@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "MouthtypeCore", targets: ["MouthtypeCore"]),
         .executable(name: "mouthtype-bench", targets: ["mouthtype-bench"]),
         .executable(name: "Mouthtype", targets: ["Mouthtype"]),
+        .executable(name: "mouthtype-fn-guard", targets: ["mouthtype-fn-guard"]),
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio", from: "0.17.7"),
@@ -31,9 +32,11 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
+        .target(name: "FnRemapKit"),
+        .executableTarget(name: "mouthtype-fn-guard", dependencies: ["FnRemapKit"]),
         .target(
             name: "MouthtypeMac",
-            dependencies: ["MouthtypeCore"],
+            dependencies: ["MouthtypeCore", "FnRemapKit"],
             resources: [.copy("Resources/Pill"), .copy("Resources/MenuBar"), .copy("Resources/Fonts")]
         ),
         .executableTarget(
@@ -51,6 +54,10 @@ let package = Package(
         .testTarget(
             name: "MouthtypeCoreTests",
             dependencies: ["MouthtypeCore", "mouthtype-bench"]
+        ),
+        .testTarget(
+            name: "FnRemapKitTests",
+            dependencies: ["FnRemapKit"]
         ),
         .testTarget(
             name: "MouthtypeMacTests",

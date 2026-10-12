@@ -78,11 +78,18 @@ private final class FakeLoginService: LoginItemService {
         for icon in StatusIcon.allCases {
             let image = try #require(icon.image, "\(icon.glyphName) did not load")
             #expect(image.isTemplate)
-            #expect(image.size == NSSize(width: 16, height: 16))
+            #expect(image.size == NSSize(width: 22, height: 18))
             let pixels = image.representations.map { [$0.pixelsWide, $0.pixelsHigh] }
-            #expect(pixels == [[16, 16], [32, 32]], "\(icon.glyphName)")
+            #expect(pixels == [[22, 18], [44, 36]], "\(icon.glyphName)")
         }
         #expect(Set(StatusIcon.allCases.map(\.glyphName)).count == 4)
+    }
+
+    @Test func aStatusIconCanBePinnedFromTheCommandLine() {
+        #expect(StatusIcon.pinned(in: ["Mouthtype", "--status-icon", "unavailable"]) == .unavailable)
+        #expect(StatusIcon.pinned(in: ["Mouthtype", "--status-icon", "bogus"]) == nil)
+        #expect(StatusIcon.pinned(in: ["Mouthtype", "--status-icon"]) == nil)
+        #expect(StatusIcon.pinned(in: ["Mouthtype"]) == nil)
     }
 
     @Test func eachStateDrawsDifferently() throws {

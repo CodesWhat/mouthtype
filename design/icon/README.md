@@ -10,7 +10,7 @@ below 64 px.
 
 `export.py` writes `AppIcon.iconset/` and `AppIcon-1024.png` here, builds `packaging/AppIcon.icns` with `iconutil` (macOS
 only), and writes the menu bar glyphs to `Sources/MouthtypeMac/Resources/MenuBar/`: one template glyph per status
-state (idle, recording, processing, unavailable) at 16 px and 32 px. The generated files are checked in, so the app
+state (idle, recording, processing, unavailable) at 22 x 18 and 44 x 36. The generated files are checked in, so the app
 builds without Python.
 
 Regenerate after changing the art (Python 3, standard library only; output is deterministic):

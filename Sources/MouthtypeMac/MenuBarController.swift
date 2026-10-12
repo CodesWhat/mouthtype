@@ -30,7 +30,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
     public init(engineHost: EngineHost, version: String = AppInfo.version) {
         self.engineHost = engineHost
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
         setIcon(.idle)
         menu.delegate = self

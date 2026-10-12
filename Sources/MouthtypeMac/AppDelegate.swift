@@ -9,7 +9,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let systemSection = SystemAccessMenuSection()
     private let accessibility = AccessibilityAccess()
     private let fnRemap = FnRemap()
-    private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap)
+    private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap, guardian: FnGuardLauncher())
     private let shortcuts = GlobalShortcuts()
     private var menuBar: MenuBarController?
     private var historySection: HistoryMenuSection?
@@ -193,6 +193,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let menuBar, let dictation else { return }
         var engineFailed = false
         if case .failed = engineHost.state { engineFailed = true }
+        if let pinned = StatusIcon.pinned(in: CommandLine.arguments) {
+            menuBar.setIcon(pinned)
+            return
+        }
         menuBar.setIcon(StatusIcon.resolve(
             phase: dictation.phase, engineFailed: engineFailed,
             microphoneAllowed: MicrophoneAccess.status == .authorized, accessibilityGranted: accessibility.isGranted

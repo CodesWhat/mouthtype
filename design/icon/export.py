@@ -91,7 +91,7 @@ def art16():
 
 
 def glyph(rows, scale):
-    cv = Canvas(16, 16)
+    cv = Canvas(len(rows[0]), len(rows))
     for y, row in enumerate(rows):
         for x, ch in enumerate(row):
             if ch == "#":

@@ -13,12 +13,12 @@ enum StatusIcon: CaseIterable {
         }
     }
 
-    /// The caret lips glyph, 16 pt with a 1x and a 2x representation. Always a template, so it follows the
+    /// The open-sides lips glyph, 22 x 18 pt with a 1x and a 2x representation. Always a template, so it follows the
     /// menu bar appearance.
     var image: NSImage? { Self.loadImage(named: glyphName) }
 
     static let glyphDirectory = "MenuBar"
-    static let pointSize = NSSize(width: 16, height: 16)
+    static let pointSize = NSSize(width: 22, height: 18)
 
     static func loadImage(named name: String, bundle: Bundle = .module) -> NSImage? {
         let image = NSImage(size: pointSize)
@@ -31,6 +31,12 @@ enum StatusIcon: CaseIterable {
         image.isTemplate = true
         image.accessibilityDescription = "Mouthtype"
         return image
+    }
+
+    /// `--status-icon <state>`: pins the icon to one state, for screenshots.
+    static func pinned(in arguments: [String]) -> StatusIcon? {
+        guard let index = arguments.firstIndex(of: "--status-icon"), arguments.indices.contains(index + 1) else { return nil }
+        return allCases.first { $0.glyphName == arguments[index + 1] }
     }
 
     /// An engine that failed, or missing microphone or Accessibility access, outranks the dictation phase.

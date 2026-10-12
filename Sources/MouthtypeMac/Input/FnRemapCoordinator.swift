@@ -1,3 +1,4 @@
+import FnRemapKit
 import Foundation
 
 /// Decides, from the `remapFnKey` preference and what the HID system accepts, which hotkey source the taps run:
@@ -12,12 +13,14 @@ final class FnRemapCoordinator {
 
     private let remap: FnRemap
     private let preferences: UserDefaults
+    private let guardian: (any FnGuarding)?
     private var started = false
     private(set) var isActive = false
 
-    init(remap: FnRemap, preferences: UserDefaults = .standard) {
+    init(remap: FnRemap, preferences: UserDefaults = .standard, guardian: (any FnGuarding)? = nil) {
         self.remap = remap
         self.preferences = preferences
+        self.guardian = guardian
     }
 
     var preferred: Bool { Self.isPreferred(preferences) }
@@ -55,6 +58,7 @@ final class FnRemapCoordinator {
         switch remap.restore() {
         case .restored, .clean:
             isActive = false
+            guardian?.stop()
             return true
         case .applied, .alreadyApplied:
             return false
@@ -68,6 +72,7 @@ final class FnRemapCoordinator {
         switch remap.apply() {
         case .applied, .alreadyApplied:
             remap.installSignalHandlers()
+            guardian?.start()
             isActive = true
             return true
         case let .failed(reason):

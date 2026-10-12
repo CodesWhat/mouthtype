@@ -1,4 +1,5 @@
 import Foundation
+import FnRemapKit
 import Testing
 @testable import MouthtypeMac
 
@@ -121,5 +122,118 @@ private final class FakeKeyStore: KeyMappingStore {
         _ = coordinator.initialSource()
         #expect(coordinator.deactivate())
         #expect(!coordinator.isActive && (store.mapping ?? []).isEmpty)
+    }
+}
+
+@MainActor
+private final class FakeGuardian: FnGuarding {
+    private(set) var starts = 0
+    private(set) var stops = 0
+    func start() { starts += 1 }
+    func stop() { stops += 1 }
+}
+
+@MainActor
+@Suite(.serialized) struct FnRemapGuardianTests {
+    private func make(_ store: FakeKeyStore, guardian: FakeGuardian) -> FnRemapCoordinator {
+        let marker = UserDefaults(suiteName: "remap-guardian-marker-\(UUID().uuidString)")!
+        let preferences = UserDefaults(suiteName: "remap-guardian-prefs-\(UUID().uuidString)")!
+        return FnRemapCoordinator(remap: FnRemap(store: store, defaults: marker), preferences: preferences, guardian: guardian)
+    }
+
+    @Test func guardStartsWithTheRemapAndStopsWhenItIsTurnedOff() {
+        let guardian = FakeGuardian()
+        let coordinator = make(FakeKeyStore(), guardian: guardian)
+        _ = coordinator.initialSource()
+        #expect(guardian.starts == 1 && guardian.stops == 0)
+        _ = coordinator.setEnabled(false)
+        #expect(guardian.stops == 1)
+        _ = coordinator.setEnabled(true)
+        #expect(guardian.starts == 2)
+    }
+
+    @Test func noGuardWhenTheRemapIsRefused() {
+        let store = FakeKeyStore()
+        store.refuseWrites = true
+        let guardian = FakeGuardian()
+        let coordinator = make(store, guardian: guardian)
+        _ = coordinator.initialSource()
+        #expect(guardian.starts == 0)
+    }
+
+    @Test func guardKeepsWatchingWhenTheRestoreFails() {
+        let store = FakeKeyStore()
+        let guardian = FakeGuardian()
+        let coordinator = make(store, guardian: guardian)
+        _ = coordinator.initialSource()
+        store.refuseWrites = true
+        #expect(!coordinator.deactivate())
+        #expect(guardian.stops == 0)
+    }
+}
+
+@MainActor
+@Suite(.serialized) struct FnGuardLauncherTests {
+    private func script(_ body: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("fn-guard-launcher-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("fake-guard")
+        try "#!/bin/sh\n\(body)\n".write(to: url, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path)
+        return url
+    }
+
+    @Test func aMissingBinaryIsSurvived() {
+        let launcher = FnGuardLauncher(executable: URL(fileURLWithPath: "/nonexistent/mouthtype-fn-guard"))
+        launcher.start()
+        launcher.start()
+        #expect(launcher.pid == nil && !launcher.isRunning)
+        launcher.stop()
+    }
+
+    @Test func startIsIdempotentAndStopEndsTheProcessInItsOwnSession() throws {
+        let url = try script("exec /bin/sleep 30")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let launcher = FnGuardLauncher(executable: url)
+        launcher.start()
+        let first = try #require(launcher.pid)
+        launcher.start()
+        #expect(launcher.pid == first && launcher.isRunning)
+        #expect(getsid(first) == first, "not a session leader")
+        #expect(getsid(first) != getsid(getpid()))
+        launcher.stop()
+        #expect(launcher.pid == nil)
+        launcher.start()
+        #expect(launcher.pid != nil && launcher.pid != first)
+        launcher.stop()
+    }
+
+    @Test func stopEndsAGuardEvenWhenTheAppIgnoresSIGTERM() throws {
+        let url = try script("exec /bin/sleep 30")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let previous = signal(SIGTERM, SIG_IGN)
+        defer { signal(SIGTERM, previous) }
+        let launcher = FnGuardLauncher(executable: url)
+        launcher.start()
+        let pid = try #require(launcher.pid)
+        launcher.stop()
+        var gone = false
+        for _ in 0..<200 where !gone {
+            usleep(10_000)
+            gone = kill(pid, 0) != 0 && errno == ESRCH
+        }
+        #expect(gone, "the guard survived SIGTERM")
+    }
+
+    @Test func aGuardThatExitedIsReplaced() throws {
+        let url = try script("exit 0")
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let launcher = FnGuardLauncher(executable: url)
+        launcher.start()
+        let first = try #require(launcher.pid)
+        while launcher.isRunning { usleep(10_000) }
+        launcher.start()
+        #expect(launcher.pid != nil && launcher.pid != first)
+        while launcher.isRunning { usleep(10_000) }
     }
 }
