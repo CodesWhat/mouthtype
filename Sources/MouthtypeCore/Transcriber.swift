@@ -4,7 +4,7 @@ public protocol Transcriber: Sendable {
     var id: String { get }                 // stable slug, e.g. "parakeet-tdt-v3"
     var displayName: String { get }
     func prepare() async throws            // download if needed + load; idempotent
-    func transcribe(samples: [Float]) async throws -> String   // 16 kHz mono Float32, -1...1
+    func transcribe(samples: [Float]) async throws -> Transcription   // 16 kHz mono Float32, -1...1
 }
 
 public struct PrepareTimings: Sendable, Codable, Equatable {

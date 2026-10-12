@@ -56,7 +56,7 @@ struct EngineWorker: AsyncParsableCommand {
             var hypothesis = ""
             for _ in 0..<runs {
                 let start = clock.now
-                hypothesis = try await transcriber.transcribe(samples: samples)
+                hypothesis = try await transcriber.transcribe(samples: samples).text
                 latencies.append((clock.now - start).seconds * 1000)
             }
             let median = Stats.median(latencies)

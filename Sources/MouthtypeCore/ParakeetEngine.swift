@@ -55,11 +55,24 @@ public actor ParakeetEngine: MeasuredTranscriber {
         )
     }
 
-    public func transcribe(samples: [Float]) async throws -> String {
+    public func transcribe(samples: [Float]) async throws -> Transcription {
         guard let manager else { throw EngineError.notPrepared(id: id) }
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+        let clock = ContinuousClock()
+        let start = clock.now
         let result = try await manager.transcribe(samples, decoderState: &state)
-        return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let elapsed = (clock.now - start).seconds
+        let units = (result.tokenTimings ?? []).map {
+            SubwordUnit(text: $0.token, start: $0.startTime, end: $0.endTime, confidence: $0.confidence)
+        }
+        return Transcription(
+            text: result.text.trimmingCharacters(in: .whitespacesAndNewlines),
+            words: WordAssembly.assemble(units),
+            confidence: result.confidence,
+            processingSeconds: elapsed,
+            engineID: id,
+            modelRevision: version == .v2 ? Repo.parakeetV2.rawValue : Repo.parakeetV3.rawValue
+        )
     }
 }
 
