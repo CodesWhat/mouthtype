@@ -3,7 +3,9 @@ import MouthtypeCore
 import Observation
 
 /// Runs one dictation at a time from the hotkey events: press starts the capture, release hands the audio to the
-/// pipeline and pastes, a short tap or Esc throws it away. Every attempt ends back at idle.
+/// pipeline and pastes, a short tap or Esc throws it away. Every attempt ends back at idle. A lock (double-tap or
+/// Fn+Space) turns the recording hands-free: it stays in the recording phase until the next tap, Esc, the menu, or
+/// the safety cap. Events are handled one at a time, so a discarded tap's cancel has finished before the next press starts.
 @MainActor
 @Observable
 final class DictationController {
@@ -11,10 +13,19 @@ final class DictationController {
         case idle, recording, processing
     }
 
+    /// A locked recording stops by itself this long after the lock, with a warning a minute before.
+    static let handsFreeLimit: TimeInterval = 20 * 60
+    static let handsFreeWarningAfter: TimeInterval = 19 * 60
+
     private(set) var phase: Phase = .idle
+    private(set) var isHandsFree = false
 
     /// Fired after each attempt ends, whatever the outcome.
     @ObservationIgnored var onAttemptFinished: (@MainActor () -> Void)?
+    /// Fired when a recording becomes hands-free and when it stops being, so the menu can offer Stop and Cancel.
+    @ObservationIgnored var onHandsFreeChanged: (@MainActor (Bool) -> Void)?
+    /// Fired when a lock ends or is refused, so the hotkey side can drop its own lock state.
+    @ObservationIgnored var onLockEnded: (@MainActor () -> Void)?
 
     @ObservationIgnored private let capture: any DictationCapturing
     @ObservationIgnored private let engine: any DictationEngine
@@ -25,6 +36,7 @@ final class DictationController {
     @ObservationIgnored private let clock: any DictationClock
     @ObservationIgnored private var session: DictationSession?
     @ObservationIgnored private var processing: Task<Void, Never>?
+    @ObservationIgnored private var capTimer: Task<Void, Never>?
 
     init(
         capture: any DictationCapturing, engine: any DictationEngine, pipeline: DictationPipeline,
@@ -49,6 +61,7 @@ final class DictationController {
     func handle(_ event: HotkeyEvent) async {
         switch event {
         case let .pressed(nanos): await pressed(at: nanos)
+        case let .locked(_, trigger): await locked(trigger)
         case let .released(nanos): released(at: nanos)
         case .discarded: await discarded()
         case .cancelled: await cancelled()
@@ -111,12 +124,68 @@ final class DictationController {
         session = current
     }
 
+    // MARK: Hands-free
+
+    private func locked(_ trigger: LockTrigger) async {
+        guard phase == .recording, let current = session else {
+            // The press never became a recording (engine loading, no mic), so the lock has nothing to hold.
+            onLockEnded?()
+            return
+        }
+        guard !isHandsFree else { return }
+        isHandsFree = true
+        sounds.playLock()
+        pill.showHandsFree()
+        startCapTimer()
+        onHandsFreeChanged?(true)
+        await pipeline.recordLock(current, trigger: trigger.dictationTrigger)
+    }
+
+    /// The menu's Stop Dictation: the same as tapping the key to end a locked recording.
+    func stopHandsFree() {
+        guard isHandsFree else { return }
+        released(at: clock.nowNanos())
+    }
+
+    /// The menu's Cancel Dictation: the same as Esc.
+    func cancelHandsFree() async {
+        guard isHandsFree else { return }
+        await cancelled()
+    }
+
+    private func startCapTimer() {
+        capTimer?.cancel()
+        let warning = Self.handsFreeWarningAfter
+        let remaining = Self.handsFreeLimit - warning
+        let clock = clock
+        capTimer = Task { [weak self] in
+            do {
+                try await clock.sleep(forSeconds: warning)
+                self?.pill.showHandsFreeNotice("1 minute left", duration: 4)
+                try await clock.sleep(forSeconds: remaining)
+            } catch {
+                return
+            }
+            self?.stopHandsFree()
+        }
+    }
+
+    private func endHandsFree() {
+        capTimer?.cancel()
+        capTimer = nil
+        guard isHandsFree else { return }
+        isHandsFree = false
+        onHandsFreeChanged?(false)
+        onLockEnded?()
+    }
+
     // MARK: Release
 
     private func released(at nanos: UInt64) {
         guard phase == .recording, let current = session else { return }
         phase = .processing
         session = nil
+        endHandsFree()
         processing = Task { await process(current, releasedAt: nanos) }
     }
 
@@ -189,6 +258,7 @@ final class DictationController {
     }
 
     private func finished() {
+        endHandsFree()
         session = nil
         phase = .idle
         onAttemptFinished?()

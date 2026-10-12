@@ -54,18 +54,27 @@ private final class GrantBox {
         #expect(GlobeKeyCheck.settingsURL.absoluteString.hasPrefix("x-apple.systempreferences:com.apple.Keyboard"))
     }
 
-    @Test func sectionShowsTheThreeLines() {
+    @Test func sectionShowsTheLinesAndTheRemapCheckbox() {
         let section = SystemAccessMenuSection()
         section.update(accessibilityGranted: false)
         section.update(hotkeyHealth: .recovering)
         section.update(globe: GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true))
-        #expect(section.items.map(\.title) == ["Accessibility: needed", "Hotkey: recovering", "Globe key opens Emoji & Symbols"])
+        #expect(section.items.map(\.title) == ["Accessibility: needed", "Hotkey: recovering", "Globe key opens Emoji & Symbols", "Remap Fn key (hides the emoji picker)"])
         #expect(section.items[0].action != nil)
         #expect(!section.items[2].isHidden)
         section.update(accessibilityGranted: true)
         section.update(globe: GlobeKeyCheck(action: .doNothing, fnKeyPresent: true))
         #expect(section.items[0].action == nil)
         #expect(section.items[2].isHidden)
+
+        section.update(remapChecked: true)
+        #expect(section.items[3].state == .on)
+        section.update(remapChecked: false)
+        #expect(section.items[3].state == .off)
+        var toggled = 0
+        section.onToggleRemap = { toggled += 1 }
+        _ = section.items[3].target?.perform(section.items[3].action)
+        #expect(toggled == 1)
     }
 }
 
@@ -107,6 +116,7 @@ private final class GrantBox {
     @Test func parsesTheProbeArguments() {
         #expect(InputProbe.mode(in: ["Mouthtype"]) == nil)
         #expect(InputProbe.mode(in: ["Mouthtype", "--globe-probe", "30"]) == .globeProbe(seconds: 30))
+        #expect(InputProbe.mode(in: ["Mouthtype", "--emulation-selftest"]) == .emulation)
         #expect(InputProbe.mode(in: ["Mouthtype", "--hotkey-log", "12.5"]) == .hotkeyLog(seconds: 12.5))
         #expect(InputProbe.mode(in: ["Mouthtype", "--globe-probe"]) == .globeProbe(seconds: 30))
         #expect(InputProbe.mode(in: ["Mouthtype", "--hotkey-log", "abc"]) == .hotkeyLog(seconds: 30))

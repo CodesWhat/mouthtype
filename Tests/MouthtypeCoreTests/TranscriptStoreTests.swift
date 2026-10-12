@@ -52,6 +52,20 @@ import Testing
         _ = store
     }
 
+    @Test func recordLockUpdatesModeAndTriggerOnTheOpenRow() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try start(store)
+        var row = try #require(try store.dictation(id: id))
+        #expect(row.mode == "hold" && row.trigger == "fn")
+        try store.recordLock(id, mode: .handsFree, trigger: .doubleTap)
+        row = try #require(try store.dictation(id: id))
+        #expect(row.mode == "hands_free" && row.trigger == "double_tap")
+        try store.recordLock(id, mode: .handsFree, trigger: .fnSpace)
+        #expect(try store.dictation(id: id)?.trigger == "fn_space")
+        #expect(throws: TranscriptStoreError.self) { try store.recordLock("missing", mode: .handsFree, trigger: .fnSpace) }
+    }
+
     @Test func reopeningRunsNoMigrationTwice() throws {
         let (_, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }

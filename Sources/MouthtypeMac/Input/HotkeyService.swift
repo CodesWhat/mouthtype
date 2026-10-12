@@ -9,7 +9,8 @@ import MouthtypeCore
 ///
 /// Tap 1 (flags, listen-only) is always on. Tap 2 (keys, active) exists only while a recording is in
 /// progress, so the tap that could break typing lives for seconds, not hours. Fn remap mode and the
-/// probes keep tap 2 on permanently: the remap has to swallow its destination key, the probes log keys.
+/// probes keep tap 2 on permanently: the remap has to swallow its destination key (and stands in for the Fn combos
+/// it broke), the probes log keys.
 @MainActor
 public final class HotkeyService {
     public struct Options: Sendable {
@@ -47,11 +48,13 @@ public final class HotkeyService {
     static let monitorInterval: Duration = .seconds(1)
     static let watchdogEveryTicks = 5
 
-    private let options: Options
+    private var options: Options
     private let otherKeysHeldProbe: @MainActor ([UInt16]) -> Bool
     private let eventSink: AsyncStream<HotkeyEvent>.Continuation
-    private let messages: AsyncStream<TapMessage>
-    private let messageSink: AsyncStream<TapMessage>.Continuation
+    private var messages: AsyncStream<TapMessage>
+    private var messageSink: AsyncStream<TapMessage>.Continuation
+    let shared = TapShared()
+    private let emulator = KeyEmulator()
     private var engine: GestureEngine
     private var mapper: HotkeyInputMapper
     private var thread: TapThread?
@@ -73,6 +76,11 @@ public final class HotkeyService {
         (messages, messageSink) = AsyncStream.makeStream(of: TapMessage.self)
     }
 
+    public var source: HotkeySource { options.source }
+
+    /// For the self-test: whether the key tap exists right now.
+    var keyTapInstalled: Bool { slots[.keys]?.tap != nil }
+
     private var keyTapStaysOn: Bool {
         if options.observesKeys { return true }
         if case .remapped = options.source { return true }
@@ -92,6 +100,8 @@ public final class HotkeyService {
         guard slots[.flags]?.tap == nil else { return }
         let thread = TapThread()
         self.thread = thread
+        // A stream whose consumer was cancelled is finished, so each run gets its own.
+        (messages, messageSink) = AsyncStream.makeStream(of: TapMessage.self)
         guard let flagsTap = makeTap(.flags) else {
             thread.stop()
             self.thread = nil
@@ -138,14 +148,41 @@ public final class HotkeyService {
         slots = [:]
         thread?.stop()
         thread = nil
+        messageSink.finish()
+        shared.reset()
         engine = GestureEngine(configuration: options.configuration)
         mapper = HotkeyInputMapper(source: options.source)
         health = .off
     }
 
+    /// Moves the live taps to another hotkey source (the Fn remap toggled) without a relaunch. A recording in
+    /// progress is cancelled, since the key that would end it is about to mean something else.
+    public func switchSource(_ source: HotkeySource) throws {
+        guard source != options.source else { return }
+        let wasRunning = thread != nil
+        let interrupted = engine.isRecording
+        stop()
+        options.source = source
+        mapper = HotkeyInputMapper(source: source)
+        if interrupted { eventSink.yield(.cancelled(reason: .inputLost)) }
+        if wasRunning { try start() }
+    }
+
+    /// Ends a locked recording that something other than the key stopped (the menu, the safety cap), so the next press starts fresh.
+    public func releaseLock() {
+        guard engine.isLocked else { return }
+        engine.endLock()
+        mapper.lockedRecording = false
+        setRecording(false)
+    }
+
     private func makeTap(_ role: TapRole) -> EventTap? {
         guard let thread else { return nil }
-        let context = TapContext(role: role, sink: messageSink, swallowedKey: role == .keys ? swallowedKey : nil)
+        let remapped = role == .keys && swallowedKey != nil
+        let context = TapContext(
+            role: role, sink: messageSink, swallowedKey: role == .keys ? swallowedKey : nil, shared: shared,
+            emulator: remapped ? emulator : nil, tracksFnFlag: swallowedKey == nil, idleKeysReported: options.observesKeys
+        )
         return EventTap(role: role, context: context, runLoop: thread.runLoop)
     }
 
@@ -160,6 +197,10 @@ public final class HotkeyService {
 
     func process(_ sample: TapSample) {
         sampleObserver?(sample)
+        if isLockChord(sample) {
+            if let gesture = engine.lockFromChord() { dispatch(gesture, nanos: sample.timestamp) }
+            return
+        }
         var excluded: [UInt16] = []
         if let swallowedKey { excluded.append(swallowedKey) }
         let probe = otherKeysHeldProbe
@@ -168,11 +209,21 @@ public final class HotkeyService {
         dispatch(gesture, nanos: mapped.timestampNanos)
     }
 
+    /// Space while the hotkey is held and a recording is in progress: the hands-free toggle.
+    private func isLockChord(_ sample: TapSample) -> Bool {
+        sample.kind == .keyDown && !sample.isAutorepeat && sample.keyCode == FnCombos.spaceKeyCode
+            && sample.userData != SyntheticEvents.stamp && mapper.hotkeyHeld && engine.isRecording && !engine.isLocked
+    }
+
     private func dispatch(_ gesture: GestureEvent, nanos: UInt64) {
+        defer { mapper.lockedRecording = engine.isLocked }
         switch gesture {
         case .pressed:
             setRecording(true)
             eventSink.yield(.pressed(at: nanos))
+        case let .locked(trigger):
+            eventSink.yield(.locked(at: nanos, trigger: trigger))
+            refreshHealth()
         case .released:
             setRecording(false)
             eventSink.yield(.released(at: nanos))
@@ -190,10 +241,11 @@ public final class HotkeyService {
             if slots[.keys]?.tap == nil, let keyTap = makeTap(.keys) {
                 slots[.keys] = Slot(tap: keyTap)
             }
-            slots[.keys]?.tap?.context.recording.store(true, ordering: .relaxed)
+            shared.recording.store(true, ordering: .relaxed)
         } else if keyTapStaysOn {
-            slots[.keys]?.tap?.context.recording.store(false, ordering: .relaxed)
+            shared.recording.store(false, ordering: .relaxed)
         } else if let slot = slots[.keys] {
+            shared.recording.store(false, ordering: .relaxed)
             slot.retry?.cancel()
             slot.tap?.teardown()
             slots[.keys] = nil
@@ -266,6 +318,7 @@ public final class HotkeyService {
             destinationKeyDown: destinationDown,
             timestampNanos: HostClock.now()
         ) else { return }
+        shared.hotkeyHeld.store(false, ordering: .relaxed)
         Log.hotkey.info("resyncing a missed hotkey release")
         process(sample)
     }

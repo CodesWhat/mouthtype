@@ -16,6 +16,7 @@ public enum DictationMode: String, Codable, Sendable {
 public enum DictationTrigger: String, Codable, Sendable {
     case fn
     case fnSpace = "fn_space"
+    case doubleTap = "double_tap"
     case pill, mouse
 }
 

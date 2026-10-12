@@ -82,6 +82,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     private(set) var capture: CaptureRecord?
     private(set) var transcription: TranscriptionRecord?
     private(set) var insertion: InsertionRecord?
+    private(set) var handsFreeLock: (DictationMode, DictationTrigger)?
     private(set) var finishes: [(DictationStatus, String?)] = []
 
     init(log: CallLog) {
@@ -100,6 +101,9 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
         try run("recordTranscription") { transcription = record }
     }
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws { try run("recordInsertion") { insertion = record } }
+    func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
+        try run("recordLock") { handsFreeLock = (mode, trigger) }
+    }
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {
         try run("finish") { finishes.append((status, errorMessage)) }
     }
@@ -142,12 +146,18 @@ private final class FakeInserter: DictationInserting {
 private final class FakePill: DictationPill {
     let log: CallLog
     var messages: [String] = []
+    var notices: [String] = []
 
     init(log: CallLog) {
         self.log = log
     }
 
     func showRecording() { log.add("pill.recording") }
+    func showHandsFree() { log.add("pill.handsFree") }
+    func showHandsFreeNotice(_ text: String, duration: TimeInterval) {
+        notices.append(text)
+        log.add("pill.notice:\(text)")
+    }
     func showProcessing() { log.add("pill.processing") }
     func showMessage(_ text: String, duration: TimeInterval) {
         messages.append(text)
@@ -166,6 +176,7 @@ private final class FakeSounds: SoundPlayer {
 
     func playStart() { log.add("sound.start") }
     func playStop() { log.add("sound.stop") }
+    func playLock() { log.add("sound.lock") }
     func playError() { log.add("sound.error") }
 }
 
@@ -173,6 +184,10 @@ private final class FakeClock: DictationClock, @unchecked Sendable {
     static let wall = Date(timeIntervalSince1970: 1_791_806_400)
     private let lock = NSLock()
     private var host: UInt64
+    private var elapsed: TimeInterval = 0
+    private var nextSleeper = 0
+    private var sleepers: [Int: (deadline: TimeInterval, continuation: CheckedContinuation<Void, Error>)] = [:]
+    private var cancelledSleepers: Set<Int> = []
 
     /// Host time here is nanoseconds; every read moves 100 ms on.
     init(start: UInt64) {
@@ -189,6 +204,42 @@ private final class FakeClock: DictationClock, @unchecked Sendable {
     func milliseconds(from start: UInt64, to end: UInt64) -> Int { Int(max(end, start) - start) / 1_000_000 }
     func now() -> Date { Self.wall }
     func date(atNanos nanos: UInt64) -> Date { Self.wall }
+
+    func sleep(forSeconds seconds: TimeInterval) async throws {
+        let id = lock.withLock { () -> Int in
+            nextSleeper += 1
+            return nextSleeper
+        }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                let alreadyCancelled = lock.withLock { () -> Bool in
+                    if cancelledSleepers.contains(id) { return true }
+                    sleepers[id] = (elapsed + seconds, continuation)
+                    return false
+                }
+                if alreadyCancelled { continuation.resume(throwing: CancellationError()) }
+            }
+        } onCancel: {
+            let continuation = lock.withLock { () -> CheckedContinuation<Void, Error>? in
+                cancelledSleepers.insert(id)
+                return sleepers.removeValue(forKey: id)?.continuation
+            }
+            continuation?.resume(throwing: CancellationError())
+        }
+    }
+
+    var sleeperCount: Int { lock.withLock { sleepers.count } }
+
+    /// Moves the sleep clock on and wakes every sleeper whose time has come.
+    func advance(by seconds: TimeInterval) {
+        let due = lock.withLock { () -> [CheckedContinuation<Void, Error>] in
+            elapsed += seconds
+            let ready = sleepers.filter { $0.value.deadline <= elapsed }.sorted { $0.value.deadline < $1.value.deadline }
+            ready.forEach { sleepers[$0.key] = nil }
+            return ready.map(\.value.continuation)
+        }
+        due.forEach { $0.resume() }
+    }
 }
 
 private let keyDown: UInt64 = 5_000_000_000
@@ -215,7 +266,9 @@ private struct Rig {
     let pill: FakePill
     let sounds: FakeSounds
     let controller: DictationController
+    let clock: FakeClock
     var finishedAttempts: Counter
+    let handsFreeChanges = Counter()
 
     final class Counter {
         var count = 0
@@ -229,6 +282,7 @@ private struct Rig {
         pill = FakePill(log: log)
         sounds = FakeSounds(log: log)
         let clock = FakeClock(start: keyUp)
+        self.clock = clock
         let pipeline = DictationPipeline(
             store: withStore ? store : nil, archive: FakeArchive(log: log), engine: engine, clock: clock
         )
@@ -238,6 +292,23 @@ private struct Rig {
         let counter = Counter()
         finishedAttempts = counter
         controller.onAttemptFinished = { counter.count += 1 }
+        let changes = handsFreeChanges
+        controller.onHandsFreeChanged = { active in changes.count += active ? 1 : 100 }
+        let ended = lockEnded
+        controller.onLockEnded = { ended.count += 1 }
+    }
+
+    let lockEnded = Counter()
+
+    /// Lets tasks the controller started on the main actor run.
+    func settle() async {
+        for _ in 0..<20 { await Task.yield() }
+    }
+
+    func lockIn(_ trigger: LockTrigger = .doubleTap) async {
+        await controller.handle(.pressed(at: keyDown))
+        await controller.handle(.locked(at: keyDown + 300_000_000, trigger: trigger))
+        await settle()
     }
 
     func dictate() async {
@@ -487,5 +558,202 @@ private struct Rig {
         await rig.dictate()
         #expect(rig.pill.messages == ["Secure field, not pasted"])
         #expect(rig.store.insertion?.outcome == "secure discard" && rig.store.insertion?.focusMoved == true)
+    }
+
+    // MARK: Hands-free
+
+    @Test func lockRecordsModeAndTriggerCuesAndTellsThePill() async throws {
+        let rig = Rig()
+        await rig.lockIn(.doubleTap)
+
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+        #expect(rig.log.all == [
+            "inserter.snapshot", "capture.start", "sound.start", "pill.recording", "store.begin",
+            "sound.lock", "pill.handsFree", "store.recordLock",
+        ])
+        let lock = try #require(rig.store.handsFreeLock)
+        #expect(lock.0 == .handsFree && lock.1 == .doubleTap)
+        #expect(rig.handsFreeChanges.count == 1)
+    }
+
+    @Test func fnSpaceLockRecordsItsOwnTrigger() async throws {
+        let rig = Rig()
+        await rig.lockIn(.fnSpace)
+        let lock = try #require(rig.store.handsFreeLock)
+        #expect(lock.0 == .handsFree && lock.1 == .fnSpace)
+    }
+
+    @Test func stoppingALockedRecordingTranscribesAndPastesAsUsual() async throws {
+        let rig = Rig()
+        await rig.lockIn()
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.store.insertion?.finalText == "Hello world.")
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.log.contains("capture.stop") && rig.log.all.last == "pill.hide")
+        #expect(rig.handsFreeChanges.count == 101)
+        #expect(rig.lockEnded.count == 1)
+        #expect(rig.finishedAttempts.count == 1)
+    }
+
+    @Test func escapeOnALockedRecordingCancels() async {
+        let rig = Rig()
+        await rig.lockIn()
+        await rig.controller.handle(.cancelled(reason: .escape))
+
+        #expect(rig.log.contains("capture.cancel") && !rig.log.contains("engine.transcribe"))
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.pill.messages == ["Cancelled"])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.lockEnded.count == 1)
+    }
+
+    @Test func menuStopAndCancelActLikeTheKeyAndEscape() async {
+        let stopped = Rig()
+        await stopped.lockIn()
+        stopped.controller.stopHandsFree()
+        await stopped.controller.waitForProcessing()
+        #expect(stopped.inserter.delivered == ["Hello world."])
+        #expect(stopped.lockEnded.count == 1)
+
+        let cancelled = Rig()
+        await cancelled.lockIn()
+        await cancelled.controller.cancelHandsFree()
+        #expect(cancelled.store.finishes.map(\.0) == [.cancelled])
+        #expect(cancelled.controller.phase == .idle)
+
+        // With nothing locked both are no-ops.
+        let idle = Rig()
+        idle.controller.stopHandsFree()
+        await idle.controller.cancelHandsFree()
+        #expect(idle.log.all.isEmpty)
+    }
+
+    @Test func aLockWithNoRecordingIsRefusedAndTheHotkeySideTold() async {
+        let rig = Rig()
+        rig.engine.readiness = .loading
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.locked(at: keyDown + 1, trigger: .doubleTap))
+        #expect(!rig.controller.isHandsFree)
+        #expect(rig.lockEnded.count == 1)
+        #expect(!rig.log.contains("sound.lock"))
+    }
+
+    @Test func aLockedRecordingWarnsAtNineteenMinutesAndStopsAtTwenty() async {
+        let rig = Rig()
+        await rig.lockIn()
+        #expect(rig.clock.sleeperCount == 1)
+
+        rig.clock.advance(by: 19 * 60 - 1)
+        await rig.settle()
+        #expect(rig.pill.notices.isEmpty && rig.controller.phase == .recording)
+
+        rig.clock.advance(by: 1)
+        await rig.settle()
+        #expect(rig.pill.notices == ["1 minute left"])
+        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree)
+
+        rig.clock.advance(by: 59)
+        await rig.settle()
+        #expect(rig.controller.phase == .recording)
+
+        rig.clock.advance(by: 1)
+        await rig.settle()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.lockEnded.count == 1)
+    }
+
+    @Test func stoppingEarlyCancelsTheCapTimer() async {
+        let rig = Rig()
+        await rig.lockIn()
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        await rig.settle()
+        #expect(rig.clock.sleeperCount == 0)
+
+        rig.clock.advance(by: 30 * 60)
+        await rig.settle()
+        #expect(rig.pill.notices.isEmpty)
+        #expect(rig.inserter.delivered.count == 1)
+    }
+
+    @Test func tapDiscardThenSecondPressThenLockNeverLetsTheCancelKillTheNewRecording() async throws {
+        let log = CallLog()
+        let capture = SlowCapture(log: log, audio: capturedTone())
+        let engine = FakeEngine(log: log)
+        let store = FakeStore(log: log)
+        let clock = FakeClock(start: keyUp)
+        let controller = DictationController(
+            capture: capture, engine: engine,
+            pipeline: DictationPipeline(store: store, archive: FakeArchive(log: log), engine: engine, clock: clock),
+            inserter: FakeInserter(log: log), pill: FakePill(log: log), sounds: FakeSounds(log: log), clock: clock
+        )
+        // The way the hotkey service delivers a double-tap: all four events, back to back.
+        let (events, sink) = AsyncStream.makeStream(of: HotkeyEvent.self)
+        sink.yield(.pressed(at: keyDown))
+        sink.yield(.discarded(reason: .tooShort))
+        sink.yield(.pressed(at: keyDown + 200_000_000))
+        sink.yield(.locked(at: keyDown + 300_000_000, trigger: .doubleTap))
+        sink.finish()
+        await controller.consume(events)
+
+        let capturing = log.all.filter { $0.hasPrefix("capture.") }
+        #expect(capturing == [
+            "capture.start.begin", "capture.start.end", "capture.cancel.begin", "capture.cancel.end",
+            "capture.start.begin", "capture.start.end",
+        ])
+        #expect(capture.failures == 0)
+        #expect(capture.running && capture.keyDownAtNanos == keyDown + 200_000_000)
+        #expect(controller.phase == .recording && controller.isHandsFree)
+        #expect(store.finishes.map(\.0) == [.tooShort])
+        #expect(store.handsFreeLock?.1 == .doubleTap)
+    }
+}
+
+/// A capture whose start and cancel really suspend, and that notices any overlap or a second start while running.
+@MainActor
+private final class SlowCapture: DictationCapturing {
+    let log: CallLog
+    let audio: CapturedAudio
+    var isPrepared = true
+    private(set) var running = false
+    private(set) var busy = false
+    private(set) var failures = 0
+    private(set) var keyDownAtNanos: UInt64?
+
+    init(log: CallLog, audio: CapturedAudio) {
+        self.log = log
+        self.audio = audio
+    }
+
+    private func work(_ name: String, _ body: () -> Void) async {
+        log.add("capture.\(name).begin")
+        if busy { failures += 1 }
+        busy = true
+        try? await Task.sleep(for: .milliseconds(30))
+        body()
+        busy = false
+        log.add("capture.\(name).end")
+    }
+
+    func start(keyDownAtNanos: UInt64) async throws {
+        await work("start") {
+            if running { failures += 1 }
+            running = true
+            self.keyDownAtNanos = keyDownAtNanos
+        }
+    }
+
+    func stop() async throws -> CapturedAudio {
+        await work("stop") { running = false }
+        return audio
+    }
+
+    func cancel() async {
+        await work("cancel") { running = false }
     }
 }

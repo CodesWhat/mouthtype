@@ -113,6 +113,13 @@ struct DictationPipeline: Sendable {
         }
     }
 
+    /// The hold became a hands-free recording: the row opened as hold/fn says so now.
+    func recordLock(_ session: DictationSession, trigger: DictationTrigger) async {
+        await write(session, "recordLock") { store in
+            try await store.recordLock(session.id, mode: .handsFree, trigger: trigger)
+        }
+    }
+
     func finish(_ session: DictationSession, _ status: DictationStatus, errorMessage: String? = nil) async {
         await write(session, "finish") { store in
             try await store.finish(session.id, status: status, errorMessage: errorMessage)

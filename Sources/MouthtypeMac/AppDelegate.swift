@@ -11,6 +11,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let systemSection = SystemAccessMenuSection()
     private let accessibility = AccessibilityAccess()
     private let fnRemap = FnRemap()
+    private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap)
     private let shortcuts = GlobalShortcuts()
     private var menuBar: MenuBarController?
     private var historySection: HistoryMenuSection?
@@ -74,6 +75,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         self.menuBar = menuBar
         historySection = history
         dictation.onAttemptFinished = { [weak menuBar] in menuBar?.refresh() }
+        dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
+        dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
+        menuBar.onStopDictation = { [weak dictation] in dictation?.stopHandsFree() }
+        menuBar.onCancelDictation = { [weak dictation] in
+            guard let dictation else { return }
+            Task { await dictation.cancelHandsFree() }
+        }
+        systemSection.onToggleRemap = { [weak self] in self?.toggleRemap() }
+        systemSection.update(remapChecked: remapCoordinator.menuChecked)
         shortcuts.register(.pasteLast) { [weak self] in self?.pasteLast() }
         shortcuts.register(.copyLast) { [weak self] in self?.copyLast() }
         trackStatus()
@@ -142,7 +152,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func refreshGlobeCheck() {
         let check = GlobeKeyCheck.current()
-        systemSection.update(globe: check)
+        // With the remap on the system never sees the Globe key, so its action can't conflict.
+        systemSection.update(globe: remapCoordinator.isActive ? nil : check)
+        systemSection.update(remapChecked: remapCoordinator.menuChecked)
         Log.permissions.info("globe key action \(String(describing: check.action), privacy: .public), fn key present \(check.fnKeyPresent, privacy: .public), conflict \(check.hasConflict, privacy: .public)")
     }
 
@@ -188,7 +200,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let service = HotkeyService()
+        let service = HotkeyService(options: .init(source: remapCoordinator.initialSource()))
         service.onHealthChange = { [weak self] health in
             Log.hotkey.info("health \(health.statusText, privacy: .public)")
             self?.systemSection.update(hotkeyHealth: health)
@@ -197,13 +209,33 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             try service.start()
         } catch {
             Log.hotkey.error("hotkey not started: \(String(describing: error), privacy: .public)")
+            // With no tap there is nothing to swallow F19, so don't leave Fn remapped.
+            remapCoordinator.deactivate()
+            refreshGlobeCheck()
             inputStarted = false
             return
         }
+        Log.hotkey.info("hotkey source \(String(describing: service.source), privacy: .public)")
+        refreshGlobeCheck()
         hotkeyService = service
         systemSection.update(hotkeyHealth: service.health)
         guard let dictation else { return }
         hotkeyLogTask = Task { await dictation.consume(service.events) }
+    }
+
+    private func toggleRemap() {
+        let enable = !remapCoordinator.menuChecked
+        let source = remapCoordinator.setEnabled(enable)
+        if let service = hotkeyService {
+            do {
+                try service.switchSource(source)
+            } catch {
+                Log.hotkey.error("hotkey source switch failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+        let state = remapCoordinator.isActive ? "on" : "off"
+        Log.hotkey.info("fn remap \(state, privacy: .public)")
+        refreshGlobeCheck()
     }
 
     private func prepareCapture() async -> Bool {

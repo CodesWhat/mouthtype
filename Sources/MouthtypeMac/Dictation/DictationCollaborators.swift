@@ -28,6 +28,7 @@ protocol DictationStoring: Sendable {
     func recordCapture(_ id: String, _ record: CaptureRecord) async throws
     func recordTranscription(_ id: String, _ record: TranscriptionRecord) async throws
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws
+    func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws
 }
 
@@ -45,6 +46,10 @@ protocol DictationInserting: AnyObject {
 @MainActor
 protocol DictationPill: AnyObject {
     func showRecording()
+    /// The locked flavour of the recording pill.
+    func showHandsFree()
+    /// A line over a locked recording that gives way to the hands-free pill again.
+    func showHandsFreeNotice(_ text: String, duration: TimeInterval)
     func showProcessing()
     func showMessage(_ text: String, duration: TimeInterval)
     func hide()
@@ -58,6 +63,8 @@ protocol DictationClock: Sendable {
     func now() -> Date
     /// The wall-clock moment a host-nanosecond time happened.
     func date(atNanos nanos: UInt64) -> Date
+    /// Suspends for `seconds`, ending early with an error if the task is cancelled.
+    func sleep(forSeconds seconds: TimeInterval) async throws
 }
 
 // MARK: - Real collaborators
@@ -113,6 +120,9 @@ struct TranscriptStoreWriter: DictationStoring {
         try store.recordTranscription(id, record)
     }
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws { try store.recordInsertion(id, record) }
+    func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
+        try store.recordLock(id, mode: mode, trigger: trigger)
+    }
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {
         try store.finish(id, status: status, errorMessage: errorMessage)
     }
@@ -139,5 +149,9 @@ struct SystemDictationClock: DictationClock {
     func date(atNanos nanos: UInt64) -> Date {
         let ago = HostClock.seconds(from: nanos, to: HostClock.now())
         return Date().addingTimeInterval(-max(0, ago))
+    }
+
+    func sleep(forSeconds seconds: TimeInterval) async throws {
+        try await Task.sleep(for: .seconds(seconds))
     }
 }

@@ -24,6 +24,8 @@ struct HotkeyInputMapper {
     let source: HotkeySource
     private(set) var state = ModifierState()
     private var remapKeyHeld = false
+    /// A locked recording is open with no key down. Only Esc, which cancels it, is worth passing on then.
+    var lockedRecording = false
 
     init(source: HotkeySource = .fnFlag) {
         self.source = source
@@ -57,7 +59,7 @@ struct HotkeyInputMapper {
                 return edge(wasHeld: false, sample, otherKeysHeld: otherKeysHeld)
             }
             // A key typed while the hotkey is up is none of the processor's business, and would leave it dirty.
-            guard hotkeyHeld else { return nil }
+            guard hotkeyHeld || (lockedRecording && sample.keyCode == TapPolicy.escapeKeyCode) else { return nil }
             return MappedInput(keyEvent: KeyEvent(key: Key(code: sample.keyCode), modifiers: composed), timestampNanos: sample.timestamp)
 
         case .keyUp:

@@ -129,12 +129,33 @@ private func tapCallback(
         return Unmanaged.passUnretained(event)
     }
     guard let sample = TapSample(type: type, event: event) else { return Unmanaged.passUnretained(event) }
+    let shared = context.shared
+    if sample.userData == SyntheticEvents.stamp { shared.stampedSeen.wrappingAdd(1, ordering: .relaxed) }
+    let pending = context.role == .keys && sample.kind != .flagsChanged ? shared.pending.withLock { $0[sample.keyCode] } : nil
     let decision = TapPolicy.decide(
         sample,
         role: context.role,
-        recording: context.recording.load(ordering: .relaxed),
-        swallowedKey: context.swallowedKey
+        recording: shared.recording.load(ordering: .relaxed),
+        swallowedKey: context.swallowedKey,
+        hotkeyHeld: shared.hotkeyHeld.load(ordering: .relaxed),
+        pending: pending,
+        idleKeysReported: context.idleKeysReported
     )
+    if let held = TapPolicy.holdChange(sample, swallowedKey: context.swallowedKey, tracksFnFlag: context.tracksFnFlag) {
+        shared.hotkeyHeld.store(held, ordering: .relaxed)
+    }
+    if let combo = decision.replacement, let emulator = context.emulator,
+       emulator.post(combo, keyDown: sample.kind == .keyDown, originalFlags: sample.flags, autorepeat: sample.isAutorepeat) {
+        shared.emulated.wrappingAdd(1, ordering: .relaxed)
+    }
+    if context.role == .keys {
+        switch TapPolicy.pendingChange(for: sample, decision: decision) {
+        case .none: break
+        case let .set(value): shared.pending.withLock { $0[sample.keyCode] = value }
+        case .clear: shared.pending.withLock { $0[sample.keyCode] = nil }
+        }
+    }
+    if decision.swallow { shared.swallowed.wrappingAdd(1, ordering: .relaxed) }
     if decision.deliver { context.sink.yield(.sample(context.role, sample)) }
     return decision.swallow ? nil : Unmanaged.passUnretained(event)
 }

@@ -30,6 +30,7 @@ import Testing
             guard let mapped = mapper.map(sample, otherKeysHeld: { otherKeysHeld }) else { continue }
             let now = Date(timeIntervalSinceReferenceDate: Double(mapped.timestampNanos) / 1000)
             if let event = engine.process(mapped.keyEvent, now: now) { events.append(event) }
+            mapper.lockedRecording = engine.isLocked
         }
         return events
     }
@@ -200,6 +201,53 @@ import Testing
             key(.keyUp, f19, at: 900),
         ], source: .remapped(keyCode: f19))
         #expect(events == [.pressed, .discarded(.otherInput)])
+    }
+
+    // MARK: Hands-free
+
+    @Test func doubleTapLocksAndAnotherTapStops() {
+        let events = run([
+            flags(63, Self.fn, at: 0), flags(63, 0, at: 100),
+            flags(63, Self.fn, at: 200), flags(63, 0, at: 300),
+            flags(63, Self.fn, at: 5000), flags(63, 0, at: 5100),
+        ])
+        #expect(events == [.pressed, .discarded(.tooShort), .pressed, .locked(.doubleTap), .released])
+    }
+
+    @Test func doubleTapLocksInRemapModeToo() {
+        let source = HotkeySource.remapped(keyCode: 80)
+        let events = run([
+            key(.keyDown, 80, at: 0), key(.keyUp, 80, at: 100),
+            key(.keyDown, 80, at: 200), key(.keyUp, 80, at: 300),
+            key(.keyDown, 80, at: 5000), key(.keyUp, 80, at: 5100),
+        ], source: source)
+        #expect(events == [.pressed, .discarded(.tooShort), .pressed, .locked(.doubleTap), .released])
+    }
+
+    @Test func escapeReachesTheProcessorOnlyWhileLocked() {
+        var mapper = HotkeyInputMapper(source: .fnFlag)
+        let escape = key(.keyDown, 53, at: 10)
+        #expect(mapper.map(escape, otherKeysHeld: { false }) == nil)
+        mapper.lockedRecording = true
+        #expect(mapper.map(escape, otherKeysHeld: { false })?.keyEvent.key == .escape)
+        // Ordinary typing during a lock is none of the processor's business, or it would stop a later tap from ending it.
+        #expect(mapper.map(key(.keyDown, 0, at: 20), otherKeysHeld: { false }) == nil)
+    }
+
+    @Test func escapeCancelsALockedRecording() {
+        var mapper = HotkeyInputMapper(source: .fnFlag)
+        var engine = GestureEngine()
+        var events: [GestureEvent] = []
+        for sample in [
+            flags(63, Self.fn, at: 0), flags(63, 0, at: 100), flags(63, Self.fn, at: 200), flags(63, 0, at: 300),
+            key(.keyDown, 0, at: 400), key(.keyDown, 53, at: 500),
+        ] {
+            mapper.lockedRecording = engine.isLocked
+            guard let mapped = mapper.map(sample, otherKeysHeld: { false }) else { continue }
+            let now = Date(timeIntervalSinceReferenceDate: Double(mapped.timestampNanos) / 1000)
+            if let event = engine.process(mapped.keyEvent, now: now) { events.append(event) }
+        }
+        #expect(events == [.pressed, .discarded(.tooShort), .pressed, .locked(.doubleTap), .cancelled(.escape)])
     }
 }
 

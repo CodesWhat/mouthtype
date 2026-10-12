@@ -126,4 +126,34 @@ import Testing
         #expect(short > PillView.pillSize.width && short <= 332)
         #expect(PillView.pillWidth(forMessage: String(repeating: "wide ", count: 60), max: 332) == 332)
     }
+
+    @Test func handsFreePillIsWiderAndShowsTheDot() {
+        #expect(PillView.barsWidth(locked: false) == PillView.pillSize.width)
+        #expect(PillView.barsWidth(locked: true) > PillView.pillSize.width)
+        #expect(PillView.barsWidth(locked: true) < PillController.panelSize.width)
+        _ = NSApplication.shared
+        let controller = PillController(level: { 0 })
+        #expect(!controller.view.isLocked)
+        controller.showHandsFree()
+        #expect(controller.state == .handsFree && controller.view.isLocked)
+        controller.showRecording()
+        #expect(controller.state == .recording && !controller.view.isLocked)
+        controller.showHandsFree()
+        controller.showProcessing()
+        #expect(!controller.view.isLocked)
+        controller.hide()
+    }
+
+    @Test func noticeOverAHandsFreeRecordingComesBackToIt() async {
+        _ = NSApplication.shared
+        let controller = PillController(level: { 0 })
+        controller.showHandsFreeNotice("1 minute left", duration: 0.05)
+        #expect(controller.state == .hidden)
+        controller.showHandsFree()
+        controller.showHandsFreeNotice("1 minute left", duration: 0.05)
+        #expect(controller.state == .message("1 minute left"))
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(controller.state == .handsFree)
+        controller.hide()
+    }
 }

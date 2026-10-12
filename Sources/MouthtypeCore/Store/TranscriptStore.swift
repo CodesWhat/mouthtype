@@ -104,6 +104,11 @@ public final class TranscriptStore: Sendable {
         return start.id
     }
 
+    /// A hold that became a hands-free recording: the row opened at key-down as hold/fn.
+    public func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) throws {
+        try update(id, [("mode", mode.rawValue), ("trigger", trigger.rawValue)])
+    }
+
     public func recordCapture(_ id: String, _ capture: CaptureRecord) throws {
         try update(id, [
             ("status", DictationStatus.recorded),

@@ -10,6 +10,10 @@ final class PillView: NSView {
     static let barPitch: CGFloat = 4.25
     static let messageFont = NSFont.systemFont(ofSize: 12)
     static let messagePadding: CGFloat = 14
+    /// A locked recording's pill is this much wider, the room taken by the dot at its left edge.
+    static let lockedExtraWidth: CGFloat = 16
+    static let dotSize: CGFloat = 6
+    static let dotCenterX: CGFloat = 22
 
     static let fill = NSColor(hex: 0x1A1A1A)
     static let stroke = NSColor(hex: 0x4D4A42)
@@ -23,6 +27,8 @@ final class PillView: NSView {
     private let pill = CALayer()
     private let bars: [CALayer]
     private let text = CATextLayer()
+    private let dot = CALayer()
+    private(set) var isLocked = false
 
     init(frame: NSRect, maxPillWidth: CGFloat) {
         self.maxPillWidth = maxPillWidth
@@ -48,6 +54,12 @@ final class PillView: NSView {
             pill.addSublayer(bar)
         }
 
+        dot.backgroundColor = Self.ink.cgColor
+        dot.cornerRadius = Self.dotSize / 2
+        dot.bounds = CGRect(origin: .zero, size: CGSize(width: Self.dotSize, height: Self.dotSize))
+        dot.isHidden = true
+        pill.addSublayer(dot)
+
         text.font = Self.messageFont
         text.fontSize = Self.messageFont.pointSize
         text.foregroundColor = Self.ink.cgColor
@@ -58,7 +70,7 @@ final class PillView: NSView {
         pill.addSublayer(text)
 
         setBarsHeights([CGFloat](repeating: BarModel.minHeight, count: BarModel.barCount))
-        setPillWidth(Self.pillSize.width, animated: false)
+        setPillWidth(Self.barsWidth(locked: false), animated: false)
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -70,15 +82,27 @@ final class PillView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         layer?.contentsScale = scale
         text.contentsScale = scale
-        for layer in [container, pill] + bars { layer.contentsScale = scale }
+        for layer in [container, pill, dot] + bars { layer.contentsScale = scale }
     }
 
     func showBars(_ heights: [CGFloat]) {
         if !text.isHidden {
             setMessage(nil)
-            setPillWidth(Self.pillSize.width, animated: false)
+            setPillWidth(Self.barsWidth(locked: isLocked), animated: false)
         }
         setBarsHeights(heights)
+    }
+
+    static func barsWidth(locked: Bool) -> CGFloat {
+        pillSize.width + (locked ? lockedExtraWidth : 0)
+    }
+
+    /// The hands-free look: a filled dot in the bar colour at the left edge, and the pill widened to make room.
+    func setLocked(_ locked: Bool) {
+        guard locked != isLocked else { return }
+        isLocked = locked
+        guard text.isHidden else { return }
+        setPillWidth(Self.barsWidth(locked: locked), animated: false)
     }
 
     /// Replaces the bars with one line of text and widens the pill to fit it.
@@ -97,6 +121,7 @@ final class PillView: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         text.isHidden = message == nil
+        dot.isHidden = message != nil || !isLocked
         bars.forEach { $0.isHidden = message != nil }
         if let message {
             text.string = message
@@ -107,7 +132,7 @@ final class PillView: NSView {
     private func setBarsHeights(_ heights: [CGFloat]) {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        let midX = pill.bounds.width / 2
+        let midX = pill.bounds.width / 2 + (isLocked ? Self.lockedExtraWidth / 2 : 0)
         let midY = pill.bounds.height / 2
         let count = CGFloat(bars.count)
         for (i, bar) in bars.enumerated() {
@@ -135,6 +160,8 @@ final class PillView: NSView {
             x: Self.messagePadding, y: (size.height - lineHeight) / 2,
             width: size.width - Self.messagePadding * 2, height: lineHeight
         )
+        dot.position = CGPoint(x: Self.dotCenterX, y: size.height / 2)
+        dot.isHidden = !text.isHidden || !isLocked
         CATransaction.commit()
         if text.isHidden { setBarsHeights(bars.map { $0.bounds.height }) }
     }

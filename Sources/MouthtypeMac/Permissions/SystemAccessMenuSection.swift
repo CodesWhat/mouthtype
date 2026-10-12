@@ -1,13 +1,17 @@
 import AppKit
 
-/// The menu lines for Accessibility, the hotkey tap's health, and a Globe key conflict.
+/// The menu lines for Accessibility, the hotkey tap's health, a Globe key conflict, and the Fn remap switch.
 @MainActor
 public final class SystemAccessMenuSection: NSObject, MenuSection {
     private let accessibilityItem = NSMenuItem()
     private let hotkeyItem = NSMenuItem()
     private let globeItem = NSMenuItem()
+    private let remapItem = NSMenuItem(title: "Remap Fn key (hides the emoji picker)", action: nil, keyEquivalent: "")
 
-    public var items: [NSMenuItem] { [accessibilityItem, hotkeyItem, globeItem] }
+    /// A click on the remap checkbox.
+    public var onToggleRemap: (@MainActor () -> Void)?
+
+    public var items: [NSMenuItem] { [accessibilityItem, hotkeyItem, globeItem, remapItem] }
 
     public override init() {
         super.init()
@@ -16,6 +20,8 @@ public final class SystemAccessMenuSection: NSObject, MenuSection {
         hotkeyItem.isEnabled = false
         globeItem.target = self
         globeItem.action = #selector(openKeyboardSettings)
+        remapItem.target = self
+        remapItem.action = #selector(toggleRemap)
         update(accessibilityGranted: false)
         update(hotkeyHealth: .off)
         update(globe: nil)
@@ -36,6 +42,14 @@ public final class SystemAccessMenuSection: NSObject, MenuSection {
         let text = globe?.menuText
         globeItem.title = text ?? ""
         globeItem.isHidden = text == nil
+    }
+
+    public func update(remapChecked checked: Bool) {
+        remapItem.state = checked ? .on : .off
+    }
+
+    @objc private func toggleRemap() {
+        onToggleRemap?()
     }
 
     @objc private func openAccessibilitySettings() {

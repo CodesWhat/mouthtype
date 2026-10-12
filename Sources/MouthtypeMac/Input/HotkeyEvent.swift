@@ -6,6 +6,8 @@ public enum HotkeyEvent: Equatable, Sendable {
     case pressed(at: UInt64)
     /// Held long enough: stop capturing and transcribe.
     case released(at: UInt64)
+    /// The recording in progress is now hands-free: no key is held and the next tap of the key ends it with `released`.
+    case locked(at: UInt64, trigger: LockTrigger)
     /// Stop capturing and throw the audio away, with feedback.
     case cancelled(reason: CancelReason)
     /// Stop capturing and throw the audio away, silently (a short tap, or a chord).
@@ -32,5 +34,14 @@ public enum HotkeyHealth: Equatable, Sendable {
         if recovering { return .recovering }
         if secureInput, !recording { return .secureInputOn }
         return .listening
+    }
+}
+
+extension LockTrigger {
+    var dictationTrigger: DictationTrigger {
+        switch self {
+        case .doubleTap: .doubleTap
+        case .fnSpace: .fnSpace
+        }
     }
 }

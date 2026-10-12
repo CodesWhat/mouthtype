@@ -150,6 +150,29 @@ public struct HotKeyProcessor: Sendable {
         }
     }
 
+    /// True while a double-tap or chord lock holds the recording open with no key down.
+    public var isLocked: Bool { state == .doubleTapLock }
+
+    /// Fn+Space style lock: turns the hold in progress into a lock. False when nothing is being held.
+    public mutating func lockCurrentHold() -> Bool {
+        guard case .pressAndHold = state else { return false }
+        state = .doubleTapLock
+        lastTapAt = nil
+        return true
+    }
+
+    /// Leaves a lock from outside the keyboard (a menu stop, the safety cap). False when not locked.
+    public mutating func endLock() -> Bool {
+        guard isLocked else { return false }
+        resetToIdle()
+        return true
+    }
+
+    /// Drops the remembered release, so a real hold followed by a quick tap can't read as a double-tap.
+    public mutating func forgetLastTap() {
+        lastTapAt = nil
+    }
+
     /// Processes a keyboard event and returns an action to take, if any.
     ///
     /// - Parameter keyEvent: The keyboard event containing key and modifier state

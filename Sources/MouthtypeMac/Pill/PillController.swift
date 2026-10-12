@@ -14,7 +14,7 @@ final class PillPanel: NSPanel {
 @MainActor
 public final class PillController {
     enum State: Equatable {
-        case hidden, recording, processing, message(String)
+        case hidden, recording, handsFree, processing, message(String)
     }
 
     static let panelSize = CGSize(width: 360, height: 40)
@@ -63,14 +63,40 @@ public final class PillController {
 
     public func showRecording() {
         enter(.recording)
+        view.setLocked(false)
         bars.reset()
         lastTimestamp = nil
         view.showBars(bars.step(level: 0, dt: 0))
         startLink()
     }
 
+    /// The same bars with a dot at the left edge and a slightly wider pill, for a recording that stays open on its own.
+    public func showHandsFree() {
+        enter(.handsFree)
+        view.setLocked(true)
+        bars.reset()
+        lastTimestamp = nil
+        view.showBars(bars.step(level: 0, dt: 0))
+        startLink()
+    }
+
+    /// One line over a hands-free recording, then back to the hands-free pill unless something else took over.
+    public func showHandsFreeNotice(_ text: String, duration: TimeInterval = 4) {
+        guard state == .handsFree else { return }
+        enter(.message(text))
+        stopLink()
+        view.showMessage(text, animated: true)
+        let shown = generation
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(duration))
+            guard let self, self.generation == shown else { return }
+            self.showHandsFree()
+        }
+    }
+
     public func showProcessing() {
         enter(.processing)
+        view.setLocked(false)
         rippleStart = CACurrentMediaTime()
         view.showBars(BarModel.ripple(time: 0))
         startLink()
@@ -154,7 +180,7 @@ public final class PillController {
 
     fileprivate func tick(_ link: CADisplayLink) {
         switch state {
-        case .recording:
+        case .recording, .handsFree:
             let dt = lastTimestamp.map { min(0.1, max(0.001, link.targetTimestamp - $0)) } ?? 1.0 / 60
             lastTimestamp = link.targetTimestamp
             view.showBars(bars.step(level: levelSource(), dt: dt))

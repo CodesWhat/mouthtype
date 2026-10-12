@@ -11,16 +11,19 @@ enum InputProbe {
         case globeProbe(seconds: Double)
         case hotkeyLog(seconds: Double)
         case tapCycle(cycles: Int)
+        case emulation
     }
 
     static let globeFlag = "--globe-probe"
     static let hotkeyLogFlag = "--hotkey-log"
     static let tapCycleFlag = "--tap-cycle-selftest"
+    static let emulationFlag = "--emulation-selftest"
     static let defaultSeconds = 30.0
 
     static func mode(in arguments: [String]) -> Mode? {
         if let seconds = seconds(after: globeFlag, in: arguments) { return .globeProbe(seconds: seconds) }
         if let seconds = seconds(after: hotkeyLogFlag, in: arguments) { return .hotkeyLog(seconds: seconds) }
+        if arguments.contains(emulationFlag) { return .emulation }
         if let index = arguments.firstIndex(of: tapCycleFlag) {
             let requested = arguments.indices.contains(index + 1) ? Int(arguments[index + 1]) : nil
             return .tapCycle(cycles: min(20, max(1, requested ?? 3)))
@@ -54,6 +57,8 @@ enum InputProbe {
             await observe(source: .fnFlag, seconds: seconds)
         case let .tapCycle(cycles):
             await cycleTaps(cycles)
+        case .emulation:
+            await EmulationSelfTest.run(remap: remap)
         case let .globeProbe(seconds):
             Log.probe.info("globe-probe for \(seconds, format: .fixed(precision: 0), privacy: .public) s; mapping before: \(remap.currentDescription(), privacy: .public)")
             let outcome = remap.apply()

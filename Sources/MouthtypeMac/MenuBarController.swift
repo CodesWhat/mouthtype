@@ -20,6 +20,13 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     private let engineStatusItem = NSMenuItem()
     private let menu = NSMenu()
     private var sections: [any MenuSection] = []
+    private let stopItem = NSMenuItem(title: "Stop Dictation", action: nil, keyEquivalent: "")
+    private let cancelItem = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
+    private var handsFree = false
+
+    /// The menu's stand-ins for the key tap and Esc while a recording is locked and the pill can't be clicked.
+    var onStopDictation: (@MainActor () -> Void)?
+    var onCancelDictation: (@MainActor () -> Void)?
 
     public init(engineHost: EngineHost, version: String = AppInfo.version) {
         self.engineHost = engineHost
@@ -27,6 +34,10 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         super.init()
         setIcon(.idle)
         menu.delegate = self
+        for (item, action) in [(stopItem, #selector(stopDictation)), (cancelItem, #selector(cancelDictation))] {
+            item.target = self
+            item.action = action
+        }
         statusItem.menu = menu
         rebuildMenu(version: version)
         observeEngineState()
@@ -35,6 +46,17 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     func setIcon(_ icon: StatusIcon) {
         statusItem.button?.image = icon.image
     }
+
+    /// Puts Stop Dictation and Cancel Dictation at the top of the menu while a recording is locked.
+    func setHandsFree(_ active: Bool) {
+        handsFree = active
+        rebuildMenu(version: AppInfo.version)
+    }
+
+    var dictationControlItems: [NSMenuItem] { [stopItem, cancelItem] }
+
+    @objc private func stopDictation() { onStopDictation?() }
+    @objc private func cancelDictation() { onCancelDictation?() }
 
     /// Re-reads every section and rebuilds the menu. Call after each finished dictation.
     public func refresh() {
@@ -54,6 +76,11 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     private func rebuildMenu(version: String) {
         // Items are reused across rebuilds and an NSMenuItem can only be in one menu.
         menu.removeAllItems()
+        if handsFree {
+            menu.addItem(stopItem)
+            menu.addItem(cancelItem)
+            menu.addItem(.separator())
+        }
         let title = NSMenuItem(title: "Mouthtype \(version)", action: nil, keyEquivalent: "")
         title.isEnabled = false
         menu.addItem(title)

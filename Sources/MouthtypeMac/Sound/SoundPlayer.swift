@@ -4,6 +4,7 @@ import AppKit
 protocol SoundPlayer: AnyObject {
     func playStart()
     func playStop()
+    func playLock()
     func playError()
 }
 
@@ -24,12 +25,14 @@ enum SoundPreference {
 final class SystemSoundPlayer: SoundPlayer {
     static let startName = "Tink"
     static let stopName = "Pop"
+    static let lockName = "Morse"
     static let errorName = "Basso"
     static let volume: Float = 0.3
 
     private let defaults: UserDefaults
     private let start: NSSound?
     private let stop: NSSound?
+    private let lock: NSSound?
     private let error: NSSound?
 
     init(defaults: UserDefaults = .standard) {
@@ -42,13 +45,15 @@ final class SystemSoundPlayer: SoundPlayer {
         }
         start = load(Self.startName)
         stop = load(Self.stopName)
+        lock = load(Self.lockName)
         error = load(Self.errorName)
     }
 
-    var loadedAll: Bool { start != nil && stop != nil && error != nil }
+    var loadedAll: Bool { start != nil && stop != nil && lock != nil && error != nil }
 
     func playStart() { play(start) }
     func playStop() { play(stop) }
+    func playLock() { play(lock) }
     func playError() { play(error) }
 
     private func play(_ sound: NSSound?) {
