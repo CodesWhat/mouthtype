@@ -14,7 +14,7 @@ struct EngineWorker: AsyncParsableCommand {
     @Option var result: String
 
     func run() async throws {
-        var output = WorkerOutput(engineID: engine, displayName: engine, prepare: nil, peakRSSBytes: 0, firstTranscribeMs: nil, modelBytes: nil, modelPath: nil, clips: [], error: nil)
+        var output = WorkerOutput(engineID: engine, displayName: engine, prepare: nil, peakRSSBytes: 0, peakFootprintBytes: nil, firstTranscribeMs: nil, modelBytes: nil, modelPath: nil, clips: [], error: nil)
         do {
             let transcriber = try EngineCatalog.make(id: engine)
             output.displayName = transcriber.displayName
@@ -34,6 +34,7 @@ struct EngineWorker: AsyncParsableCommand {
             output.error = "\(error.localizedDescription)"
         }
         output.peakRSSBytes = Self.peakRSS()
+        output.peakFootprintBytes = ProcessMemory.peakFootprintBytes()
         try JSONEncoder().encode(output).write(to: URL(fileURLWithPath: result))
     }
 

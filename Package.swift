@@ -1,4 +1,4 @@
-// swift-tools-version:6.0
+// swift-tools-version:6.2
 import PackageDescription
 
 let package = Package(
@@ -12,6 +12,9 @@ let package = Package(
         .package(url: "https://github.com/FluidInference/FluidAudio", from: "0.17.7"),
         .package(url: "https://github.com/argmaxinc/WhisperKit", from: "1.1.1"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.8.2"),
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.32.3", traits: []),
+        .package(url: "https://github.com/huggingface/swift-huggingface", from: "1.0.0"),
+        .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.5"),
     ],
     targets: [
         .target(
@@ -19,6 +22,10 @@ let package = Package(
             dependencies: [
                 .product(name: "FluidAudio", package: "FluidAudio"),
                 .product(name: "WhisperKit", package: "WhisperKit"),
+                .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "HuggingFace", package: "swift-huggingface"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
             ]
         ),
         .executableTarget(
@@ -26,11 +33,12 @@ let package = Package(
             dependencies: [
                 "MouthtypeCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ]
+            ],
+            resources: [.copy("Fixtures/cleanup-cases.json")]
         ),
         .testTarget(
             name: "MouthtypeCoreTests",
-            dependencies: ["MouthtypeCore"]
+            dependencies: ["MouthtypeCore", "mouthtype-bench"]
         ),
     ]
 )

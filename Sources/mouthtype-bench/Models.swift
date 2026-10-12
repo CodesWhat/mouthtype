@@ -31,6 +31,7 @@ struct WorkerOutput: Codable {
     var displayName: String
     var prepare: PrepareTimings?
     var peakRSSBytes: Int
+    var peakFootprintBytes: Int?
     var firstTranscribeMs: Double?
     var modelBytes: Int?
     var modelPath: String?

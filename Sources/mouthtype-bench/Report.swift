@@ -32,17 +32,17 @@ enum Report {
         }
 
         out += "## Summary\n\n"
-        out += "| Engine | Cold prepare (s) | Warm load (s) | First transcribe (ms) | Short-clip median (ms) | Overall RTFx | WER synthetic | WER real | Peak RSS (MB) | Model size (MB) | Status |\n"
-        out += "|---|---|---|---|---|---|---|---|---|---|---|\n"
+        out += "| Engine | Cold prepare (s) | Warm load (s) | First transcribe (ms) | Short-clip median (ms) | Overall RTFx | WER synthetic | WER real | Peak RSS (MB) | Peak footprint (MB) | Model size (MB) | Status |\n"
+        out += "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         for e in report.engines {
-            out += "| \(e.displayName) (`\(e.engineID)`) | \(coldCell(e)) | \(warmCell(e)) | \(num(e.warm?.firstTranscribeMs, 0)) | \(num(e.shortClipMedianMs, 0)) | \(num(e.overallRTFx, 1)) | \(pct(e.werSynthetic)) | \(pct(e.werReal)) | \(mb(e.warm?.peakRSSBytes)) | \(mb(e.warm?.modelBytes ?? e.cold?.modelBytes)) | \(e.error == nil ? "ok" : "FAILED") |\n"
+            out += "| \(e.displayName) (`\(e.engineID)`) | \(coldCell(e)) | \(warmCell(e)) | \(num(e.warm?.firstTranscribeMs, 0)) | \(num(e.shortClipMedianMs, 0)) | \(num(e.overallRTFx, 1)) | \(pct(e.werSynthetic)) | \(pct(e.werReal)) | \(mb(e.warm?.peakRSSBytes)) | \(mb(e.warm?.peakFootprintBytes)) | \(mb(e.warm?.modelBytes ?? e.cold?.modelBytes)) | \(e.error == nil ? "ok" : "FAILED") |\n"
         }
         out += "\nCold prepare is the first process for the engine: download plus load, with CoreML compile folded into load. "
         out += "Warm load is `prepare()` in a fresh process with the models already on disk. "
         out += "First transcribe is the first untimed transcription in the warm process, which absorbs any lazy CoreML specialization that `prepare()` did not. Short-clip median is the median of per-clip medians for clips of 10 s or less. "
         out += "Overall RTFx is total audio seconds over the summed per-clip median processing seconds. "
         out += "WER is corpus-level (total edits over total reference words) on the last timed run of each clip. "
-        out += "Peak RSS is the warm process after loading and transcribing the whole corpus.\n\n"
+        out += "Peak RSS is the warm process after loading and transcribing the whole corpus. Peak footprint is the same process's peak `phys_footprint` from `TASK_VM_INFO`, which also counts GPU-backed unified memory.\n\n"
         if report.engines.contains(where: { $0.cold?.prepare?.downloaded == false }) {
             out += "Engines marked `(models already on disk)` in the cold column had their files cached before this run, so their cold number is not a first-ever download.\n\n"
         }
