@@ -3,16 +3,19 @@ import QuartzCore
 
 /// The pill, drawn from sprites: a static chassis with live layers over it (meter segments, timer, lamps, caps,
 /// message text), all placed on whole points from the skin's layout. Sprites are magnified nearest-neighbour at an
-/// integer art scale so every art pixel stays a crisp block. The view never takes events, and the panel around it
-/// is click-through anyway.
+/// integer art scale so every art pixel stays a crisp block. The view never takes events, the host view over it does.
 @MainActor
-final class PillView: NSView {
+final class HiFiPillView: NSView, PillSkinView {
     /// Points per art pixel. 1 or 2; a setting later.
     static let artScale: CGFloat = 1
     static let artSize = CGSize(width: 146, height: 32)
     static let pillSize = CGSize(width: artSize.width * artScale, height: artSize.height * artScale)
 
     private enum Mode { case meter, message }
+
+    static let fadeIn: TimeInterval = 0.12
+    static let fadeOut: TimeInterval = 0.16
+    private static let travel: CGFloat = 6 * artScale
 
     /// Holds the pill and is what the show and hide animations fade and move.
     let container = CALayer()
@@ -37,6 +40,7 @@ final class PillView: NSView {
     private var ledOn = false
     private var talkDown = false
     private var messageWidth = 0
+    private var pressedControl: PillControl?
     private(set) var isLocked = false
     /// How far the current message has to scroll, 0 when it sits centred.
     private(set) var messageScrollDistance = 0
@@ -54,8 +58,7 @@ final class PillView: NSView {
         layer?.addSublayer(container)
 
         pill.frame = CGRect(
-            x: ((bounds.width - Self.pillSize.width) / 2).rounded(.down),
-            y: ((bounds.height - Self.pillSize.height) / 2).rounded(.down),
+            x: ((bounds.width - Self.pillSize.width) / 2).rounded(.down), y: PillGeometry.verticalMargin,
             width: Self.pillSize.width, height: Self.pillSize.height
         )
         container.addSublayer(pill)
@@ -102,6 +105,17 @@ final class PillView: NSView {
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    /// The cap sprites' frames in this view, while locked and showing the meter.
+    var controlFrames: [PillControl: CGRect] {
+        guard isLocked, mode == .meter else { return [:] }
+        return [.cancel: capFrame("cancel"), .stop: capFrame("stop")].compactMapValues { $0 }
+    }
+
+    private func capFrame(_ name: String) -> CGRect? {
+        guard let spec = layout.sprites[name] else { return nil }
+        return layerFrame(of: spec.rect).offsetBy(dx: pill.frame.minX, dy: pill.frame.minY)
+    }
 
     // MARK: Layout helpers
 
@@ -235,12 +249,94 @@ final class PillView: NSView {
     func setLocked(_ locked: Bool) {
         guard locked != isLocked else { return }
         isLocked = locked
-        withoutActions {
-            setSprite(cancel, locked ? "cancel_lit" : "cancel")
-            setSprite(stop, locked ? "stop_lit" : "stop")
-            padlock.isHidden = !(locked && mode == .meter)
-        }
+        withoutActions { padlock.isHidden = !(locked && mode == .meter) }
+        refreshCaps()
         renderTimer()
+    }
+
+    /// Lit caps while locked; a pressed cap drops to its unlit sprite and sits one art pixel lower.
+    private func refreshCaps() {
+        withoutActions {
+            for (control, layer, name) in [(PillControl.cancel, cancel, "cancel"), (.stop, stop, "stop")] {
+                let down = pressedControl == control
+                setSprite(layer, isLocked && !down ? name + "_lit" : name)
+                guard let spec = layout.sprites[name] else { continue }
+                var frame = layerFrame(of: spec.rect)
+                if down { frame.origin.y -= Self.artScale }
+                layer.frame = frame
+            }
+        }
+    }
+
+    func setHovered(_ control: PillControl?) {}
+
+    func setPressed(_ control: PillControl?) {
+        guard control != pressedControl else { return }
+        pressedControl = control
+        refreshCaps()
+    }
+
+    // MARK: Protocol entry points
+
+    func showRecording(locked: Bool) {
+        setLocked(locked)
+        setTalkDown(!locked)
+    }
+
+    func beginProcessing() {
+        setLocked(false)
+        setTalkDown(false)
+        setLED(false)
+        setTimer(seconds: nil)
+        showRun(columns: BarModel.processingColumns(time: 0, columns: BarModel.barCount))
+    }
+
+    func showMessage(_ text: String, isError: Bool, overRecording: Bool) {
+        if !overRecording {
+            setLocked(false)
+            setTalkDown(false)
+            setLED(false)
+            setTimer(seconds: nil)
+        }
+        showMessage(text, isError: isError)
+    }
+
+    func showFractions(_ fractions: [Float]) {
+        showMeter(litCounts: BarModel.litSegments(fractions, segments: BarModel.segmentRows))
+    }
+
+    func updateProcessing(time: TimeInterval) {
+        showRun(columns: BarModel.processingColumns(time: time, columns: BarModel.barCount))
+    }
+
+    func setElapsed(_ seconds: TimeInterval?) {
+        guard let seconds else { return }
+        setTimer(seconds: Int(max(0, seconds)))
+        setLED(PillTimeline.ledOn(elapsed: seconds, locked: isLocked))
+    }
+
+    /// A short fade with a few points of upward travel; fade only under Reduce Motion.
+    func appear(reduceMotion: Bool) {
+        withoutActions {
+            container.opacity = 0
+            container.transform = reduceMotion ? CATransform3DIdentity : CATransform3DMakeTranslation(0, -Self.travel, 0)
+        }
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(Self.fadeIn)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeOut))
+        container.opacity = 1
+        container.transform = CATransform3DIdentity
+        CATransaction.commit()
+    }
+
+    func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void) {
+        CATransaction.begin()
+        CATransaction.setAnimationDuration(Self.fadeOut)
+        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeIn))
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
+        container.opacity = 0
+        if !reduceMotion { container.transform = CATransform3DMakeTranslation(0, Self.travel / 2, 0) }
+        CATransaction.commit()
     }
 
     // MARK: Message

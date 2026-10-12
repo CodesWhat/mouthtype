@@ -8,32 +8,33 @@ final class PillPanel: NSPanel {
     override var canBecomeMain: Bool { false }
 }
 
-/// The floating pill: a hi-fi deck with a live level meter and timer while recording, a travelling run of segments
-/// while processing, and one line of text for a message. The panel is built once at init and only ordered in and
-/// out; the display link runs only while something on screen moves, so nothing runs while idle.
+/// The floating pill, in whichever skin is selected: a level meter while recording (with the cancel and stop
+/// controls once hands-free locks), a travelling wave while processing, and one line of text for a message. The
+/// panel is built once at init and only ordered in and out; the display link runs only while something on screen
+/// moves, so nothing runs while idle. The panel is click-through except while locked and the pointer is over a
+/// control.
 @MainActor
 public final class PillController {
     enum State: Equatable {
         case hidden, recording, handsFree, processing, message(String)
     }
 
-    /// Room around the pill for the show and hide travel; whole points at every art scale.
-    static let horizontalPadding: CGFloat = 16 * PillView.artScale
-    static let pillPadding: CGFloat = 8 * PillView.artScale
-    static let panelSize = CGSize(
-        width: PillView.pillSize.width + 2 * horizontalPadding, height: PillView.pillSize.height + 2 * pillPadding
-    )
-    static let fadeIn: TimeInterval = 0.12
-    static let fadeOut: TimeInterval = 0.16
-    private static let travel: CGFloat = 6 * PillView.artScale
+    static let horizontalPadding = PillGeometry.horizontalMargin
+    static let pillPadding = PillGeometry.verticalMargin
+    static let panelSize = PillGeometry.panelSize
 
     private(set) var state: State = .hidden
     let panel: PillPanel
-    let view: PillView
+    let host: PillHostView
+    private(set) var skinKind: PillSkinKind
+    private(set) var skin: any PillSkinView
 
     /// Read once per frame while recording. `PillDemo` swaps it for a synthetic curve.
     var levelSource: @MainActor () -> Float
+    /// A click on the cancel or stop control of a locked pill.
+    var onControl: (@MainActor (PillControl) -> Void)?
 
+    private var pendingSkin: PillSkinKind?
     private var bars = BarModel()
     private var link: CADisplayLink?
     private var lastTimestamp: CFTimeInterval?
@@ -43,16 +44,13 @@ public final class PillController {
     private var messageStart: CFTimeInterval = 0
     /// Bumped by every state change, so a message timer or a hide completion only acts on its own state.
     private var generation = 0
+    private var pressedControl: PillControl?
 
-    public init(level: @escaping @MainActor () -> Float) {
+    public init(level: @escaping @MainActor () -> Float, defaults: UserDefaults = .standard) {
         levelSource = level
-        let assets: PillAssets
-        do {
-            assets = try PillAssets.loadHiFi()
-        } catch {
-            fatalError("pill resources missing from the bundle: \(error)")
-        }
-        view = PillView(frame: NSRect(origin: .zero, size: Self.panelSize), assets: assets)
+        skinKind = PillSkinPreference.current(defaults)
+        skin = Self.makeSkin(skinKind)
+        host = PillHostView(frame: NSRect(origin: .zero, size: Self.panelSize))
         panel = PillPanel(
             contentRect: NSRect(origin: .zero, size: Self.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -68,23 +66,68 @@ public final class PillController {
         panel.collectionBehavior = [.canJoinAllSpaces, .stationary, .ignoresCycle, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.contentView = view
+        panel.contentView = host
+        host.wantsLayer = true
+        host.controlAt = { [weak self] point in self.flatMap { PillHit.control(at: point, frames: $0.skin.controlFrames) } }
+        host.onPress = { [weak self] control in self?.press(control) }
+        host.onActivate = { [weak self] control in self?.onControl?(control) }
+        install(skin)
+    }
+
+    private static func makeSkin(_ kind: PillSkinKind) -> any PillSkinView {
+        let frame = NSRect(origin: .zero, size: PillGeometry.panelSize)
+        switch kind {
+        case .classic:
+            return ClassicPillView(frame: frame)
+        case .hifi:
+            do {
+                return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi())
+            } catch {
+                fatalError("pill resources missing from the bundle: \(error)")
+            }
+        }
+    }
+
+    /// Slows every animation on the pill by `factor`, so a transition can be caught mid-way. Demo only.
+    func slowAnimations(by factor: Float) {
+        host.layer?.speed = 1 / max(1, factor)
+    }
+
+    private func install(_ new: any PillSkinView) {
+        skin.removeFromSuperview()
+        skin = new
+        new.frame = host.bounds
+        new.autoresizingMask = [.width, .height]
+        host.addSubview(new)
+        host.skinReplaced()
+    }
+
+    /// Switches skins at once when the pill is down, else at the next time it shows, so a recording is never
+    /// redrawn under the user.
+    func setSkin(_ kind: PillSkinKind) {
+        pendingSkin = kind == skinKind ? nil : kind
+        if state == .hidden { applyPendingSkin() }
+    }
+
+    private func applyPendingSkin() {
+        guard let kind = pendingSkin else { return }
+        pendingSkin = nil
+        skinKind = kind
+        install(Self.makeSkin(kind))
     }
 
     public func showRecording() {
         enter(.recording)
         recordingStart = CACurrentMediaTime()
-        view.setLocked(false)
-        view.setTalkDown(true)
+        skin.showRecording(locked: false)
         beginMeter()
     }
 
-    /// The same meter and timer with the padlock and lit caps, for a recording that stays open on its own.
+    /// The same meter with the lock look and, once clicked, the cancel and stop controls.
     public func showHandsFree() {
         enter(.handsFree)
         if recordingStart == nil { recordingStart = CACurrentMediaTime() }
-        view.setLocked(true)
-        view.setTalkDown(false)
+        skin.showRecording(locked: true)
         beginMeter()
     }
 
@@ -92,29 +135,25 @@ public final class PillController {
     public func showHandsFreeNotice(_ text: String, duration: TimeInterval = 4) {
         guard state == .handsFree else { return }
         enter(.message(text))
-        presentMessage(text, duration: duration) { [weak self] in self?.showHandsFree() }
+        presentMessage(text, isError: false, overRecording: true, duration: duration) { [weak self] in self?.showHandsFree() }
     }
 
     public func showProcessing() {
         enter(.processing)
         recordingStart = nil
-        view.setLocked(false)
-        view.setTalkDown(false)
-        view.setLED(false)
-        view.setTimer(seconds: nil)
+        skin.beginProcessing()
         processingStart = CACurrentMediaTime()
-        view.showRun(columns: BarModel.processingColumns(time: 0, columns: BarModel.barCount))
         startLink()
     }
 
     public func showMessage(_ text: String, duration: TimeInterval = 2.5) {
+        showMessage(text, isError: false, duration: duration)
+    }
+
+    func showMessage(_ text: String, isError: Bool, duration: TimeInterval = 2.5) {
         enter(.message(text))
         recordingStart = nil
-        view.setLocked(false)
-        view.setTalkDown(false)
-        view.setLED(false)
-        view.setTimer(seconds: nil)
-        presentMessage(text, duration: duration) { [weak self] in self?.hide() }
+        presentMessage(text, isError: isError, overRecording: false, duration: duration) { [weak self] in self?.hide() }
     }
 
     public func hide() {
@@ -123,8 +162,9 @@ public final class PillController {
         state = .hidden
         recordingStart = nil
         stopLink()
+        endInteraction()
         let shown = generation
-        animate(visible: false) { [weak self] in
+        skin.disappear(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion) { [weak self] in
             guard let self, self.generation == shown else { return }
             self.panel.orderOut(nil)
         }
@@ -135,28 +175,25 @@ public final class PillController {
     private func beginMeter() {
         bars.reset()
         lastTimestamp = nil
-        showMeter(bars.step(level: 0, dt: 0))
+        skin.showFractions(bars.step(level: 0, dt: 0))
         updateChrome(now: CACurrentMediaTime())
         startLink()
-    }
-
-    private func showMeter(_ fractions: [Float]) {
-        view.showMeter(litCounts: BarModel.litSegments(fractions, segments: BarModel.segmentRows))
     }
 
     /// Timer and REC lamp, from the recording's own clock.
     private func updateChrome(now: CFTimeInterval) {
         guard let start = recordingStart else { return }
-        let elapsed = max(0, now - start)
-        view.setTimer(seconds: Int(elapsed))
-        view.setLED(PillTimeline.ledOn(elapsed: elapsed, locked: view.isLocked))
+        skin.setElapsed(max(0, now - start))
     }
 
     /// Shows `text`, and runs `after` once it has been up for `duration`, or for as long as it takes to scroll through.
-    private func presentMessage(_ text: String, duration: TimeInterval, then after: @escaping @MainActor () -> Void) {
-        view.showMessage(text)
+    private func presentMessage(
+        _ text: String, isError: Bool, overRecording: Bool, duration: TimeInterval,
+        then after: @escaping @MainActor () -> Void
+    ) {
+        skin.showMessage(text, isError: isError, overRecording: overRecording)
         messageStart = CACurrentMediaTime()
-        let distance = view.messageScrollDistance
+        let distance = skin.messageScrollDistance
         let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance) + 0.3) : duration
         if distance > 0 || recordingStart != nil { startLink() } else { stopLink() }
         let shown = generation
@@ -167,15 +204,17 @@ public final class PillController {
         }
     }
 
-    /// Moves to `next`, placing and fading the panel in unless it is already up.
+    /// Moves to `next`, placing and showing the panel unless it is already up.
     private func enter(_ next: State) {
         generation += 1
         let wasShown = isShown
         state = next
+        if next != .handsFree { endInteraction() }
         guard !wasShown else { return }
+        applyPendingSkin()
         place()
         panel.orderFrontRegardless()
-        animate(visible: true, completion: nil)
+        skin.appear(reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     private func place() {
@@ -186,33 +225,39 @@ public final class PillController {
         panel.setFrameOrigin(CGPoint(x: origin.x.rounded(.down), y: origin.y.rounded(.down)))
     }
 
-    /// A short fade with a few points of upward travel; fade only under Reduce Motion.
-    private func animate(visible: Bool, completion: (@MainActor () -> Void)?) {
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        let layer = view.container
-        if visible {
-            CATransaction.begin()
-            CATransaction.setDisableActions(true)
-            layer.opacity = 0
-            layer.transform = reduceMotion ? CATransform3DIdentity : CATransform3DMakeTranslation(0, -Self.travel, 0)
-            CATransaction.commit()
+    // MARK: Clicks
+
+    /// Keeps the panel click-through except while a locked pill has the pointer over a control (or a press is in
+    /// flight), so the rest of the panel never swallows a click meant for the window underneath. `pointer` is in
+    /// screen coordinates.
+    func updateInteractivity(pointer: CGPoint) {
+        guard state == .handsFree else {
+            endInteraction()
+            return
         }
-        CATransaction.begin()
-        CATransaction.setAnimationDuration(visible ? Self.fadeIn : Self.fadeOut)
-        CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: visible ? .easeOut : .easeIn))
-        CATransaction.setCompletionBlock {
-            MainActor.assumeIsolated { completion?() }
-        }
-        layer.opacity = visible ? 1 : 0
-        if !reduceMotion {
-            layer.transform = visible ? CATransform3DIdentity : CATransform3DMakeTranslation(0, Self.travel / 2, 0)
-        }
-        CATransaction.commit()
+        let local = host.convert(panel.convertPoint(fromScreen: pointer), from: nil)
+        let frames = skin.controlFrames
+        let control = PillHit.control(at: local, frames: frames)
+        panel.ignoresMouseEvents = control == nil && pressedControl == nil
+        skin.setHovered(pressedControl == nil ? control : nil)
+    }
+
+    private func press(_ control: PillControl?) {
+        pressedControl = control
+        skin.setPressed(control)
+        if control != nil { skin.setHovered(nil) }
+    }
+
+    private func endInteraction() {
+        pressedControl = nil
+        panel.ignoresMouseEvents = true
+        skin.setPressed(nil)
+        skin.setHovered(nil)
     }
 
     private func startLink() {
         guard link == nil else { return }
-        let link = view.displayLink(target: LinkTarget(owner: self), selector: #selector(LinkTarget.tick(_:)))
+        let link = host.displayLink(target: LinkTarget(owner: self), selector: #selector(LinkTarget.tick(_:)))
         link.add(to: .main, forMode: .common)
         self.link = link
     }
@@ -228,14 +273,15 @@ public final class PillController {
         case .recording, .handsFree:
             let dt = lastTimestamp.map { min(0.1, max(0.001, now - $0)) } ?? 1.0 / 60
             lastTimestamp = now
-            showMeter(bars.step(level: levelSource(), dt: dt))
+            skin.showFractions(bars.step(level: levelSource(), dt: dt))
             updateChrome(now: now)
+            if state == .handsFree { updateInteractivity(pointer: NSEvent.mouseLocation) }
         case .processing:
-            view.showRun(columns: BarModel.processingColumns(time: now - processingStart, columns: BarModel.barCount))
+            skin.updateProcessing(time: now - processingStart)
         case .message:
-            let distance = view.messageScrollDistance
+            let distance = skin.messageScrollDistance
             let elapsed = now - messageStart
-            if distance > 0 { view.setMessageOffset(Marquee.offset(distance: distance, at: elapsed)) }
+            if distance > 0 { skin.setMessageOffset(Marquee.offset(distance: distance, at: elapsed)) }
             updateChrome(now: now)
             if recordingStart == nil, distance == 0 || elapsed > Marquee.duration(distance: distance) { stopLink() }
         case .hidden:

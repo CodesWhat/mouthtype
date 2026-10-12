@@ -123,10 +123,17 @@ import Testing
 }
 
 @MainActor
+func makePillController(skin: PillSkinKind? = nil, level: @escaping @MainActor () -> Float = { 0 }) -> PillController {
+    _ = NSApplication.shared
+    let defaults = UserDefaults(suiteName: "pill-tests-\(UUID().uuidString)")!
+    if let skin { PillSkinPreference.set(skin, in: defaults) }
+    return PillController(level: level, defaults: defaults)
+}
+
+@MainActor
 @Suite struct PillPanelTests {
     @Test func panelIsConfiguredToNeverTakeFocus() {
-        _ = NSApplication.shared
-        let controller = PillController(level: { 0 })
+        let controller = makePillController()
         let panel = controller.panel
         #expect(panel.styleMask.contains(.borderless))
         #expect(panel.styleMask.contains(.nonactivatingPanel))
@@ -142,42 +149,39 @@ import Testing
 
     @Test func pillIsTheDrawnSizeAndTheSkinAgrees() throws {
         let assets = try PillAssets.loadHiFi()
-        #expect(PillView.artSize == CGSize(width: assets.layout.size.w, height: assets.layout.size.h))
-        #expect(PillView.pillSize == CGSize(width: 146 * PillView.artScale, height: 32 * PillView.artScale))
-        #expect(PillController.panelSize.width >= PillView.pillSize.width)
-        #expect(PillController.panelSize.height == PillView.pillSize.height + 2 * PillController.pillPadding)
-        #expect(PillView.artScale.rounded() == PillView.artScale)
+        #expect(HiFiPillView.artSize == CGSize(width: assets.layout.size.w, height: assets.layout.size.h))
+        #expect(HiFiPillView.pillSize == CGSize(width: 146 * HiFiPillView.artScale, height: 32 * HiFiPillView.artScale))
+        #expect(PillController.panelSize.width >= HiFiPillView.pillSize.width)
+        #expect(PillController.panelSize.height == HiFiPillView.pillSize.height + 2 * PillController.pillPadding)
+        #expect(HiFiPillView.artScale.rounded() == HiFiPillView.artScale)
         #expect(assets.layout.meter.columns == BarModel.barCount)
         #expect(assets.layout.meter.segmentsPerColumn == BarModel.segmentRows)
     }
 
     @Test func handsFreeLocksTheViewAndTheTimerSurvivesANotice() {
-        _ = NSApplication.shared
-        let controller = PillController(level: { 0 })
-        #expect(!controller.view.isLocked)
+        let controller = makePillController()
+        #expect(!controller.skin.isLocked)
         controller.showHandsFree()
-        #expect(controller.state == .handsFree && controller.view.isLocked)
+        #expect(controller.state == .handsFree && controller.skin.isLocked)
         controller.showRecording()
-        #expect(controller.state == .recording && !controller.view.isLocked)
+        #expect(controller.state == .recording && !controller.skin.isLocked)
         controller.showHandsFree()
         controller.showProcessing()
-        #expect(!controller.view.isLocked)
+        #expect(!controller.skin.isLocked)
         controller.hide()
     }
 
     @Test func longMessagesScrollAndShortOnesStayPut() {
-        _ = NSApplication.shared
-        let controller = PillController(level: { 0 })
+        let controller = makePillController(skin: .hifi)
         controller.showMessage("Too short", duration: 5)
-        #expect(controller.view.messageScrollDistance == 0)
+        #expect(controller.skin.messageScrollDistance == 0)
         controller.showMessage("Secure field, not pasted. Copied to the clipboard instead.", duration: 5)
-        #expect(controller.view.messageScrollDistance > 0)
+        #expect(controller.skin.messageScrollDistance > 0)
         controller.hide()
     }
 
     @Test func noticeOverAHandsFreeRecordingComesBackToIt() async {
-        _ = NSApplication.shared
-        let controller = PillController(level: { 0 })
+        let controller = makePillController()
         controller.showHandsFreeNotice("1 min left", duration: 0.05)
         #expect(controller.state == .hidden)
         controller.showHandsFree()

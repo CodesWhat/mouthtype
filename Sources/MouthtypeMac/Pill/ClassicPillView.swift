@@ -1,0 +1,431 @@
+import AppKit
+import QuartzCore
+
+/// The classic pill: a dark capsule with ten bars, drawn as vector shape layers so it stays crisp at any scale.
+/// Width changes between states are springs that settle without visible overshoot; under Reduce Motion they snap
+/// and the content cross-fades instead. The view never takes events itself, the host view over it does.
+@MainActor
+final class ClassicPillView: NSView, PillSkinView {
+    static let fill = NSColor(hex: 0x1A1A1A)
+    static let stroke = NSColor(hex: 0x4D4A42)
+    static let ink = NSColor(hex: 0xFFFFEB)
+    static let errorInk = NSColor(hex: 0xFF8A80)
+    static let messageFont = NSFont.systemFont(ofSize: ClassicPillLayout.messageFontSize, weight: .medium)
+
+    private enum Timing {
+        case none, spring
+        case ease(TimeInterval, delay: TimeInterval = 0)
+    }
+
+    private struct Disc {
+        let group = CALayer()
+        let disc = CAShapeLayer()
+        let glyph = CAShapeLayer()
+    }
+
+    private let container = CALayer()
+    private let ambient = CAShapeLayer()
+    private let contact = CAShapeLayer()
+    private let body = CAShapeLayer()
+    private let rim = CAShapeLayer()
+    private let barsLayer = CALayer()
+    private let bars = (0..<BarModel.barCount).map { _ in CAShapeLayer() }
+    private let text = CATextLayer()
+    private let discs: [PillControl: Disc] = [.cancel: Disc(), .stop: Disc()]
+
+    private var scale: CGFloat = 2
+    private var mode = ClassicPillLayout.Mode.hold
+    private var width = ClassicPillLayout.dotWidth
+    private var presented = false
+    private var heights: [CGFloat]
+    private var hovered: PillControl?
+    private var pressed: PillControl?
+    private(set) var isLocked = false
+    /// Whether the current message was cut short at the width cap.
+    private(set) var isTruncated = false
+
+    var messageScrollDistance: Int { 0 }
+
+    var controlFrames: [PillControl: CGRect] {
+        guard isLocked, mode == .locked else { return [:] }
+        return ClassicPillLayout.controlFrames(capsule: capsule(width: width))
+    }
+
+    override init(frame: NSRect) {
+        heights = [CGFloat](repeating: ClassicPillLayout.barMetrics(scale: 2).width, count: BarModel.barCount)
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = .clear
+
+        container.frame = bounds
+        container.autoresizingMask = [.layerWidthSizable, .layerHeightSizable]
+        container.opacity = 0
+        layer?.addSublayer(container)
+
+        for (shadow, opacity, radius, drop) in [(ambient, Float(0.30), CGFloat(9), CGFloat(3)), (contact, 0.28, 1.5, 0.5)] {
+            shadow.fillColor = nil
+            shadow.shadowColor = NSColor.black.cgColor
+            shadow.shadowOpacity = opacity
+            shadow.shadowRadius = radius
+            shadow.shadowOffset = CGSize(width: 0, height: -drop)
+            container.addSublayer(shadow)
+        }
+        body.fillColor = Self.fill.withAlphaComponent(0.96).cgColor
+        container.addSublayer(body)
+        rim.fillColor = nil
+        rim.strokeColor = Self.stroke.cgColor
+        rim.lineWidth = 1
+        container.addSublayer(rim)
+
+        container.addSublayer(barsLayer)
+        for bar in bars {
+            bar.fillColor = Self.ink.cgColor
+            barsLayer.addSublayer(bar)
+        }
+
+        text.alignmentMode = .center
+        text.truncationMode = .none
+        text.isWrapped = false
+        text.opacity = 0
+        container.addSublayer(text)
+
+        for (control, disc) in discs {
+            let isStop = control == .stop
+            disc.group.bounds = CGRect(origin: .zero, size: CGSize(width: ClassicPillLayout.controlDiameter, height: ClassicPillLayout.controlDiameter))
+            disc.group.opacity = 0
+            disc.disc.path = CGPath(ellipseIn: disc.group.bounds, transform: nil)
+            disc.glyph.path = Self.glyphPath(stop: isStop, in: disc.group.bounds)
+            disc.glyph.fillColor = isStop ? Self.fill.cgColor : nil
+            disc.glyph.strokeColor = isStop ? nil : NSColor(hex: 0xFCFCFB).cgColor
+            disc.glyph.lineWidth = 1.5
+            disc.glyph.lineCap = .round
+            disc.group.addSublayer(disc.disc)
+            disc.group.addSublayer(disc.glyph)
+            container.addSublayer(disc.group)
+            disc.disc.fillColor = Self.discColor(control, hovered: false, pressed: false)
+        }
+        applyScale()
+        relayout()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not used") }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        applyScale()
+        relayout()
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        applyScale()
+        relayout()
+    }
+
+    override func layout() {
+        super.layout()
+        relayout()
+    }
+
+    // MARK: Geometry
+
+    private func applyScale() {
+        scale = window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        for layer in allLayers { layer.contentsScale = scale }
+        container.contentsScale = scale
+    }
+
+    private var allLayers: [CALayer] {
+        [ambient, contact, body, rim, text] + bars + discs.values.flatMap { [$0.group, $0.disc, $0.glyph] }
+    }
+
+    private func capsule(width: CGFloat) -> CGRect {
+        ClassicPillLayout.capsuleFrame(
+            width: width, bounds: bounds.size, bottomMargin: PillGeometry.verticalMargin, scale: scale
+        )
+    }
+
+    private func capsulePath(_ rect: CGRect, inset: CGFloat = 0) -> CGPath {
+        let r = rect.insetBy(dx: inset, dy: inset)
+        return CGPath(roundedRect: r, cornerWidth: r.height / 2, cornerHeight: r.height / 2, transform: nil)
+    }
+
+    /// Puts everything where the current mode and width say, without animating. Used after a scale or size change.
+    private func relayout() {
+        place(width: width, timing: .none)
+        layoutBars()
+        layoutText()
+    }
+
+    private func place(width newWidth: CGFloat, timing: Timing) {
+        width = newWidth
+        let rect = capsule(width: newWidth)
+        let path = capsulePath(rect)
+        set(body, "path", path, timing)
+        set(ambient, "shadowPath", path, timing)
+        set(contact, "shadowPath", path, timing)
+        set(rim, "path", capsulePath(rect, inset: 0.5), timing)
+        // Controls travel with the capsule's ends while hidden too, so they fade in where they will sit.
+        let frames = ClassicPillLayout.controlFrames(capsule: rect)
+        for (control, disc) in discs {
+            guard let frame = frames[control] else { continue }
+            set(disc.group, "position", NSValue(point: CGPoint(x: frame.midX, y: frame.midY)), timing)
+        }
+    }
+
+    private func layoutBars() {
+        let rect = capsule(width: width)
+        let frames = ClassicPillLayout.barFrames(capsule: rect, heights: heights, scale: scale)
+        withoutActions {
+            for (bar, frame) in zip(bars, frames) {
+                bar.frame = frame
+                bar.path = CGPath(
+                    roundedRect: CGRect(origin: .zero, size: frame.size),
+                    cornerWidth: min(frame.width, frame.height) / 2, cornerHeight: min(frame.width, frame.height) / 2,
+                    transform: nil
+                )
+            }
+        }
+    }
+
+    private func layoutText() {
+        let rect = capsule(width: width)
+        let font = Self.messageFont
+        let descent = -font.descender
+        let lineHeight = ceil(font.ascender + descent + font.leading)
+        // Cap-height centred on the capsule, which reads as centred for sentence-case text.
+        let baseline = rect.midY - font.capHeight / 2
+        withoutActions {
+            text.frame = CGRect(
+                x: rect.minX + ClassicPillLayout.messagePadding,
+                y: ClassicPillLayout.snap(baseline - descent, scale: scale),
+                width: rect.width - 2 * ClassicPillLayout.messagePadding, height: lineHeight
+            )
+        }
+    }
+
+    private static func glyphPath(stop: Bool, in bounds: CGRect) -> CGPath {
+        let c = CGPoint(x: bounds.midX, y: bounds.midY)
+        if stop {
+            let side: CGFloat = 7
+            return CGPath(
+                roundedRect: CGRect(x: c.x - side / 2, y: c.y - side / 2, width: side, height: side),
+                cornerWidth: 1.5, cornerHeight: 1.5, transform: nil
+            )
+        }
+        let h: CGFloat = 3.1
+        let path = CGMutablePath()
+        path.move(to: CGPoint(x: c.x - h, y: c.y - h))
+        path.addLine(to: CGPoint(x: c.x + h, y: c.y + h))
+        path.move(to: CGPoint(x: c.x - h, y: c.y + h))
+        path.addLine(to: CGPoint(x: c.x + h, y: c.y - h))
+        return path
+    }
+
+    private static func discColor(_ control: PillControl, hovered: Bool, pressed: Bool) -> CGColor {
+        switch (control, pressed, hovered) {
+        case (.cancel, true, _): NSColor(hex: 0x5C5C5A).cgColor
+        case (.cancel, _, true): NSColor(hex: 0x858582).cgColor
+        case (.cancel, _, _): NSColor(hex: 0x71716E).cgColor
+        case (.stop, true, _): NSColor(hex: 0xD2D2CF).cgColor
+        case (.stop, _, true): NSColor(hex: 0xEDEDEB).cgColor
+        case (.stop, _, _): NSColor(hex: 0xFCFCFB).cgColor
+        }
+    }
+
+    // MARK: Animation plumbing
+
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    private func withoutActions(_ body: () -> Void) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        body()
+        CATransaction.commit()
+    }
+
+    /// Sets the model value and, unless `timing` is `.none`, animates to it from wherever the layer is on screen.
+    private func set(_ layer: CALayer, _ keyPath: String, _ value: Any, _ timing: Timing) {
+        let from = layer.presentation()?.value(forKeyPath: keyPath) ?? layer.value(forKeyPath: keyPath)
+        withoutActions { layer.setValue(value, forKeyPath: keyPath) }
+        let animation: CABasicAnimation
+        switch timing {
+        case .none:
+            layer.removeAnimation(forKey: keyPath)
+            return
+        case .spring:
+            // Damping ratio about 0.8: settles in roughly 220 ms with under 2 percent overshoot.
+            let spring = CASpringAnimation(keyPath: keyPath)
+            spring.mass = 1
+            spring.stiffness = 500
+            spring.damping = 36
+            spring.duration = spring.settlingDuration
+            animation = spring
+        case .ease(let duration, let delay):
+            animation = CABasicAnimation(keyPath: keyPath)
+            animation.duration = duration
+            animation.beginTime = delay > 0 ? layer.convertTime(CACurrentMediaTime(), from: nil) + delay : 0
+            animation.fillMode = .backwards
+            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        }
+        animation.fromValue = from
+        animation.toValue = value
+        layer.add(animation, forKey: keyPath)
+    }
+
+    // MARK: Modes
+
+    private func apply(_ new: ClassicPillLayout.Mode) {
+        let old = mode
+        mode = new
+        let moving = presented && !reduceMotion
+        let fade: Timing = presented ? .ease(reduceMotion ? 0.15 : 0.18) : .none
+        place(width: ClassicPillLayout.capsuleWidth(new, scale: scale), timing: moving ? .spring : .none)
+
+        let barsOpacity: Float
+        switch new {
+        case .hold, .locked: barsOpacity = 1
+        case .processing: barsOpacity = 0.55
+        case .message: barsOpacity = 0
+        }
+        set(barsLayer, "opacity", barsOpacity, fade)
+        let controlsIn = new == .locked
+        for disc in discs.values {
+            set(disc.group, "opacity", controlsIn ? Float(1) : 0, controlsIn && old != .locked && presented ? .ease(0.18, delay: 0.05) : fade)
+        }
+        var isMessage = false
+        if case .message = new { isMessage = true }
+        set(text, "opacity", isMessage ? Float(1) : 0, isMessage && presented ? .ease(0.18, delay: 0.06) : fade)
+        layoutBars()
+        layoutText()
+    }
+
+    func showRecording(locked: Bool) {
+        isLocked = locked
+        apply(locked ? .locked : .hold)
+    }
+
+    func beginProcessing() {
+        isLocked = false
+        apply(.processing)
+    }
+
+    func showMessage(_ text: String, isError: Bool, overRecording: Bool) {
+        if !overRecording { isLocked = false }
+        let color = isError ? Self.errorInk : Self.ink
+        let attributes: [NSAttributedString.Key: Any] = [.font: Self.messageFont, .foregroundColor: color]
+        let measured = ClassicPillLayout.messageLayout(
+            textWidth: NSAttributedString(string: text, attributes: attributes).size().width, scale: scale
+        )
+        isTruncated = measured.truncated
+        let shown = measured.truncated ? Self.ellipsized(text, fitting: measured.textWidth, attributes: attributes) : text
+        withoutActions { self.text.string = NSAttributedString(string: shown, attributes: attributes) }
+        apply(.message(textWidth: measured.textWidth))
+    }
+
+    /// The longest prefix of `text` that fits `width` with an ellipsis after it.
+    private static func ellipsized(_ text: String, fitting width: CGFloat, attributes: [NSAttributedString.Key: Any]) -> String {
+        let chars = Array(text)
+        var low = 0, high = chars.count
+        while low < high {
+            let mid = (low + high + 1) / 2
+            let candidate = String(chars[..<mid]).trimmingCharacters(in: .whitespaces) + "\u{2026}"
+            if NSAttributedString(string: candidate, attributes: attributes).size().width <= width { low = mid } else { high = mid - 1 }
+        }
+        return String(chars[..<low]).trimmingCharacters(in: .whitespaces) + "\u{2026}"
+    }
+
+    func showFractions(_ fractions: [Float]) {
+        guard mode == .hold || mode == .locked else { return }
+        let next = (0..<BarModel.barCount).map {
+            ClassicPillLayout.barHeight(fraction: $0 < fractions.count ? fractions[$0] : 0, scale: scale)
+        }
+        guard next != heights else { return }
+        heights = next
+        layoutBars()
+    }
+
+    func updateProcessing(time: TimeInterval) {
+        guard mode == .processing else { return }
+        let targets = ClassicPillLayout.processingFractions(time: time, count: BarModel.barCount)
+            .map { ClassicPillLayout.barHeight(fraction: $0, scale: scale) }
+        // Ease toward the wave so the bars settle into it from wherever the recording left them.
+        let next = zip(heights, targets).map { ClassicPillLayout.snapEven($0 + ($1 - $0) * 0.2, scale: scale) }
+        guard next != heights else { return }
+        heights = next
+        layoutBars()
+    }
+
+    func setElapsed(_ seconds: TimeInterval?) {}
+    func setMessageOffset(_ offset: Int) {}
+
+    // MARK: Controls
+
+    func setHovered(_ control: PillControl?) {
+        guard control != hovered else { return }
+        hovered = control
+        refreshControls()
+    }
+
+    func setPressed(_ control: PillControl?) {
+        guard control != pressed else { return }
+        pressed = control
+        refreshControls()
+    }
+
+    private func refreshControls() {
+        for (control, disc) in discs {
+            let down = pressed == control
+            set(disc.disc, "fillColor", Self.discColor(control, hovered: hovered == control, pressed: down), .ease(0.1))
+            set(disc.group, "transform", CATransform3DMakeScale(down ? 0.92 : 1, down ? 0.92 : 1, 1), .ease(0.1))
+        }
+    }
+
+    // MARK: Show and hide
+
+    func appear(reduceMotion: Bool) {
+        presented = true
+        withoutActions {
+            container.opacity = 0
+            barsLayer.opacity = 0
+            text.opacity = 0
+            discs.values.forEach { $0.group.opacity = 0 }
+        }
+        place(width: ClassicPillLayout.dotWidth, timing: .none)
+        set(container, "opacity", Float(1), .ease(reduceMotion ? 0.15 : 0.2))
+    }
+
+    func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void) {
+        presented = false
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
+        let duration: TimeInterval = reduceMotion ? 0.12 : 0.16
+        set(container, "opacity", Float(0), .ease(duration))
+        set(barsLayer, "opacity", Float(0), .ease(duration))
+        set(text, "opacity", Float(0), .ease(duration))
+        discs.values.forEach { set($0.group, "opacity", Float(0), .ease(duration)) }
+        if !reduceMotion {
+            let rect = capsule(width: ClassicPillLayout.dotWidth)
+            let path = capsulePath(rect)
+            width = ClassicPillLayout.dotWidth
+            set(body, "path", path, .ease(duration))
+            set(ambient, "shadowPath", path, .ease(duration))
+            set(contact, "shadowPath", path, .ease(duration))
+            set(rim, "path", capsulePath(rect, inset: 0.5), .ease(duration))
+        }
+        CATransaction.commit()
+    }
+}
+
+extension NSColor {
+    convenience init(hex: UInt32) {
+        self.init(
+            srgbRed: CGFloat((hex >> 16) & 0xFF) / 255,
+            green: CGFloat((hex >> 8) & 0xFF) / 255,
+            blue: CGFloat(hex & 0xFF) / 255,
+            alpha: 1
+        )
+    }
+}

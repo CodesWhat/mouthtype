@@ -3,8 +3,6 @@ import MouthtypeCore
 
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
-    static let pillDemoFlag = "--pill-demo"
-
     private let engineHost = EngineHost()
     private let micCapture = MicCapture()
     private let microphoneSection = MicrophoneMenuSection()
@@ -27,11 +25,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         Log.app.info("launch \(AppInfo.version, privacy: .public)")
         let arguments = CommandLine.arguments
         // The two file/visual modes need no permissions and touch neither the remap, the mic nor the real database.
-        if arguments.contains(Self.pillDemoFlag) {
+        if let demo = PillDemo.options(in: arguments) {
             let pill = PillController(level: { 0 })
+            if let skin = demo.skin { pill.setSkin(skin) }
             self.pill = pill
             Task {
-                await PillDemo.run(controller: pill)
+                await PillDemo.run(controller: pill, options: demo)
                 NSApp.terminate(nil)
             }
             return
@@ -69,6 +68,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: microphoneSection)
         menuBar.add(section: systemSection)
         menuBar.add(section: history)
+        menuBar.add(section: PillSkinMenuSection(onSelect: { [weak pill] kind in pill?.setSkin(kind) }))
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
@@ -81,6 +81,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.onCancelDictation = { [weak dictation] in
             guard let dictation else { return }
             Task { await dictation.cancelHandsFree() }
+        }
+        pill.onControl = { [weak dictation] control in
+            guard let dictation else { return }
+            switch control {
+            case .stop: dictation.stopHandsFree()
+            case .cancel: Task { await dictation.cancelHandsFree() }
+            }
         }
         systemSection.onToggleRemap = { [weak self] in self?.toggleRemap() }
         systemSection.update(remapChecked: remapCoordinator.menuChecked)
