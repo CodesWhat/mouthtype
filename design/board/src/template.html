@@ -1,0 +1,24 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Mouthtype pill prototypes</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"><style>/*CSS*/</style></head><body>
+<div id="side"><h1>Mouthtype pill</h1><div class="sub">Prototype study. Everything is drawn live in canvas; nothing is loaded.</div>
+<div class="grp"><label>States (all pills)</label><div class="row" id="acts"></div></div>
+<div class="grp"><label>Messages</label><div class="row" id="pre"></div><input type="text" id="txt" placeholder="Type a message"><div class="row" style="margin-top:4px"><button id="send">Send message</button><label style="font-size:11px;color:#666;align-self:center"><input type="checkbox" id="auto"> auto-hide</label></div></div>
+<div class="grp"><label>Delivery card</label><div class="row" id="cardbtns"></div></div>
+<div class="grp"><label>Long message</label><div class="row" id="long"></div></div>
+<div class="grp"><label>Voice level (quiet to loud)</label><input type="range" id="lvl" min="5" max="100" value="70"><button id="mic" style="margin-top:4px">Use microphone</button></div>
+<div class="grp"><label>Zoom</label><div class="row" id="zoom"></div></div>
+<div class="grp"><label>Background</label><div class="row" id="bg"></div></div>
+<div class="grp"><label>Material</label><div class="row" id="mat"></div></div>
+<div class="grp"><label>Shape</label><div class="row" id="shape"></div></div>
+<div class="grp"><label>Readout colour</label><div class="row" id="col"></div></div>
+<div class="grp"><label>Text font (Classic, Minimal, cards)</label><div id="tflist"></div><input type="text" id="tfany" placeholder="Any installed font, e.g. Baskerville"><div id="tfnote"></div><div class="row" id="tfw" style="margin-top:4px"></div><div class="row" id="tfs" style="margin-top:4px"></div></div>
+<div class="grp"><label>Label font (LED card and pill)</label><div class="row" id="lab"></div></div>
+<div class="grp"><label>Card buttons (LED card)</label><div class="row" id="cbtn"></div></div>
+<div class="grp"><label>Finish button</label><div class="row" id="fin"></div></div>
+<div class="grp"><label style="text-transform:none;letter-spacing:0;font-size:12px"><input type="checkbox" id="dockchk" checked> Dock preview</label></div>
+</div>
+<div id="main"><div id="stage" class="light"><div id="gal"></div></div>
+<div id="cardstage" class="light"><h2>Delivery card (attached above the pill)</h2><div id="cardrow"></div></div>
+<div id="dockwrap" class="light" style="--z:2"><div id="dockpill"></div><div id="dock"><i style="background:linear-gradient(#5ac8fa,#007aff)"></i><i style="background:linear-gradient(#ffd60a,#ff9f0a)"></i><i style="background:linear-gradient(#ff6b6b,#d70015)"></i><i style="background:linear-gradient(#a8e063,#34c759)"></i><i style="background:linear-gradient(#bf5af2,#5e5ce6)"></i><i style="background:linear-gradient(#e5e5ea,#8e8e93)"></i><i style="background:linear-gradient(#64d2ff,#0a84ff)"></i></div></div>
+<div id="panel"></div></div>
+<script>/*JS*/</script></body></html>
