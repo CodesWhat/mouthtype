@@ -120,6 +120,11 @@ struct DictationPipeline: Sendable {
         }
     }
 
+    /// An Undo runs a cancelled dictation after all: its row goes back to started.
+    func reopen(_ session: DictationSession) async {
+        await write(session, "reopen") { store in try await store.reopen(session.id) }
+    }
+
     func finish(_ session: DictationSession, _ status: DictationStatus, errorMessage: String? = nil) async {
         await write(session, "finish") { store in
             try await store.finish(session.id, status: status, errorMessage: errorMessage)

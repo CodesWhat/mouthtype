@@ -84,6 +84,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     private(set) var insertion: InsertionRecord?
     private(set) var handsFreeLock: (DictationMode, DictationTrigger)?
     private(set) var finishes: [(DictationStatus, String?)] = []
+    private(set) var reopens = 0
 
     init(log: CallLog) {
         self.log = log
@@ -104,6 +105,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
         try run("recordLock") { handsFreeLock = (mode, trigger) }
     }
+    func reopen(_ id: String) async throws { try run("reopen") { reopens += 1 } }
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {
         try run("finish") { finishes.append((status, errorMessage)) }
     }
@@ -145,7 +147,7 @@ private final class FakeInserter: DictationInserting {
 @MainActor
 private final class FakePill: DictationPill {
     let log: CallLog
-    var messages: [String] = []
+    var messages: [PillMessage] = []
     var notices: [String] = []
 
     init(log: CallLog) {
@@ -159,11 +161,30 @@ private final class FakePill: DictationPill {
         log.add("pill.notice:\(text)")
     }
     func showProcessing() { log.add("pill.processing") }
-    func showMessage(_ text: String, duration: TimeInterval) {
-        messages.append(text)
-        log.add("pill.message:\(text)")
+    func showMessage(_ message: PillMessage, duration: TimeInterval) {
+        messages.append(message)
+        log.add("pill.message:\(message.headline)")
     }
     func hide() { log.add("pill.hide") }
+}
+
+@MainActor
+private final class FakeCards: DictationCards {
+    let log: CallLog
+    var presented: [DeliveryCard] = []
+    var onUndo: (@MainActor () -> Void)?
+    var onDismissed: (@MainActor (DeliveryCard) -> Void)?
+
+    init(log: CallLog) {
+        self.log = log
+    }
+
+    func present(_ card: DeliveryCard) {
+        presented.append(card)
+        log.add("card.present:\(card.kind)")
+    }
+
+    func dismiss() { log.add("card.dismiss") }
 }
 
 @MainActor
@@ -180,7 +201,7 @@ private final class FakeSounds: SoundPlayer {
     func playError() { log.add("sound.error") }
 }
 
-private final class FakeClock: DictationClock, @unchecked Sendable {
+final class FakeClock: DictationClock, @unchecked Sendable {
     static let wall = Date(timeIntervalSince1970: 1_791_806_400)
     private let lock = NSLock()
     private var host: UInt64
@@ -265,6 +286,7 @@ private struct Rig {
     let inserter: FakeInserter
     let pill: FakePill
     let sounds: FakeSounds
+    let cards: FakeCards
     let controller: DictationController
     let clock: FakeClock
     var finishedAttempts: Counter
@@ -281,13 +303,15 @@ private struct Rig {
         inserter = FakeInserter(log: log)
         pill = FakePill(log: log)
         sounds = FakeSounds(log: log)
+        cards = FakeCards(log: log)
         let clock = FakeClock(start: keyUp)
         self.clock = clock
         let pipeline = DictationPipeline(
             store: withStore ? store : nil, archive: FakeArchive(log: log), engine: engine, clock: clock
         )
         controller = DictationController(
-            capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock
+            capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
+            cards: cards
         )
         let counter = Counter()
         finishedAttempts = counter
@@ -325,7 +349,7 @@ private struct Rig {
         await rig.dictate()
 
         #expect(rig.log.all == [
-            "inserter.snapshot", "capture.start", "sound.start", "pill.recording", "store.begin",
+            "card.dismiss", "inserter.snapshot", "capture.start", "sound.start", "pill.recording", "store.begin",
             "capture.stop", "sound.stop", "pill.processing",
             "archive.write", "store.recordCapture", "engine.transcribe", "store.recordTranscription",
             "inserter.deliver", "store.recordInsertion", "pill.hide",
@@ -398,23 +422,119 @@ private struct Rig {
         #expect(rig.finishedAttempts.count == 1)
     }
 
-    @Test func escapeCancelsWithAMessage() async {
+    @Test func escapeCancelsKeepsTheAudioAndOffersUndo() async {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
         await rig.controller.handle(.cancelled(reason: .escape))
 
-        #expect(rig.log.contains("capture.cancel"))
+        // Stopped, not cancelled: the audio stays in memory for Undo.
+        #expect(rig.log.contains("capture.stop") && !rig.log.contains("capture.cancel"))
         #expect(rig.store.finishes.map(\.0) == [.cancelled])
-        #expect(rig.pill.messages == ["Cancelled"])
-        #expect(!rig.log.contains("engine.transcribe"))
+        #expect(rig.cards.presented.map(\.kind) == [.cancelled])
+        let card = rig.cards.presented.first
+        #expect(card?.header == "Cancelled" && card?.transcript == nil)
+        #expect(card?.actions == [.undo] && card?.countdown == 5)
+        #expect(rig.pill.messages.isEmpty && rig.log.contains("pill.hide"))
+        #expect(!rig.log.contains("engine.transcribe") && !rig.log.contains("archive.write"))
         #expect(rig.controller.phase == .idle)
+    }
+
+    @Test func undoWithinTheWindowTranscribesDeliversAndFixesTheRow() async throws {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        await rig.settle()
+        #expect(rig.clock.sleeperCount == 1)
+
+        rig.clock.advance(by: 4.9)
+        await rig.settle()
+        await rig.controller.undoCancel()
+
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.store.reopens == 1)
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.store.insertion?.finalText == "Hello world.")
+        let tail = Array(rig.log.all.drop { $0 != "store.reopen" })
+        #expect(tail == [
+            "store.reopen", "pill.processing", "archive.write", "store.recordCapture", "engine.transcribe",
+            "store.recordTranscription", "inserter.deliver", "store.recordInsertion", "pill.hide",
+        ])
+        #expect(rig.controller.phase == .idle && rig.clock.sleeperCount == 0)
+
+        // The expiry timer is gone: running the clock out dismisses nothing more.
+        let dismissals = rig.log.all.filter { $0 == "card.dismiss" }.count
+        rig.clock.advance(by: 10)
+        await rig.settle()
+        #expect(rig.log.all.filter { $0 == "card.dismiss" }.count == dismissals)
+    }
+
+    @Test func undoDeliversToACardWhenThePasteCannotLand() async {
+        let rig = Rig()
+        rig.inserter.result = DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: true, target: nil, finalText: "")
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        await rig.controller.undoCancel()
+        #expect(rig.cards.presented.map(\.kind) == [.cancelled, .secure])
+    }
+
+    @Test func theWindowLapsingDiscardsTheAudio() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        await rig.settle()
+        rig.clock.advance(by: 5)
+        await rig.settle()
+
+        #expect(rig.log.all.last == "card.dismiss")
+        await rig.controller.undoCancel()
+        #expect(!rig.log.contains("engine.transcribe") && rig.store.reopens == 0)
+        #expect(rig.inserter.delivered.isEmpty)
+    }
+
+    @Test func aNewPressDismissesTheCardAndDiscardsTheAudio() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        await rig.settle()
+        await rig.controller.handle(.pressed(at: keyDown + 1_000_000_000))
+        #expect(rig.log.contains("card.dismiss"))
+        #expect(rig.clock.sleeperCount == 0)
+
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        await rig.controller.undoCancel()
+        #expect(rig.log.all.filter { $0 == "engine.transcribe" }.count == 1)
+        #expect(rig.store.reopens == 0)
+    }
+
+    @Test func dismissingTheCancelledCardDiscardsTheAudio() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        rig.cards.onDismissed?(.cancelled())
+        await rig.settle()
+        #expect(rig.clock.sleeperCount == 0)
+        await rig.controller.undoCancel()
+        #expect(!rig.log.contains("engine.transcribe"))
+    }
+
+    @Test func aStoppedCaptureThatErrorsFallsBackToAPlainCancel() async {
+        let rig = Rig()
+        rig.capture.stopError = CaptureError.notRecording
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        #expect(rig.log.contains("capture.cancel"))
+        #expect(rig.cards.presented.isEmpty)
+        #expect(rig.pill.messages == [PillMessage("Cancelled")])
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
     }
 
     @Test func pressWhileTheEngineLoadsOnlyShowsAMessage() async {
         let rig = Rig()
         rig.engine.readiness = .loading
         await rig.controller.handle(.pressed(at: keyDown))
-        #expect(rig.log.all == ["pill.message:Loading model\u{2026}"])
+        #expect(rig.log.all == ["pill.message:Loading model"])
+        #expect(rig.pill.messages == [PillMessage("Loading model", detail: "Try again in a moment")])
         #expect(rig.controller.phase == .idle)
 
         await rig.controller.handle(.released(at: keyUp))
@@ -437,7 +557,7 @@ private struct Rig {
 
         await rig.controller.handle(.pressed(at: keyUp + 1))
         #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
-        #expect(rig.pill.messages == ["Still working on the last one"])
+        #expect(rig.pill.messages == [PillMessage("Still working", detail: "Finishing the last dictation")])
 
         await rig.controller.waitForProcessing()
         #expect(rig.controller.phase == .idle)
@@ -465,7 +585,7 @@ private struct Rig {
 
         #expect(rig.store.finishes.map(\.0) == [.failed])
         #expect(rig.store.finishes.first?.1?.isEmpty == false)
-        #expect(rig.pill.messages == ["No microphone found"])
+        #expect(rig.pill.messages == [PillMessage("No microphone found", detail: "Connect one and try again", isError: true)])
         #expect(rig.log.contains("sound.error") && !rig.log.contains("pill.recording"))
         #expect(rig.controller.phase == .idle)
         #expect(rig.finishedAttempts.count == 1)
@@ -480,7 +600,7 @@ private struct Rig {
         rig.capture.stopError = CaptureError.routeChanged
         await rig.dictate()
         #expect(rig.store.finishes.map(\.0) == [.failed])
-        #expect(rig.pill.messages == ["Microphone changed, try again"])
+        #expect(rig.pill.messages == [PillMessage("Microphone changed", detail: "Try again", isError: true)])
         #expect(rig.controller.phase == .idle)
     }
 
@@ -490,7 +610,7 @@ private struct Rig {
         await rig.dictate()
 
         #expect(rig.store.finishes.map(\.0) == [.failed])
-        #expect(rig.pill.messages == ["Transcription failed"])
+        #expect(rig.pill.messages == [PillMessage("Transcription failed", detail: "Try again", isError: true)])
         #expect(rig.inserter.delivered.isEmpty)
         #expect(rig.controller.phase == .idle)
 
@@ -552,12 +672,23 @@ private struct Rig {
         #expect(rig.pill.messages.isEmpty)
     }
 
-    @Test func aNonPastedResultShowsItsMessage() async {
-        let rig = Rig()
-        rig.inserter.result = DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: true, target: nil, finalText: "")
-        await rig.dictate()
-        #expect(rig.pill.messages == ["Secure field, not pasted"])
-        #expect(rig.store.insertion?.outcome == "secure discard" && rig.store.insertion?.focusMoved == true)
+    @Test func eachDeliveryOutcomeMapsToTheRightCard() async {
+        let cases: [(DeliveryResult.Method, DeliveryResult.Outcome, String, DeliveryCard.Kind?, String)] = [
+            (.none, .secureDiscard, "", .secure, "Secure field, not pasted"),
+            (.clipboardOnly, .unknown, "Hello world.", .nowhere, "Nothing to paste into"),
+            (.clipboardOnly, .failed("no event"), " Hello world.", .pasteFailed, "Paste failed"),
+            (.paste, .unknown, "Hello world.", nil, ""),
+        ]
+        for (method, outcome, finalText, kind, header) in cases {
+            let rig = Rig()
+            rig.inserter.result = DeliveryResult(method: method, outcome: outcome, focusMoved: false, target: nil, finalText: finalText)
+            await rig.dictate()
+            #expect(rig.cards.presented.map(\.kind) == (kind.map { [$0] } ?? []))
+            #expect(rig.pill.messages.isEmpty && rig.log.contains("pill.hide"))
+            guard let card = rig.cards.presented.first else { continue }
+            #expect(card.header == header && card.actions == [.copy] && card.countdown == nil)
+            #expect(card.transcript == (finalText.isEmpty ? "Hello world." : finalText))
+        }
     }
 
     // MARK: Hands-free
@@ -568,7 +699,7 @@ private struct Rig {
 
         #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
         #expect(rig.log.all == [
-            "inserter.snapshot", "capture.start", "sound.start", "pill.recording", "store.begin",
+            "card.dismiss", "inserter.snapshot", "capture.start", "sound.start", "pill.recording", "store.begin",
             "sound.lock", "pill.handsFree", "store.recordLock",
         ])
         let lock = try #require(rig.store.handsFreeLock)
@@ -603,9 +734,9 @@ private struct Rig {
         await rig.lockIn()
         await rig.controller.handle(.cancelled(reason: .escape))
 
-        #expect(rig.log.contains("capture.cancel") && !rig.log.contains("engine.transcribe"))
+        #expect(rig.log.contains("capture.stop") && !rig.log.contains("engine.transcribe"))
         #expect(rig.store.finishes.map(\.0) == [.cancelled])
-        #expect(rig.pill.messages == ["Cancelled"])
+        #expect(rig.cards.presented.map(\.kind) == [.cancelled])
         #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
         #expect(rig.lockEnded.count == 1)
     }
@@ -690,7 +821,8 @@ private struct Rig {
         let controller = DictationController(
             capture: capture, engine: engine,
             pipeline: DictationPipeline(store: store, archive: FakeArchive(log: log), engine: engine, clock: clock),
-            inserter: FakeInserter(log: log), pill: FakePill(log: log), sounds: FakeSounds(log: log), clock: clock
+            inserter: FakeInserter(log: log), pill: FakePill(log: log), sounds: FakeSounds(log: log), clock: clock,
+            cards: FakeCards(log: log)
         )
         // The way the hotkey service delivers a double-tap: all four events, back to back.
         let (events, sink) = AsyncStream.makeStream(of: HotkeyEvent.self)

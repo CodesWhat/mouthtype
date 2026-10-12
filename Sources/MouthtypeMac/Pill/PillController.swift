@@ -16,7 +16,7 @@ final class PillPanel: NSPanel {
 @MainActor
 public final class PillController {
     enum State: Equatable {
-        case hidden, recording, handsFree, processing, message(String)
+        case hidden, recording, handsFree, processing, message(PillMessage)
     }
 
     static let horizontalPadding = PillGeometry.horizontalMargin
@@ -72,7 +72,13 @@ public final class PillController {
         host.onPress = { [weak self] control in self?.press(control) }
         host.onActivate = { [weak self] control in self?.onControl?(control) }
         install(skin)
+        _ = NotificationCenter.default.addObserver(
+            forName: Typography.didChange, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.skin.applyTypography(Typography.current()) }
+        }
     }
+
 
     private static func makeSkin(_ kind: PillSkinKind) -> any PillSkinView {
         let frame = NSRect(origin: .zero, size: PillGeometry.panelSize)
@@ -98,6 +104,7 @@ public final class PillController {
         skin = new
         new.frame = host.bounds
         new.autoresizingMask = [.width, .height]
+        new.applyTypography(Typography.current())
         host.addSubview(new)
         host.skinReplaced()
     }
@@ -134,8 +141,9 @@ public final class PillController {
     /// One line over a hands-free recording, then back to the hands-free pill unless something else took over.
     public func showHandsFreeNotice(_ text: String, duration: TimeInterval = 4) {
         guard state == .handsFree else { return }
-        enter(.message(text))
-        presentMessage(text, isError: false, overRecording: true, duration: duration) { [weak self] in self?.showHandsFree() }
+        let message = PillMessage(text)
+        enter(.message(message))
+        presentMessage(message, overRecording: true, duration: duration) { [weak self] in self?.showHandsFree() }
     }
 
     public func showProcessing() {
@@ -146,14 +154,14 @@ public final class PillController {
         startLink()
     }
 
-    public func showMessage(_ text: String, duration: TimeInterval = 2.5) {
-        showMessage(text, isError: false, duration: duration)
+    func showMessage(_ message: PillMessage, duration: TimeInterval = 2.5) {
+        enter(.message(message))
+        recordingStart = nil
+        presentMessage(message, overRecording: false, duration: duration) { [weak self] in self?.hide() }
     }
 
-    func showMessage(_ text: String, isError: Bool, duration: TimeInterval = 2.5) {
-        enter(.message(text))
-        recordingStart = nil
-        presentMessage(text, isError: isError, overRecording: false, duration: duration) { [weak self] in self?.hide() }
+    func showMessage(_ text: String, isError: Bool = false, duration: TimeInterval = 2.5) {
+        showMessage(PillMessage(text, isError: isError), duration: duration)
     }
 
     public func hide() {
@@ -186,12 +194,12 @@ public final class PillController {
         skin.setElapsed(max(0, now - start))
     }
 
-    /// Shows `text`, and runs `after` once it has been up for `duration`, or for as long as it takes to scroll through.
+    /// Shows `message`, and runs `after` once it has been up for `duration`, or for as long as it takes to scroll through.
     private func presentMessage(
-        _ text: String, isError: Bool, overRecording: Bool, duration: TimeInterval,
+        _ message: PillMessage, overRecording: Bool, duration: TimeInterval,
         then after: @escaping @MainActor () -> Void
     ) {
-        skin.showMessage(text, isError: isError, overRecording: overRecording)
+        skin.showMessage(message, overRecording: overRecording)
         messageStart = CACurrentMediaTime()
         let distance = skin.messageScrollDistance
         let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance) + 0.3) : duration
@@ -223,6 +231,22 @@ public final class PillController {
             pointer: NSEvent.mouseLocation, screens: screens, panelSize: Self.panelSize, pillPadding: Self.pillPadding
         ) else { return }
         panel.setFrameOrigin(CGPoint(x: origin.x.rounded(.down), y: origin.y.rounded(.down)))
+    }
+
+    /// Where the pill sits, or would if it showed now, for the card that goes above it.
+    func cardAnchor() -> DeliveryCardController.Anchor? {
+        let pointer = NSEvent.mouseLocation
+        let screens = NSScreen.screens
+        let placements = screens.map { PillPlacement.Screen(frame: $0.frame, visibleFrame: $0.visibleFrame) }
+        guard let origin = PillPlacement.origin(
+            pointer: pointer, screens: placements, panelSize: Self.panelSize, pillPadding: Self.pillPadding
+        ) else { return nil }
+        let screen = screens.first { $0.frame.contains(pointer) } ?? screens.first
+        return .init(
+            midX: origin.x.rounded(.down) + Self.panelSize.width / 2,
+            top: origin.y.rounded(.down) + Self.pillPadding + ClassicPillLayout.height,
+            visible: screen?.visibleFrame ?? .zero
+        )
     }
 
     // MARK: Clicks

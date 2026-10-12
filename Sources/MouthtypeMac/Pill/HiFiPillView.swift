@@ -291,15 +291,17 @@ final class HiFiPillView: NSView, PillSkinView {
         showRun(columns: BarModel.processingColumns(time: 0, columns: BarModel.barCount))
     }
 
-    func showMessage(_ text: String, isError: Bool, overRecording: Bool) {
+    func showMessage(_ message: PillMessage, overRecording: Bool) {
         if !overRecording {
             setLocked(false)
             setTalkDown(false)
             setLED(false)
             setTimer(seconds: nil)
         }
-        showMessage(text, isError: isError)
+        showMessage(message.singleLine, isError: message.isError)
     }
+
+    func applyTypography(_ typography: Typography) {}
 
     func showFractions(_ fractions: [Float]) {
         showMeter(litCounts: BarModel.litSegments(fractions, segments: BarModel.segmentRows))

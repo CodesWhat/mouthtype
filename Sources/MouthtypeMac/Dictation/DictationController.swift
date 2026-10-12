@@ -3,7 +3,8 @@ import MouthtypeCore
 import Observation
 
 /// Runs one dictation at a time from the hotkey events: press starts the capture, release hands the audio to the
-/// pipeline and pastes, a short tap or Esc throws it away. Every attempt ends back at idle. A lock (double-tap or
+/// pipeline and pastes, a short tap throws it away, and Esc cancels it but keeps the audio for a few seconds so Undo
+/// can still run it. Every attempt ends back at idle. A lock (double-tap or
 /// Fn+Space) turns the recording hands-free: it stays in the recording phase until the next tap, Esc, the menu, or
 /// the safety cap. Events are handled one at a time, so a discarded tap's cancel has finished before the next press starts.
 @MainActor
@@ -34,13 +35,24 @@ final class DictationController {
     @ObservationIgnored private let pill: any DictationPill
     @ObservationIgnored private let sounds: any SoundPlayer
     @ObservationIgnored private let clock: any DictationClock
+    @ObservationIgnored private let cards: any DictationCards
     @ObservationIgnored private var session: DictationSession?
+    @ObservationIgnored private var undo: PendingUndo?
     @ObservationIgnored private var processing: Task<Void, Never>?
     @ObservationIgnored private var capTimer: Task<Void, Never>?
 
+    /// A cancelled dictation whose audio is kept for `DeliveryCard.undoWindow`.
+    private struct PendingUndo {
+        var session: DictationSession
+        var audio: CapturedAudio
+        var cancelledAt: UInt64
+        var timer: Task<Void, Never>
+    }
+
     init(
         capture: any DictationCapturing, engine: any DictationEngine, pipeline: DictationPipeline,
-        inserter: any DictationInserting, pill: any DictationPill, sounds: any SoundPlayer, clock: any DictationClock
+        inserter: any DictationInserting, pill: any DictationPill, sounds: any SoundPlayer, clock: any DictationClock,
+        cards: any DictationCards
     ) {
         self.capture = capture
         self.engine = engine
@@ -49,6 +61,14 @@ final class DictationController {
         self.pill = pill
         self.sounds = sounds
         self.clock = clock
+        self.cards = cards
+        cards.onUndo = { [weak self] in
+            guard let self else { return }
+            Task { await self.undoCancel() }
+        }
+        cards.onDismissed = { [weak self] card in
+            if card.kind == .cancelled { self?.discardPendingUndo() }
+        }
     }
 
     func consume(_ events: AsyncStream<HotkeyEvent>) async {
@@ -80,7 +100,7 @@ final class DictationController {
         case .recording:
             return
         case .processing:
-            pill.showMessage("Still working on the last one", duration: 2.5)
+            pill.showMessage(PillMessage("Still working", detail: "Finishing the last dictation"), duration: 2.5)
             return
         case .idle:
             break
@@ -88,16 +108,21 @@ final class DictationController {
         switch engine.readiness {
         case .ready: break
         case .loading:
-            pill.showMessage("Loading model\u{2026}", duration: 2.5)
+            pill.showMessage(PillMessage("Loading model", detail: "Try again in a moment"), duration: 2.5)
             return
         case .failed:
-            pill.showMessage("Speech engine unavailable", duration: 2.5)
+            pill.showMessage(
+                PillMessage("Speech engine unavailable", detail: "Restart Mouthtype to try again", isError: true), duration: 3
+            )
             return
         }
         guard capture.isPrepared else {
-            pill.showMessage("Microphone access needed", duration: 2.5)
+            pill.showMessage(Self.microphoneAccessMessage, duration: 3)
             return
         }
+
+        // A new dictation ends the last one's card and the Undo it offered.
+        discardPendingUndo()
 
         let startFocus = inserter.snapshotFocus()
         var current = DictationSession(
@@ -194,26 +219,27 @@ final class DictationController {
             let audio = try await capture.stop()
             sounds.playStop()
             pill.showProcessing()
-
-            let keyUpMs = clock.milliseconds(from: session.keyDownAt, to: releasedAt)
-            _ = await pipeline.recordCapture(audio, session: session, keyUpMs: keyUpMs)
-            guard let transcribed = try await pipeline.transcribe(audio, session: session) else {
-                pill.hide()
-                finished()
-                return
-            }
-
-            let result = await inserter.deliver(transcribed.text, startFocus: session.startFocus)
-            await pipeline.recordInsertion(result, session: session)
-            if let message = result.userMessage {
-                pill.showMessage(message, duration: 2.5)
-            } else {
-                pill.hide()
-            }
-            finished()
+            try await transcribeAndDeliver(audio, session: session, keyUpAt: releasedAt)
         } catch {
             await fail(session, error)
         }
+    }
+
+    /// Everything after the audio is in hand, shared by a normal release and an Undo.
+    private func transcribeAndDeliver(_ audio: CapturedAudio, session: DictationSession, keyUpAt: UInt64) async throws {
+        let keyUpMs = clock.milliseconds(from: session.keyDownAt, to: keyUpAt)
+        _ = await pipeline.recordCapture(audio, session: session, keyUpMs: keyUpMs)
+        guard let transcribed = try await pipeline.transcribe(audio, session: session) else {
+            pill.hide()
+            finished()
+            return
+        }
+
+        let result = await inserter.deliver(transcribed.text, startFocus: session.startFocus)
+        await pipeline.recordInsertion(result, session: session)
+        pill.hide()
+        if let card = DeliveryCard.forDelivery(result, transcript: transcribed.text) { cards.present(card) }
+        finished()
     }
 
     // MARK: Discard and cancel
@@ -227,13 +253,73 @@ final class DictationController {
         finished()
     }
 
+    /// Esc: stops the capture but keeps the audio in memory and offers Undo. The row is written as cancelled at
+    /// once, so nothing is lost if the app quits during the window.
     private func cancelled() async {
         guard phase == .recording, let current = session else { return }
         session = nil
-        await capture.cancel()
+        var kept: CapturedAudio?
+        do {
+            kept = try await capture.stop()
+        } catch {
+            await capture.cancel()
+        }
+        let cancelledAt = clock.nowNanos()
         await pipeline.finish(current, .cancelled)
-        pill.showMessage("Cancelled", duration: 2.5)
+        pill.hide()
+        if let kept {
+            offerUndo(current, audio: kept, cancelledAt: cancelledAt)
+        } else {
+            pill.showMessage("Cancelled", duration: 2.5)
+        }
         finished()
+    }
+
+    private func offerUndo(_ session: DictationSession, audio: CapturedAudio, cancelledAt: UInt64) {
+        undo?.timer.cancel()
+        let clock = clock
+        let timer = Task { [weak self] in
+            do {
+                try await clock.sleep(forSeconds: DeliveryCard.undoWindow)
+            } catch {
+                return
+            }
+            self?.undoExpired()
+        }
+        undo = PendingUndo(session: session, audio: audio, cancelledAt: cancelledAt, timer: timer)
+        cards.present(.cancelled())
+    }
+
+    private func undoExpired() {
+        guard undo != nil else { return }
+        undo?.timer.cancel()
+        undo = nil
+        cards.dismiss()
+    }
+
+    /// Throws the kept audio away and takes any card down.
+    private func discardPendingUndo() {
+        undo?.timer.cancel()
+        undo = nil
+        cards.dismiss()
+    }
+
+    /// The card's Undo: runs the normal pipeline on the kept audio and delivers wherever focus is now.
+    func undoCancel() async {
+        guard phase == .idle, let pending = undo else { return }
+        pending.timer.cancel()
+        undo = nil
+        phase = .processing
+        processing = Task {
+            await pipeline.reopen(pending.session)
+            pill.showProcessing()
+            do {
+                try await transcribeAndDeliver(pending.audio, session: pending.session, keyUpAt: pending.cancelledAt)
+            } catch {
+                await fail(pending.session, error)
+            }
+        }
+        await processing?.value
     }
 
     // MARK: Failure
@@ -243,17 +329,24 @@ final class DictationController {
         await capture.cancel()
         await pipeline.finish(session, .failed, errorMessage: String(describing: error))
         sounds.playError()
-        pill.showMessage(Self.userMessage(for: error), duration: 2.5)
+        pill.showMessage(Self.pillMessage(for: error), duration: 3)
         finished()
     }
 
-    static func userMessage(for error: Error) -> String {
-        guard let error = error as? CaptureError else { return "Transcription failed" }
+    static let microphoneAccessMessage = PillMessage(
+        "Microphone access needed", detail: "Allow it in System Settings", isError: true
+    )
+
+    static func pillMessage(for error: Error) -> PillMessage {
+        guard let error = error as? CaptureError else {
+            return PillMessage("Transcription failed", detail: "Try again", isError: true)
+        }
         switch error {
-        case .microphoneDenied, .microphonePending: return "Microphone access needed"
-        case .noInputDevice, .invalidInputFormat: return "No microphone found"
-        case .routeChanged: return "Microphone changed, try again"
-        case .engineStartFailed, .notRecording: return "Couldn't record"
+        case .microphoneDenied, .microphonePending: return microphoneAccessMessage
+        case .noInputDevice, .invalidInputFormat:
+            return PillMessage("No microphone found", detail: "Connect one and try again", isError: true)
+        case .routeChanged: return PillMessage("Microphone changed", detail: "Try again", isError: true)
+        case .engineStartFailed, .notRecording: return PillMessage("Couldn't record", detail: "Try again", isError: true)
         }
     }
 

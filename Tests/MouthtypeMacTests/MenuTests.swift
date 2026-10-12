@@ -149,12 +149,17 @@ private final class FakeLoginService: LoginItemService {
         #expect(HistoryMenuSection.statsLine(one) == "1 word today \u{00B7} 90 WPM")
     }
 
-    @Test func titlesTruncateWithAnEllipsis() {
-        #expect(HistoryMenuSection.truncated("short one") == "short one")
+    @Test func titlesShortenAtAWordBoundaryWithNoEllipsis() {
+        #expect(HistoryMenuSection.shortened("short one") == "short one")
         let long = String(repeating: "word ", count: 30)
-        let title = HistoryMenuSection.truncated(long)
-        #expect(title.hasSuffix("\u{2026}") && title.count <= 51)
-        #expect(HistoryMenuSection.truncated("line one\n\nline   two") == "line one line two")
+        let title = HistoryMenuSection.shortened(long)
+        #expect(!title.contains("\u{2026}") && title.count <= 50 && title == "word word word word word word word word word word")
+        #expect(HistoryMenuSection.shortened("line one\n\nline   two") == "line one line two")
+        // Lands exactly on a boundary, and cuts mid-word back to the last whole word.
+        #expect(HistoryMenuSection.shortened("abcd efgh ijkl", limit: 9) == "abcd efgh")
+        #expect(HistoryMenuSection.shortened("abcd efgh ijkl", limit: 11) == "abcd efgh")
+        // A first word longer than the limit has no boundary, so it is cut at the limit.
+        #expect(HistoryMenuSection.shortened("supercalifragilistic is long", limit: 10) == "supercalif")
     }
 
     @Test func listsTheLastFiveNewestFirstAndCopiesFullText() throws {
@@ -175,9 +180,10 @@ private final class FakeLoginService: LoginItemService {
         #expect(items[0].isEnabled == false && items[0].title.contains("words today"))
         #expect(items[1].title.hasPrefix("dictation number 6"))
         #expect(items[5].title.hasPrefix("dictation number 2"))
-        #expect(items[1].title.hasSuffix("\u{2026}"))
+        #expect(items[1].title == "dictation number 6" && !items[1].title.contains("\u{2026}"))
         let full = try #require(items[1].representedObject as? String)
         #expect(full.hasPrefix("dictation number 6") && full.count > 80)
+        #expect(items[1].toolTip == full)
     }
 
     @Test func recentIsHiddenWhenThereAreNone() throws {

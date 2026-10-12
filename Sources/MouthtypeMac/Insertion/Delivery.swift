@@ -48,14 +48,4 @@ public struct DeliveryResult: Sendable {
         case .failed: "not landed"
         }
     }
-
-    /// The pill line for a transcript that was not pasted, or nil when it was.
-    public var userMessage: String? {
-        switch (method, outcome) {
-        case (_, .secureDiscard): "Secure field, not pasted"
-        case (_, .failed): "Paste failed, text copied"
-        case (.clipboardOnly, _): "Copied, nothing to paste into"
-        default: nil
-        }
-    }
 }

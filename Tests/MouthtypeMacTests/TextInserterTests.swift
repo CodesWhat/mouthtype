@@ -420,7 +420,7 @@ private struct Rig {
         #expect(result(.none, .secureDiscard).storeOutcome == "secure discard")
         #expect(result(.clipboardOnly, .failed("x")).storeOutcome == "not landed")
         #expect(result(.paste, .unknown).storeOutcome == "unknown")
-        #expect(result(.paste, .unknown).userMessage == nil)
+        #expect(DeliveryCard.forDelivery(result(.paste, .unknown), transcript: "x") == nil)
     }
 
     @Test func snapshotConvertsToTheStoreTarget() {

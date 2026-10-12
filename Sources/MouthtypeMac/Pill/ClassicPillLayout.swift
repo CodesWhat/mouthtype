@@ -15,14 +15,18 @@ enum ClassicPillLayout {
     static let controlDiameter: CGFloat = 18
     static let controlInset: CGFloat = 5
     static let controlGap: CGFloat = 16
-    static let messageFontSize: CGFloat = 12
     static let messagePadding: CGFloat = 16
+    static let messageVerticalPadding: CGFloat = 7
     static let messageMinWidth: CGFloat = 64
     static let messageCap: CGFloat = 320
+    /// Gap between the headline and the detail under it.
+    static let detailGap: CGFloat = 1
+    /// A taller pill keeps the corner of the 28 pt one, so the capsule becomes a rounded rectangle.
+    static let cornerRadius: CGFloat = height / 2
 
     enum Mode: Equatable {
         case hold, locked, processing
-        case message(textWidth: CGFloat)
+        case message(width: CGFloat, height: CGFloat)
     }
 
     /// Rounds to a whole number of device pixels, returned in points.
@@ -78,26 +82,104 @@ enum ClassicPillLayout {
         evenCeil(2 * (controlInset + controlDiameter + controlGap) + barsSpan(scale: scale), scale: scale)
     }
 
-    /// The message capsule: wide enough for the text and its padding, within the minimum and the cap. `truncated`
-    /// when the text doesn't fit even at the cap, and `textWidth` is then what the text layer gets.
-    static func messageLayout(textWidth: CGFloat, scale: CGFloat) -> (width: CGFloat, textWidth: CGFloat, truncated: Bool) {
-        let natural = ceil(max(0, textWidth.isFinite ? textWidth : 0))
-        let wanted = natural + 2 * messagePadding
-        let width = evenCeil(min(messageCap, max(messageMinWidth, wanted)), scale: scale)
-        let available = width - 2 * messagePadding
-        return (width, min(natural, available), natural > available)
+    /// One line of a laid-out message and where it sits, as the offset of its middle from the block's middle
+    /// (positive is down).
+    struct MessageLine: Equatable {
+        var text: String
+        var isDetail: Bool
+        var centerOffset: CGFloat
+        var height: CGFloat
+    }
+
+    struct MessageBlock: Equatable {
+        var width: CGFloat
+        var height: CGFloat
+        var lines: [MessageLine]
+    }
+
+    /// Breaks a message at its logical point: the headline on its own line or lines, the detail under it. A part wraps
+    /// onto further lines only where it is wider than the cap, at a word boundary, and a single word wider than the
+    /// cap breaks between characters. Nothing is cut off. `measure` gives a string's width in the part's real font.
+    static func messageBlock(
+        headline: String, detail: String?, headlineLineHeight: CGFloat, detailLineHeight: CGFloat,
+        scale: CGFloat, measure: (String, _ isDetail: Bool) -> CGFloat
+    ) -> MessageBlock {
+        let available = messageCap - 2 * messagePadding
+        let head = wrap(headline, width: available) { measure($0, false) }
+        let tail = (detail?.isEmpty == false) ? wrap(detail ?? "", width: available) { measure($0, true) } : []
+        let widest = (head.map { measure($0, false) } + tail.map { measure($0, true) }).max() ?? 0
+        let width = evenCeil(min(messageCap, max(messageMinWidth, ceil(widest) + 2 * messagePadding)), scale: scale)
+
+        let stack = head.count * Int(headlineLineHeight.rounded()) + tail.count * Int(detailLineHeight.rounded())
+        let gap = tail.isEmpty ? 0 : detailGap
+        let block = CGFloat(stack) + gap
+        let height = head.count + tail.count == 1
+            ? Self.height
+            : max(Self.height, evenCeil(block + 2 * messageVerticalPadding, scale: scale))
+        var lines: [MessageLine] = []
+        var y = -block / 2
+        for text in head {
+            lines.append(MessageLine(text: text, isDetail: false, centerOffset: y + headlineLineHeight / 2, height: headlineLineHeight))
+            y += headlineLineHeight
+        }
+        y += gap
+        for text in tail {
+            lines.append(MessageLine(text: text, isDetail: true, centerOffset: y + detailLineHeight / 2, height: detailLineHeight))
+            y += detailLineHeight
+        }
+        return MessageBlock(width: width, height: height, lines: lines)
+    }
+
+    /// Greedy word wrap to `width`; an over-wide word is split between characters.
+    static func wrap(_ text: String, width: CGFloat, measure: (String) -> CGFloat) -> [String] {
+        var lines: [String] = []
+        var current = ""
+        func flush() {
+            if !current.isEmpty { lines.append(current) }
+            current = ""
+        }
+        for word in text.split(separator: " ", omittingEmptySubsequences: true).map(String.init) {
+            let joined = current.isEmpty ? word : current + " " + word
+            if measure(joined) <= width {
+                current = joined
+                continue
+            }
+            flush()
+            if measure(word) <= width {
+                current = word
+                continue
+            }
+            for character in word {
+                let next = current + String(character)
+                if measure(next) > width, !current.isEmpty {
+                    flush()
+                    current = String(character)
+                } else {
+                    current = next
+                }
+            }
+        }
+        flush()
+        return lines.isEmpty ? [""] : lines
     }
 
     static func capsuleWidth(_ mode: Mode, scale: CGFloat) -> CGFloat {
         switch mode {
         case .hold, .processing: evenCeil(holdWidth, scale: scale)
         case .locked: lockedWidth(scale: scale)
-        case .message(let textWidth): messageLayout(textWidth: textWidth, scale: scale).width
+        case .message(let width, _): width
         }
     }
 
+    static func capsuleHeight(_ mode: Mode) -> CGFloat {
+        if case .message(_, let height) = mode { return height }
+        return height
+    }
+
     /// The capsule inside a view of `bounds`: centred across, `bottomMargin` up from the bottom.
-    static func capsuleFrame(width: CGFloat, bounds: CGSize, bottomMargin: CGFloat, scale: CGFloat) -> CGRect {
+    static func capsuleFrame(
+        width: CGFloat, height: CGFloat = ClassicPillLayout.height, bounds: CGSize, bottomMargin: CGFloat, scale: CGFloat
+    ) -> CGRect {
         CGRect(x: snap((bounds.width - width) / 2, scale: scale), y: bottomMargin, width: width, height: height)
     }
 

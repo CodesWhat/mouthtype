@@ -97,3 +97,33 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Fonts
+
+Three typefaces are bundled in `Sources/MouthtypeMac/Resources/Fonts/` and embedded in `design/board/prototype.html`.
+All three are licensed under the SIL Open Font License, Version 1.1. They are bundled unmodified and stay under the
+OFL; they are not sold on their own. The full licence text for each sits beside its font files.
+
+### Instrument Serif
+
+Copyright 2022 The Instrument Serif Project Authors (https://github.com/Instrument/instrument-serif)
+
+- Licence: SIL OFL 1.1, `Sources/MouthtypeMac/Resources/Fonts/OFL-InstrumentSerif.txt`
+- Source: https://github.com/Instrument/instrument-serif, commit 65c0ef225f386a3c7e87570a4aa9cc0262c2fd81 (no tagged release), `fonts/ttf/InstrumentSerif-Regular.ttf`
+- Used for: the Systema set's headers and pill messages
+
+### Instrument Sans
+
+Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans)
+
+- Licence: SIL OFL 1.1, `Sources/MouthtypeMac/Resources/Fonts/OFL-InstrumentSans.txt`
+- Source: https://github.com/Instrument/instrument-sans, commit 7fa22308a3d0c94ee2b3cd537a1196b65db34a3e (no tagged release), `fonts/ttf/InstrumentSans-{Regular,Medium,SemiBold}.ttf`
+- Used for: the Systema set's body text, pill details and buttons
+
+### JetBrains Mono
+
+Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+
+- Licence: SIL OFL 1.1, `Sources/MouthtypeMac/Resources/Fonts/OFL-JetBrainsMono.txt`
+- Source: https://github.com/JetBrains/JetBrainsMono, tag v2.304 (commit cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9), `fonts/ttf/JetBrainsMono-Medium.ttf`
+- Used for: the Systema set's clocks and countdowns

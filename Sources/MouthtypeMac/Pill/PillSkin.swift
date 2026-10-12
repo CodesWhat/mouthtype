@@ -35,7 +35,8 @@ enum PillSkinPreference {
 enum PillGeometry {
     static let horizontalMargin: CGFloat = 24
     static let verticalMargin: CGFloat = 20
-    static let maxPillSize = CGSize(width: ClassicPillLayout.messageCap, height: 32)
+    /// Tall enough for a message wrapped onto many lines; the panel is click-through, so spare room costs nothing.
+    static let maxPillSize = CGSize(width: ClassicPillLayout.messageCap, height: 160)
     static let panelSize = CGSize(
         width: maxPillSize.width + 2 * horizontalMargin, height: maxPillSize.height + 2 * verticalMargin
     )
@@ -78,7 +79,9 @@ protocol PillSkinView: NSView {
     func showRecording(locked: Bool)
     func beginProcessing()
     /// `overRecording` keeps the recording's lock look underneath, for a notice that gives way to it again.
-    func showMessage(_ text: String, isError: Bool, overRecording: Bool)
+    func showMessage(_ message: PillMessage, overRecording: Bool)
+    /// The text font setting changed. Skins that draw bitmap text ignore it.
+    func applyTypography(_ typography: Typography)
     /// Each frame while recording: the smoothed 0...1 level of every bar.
     func showFractions(_ fractions: [Float])
     /// Each frame while processing.

@@ -69,7 +69,7 @@ import Testing
         #expect(L.capsuleWidth(.locked, scale: 2) > L.capsuleWidth(.hold, scale: 2))
         #expect(L.capsuleWidth(.locked, scale: 2) == L.lockedWidth(scale: 2))
         for scale in [CGFloat(1), 2] {
-            for mode in [L.Mode.hold, .locked, .processing, .message(textWidth: 120)] {
+            for mode in [L.Mode.hold, .locked, .processing, .message(width: 120, height: 28)] {
                 let px = L.capsuleWidth(mode, scale: scale) * scale
                 #expect(px == px.rounded() && Int(px) % 2 == 0)
             }
@@ -127,34 +127,11 @@ import Testing
         #expect(bars.first!.minX > cancel.maxX && bars.last!.maxX < stop.minX)
     }
 
-    @Test func messageWidthFitsThenClampsAtTheCap() {
-        let short = L.messageLayout(textWidth: 10, scale: 2)
-        #expect(short.width == L.messageMinWidth && !short.truncated)
-        let fit = L.messageLayout(textWidth: 150.3, scale: 2)
-        #expect(fit.width >= 151 + 2 * L.messagePadding && fit.width <= 151 + 2 * L.messagePadding + 1)
-        #expect(!fit.truncated && fit.textWidth == 151)
-        let long = L.messageLayout(textWidth: 900, scale: 2)
-        #expect(long.width == L.messageCap && long.truncated)
-        #expect(long.textWidth == L.messageCap - 2 * L.messagePadding)
-        let edge = L.messageLayout(textWidth: L.messageCap - 2 * L.messagePadding, scale: 2)
-        #expect(edge.width == L.messageCap && !edge.truncated)
-        #expect(L.messageLayout(textWidth: .nan, scale: 2).width == L.messageMinWidth)
-    }
-
     @Test func processingWaveStaysLowAndMoves() {
         let a = L.processingFractions(time: 0, count: 10)
         let b = L.processingFractions(time: 0.4, count: 10)
         #expect(a != b)
         #expect((a + b).allSatisfy { $0 > 0.05 && $0 < 0.35 })
-    }
-
-    @Test func realMessageTextTruncatesOnlyWhenItIsLong() {
-        _ = NSApplication.shared
-        let view = ClassicPillView(frame: NSRect(origin: .zero, size: PillGeometry.panelSize))
-        view.showMessage("Too short", isError: false, overRecording: false)
-        #expect(!view.isTruncated)
-        view.showMessage(String(repeating: "Copied to the clipboard instead. ", count: 6), isError: true, overRecording: false)
-        #expect(view.isTruncated)
     }
 }
 

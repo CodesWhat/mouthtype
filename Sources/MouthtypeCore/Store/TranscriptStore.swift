@@ -4,6 +4,7 @@ import GRDB
 public enum TranscriptStoreError: Error, Equatable {
     case unknownDictation(String)
     case notTerminal(DictationStatus)
+    case notCancelled(DictationStatus)
 }
 
 public final class TranscriptStore: Sendable {
@@ -168,6 +169,21 @@ public final class TranscriptStore: Sendable {
         default: throw TranscriptStoreError.notTerminal(status)
         }
         try update(id, [("status", status), ("error_message", errorMessage)])
+    }
+
+    /// Puts a cancelled dictation back to `started`, for an Undo that runs it after all. Only a cancelled row can be
+    /// reopened; the staged writes then carry on from the capture.
+    public func reopen(_ id: String) throws {
+        try pool.write { db in
+            guard let status = try DictationStatus.fetchOne(
+                db, sql: "SELECT status FROM dictation WHERE id = ?", arguments: [id]
+            ) else { throw TranscriptStoreError.unknownDictation(id) }
+            guard status == .cancelled else { throw TranscriptStoreError.notCancelled(status) }
+            try db.execute(
+                sql: "UPDATE dictation SET status = ?, error_message = NULL WHERE id = ?",
+                arguments: [DictationStatus.started, id]
+            )
+        }
     }
 
     public func appendEdits(_ id: String, _ edits: [EditOp]) throws {

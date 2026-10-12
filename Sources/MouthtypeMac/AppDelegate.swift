@@ -16,6 +16,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotkeyService: HotkeyService?
     private var hotkeyLogTask: Task<Void, Never>?
     private var pill: PillController?
+    private var cardController: DeliveryCardController?
+    private var cardPresenter: DeliveryCardPresenter?
     private var inserter: TextInserter?
     private var dictation: DictationController?
     private var inputStarted = false
@@ -24,13 +26,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.info("launch \(AppInfo.version, privacy: .public)")
         let arguments = CommandLine.arguments
+        FontRegistry.registerBundledFonts()
         // The two file/visual modes need no permissions and touch neither the remap, the mic nor the real database.
         if let demo = PillDemo.options(in: arguments) {
             let pill = PillController(level: { 0 })
             if let skin = demo.skin { pill.setSkin(skin) }
+            let cards = DeliveryCardController()
+            cards.anchor = { [weak pill] in pill?.cardAnchor() }
+            let presenter = DeliveryCardPresenter(surface: cards, clipboard: SystemClipboard(), clock: SystemDictationClock())
+            cards.onAction = { [weak presenter] action in presenter?.perform(action) }
+            cards.onDismiss = { [weak presenter] in presenter?.userDismissed() }
             self.pill = pill
+            cardController = cards
+            cardPresenter = presenter
             Task {
-                await PillDemo.run(controller: pill, options: demo)
+                await PillDemo.run(controller: pill, cards: cards, presenter: presenter, options: demo)
                 NSApp.terminate(nil)
             }
             return
@@ -52,12 +62,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let inserter = TextInserter(syntheticStamp: SyntheticEvents.stamp)
         let engine = HostEngine(host: engineHost)
         let sounds = SystemSoundPlayer()
+        let cards = DeliveryCardController()
+        cards.anchor = { [weak pill] in pill?.cardAnchor() }
+        let presenter = DeliveryCardPresenter(surface: cards, clipboard: SystemClipboard(), clock: SystemDictationClock())
+        cards.onAction = { [weak presenter] action in presenter?.perform(action) }
+        cards.onDismiss = { [weak presenter] in presenter?.userDismissed() }
+        cardController = cards
+        cardPresenter = presenter
         let dictation = DictationController(
             capture: micCapture, engine: engine,
             pipeline: DictationPipeline(
                 store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
             ),
-            inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock()
+            inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock(), cards: presenter
         )
         self.pill = pill
         self.inserter = inserter
@@ -69,6 +86,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: systemSection)
         menuBar.add(section: history)
         menuBar.add(section: PillSkinMenuSection(onSelect: { [weak pill] kind in pill?.setSkin(kind) }))
+        menuBar.add(section: TextFontMenuSection())
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
@@ -142,13 +160,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func pasteLast() {
-        guard let inserter, let pill else { return }
+        guard let inserter, let pill, let cardPresenter else { return }
         Task {
             guard let result = await inserter.pasteLast() else {
                 pill.showMessage("Nothing to paste yet")
                 return
             }
-            if let message = result.userMessage { pill.showMessage(message) }
+            if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") { cardPresenter.present(card) }
         }
     }
 

@@ -48,6 +48,9 @@ public final class TextInserter {
         )
     }
 
+    /// The last transcript handed to `deliver`, whether or not it landed.
+    var lastDelivered: String? { lastText }
+
     public func snapshotFocus() -> FocusSnapshot {
         focus.snapshot()
     }

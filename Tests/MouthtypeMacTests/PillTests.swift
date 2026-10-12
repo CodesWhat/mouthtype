@@ -152,7 +152,7 @@ func makePillController(skin: PillSkinKind? = nil, level: @escaping @MainActor (
         #expect(HiFiPillView.artSize == CGSize(width: assets.layout.size.w, height: assets.layout.size.h))
         #expect(HiFiPillView.pillSize == CGSize(width: 146 * HiFiPillView.artScale, height: 32 * HiFiPillView.artScale))
         #expect(PillController.panelSize.width >= HiFiPillView.pillSize.width)
-        #expect(PillController.panelSize.height == HiFiPillView.pillSize.height + 2 * PillController.pillPadding)
+        #expect(PillController.panelSize.height >= HiFiPillView.pillSize.height + 2 * PillController.pillPadding)
         #expect(HiFiPillView.artScale.rounded() == HiFiPillView.artScale)
         #expect(assets.layout.meter.columns == BarModel.barCount)
         #expect(assets.layout.meter.segmentsPerColumn == BarModel.segmentRows)
@@ -186,8 +186,9 @@ func makePillController(skin: PillSkinKind? = nil, level: @escaping @MainActor (
         #expect(controller.state == .hidden)
         controller.showHandsFree()
         controller.showHandsFreeNotice("1 min left", duration: 0.05)
-        #expect(controller.state == .message("1 min left"))
-        try? await Task.sleep(for: .milliseconds(200))
+        #expect(controller.state == .message(PillMessage("1 min left")))
+        // Poll rather than sleep once: other main-actor tests can hold the actor past a fixed delay.
+        for _ in 0..<40 where controller.state != .handsFree { try? await Task.sleep(for: .milliseconds(50)) }
         #expect(controller.state == .handsFree)
         controller.hide()
     }

@@ -36,9 +36,10 @@ final class HistoryMenuSection: NSObject, MenuSection {
             .prefix(Self.recentCount)
         recentItems = records.compactMap { record in
             guard let text = record.finalText else { return nil }
-            let item = NSMenuItem(title: Self.truncated(text), action: #selector(copyRecent(_:)), keyEquivalent: "")
+            let item = NSMenuItem(title: Self.shortened(text), action: #selector(copyRecent(_:)), keyEquivalent: "")
             item.target = self
             item.representedObject = text
+            item.toolTip = text
             return item
         }
     }
@@ -62,10 +63,17 @@ final class HistoryMenuSection: NSObject, MenuSection {
         return parts.joined(separator: " \u{00B7} ")
     }
 
-    /// One line of about `limit` characters: whitespace runs collapse, and a longer text ends in an ellipsis.
-    static func truncated(_ text: String, limit: Int = titleLimit) -> String {
+    /// One line of at most `limit` characters: whitespace runs collapse, and a longer text keeps the words that fit,
+    /// cut at a word boundary with no ellipsis (the full text is the item's tooltip). A first word longer than
+    /// `limit` is cut at the limit, since it has no boundary to cut at.
+    static func shortened(_ text: String, limit: Int = titleLimit) -> String {
         let flat = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
         guard flat.count > limit else { return flat }
-        return String(flat.prefix(limit)).trimmingCharacters(in: .whitespaces) + "\u{2026}"
+        let head = flat.prefix(limit)
+        let atBoundary = flat[head.endIndex].isWhitespace
+        guard !atBoundary, let space = head.lastIndex(of: " ") else {
+            return String(head).trimmingCharacters(in: .whitespaces)
+        }
+        return String(head[..<space])
     }
 }

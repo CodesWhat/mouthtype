@@ -29,6 +29,8 @@ protocol DictationStoring: Sendable {
     func recordTranscription(_ id: String, _ record: TranscriptionRecord) async throws
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws
+    /// A cancelled row goes back to started, for an Undo that runs it after all.
+    func reopen(_ id: String) async throws
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws
 }
 
@@ -51,8 +53,14 @@ protocol DictationPill: AnyObject {
     /// A line over a locked recording that gives way to the hands-free pill again.
     func showHandsFreeNotice(_ text: String, duration: TimeInterval)
     func showProcessing()
-    func showMessage(_ text: String, duration: TimeInterval)
+    func showMessage(_ message: PillMessage, duration: TimeInterval)
     func hide()
+}
+
+extension DictationPill {
+    func showMessage(_ text: String, duration: TimeInterval) {
+        showMessage(PillMessage(text), duration: duration)
+    }
 }
 
 protocol DictationClock: Sendable {
@@ -123,6 +131,7 @@ struct TranscriptStoreWriter: DictationStoring {
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
         try store.recordLock(id, mode: mode, trigger: trigger)
     }
+    func reopen(_ id: String) async throws { try store.reopen(id) }
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {
         try store.finish(id, status: status, errorMessage: errorMessage)
     }

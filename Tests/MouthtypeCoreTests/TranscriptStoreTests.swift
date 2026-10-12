@@ -122,6 +122,28 @@ import Testing
         #expect(try store.recent(limit: 5).map(\.id) == [id])
     }
 
+    @Test func aCancelledRowReopensAndThenCompletes() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try start(store)
+        try store.finish(id, status: .cancelled)
+        try store.reopen(id)
+        #expect(try store.dictation(id: id)?.status == .started)
+        try store.recordInsertion(id, InsertionRecord(finalText: "Hello again."))
+        #expect(try store.dictation(id: id)?.status == .inserted)
+        #expect(try store.dictation(id: id)?.finalText == "Hello again.")
+    }
+
+    @Test func onlyACancelledRowReopens() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try start(store)
+        #expect(throws: TranscriptStoreError.notCancelled(.started)) { try store.reopen(id) }
+        try store.finish(id, status: .empty)
+        #expect(throws: TranscriptStoreError.notCancelled(.empty)) { try store.reopen(id) }
+        #expect(throws: TranscriptStoreError.unknownDictation("nope")) { try store.reopen("nope") }
+    }
+
     @Test func cancelledAttemptIsARow() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
