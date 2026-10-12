@@ -1,0 +1,17 @@
+# agent and planning dirs, local only
+.claude/
+.planning/
+
+# swift / xcode
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj
+xcuserdata/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# benchmark audio and model caches
+bench-cache/
