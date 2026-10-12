@@ -11,12 +11,27 @@ public final class TextInserter {
     /// How long the target app gets to read the clipboard before it is restored.
     static let restoreDelay: TimeInterval = 0.25
 
+    /// How long after a paste its last character still stands in for an unreadable text-before-cursor.
+    static let continuationWindow: TimeInterval = 5 * 60
+
     private let focus: FocusReading
     private let clipboard: PasteboardSession
+    private let now: @MainActor () -> Date
     private var lastText: String?
+    private var lastPaste: LastPaste?
+
+    /// What the last successful paste put in the field and where.
+    private struct LastPaste {
+        var pid: pid_t
+        var bundleID: String?
+        var element: FocusedElement?
+        var finalCharacter: Character
+        var date: Date
+    }
 
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
     public init(syntheticStamp: Int64) {
+        self.now = { Date() }
         self.focus = AccessibilityFocusReader()
         self.clipboard = PasteboardSession(
             pasteboard: SystemPasteboard(.general),
@@ -25,7 +40,8 @@ public final class TextInserter {
         )
     }
 
-    init(focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, schedule: @escaping PasteboardSession.Schedule) {
+    init(focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, schedule: @escaping PasteboardSession.Schedule, now: @escaping @MainActor () -> Date = { Date() }) {
+        self.now = now
         self.focus = focus
         self.clipboard = PasteboardSession(
             pasteboard: pasteboard, poster: poster, restoreDelay: Self.restoreDelay, schedule: schedule
@@ -57,7 +73,10 @@ public final class TextInserter {
             return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
         case .paste:
             lastText = text
-            let before = now.element.map { focus.textBeforeCursor(of: $0) } ?? .unknown
+            var before = now.element.map { focus.textBeforeCursor(of: $0) } ?? .unknown
+            if case .unknown = before, let preceding = continuationCharacter(for: now) {
+                before = .character(preceding)
+            }
             let spaced = Spacing.spaced(text, before: before)
             guard clipboard.paste(spaced) else {
                 clipboard.copy(spaced)
@@ -67,8 +86,24 @@ public final class TextInserter {
                     focusMoved: moved, target: now, finalText: spaced
                 )
             }
+            if let pid = now.pid, let last = spaced.last {
+                lastPaste = LastPaste(
+                    pid: pid, bundleID: now.bundleID, element: now.element, finalCharacter: last, date: self.now()
+                )
+            }
             return DeliveryResult(method: .paste, outcome: .unknown, focusMoved: moved, target: now, finalText: spaced)
         }
+    }
+
+    /// The last character we pasted, when the text before the cursor can't be read (Electron terminals expose no
+    /// Accessibility text) and the last paste went to the same app recently. Known limit: if the user typed or moved
+    /// the cursor between dictations in such an app we can't know, and may add a space that isn't needed.
+    private func continuationCharacter(for target: FocusSnapshot) -> Character? {
+        guard let last = lastPaste, let pid = target.pid, last.pid == pid, last.bundleID == target.bundleID else { return nil }
+        if let element = last.element, let other = target.element, element != other { return nil }
+        let age = now().timeIntervalSince(last.date)
+        guard age >= 0, age <= Self.continuationWindow else { return nil }
+        return last.finalCharacter
     }
 
     /// Pastes the last delivered transcript again, at the current focus. Nil when nothing was delivered yet.

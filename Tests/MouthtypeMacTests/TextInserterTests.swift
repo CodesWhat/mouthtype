@@ -71,7 +71,14 @@ private func element(_ pid: pid_t) -> FocusedElement {
 }
 
 @MainActor
+private final class TestClock {
+    var date = Date(timeIntervalSince1970: 1_000_000)
+    func advance(_ seconds: TimeInterval) { date = date.addingTimeInterval(seconds) }
+}
+
+@MainActor
 private struct Rig {
+    let clock = TestClock()
     let pasteboard = FakePasteboard()
     let poster = FakePoster()
     let focus = FakeFocus()
@@ -90,10 +97,11 @@ private struct Rig {
 
     init() {
         let pending = pending
-        inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster) { delay, work in
+        let clock = clock
+        inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, schedule: { delay, work in
             pending.delays.append(delay)
             pending.works.append(work)
-        }
+        }, now: { clock.date })
     }
 }
 
@@ -259,6 +267,101 @@ private struct Rig {
         #expect(result.finalText == "world")
     }
 
+    // MARK: - Continuing after our own last paste when the text before the cursor can't be read
+
+    @Test func twoDeliveriesToTheSameAppWithNoReadableContextGetASpaceBetween() async {
+        let rig = Rig()
+        #expect(await rig.inserter.deliver("My name is Hove.", startFocus: nil).finalText == "My name is Hove.")
+        rig.clock.advance(30)
+        #expect(await rig.inserter.deliver("Damn, can you check", startFocus: nil).finalText == " Damn, can you check")
+    }
+
+    @Test func theFirstEverDeliveryGetsNoSpace() async {
+        let rig = Rig()
+        #expect(await rig.inserter.deliver("hello", startFocus: nil).finalText == "hello")
+    }
+
+    @Test func aDifferentAppGetsNoSpace() async {
+        let rig = Rig()
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other")
+        #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
+    }
+
+    @Test func aDifferentFocusedElementInTheSameAppGetsNoSpace() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(101))
+        #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
+    }
+
+    @Test func outsideTheWindowGetsNoSpace() async {
+        let rig = Rig()
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.clock.advance(TextInserter.continuationWindow + 1)
+        #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
+    }
+
+    @Test func atTheEdgeOfTheWindowStillGetsASpace() async {
+        let rig = Rig()
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.clock.advance(TextInserter.continuationWindow)
+        #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == " world")
+    }
+
+    @Test func aPreviousPasteEndingInNewlineSpaceOrOpenerGetsNoSpace() async {
+        for ending in ["hello\n", "hello ", "hello ("] {
+            let rig = Rig()
+            _ = await rig.inserter.deliver(ending, startFocus: nil)
+            #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
+        }
+    }
+
+    @Test func readableContextOverridesTheFallbackBothWays() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.focus.before = .character(" ")
+        #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
+        rig.focus.before = .start
+        #expect(await rig.inserter.deliver("again", startFocus: nil).finalText == "again")
+
+        let other = Rig()
+        other.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
+        other.focus.before = .character("x")
+        _ = await other.inserter.deliver("hello.", startFocus: nil)
+        #expect(await other.inserter.deliver("world", startFocus: nil).finalText == " world")
+        // Last paste ended in a space-free opener, but the field says a word precedes the cursor.
+        let third = Rig()
+        third.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
+        _ = await third.inserter.deliver("hello (", startFocus: nil)
+        third.focus.before = .character("o")
+        #expect(await third.inserter.deliver("world", startFocus: nil).finalText == " world")
+    }
+
+    @Test func aClipboardOnlyDeliveryIsNotTheLastPaste() async {
+        let rig = Rig()
+        _ = await rig.inserter.deliver("first.", startFocus: nil)
+        rig.poster.succeeds = false
+        #expect(await rig.inserter.deliver("lost", startFocus: nil).method == .clipboardOnly)
+        rig.poster.succeeds = true
+        // Memory still holds "first." so a space is added, not driven by "lost".
+        #expect(await rig.inserter.deliver("next", startFocus: nil).finalText == " next")
+
+        let fresh = Rig()
+        fresh.poster.succeeds = false
+        _ = await fresh.inserter.deliver("lost", startFocus: nil)
+        fresh.poster.succeeds = true
+        #expect(await fresh.inserter.deliver("next", startFocus: nil).finalText == "next")
+
+        let nothing = Rig()
+        nothing.focus.current = FocusSnapshot()
+        _ = await nothing.inserter.deliver("lost", startFocus: nil)
+        nothing.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app")
+        #expect(await nothing.inserter.deliver("next", startFocus: nil).finalText == "next")
+    }
+
     @Test func nothingFrontmostLeavesTheTextOnTheClipboardWithoutRestoring() async {
         let rig = Rig()
         rig.pasteboard.contents = original
@@ -298,7 +401,7 @@ private struct Rig {
         rig.pending.runAll()
         let again = await rig.inserter.pasteLast()
         #expect(again?.method == .paste)
-        #expect(again?.finalText == "hello")
+        #expect(again?.finalText == " hello")
         #expect(rig.poster.posts == 2)
 
         #expect(rig.inserter.copyLast())
