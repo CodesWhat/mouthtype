@@ -1,0 +1,1312 @@
+{
+  "corpus" : "bench-cache\/corpus",
+  "date" : "2026-10-12",
+  "engines" : [
+    {
+      "cold" : {
+        "clips" : [
+
+        ],
+        "displayName" : "Parakeet TDT 0.6B v3 (multilingual)",
+        "engineID" : "parakeet-tdt-v3",
+        "modelBytes" : 489193472,
+        "modelPath" : "\/Users\/sbenson\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v3",
+        "peakRSSBytes" : 46546944,
+        "prepare" : {
+          "downloadSeconds" : 0,
+          "downloaded" : false,
+          "loadSeconds" : 0.225542917
+        }
+      },
+      "displayName" : "Parakeet TDT 0.6B v3 (multilingual)",
+      "engineID" : "parakeet-tdt-v3",
+      "overallRTFx" : 172.10537764035024,
+      "shortClipMedianMs" : 44.908875,
+      "warm" : {
+        "clips" : [
+          {
+            "audioSeconds" : 3.505,
+            "edits" : 0,
+            "hypothesis" : "Concord returned to its place amidst the tents.",
+            "latenciesMs" : [
+              39.816042,
+              40.056959000000006,
+              39.639542,
+              39.281000000000006,
+              41.197334000000005
+            ],
+            "medianMs" : 39.816042,
+            "name" : "real-6930-75918-0000",
+            "p95Ms" : 41.197334000000005,
+            "reference" : "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS",
+            "referenceWords" : 8,
+            "rtfx" : 88.02984485499587,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 14.225,
+            "edits" : 0,
+            "hypothesis" : "the English forwarded to the French baskets of flowers, of which they had made a plentiful provision to greet the arrival of the young princess. The French, in return, invited the English to a supper, which was to be given the next day.",
+            "latenciesMs" : [
+              74.12725,
+              74.47733400000001,
+              72.19895799999999,
+              72.764791,
+              73.62804200000001
+            ],
+            "medianMs" : 73.62804200000001,
+            "name" : "real-6930-75918-0001",
+            "p95Ms" : 74.47733400000001,
+            "reference" : "THE ENGLISH FORWARDED TO THE FRENCH BASKETS OF FLOWERS OF WHICH THEY HAD MADE A PLENTIFUL PROVISION TO GREET THE ARRIVAL OF THE YOUNG PRINCESS THE FRENCH IN RETURN INVITED THE ENGLISH TO A SUPPER WHICH WAS TO BE GIVEN THE NEXT DAY",
+            "referenceWords" : 43,
+            "rtfx" : 193.2008459494278,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 5.025,
+            "edits" : 0,
+            "hypothesis" : "Congratulations were poured in upon the Princess everywhere during her journey.",
+            "latenciesMs" : [
+              44.654666000000006,
+              45.178792,
+              49.213874999999994,
+              44.908875,
+              43.525917
+            ],
+            "medianMs" : 44.908875,
+            "name" : "real-6930-75918-0002",
+            "p95Ms" : 49.213874999999994,
+            "reference" : "CONGRATULATIONS WERE POURED IN UPON THE PRINCESS EVERYWHERE DURING HER JOURNEY",
+            "referenceWords" : 11,
+            "rtfx" : 111.893250498927,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 23.315,
+            "edits" : 0,
+            "hypothesis" : "From the respect paid her on all sides she seemed like a queen, and from the adoration with which she was treated by two or three, she appeared an object of worship. The Queen Mother gave the French the most affectionate reception. France was her native country, and she had suffered too much unhappiness in England for England to have made her forget France.",
+            "latenciesMs" : [
+              114.869709,
+              115.779166,
+              115.094583,
+              111.27425000000001,
+              116.823583
+            ],
+            "medianMs" : 115.094583,
+            "name" : "real-6930-75918-0003",
+            "p95Ms" : 116.823583,
+            "reference" : "FROM THE RESPECT PAID HER ON ALL SIDES SHE SEEMED LIKE A QUEEN AND FROM THE ADORATION WITH WHICH SHE WAS TREATED BY TWO OR THREE SHE APPEARED AN OBJECT OF WORSHIP THE QUEEN MOTHER GAVE THE FRENCH THE MOST AFFECTIONATE RECEPTION FRANCE WAS HER NATIVE COUNTRY AND SHE HAD SUFFERED TOO MUCH UNHAPPINESS IN ENGLAND FOR ENGLAND TO HAVE MADE HER FORGET FRANCE",
+            "referenceWords" : 64,
+            "rtfx" : 202.57252246180866,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 11.065,
+            "edits" : 1,
+            "hypothesis" : "She taught her daughter, then, by her own affection for it, that love for a country where they had both been hospitably received, and where a brilliant future opened for them.",
+            "latenciesMs" : [
+              57.958584,
+              61.349708,
+              60.246583,
+              60.98675,
+              58.229417
+            ],
+            "medianMs" : 60.246583,
+            "name" : "real-6930-75918-0004",
+            "p95Ms" : 61.349708,
+            "reference" : "SHE TAUGHT HER DAUGHTER THEN BY HER OWN AFFECTION FOR IT THAT LOVE FOR A COUNTRY WHERE THEY HAD BOTH BEEN HOSPITABLY RECEIVED AND WHERE A BRILLIANT FUTURE OPENED BEFORE THEM",
+            "referenceWords" : 31,
+            "rtfx" : 183.6618684249694,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 13.16,
+            "edits" : 0,
+            "hypothesis" : "the Count had thrown himself back on his seat, leaning his shoulders against the partition of the tent, and remained thus, his face buried in his hands, with heaving chest and restless limbs.",
+            "latenciesMs" : [
+              61.886375,
+              62.617375,
+              65.366375,
+              62.97641599999999,
+              65.327541
+            ],
+            "medianMs" : 62.97641599999999,
+            "name" : "real-6930-75918-0005",
+            "p95Ms" : 65.366375,
+            "reference" : "THE COUNT HAD THROWN HIMSELF BACK ON HIS SEAT LEANING HIS SHOULDERS AGAINST THE PARTITION OF THE TENT AND REMAINED THUS HIS FACE BURIED IN HIS HANDS WITH HEAVING CHEST AND RESTLESS LIMBS",
+            "referenceWords" : 33,
+            "rtfx" : 208.96711556275292,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 5.85,
+            "edits" : 0,
+            "hypothesis" : "This has indeed been a harassing day, continued the young man, his eyes fixed upon his friend",
+            "latenciesMs" : [
+              47.491749999999996,
+              51.14475,
+              46.414541,
+              49.427666,
+              46.890375
+            ],
+            "medianMs" : 47.491749999999996,
+            "name" : "real-6930-75918-0006",
+            "p95Ms" : 51.14475,
+            "reference" : "THIS HAS INDEED BEEN A HARASSING DAY CONTINUED THE YOUNG MAN HIS EYES FIXED UPON HIS FRIEND",
+            "referenceWords" : 17,
+            "rtfx" : 123.17928903441124,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 3.315,
+            "edits" : 0,
+            "hypothesis" : "You will be frank with me? I always am.",
+            "latenciesMs" : [
+              36.565167,
+              37.005042,
+              37.951792,
+              37.074208,
+              38.129083
+            ],
+            "medianMs" : 37.074208,
+            "name" : "real-6930-75918-0007",
+            "p95Ms" : 38.129083,
+            "reference" : "YOU WILL BE FRANK WITH ME I ALWAYS AM",
+            "referenceWords" : 9,
+            "rtfx" : 89.41526141300173,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 4.785,
+            "edits" : 0,
+            "hypothesis" : "Can you imagine why Buckingham has been so violent? I suspect.",
+            "latenciesMs" : [
+              42.520958,
+              42.378708,
+              41.196667,
+              43.143875,
+              42.358458
+            ],
+            "medianMs" : 42.378708,
+            "name" : "real-6930-75918-0008",
+            "p95Ms" : 43.143875,
+            "reference" : "CAN YOU IMAGINE WHY BUCKINGHAM HAS BEEN SO VIOLENT I SUSPECT",
+            "referenceWords" : 11,
+            "rtfx" : 112.9104738162381,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 7.28,
+            "edits" : 0,
+            "hypothesis" : "It is you who are mistaken, Raoul. I have read his distress in his eyes, in his every gesture and action the whole day.",
+            "latenciesMs" : [
+              53.522791,
+              51.536125000000006,
+              51.551832999999995,
+              51.234666999999995,
+              52.54875
+            ],
+            "medianMs" : 51.551832999999995,
+            "name" : "real-6930-75918-0009",
+            "p95Ms" : 53.522791,
+            "reference" : "IT IS YOU WHO ARE MISTAKEN RAOUL I HAVE READ HIS DISTRESS IN HIS EYES IN HIS EVERY GESTURE AND ACTION THE WHOLE DAY",
+            "referenceWords" : 24,
+            "rtfx" : 141.21709309540944,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 1.9900625,
+            "edits" : 0,
+            "hypothesis" : "Sounds good. I'll send it over now.",
+            "latenciesMs" : [
+              38.081875000000004,
+              37.754875,
+              37.978416,
+              37.669791000000004,
+              38.051333
+            ],
+            "medianMs" : 37.978416,
+            "name" : "synthetic-1-slack-2s",
+            "p95Ms" : 38.081875000000004,
+            "reference" : "Sounds good, I'll send it over now.",
+            "referenceWords" : 7,
+            "rtfx" : 52.3998288922845,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 5.4346875,
+            "edits" : 0,
+            "hypothesis" : "Hey, can you check the staging deploy before the meeting? The health check looks off.",
+            "latenciesMs" : [
+              44.860042,
+              46.143958,
+              45.334875,
+              46.525459,
+              49.06554199999999
+            ],
+            "medianMs" : 46.143958,
+            "name" : "synthetic-2-slack-5s",
+            "p95Ms" : 49.06554199999999,
+            "reference" : "Hey, can you check the staging deploy before the meeting? The health check looks off.",
+            "referenceWords" : 15,
+            "rtfx" : 117.77679539323437,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 9.6,
+            "edits" : 0,
+            "hypothesis" : "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. Please log the failure and return a proper status code.",
+            "latenciesMs" : [
+              56.142584,
+              57.748667,
+              57.073459,
+              61.768875,
+              57.486166
+            ],
+            "medianMs" : 57.486166,
+            "name" : "synthetic-3-review-10s",
+            "p95Ms" : 61.768875,
+            "reference" : "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. Please log the failure and return a proper status code.",
+            "referenceWords" : 24,
+            "rtfx" : 166.99669969293134,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 19.1466875,
+            "edits" : 0,
+            "hypothesis" : "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we're mostly aligned. The one open question is the rollout plan for the second quarter, specifically whether we can stage the migration by region instead of cutting everything over in a single weekend.",
+            "latenciesMs" : [
+              120.631625,
+              113.014792,
+              119.210916,
+              118.375042,
+              116.864542
+            ],
+            "medianMs" : 118.375042,
+            "name" : "synthetic-4-email-20s",
+            "p95Ms" : 120.631625,
+            "reference" : "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we're mostly aligned. The one open question is the rollout plan for the second quarter, specifically whether we can stage the migration by region instead of cutting everything over in a single weekend.",
+            "referenceWords" : 56,
+            "rtfx" : 161.74598273848974,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 45.456,
+            "edits" : 0,
+            "hypothesis" : "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up. Over the next few days, I want to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the worker pool still point at the old cluster, so I'll open a pull request to fix that and tag the platform team for review. Third, the dashboards need new alerts because the latency thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about the schedule, please say so in the thread before Friday, and I'll adjust the plan.",
+            "latenciesMs" : [
+              169.855709,
+              174.733292,
+              169.679125,
+              173.542125,
+              170.933208
+            ],
+            "medianMs" : 170.933208,
+            "name" : "synthetic-5-email-45s",
+            "p95Ms" : 174.733292,
+            "reference" : "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up. Over the next few days I want to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the worker pool still point at the old cluster, so I'll open a pull request to fix that and tag the platform team for review. Third, the dashboards need new alerts, because the latency thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about the schedule, please say so in the thread before Friday, and I'll adjust the plan.",
+            "referenceWords" : 131,
+            "rtfx" : 265.9284321160111,
+            "set" : "synthetic"
+          }
+        ],
+        "displayName" : "Parakeet TDT 0.6B v3 (multilingual)",
+        "engineID" : "parakeet-tdt-v3",
+        "firstTranscribeMs" : 81.491375,
+        "modelBytes" : 489193472,
+        "modelPath" : "\/Users\/sbenson\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v3",
+        "peakRSSBytes" : 149700608,
+        "prepare" : {
+          "downloadSeconds" : 0,
+          "downloaded" : false,
+          "loadSeconds" : 0.10828225
+        }
+      },
+      "werReal" : 0.00398406374501992,
+      "werSynthetic" : 0
+    },
+    {
+      "cold" : {
+        "clips" : [
+
+        ],
+        "displayName" : "Parakeet TDT 0.6B v2 (English)",
+        "engineID" : "parakeet-tdt-v2",
+        "modelBytes" : 472899584,
+        "modelPath" : "\/Users\/sbenson\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v2",
+        "peakRSSBytes" : 562053120,
+        "prepare" : {
+          "downloadSeconds" : 31.528567458,
+          "downloaded" : true,
+          "loadSeconds" : 0.140550875
+        }
+      },
+      "displayName" : "Parakeet TDT 0.6B v2 (English)",
+      "engineID" : "parakeet-tdt-v2",
+      "overallRTFx" : 190.0024829896979,
+      "shortClipMedianMs" : 45.78775,
+      "warm" : {
+        "clips" : [
+          {
+            "audioSeconds" : 3.505,
+            "edits" : 0,
+            "hypothesis" : "Concord returned to its place amidst the tents",
+            "latenciesMs" : [
+              41.856084,
+              44.2975,
+              41.873667000000005,
+              40.9925,
+              41.63075
+            ],
+            "medianMs" : 41.856084,
+            "name" : "real-6930-75918-0000",
+            "p95Ms" : 44.2975,
+            "reference" : "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS",
+            "referenceWords" : 8,
+            "rtfx" : 83.73931971275668,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 14.225,
+            "edits" : 0,
+            "hypothesis" : "The English forwarded to the French baskets of flowers, of which they had made a plentiful provision to greet the arrival of the young princess. The French in return invited the English to a supper, which was to be given the next day",
+            "latenciesMs" : [
+              61.655958,
+              61.197584,
+              62.964667,
+              61.53975,
+              64.452375
+            ],
+            "medianMs" : 61.655958,
+            "name" : "real-6930-75918-0001",
+            "p95Ms" : 64.452375,
+            "reference" : "THE ENGLISH FORWARDED TO THE FRENCH BASKETS OF FLOWERS OF WHICH THEY HAD MADE A PLENTIFUL PROVISION TO GREET THE ARRIVAL OF THE YOUNG PRINCESS THE FRENCH IN RETURN INVITED THE ENGLISH TO A SUPPER WHICH WAS TO BE GIVEN THE NEXT DAY",
+            "referenceWords" : 43,
+            "rtfx" : 230.71574039933012,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 5.025,
+            "edits" : 0,
+            "hypothesis" : "Congratulations were poured in upon the princess everywhere during her journey",
+            "latenciesMs" : [
+              45.31925,
+              45.500959,
+              46.064667,
+              45.951375000000006,
+              45.78775
+            ],
+            "medianMs" : 45.78775,
+            "name" : "real-6930-75918-0002",
+            "p95Ms" : 46.064667,
+            "reference" : "CONGRATULATIONS WERE POURED IN UPON THE PRINCESS EVERYWHERE DURING HER JOURNEY",
+            "referenceWords" : 11,
+            "rtfx" : 109.74551053502302,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 23.315,
+            "edits" : 0,
+            "hypothesis" : "From the respect paid her on all sides, she seemed like a queen, and from the adoration with which she was treated by two or three, she appeared an object of worship. The queen mother gave the French the most affectionate reception. France was her native country, and she had suffered too much unhappiness in England for England to have made her forget France.",
+            "latenciesMs" : [
+              87.171625,
+              84.47916699999999,
+              86.103083,
+              89.797875,
+              85.188625
+            ],
+            "medianMs" : 86.103083,
+            "name" : "real-6930-75918-0003",
+            "p95Ms" : 89.797875,
+            "reference" : "FROM THE RESPECT PAID HER ON ALL SIDES SHE SEEMED LIKE A QUEEN AND FROM THE ADORATION WITH WHICH SHE WAS TREATED BY TWO OR THREE SHE APPEARED AN OBJECT OF WORSHIP THE QUEEN MOTHER GAVE THE FRENCH THE MOST AFFECTIONATE RECEPTION FRANCE WAS HER NATIVE COUNTRY AND SHE HAD SUFFERED TOO MUCH UNHAPPINESS IN ENGLAND FOR ENGLAND TO HAVE MADE HER FORGET FRANCE",
+            "referenceWords" : 64,
+            "rtfx" : 270.78008344950905,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 11.065,
+            "edits" : 1,
+            "hypothesis" : "She taught her daughter, then, by her own affection for it, that love for a country where they had both been hospitably received, and where a brilliant future opened for them.",
+            "latenciesMs" : [
+              57.582916999999995,
+              57.898959,
+              57.254,
+              55.7285,
+              54.415458
+            ],
+            "medianMs" : 57.254,
+            "name" : "real-6930-75918-0004",
+            "p95Ms" : 57.898959,
+            "reference" : "SHE TAUGHT HER DAUGHTER THEN BY HER OWN AFFECTION FOR IT THAT LOVE FOR A COUNTRY WHERE THEY HAD BOTH BEEN HOSPITABLY RECEIVED AND WHERE A BRILLIANT FUTURE OPENED BEFORE THEM",
+            "referenceWords" : 31,
+            "rtfx" : 193.2616061759877,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 13.16,
+            "edits" : 0,
+            "hypothesis" : "the count had thrown himself back on his seat, leaning his shoulders against the partition of the tent, and remained thus, his face buried in his hands, with heaving chest and restless limbs.",
+            "latenciesMs" : [
+              56.061833,
+              58.01775,
+              56.595417000000005,
+              57.838209,
+              57.519709
+            ],
+            "medianMs" : 57.519709,
+            "name" : "real-6930-75918-0005",
+            "p95Ms" : 58.01775,
+            "reference" : "THE COUNT HAD THROWN HIMSELF BACK ON HIS SEAT LEANING HIS SHOULDERS AGAINST THE PARTITION OF THE TENT AND REMAINED THUS HIS FACE BURIED IN HIS HANDS WITH HEAVING CHEST AND RESTLESS LIMBS",
+            "referenceWords" : 33,
+            "rtfx" : 228.79114357132786,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 5.85,
+            "edits" : 0,
+            "hypothesis" : "This has, indeed, been a harassing day, continued the young man, his eyes fixed upon his friend",
+            "latenciesMs" : [
+              48.450792,
+              48.014874999999996,
+              48.5665,
+              49.940458,
+              48.746667
+            ],
+            "medianMs" : 48.5665,
+            "name" : "real-6930-75918-0006",
+            "p95Ms" : 49.940458,
+            "reference" : "THIS HAS INDEED BEEN A HARASSING DAY CONTINUED THE YOUNG MAN HIS EYES FIXED UPON HIS FRIEND",
+            "referenceWords" : 17,
+            "rtfx" : 120.45339894783442,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 3.315,
+            "edits" : 0,
+            "hypothesis" : "You will be frank with me? I always am.",
+            "latenciesMs" : [
+              40.235792,
+              40.649375,
+              40.49975,
+              40.3115,
+              40.55225
+            ],
+            "medianMs" : 40.49975,
+            "name" : "real-6930-75918-0007",
+            "p95Ms" : 40.649375,
+            "reference" : "YOU WILL BE FRANK WITH ME I ALWAYS AM",
+            "referenceWords" : 9,
+            "rtfx" : 81.8523571133155,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 4.785,
+            "edits" : 0,
+            "hypothesis" : "Can you imagine why Buckingham has been so violent? I suspect.",
+            "latenciesMs" : [
+              44.328832999999996,
+              44.710416,
+              44.48291699999999,
+              44.38675,
+              44.770834
+            ],
+            "medianMs" : 44.48291699999999,
+            "name" : "real-6930-75918-0008",
+            "p95Ms" : 44.770834,
+            "reference" : "CAN YOU IMAGINE WHY BUCKINGHAM HAS BEEN SO VIOLENT I SUSPECT",
+            "referenceWords" : 11,
+            "rtfx" : 107.56938444481958,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 7.28,
+            "edits" : 0,
+            "hypothesis" : "It is you who are mistaken, Raoul. I have read his distress in his eyes, in his every gesture and action the whole day",
+            "latenciesMs" : [
+              51.067542,
+              52.229625,
+              54.244915999999996,
+              55.807125,
+              55.694292
+            ],
+            "medianMs" : 54.244915999999996,
+            "name" : "real-6930-75918-0009",
+            "p95Ms" : 55.807125,
+            "reference" : "IT IS YOU WHO ARE MISTAKEN RAOUL I HAVE READ HIS DISTRESS IN HIS EYES IN HIS EVERY GESTURE AND ACTION THE WHOLE DAY",
+            "referenceWords" : 24,
+            "rtfx" : 134.20612541827884,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 1.9900625,
+            "edits" : 0,
+            "hypothesis" : "Sounds good. I'll send it over now.",
+            "latenciesMs" : [
+              44.614917,
+              40.884042,
+              41.923958999999996,
+              41.621208,
+              43.228375
+            ],
+            "medianMs" : 41.923958999999996,
+            "name" : "synthetic-1-slack-2s",
+            "p95Ms" : 44.614917,
+            "reference" : "Sounds good, I'll send it over now.",
+            "referenceWords" : 7,
+            "rtfx" : 47.468381981768474,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 5.4346875,
+            "edits" : 0,
+            "hypothesis" : "Hey, can you check the staging deploy before the meeting? The health check looks off.",
+            "latenciesMs" : [
+              50.200416999999995,
+              50.920709,
+              51.557249999999996,
+              55.112792,
+              51.434542
+            ],
+            "medianMs" : 51.434542,
+            "name" : "synthetic-2-slack-5s",
+            "p95Ms" : 55.112792,
+            "reference" : "Hey, can you check the staging deploy before the meeting? The health check looks off.",
+            "referenceWords" : 15,
+            "rtfx" : 105.6622123708227,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 9.6,
+            "edits" : 0,
+            "hypothesis" : "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. Please log the failure and return a proper status code.",
+            "latenciesMs" : [
+              63.968417,
+              64.59204100000001,
+              62.70125,
+              56.492292,
+              54.866541999999995
+            ],
+            "medianMs" : 62.70125,
+            "name" : "synthetic-3-review-10s",
+            "p95Ms" : 64.59204100000001,
+            "reference" : "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. Please log the failure and return a proper status code.",
+            "referenceWords" : 24,
+            "rtfx" : 153.10699547457187,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 19.1466875,
+            "edits" : 0,
+            "hypothesis" : "Hi, Dana. Thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we're mostly aligned. The one open question is the rollout plan for the second quarter, specifically, whether we can stage the migration by region instead of cutting everything over in a single weekend.",
+            "latenciesMs" : [
+              78.861917,
+              79.21375,
+              90.878666,
+              86.008125,
+              91.540583
+            ],
+            "medianMs" : 86.008125,
+            "name" : "synthetic-4-email-20s",
+            "p95Ms" : 91.540583,
+            "reference" : "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we're mostly aligned. The one open question is the rollout plan for the second quarter, specifically whether we can stage the migration by region instead of cutting everything over in a single weekend.",
+            "referenceWords" : 56,
+            "rtfx" : 222.61486923473797,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 45.456,
+            "edits" : 0,
+            "hypothesis" : "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up. Over the next few days, I want to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the worker pool still point at the old cluster, so I'll open a pull request to fix that and tag the platform team for review. Third, the dashboards need new alerts because the latency thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about the schedule, please say so in the thread before Friday, and I'll adjust the plan.",
+            "latenciesMs" : [
+              136.821458,
+              143.549333,
+              129.018,
+              128.59395800000001,
+              131.278166
+            ],
+            "medianMs" : 131.278166,
+            "name" : "synthetic-5-email-45s",
+            "p95Ms" : 143.549333,
+            "reference" : "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up. Over the next few days I want to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the worker pool still point at the old cluster, so I'll open a pull request to fix that and tag the platform team for review. Third, the dashboards need new alerts, because the latency thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about the schedule, please say so in the thread before Friday, and I'll adjust the plan.",
+            "referenceWords" : 131,
+            "rtfx" : 346.25712245248764,
+            "set" : "synthetic"
+          }
+        ],
+        "displayName" : "Parakeet TDT 0.6B v2 (English)",
+        "engineID" : "parakeet-tdt-v2",
+        "firstTranscribeMs" : 51.824625,
+        "modelBytes" : 472899584,
+        "modelPath" : "\/Users\/sbenson\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v2",
+        "peakRSSBytes" : 131022848,
+        "prepare" : {
+          "downloadSeconds" : 0,
+          "downloaded" : false,
+          "loadSeconds" : 0.146942209
+        }
+      },
+      "werReal" : 0.00398406374501992,
+      "werSynthetic" : 0
+    },
+    {
+      "cold" : {
+        "clips" : [
+
+        ],
+        "displayName" : "Whisper large-v3 turbo",
+        "engineID" : "whisper-large-v3-turbo",
+        "modelBytes" : 1660149760,
+        "modelPath" : "\/Users\/sbenson\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-large-v3-v20240930_turbo",
+        "peakRSSBytes" : 1652244480,
+        "prepare" : {
+          "downloadSeconds" : 40.24358675,
+          "downloaded" : true,
+          "loadSeconds" : 132.5786925
+        }
+      },
+      "displayName" : "Whisper large-v3 turbo",
+      "engineID" : "whisper-large-v3-turbo",
+      "overallRTFx" : 16.857310145896484,
+      "shortClipMedianMs" : 489.20466600000003,
+      "warm" : {
+        "clips" : [
+          {
+            "audioSeconds" : 3.505,
+            "edits" : 0,
+            "hypothesis" : "Concord returned to its place amidst the tents.",
+            "latenciesMs" : [
+              445.23675000000003,
+              450.727958,
+              446.536208,
+              443.02916700000003,
+              445.044375
+            ],
+            "medianMs" : 445.23675000000003,
+            "name" : "real-6930-75918-0000",
+            "p95Ms" : 450.727958,
+            "reference" : "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS",
+            "referenceWords" : 8,
+            "rtfx" : 7.872216298407532,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 14.225,
+            "edits" : 0,
+            "hypothesis" : "the english forwarded to the french baskets of flowers of which they had made a plentiful provision to greet the arrival of the young princess the french in return invited the english to a supper which was to be given the next day",
+            "latenciesMs" : [
+              705.5706250000001,
+              723.440042,
+              705.637917,
+              706.2543340000001,
+              723.728334
+            ],
+            "medianMs" : 706.2543340000001,
+            "name" : "real-6930-75918-0001",
+            "p95Ms" : 723.728334,
+            "reference" : "THE ENGLISH FORWARDED TO THE FRENCH BASKETS OF FLOWERS OF WHICH THEY HAD MADE A PLENTIFUL PROVISION TO GREET THE ARRIVAL OF THE YOUNG PRINCESS THE FRENCH IN RETURN INVITED THE ENGLISH TO A SUPPER WHICH WAS TO BE GIVEN THE NEXT DAY",
+            "referenceWords" : 43,
+            "rtfx" : 20.141469319464733,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 5.025,
+            "edits" : 0,
+            "hypothesis" : "Congratulations were poured in upon the princess everywhere during her journey.",
+            "latenciesMs" : [
+              449.668166,
+              451.856875,
+              450.596291,
+              451.60475,
+              455.802167
+            ],
+            "medianMs" : 451.60475,
+            "name" : "real-6930-75918-0002",
+            "p95Ms" : 455.802167,
+            "reference" : "CONGRATULATIONS WERE POURED IN UPON THE PRINCESS EVERYWHERE DURING HER JOURNEY",
+            "referenceWords" : 11,
+            "rtfx" : 11.126986596133014,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 23.315,
+            "edits" : 0,
+            "hypothesis" : "from the respect paid her on all sides she seemed like a queen and from the adoration with which she was treated by two or three she appeared an object of worship the queen-mother gave the french the most affectionate reception france was her native country and she had suffered too much unhappiness in england for england to have made her forget france",
+            "latenciesMs" : [
+              917.7914579999999,
+              921.835084,
+              925.5897090000001,
+              914.1955,
+              918.686
+            ],
+            "medianMs" : 918.686,
+            "name" : "real-6930-75918-0003",
+            "p95Ms" : 925.5897090000001,
+            "reference" : "FROM THE RESPECT PAID HER ON ALL SIDES SHE SEEMED LIKE A QUEEN AND FROM THE ADORATION WITH WHICH SHE WAS TREATED BY TWO OR THREE SHE APPEARED AN OBJECT OF WORSHIP THE QUEEN MOTHER GAVE THE FRENCH THE MOST AFFECTIONATE RECEPTION FRANCE WAS HER NATIVE COUNTRY AND SHE HAD SUFFERED TOO MUCH UNHAPPINESS IN ENGLAND FOR ENGLAND TO HAVE MADE HER FORGET FRANCE",
+            "referenceWords" : 64,
+            "rtfx" : 25.378638620812772,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 11.065,
+            "edits" : 1,
+            "hypothesis" : "she taught her daughter then by her own affection for it that love for a country where they had both been hospitably received and where a brilliant future opened for them",
+            "latenciesMs" : [
+              608.073125,
+              612.9149160000001,
+              619.815959,
+              609.5705829999999,
+              615.942791
+            ],
+            "medianMs" : 612.9149160000001,
+            "name" : "real-6930-75918-0004",
+            "p95Ms" : 619.815959,
+            "reference" : "SHE TAUGHT HER DAUGHTER THEN BY HER OWN AFFECTION FOR IT THAT LOVE FOR A COUNTRY WHERE THEY HAD BOTH BEEN HOSPITABLY RECEIVED AND WHERE A BRILLIANT FUTURE OPENED BEFORE THEM",
+            "referenceWords" : 31,
+            "rtfx" : 18.05307671774788,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 13.16,
+            "edits" : 0,
+            "hypothesis" : "the count had thrown himself back on his seat leaning his shoulders against the partition of the tent and remained thus his face buried in his hands with heaving chest and restless limbs",
+            "latenciesMs" : [
+              616.6065,
+              619.157583,
+              617.9896249999999,
+              617.291791,
+              616.960792
+            ],
+            "medianMs" : 617.291791,
+            "name" : "real-6930-75918-0005",
+            "p95Ms" : 619.157583,
+            "reference" : "THE COUNT HAD THROWN HIMSELF BACK ON HIS SEAT LEANING HIS SHOULDERS AGAINST THE PARTITION OF THE TENT AND REMAINED THUS HIS FACE BURIED IN HIS HANDS WITH HEAVING CHEST AND RESTLESS LIMBS",
+            "referenceWords" : 33,
+            "rtfx" : 21.318929219326037,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 5.85,
+            "edits" : 0,
+            "hypothesis" : "this has indeed been a harassing day continued the young man his eyes fixed upon his friend",
+            "latenciesMs" : [
+              496.693333,
+              497.541917,
+              498.89595799999995,
+              499.62487500000003,
+              497.306792
+            ],
+            "medianMs" : 497.541917,
+            "name" : "real-6930-75918-0006",
+            "p95Ms" : 499.62487500000003,
+            "reference" : "THIS HAS INDEED BEEN A HARASSING DAY CONTINUED THE YOUNG MAN HIS EYES FIXED UPON HIS FRIEND",
+            "referenceWords" : 17,
+            "rtfx" : 11.757803312881475,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 3.315,
+            "edits" : 0,
+            "hypothesis" : "You will be frank with me. I always am.",
+            "latenciesMs" : [
+              445.591917,
+              444.383666,
+              444.02695800000004,
+              443.632708,
+              446.044583
+            ],
+            "medianMs" : 444.383666,
+            "name" : "real-6930-75918-0007",
+            "p95Ms" : 446.044583,
+            "reference" : "YOU WILL BE FRANK WITH ME I ALWAYS AM",
+            "referenceWords" : 9,
+            "rtfx" : 7.4597701347555825,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 4.785,
+            "edits" : 0,
+            "hypothesis" : "Can you imagine why Buckingham has been so violent? I suspect.",
+            "latenciesMs" : [
+              495.603167,
+              488.78700000000003,
+              490.88045800000003,
+              488.778209,
+              489.20466600000003
+            ],
+            "medianMs" : 489.20466600000003,
+            "name" : "real-6930-75918-0008",
+            "p95Ms" : 495.603167,
+            "reference" : "CAN YOU IMAGINE WHY BUCKINGHAM HAS BEEN SO VIOLENT I SUSPECT",
+            "referenceWords" : 11,
+            "rtfx" : 9.78118225879718,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 7.28,
+            "edits" : 0,
+            "hypothesis" : "it is you who are mistaken raoul i have read his distress in his eyes in his every gesture and action the whole day",
+            "latenciesMs" : [
+              546.4695830000001,
+              552.053625,
+              548.086625,
+              548.5735000000001,
+              548.175
+            ],
+            "medianMs" : 548.175,
+            "name" : "real-6930-75918-0009",
+            "p95Ms" : 552.053625,
+            "reference" : "IT IS YOU WHO ARE MISTAKEN RAOUL I HAVE READ HIS DISTRESS IN HIS EYES IN HIS EVERY GESTURE AND ACTION THE WHOLE DAY",
+            "referenceWords" : 24,
+            "rtfx" : 13.280430519450906,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 1.9900625,
+            "edits" : 0,
+            "hypothesis" : "Sounds good. I'll send it over now.",
+            "latenciesMs" : [
+              435.606542,
+              436.444459,
+              436.526042,
+              435.018542,
+              435.062416
+            ],
+            "medianMs" : 435.606542,
+            "name" : "synthetic-1-slack-2s",
+            "p95Ms" : 436.526042,
+            "reference" : "Sounds good, I'll send it over now.",
+            "referenceWords" : 7,
+            "rtfx" : 4.568486255654077,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 5.4346875,
+            "edits" : 0,
+            "hypothesis" : "Hey, can you check the staging deploy before the meeting? The health check looks off.",
+            "latenciesMs" : [
+              513.388375,
+              515.7446249999999,
+              512.1251249999999,
+              513.148333,
+              513.1118749999999
+            ],
+            "medianMs" : 513.148333,
+            "name" : "synthetic-2-slack-5s",
+            "p95Ms" : 515.7446249999999,
+            "reference" : "Hey, can you check the staging deploy before the meeting? The health check looks off.",
+            "referenceWords" : 15,
+            "rtfx" : 10.590870417969379,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 9.6,
+            "edits" : 0,
+            "hypothesis" : "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. Please log the failure and return a proper status code.",
+            "latenciesMs" : [
+              624.534625,
+              601.317041,
+              612.46725,
+              622.919916,
+              598.941084
+            ],
+            "medianMs" : 612.46725,
+            "name" : "synthetic-3-review-10s",
+            "p95Ms" : 624.534625,
+            "reference" : "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. Please log the failure and return a proper status code.",
+            "referenceWords" : 24,
+            "rtfx" : 15.674307483379723,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 19.1466875,
+            "edits" : 0,
+            "hypothesis" : "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we're mostly aligned. The one open question is the rollout plan for the second quarter, specifically whether we can stage the migration by region instead of cutting everything over in a single weekend.",
+            "latenciesMs" : [
+              898.201417,
+              893.6502079999999,
+              903.418041,
+              900.905084,
+              908.916291
+            ],
+            "medianMs" : 900.905084,
+            "name" : "synthetic-4-email-20s",
+            "p95Ms" : 908.916291,
+            "reference" : "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we're mostly aligned. The one open question is the rollout plan for the second quarter, specifically whether we can stage the migration by region instead of cutting everything over in a single weekend.",
+            "referenceWords" : 56,
+            "rtfx" : 21.25272444349975,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 45.456,
+            "edits" : 1,
+            "hypothesis" : "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up. Over the next few days, I want to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the worker pool still point at the old cluster. So I'll open a pull request to fix that end tag the platform team for review. Third, the dashboards need new alerts because the latency thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about the schedule, please say so in the thread before Friday, and I'll adjust the plan.",
+            "latenciesMs" : [
+              2087.3867920000002,
+              2078.231833,
+              2065.5219159999997,
+              2074.841833,
+              2088.5257500000002
+            ],
+            "medianMs" : 2078.231833,
+            "name" : "synthetic-5-email-45s",
+            "p95Ms" : 2088.5257500000002,
+            "reference" : "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up. Over the next few days I want to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the worker pool still point at the old cluster, so I'll open a pull request to fix that and tag the platform team for review. Third, the dashboards need new alerts, because the latency thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about the schedule, please say so in the thread before Friday, and I'll adjust the plan.",
+            "referenceWords" : 131,
+            "rtfx" : 21.87243948351166,
+            "set" : "synthetic"
+          }
+        ],
+        "displayName" : "Whisper large-v3 turbo",
+        "engineID" : "whisper-large-v3-turbo",
+        "firstTranscribeMs" : 489.930875,
+        "modelBytes" : 1660149760,
+        "modelPath" : "\/Users\/sbenson\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-large-v3-v20240930_turbo",
+        "peakRSSBytes" : 252084224,
+        "prepare" : {
+          "downloadSeconds" : 0,
+          "downloaded" : false,
+          "loadSeconds" : 0.796946375
+        }
+      },
+      "werReal" : 0.00398406374501992,
+      "werSynthetic" : 0.004291845493562232
+    },
+    {
+      "cold" : {
+        "clips" : [
+
+        ],
+        "displayName" : "Whisper small.en",
+        "engineID" : "whisper-small-en",
+        "modelBytes" : 501686272,
+        "modelPath" : "\/Users\/sbenson\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-small.en",
+        "peakRSSBytes" : 881311744,
+        "prepare" : {
+          "downloadSeconds" : 16.691777708,
+          "downloaded" : true,
+          "loadSeconds" : 19.960240958
+        }
+      },
+      "displayName" : "Whisper small.en",
+      "engineID" : "whisper-small-en",
+      "overallRTFx" : 27.043628519984445,
+      "shortClipMedianMs" : 201.651166,
+      "warm" : {
+        "clips" : [
+          {
+            "audioSeconds" : 3.505,
+            "edits" : 1,
+            "hypothesis" : "Concorde returned to its place amidst the tents.",
+            "latenciesMs" : [
+              163.101875,
+              160.169875,
+              160.22725,
+              163.58012499999998,
+              158.151709
+            ],
+            "medianMs" : 160.22725,
+            "name" : "real-6930-75918-0000",
+            "p95Ms" : 163.58012499999998,
+            "reference" : "CONCORD RETURNED TO ITS PLACE AMIDST THE TENTS",
+            "referenceWords" : 8,
+            "rtfx" : 21.87518040782701,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 14.225,
+            "edits" : 0,
+            "hypothesis" : "The English forwarded to the French baskets of flowers of which they had made a plentiful provision to greet the arrival of the young princess. The French, in return, invited the English to a supper, which was to be given the next day.",
+            "latenciesMs" : [
+              530.0299160000001,
+              530.989084,
+              519.343208,
+              528.2027919999999,
+              528.4824160000001
+            ],
+            "medianMs" : 528.4824160000001,
+            "name" : "real-6930-75918-0001",
+            "p95Ms" : 530.989084,
+            "reference" : "THE ENGLISH FORWARDED TO THE FRENCH BASKETS OF FLOWERS OF WHICH THEY HAD MADE A PLENTIFUL PROVISION TO GREET THE ARRIVAL OF THE YOUNG PRINCESS THE FRENCH IN RETURN INVITED THE ENGLISH TO A SUPPER WHICH WAS TO BE GIVEN THE NEXT DAY",
+            "referenceWords" : 43,
+            "rtfx" : 26.91669499179704,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 5.025,
+            "edits" : 2,
+            "hypothesis" : "Congratulations, report in upon the princess everywhere during her journey.",
+            "latenciesMs" : [
+              179.161958,
+              177.155791,
+              180.034417,
+              178.101583,
+              180.256209
+            ],
+            "medianMs" : 179.161958,
+            "name" : "real-6930-75918-0002",
+            "p95Ms" : 180.256209,
+            "reference" : "CONGRATULATIONS WERE POURED IN UPON THE PRINCESS EVERYWHERE DURING HER JOURNEY",
+            "referenceWords" : 11,
+            "rtfx" : 28.047248735694215,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 23.315,
+            "edits" : 0,
+            "hypothesis" : "From the respect paid her on all sides, she seemed like a queen, and from the adoration with which she was treated by two or three, she appeared an object of worship. The Queen Mother gave the French the most affectionate reception. France was her native country, and she had suffered too much unhappiness in England for England to have made her forget France.",
+            "latenciesMs" : [
+              757.150542,
+              756.8836660000001,
+              751.261125,
+              749.172417,
+              752.329167
+            ],
+            "medianMs" : 752.329167,
+            "name" : "real-6930-75918-0003",
+            "p95Ms" : 757.150542,
+            "reference" : "FROM THE RESPECT PAID HER ON ALL SIDES SHE SEEMED LIKE A QUEEN AND FROM THE ADORATION WITH WHICH SHE WAS TREATED BY TWO OR THREE SHE APPEARED AN OBJECT OF WORSHIP THE QUEEN MOTHER GAVE THE FRENCH THE MOST AFFECTIONATE RECEPTION FRANCE WAS HER NATIVE COUNTRY AND SHE HAD SUFFERED TOO MUCH UNHAPPINESS IN ENGLAND FOR ENGLAND TO HAVE MADE HER FORGET FRANCE",
+            "referenceWords" : 64,
+            "rtfx" : 30.990424168946255,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 11.065,
+            "edits" : 1,
+            "hypothesis" : "She taught her daughter, then, by her own affection for it, that love for a country where they had both been hospitably received and where a brilliant future opened for them.",
+            "latenciesMs" : [
+              370.369166,
+              373.089167,
+              377.854083,
+              383.159916,
+              374.833875
+            ],
+            "medianMs" : 374.833875,
+            "name" : "real-6930-75918-0004",
+            "p95Ms" : 383.159916,
+            "reference" : "SHE TAUGHT HER DAUGHTER THEN BY HER OWN AFFECTION FOR IT THAT LOVE FOR A COUNTRY WHERE THEY HAD BOTH BEEN HOSPITABLY RECEIVED AND WHERE A BRILLIANT FUTURE OPENED BEFORE THEM",
+            "referenceWords" : 31,
+            "rtfx" : 29.519743913220225,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 13.16,
+            "edits" : 0,
+            "hypothesis" : "The Count had thrown himself back on his seat, leaning his shoulders against the partition of the tent, and remained thus, his face buried in his hands, with heaving chest and restless limbs.",
+            "latenciesMs" : [
+              439.924125,
+              426.285625,
+              431.25275,
+              440.5735,
+              443.593208
+            ],
+            "medianMs" : 439.924125,
+            "name" : "real-6930-75918-0005",
+            "p95Ms" : 443.593208,
+            "reference" : "THE COUNT HAD THROWN HIMSELF BACK ON HIS SEAT LEANING HIS SHOULDERS AGAINST THE PARTITION OF THE TENT AND REMAINED THUS HIS FACE BURIED IN HIS HANDS WITH HEAVING CHEST AND RESTLESS LIMBS",
+            "referenceWords" : 33,
+            "rtfx" : 29.914249417442157,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 5.85,
+            "edits" : 0,
+            "hypothesis" : "\"This has indeed been a harassing day,\" continued the young man, his eyes fixed upon his friend.",
+            "latenciesMs" : [
+              256.82270800000003,
+              252.014458,
+              258.08237499999996,
+              249.09300000000002,
+              258.061708
+            ],
+            "medianMs" : 256.82270800000003,
+            "name" : "real-6930-75918-0006",
+            "p95Ms" : 258.08237499999996,
+            "reference" : "THIS HAS INDEED BEEN A HARASSING DAY CONTINUED THE YOUNG MAN HIS EYES FIXED UPON HIS FRIEND",
+            "referenceWords" : 17,
+            "rtfx" : 22.778359614524426,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 3.315,
+            "edits" : 0,
+            "hypothesis" : "You will be frank with me. I always am",
+            "latenciesMs" : [
+              158.74412500000003,
+              159.386417,
+              168.752209,
+              168.017459,
+              166.074417
+            ],
+            "medianMs" : 166.074417,
+            "name" : "real-6930-75918-0007",
+            "p95Ms" : 168.752209,
+            "reference" : "YOU WILL BE FRANK WITH ME I ALWAYS AM",
+            "referenceWords" : 9,
+            "rtfx" : 19.960931128844486,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 4.785,
+            "edits" : 0,
+            "hypothesis" : "Can you imagine why Buckingham has been so violent? I suspect.",
+            "latenciesMs" : [
+              207.095834,
+              201.61445899999998,
+              202.303584,
+              201.36795800000002,
+              201.651166
+            ],
+            "medianMs" : 201.651166,
+            "name" : "real-6930-75918-0008",
+            "p95Ms" : 207.095834,
+            "reference" : "CAN YOU IMAGINE WHY BUCKINGHAM HAS BEEN SO VIOLENT I SUSPECT",
+            "referenceWords" : 11,
+            "rtfx" : 23.729096612315153,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 7.28,
+            "edits" : 1,
+            "hypothesis" : "It is you who are mistaken, Ral. I have read his distress in his eyes, in his every gesture and action the whole day.",
+            "latenciesMs" : [
+              336.16375,
+              332.201125,
+              327.405208,
+              330.746,
+              325.91425000000004
+            ],
+            "medianMs" : 330.746,
+            "name" : "real-6930-75918-0009",
+            "p95Ms" : 336.16375,
+            "reference" : "IT IS YOU WHO ARE MISTAKEN RAOUL I HAVE READ HIS DISTRESS IN HIS EYES IN HIS EVERY GESTURE AND ACTION THE WHOLE DAY",
+            "referenceWords" : 24,
+            "rtfx" : 22.01084820375757,
+            "set" : "real"
+          },
+          {
+            "audioSeconds" : 1.9900625,
+            "edits" : 0,
+            "hypothesis" : "Sounds good. I'll send it over now.",
+            "latenciesMs" : [
+              155.355584,
+              158.825084,
+              157.960125,
+              163.804834,
+              160.13549999999998
+            ],
+            "medianMs" : 158.825084,
+            "name" : "synthetic-1-slack-2s",
+            "p95Ms" : 163.804834,
+            "reference" : "Sounds good, I'll send it over now.",
+            "referenceWords" : 7,
+            "rtfx" : 12.529900503625736,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 5.4346875,
+            "edits" : 0,
+            "hypothesis" : "Hey, can you check the staging deploy before the meeting? The health check looks off.",
+            "latenciesMs" : [
+              239.240208,
+              238.25616599999998,
+              242.812041,
+              240.256666,
+              239.750541
+            ],
+            "medianMs" : 239.750541,
+            "name" : "synthetic-2-slack-5s",
+            "p95Ms" : 242.812041,
+            "reference" : "Hey, can you check the staging deploy before the meeting? The health check looks off.",
+            "referenceWords" : 15,
+            "rtfx" : 22.66809274895442,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 9.6,
+            "edits" : 0,
+            "hypothesis" : "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. Please log the failure and return a proper status code.",
+            "latenciesMs" : [
+              351.944167,
+              362.79587499999997,
+              355.354083,
+              356.831417,
+              365.12412500000005
+            ],
+            "medianMs" : 356.831417,
+            "name" : "synthetic-3-review-10s",
+            "p95Ms" : 365.12412500000005,
+            "reference" : "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. Please log the failure and return a proper status code.",
+            "referenceWords" : 24,
+            "rtfx" : 26.903460689393278,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 19.1466875,
+            "edits" : 0,
+            "hypothesis" : "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we're mostly aligned. The one open question is the rollout plan for the second quarter, specifically whether we can stage the migration by region instead of cutting everything over in a single weekend.",
+            "latenciesMs" : [
+              664.408167,
+              659.969875,
+              672.532708,
+              675.9707080000001,
+              659.220625
+            ],
+            "medianMs" : 664.408167,
+            "name" : "synthetic-4-email-20s",
+            "p95Ms" : 675.9707080000001,
+            "reference" : "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we're mostly aligned. The one open question is the rollout plan for the second quarter, specifically whether we can stage the migration by region instead of cutting everything over in a single weekend.",
+            "referenceWords" : 56,
+            "rtfx" : 28.817658257352512,
+            "set" : "synthetic"
+          },
+          {
+            "audioSeconds" : 45.456,
+            "edits" : 1,
+            "hypothesis" : "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up. Over the next few days, I want to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the worker pool still point at the old cluster, So I'll open a pull request to fix that end tag the platform team for review. Third, the dashboards need new alerts because the latency thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about the schedule, please say so in the thread before Friday, and I'll adjust the plan.",
+            "latenciesMs" : [
+              1581.7914580000001,
+              1599.203084,
+              1584.588541,
+              1598.902083,
+              1592.6390000000001
+            ],
+            "medianMs" : 1592.6390000000001,
+            "name" : "synthetic-5-email-45s",
+            "p95Ms" : 1599.203084,
+            "reference" : "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up. Over the next few days I want to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the worker pool still point at the old cluster, so I'll open a pull request to fix that and tag the platform team for review. Third, the dashboards need new alerts, because the latency thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about the schedule, please say so in the thread before Friday, and I'll adjust the plan.",
+            "referenceWords" : 131,
+            "rtfx" : 28.54130785444787,
+            "set" : "synthetic"
+          }
+        ],
+        "displayName" : "Whisper small.en",
+        "engineID" : "whisper-small-en",
+        "firstTranscribeMs" : 187.856625,
+        "modelBytes" : 501686272,
+        "modelPath" : "\/Users\/sbenson\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-small.en",
+        "peakRSSBytes" : 165707776,
+        "prepare" : {
+          "downloadSeconds" : 0,
+          "downloaded" : false,
+          "loadSeconds" : 0.452984583
+        }
+      },
+      "werReal" : 0.0199203187250996,
+      "werSynthetic" : 0.004291845493562232
+    }
+  ],
+  "hasRealSpeech" : true,
+  "machine" : {
+    "chip" : "Apple M4 Pro",
+    "macOS" : "Version 26.6.2 (Build 25G83)",
+    "packageVersions" : {
+      "fluidaudio" : "0.17.7",
+      "swift-argument-parser" : "1.8.2",
+      "whisperkit" : "1.1.1"
+    },
+    "ramGB" : 48,
+    "swift" : "Apple Swift version 6.4 (swiftlang-6.4.0.34.1 clang-2100.3.34.1)"
+  },
+  "runsPerClip" : 5,
+  "warmupRuns" : 1
+}
