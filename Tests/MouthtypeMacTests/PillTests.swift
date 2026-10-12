@@ -3,57 +3,74 @@ import Testing
 @testable import MouthtypeMac
 
 @Suite struct BarModelTests {
-    private func run(_ model: inout BarModel, level: Float, seconds: Double, dt: Double = 1.0 / 60) -> [CGFloat] {
-        var heights: [CGFloat] = []
-        for _ in 0..<Int(seconds / dt) { heights = model.step(level: level, dt: dt) }
-        return heights
+    private func run(_ model: inout BarModel, level: Float, seconds: Double, dt: Double = 1.0 / 60) -> [Float] {
+        var fractions: [Float] = []
+        for _ in 0..<Int(seconds / dt) { fractions = model.step(level: level, dt: dt) }
+        return fractions
     }
 
-    @Test func silenceIsTenDots() {
+    private func lit(_ fractions: [Float]) -> [Int] {
+        BarModel.litSegments(fractions, segments: BarModel.segmentRows)
+    }
+
+    @Test func silenceShowsOnlyTheBaselineSegment() {
         var model = BarModel()
-        let heights = run(&model, level: 0, seconds: 1)
-        #expect(heights.count == 10)
-        #expect(heights.allSatisfy { $0 == BarModel.minHeight })
+        let fractions = run(&model, level: 0, seconds: 1)
+        #expect(fractions.count == 10)
+        #expect(fractions.allSatisfy { $0 == 0 })
+        #expect(lit(fractions) == [Int](repeating: 1, count: 10))
     }
 
-    @Test func fullLevelReachesTheMaxInTheMiddleAndLessAtTheEnds() {
+    @Test func fullLevelFillsTheMiddleColumnsAndLessAtTheEnds() {
         var model = BarModel()
-        let heights = run(&model, level: 1, seconds: 1)
-        #expect(abs(heights[4] - BarModel.maxHeight) < 0.01)
-        #expect(abs(heights[5] - BarModel.maxHeight) < 0.01)
-        #expect(heights[0] < heights[4] - 2)
-        #expect(heights[9] < heights[5] - 2)
-        #expect(heights[0] > BarModel.minHeight)
+        let counts = lit(run(&model, level: 1, seconds: 1))
+        #expect(counts[4] == BarModel.segmentRows && counts[5] == BarModel.segmentRows)
+        #expect(counts[0] < counts[4])
+        #expect(counts[9] < counts[5])
+        #expect(counts[0] > 1)
     }
 
-    @Test func heightsNeverLeaveTheRange() {
+    @Test func quantisationGivesWholeSegmentsAcrossTheRange() {
+        let rows = BarModel.segmentRows
+        #expect(BarModel.litSegments([0, 0.001, 0.2, 0.21, 0.5, 0.99, 1], segments: rows) == [1, 1, 1, 2, 3, 5, 5])
+        #expect(BarModel.litSegments([-3, 7, .nan, .infinity], segments: rows) == [1, rows, 1, 1])
+        var last = 0
+        for step in 0...100 {
+            let count = BarModel.litSegments([Float(step) / 100], segments: rows)[0]
+            #expect(count >= last && (1...rows).contains(count))
+            last = count
+        }
+    }
+
+    @Test func fractionsNeverLeaveTheRange() {
         var model = BarModel()
         for level: Float in [-5, 0, 0.3, 1, 7, .nan, .infinity, -.infinity, 1, 0] {
             for dt in [0.0, 0.001, 0.016, 5, .nan] {
-                let heights = model.step(level: level, dt: dt)
-                #expect(heights.allSatisfy { $0 >= BarModel.minHeight && $0 <= BarModel.maxHeight })
+                let fractions = model.step(level: level, dt: dt)
+                #expect(fractions.allSatisfy { $0 >= 0 && $0 <= 1 })
+                #expect(lit(fractions).allSatisfy { (1...BarModel.segmentRows).contains($0) })
             }
         }
     }
 
-    @Test func releaseDecaysSlowerThanAttackAndReachesDots() {
+    @Test func releaseDecaysSlowerThanAttackAndReachesTheBaseline() {
         var model = BarModel()
         let attack = run(&model, level: 1, seconds: 0.1)
         let loud = run(&model, level: 1, seconds: 1)
-        #expect(attack[4] > BarModel.maxHeight - 1.5)
+        #expect(attack[4] > 0.9)
 
         let early = run(&model, level: 0, seconds: 0.1)
         let later = run(&model, level: 0, seconds: 0.2)
         #expect(early[4] < loud[4])
         #expect(early[4] > later[4])
-        #expect(early[4] > BarModel.minHeight + 1)
+        #expect(early[4] > 0.05)
         let end = run(&model, level: 0, seconds: 2)
-        #expect(end.allSatisfy { $0 == BarModel.minHeight })
+        #expect(lit(end) == [Int](repeating: 1, count: 10))
     }
 
-    @Test func outerBarsLagTheMiddle() {
+    @Test func outerColumnsLagTheMiddle() {
         var model = BarModel()
-        var first: [CGFloat] = []
+        var first: [Float] = []
         for _ in 0..<3 { first = model.step(level: 1, dt: 1.0 / 60) }
         #expect(first[4] > first[0])
     }
@@ -66,13 +83,16 @@ import Testing
         #expect(w[9] < w[7] && w[7] < w[5])
     }
 
-    @Test func rippleStaysCalmAndInRange() {
-        for t in stride(from: 0.0, to: 5, by: 0.05) {
-            let heights = BarModel.ripple(time: t)
-            #expect(heights.count == 10)
-            #expect(heights.allSatisfy { $0 >= BarModel.minHeight && $0 <= BarModel.minHeight + 4 })
+    @Test func processingRunTravelsBackAndForthInsideTheRow() {
+        var seen = Set<Int>()
+        for t in stride(from: 0.0, to: 3, by: 0.05) {
+            let run = BarModel.processingColumns(time: t, columns: 10)
+            #expect(run.lowerBound >= 0 && run.upperBound <= 9 && run.count <= 3)
+            seen.insert(run.lowerBound)
         }
-        #expect(BarModel.ripple(time: 0) != BarModel.ripple(time: 0.35))
+        #expect(seen.contains(0) && seen.contains(8))
+        #expect(BarModel.processingColumns(time: 0, columns: 10) != BarModel.processingColumns(time: 0.5, columns: 10))
+        #expect(BarModel.processingColumns(time: .nan, columns: 10) == 0...1)
     }
 }
 
@@ -120,17 +140,18 @@ import Testing
         #expect(panel.isVisible == false)
     }
 
-    @Test func messageWidthFitsTextAndNeverExceedsTheCap() {
-        #expect(PillView.pillWidth(forMessage: "x", max: 332) == PillView.pillSize.width)
-        let short = PillView.pillWidth(forMessage: "Secure field, not pasted", max: 332)
-        #expect(short > PillView.pillSize.width && short <= 332)
-        #expect(PillView.pillWidth(forMessage: String(repeating: "wide ", count: 60), max: 332) == 332)
+    @Test func pillIsTheDrawnSizeAndTheSkinAgrees() throws {
+        let assets = try PillAssets.loadHiFi()
+        #expect(PillView.artSize == CGSize(width: assets.layout.size.w, height: assets.layout.size.h))
+        #expect(PillView.pillSize == CGSize(width: 146 * PillView.artScale, height: 32 * PillView.artScale))
+        #expect(PillController.panelSize.width >= PillView.pillSize.width)
+        #expect(PillController.panelSize.height == PillView.pillSize.height + 2 * PillController.pillPadding)
+        #expect(PillView.artScale.rounded() == PillView.artScale)
+        #expect(assets.layout.meter.columns == BarModel.barCount)
+        #expect(assets.layout.meter.segmentsPerColumn == BarModel.segmentRows)
     }
 
-    @Test func handsFreePillIsWiderAndShowsTheDot() {
-        #expect(PillView.barsWidth(locked: false) == PillView.pillSize.width)
-        #expect(PillView.barsWidth(locked: true) > PillView.pillSize.width)
-        #expect(PillView.barsWidth(locked: true) < PillController.panelSize.width)
+    @Test func handsFreeLocksTheViewAndTheTimerSurvivesANotice() {
         _ = NSApplication.shared
         let controller = PillController(level: { 0 })
         #expect(!controller.view.isLocked)
@@ -144,14 +165,24 @@ import Testing
         controller.hide()
     }
 
+    @Test func longMessagesScrollAndShortOnesStayPut() {
+        _ = NSApplication.shared
+        let controller = PillController(level: { 0 })
+        controller.showMessage("Too short", duration: 5)
+        #expect(controller.view.messageScrollDistance == 0)
+        controller.showMessage("Secure field, not pasted. Copied to the clipboard instead.", duration: 5)
+        #expect(controller.view.messageScrollDistance > 0)
+        controller.hide()
+    }
+
     @Test func noticeOverAHandsFreeRecordingComesBackToIt() async {
         _ = NSApplication.shared
         let controller = PillController(level: { 0 })
-        controller.showHandsFreeNotice("1 minute left", duration: 0.05)
+        controller.showHandsFreeNotice("1 min left", duration: 0.05)
         #expect(controller.state == .hidden)
         controller.showHandsFree()
-        controller.showHandsFreeNotice("1 minute left", duration: 0.05)
-        #expect(controller.state == .message("1 minute left"))
+        controller.showHandsFreeNotice("1 min left", duration: 0.05)
+        #expect(controller.state == .message("1 min left"))
         try? await Task.sleep(for: .milliseconds(200))
         #expect(controller.state == .handsFree)
         controller.hide()
