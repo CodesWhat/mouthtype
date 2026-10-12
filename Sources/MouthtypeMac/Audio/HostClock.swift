@@ -1,12 +1,10 @@
 // Adapted from Parrot (https://github.com/humanitas-labs/parrot, 0eb4708), MIT License, Copyright (c) 2026 Humanitas Labs.
 import Darwin
 
-/// Host time in nanoseconds: the clock Core Audio stamps each buffer with
-/// (`mach_absolute_time`), so a press and the capture time of a sample can
-/// be compared directly.
+/// Host time in nanoseconds: one unit above the audio render callback. `CGEvent.timestamp` is already
+/// nanoseconds since boot (not `mach_absolute_time` ticks), so it compares directly with `now()`. Core Audio
+/// stamps buffers in raw mach ticks (`mHostTime`); convert those with `nanoseconds(fromHostTime:)` as they enter.
 enum HostClock {
-    /// Now as raw mach host time, the unit `CGEvent.timestamp` uses. Pass this as `keyDownAt`.
-    static func hostTimeNow() -> UInt64 { mach_absolute_time() }
 
     private static let timebase: mach_timebase_info_data_t = {
         var info = mach_timebase_info_data_t()
@@ -19,8 +17,8 @@ enum HostClock {
         nanoseconds(fromHostTime: mach_absolute_time())
     }
 
-    /// A Core Audio host time (`AudioTimeStamp.mHostTime`,
-    /// `AVAudioTime.hostTime`) in host nanoseconds.
+    /// A raw mach tick count (`AudioTimeStamp.mHostTime`, `AVAudioTime.hostTime`,
+    /// `mach_absolute_time()`) in host nanoseconds. Never call this on a `CGEvent.timestamp`.
     static func nanoseconds(fromHostTime hostTime: UInt64) -> UInt64 {
         let info = timebase
         if info.numer == info.denom { return hostTime }

@@ -42,11 +42,11 @@ public actor AudioCapture {
         Log.capture.info("prepared \(InputDevice.name(of: device.id) ?? "unknown input", privacy: .public) \(device.sampleRate, format: .fixed(precision: 0), privacy: .public) Hz x \(device.channels, privacy: .public), not started")
     }
 
-    /// `keyDownAt` is mach host time (`mach_absolute_time` units, as `CGEvent.timestamp` reports it).
+    /// `keyDownAtNanos` is host nanoseconds (`HostClock.now()` units, which is what `CGEvent.timestamp` reports).
     /// Throws `CaptureError`; on a throw nothing is left running.
-    public func start(keyDownAt: UInt64) throws {
+    public func start(keyDownAtNanos: UInt64) throws {
         guard !recording else { return }
-        let startedAt = HostClock.nanoseconds(fromHostTime: keyDownAt)
+        let startedAt = keyDownAtNanos
 
         if let error = MicrophoneAccess.captureError(for: MicrophoneAccess.status) {
             // A press is the one moment the user is looking; ask again if the system never has.

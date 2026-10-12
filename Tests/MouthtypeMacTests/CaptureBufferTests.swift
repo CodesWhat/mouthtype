@@ -170,7 +170,7 @@ func makePCM(sampleRate: Double, channels: AVAudioChannelCount, frames: AVAudioF
     @Test func hostClockConvertsAndSubtractsSigned() {
         #expect(abs(HostClock.seconds(from: 2_000_000_000, to: 1_500_000_000) + 0.5) < 1e-12)
         let a = HostClock.now()
-        let b = HostClock.nanoseconds(fromHostTime: HostClock.hostTimeNow())
+        let b = HostClock.nanoseconds(fromHostTime: mach_absolute_time())
         #expect(b >= a)
         #expect(b - a < 1_000_000_000)
     }

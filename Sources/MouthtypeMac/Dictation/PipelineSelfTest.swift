@@ -34,7 +34,7 @@ enum PipelineSelfTest {
                 samples: samples, sampleRate: AudioCapture.targetSampleRate, deviceUID: nil, deviceName: "file",
                 deviceTransport: "file", firstSampleMs: 0, firstNonzeroMs: 0, captureStartMs: 0, audioMs: audioMs
             )
-            let keyDownAt = clock.hostTimeNow()
+            let keyDownAt = clock.nowNanos()
             var session = DictationSession(id: UUID().uuidString, startedAt: clock.now(), keyDownAt: keyDownAt)
             session.rowOpen = await pipeline.begin(session, target: DictationTarget(appName: "pipeline-selftest"))
 

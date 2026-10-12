@@ -111,6 +111,8 @@ private final class GrantBox {
         #expect(InputProbe.mode(in: ["Mouthtype", "--globe-probe"]) == .globeProbe(seconds: 30))
         #expect(InputProbe.mode(in: ["Mouthtype", "--hotkey-log", "abc"]) == .hotkeyLog(seconds: 30))
         #expect(InputProbe.mode(in: ["Mouthtype", "--globe-probe", "100000"]) == .globeProbe(seconds: 30))
+        #expect(InputProbe.mode(in: ["Mouthtype", "--tap-cycle-selftest"]) == .tapCycle(cycles: 3))
+        #expect(InputProbe.mode(in: ["Mouthtype", "--tap-cycle-selftest", "5"]) == .tapCycle(cycles: 5))
     }
 
     @Test func describesAnEventWithTypeKeyCodeFlagsAndFn() {

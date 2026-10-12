@@ -52,24 +52,24 @@ import Testing
 
     @Test func resyncEmitsOnlyAMissedRelease() {
         let fn = CGEventFlags.maskSecondaryFn.rawValue
-        let missed = HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: false, hostTime: 5)
+        let missed = HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: false, timestampNanos: 5)
         #expect(missed == TapSample(kind: .flagsChanged, keyCode: 63, flags: 0, timestamp: 5))
-        #expect(HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: true, currentFlags: fn, destinationKeyDown: false, hostTime: 5) == nil)
-        #expect(HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: false, currentFlags: 0, destinationKeyDown: false, hostTime: 5) == nil)
-        #expect(HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: false, currentFlags: fn, destinationKeyDown: false, hostTime: 5) == nil)
+        #expect(HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: true, currentFlags: fn, destinationKeyDown: false, timestampNanos: 5) == nil)
+        #expect(HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: false, currentFlags: 0, destinationKeyDown: false, timestampNanos: 5) == nil)
+        #expect(HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: false, currentFlags: fn, destinationKeyDown: false, timestampNanos: 5) == nil)
     }
 
     @Test func resyncForRemapReadsTheDestinationKey() {
         let source = HotkeySource.remapped(keyCode: 80)
-        #expect(HotkeyService.resyncSample(source: source, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: false, hostTime: 9)
+        #expect(HotkeyService.resyncSample(source: source, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: false, timestampNanos: 9)
             == TapSample(kind: .keyUp, keyCode: 80, flags: 0, timestamp: 9))
-        #expect(HotkeyService.resyncSample(source: source, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: true, hostTime: 9) == nil)
+        #expect(HotkeyService.resyncSample(source: source, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: true, timestampNanos: 9) == nil)
     }
 
     @Test func aMissedReleaseEndsTheRecordingThroughTheMapper() {
         var mapper = HotkeyInputMapper()
         _ = mapper.map(TapSample(kind: .flagsChanged, keyCode: 63, flags: CGEventFlags.maskSecondaryFn.rawValue, timestamp: 0), otherKeysHeld: { false })
-        let resync = HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: mapper.hotkeyHeld, currentFlags: 0, destinationKeyDown: false, hostTime: 1)
+        let resync = HotkeyService.resyncSample(source: .fnFlag, hotkeyHeld: mapper.hotkeyHeld, currentFlags: 0, destinationKeyDown: false, timestampNanos: 1)
         let mapped = resync.flatMap { mapper.map($0, otherKeysHeld: { false }) }
         #expect(mapped?.keyEvent.modifiers.isEmpty == true)
         #expect(!mapper.hotkeyHeld)

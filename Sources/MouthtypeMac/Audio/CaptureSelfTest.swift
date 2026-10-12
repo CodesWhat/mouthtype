@@ -16,7 +16,7 @@ enum CaptureSelfTest {
 
     static func run(capture: AudioCapture, seconds: Double) async {
         do {
-            try await capture.start(keyDownAt: HostClock.hostTimeNow())
+            try await capture.start(keyDownAtNanos: HostClock.now())
             var maxLevel: Float = 0
             let deadline = ContinuousClock.now + .seconds(seconds)
             while ContinuousClock.now < deadline {

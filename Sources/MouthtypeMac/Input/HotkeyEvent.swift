@@ -1,6 +1,6 @@
 import MouthtypeCore
 
-/// What the controller slice reacts to. Host times are `mach_absolute_time` units, the same clock `AudioCapture.start(keyDownAt:)` takes.
+/// What the controller slice reacts to. Times are host nanoseconds (what `CGEvent.timestamp` reports), the same clock `AudioCapture.start(keyDownAtNanos:)` takes.
 public enum HotkeyEvent: Equatable, Sendable {
     /// Fn went down. Start capturing now; the minimum hold is judged at release.
     case pressed(at: UInt64)

@@ -10,15 +10,21 @@ enum InputProbe {
     enum Mode: Equatable {
         case globeProbe(seconds: Double)
         case hotkeyLog(seconds: Double)
+        case tapCycle(cycles: Int)
     }
 
     static let globeFlag = "--globe-probe"
     static let hotkeyLogFlag = "--hotkey-log"
+    static let tapCycleFlag = "--tap-cycle-selftest"
     static let defaultSeconds = 30.0
 
     static func mode(in arguments: [String]) -> Mode? {
         if let seconds = seconds(after: globeFlag, in: arguments) { return .globeProbe(seconds: seconds) }
         if let seconds = seconds(after: hotkeyLogFlag, in: arguments) { return .hotkeyLog(seconds: seconds) }
+        if let index = arguments.firstIndex(of: tapCycleFlag) {
+            let requested = arguments.indices.contains(index + 1) ? Int(arguments[index + 1]) : nil
+            return .tapCycle(cycles: min(20, max(1, requested ?? 3)))
+        }
         return nil
     }
 
@@ -46,6 +52,8 @@ enum InputProbe {
         case let .hotkeyLog(seconds):
             Log.probe.info("hotkey-log for \(seconds, format: .fixed(precision: 0), privacy: .public) s, no remap")
             await observe(source: .fnFlag, seconds: seconds)
+        case let .tapCycle(cycles):
+            await cycleTaps(cycles)
         case let .globeProbe(seconds):
             Log.probe.info("globe-probe for \(seconds, format: .fixed(precision: 0), privacy: .public) s; mapping before: \(remap.currentDescription(), privacy: .public)")
             let outcome = remap.apply()
@@ -59,6 +67,27 @@ enum InputProbe {
             Log.probe.info("verified mapping restored: \(!remap.isApplied, privacy: .public)")
         }
         NSApp.terminate(nil)
+    }
+
+    /// Installs and tears down the active key tap on the real tap thread, the path a press and release take.
+    /// Each teardown hands a release block to that thread, so the waits give it time to run (and trap, if broken).
+    private static func cycleTaps(_ cycles: Int) async {
+        let service = HotkeyService()
+        do {
+            try service.start()
+        } catch {
+            Log.probe.error("tap-cycle: taps not started: \(String(describing: error), privacy: .public)")
+            return
+        }
+        Log.probe.info("tap-cycle: flags tap up, \(cycles, privacy: .public) cycles")
+        for cycle in 1...cycles {
+            let installed = service.cycleKeyTapForSelfTest()
+            Log.probe.info("tap-cycle \(cycle, privacy: .public): key tap installed=\(installed, privacy: .public), torn down")
+            try? await Task.sleep(for: .milliseconds(250))
+        }
+        service.stop()
+        try? await Task.sleep(for: .milliseconds(500))
+        Log.probe.info("tap-cycle: finished, taps stopped, no trap")
     }
 
     private static func observe(source: HotkeySource, seconds: Double) async {

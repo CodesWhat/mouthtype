@@ -25,16 +25,16 @@ private final class FakeCapture: DictationCapturing {
     var startError: Error?
     var stopError: Error?
     var audio: CapturedAudio
-    var keyDownAt: UInt64?
+    var keyDownAtNanos: UInt64?
 
     init(log: CallLog, audio: CapturedAudio) {
         self.log = log
         self.audio = audio
     }
 
-    func start(keyDownAt: UInt64) async throws {
+    func start(keyDownAtNanos: UInt64) async throws {
         log.add("capture.start")
-        self.keyDownAt = keyDownAt
+        self.keyDownAtNanos = keyDownAtNanos
         if let startError { throw startError }
     }
 
@@ -179,7 +179,7 @@ private final class FakeClock: DictationClock, @unchecked Sendable {
         host = start
     }
 
-    func hostTimeNow() -> UInt64 {
+    func nowNanos() -> UInt64 {
         lock.withLock {
             host += 100_000_000
             return host
@@ -188,7 +188,7 @@ private final class FakeClock: DictationClock, @unchecked Sendable {
 
     func milliseconds(from start: UInt64, to end: UInt64) -> Int { Int(max(end, start) - start) / 1_000_000 }
     func now() -> Date { Self.wall }
-    func date(atHostTime hostTime: UInt64) -> Date { Self.wall }
+    func date(atNanos nanos: UInt64) -> Date { Self.wall }
 }
 
 private let keyDown: UInt64 = 5_000_000_000
@@ -261,7 +261,7 @@ private struct Rig {
         ])
         #expect(rig.controller.phase == .idle)
         #expect(rig.finishedAttempts.count == 1)
-        #expect(rig.capture.keyDownAt == keyDown)
+        #expect(rig.capture.keyDownAtNanos == keyDown)
         #expect(rig.inserter.delivered == ["Hello world."])
         #expect(rig.inserter.startFocusSeen?.bundleID == "com.apple.Notes")
     }

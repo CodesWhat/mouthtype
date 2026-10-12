@@ -48,8 +48,8 @@ final class DictationController {
 
     func handle(_ event: HotkeyEvent) async {
         switch event {
-        case let .pressed(hostTime): await pressed(at: hostTime)
-        case let .released(hostTime): released(at: hostTime)
+        case let .pressed(nanos): await pressed(at: nanos)
+        case let .released(nanos): released(at: nanos)
         case .discarded: await discarded()
         case .cancelled: await cancelled()
         }
@@ -62,7 +62,7 @@ final class DictationController {
 
     // MARK: Press
 
-    private func pressed(at hostTime: UInt64) async {
+    private func pressed(at nanos: UInt64) async {
         switch phase {
         case .recording:
             return
@@ -88,14 +88,14 @@ final class DictationController {
 
         let startFocus = inserter.snapshotFocus()
         var current = DictationSession(
-            id: UUID().uuidString, startedAt: clock.date(atHostTime: hostTime), keyDownAt: hostTime, startFocus: startFocus
+            id: UUID().uuidString, startedAt: clock.date(atNanos: nanos), keyDownAt: nanos, startFocus: startFocus
         )
         phase = .recording
 
         // The capture goes first: nothing else waits ahead of it.
         var startError: Error?
         do {
-            try await capture.start(keyDownAt: hostTime)
+            try await capture.start(keyDownAtNanos: nanos)
         } catch {
             startError = error
         }
@@ -113,11 +113,11 @@ final class DictationController {
 
     // MARK: Release
 
-    private func released(at hostTime: UInt64) {
+    private func released(at nanos: UInt64) {
         guard phase == .recording, let current = session else { return }
         phase = .processing
         session = nil
-        processing = Task { await process(current, releasedAt: hostTime) }
+        processing = Task { await process(current, releasedAt: nanos) }
     }
 
     private func process(_ session: DictationSession, releasedAt: UInt64) async {

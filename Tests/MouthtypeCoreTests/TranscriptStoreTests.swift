@@ -226,6 +226,21 @@ import Testing
         #expect(try store.dictation(id: id)?.appBundleId == "com.apple.mail")
     }
 
+    @Test func aStaleStartedRowFromACrashDoesNotAffectRecentStatsOrTheNextDictation() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let stale = try start(store, at: Self.noon.addingTimeInterval(-60))
+        #expect(try store.recent(limit: 10).isEmpty)
+        #expect(try store.stats(now: Self.noon, timeZone: Self.utc) == StatsSummary(
+            wordsToday: 0, recentWPM: 0, currentStreakDays: 0, longestStreakDays: 0
+        ))
+
+        let next = try dictate(store, at: Self.noon, words: 3, audioMs: 3_000)
+        #expect(try store.recent(limit: 10).map(\.id) == [next])
+        #expect(try store.stats(now: Self.noon, timeZone: Self.utc).wordsToday == 3)
+        #expect(try store.dictation(id: stale)?.status == .started)
+    }
+
     @Test func wordCountSplitsOnWhitespace() {
         #expect(TranscriptStore.wordCount("  one  two\nthree\tfour ") == 4)
         #expect(TranscriptStore.wordCount("") == 0)

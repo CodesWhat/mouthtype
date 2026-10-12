@@ -5,7 +5,7 @@ import MouthtypeCore
 struct DictationSession: Sendable {
     var id: String
     var startedAt: Date
-    var keyDownAt: UInt64
+    var keyDownAt: UInt64 // host nanoseconds (`HostClock`)
     var startFocus: FocusSnapshot?
     /// False when the store is missing or `begin` failed; later writes are then skipped.
     var rowOpen = false
@@ -79,7 +79,7 @@ struct DictationPipeline: Sendable {
         }
         let trimmed = SilenceTrimmer.trim(audio.samples)
         let transcription = try await engine.transcribe(samples: trimmed.samples)
-        let asrDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.hostTimeNow())
+        let asrDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
 
         // The engine's times are relative to the trimmed audio; put them back on the untrimmed capture.
         let head = trimmed.headTrimmedMs / 1000
@@ -104,7 +104,7 @@ struct DictationPipeline: Sendable {
     }
 
     func recordInsertion(_ result: DeliveryResult, session: DictationSession) async {
-        let insertDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.hostTimeNow())
+        let insertDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
         await write(session, "recordInsertion") { store in
             try await store.recordInsertion(session.id, InsertionRecord(
                 finalText: result.finalText, method: result.storeMethod, outcome: result.storeOutcome,

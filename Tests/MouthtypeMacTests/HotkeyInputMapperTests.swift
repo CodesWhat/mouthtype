@@ -28,7 +28,7 @@ import Testing
         var events: [GestureEvent] = []
         for sample in samples {
             guard let mapped = mapper.map(sample, otherKeysHeld: { otherKeysHeld }) else { continue }
-            let now = Date(timeIntervalSinceReferenceDate: Double(mapped.hostTime) / 1000)
+            let now = Date(timeIntervalSinceReferenceDate: Double(mapped.timestampNanos) / 1000)
             if let event = engine.process(mapped.keyEvent, now: now) { events.append(event) }
         }
         return events
@@ -42,7 +42,7 @@ import Testing
     @Test func pressCarriesTheTapTimestamp() {
         var mapper = HotkeyInputMapper()
         let mapped = mapper.map(flags(63, Self.fn, at: 123_456), otherKeysHeld: { false })
-        #expect(mapped?.hostTime == 123_456)
+        #expect(mapped?.timestampNanos == 123_456)
         #expect(mapped?.keyEvent == KeyEvent(key: nil, modifiers: [.fn]))
     }
 

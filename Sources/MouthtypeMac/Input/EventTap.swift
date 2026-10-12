@@ -37,6 +37,12 @@ final class TapThread: @unchecked Sendable {
     }
 }
 
+private struct ReleaseBox: @unchecked Sendable {
+    let retained: Unmanaged<TapContext>
+    init(_ retained: Unmanaged<TapContext>) { self.retained = retained }
+    func release() { retained.release() }
+}
+
 /// One CGEvent tap on the tap thread. The callback copies fields and hands them off; it does nothing else.
 @MainActor
 final class EventTap {
@@ -95,8 +101,16 @@ final class EventTap {
         CFMachPortInvalidate(port)
         CFRunLoopRemoveSource(runLoop, source, .commonModes)
         // Release on the tap thread, behind any callback still running there.
-        let retained = retainedContext
-        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue) { retained.release() }
+        Self.releaseOnTapThread(retainedContext, runLoop: runLoop)
+    }
+
+    /// Nonisolated on purpose: a block formed inside this `@MainActor` class would inherit main-actor isolation,
+    /// and Swift 6 would assert that executor when the block runs on the tap thread, trapping. The block here
+    /// is `@Sendable` and captures only a `Sendable` box.
+    nonisolated private static func releaseOnTapThread(_ retained: Unmanaged<TapContext>, runLoop: CFRunLoop) {
+        let box = ReleaseBox(retained)
+        let block: @Sendable () -> Void = { box.release() }
+        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue, block)
         CFRunLoopWakeUp(runLoop)
     }
 }

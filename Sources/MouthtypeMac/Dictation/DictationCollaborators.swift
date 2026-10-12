@@ -7,7 +7,7 @@ import MouthtypeCore
 protocol DictationCapturing: AnyObject {
     /// False until the audio unit is built, which needs microphone access.
     var isPrepared: Bool { get }
-    func start(keyDownAt: UInt64) async throws
+    func start(keyDownAtNanos: UInt64) async throws
     func stop() async throws -> CapturedAudio
     func cancel() async
 }
@@ -51,13 +51,13 @@ protocol DictationPill: AnyObject {
 }
 
 protocol DictationClock: Sendable {
-    /// Raw host time, the unit `HotkeyEvent` carries.
-    func hostTimeNow() -> UInt64
-    /// Whole ms between two host times, never negative.
+    /// Now in host nanoseconds, the unit `HotkeyEvent` carries.
+    func nowNanos() -> UInt64
+    /// Whole ms between two host-nanosecond times, never negative.
     func milliseconds(from start: UInt64, to end: UInt64) -> Int
     func now() -> Date
-    /// The wall-clock moment a host time happened.
-    func date(atHostTime hostTime: UInt64) -> Date
+    /// The wall-clock moment a host-nanosecond time happened.
+    func date(atNanos nanos: UInt64) -> Date
 }
 
 // MARK: - Real collaborators
@@ -76,7 +76,7 @@ final class MicCapture: DictationCapturing {
         isPrepared = true
     }
 
-    func start(keyDownAt: UInt64) async throws { try await capture.start(keyDownAt: keyDownAt) }
+    func start(keyDownAtNanos: UInt64) async throws { try await capture.start(keyDownAtNanos: keyDownAtNanos) }
     func stop() async throws -> CapturedAudio { try await capture.stop() }
     func cancel() async { await capture.cancel() }
 }
@@ -127,19 +127,17 @@ extension TextInserter: DictationInserting {}
 extension PillController: DictationPill {}
 
 struct SystemDictationClock: DictationClock {
-    func hostTimeNow() -> UInt64 { HostClock.hostTimeNow() }
+    func nowNanos() -> UInt64 { HostClock.now() }
 
     func milliseconds(from start: UInt64, to end: UInt64) -> Int {
-        let seconds = HostClock.seconds(
-            from: HostClock.nanoseconds(fromHostTime: start), to: HostClock.nanoseconds(fromHostTime: end)
-        )
+        let seconds = HostClock.seconds(from: start, to: end)
         return max(0, Int((seconds * 1000).rounded()))
     }
 
     func now() -> Date { Date() }
 
-    func date(atHostTime hostTime: UInt64) -> Date {
-        let ago = HostClock.seconds(from: HostClock.nanoseconds(fromHostTime: hostTime), to: HostClock.now())
+    func date(atNanos nanos: UInt64) -> Date {
+        let ago = HostClock.seconds(from: nanos, to: HostClock.now())
         return Date().addingTimeInterval(-max(0, ago))
     }
 }

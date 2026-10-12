@@ -164,18 +164,18 @@ public final class HotkeyService {
         if let swallowedKey { excluded.append(swallowedKey) }
         let probe = otherKeysHeldProbe
         guard let mapped = mapper.map(sample, otherKeysHeld: { probe(excluded) }) else { return }
-        guard let gesture = engine.process(mapped.keyEvent, now: Self.date(hostTime: mapped.hostTime)) else { return }
-        dispatch(gesture, hostTime: mapped.hostTime)
+        guard let gesture = engine.process(mapped.keyEvent, now: Self.date(nanos: mapped.timestampNanos)) else { return }
+        dispatch(gesture, nanos: mapped.timestampNanos)
     }
 
-    private func dispatch(_ gesture: GestureEvent, hostTime: UInt64) {
+    private func dispatch(_ gesture: GestureEvent, nanos: UInt64) {
         switch gesture {
         case .pressed:
             setRecording(true)
-            eventSink.yield(.pressed(at: hostTime))
+            eventSink.yield(.pressed(at: nanos))
         case .released:
             setRecording(false)
-            eventSink.yield(.released(at: hostTime))
+            eventSink.yield(.released(at: nanos))
         case let .cancelled(reason):
             setRecording(false)
             eventSink.yield(.cancelled(reason: reason))
@@ -201,8 +201,18 @@ public final class HotkeyService {
         refreshHealth()
     }
 
-    nonisolated static func date(hostTime: UInt64) -> Date {
-        Date(timeIntervalSinceReferenceDate: Double(HostClock.nanoseconds(fromHostTime: hostTime)) / 1_000_000_000)
+    /// Only differences between these dates matter to the gesture engine; `nanos` is a `CGEvent.timestamp`.
+    /// Diagnostics (`--tap-cycle-selftest`): installs the active key tap the way a press does, then tears it down
+    /// the way a release does, without any key event. Returns whether the tap came up.
+    func cycleKeyTapForSelfTest() -> Bool {
+        setRecording(true)
+        let installed = slots[.keys]?.tap != nil
+        setRecording(false)
+        return installed
+    }
+
+    nonisolated static func date(nanos: UInt64) -> Date {
+        Date(timeIntervalSinceReferenceDate: Double(nanos) / 1_000_000_000)
     }
 
     // MARK: - Recovery
@@ -254,21 +264,21 @@ public final class HotkeyService {
             hotkeyHeld: mapper.hotkeyHeld,
             currentFlags: flags,
             destinationKeyDown: destinationDown,
-            hostTime: HostClock.hostTimeNow()
+            timestampNanos: HostClock.now()
         ) else { return }
         Log.hotkey.info("resyncing a missed hotkey release")
         process(sample)
     }
 
-    nonisolated static func resyncSample(source: HotkeySource, hotkeyHeld: Bool, currentFlags: UInt64, destinationKeyDown: Bool, hostTime: UInt64) -> TapSample? {
+    nonisolated static func resyncSample(source: HotkeySource, hotkeyHeld: Bool, currentFlags: UInt64, destinationKeyDown: Bool, timestampNanos: UInt64) -> TapSample? {
         guard hotkeyHeld else { return nil }
         switch source {
         case .fnFlag:
             guard currentFlags & CGEventFlags.maskSecondaryFn.rawValue == 0 else { return nil }
-            return TapSample(kind: .flagsChanged, keyCode: ModifierState.fnKeyCode, flags: currentFlags, timestamp: hostTime)
+            return TapSample(kind: .flagsChanged, keyCode: ModifierState.fnKeyCode, flags: currentFlags, timestamp: timestampNanos)
         case let .remapped(code):
             guard !destinationKeyDown else { return nil }
-            return TapSample(kind: .keyUp, keyCode: code, flags: currentFlags, timestamp: hostTime)
+            return TapSample(kind: .keyUp, keyCode: code, flags: currentFlags, timestamp: timestampNanos)
         }
     }
 

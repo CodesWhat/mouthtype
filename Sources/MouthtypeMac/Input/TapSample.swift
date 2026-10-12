@@ -18,7 +18,7 @@ public struct TapSample: Equatable, Sendable {
     public var kind: Kind
     public var keyCode: UInt16
     public var flags: UInt64
-    /// Mach host time, the unit `CGEvent.timestamp` reports.
+    /// Nanoseconds since boot, as `CGEvent.timestamp` reports it. Not `mach_absolute_time` ticks.
     public var timestamp: UInt64
     public var userData: Int64
     public var isAutorepeat: Bool

@@ -13,7 +13,7 @@ extension Key {
 
 struct MappedInput: Equatable {
     var keyEvent: KeyEvent
-    var hostTime: UInt64
+    var timestampNanos: UInt64 // host nanoseconds, as `CGEvent.timestamp`
 }
 
 /// Turns tap samples into the processor's `KeyEvent`s. Pure, so it is tested without a live tap.
@@ -58,7 +58,7 @@ struct HotkeyInputMapper {
             }
             // A key typed while the hotkey is up is none of the processor's business, and would leave it dirty.
             guard hotkeyHeld else { return nil }
-            return MappedInput(keyEvent: KeyEvent(key: Key(code: sample.keyCode), modifiers: composed), hostTime: sample.timestamp)
+            return MappedInput(keyEvent: KeyEvent(key: Key(code: sample.keyCode), modifiers: composed), timestampNanos: sample.timestamp)
 
         case .keyUp:
             guard case let .remapped(destination) = source, sample.keyCode == destination, remapKeyHeld else { return nil }
@@ -79,6 +79,6 @@ struct HotkeyInputMapper {
             && (ModifierState.hasOtherModifierFlags(sample.flags) || otherKeysHeld())
         let key: Key? = refuse ? .heldElsewhere : nil
         // While the hotkey is up, still pass modifier changes on: the processor needs the full release to clear a dirty chord.
-        return MappedInput(keyEvent: KeyEvent(key: key, modifiers: composed), hostTime: sample.timestamp)
+        return MappedInput(keyEvent: KeyEvent(key: key, modifiers: composed), timestampNanos: sample.timestamp)
     }
 }
