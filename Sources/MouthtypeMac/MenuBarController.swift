@@ -58,6 +58,11 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
     @objc private func stopDictation() { onStopDictation?() }
     @objc private func cancelDictation() { onCancelDictation?() }
 
+    @objc private func showAbout() {
+        NSApp.activate()
+        NSApp.orderFrontStandardAboutPanel(nil)
+    }
+
     /// Re-reads every section and rebuilds the menu. Call after each finished dictation.
     public func refresh() {
         sections.forEach { $0.refresh() }
@@ -92,6 +97,9 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
             section.items.forEach(menu.addItem)
         }
         menu.addItem(.separator())
+        let about = NSMenuItem(title: "About Mouthtype", action: #selector(showAbout), keyEquivalent: "")
+        about.target = self
+        menu.addItem(about)
         menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 

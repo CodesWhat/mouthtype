@@ -34,7 +34,7 @@ let package = Package(
         .target(
             name: "MouthtypeMac",
             dependencies: ["MouthtypeCore"],
-            resources: [.copy("Resources/Pill")]
+            resources: [.copy("Resources/Pill"), .copy("Resources/MenuBar")]
         ),
         .executableTarget(
             name: "Mouthtype",

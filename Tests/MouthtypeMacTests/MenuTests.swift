@@ -74,14 +74,23 @@ private final class FakeLoginService: LoginItemService {
 
 @MainActor
 @Suite struct StatusIconTests {
-    @Test func everySymbolLoadsAsATemplate() throws {
+    @Test func everyGlyphLoadsAsATemplateWithBothRepresentations() throws {
         for icon in StatusIcon.allCases {
-            let image = try #require(icon.image, "\(icon.symbolName) did not load")
+            let image = try #require(icon.image, "\(icon.glyphName) did not load")
             #expect(image.isTemplate)
+            #expect(image.size == NSSize(width: 16, height: 16))
+            let pixels = image.representations.map { [$0.pixelsWide, $0.pixelsHigh] }
+            #expect(pixels == [[16, 16], [32, 32]], "\(icon.glyphName)")
         }
-        #expect(Set(StatusIcon.allCases.map(\.symbolName)).count == 4)
-        #expect(StatusIcon.idle.symbolName == "mic" && StatusIcon.recording.symbolName == "mic.fill")
-        #expect(StatusIcon.unavailable.symbolName == "mic.slash")
+        #expect(Set(StatusIcon.allCases.map(\.glyphName)).count == 4)
+    }
+
+    @Test func eachStateDrawsDifferently() throws {
+        let bitmaps = try StatusIcon.allCases.map { icon in
+            let rep = try #require(icon.image?.representations.first as? NSBitmapImageRep)
+            return rep.representation(using: .png, properties: [:])
+        }
+        #expect(Set(bitmaps).count == 4)
     }
 
     @Test func phaseMapsToTheIconWhenEverythingWorks() {
