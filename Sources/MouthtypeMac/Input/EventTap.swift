@@ -1,0 +1,126 @@
+// Adapted from Parrot (https://github.com/humanitas-labs/parrot, 0eb4708), MIT License, Copyright (c) 2026 Humanitas Labs.
+import CoreGraphics
+import Foundation
+
+/// The thread the taps' run loop sources live on, so a busy main thread can't get a tap disabled for being slow.
+final class TapThread: @unchecked Sendable {
+    private final class Box: @unchecked Sendable {
+        var runLoop: CFRunLoop?
+    }
+
+    let runLoop: CFRunLoop
+    private let thread: Thread
+
+    init() {
+        let box = Box()
+        let ready = DispatchSemaphore(value: 0)
+        thread = Thread {
+            let current = CFRunLoopGetCurrent()
+            box.runLoop = current
+            // A run loop with no sources returns at once; this one keeps it alive until stop().
+            var context = CFRunLoopSourceContext()
+            if let keepAlive = CFRunLoopSourceCreate(nil, 0, &context) {
+                CFRunLoopAddSource(current, keepAlive, .defaultMode)
+            }
+            ready.signal()
+            CFRunLoopRun()
+        }
+        thread.name = "com.codeswhat.mouthtype.event-taps"
+        thread.qualityOfService = .userInteractive
+        thread.start()
+        ready.wait()
+        runLoop = box.runLoop!
+    }
+
+    func stop() {
+        CFRunLoopStop(runLoop)
+    }
+}
+
+/// One CGEvent tap on the tap thread. The callback copies fields and hands them off; it does nothing else.
+@MainActor
+final class EventTap {
+    let role: TapRole
+    let context: TapContext
+    private let runLoop: CFRunLoop
+    private let port: CFMachPort
+    private let source: CFRunLoopSource
+    private let retainedContext: Unmanaged<TapContext>
+
+    init?(role: TapRole, context: TapContext, runLoop: CFRunLoop) {
+        let mask: CGEventMask
+        let options: CGEventTapOptions
+        switch role {
+        case .flags:
+            mask = 1 << CGEventType.flagsChanged.rawValue
+            options = .listenOnly
+        case .keys:
+            mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+            options = .defaultTap
+        }
+        let retained = Unmanaged.passRetained(context)
+        // .cgSessionEventTap is the level for an Accessibility-granted user process; .cghidEventTap needs root.
+        guard
+            let port = CGEvent.tapCreate(
+                tap: .cgSessionEventTap,
+                place: .headInsertEventTap,
+                options: options,
+                eventsOfInterest: mask,
+                callback: tapCallback,
+                userInfo: retained.toOpaque()
+            ),
+            let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, port, 0)
+        else {
+            retained.release()
+            return nil
+        }
+        self.role = role
+        self.context = context
+        self.runLoop = runLoop
+        self.port = port
+        self.source = source
+        retainedContext = retained
+        CFRunLoopAddSource(runLoop, source, .commonModes)
+        CGEvent.tapEnable(tap: port, enable: true)
+    }
+
+    var isEnabled: Bool { CGEvent.tapIsEnabled(tap: port) }
+
+    func enable() {
+        CGEvent.tapEnable(tap: port, enable: true)
+    }
+
+    func teardown() {
+        CGEvent.tapEnable(tap: port, enable: false)
+        CFMachPortInvalidate(port)
+        CFRunLoopRemoveSource(runLoop, source, .commonModes)
+        // Release on the tap thread, behind any callback still running there.
+        let retained = retainedContext
+        CFRunLoopPerformBlock(runLoop, CFRunLoopMode.commonModes.rawValue) { retained.release() }
+        CFRunLoopWakeUp(runLoop)
+    }
+}
+
+private func tapCallback(
+    proxy: CGEventTapProxy,
+    type: CGEventType,
+    event: CGEvent,
+    userInfo: UnsafeMutableRawPointer?
+) -> Unmanaged<CGEvent>? {
+    guard let userInfo else { return Unmanaged.passUnretained(event) }
+    let context = Unmanaged<TapContext>.fromOpaque(userInfo).takeUnretainedValue()
+
+    if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+        context.sink.yield(.disabled(context.role))
+        return Unmanaged.passUnretained(event)
+    }
+    guard let sample = TapSample(type: type, event: event) else { return Unmanaged.passUnretained(event) }
+    let decision = TapPolicy.decide(
+        sample,
+        role: context.role,
+        recording: context.recording.load(ordering: .relaxed),
+        swallowedKey: context.swallowedKey
+    )
+    if decision.deliver { context.sink.yield(.sample(context.role, sample)) }
+    return decision.swallow ? nil : Unmanaged.passUnretained(event)
+}

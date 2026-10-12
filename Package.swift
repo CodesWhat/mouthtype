@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "MouthtypeCore", targets: ["MouthtypeCore"]),
         .executable(name: "mouthtype-bench", targets: ["mouthtype-bench"]),
+        .executable(name: "Mouthtype", targets: ["Mouthtype"]),
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio", from: "0.17.7"),
@@ -30,6 +31,14 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
             ]
         ),
+        .target(
+            name: "MouthtypeMac",
+            dependencies: ["MouthtypeCore"]
+        ),
+        .executableTarget(
+            name: "Mouthtype",
+            dependencies: ["MouthtypeMac"]
+        ),
         .executableTarget(
             name: "mouthtype-bench",
             dependencies: [
@@ -41,6 +50,10 @@ let package = Package(
         .testTarget(
             name: "MouthtypeCoreTests",
             dependencies: ["MouthtypeCore", "mouthtype-bench"]
+        ),
+        .testTarget(
+            name: "MouthtypeMacTests",
+            dependencies: ["MouthtypeMac"]
         ),
     ]
 )

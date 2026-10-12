@@ -1,0 +1,236 @@
+import AppKit
+import MouthtypeCore
+
+@MainActor
+public final class AppDelegate: NSObject, NSApplicationDelegate {
+    static let pillDemoFlag = "--pill-demo"
+
+    private let engineHost = EngineHost()
+    private let micCapture = MicCapture()
+    private let microphoneSection = MicrophoneMenuSection()
+    private let systemSection = SystemAccessMenuSection()
+    private let accessibility = AccessibilityAccess()
+    private let fnRemap = FnRemap()
+    private let shortcuts = GlobalShortcuts()
+    private var menuBar: MenuBarController?
+    private var historySection: HistoryMenuSection?
+    private var hotkeyService: HotkeyService?
+    private var hotkeyLogTask: Task<Void, Never>?
+    private var pill: PillController?
+    private var inserter: TextInserter?
+    private var dictation: DictationController?
+    private var inputStarted = false
+    private var preparingCapture = false
+
+    public func applicationDidFinishLaunching(_ notification: Notification) {
+        Log.app.info("launch \(AppInfo.version, privacy: .public)")
+        let arguments = CommandLine.arguments
+        // The two file/visual modes need no permissions and touch neither the remap, the mic nor the real database.
+        if arguments.contains(Self.pillDemoFlag) {
+            let pill = PillController(level: { 0 })
+            self.pill = pill
+            Task {
+                await PillDemo.run(controller: pill)
+                NSApp.terminate(nil)
+            }
+            return
+        }
+        if let path = PipelineSelfTest.path(in: arguments) {
+            engineHost.start()
+            Task { await PipelineSelfTest.run(path: path, engineHost: engineHost) }
+            return
+        }
+
+        // Undo a Fn remap a previous run died with before anything reads the keyboard.
+        _ = fnRemap.restoreIfStale()
+        let store = openStore()
+        let archive = AudioArchive(supportDirectory: TranscriptStore.defaultURL().deletingLastPathComponent())
+        purgeAudio(archive: archive, store: store)
+
+        let level = micCapture.capture
+        let pill = PillController(level: { level.level })
+        let inserter = TextInserter(syntheticStamp: SyntheticEvents.stamp)
+        let engine = HostEngine(host: engineHost)
+        let sounds = SystemSoundPlayer()
+        let dictation = DictationController(
+            capture: micCapture, engine: engine,
+            pipeline: DictationPipeline(
+                store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
+            ),
+            inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock()
+        )
+        self.pill = pill
+        self.inserter = inserter
+        self.dictation = dictation
+
+        let menuBar = MenuBarController(engineHost: engineHost)
+        let history = HistoryMenuSection(store: store)
+        menuBar.add(section: microphoneSection)
+        menuBar.add(section: systemSection)
+        menuBar.add(section: history)
+        menuBar.add(section: ActionsMenuSection(
+            onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
+        ))
+        self.menuBar = menuBar
+        historySection = history
+        dictation.onAttemptFinished = { [weak menuBar] in menuBar?.refresh() }
+        shortcuts.register(.pasteLast) { [weak self] in self?.pasteLast() }
+        shortcuts.register(.copyLast) { [weak self] in self?.copyLast() }
+        trackStatus()
+
+        refreshGlobeCheck()
+        engineHost.start()
+        Task { await setUpCapture() }
+
+        accessibility.onChange = { [weak self] granted in self?.accessibilityChanged(granted) }
+        accessibility.start()
+    }
+
+    public func applicationDidBecomeActive(_ notification: Notification) {
+        guard menuBar != nil else { return }
+        refreshGlobeCheck()
+        guard !micCapture.isPrepared, !preparingCapture else { return }
+        Task {
+            refreshMicrophone()
+            _ = await prepareCapture()
+        }
+    }
+
+    public func applicationWillTerminate(_ notification: Notification) {
+        guard menuBar != nil else { return }
+        shortcuts.unregisterAll()
+        hotkeyService?.stop()
+        _ = fnRemap.restore()
+    }
+
+    private func openStore() -> TranscriptStore? {
+        do {
+            return try TranscriptStore()
+        } catch {
+            Log.app.error("history unavailable: \(String(describing: error), privacy: .public)")
+            return nil
+        }
+    }
+
+    private func purgeAudio(archive: AudioArchive, store: TranscriptStore?) {
+        Task.detached {
+            do {
+                let removed = try archive.purge(olderThan: Date().addingTimeInterval(-AudioArchive.defaultRetention))
+                if !removed.isEmpty { try store?.clearAudio(ids: removed) }
+                Log.app.info("audio purge removed \(removed.count, privacy: .public) files")
+            } catch {
+                Log.app.error("audio purge failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    private func pasteLast() {
+        guard let inserter, let pill else { return }
+        Task {
+            guard let result = await inserter.pasteLast() else {
+                pill.showMessage("Nothing to paste yet")
+                return
+            }
+            if let message = result.userMessage { pill.showMessage(message) }
+        }
+    }
+
+    private func copyLast() {
+        guard let inserter, let pill else { return }
+        pill.showMessage(inserter.copyLast() ? "Copied" : "Nothing to copy yet")
+    }
+
+    private func refreshGlobeCheck() {
+        let check = GlobeKeyCheck.current()
+        systemSection.update(globe: check)
+        Log.permissions.info("globe key action \(String(describing: check.action), privacy: .public), fn key present \(check.fnKeyPresent, privacy: .public), conflict \(check.hasConflict, privacy: .public)")
+    }
+
+    private func refreshMicrophone() {
+        microphoneSection.refresh()
+        Log.permissions.info("microphone status \(MicrophoneAccess.statusText(for: MicrophoneAccess.status), privacy: .public)")
+        refreshStatusIcon()
+    }
+
+    private func refreshStatusIcon() {
+        guard let menuBar, let dictation else { return }
+        var engineFailed = false
+        if case .failed = engineHost.state { engineFailed = true }
+        menuBar.setIcon(StatusIcon.resolve(
+            phase: dictation.phase, engineFailed: engineFailed,
+            microphoneAllowed: MicrophoneAccess.status == .authorized, accessibilityGranted: accessibility.isGranted
+        ))
+    }
+
+    /// Re-draws the icon whenever the dictation phase or the engine state changes.
+    private func trackStatus() {
+        refreshStatusIcon()
+        withObservationTracking {
+            _ = dictation?.phase
+            _ = engineHost.state
+        } onChange: { [weak self] in
+            Task { @MainActor in self?.trackStatus() }
+        }
+    }
+
+    private func accessibilityChanged(_ granted: Bool) {
+        Log.permissions.info("accessibility \(granted ? "allowed" : "needed", privacy: .public)")
+        systemSection.update(accessibilityGranted: granted)
+        refreshStatusIcon()
+        if granted { startInput() }
+    }
+
+    private func startInput() {
+        guard !inputStarted else { return }
+        inputStarted = true
+        if let mode = InputProbe.mode(in: CommandLine.arguments) {
+            Task { await InputProbe.run(mode, remap: fnRemap) }
+            return
+        }
+
+        let service = HotkeyService()
+        service.onHealthChange = { [weak self] health in
+            Log.hotkey.info("health \(health.statusText, privacy: .public)")
+            self?.systemSection.update(hotkeyHealth: health)
+        }
+        do {
+            try service.start()
+        } catch {
+            Log.hotkey.error("hotkey not started: \(String(describing: error), privacy: .public)")
+            inputStarted = false
+            return
+        }
+        hotkeyService = service
+        systemSection.update(hotkeyHealth: service.health)
+        guard let dictation else { return }
+        hotkeyLogTask = Task { await dictation.consume(service.events) }
+    }
+
+    private func prepareCapture() async -> Bool {
+        preparingCapture = true
+        defer { preparingCapture = false }
+        do {
+            try await micCapture.prepare()
+            Log.capture.info("microphone ready")
+            return true
+        } catch {
+            Log.capture.error("capture not prepared: \(String(describing: error), privacy: .public)")
+            return false
+        }
+    }
+
+    private func setUpCapture() async {
+        await MicrophoneAccess.requestIfUndetermined()
+        refreshMicrophone()
+        let selfTestSeconds = CaptureSelfTest.seconds(in: CommandLine.arguments)
+
+        guard await prepareCapture() else {
+            if selfTestSeconds != nil { NSApp.terminate(nil) }
+            return
+        }
+        if let seconds = selfTestSeconds {
+            await CaptureSelfTest.run(capture: micCapture.capture, seconds: seconds)
+            NSApp.terminate(nil)
+        }
+    }
+}
