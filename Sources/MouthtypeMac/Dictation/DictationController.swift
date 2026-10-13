@@ -228,17 +228,28 @@ final class DictationController {
     /// Everything after the audio is in hand, shared by a normal release and an Undo.
     private func transcribeAndDeliver(_ audio: CapturedAudio, session: DictationSession, keyUpAt: UInt64) async throws {
         let keyUpMs = clock.milliseconds(from: session.keyDownAt, to: keyUpAt)
-        _ = await pipeline.recordCapture(audio, session: session, keyUpMs: keyUpMs)
-        guard let transcribed = try await pipeline.transcribe(audio, session: session) else {
+        let features = await pipeline.recordCapture(audio, session: session, keyUpMs: keyUpMs)
+        guard let transcribed = try await pipeline.transcribe(audio, session: session, voicedMs: features.voicedMs) else {
             pill.hide()
             finished()
             return
         }
 
-        let result = await inserter.deliver(transcribed.text, startFocus: session.startFocus)
-        await pipeline.recordInsertion(result, session: session)
+        let inputs = pipeline.cleanupInputs()
+        let context = inputs.settings.enabled ? inserter.insertionContext() : nil
+        let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
+        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard)
+        guard !cleaned.text.isEmpty else {
+            await pipeline.finishEmpty(cleaned, session: session)
+            pill.hide()
+            finished()
+            return
+        }
+
+        let result = await inserter.deliver(cleaned.text, startFocus: session.startFocus)
+        await pipeline.recordInsertion(result, session: session, cleaned: cleaned)
         pill.hide()
-        if let card = DeliveryCard.forDelivery(result, transcript: transcribed.text) { cards.present(card) }
+        if let card = DeliveryCard.forDelivery(result, transcript: cleaned.text) { cards.present(card) }
         finished()
     }
 

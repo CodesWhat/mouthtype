@@ -11,6 +11,18 @@ public struct SpokenCommand: Sendable, Equatable {
         case clauseEnd
         /// A command unless a determiner or adjective right before it makes it a noun ("a question mark").
         case unlessNoun
+        /// A list command: see `ListAction` for when each one counts.
+        case list
+    }
+
+    /// The spoken list commands. All but `.end` and the item separators work anywhere; those only inside a list.
+    public enum ListAction: Sendable, Equatable {
+        case bullet       // "bullet", "bullet point": needs item text after it
+        case newBullet    // "new bullet"
+        case numbered     // "numbered list": needs item text after it
+        case nextItem     // "next item", "new item": inside a list, needs item text
+        case next         // bare "next": inside a list, needs item text, with extra prose guards
+        case end          // "end list", "end of list": inside a list
     }
 
     /// How the symbol sits against its neighbours.
@@ -28,8 +40,13 @@ public struct SpokenCommand: Sendable, Equatable {
     public var attach: Attach
     /// The next word starts a new sentence and gets a capital.
     public var endsSentence: Bool
+    public var list: ListAction?
 
-    public init(_ words: [String], _ output: String, _ style: Style, _ attach: Attach, endsSentence: Bool = false) {
+    public init(
+        _ words: [String], _ output: String, _ style: Style, _ attach: Attach, endsSentence: Bool = false,
+        list: ListAction? = nil
+    ) {
+        self.list = list
         self.words = words
         self.output = output
         self.style = style
@@ -44,6 +61,17 @@ public enum SpokenCommandTable {
         SpokenCommand(["new", "paragraph"], "\n\n", .layout, .newline, endsSentence: true),
         SpokenCommand(["new", "line"], "\n", .layout, .newline, endsSentence: true),
         SpokenCommand(["newline"], "\n", .layout, .newline, endsSentence: true),
+
+        // Lists. The output is a placeholder: the marker depends on the list state when the command is read.
+        SpokenCommand(["bullet", "point"], "- ", .list, .newline, endsSentence: true, list: .bullet),
+        SpokenCommand(["bullet"], "- ", .list, .newline, endsSentence: true, list: .bullet),
+        SpokenCommand(["new", "bullet"], "- ", .list, .newline, endsSentence: true, list: .newBullet),
+        SpokenCommand(["numbered", "list"], "1. ", .list, .newline, endsSentence: true, list: .numbered),
+        SpokenCommand(["next", "item"], "- ", .list, .newline, endsSentence: true, list: .nextItem),
+        SpokenCommand(["new", "item"], "- ", .list, .newline, endsSentence: true, list: .nextItem),
+        SpokenCommand(["next"], "- ", .list, .newline, endsSentence: true, list: .next),
+        SpokenCommand(["end", "list"], "\n", .list, .newline, endsSentence: true, list: .end),
+        SpokenCommand(["end", "of", "list"], "\n", .list, .newline, endsSentence: true, list: .end),
 
         // Clause-end only: these are common nouns.
         SpokenCommand(["period"], ".", .clauseEnd, .previous, endsSentence: true),
@@ -70,6 +98,31 @@ public enum SpokenCommandTable {
         SpokenCommand(["open", "quote"], "\"", .unlessNoun, .next),
         SpokenCommand(["close", "quote"], "\"", .unlessNoun, .previous),
         SpokenCommand(["end", "quote"], "\"", .unlessNoun, .previous),
+    ]
+
+    /// Words right before "new line" or "new paragraph" that make it a noun phrase ("a new line of products").
+    public static let layoutNounSignals: Set<String> = [
+        "the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "its", "our", "their",
+        "another", "each", "every", "any", "some", "no",
+    ]
+
+    /// Words right before a bare "next" that make it prose ("what's next", "until next week").
+    public static let nextPrepositions: Set<String> = [
+        "on", "in", "at", "for", "until", "till", "by", "of", "to", "from", "with", "about", "is", "was", "be",
+        "are", "what's", "whats", "here's", "comes", "came", "see", "up",
+    ]
+
+    /// Words right after a bare "next" that make it prose ("next week", "next steps").
+    public static let nextFollowers: Set<String> = [
+        "week", "weekend", "month", "year", "time", "to", "step", "steps", "door", "one", "day", "morning",
+        "evening", "few", "up", "quarter", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+        "sunday", "summer", "winter", "spring", "fall", "on", "in", "round", "release", "version",
+    ]
+
+    /// Words right after a bare "bullet" that make it a noun ("bullet points are", "bullet train").
+    public static let bulletFollowers: Set<String> = [
+        "points", "lists", "list", "journal", "train", "proof", "wound", "wounds", "hole", "holes", "casing",
+        "casings", "time", "point",
     ]
 
     /// A determiner, quantifier or adjective directly before a command word means it is being used as a noun.

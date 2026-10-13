@@ -12,9 +12,33 @@ struct DictationSession: Sendable {
 }
 
 struct TranscribedDictation: Sendable {
+    /// What the cleanup pass starts from: the engine's text after the guard.
     var text: String
+    /// The engine's text exactly.
+    var rawText: String
     var asrDoneMs: Int
     var words: [WordTiming]
+    /// Words and tags the guard dropped.
+    var guardEdits: [EditOp] = []
+}
+
+/// What a dictation's cleanup needs, read once so one dictation sees one set of switches.
+struct CleanupInputs: Sendable {
+    var settings: CleanupSettings
+    var dictionary: [DictionaryRule]
+    var snippets: [Snippet]
+    var now: Date
+
+    var needsClipboard: Bool {
+        settings.enabled && settings.pipelineOptions.snippets && snippets.contains { $0.expansion.contains("{clipboard}") }
+    }
+}
+
+/// The text to deliver and what to store about how it got there.
+struct CleanedDictation: Sendable {
+    var text: String
+    var edits: [EditOp]
+    var cleanup: CleanupRecord
 }
 
 /// Everything after the audio is in hand, off the main actor: features, the WAV, the trim, the engine call, the
@@ -27,6 +51,12 @@ struct DictationPipeline: Sendable {
     let clock: any DictationClock
 
     var retention: TimeInterval = AudioArchive.defaultRetention
+    var vocabulary: any VocabularyProviding = EmptyVocabulary()
+    var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
+    var textPipeline = TextPipeline()
+
+    /// Cleanup slower than this is thrown away and the raw text goes out.
+    static let cleanupBudgetMs = 50.0
 
     func begin(_ session: DictationSession, target: DictationTarget) async -> Bool {
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -72,7 +102,10 @@ struct DictationPipeline: Sendable {
     }
 
     /// Nil when nothing was voiced or the engine heard nothing; the row is then already finished as `.empty`.
-    func transcribe(_ audio: CapturedAudio, session: DictationSession) async throws -> TranscribedDictation? {
+    /// `voicedMs` is the capture's voiced audio, for the guard against empty and stray output.
+    func transcribe(
+        _ audio: CapturedAudio, session: DictationSession, voicedMs: Double? = nil
+    ) async throws -> TranscribedDictation? {
         guard SilenceTrimmer.voicedRange(audio.samples) != nil else {
             await finish(session, .empty)
             return nil
@@ -96,20 +129,74 @@ struct DictationPipeline: Sendable {
                 transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset
             ))
         }
-        guard !transcription.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: settings().enabled)
+        guard !guarded.isEmpty else {
+            if !guarded.edits.isEmpty { await write(session, "appendEdits") { try await $0.appendEdits(session.id, guarded.edits) } }
             await finish(session, .empty)
             return nil
         }
-        return TranscribedDictation(text: transcription.text, asrDoneMs: asrDoneMs, words: shifted.words)
+        return TranscribedDictation(
+            text: guarded.text, rawText: transcription.text, asrDoneMs: asrDoneMs, words: shifted.words,
+            guardEdits: guarded.edits
+        )
     }
 
-    func recordInsertion(_ result: DeliveryResult, session: DictationSession) async {
+    func cleanupInputs() -> CleanupInputs {
+        CleanupInputs(settings: settings(), dictionary: vocabulary.dictionary(), snippets: vocabulary.snippets(), now: clock.now())
+    }
+
+    /// The deterministic cleanup. It cannot lose a dictation: past the time budget, or when it leaves nothing for
+    /// text that had words, the raw text is delivered instead. `context` and `clipboard` are used here and dropped.
+    func clean(
+        _ transcribed: TranscribedDictation, inputs: CleanupInputs, context: InsertionContext?, clipboard: String?
+    ) async -> CleanedDictation {
+        let settings = inputs.settings
+        guard settings.enabled else {
+            return CleanedDictation(
+                text: transcribed.rawText, edits: [], cleanup: CleanupRecord(cleanerID: Self.cleanerID, outcome: "skipped")
+            )
+        }
+        let clock = ContinuousClock()
+        let start = clock.now
+        let result = textPipeline.run(TextPipelineInput(
+            text: transcribed.text, dictionary: inputs.dictionary, snippets: inputs.snippets, context: context,
+            now: inputs.now, clipboard: clipboard, options: settings.pipelineOptions
+        ))
+        let elapsed = clock.now - start
+        let ms = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
+        let record = CleanupRecord(
+            cleanerID: Self.cleanerID, style: settings.styleName, ms: Int(ms.rounded()), outcome: "ok"
+        )
+        if ms > Self.cleanupBudgetMs {
+            Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the raw text")
+            var late = record
+            late.outcome = "timeout"
+            return CleanedDictation(text: transcribed.rawText, edits: transcribed.guardEdits, cleanup: late)
+        }
+        for note in result.notes { Log.app.info("cleanup note: \(note, privacy: .public)") }
+        Log.app.info("cleanup ok ms=\(ms, format: .fixed(precision: 2)) edits=\(result.edits.count + transcribed.guardEdits.count)")
+        return CleanedDictation(text: result.text, edits: transcribed.guardEdits + result.edits, cleanup: record)
+    }
+
+    static let cleanerID = "deterministic"
+
+    /// The cleanup left nothing (the dictation was only fillers): the row ends as empty, its edits kept.
+    func finishEmpty(_ cleaned: CleanedDictation, session: DictationSession) async {
+        if !cleaned.edits.isEmpty { await write(session, "appendEdits") { try await $0.appendEdits(session.id, cleaned.edits) } }
+        await finish(session, .empty)
+    }
+
+    func recordInsertion(_ result: DeliveryResult, session: DictationSession, cleaned: CleanedDictation? = nil) async {
         let insertDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
         await write(session, "recordInsertion") { store in
             try await store.recordInsertion(session.id, InsertionRecord(
-                finalText: result.finalText, method: result.storeMethod, outcome: result.storeOutcome,
-                focusMoved: result.focusMoved, insertDoneMs: insertDoneMs, target: result.target?.target
+                finalText: result.finalText, detText: cleaned?.text, cleanup: cleaned?.cleanup, method: result.storeMethod,
+                outcome: result.storeOutcome, focusMoved: result.focusMoved, insertDoneMs: insertDoneMs,
+                target: result.target?.target
             ))
+        }
+        if let edits = cleaned?.edits, !edits.isEmpty {
+            await write(session, "appendEdits") { try await $0.appendEdits(session.id, edits) }
         }
     }
 

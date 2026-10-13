@@ -46,4 +46,26 @@ import Testing
     @Test func emptyStaysEmpty() {
         #expect(spaced("", after: .character("o")) == "")
     }
+
+    @Test func listsStartOnTheirOwnLineWithNoSpaceBeforeTheMarker() {
+        #expect(spaced("- Milk\n- Eggs", after: .character("o")) == "\n- Milk\n- Eggs")
+        #expect(spaced("1. Milk\n2. Eggs", after: .character(".")) == "\n1. Milk\n2. Eggs")
+        #expect(spaced("- Milk", after: .character("\n")) == "- Milk")
+        #expect(spaced("- Milk", after: .start) == "- Milk")
+        #expect(spaced("- Milk", after: .unknown) == "- Milk")
+    }
+
+    @Test func aLeadingNewlineGetsNoSpace() {
+        #expect(spaced("\nNext", after: .character("o")) == "\nNext")
+    }
+
+    @Test func plainTextThatLooksSimilarStillGetsItsSpace() {
+        #expect(spaced("-5 degrees", after: .character("o")) == " -5 degrees")
+        #expect(spaced("2.5 million", after: .character("o")) == " 2.5 million")
+    }
+
+    @Test func listDetection() {
+        #expect(Spacing.startsList("- a") && Spacing.startsList("12. a"))
+        #expect(!Spacing.startsList("-a") && !Spacing.startsList("1.5") && !Spacing.startsList(". a") && !Spacing.startsList(""))
+    }
 }

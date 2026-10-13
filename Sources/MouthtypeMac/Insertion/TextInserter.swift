@@ -2,6 +2,7 @@
 import AppKit
 import CoreGraphics
 import Foundation
+import MouthtypeCore
 
 /// Inserts a transcript at the cursor by borrowing the clipboard: write it, post Cmd+V, restore the user's clipboard.
 ///
@@ -53,6 +54,18 @@ public final class TextInserter {
 
     public func snapshotFocus() -> FocusSnapshot {
         focus.snapshot()
+    }
+
+    /// The text around the cursor in the focused field, for the cleanup pass. Nil for a secure field or when the app
+    /// won't say. The text is used for one cleanup run and neither stored nor logged.
+    public func insertionContext() -> InsertionContext? {
+        let now = focus.snapshot()
+        guard !now.isSecure, !focus.isSecureInputEnabled, let element = now.element else { return nil }
+        return focus.insertionContext(of: element)
+    }
+
+    func clipboardText() -> String? {
+        clipboard.currentString()
     }
 
     /// Pastes `text` into whatever has focus now. `startFocus` only decides `focusMoved`.
@@ -180,9 +193,14 @@ struct PasteboardSnapshot: Equatable {
 protocol PasteboardAccess: AnyObject {
     var changeCount: Int { get }
     func snapshot() -> PasteboardSnapshot
+    func currentString() -> String?
     func restore(_ snapshot: PasteboardSnapshot)
     /// Replaces the contents with `text`, plus an empty entry of each marker type on the same item.
     func write(_ text: String, markers: [String])
+}
+
+extension PasteboardAccess {
+    func currentString() -> String? { nil }
 }
 
 /// Borrows the clipboard for a paste and gives it back.
@@ -231,6 +249,8 @@ final class PasteboardSession {
     }
 
     var isRestorePending: Bool { saved != nil }
+
+    func currentString() -> String? { pasteboard.currentString() }
 
     /// False when the paste event could not be posted; the clipboard then still holds `text` and no restore is scheduled.
     func paste(_ text: String) -> Bool {
@@ -285,6 +305,8 @@ final class SystemPasteboard: PasteboardAccess {
         }
         return PasteboardSnapshot(items: items)
     }
+
+    func currentString() -> String? { pasteboard.string(forType: .string) }
 
     func restore(_ snapshot: PasteboardSnapshot) {
         pasteboard.clearContents()

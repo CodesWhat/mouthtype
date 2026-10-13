@@ -45,10 +45,22 @@ enum Spacing {
     /// before the cursor needs one, as after a word typed by hand. Unknown
     /// adds none.
     static func spaced(_ text: String, before: TextBeforeCursor) -> String {
+        // A list begins on its own line, with no space in front of the marker.
+        if startsList(text) {
+            if case .character(let preceding) = before, !preceding.isNewline { return "\n" + text }
+            return text
+        }
         if case .character(let preceding) = before, needsSpace(after: preceding, text: text) {
             return " " + text
         }
         return text
+    }
+
+    /// "- item" or "1. item": the text begins with a list marker.
+    static func startsList(_ text: String) -> Bool {
+        if text.hasPrefix("- ") { return true }
+        let digits = text.prefix(while: { $0.isASCII && $0.isNumber })
+        return !digits.isEmpty && text.dropFirst(digits.count).hasPrefix(". ")
     }
 
     /// Whether `text` needs a space to follow `preceding`.

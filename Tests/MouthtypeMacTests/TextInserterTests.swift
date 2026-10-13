@@ -276,6 +276,21 @@ private struct Rig {
         #expect(await rig.inserter.deliver("Damn, can you check", startFocus: nil).finalText == " Damn, can you check")
     }
 
+    @Test func aListAfterAnUnreadablePasteStartsOnANewLineAndKeepsTheContinuation() async {
+        let rig = Rig()
+        _ = await rig.inserter.deliver("Groceries:", startFocus: nil)
+        rig.clock.advance(30)
+        #expect(await rig.inserter.deliver("- Milk\n- Eggs", startFocus: nil).finalText == "\n- Milk\n- Eggs")
+        rig.clock.advance(30)
+        #expect(await rig.inserter.deliver("Thanks", startFocus: nil).finalText == " Thanks")
+    }
+
+    @Test func aResultStartingWithANewlineGetsNoLeadingSpace() async {
+        let rig = Rig()
+        _ = await rig.inserter.deliver("Hello", startFocus: nil)
+        #expect(await rig.inserter.deliver("\nWorld", startFocus: nil).finalText == "\nWorld")
+    }
+
     @Test func theFirstEverDeliveryGetsNoSpace() async {
         let rig = Rig()
         #expect(await rig.inserter.deliver("hello", startFocus: nil).finalText == "hello")

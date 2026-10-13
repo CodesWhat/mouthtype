@@ -9,6 +9,8 @@ public struct TextPipelineOptions: Sendable, Equatable {
     public var snippets: Bool
     public var blend: Bool
     public var whitespace: Bool
+    /// The tone pass. `.formal` changes nothing.
+    public var style: StyleOptions
 
     public init(
         fillers: Bool = true,
@@ -17,7 +19,8 @@ public struct TextPipelineOptions: Sendable, Equatable {
         dictionary: Bool = true,
         snippets: Bool = true,
         blend: Bool = true,
-        whitespace: Bool = true
+        whitespace: Bool = true,
+        style: StyleOptions = .formal
     ) {
         self.fillers = fillers
         self.spokenCommands = spokenCommands
@@ -26,6 +29,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
         self.snippets = snippets
         self.blend = blend
         self.whitespace = whitespace
+        self.style = style
     }
 
     public static let all = TextPipelineOptions()
@@ -85,11 +89,13 @@ public struct TextPipelineResult: Sendable, Equatable {
 
 /// The deterministic cleanup pass: no model, a few milliseconds, every change logged.
 ///
-/// Stages run in this fixed order: fillers, spoken commands, numbers, dictionary, snippets, blend, whitespace.
+/// Stages run in this fixed order: fillers, spoken commands, numbers, dictionary, snippets, blend, style, whitespace.
+/// Style edits are logged under the `blend` stage name, the store's vocabulary has no separate one.
 /// Each is its own small type and takes the previous stage's output; the edit `position` is a Character offset
 /// into the text as it entered that stage.
 public struct TextPipeline: Sendable {
     public static let whitespaceStageName = "whitespace"
+    public static let styleStageName = "style"
 
     private let numberFormatter: any NumberFormatting
     private let dateFormatter: SnippetExpander.DateFormatter
@@ -166,6 +172,13 @@ public struct TextPipeline: Sendable {
             if options.snippets { protected.formUnion(BlendStage.firstWords(of: input.snippets.map(\.expansion))) }
             let stage = BlendStage(context: input.context, protectedWords: protected)
             run(BlendStage.stageName) { stage.apply($0) }
+        }
+        if options.style != .formal {
+            var protected = Set<String>()
+            if options.dictionary { protected.formUnion(StyleStage.words(of: input.dictionary.map(\.written))) }
+            if options.snippets { protected.formUnion(StyleStage.words(of: input.snippets.map(\.expansion))) }
+            let stage = StyleStage(options: options.style, protectedWords: protected)
+            run(Self.styleStageName) { stage.apply($0) }
         }
         if options.whitespace {
             run(Self.whitespaceStageName) { StageResult(text: WhitespaceNormalizer().apply($0)) }

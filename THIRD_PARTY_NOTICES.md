@@ -12,6 +12,8 @@ Files adapted from Parrot:
 - `packaging/Info.plist`
 - `packaging/Mouthtype.entitlements`
 - `Sources/MouthtypeCore/SilenceTrimmer.swift` and `Tests/MouthtypeCoreTests/SilenceTrimmerTests.swift`
+- `Sources/MouthtypeCore/Text/PhraseMatcher.swift`
+- `Sources/MouthtypeCore/Text/DictionaryReplacer.swift` and `Tests/MouthtypeCoreTests/DictionaryReplacerTests.swift`
 - `Sources/MouthtypeMac/Audio/AudioCapture.swift`
 - `Sources/MouthtypeMac/Audio/CaptureBuffer.swift`
 - `Sources/MouthtypeMac/Audio/CaptureError.swift`

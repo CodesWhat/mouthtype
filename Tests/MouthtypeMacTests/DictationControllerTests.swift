@@ -85,6 +85,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     private(set) var handsFreeLock: (DictationMode, DictationTrigger)?
     private(set) var finishes: [(DictationStatus, String?)] = []
     private(set) var reopens = 0
+    private(set) var edits: [EditOp] = []
 
     init(log: CallLog) {
         self.log = log
@@ -106,6 +107,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
         try run("recordLock") { handsFreeLock = (mode, trigger) }
     }
     func reopen(_ id: String) async throws { try run("reopen") { reopens += 1 } }
+    func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try run("appendEdits") { self.edits += edits } }
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {
         try run("finish") { finishes.append((status, errorMessage)) }
     }
@@ -126,6 +128,10 @@ private final class FakeInserter: DictationInserting {
     var result = DeliveryResult(method: .paste, outcome: .unknown, focusMoved: false, target: nil, finalText: "Hello world.")
     var delivered: [String] = []
     var startFocusSeen: FocusSnapshot?
+    var context: InsertionContext?
+    var clipboard: String?
+    private(set) var contextReads = 0
+    private(set) var clipboardReads = 0
 
     init(log: CallLog) {
         self.log = log
@@ -141,6 +147,30 @@ private final class FakeInserter: DictationInserting {
         delivered.append(text)
         startFocusSeen = startFocus
         return result
+    }
+
+    func insertionContext() -> InsertionContext? {
+        contextReads += 1
+        return context
+    }
+
+    func clipboardText() -> String? {
+        clipboardReads += 1
+        return clipboard
+    }
+}
+
+private struct FakeVocabulary: VocabularyProviding {
+    var rules: [DictionaryRule] = []
+    var expansions: [Snippet] = []
+    func dictionary() -> [DictionaryRule] { rules }
+    func snippets() -> [Snippet] { expansions }
+}
+
+private struct SlowNumbers: NumberFormatting {
+    func spans(in text: String) -> [TextSpan] {
+        Thread.sleep(forTimeInterval: 0.08)
+        return []
     }
 }
 
@@ -266,6 +296,17 @@ final class FakeClock: DictationClock, @unchecked Sendable {
 private let keyDown: UInt64 = 5_000_000_000
 private let keyUp: UInt64 = 7_000_000_000
 
+/// A short tone, 0.5 s silence, then 1 s tone, so the first word is not head-trimmed.
+private func capturedWithLeadingCue() -> CapturedAudio {
+    var samples = (0..<1_600).map { 0.3 * sin(Float($0) * 0.2) }
+    samples += [Float](repeating: 0, count: 8_000)
+    samples += (0..<16_000).map { 0.3 * sin(Float($0) * 0.2) }
+    return CapturedAudio(
+        samples: samples, sampleRate: 16_000, deviceUID: "uid", deviceName: "Test Mic", deviceTransport: "built-in",
+        firstSampleMs: 0, firstNonzeroMs: 0, captureStartMs: 0, audioMs: 1_700
+    )
+}
+
 /// 0.5 s silence, 1 s tone, 0.5 s silence at 16 kHz.
 private func capturedTone() -> CapturedAudio {
     var samples = [Float](repeating: 0, count: 8_000)
@@ -296,7 +337,10 @@ private struct Rig {
         var count = 0
     }
 
-    init(audio: CapturedAudio = capturedTone(), withStore: Bool = true) {
+    init(
+        audio: CapturedAudio = capturedTone(), withStore: Bool = true, settings: CleanupSettings = CleanupSettings(),
+        vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline()
+    ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
         store = FakeStore(log: log)
@@ -306,9 +350,12 @@ private struct Rig {
         cards = FakeCards(log: log)
         let clock = FakeClock(start: keyUp)
         self.clock = clock
-        let pipeline = DictationPipeline(
+        var pipeline = DictationPipeline(
             store: withStore ? store : nil, archive: FakeArchive(log: log), engine: engine, clock: clock
         )
+        pipeline.settings = { settings }
+        pipeline.vocabulary = vocabulary
+        pipeline.textPipeline = textPipeline
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
             cards: cards
@@ -339,6 +386,163 @@ private struct Rig {
         await controller.handle(.pressed(at: keyDown))
         await controller.handle(.released(at: keyUp))
         await controller.waitForProcessing()
+    }
+}
+
+@MainActor
+@Suite struct DictationCleanupTests {
+    private let messy = "um so the build is uh green new line ship it"
+    private let cleaned = "So the build is green\nShip it"
+
+    @Test func theCleanedTextIsDeliveredAndStored() async throws {
+        let rig = Rig()
+        rig.engine.result.text = messy
+        await rig.dictate()
+
+        #expect(rig.inserter.delivered == [cleaned])
+        #expect(rig.store.transcription?.rawText == messy)
+        let insertion = try #require(rig.store.insertion)
+        #expect(insertion.detText == cleaned)
+        #expect(insertion.cleanup?.cleanerID == "deterministic" && insertion.cleanup?.outcome == "ok")
+        #expect(insertion.cleanup?.style == "formal" && insertion.cleanup?.ms != nil)
+        #expect(rig.store.edits.contains { $0.stage == "filler" })
+        #expect(rig.store.edits.contains { $0.stage == "spoken command" })
+        let insertAt = try #require(rig.log.index(of: "store.recordInsertion"))
+        let editsAt = try #require(rig.log.index(of: "store.appendEdits"))
+        #expect(editsAt > insertAt)
+    }
+
+    @Test func listCommandsReachThePaste() async {
+        let rig = Rig()
+        rig.engine.result.text = "shopping list colon bullet milk bullet eggs"
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["Shopping list:\n- Milk\n- Eggs"])
+    }
+
+    @Test func theMasterSwitchOffDeliversTheRawText() async throws {
+        var off = CleanupSettings()
+        off.enabled = false
+        let rig = Rig(settings: off)
+        rig.engine.result.text = messy
+        await rig.dictate()
+
+        #expect(rig.inserter.delivered == [messy])
+        let insertion = try #require(rig.store.insertion)
+        #expect(insertion.detText == messy && insertion.cleanup?.outcome == "skipped")
+        #expect(rig.store.edits.isEmpty && !rig.log.contains("store.appendEdits"))
+        #expect(rig.inserter.contextReads == 0)
+    }
+
+    @Test func perStageSwitchesApply() async {
+        var settings = CleanupSettings()
+        settings.fillers = false
+        let rig = Rig(settings: settings)
+        rig.engine.result.text = "um hello"
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["Um hello"])
+    }
+
+    @Test func theStyleSettingReachesTheText() async throws {
+        var settings = CleanupSettings()
+        settings.style = StylePreset.casual.options
+        let rig = Rig(settings: settings)
+        rig.engine.result.text = "See you Friday."
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["See you Friday"])
+        #expect(rig.store.insertion?.cleanup?.style == "casual")
+    }
+
+    @Test func theCursorContextBlendsTheText() async {
+        let rig = Rig()
+        rig.inserter.context = InsertionContext(before: "I think", after: nil)
+        rig.engine.result.text = "The build is green."
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["the build is green."])
+        #expect(rig.inserter.contextReads == 1)
+    }
+
+    @Test func theClipboardIsReadOnlyForSnippetsThatUseIt() async {
+        let plain = Rig()
+        await plain.dictate()
+        #expect(plain.inserter.clipboardReads == 0)
+
+        let rig = Rig(vocabulary: FakeVocabulary(expansions: [Snippet(trigger: "paste it", expansion: "Link: {clipboard}")]))
+        rig.inserter.clipboard = "https://example.com"
+        rig.engine.result.text = "paste it"
+        await rig.dictate()
+        #expect(rig.inserter.clipboardReads == 1)
+        #expect(rig.inserter.delivered == ["Link: https://example.com"])
+    }
+
+    @Test func theDictionaryComesFromTheVocabularySeam() async {
+        let rig = Rig(vocabulary: FakeVocabulary(rules: [DictionaryRule(heard: "mouth type", written: "Mouthtype")]))
+        rig.engine.result.text = "send it to mouth type"
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["Send it to Mouthtype"])
+    }
+
+    @Test func slowCleanupFallsBackToTheRawText() async throws {
+        let rig = Rig(textPipeline: TextPipeline(numberFormatter: SlowNumbers()))
+        rig.engine.result.text = messy
+        await rig.dictate()
+        #expect(rig.inserter.delivered == [messy])
+        #expect(rig.store.insertion?.cleanup?.outcome == "timeout")
+        #expect(rig.store.insertion?.detText == messy)
+    }
+
+    @Test func aDictationOfOnlyFillersEndsAsEmpty() async {
+        let rig = Rig()
+        rig.engine.result.text = "um uh"
+        await rig.dictate()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.empty])
+        #expect(rig.store.insertion == nil)
+        #expect(rig.log.all.last == "pill.hide")
+    }
+
+    @Test func aBlankAudioTagEndsAsEmpty() async {
+        let rig = Rig()
+        rig.engine.result.text = "[BLANK_AUDIO]"
+        await rig.dictate()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.empty])
+        #expect(rig.store.edits.map(\.stage) == ["filler"])
+    }
+
+    @Test func aLeadingStartCueIsDropped() async throws {
+        let rig = Rig(audio: capturedWithLeadingCue())
+        rig.engine.result = Transcription(
+            text: "Tink Send it",
+            words: [
+                WordTiming(word: "Tink", start: 0.05, end: 0.1, confidence: 0.2),
+                WordTiming(word: "Send", start: 0.7, end: 0.9, confidence: 0.95),
+                WordTiming(word: "it", start: 0.9, end: 1.0, confidence: 0.95),
+            ],
+            processingSeconds: 0.2, engineID: "fake"
+        )
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["Send it"])
+        #expect(rig.store.transcription?.rawText == "Tink Send it")
+        #expect(rig.store.edits.first?.fromText == "Tink" && rig.store.edits.first?.stage == "filler")
+    }
+
+    @Test func undoDeliversTheCleanedText() async {
+        let rig = Rig()
+        rig.engine.result.text = messy
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        await rig.settle()
+        await rig.controller.undoCancel()
+        #expect(rig.inserter.delivered == [cleaned])
+        #expect(rig.store.insertion?.detText == cleaned)
+    }
+
+    @Test func theCardShowsTheCleanedText() async {
+        let rig = Rig()
+        rig.engine.result.text = messy
+        rig.inserter.result = DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: false, target: nil, finalText: "")
+        await rig.dictate()
+        #expect(rig.cards.presented == [.secure(cleaned)])
     }
 }
 

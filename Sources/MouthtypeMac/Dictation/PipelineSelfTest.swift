@@ -39,20 +39,24 @@ enum PipelineSelfTest {
             session.rowOpen = await pipeline.begin(session, target: DictationTarget(appName: "pipeline-selftest"))
 
             let features = await pipeline.recordCapture(audio, session: session, keyUpMs: Int(audioMs.rounded()))
-            let transcribed = try await pipeline.transcribe(audio, session: session)
+            let transcribed = try await pipeline.transcribe(audio, session: session, voicedMs: features.voicedMs)
+            var cleanedText = ""
             if let transcribed {
+                let cleaned = await pipeline.clean(transcribed, inputs: pipeline.cleanupInputs(), context: nil, clipboard: nil)
+                cleanedText = cleaned.text
                 let result = DeliveryResult(
-                    method: .none, outcome: .unknown, focusMoved: false, target: nil, finalText: transcribed.text
+                    method: .none, outcome: .unknown, focusMoved: false, target: nil, finalText: cleaned.text
                 )
-                await pipeline.recordInsertion(result, session: session)
+                await pipeline.recordInsertion(result, session: session, cleaned: cleaned)
             }
 
             let words = transcribed?.words ?? []
             let monotonic = zip(words, words.dropFirst()).allSatisfy { $0.start <= $1.start }
                 && words.allSatisfy { $0.start <= $0.end }
             let lastEnd = words.last?.end ?? 0
-            let text = transcribed?.text ?? ""
-            let line = "pipeline selftest transcript=\"\(text)\" words=\(TranscriptStore.wordCount(text))"
+            let text = transcribed?.rawText ?? ""
+            let line = "pipeline selftest transcript=\"\(text)\" cleaned=\"\(cleanedText.replacingOccurrences(of: "\n", with: "\\n"))\""
+                + " words=\(TranscriptStore.wordCount(text))"
                 + " timings=\(words.count) monotonic=\(monotonic) lastEndS=\(String(format: "%.2f", lastEnd))"
                 + " clipS=\(String(format: "%.2f", audioMs / 1000)) asrMs=\(transcribed?.asrDoneMs.description ?? "none")"
                 + " voicedMs=\(Int(features.voicedMs.rounded())) db=\(databaseURL.path) archive=\(archive.directory.path)"

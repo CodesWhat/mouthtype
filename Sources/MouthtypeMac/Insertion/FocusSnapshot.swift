@@ -64,7 +64,13 @@ struct FocusedElement: Equatable, @unchecked Sendable {
 protocol FocusReading: AnyObject {
     func snapshot() -> FocusSnapshot
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor
+    /// A bounded window of text around the cursor, for the cleanup pass. Nil when the app doesn't say.
+    func insertionContext(of element: FocusedElement) -> InsertionContext?
     var isSecureInputEnabled: Bool { get }
+}
+
+extension FocusReading {
+    func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
 }
 
 @MainActor
@@ -125,6 +131,52 @@ final class AccessibilityFocusReader: FocusReading {
         let end = units.index(units.startIndex, offsetBy: range.location)
         let start = units.index(end, offsetBy: -length)
         return String(units[start..<end]).flatMap { $0.last }.map(TextBeforeCursor.character) ?? .unknown
+    }
+
+    /// Characters read before and after the cursor. Held only for the one cleanup run; never stored or logged.
+    static let contextBefore = 300
+    static let contextAfter = 40
+
+    /// Never call on a secure field. A terminal that reports position 0 wherever the cursor is gives nil.
+    func insertionContext(of element: FocusedElement) -> InsertionContext? {
+        let ref = bounded(element.ref)
+        var rangeValue: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
+              let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
+        let count = characterCount(ref)
+        if range.location == 0 {
+            return count == 0 ? InsertionContext(before: "", after: "") : nil
+        }
+
+        let beforeStart = max(0, range.location - Self.contextBefore)
+        guard let before = text(of: ref, CFRange(location: beforeStart, length: range.location - beforeStart)) else { return nil }
+        var after = ""
+        let afterStart = range.location + range.length
+        if let count, afterStart < count {
+            after = text(of: ref, CFRange(location: afterStart, length: min(Self.contextAfter, count - afterStart))) ?? ""
+        }
+        return InsertionContext(before: before, after: after)
+    }
+
+    /// A slice by UTF-16 range, from `AXStringForRange` or else the whole value.
+    private func text(of element: AXUIElement, _ range: CFRange) -> String? {
+        var range = range
+        var text: CFTypeRef?
+        if let query = AXValueCreate(.cfRange, &range),
+           AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
+           let string = text as? String {
+            return string
+        }
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
+              let value = value as? String else { return nil }
+        let units = value.utf16
+        guard range.location + range.length <= units.count else { return nil }
+        let start = units.index(units.startIndex, offsetBy: range.location)
+        let end = units.index(start, offsetBy: range.length)
+        return String(units[start..<end])
     }
 
     @discardableResult

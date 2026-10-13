@@ -7,7 +7,7 @@ struct MouthtypeBench: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "mouthtype-bench",
         abstract: "Benchmark Mouthtype speech engines and text-cleanup models.",
-        subcommands: [List.self, Run.self, CleanupCommand.self, CorpusCommand.self, EngineWorker.self, CleanupWorker.self]
+        subcommands: [List.self, Run.self, CleanupCommand.self, CleanTextCommand.self, CorpusCommand.self, EngineWorker.self, CleanupWorker.self]
     )
 }
 

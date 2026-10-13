@@ -87,6 +87,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: history)
         menuBar.add(section: PillSkinMenuSection(onSelect: { [weak pill] kind in pill?.setSkin(kind) }))
         menuBar.add(section: TextFontMenuSection())
+        menuBar.add(section: CleanupMenuSection())
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))

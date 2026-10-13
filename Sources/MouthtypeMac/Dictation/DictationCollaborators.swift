@@ -32,6 +32,7 @@ protocol DictationStoring: Sendable {
     /// A cancelled row goes back to started, for an Undo that runs it after all.
     func reopen(_ id: String) async throws
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws
+    func appendEdits(_ id: String, _ edits: [EditOp]) async throws
 }
 
 protocol DictationArchiving: Sendable {
@@ -43,6 +44,15 @@ protocol DictationArchiving: Sendable {
 protocol DictationInserting: AnyObject {
     func snapshotFocus() -> FocusSnapshot
     func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult
+    /// A little text either side of the cursor for the cleanup pass, or nil when it can't be read.
+    func insertionContext() -> InsertionContext?
+    /// The clipboard's text, for snippets that use `{clipboard}`.
+    func clipboardText() -> String?
+}
+
+extension DictationInserting {
+    func insertionContext() -> InsertionContext? { nil }
+    func clipboardText() -> String? { nil }
 }
 
 @MainActor
@@ -135,6 +145,7 @@ struct TranscriptStoreWriter: DictationStoring {
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {
         try store.finish(id, status: status, errorMessage: errorMessage)
     }
+    func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try store.appendEdits(id, edits) }
 }
 
 extension AudioArchive: DictationArchiving {
