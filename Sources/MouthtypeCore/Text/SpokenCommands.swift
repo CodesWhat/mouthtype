@@ -6,8 +6,10 @@ import Foundation
 /// Parakeet already placed next to the spoken word is absorbed ("hello comma, world" becomes "hello, world").
 /// Symbols attach to the previous word, and the word after sentence-ending punctuation or a line break gets a
 /// capital. "new line" and "new paragraph" are commands unless a determiner or possessive sits right before
-/// them ("a new line of products"). A clause-end word followed by a lowercase word ("send it comma then wait")
-/// is read as ordinary speech.
+/// them ("a new line of products"). "comma", "colon" and "semicolon" are commands unless a noun signal sits
+/// before them ("the Oxford comma"), a noun follower after them ("comma splice") or an object verb before them
+/// ("add comma"). A comma, semicolon or colon right before "new line" or "new paragraph" is dropped. A clause-end
+/// word ("period") followed by a lowercase word ("the period ended") is read as ordinary speech.
 ///
 /// List commands ("bullet", "numbered list", "next item", "end list") are read in order with a small state: the
 /// current list kind and number. Rules: "bullet", "bullet point", "numbered list" and "new bullet" start or
@@ -79,6 +81,13 @@ public struct SpokenCommands: Sendable {
                     if signals.contains(prev.lower) { continue }
                 }
             }
+            if m.entry.style == .punctuation {
+                if m.firstWord > 0, SpokenCommandTable.punctuationVerbs.contains(words[m.firstWord - 1].lower),
+                   TextScan.onlySpaces(chars, words[m.firstWord - 1].end, first.start) { continue }
+                let next = m.lastWord + 1
+                if next < words.count, SpokenCommandTable.punctuationFollowers.contains(words[next].lower),
+                   TextScan.onlySpaces(chars, last.end, words[next].start) { continue }
+            }
             if let action = m.entry.list, !listCommandApplies(action, m, chars, words, listState) { continue }
             var coreStart = first.start
             var coreEnd = last.end
@@ -91,6 +100,19 @@ public struct SpokenCommands: Sendable {
                 while coreEnd < n, Self.layoutAbsorbAfter.contains(chars[coreEnd]) { coreEnd += 1 }
             case .next:
                 break
+            }
+            if m.entry.style == .layout {
+                // A comma, semicolon or colon the engine put before the break would dangle at the end of the line.
+                // That includes a spoken one ("green comma new line").
+                if let prev = accepted.last, prev.match.entry.style == .punctuation,
+                   [",", ";", ":"].contains(prev.match.entry.output), prev.match.lastWord + 1 == m.firstWord {
+                    coreStart = prev.coreStart
+                    commandStarts.remove(prev.match.firstWord)
+                    accepted.removeLast()
+                }
+                var j = coreStart - 1
+                while j >= 0, TextScan.isSpace(chars[j]) { j -= 1 }
+                if j >= (accepted.last?.coreEnd ?? 0), [",", ";", ":"].contains(chars[j]) { coreStart = j }
             }
             var replacement: String?
             if let action = m.entry.list {

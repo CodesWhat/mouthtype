@@ -9,6 +9,10 @@ public struct SpokenCommand: Sendable, Equatable {
         /// Only at the end of a clause: followed by end of text, a newline, punctuation Parakeet already
         /// inserted, a capitalised word, or another command. Ordinary nouns ("period", "colon") live here.
         case clauseEnd
+        /// A command by default: a comma is followed by a lowercase word, so clause-end rules can't work. Stays prose
+        /// after a noun signal ("the Oxford comma"), before a noun follower ("comma splice"), or right after a verb
+        /// that takes it as an object ("add comma").
+        case punctuation
         /// A command unless a determiner or adjective right before it makes it a noun ("a question mark").
         case unlessNoun
         /// A list command: see `ListAction` for when each one counts.
@@ -76,15 +80,16 @@ public enum SpokenCommandTable {
         // Clause-end only: these are common nouns.
         SpokenCommand(["period"], ".", .clauseEnd, .previous, endsSentence: true),
         SpokenCommand(["full", "stop"], ".", .clauseEnd, .previous, endsSentence: true),
-        SpokenCommand(["comma"], ",", .clauseEnd, .previous),
-        SpokenCommand(["colon"], ":", .clauseEnd, .previous),
+        // Commands by default: a comma or colon is followed by a lowercase word more often than not.
+        SpokenCommand(["comma"], ",", .punctuation, .previous),
+        SpokenCommand(["colon"], ":", .punctuation, .previous),
+        SpokenCommand(["semicolon"], ";", .punctuation, .previous),
+        SpokenCommand(["semi", "colon"], ";", .punctuation, .previous),
 
         // Commands unless a noun use is signalled.
         SpokenCommand(["question", "mark"], "?", .unlessNoun, .previous, endsSentence: true),
         SpokenCommand(["exclamation", "point"], "!", .unlessNoun, .previous, endsSentence: true),
         SpokenCommand(["exclamation", "mark"], "!", .unlessNoun, .previous, endsSentence: true),
-        SpokenCommand(["semicolon"], ";", .unlessNoun, .previous),
-        SpokenCommand(["semi", "colon"], ";", .unlessNoun, .previous),
         SpokenCommand(["ellipsis"], "\u{2026}", .unlessNoun, .previous),
         SpokenCommand(["dot", "dot", "dot"], "\u{2026}", .unlessNoun, .previous),
         SpokenCommand(["dash"], " - ", .unlessNoun, .spaced),
@@ -125,11 +130,25 @@ public enum SpokenCommandTable {
         "casings", "time", "point",
     ]
 
+    /// Words right after "comma", "colon" or "semicolon" that make it a noun phrase ("comma splice", "colon cancer").
+    public static let punctuationFollowers: Set<String> = [
+        "splice", "splices", "separated", "delimited", "cancer", "cleanse", "cleansing", "polyp", "polyps",
+        "surgery", "operator", "placement", "key",
+    ]
+
+    /// Verbs right before "comma", "colon" or "semicolon" that take it as an object ("add comma", "remove semicolon").
+    public static let punctuationVerbs: Set<String> = [
+        "add", "adds", "adding", "put", "puts", "putting", "insert", "inserts", "inserting", "remove", "removes",
+        "removing", "use", "uses", "using", "need", "needs", "delete", "deletes", "deleting", "missing", "drop",
+        "dropping", "replace", "replacing",
+    ]
+
     /// A determiner, quantifier or adjective directly before a command word means it is being used as a noun.
     public static let nounSignals: Set<String> = [
         "the", "a", "an", "this", "that", "these", "those", "my", "your", "his", "her", "its", "our", "their",
         "another", "each", "every", "any", "some", "no", "such", "which", "what", "per",
         "trial", "grace", "probation", "probationary", "first", "second", "third", "last", "next", "previous",
         "final", "same", "long", "short", "whole", "yard", "mad", "quick", "big", "little",
+        "oxford", "serial", "missing", "extra", "trailing", "leading", "inverted", "stray", "dangling", "double",
     ]
 }
