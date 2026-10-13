@@ -4,6 +4,8 @@ import Foundation
 public struct TextPipelineOptions: Sendable, Equatable {
     public var fillers: Bool
     public var spokenCommands: Bool
+    /// Lists the speaker counts ("first, second", "one, two") become numbered lists. Runs right after spoken commands.
+    public var countedLists: Bool
     public var numbers: Bool
     public var dictionary: Bool
     public var snippets: Bool
@@ -15,6 +17,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
     public init(
         fillers: Bool = true,
         spokenCommands: Bool = true,
+        countedLists: Bool = true,
         numbers: Bool = true,
         dictionary: Bool = true,
         snippets: Bool = true,
@@ -24,6 +27,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
     ) {
         self.fillers = fillers
         self.spokenCommands = spokenCommands
+        self.countedLists = countedLists
         self.numbers = numbers
         self.dictionary = dictionary
         self.snippets = snippets
@@ -34,7 +38,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
 
     public static let all = TextPipelineOptions()
     public static let none = TextPipelineOptions(
-        fillers: false, spokenCommands: false, numbers: false, dictionary: false,
+        fillers: false, spokenCommands: false, countedLists: false, numbers: false, dictionary: false,
         snippets: false, blend: false, whitespace: false
     )
 
@@ -89,7 +93,7 @@ public struct TextPipelineResult: Sendable, Equatable {
 
 /// The deterministic cleanup pass: no model, a few milliseconds, every change logged.
 ///
-/// Stages run in this fixed order: fillers, spoken commands, numbers, dictionary, snippets, blend, style, whitespace.
+/// Stages run in this fixed order: fillers, spoken commands, counted lists, numbers, dictionary, snippets, blend, style, whitespace.
 /// Style edits are logged under the `blend` stage name, the store's vocabulary has no separate one.
 /// Each is its own small type and takes the previous stage's output; the edit `position` is a Character offset
 /// into the text as it entered that stage.
@@ -137,7 +141,8 @@ public struct TextPipeline: Sendable {
             let before = text
             let out = body(text)
             let d = clock.now - start
-            millis[name] = Double(d.components.seconds) * 1000 + Double(d.components.attoseconds) / 1e15
+            // Counted lists log under the spoken command stage, so their time adds to it.
+            millis[name, default: 0] += Double(d.components.seconds) * 1000 + Double(d.components.attoseconds) / 1e15
             text = out.text
             edits += out.edits
             notes += out.notes
@@ -149,6 +154,9 @@ public struct TextPipeline: Sendable {
         }
         if options.spokenCommands {
             run(SpokenCommands.stageName) { SpokenCommands().apply($0) }
+        }
+        if options.countedLists {
+            run(CountedLists.stageName) { CountedLists().apply($0) }
         }
         if options.numbers {
             let formatter = numberFormatter
