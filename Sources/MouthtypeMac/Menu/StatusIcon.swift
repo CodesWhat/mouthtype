@@ -13,12 +13,12 @@ enum StatusIcon: CaseIterable {
         }
     }
 
-    /// The open-sides lips glyph, 22 x 18 pt with a 1x and a 2x representation. Always a template, so it follows the
+    /// The smiley glyph, 16 x 15 pt with a 1x and a 2x representation. Always a template, so it follows the
     /// menu bar appearance.
     var image: NSImage? { Self.loadImage(named: glyphName) }
 
     static let glyphDirectory = "MenuBar"
-    static let pointSize = NSSize(width: 22, height: 18)
+    static let pointSize = NSSize(width: 16, height: 15)
 
     static func loadImage(named name: String, bundle: Bundle = .module) -> NSImage? {
         let image = NSImage(size: pointSize)
