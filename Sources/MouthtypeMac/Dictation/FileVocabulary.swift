@@ -95,6 +95,122 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         return url
     }
 
+    enum WriteError: Error, Equatable {
+        /// The file doesn't parse as a list of entries, so it is left exactly as it is.
+        case malformed(String)
+        case failed(String)
+    }
+
+    enum SaveResult: Equatable {
+        case added, updated, unchanged
+    }
+
+    /// Adds `heard` to `written`, or sets `written` on the rule that already has that `heard` (ignoring case). A new
+    /// entry is appended to the file's text so the rest of it stays as the user wrote it; an update rewrites the list
+    /// in the file's usual one-line-per-entry shape, keeping order and any extra keys. Creates the file when missing.
+    @discardableResult
+    func save(heard: String, written: String) throws -> SaveResult {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            try write("[\n  \(Self.line(heard: heard, written: written, starred: false, extra: [:]))\n]\n")
+            return .added
+        }
+        let (text, entries) = try readEntries()
+        if let index = entries.firstIndex(where: { Self.string($0["heard"])?.lowercased() == heard.lowercased() }) {
+            guard Self.string(entries[index]["written"]) != written else { return .unchanged }
+            var changed = entries
+            changed[index]["written"] = written
+            try write(Self.render(changed))
+            return .updated
+        }
+        try write(Self.appending(Self.line(heard: heard, written: written, starred: false, extra: [:]), to: text))
+        return .added
+    }
+
+    /// Takes out the rule with this `heard` (ignoring case). False when there isn't one.
+    @discardableResult
+    func remove(heard: String) throws -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        let (_, entries) = try readEntries()
+        let kept = entries.filter { Self.string($0["heard"])?.lowercased() != heard.lowercased() }
+        guard kept.count != entries.count else { return false }
+        try write(Self.render(kept))
+        return true
+    }
+
+    private func readEntries() throws -> (text: String, entries: [[String: Any]]) {
+        let data: Data
+        do { data = try Data(contentsOf: url) } catch { throw WriteError.failed(error.localizedDescription) }
+        let entries: [[String: Any]]
+        do {
+            guard let parsed = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {
+                throw WriteError.malformed("expected a list of {heard, written} entries")
+            }
+            entries = parsed
+        } catch let error as WriteError {
+            throw error
+        } catch {
+            throw WriteError.malformed("not valid JSON")
+        }
+        for entry in entries where Self.string(entry["heard"]) == nil || Self.string(entry["written"]) == nil {
+            throw WriteError.malformed("expected a list of {heard, written} entries")
+        }
+        return (String(decoding: data, as: UTF8.self), entries)
+    }
+
+    private func write(_ text: String) throws {
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(text.utf8).write(to: url, options: .atomic)
+        } catch {
+            throw WriteError.failed(error.localizedDescription)
+        }
+        snapshot.withLock { $0.stamp = nil }
+        reloadIfChanged()
+    }
+
+    private static func string(_ value: Any?) -> String? { value as? String }
+
+    private static func quoted(_ text: String) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = .withoutEscapingSlashes
+        return (try? encoder.encode(text)).map { String(decoding: $0, as: UTF8.self) } ?? "\"\""
+    }
+
+    private static func line(heard: String, written: String, starred: Bool, extra: [String: Any]) -> String {
+        var parts = ["\"heard\": \(quoted(heard))", "\"written\": \(quoted(written))", "\"starred\": \(starred)"]
+        for key in extra.keys.sorted() {
+            guard let data = try? JSONSerialization.data(withJSONObject: [extra[key] as Any], options: .withoutEscapingSlashes),
+                  var value = String(data: data, encoding: .utf8) else { continue }
+            value.removeFirst()
+            value.removeLast()
+            parts.append("\(quoted(key)): \(value)")
+        }
+        return "{ " + parts.joined(separator: ", ") + " }"
+    }
+
+    private static func render(_ entries: [[String: Any]]) -> String {
+        guard !entries.isEmpty else { return "[]\n" }
+        let lines = entries.map { entry -> String in
+            var extra = entry
+            for key in ["heard", "written", "starred"] { extra[key] = nil }
+            return "  " + line(
+                heard: string(entry["heard"]) ?? "", written: string(entry["written"]) ?? "",
+                starred: (entry["starred"] as? Bool) ?? false, extra: extra
+            )
+        }
+        return "[\n" + lines.joined(separator: ",\n") + "\n]\n"
+    }
+
+    /// `line` added before the closing bracket of `text`, leaving everything else as it was.
+    private static func appending(_ line: String, to text: String) -> String {
+        guard let close = text.lastIndex(of: "]") else { return render([]) }
+        var head = String(text[..<close])
+        while let last = head.last, last.isWhitespace { head.removeLast() }
+        let tail = text[close...]
+        let separator = head.hasSuffix("[") ? "\n  " : ",\n  "
+        return head + separator + line + "\n" + tail
+    }
+
     private static func stamp(of url: URL) -> Stamp? {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
               let modified = attributes[.modificationDate] as? Date

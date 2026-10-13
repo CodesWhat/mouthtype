@@ -17,6 +17,7 @@ final class CleanupMenuSection: NSObject, MenuSection {
     private let fallbackItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let cancelDownloadItem = NSMenuItem(title: "Cancel Download", action: nil, keyEquivalent: "")
+    private let learnItem = NSMenuItem(title: "Learn from My Corrections", action: nil, keyEquivalent: "")
     private let editDictionaryItem = NSMenuItem(title: "Edit Dictionary\u{2026}", action: nil, keyEquivalent: "")
     private let dictionaryErrorItem = NSMenuItem(title: "dictionary.json has an error", action: nil, keyEquivalent: "")
     private let fillersItem = NSMenuItem(title: "Remove fillers", action: nil, keyEquivalent: "")
@@ -42,7 +43,7 @@ final class CleanupMenuSection: NSObject, MenuSection {
         super.init()
         for (item, action) in [
             (downloadItem, #selector(download(_:))), (cancelDownloadItem, #selector(cancelDownload(_:))),
-            (editDictionaryItem, #selector(editDictionary(_:))), (fillersItem, #selector(toggleFillers(_:))),
+            (editDictionaryItem, #selector(editDictionary(_:))), (learnItem, #selector(toggleLearn(_:))), (fillersItem, #selector(toggleFillers(_:))),
             (commandsItem, #selector(toggleCommands(_:))), (numbersItem, #selector(toggleNumbers(_:))),
             (capitalisationItem, #selector(toggleCapitalisation(_:))), (endingItem, #selector(toggleEnding(_:))),
         ] {
@@ -85,6 +86,7 @@ final class CleanupMenuSection: NSObject, MenuSection {
         submenu.addItem(capitalisationItem)
         submenu.addItem(endingItem)
         submenu.addItem(.separator())
+        submenu.addItem(learnItem)
         submenu.addItem(editDictionaryItem)
         submenu.addItem(dictionaryErrorItem)
         parent.submenu = submenu
@@ -168,6 +170,7 @@ final class CleanupMenuSection: NSObject, MenuSection {
         default:
             dictionaryErrorItem.isHidden = true
         }
+        learnItem.state = CorrectionSettings.isEnabled(defaults) ? .on : .off
         fillersItem.state = settings.fillers ? .on : .off
         commandsItem.state = settings.spokenCommands ? .on : .off
         numbersItem.state = settings.numbers ? .on : .off
@@ -214,6 +217,11 @@ final class CleanupMenuSection: NSObject, MenuSection {
         }
         refresh()
     }
+    @objc private func toggleLearn(_ sender: NSMenuItem) {
+        CorrectionSettings.set(!CorrectionSettings.isEnabled(defaults), in: defaults)
+        refresh()
+    }
+
     @objc private func toggleFillers(_ sender: NSMenuItem) { update { $0.fillers.toggle() } }
     @objc private func toggleCommands(_ sender: NSMenuItem) { update { $0.spokenCommands.toggle() } }
     @objc private func toggleNumbers(_ sender: NSMenuItem) { update { $0.numbers.toggle() } }

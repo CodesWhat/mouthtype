@@ -99,6 +99,9 @@ enum CardPalette {
     static let body = NSColor(hex: 0xF1F0E6)
     static let onInk = NSColor(hex: 0x1D1D1F)
     static let warn = NSColor(hex: 0xFF453A)
+
+    /// The status dot and countdown bar: red for a delivery problem, the quiet ink for a question.
+    static func accent(for kind: DeliveryCard.Kind) -> NSColor { kind.isOffer ? ink : warn }
 }
 
 /// The card: the dark surface, the reason line with its status dot, the transcript, the buttons and the dismiss
@@ -229,14 +232,21 @@ final class DeliveryCardView: NSView {
         header.attributedStringValue = headerString
         let headerHeight = Self.height(of: headerString, width: CardLayout.headerTextWidth)
 
-        let transcriptString = card.transcript.map { text -> NSAttributedString in
-            let style = NSMutableParagraphStyle()
-            style.lineBreakMode = .byWordWrapping
-            style.lineSpacing = max(0, round(bodyFont.pointSize * 1.38) - Typography.lineHeight(bodyFont))
-            return NSAttributedString(
-                string: text, attributes: [.font: bodyFont, .foregroundColor: CardPalette.body, .paragraphStyle: style]
+        let bodyStyle = NSMutableParagraphStyle()
+        bodyStyle.lineBreakMode = .byWordWrapping
+        bodyStyle.lineSpacing = max(0, round(bodyFont.pointSize * 1.38) - Typography.lineHeight(bodyFont))
+        var transcriptString: NSAttributedString?
+        if let text = card.transcript {
+            transcriptString = NSAttributedString(
+                string: text, attributes: [.font: bodyFont, .foregroundColor: CardPalette.body, .paragraphStyle: bodyStyle]
             )
+        } else if let pair = card.pair {
+            transcriptString = Self.pairString(pair, bodyFont: bodyFont, emphasis: buttonFont, style: bodyStyle)
         }
+        let accent = CardPalette.accent(for: card.kind)
+        dot.backgroundColor = accent.cgColor
+        dot.shadowColor = accent.cgColor
+        barFill.backgroundColor = accent.withAlphaComponent(0.6).cgColor
         let transcriptHeight = transcriptString.map { Self.height(of: $0, width: CardLayout.contentWidth) }
         let lineHeight = Typography.lineHeight(bodyFont) + max(0, round(bodyFont.pointSize * 1.38) - Typography.lineHeight(bodyFont))
 
@@ -340,6 +350,8 @@ final class DeliveryCardView: NSView {
         }
         let color = primary ? CardPalette.onInk : CardPalette.body
         if state.copied && action == .copy { return [text("Copied", color: color)] }
+        if state.copied && action == .save { return [text("Saved", color: color)] }
+        if state.copied && action == .forget { return [text("Forgotten", color: color)] }
         switch action {
         case .undo:
             func undo(_ seconds: String) -> NSAttributedString {
@@ -353,7 +365,26 @@ final class DeliveryCardView: NSView {
             return [text("Copy", color: color), text("Copied", color: color)]
         case .insert:
             return [text("Insert", color: color)]
+        case .save:
+            return [text("Save", color: color), text("Saved", color: color)]
+        case .forget:
+            return [text("Forget", color: color), text("Forgotten", color: color)]
+        case .notNow:
+            return [text("Not now", color: color)]
+        case .keep:
+            return [text("Keep", color: color)]
         }
+    }
+
+    /// `heard → corrected` in the body face, the corrected form in the button face's heavier weight.
+    private static func pairString(_ pair: SpellingPair, bodyFont: NSFont, emphasis: NSFont, style: NSParagraphStyle) -> NSAttributedString {
+        let plain: [NSAttributedString.Key: Any] = [.font: bodyFont, .foregroundColor: CardPalette.body, .paragraphStyle: style]
+        let bold = NSFont(descriptor: emphasis.fontDescriptor, size: bodyFont.pointSize) ?? bodyFont
+        let result = NSMutableAttributedString(string: "\(pair.heard) \u{2192} ", attributes: plain)
+        result.append(NSAttributedString(string: pair.corrected, attributes: [
+            .font: bold, .foregroundColor: CardPalette.ink, .paragraphStyle: style,
+        ]))
+        return result
     }
 
     private static func height(of string: NSAttributedString, width: CGFloat) -> CGFloat {

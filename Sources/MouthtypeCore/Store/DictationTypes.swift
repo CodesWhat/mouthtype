@@ -213,6 +213,19 @@ public struct EditOp: Sendable, Equatable {
     }
 }
 
+public enum CorrectionKind: String, Sendable { case remember, forget }
+
+/// One `correction` row: a spelling offered after a dictation, and how the user answered.
+public struct CorrectionRecord: Sendable, Equatable {
+    public var id: Int64
+    public var dictationID: String
+    public var kind: CorrectionKind
+    public var heard: String
+    public var corrected: String
+    public var accepted: Bool?
+    public var createdAt: Double
+}
+
 /// One `dictation` row as stored. Times are ms from key-down; `startedAt` and `audioExpiresAt` are unix seconds.
 public struct DictationRecord: Codable, FetchableRecord, Sendable, Equatable {
     public static let databaseColumnDecodingStrategy = DatabaseColumnDecodingStrategy.convertFromSnakeCase

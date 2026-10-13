@@ -36,6 +36,8 @@ final class DictationController {
     @ObservationIgnored private let sounds: any SoundPlayer
     @ObservationIgnored private let clock: any DictationClock
     @ObservationIgnored private let cards: any DictationCards
+    /// Told when a paste lands and when the next dictation starts, so edits to the pasted text can be learned from.
+    @ObservationIgnored weak var corrections: (any CorrectionObserving)?
     @ObservationIgnored private var session: DictationSession?
     @ObservationIgnored private var undo: PendingUndo?
     @ObservationIgnored private var processing: Task<Void, Never>?
@@ -123,6 +125,7 @@ final class DictationController {
 
         // A new dictation ends the last one's card and the Undo it offered.
         discardPendingUndo()
+        corrections?.dictationStarted()
 
         let startFocus = inserter.snapshotFocus()
         var current = DictationSession(
@@ -250,6 +253,9 @@ final class DictationController {
 
         let result = await inserter.deliver(cleaned.text, startFocus: session.startFocus)
         await pipeline.recordInsertion(result, session: session, cleaned: cleaned)
+        if result.method == .paste, result.outcome == .unknown {
+            corrections?.pasted(result.finalText, dictationID: session.id, target: result.target)
+        }
         pill.hide()
         if let card = DeliveryCard.forDelivery(result, transcript: cleaned.text) { cards.present(card) }
         finished()

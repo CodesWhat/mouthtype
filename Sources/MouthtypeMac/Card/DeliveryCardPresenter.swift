@@ -31,6 +31,18 @@ protocol DictationCards: AnyObject {
     var onDismissed: (@MainActor (DeliveryCard) -> Void)? { get set }
 }
 
+/// How a spelling question ended.
+enum OfferResolution: Equatable, Sendable {
+    /// Save or Forget was clicked and the dictionary took it.
+    case accepted
+    /// Not now, Keep or the dismiss control.
+    case declined
+    /// Nobody answered in time; counts as "not now".
+    case timedOut
+    /// A dictation or another card took the place before an answer.
+    case replaced
+}
+
 /// Which card is up and what a click on it does. One card at a time: a new one replaces the old. Copy confirms in
 /// place and then the card leaves; the other actions hand off and take it down.
 @MainActor
@@ -44,6 +56,11 @@ final class DeliveryCardPresenter: DictationCards {
     var onUndo: (@MainActor () -> Void)?
     var onInsert: (@MainActor () -> Void)?
     var onDismissed: (@MainActor (DeliveryCard) -> Void)?
+    /// Save or Forget was clicked: do it, and say whether it worked. A false leaves the card down with no confirmation.
+    var onOfferAccepted: (@MainActor (DeliveryCard) -> Bool)?
+    /// A spelling question ended, once, however it ended.
+    var onOfferResolved: (@MainActor (DeliveryCard, OfferResolution) -> Void)?
+    private var openOffer: DeliveryCard?
 
     init(surface: any CardSurface, clipboard: any ClipboardWriting, clock: any DictationClock) {
         self.surface = surface
@@ -52,16 +69,33 @@ final class DeliveryCardPresenter: DictationCards {
     }
 
     func present(_ card: DeliveryCard) {
+        resolveOffer(.replaced)
         generation += 1
         state = CardViewState(card: card)
         surface.render(state)
+        guard card.kind.isOffer else { return }
+        openOffer = card
+        let shown = generation
+        Task { @MainActor [weak self, clock] in
+            try? await clock.sleep(forSeconds: card.countdown ?? DeliveryCard.offerWindow)
+            guard let self, self.generation == shown, self.openOffer != nil else { return }
+            self.resolveOffer(.timedOut)
+            self.dismiss()
+        }
     }
 
     func dismiss() {
+        resolveOffer(.replaced)
         generation += 1
         guard state != nil else { return }
         state = nil
         surface.render(nil)
+    }
+
+    private func resolveOffer(_ resolution: OfferResolution) {
+        guard let card = openOffer else { return }
+        openOffer = nil
+        onOfferResolved?(card, resolution)
     }
 
     func perform(_ action: CardAction) {
@@ -84,12 +118,32 @@ final class DeliveryCardPresenter: DictationCards {
         case .insert:
             dismiss()
             onInsert?()
+        case .save, .forget:
+            guard onOfferAccepted?(current.card) ?? true else {
+                resolveOffer(.declined)
+                dismiss()
+                return
+            }
+            resolveOffer(.accepted)
+            generation += 1
+            let shown = generation
+            state?.copied = true
+            surface.render(state)
+            Task { @MainActor [weak self, clock] in
+                try? await clock.sleep(forSeconds: DeliveryCard.copiedHold)
+                guard let self, self.generation == shown else { return }
+                self.dismiss()
+            }
+        case .notNow, .keep:
+            resolveOffer(.declined)
+            dismiss()
         }
     }
 
     /// The dismiss control.
     func userDismissed() {
         guard let card = state?.card else { return }
+        resolveOffer(.declined)
         dismiss()
         onDismissed?(card)
     }

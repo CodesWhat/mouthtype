@@ -24,6 +24,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cardController: DeliveryCardController?
     private var cardPresenter: DeliveryCardPresenter?
     private var inserter: TextInserter?
+    private var correctionWatcher: CorrectionWatcher?
     private var dictation: DictationController?
     private var inputStarted = false
     private var preparingCapture = false
@@ -48,6 +49,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 await PillDemo.run(controller: pill, cards: cards, presenter: presenter, options: demo)
                 NSApp.terminate(nil)
             }
+            return
+        }
+        if CorrectionSelfTest.isRequested(in: arguments) {
+            Task { await CorrectionSelfTest.run() }
             return
         }
         if let path = PipelineSelfTest.path(in: arguments) {
@@ -87,6 +92,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         self.pill = pill
         self.inserter = inserter
         self.dictation = dictation
+        let watcher = CorrectionWatcher(
+            reader: AccessibilityFieldReader(), dictionary: dictionary, ledger: CorrectionLedger(),
+            store: store.map(CorrectionStoreWriter.init), cards: presenter, clock: SystemDictationClock(),
+            input: { [weak self] in self?.hotkeyService?.userInputGeneration },
+            canOffer: { [weak dictation] in dictation?.phase == .idle }
+        )
+        watcher.onNotice = { [weak pill] message in pill?.showMessage(message, duration: 4) }
+        dictation.corrections = watcher
+        correctionWatcher = watcher
 
         let menuBar = MenuBarController(engineHost: engineHost)
         let history = HistoryMenuSection(store: store)

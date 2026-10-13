@@ -9,3 +9,7 @@ extension Log {
 extension Log {
     static let selftest = Logger(subsystem: "com.codeswhat.mouthtype", category: "selftest")
 }
+
+extension Log {
+    static let corrections = Logger(subsystem: "com.codeswhat.mouthtype", category: "corrections")
+}

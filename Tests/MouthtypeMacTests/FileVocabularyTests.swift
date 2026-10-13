@@ -86,6 +86,76 @@ import MouthtypeCore
         #expect(result.text == "The Mouthtype build")
     }
 
+    // MARK: Saving
+
+    @Test func savingCreatesAMissingFileWithTheOneRule() throws {
+        let url = directory().appendingPathComponent("sub/dictionary.json")
+        let vocabulary = FileVocabulary(url: url)
+        #expect(try vocabulary.save(heard: "Hove", written: "Hov") == .added)
+        #expect(vocabulary.status == .loaded(count: 1))
+        #expect(vocabulary.dictionary() == [DictionaryRule(heard: "Hove", written: "Hov")])
+    }
+
+    @Test func savingAppendsAndLeavesTheRestOfTheFileAsTheUserWroteIt() throws {
+        let url = directory().appendingPathComponent("dictionary.json")
+        let original = "[\n  { \"heard\": \"a\",   \"written\": \"A\", \"starred\": true, \"note\": \"mine\" }\n]\n"
+        try write(original, to: url)
+        let vocabulary = FileVocabulary(url: url)
+        #expect(try vocabulary.save(heard: "Hove", written: "Hov") == .added)
+        let text = try String(contentsOf: url, encoding: .utf8)
+        #expect(text.hasPrefix(String(original.dropLast(3))))
+        #expect(text.contains(#"{ "heard": "Hove", "written": "Hov", "starred": false }"#))
+        #expect(vocabulary.dictionary() == [DictionaryRule(heard: "a", written: "A", starred: true), DictionaryRule(heard: "Hove", written: "Hov")])
+    }
+
+    @Test func savingIntoAnEmptyListWorks() throws {
+        let url = directory().appendingPathComponent("dictionary.json")
+        try write("[]\n", to: url)
+        let vocabulary = FileVocabulary(url: url)
+        try vocabulary.save(heard: "x", written: "X")
+        try vocabulary.save(heard: "y", written: "Y")
+        #expect(vocabulary.dictionary().map(\.written) == ["X", "Y"])
+    }
+
+    @Test func savingARuleWithTheSameHeardUpdatesItsWrittenForm() throws {
+        let url = directory().appendingPathComponent("dictionary.json")
+        try write(#"[{"heard": "b", "written": "B", "starred": true, "note": "keep"}, {"heard": "Hove", "written": "Hoove"}]"#, to: url)
+        let vocabulary = FileVocabulary(url: url)
+        #expect(try vocabulary.save(heard: "hove", written: "Hov") == .updated)
+        #expect(vocabulary.dictionary() == [DictionaryRule(heard: "b", written: "B", starred: true), DictionaryRule(heard: "Hove", written: "Hov")])
+        #expect(try String(contentsOf: url, encoding: .utf8).contains(#""note": "keep""#))
+        #expect(try vocabulary.save(heard: "Hove", written: "Hov") == .unchanged)
+    }
+
+    @Test func aMalformedFileIsLeftExactlyAsItIs() throws {
+        let url = directory().appendingPathComponent("dictionary.json")
+        for broken in ["[oops", #"{"heard": "a"}"#, #"[{"heard": "a"}]"#, ""] {
+            try write(broken, to: url)
+            let vocabulary = FileVocabulary(url: url)
+            #expect(throws: FileVocabulary.WriteError.self) { try vocabulary.save(heard: "x", written: "X") }
+            #expect(throws: FileVocabulary.WriteError.self) { try vocabulary.remove(heard: "x") }
+            #expect(try String(contentsOf: url, encoding: .utf8) == broken)
+        }
+    }
+
+    @Test func removingTakesOutOnlyThatRule() throws {
+        let url = directory().appendingPathComponent("dictionary.json")
+        try write(#"[{"heard": "a", "written": "A"}, {"heard": "Hove", "written": "Hov"}]"#, to: url)
+        let vocabulary = FileVocabulary(url: url)
+        #expect(try vocabulary.remove(heard: "hove"))
+        #expect(vocabulary.dictionary().map(\.written) == ["A"])
+        #expect(try !vocabulary.remove(heard: "hove"))
+        #expect(try vocabulary.remove(heard: "a") && vocabulary.dictionary().isEmpty)
+        #expect(try !FileVocabulary(url: directory().appendingPathComponent("none.json")).remove(heard: "x"))
+    }
+
+    @Test func quotesAndUnicodeSurviveASave() throws {
+        let url = directory().appendingPathComponent("dictionary.json")
+        let vocabulary = FileVocabulary(url: url)
+        try vocabulary.save(heard: #"zoe "z""#, written: "Zo\u{EB}/\\")
+        #expect(vocabulary.dictionary() == [DictionaryRule(heard: #"zoe "z""#, written: "Zo\u{EB}/\\")])
+    }
+
     // MARK: Menu
 
     @Test func editDictionaryCreatesTheFileAndOpensIt() throws {
@@ -117,5 +187,22 @@ import MouthtypeCore
         try write(#"[{"heard": "a", "written": "A"}]"#, to: url, second: 20)
         section.refresh()
         #expect(line.isHidden)
+    }
+
+    @Test func theLearnSettingIsAMenuCheckboxThatDefaultsOn() throws {
+        let suite = "mouthtype.vocab.menu.\(UUID().uuidString)"
+        let d = UserDefaults(suiteName: suite)!
+        d.removePersistentDomain(forName: suite)
+        let section = CleanupMenuSection(defaults: d, dictionary: FileVocabulary(url: directory().appendingPathComponent("dictionary.json")))
+        let menu = section.items[0].submenu!
+        let item = try #require(menu.items.first { $0.title == "Learn from My Corrections" })
+        #expect(item.state == .on && CorrectionSettings.isEnabled(d))
+        _ = item.target?.perform(item.action, with: item)
+        #expect(item.state == .off && !CorrectionSettings.isEnabled(d) && d.bool(forKey: "learnFromCorrections") == false)
+        _ = item.target?.perform(item.action, with: item)
+        #expect(item.state == .on)
+        let titles = menu.items.map(\.title)
+        let learn = try #require(titles.firstIndex(of: "Learn from My Corrections"))
+        #expect(abs(learn - (try #require(titles.firstIndex(of: "Edit Dictionary\u{2026}")))) == 1)
     }
 }

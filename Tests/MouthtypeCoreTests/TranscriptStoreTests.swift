@@ -43,13 +43,66 @@ import Testing
         }
         #expect(tables.contains("dictation") && tables.contains("edit_op"))
         #expect(indexes.contains("dictation_local_day") && indexes.contains("dictation_started_at") && indexes.contains("dictation_status"))
-        #expect(migrations == ["v1"])
+        #expect(migrations == ["v1", "v2"])
+        #expect(tables.contains("correction"))
         for column in ["id", "started_at", "utc_offset_s", "local_day", "first_nonzero_ms", "word_timings_json", "raw_text",
                        "det_text", "final_text", "prompt_sha", "is_secure", "paste_receipt_ms", "retry_of", "os_version", "error_message"] {
             #expect(columns.contains(column), "missing \(column)")
         }
         #expect(!columns.contains { $0.contains("field") && $0.contains("text") })
         _ = store
+    }
+
+    @Test func v2AddsTheCorrectionTableWithoutLosingV1Rows() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-test-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("mouthtype.sqlite")
+        let pool = try DatabasePool(path: url.path)
+        try TranscriptStore.migrator.migrate(pool, upTo: "v1")
+        try pool.write { db in
+            for n in 0..<3 {
+                try db.execute(sql: """
+                    INSERT INTO dictation (id, started_at, utc_offset_s, local_day, mode, trigger, status, final_text)
+                    VALUES (?, 1, 0, '2026-10-12', 'hold', 'fn', 'inserted', ?)
+                    """, arguments: ["old-\(n)", "text \(n)"])
+            }
+            #expect(try !db.tableExists("correction"))
+        }
+        try pool.close()
+
+        let store = try TranscriptStore(url: url)
+        #expect(try store.recent(limit: 10).count == 3)
+        #expect(try store.dictation(id: "old-1")?.finalText == "text 1")
+        let id = try store.recordCorrectionOffer(dictationID: "old-1", heard: "Hove", corrected: "Hov")
+        #expect(try store.corrections(dictationID: "old-1").count == 1 && id > 0)
+    }
+
+    @Test func correctionOffersAndOutcomesAreRecordedAndTheDictationTextIsUntouched() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try dictate(store, at: Self.noon, words: 4, audioMs: 1000)
+        let before = try #require(try store.dictation(id: id))
+        let first = try store.recordCorrectionOffer(dictationID: id, heard: "Hove", corrected: "Hov", at: Self.noon)
+        let second = try store.recordCorrectionOffer(dictationID: id, kind: .forget, heard: "hove", corrected: "Hov", at: Self.noon)
+        var rows = try store.corrections(dictationID: id)
+        #expect(rows.map(\.accepted) == [nil, nil] && rows.map(\.kind) == [.remember, .forget])
+        #expect(rows[0].heard == "Hove" && rows[0].corrected == "Hov" && rows[0].createdAt == Self.noon.timeIntervalSince1970)
+        try store.recordCorrectionOutcome(first, accepted: true)
+        try store.recordCorrectionOutcome(second, accepted: false)
+        rows = try store.corrections(dictationID: id)
+        #expect(rows.map(\.accepted) == [true, false])
+        #expect(try store.dictation(id: id) == before)
+    }
+
+    @Test func correctionsFollowTheirDictationAndNeedOne() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(throws: (any Error).self) { try store.recordCorrectionOffer(dictationID: "missing", heard: "a", corrected: "b") }
+        let id = try dictate(store, at: Self.noon, words: 4, audioMs: 1000)
+        try store.recordCorrectionOffer(dictationID: id, heard: "a", corrected: "b")
+        try store.delete(id)
+        #expect(try store.corrections(dictationID: id).isEmpty)
     }
 
     @Test func recordLockUpdatesModeAndTriggerOnTheOpenRow() throws {

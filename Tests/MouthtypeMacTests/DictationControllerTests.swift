@@ -547,7 +547,39 @@ private struct Rig {
 }
 
 @MainActor
+private final class FakeCorrections: CorrectionObserving {
+    var pastes: [(text: String, id: String, pid: pid_t?)] = []
+    var starts = 0
+    func pasted(_ text: String, dictationID: String, target: FocusSnapshot?) { pastes.append((text, dictationID, target?.pid)) }
+    func dictationStarted() { starts += 1 }
+}
+
+@MainActor
 @Suite struct DictationControllerTests {
+    @Test func aPastedDictationIsHandedToTheCorrectionWatcherAndANewOneStopsIt() async {
+        let rig = Rig()
+        let corrections = FakeCorrections()
+        rig.controller.corrections = corrections
+        rig.inserter.result = DeliveryResult(
+            method: .paste, outcome: .unknown, focusMoved: false, target: FocusSnapshot(pid: 42), finalText: " Hello world."
+        )
+        await rig.dictate()
+        #expect(corrections.starts == 1)
+        #expect(corrections.pastes.count == 1 && corrections.pastes.first?.text == " Hello world." && corrections.pastes.first?.pid == 42)
+        #expect(corrections.pastes.first?.id.isEmpty == false)
+    }
+
+    @Test func nothingIsWatchedWhenTheTextDidNotLandInAField() async {
+        let rig = Rig()
+        let corrections = FakeCorrections()
+        rig.controller.corrections = corrections
+        rig.inserter.result = DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: false, target: nil, finalText: "x")
+        await rig.dictate()
+        rig.inserter.result = DeliveryResult(method: .paste, outcome: .failed("no"), focusMoved: false, target: nil, finalText: "x")
+        await rig.dictate()
+        #expect(corrections.pastes.isEmpty && corrections.starts == 2)
+    }
+
     @Test func happyPathRunsTheCollaboratorsInOrder() async throws {
         let rig = Rig()
         await rig.dictate()

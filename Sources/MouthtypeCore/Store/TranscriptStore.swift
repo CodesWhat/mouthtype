@@ -77,6 +77,20 @@ public final class TranscriptStore: Sendable {
                 CREATE INDEX edit_op_dictation_id ON edit_op(dictation_id);
                 """)
         }
+        migrator.registerMigration("v2") { db in
+            try db.execute(sql: """
+                CREATE TABLE correction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    dictation_id TEXT NOT NULL REFERENCES dictation(id) ON DELETE CASCADE,
+                    kind TEXT NOT NULL DEFAULT 'remember',
+                    heard TEXT NOT NULL,
+                    corrected TEXT NOT NULL,
+                    accepted INTEGER,
+                    created_at REAL NOT NULL
+                );
+                CREATE INDEX correction_dictation_id ON correction(dictation_id);
+                """)
+        }
         return migrator
     }
 
@@ -196,6 +210,38 @@ public final class TranscriptStore: Sendable {
                     INSERT INTO edit_op (dictation_id, stage, kind, from_text, to_text, word_delta, position)
                     VALUES (?, ?, ?, ?, ?, ?, ?)
                     """, arguments: [id, edit.stage, edit.kind.rawValue, edit.fromText, edit.toText, edit.wordDelta, edit.position])
+            }
+        }
+    }
+
+    /// Records that a spelling was offered, with no answer yet. Returns the row to settle with `recordCorrectionOutcome`.
+    @discardableResult
+    public func recordCorrectionOffer(
+        dictationID: String, kind: CorrectionKind = .remember, heard: String, corrected: String, at date: Date = Date()
+    ) throws -> Int64 {
+        try pool.write { db in
+            try db.execute(sql: """
+                INSERT INTO correction (dictation_id, kind, heard, corrected, accepted, created_at)
+                VALUES (?, ?, ?, ?, NULL, ?)
+                """, arguments: [dictationID, kind.rawValue, heard, corrected, date.timeIntervalSince1970])
+            return db.lastInsertedRowID
+        }
+    }
+
+    /// `true` when the user accepted, `false` when they declined, `nil` for no answer (the card timed out or was replaced).
+    public func recordCorrectionOutcome(_ id: Int64, accepted: Bool?) throws {
+        try pool.write { db in
+            try db.execute(sql: "UPDATE correction SET accepted = ? WHERE id = ?", arguments: [accepted, id])
+        }
+    }
+
+    public func corrections(dictationID: String) throws -> [CorrectionRecord] {
+        try pool.read { db in
+            try Row.fetchAll(db, sql: "SELECT * FROM correction WHERE dictation_id = ? ORDER BY id", arguments: [dictationID]).map {
+                CorrectionRecord(
+                    id: $0["id"], dictationID: $0["dictation_id"], kind: CorrectionKind(rawValue: $0["kind"]) ?? .remember,
+                    heard: $0["heard"], corrected: $0["corrected"], accepted: $0["accepted"], createdAt: $0["created_at"]
+                )
             }
         }
     }

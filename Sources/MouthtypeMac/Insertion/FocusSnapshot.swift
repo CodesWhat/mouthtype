@@ -59,6 +59,13 @@ struct FocusedElement: Equatable, @unchecked Sendable {
     }
 }
 
+/// What a correction watch checks on each poll.
+struct FocusProbe: Sendable {
+    var pid: pid_t?
+    var element: FocusedElement?
+    var isSecure: Bool
+}
+
 /// The Accessibility and secure-input reads delivery needs. The system in the app, a fake in tests.
 @MainActor
 protocol FocusReading: AnyObject {
@@ -158,6 +165,22 @@ final class AccessibilityFocusReader: FocusReading {
             after = text(of: ref, CFRange(location: afterStart, length: min(Self.contextAfter, count - afterStart))) ?? ""
         }
         return InsertionContext(before: before, after: after)
+    }
+
+    /// The frontmost app, its focused element and whether that is secure: the few reads a correction watch repeats.
+    func probe() -> FocusProbe {
+        let pid = NSWorkspace.shared.frontmostApplication?.processIdentifier
+        guard let element = elementValue(bounded(AXUIElementCreateSystemWide()), kAXFocusedUIElementAttribute) else {
+            return FocusProbe(pid: pid, element: nil, isSecure: false)
+        }
+        return FocusProbe(
+            pid: pid, element: FocusedElement(element), isSecure: isSecure(element, subrole: stringValue(element, kAXSubroleAttribute))
+        )
+    }
+
+    /// The element's whole text, or nil when the app doesn't give it as a string. Never call on a secure field.
+    func fieldValue(of element: FocusedElement) -> String? {
+        stringValue(bounded(element.ref), kAXValueAttribute)
     }
 
     /// A slice by UTF-16 range, from `AXStringForRange` or else the whole value.
