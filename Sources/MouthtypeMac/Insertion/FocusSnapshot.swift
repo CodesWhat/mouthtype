@@ -15,12 +15,15 @@ public struct FocusSnapshot: Sendable {
     public var role: String?
     public var subrole: String?
     public var isSecure: Bool
+    /// For static text only: whether its value or selection can be set. Nil for every other role, or when unread.
+    var isTextSettable: Bool?
     /// The focused element, if the app exposes one over Accessibility.
     var element: FocusedElement?
 
     init(
         pid: pid_t? = nil, bundleID: String? = nil, appName: String? = nil, windowTitle: String? = nil,
-        role: String? = nil, subrole: String? = nil, isSecure: Bool = false, element: FocusedElement? = nil
+        role: String? = nil, subrole: String? = nil, isSecure: Bool = false, isTextSettable: Bool? = nil,
+        element: FocusedElement? = nil
     ) {
         self.pid = pid
         self.bundleID = bundleID
@@ -29,6 +32,7 @@ public struct FocusSnapshot: Sendable {
         self.role = role
         self.subrole = subrole
         self.isSecure = isSecure
+        self.isTextSettable = isTextSettable
         self.element = element
     }
 
@@ -73,11 +77,14 @@ protocol FocusReading: AnyObject {
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor
     /// A bounded window of text around the cursor, for the cleanup pass. Nil when the app doesn't say.
     func insertionContext(of element: FocusedElement) -> InsertionContext?
+    /// The value, length and selection a paste is verified against. Never call on a secure field.
+    func readField(of element: FocusedElement) -> FieldReading
     var isSecureInputEnabled: Bool { get }
 }
 
 extension FocusReading {
     func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
+    func readField(of element: FocusedElement) -> FieldReading { FieldReading() }
 }
 
 @MainActor
@@ -104,6 +111,7 @@ final class AccessibilityFocusReader: FocusReading {
         snapshot.role = stringValue(element, kAXRoleAttribute)
         snapshot.subrole = stringValue(element, kAXSubroleAttribute)
         snapshot.isSecure = isSecure(element, subrole: snapshot.subrole)
+        if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(element) }
         snapshot.windowTitle = elementValue(element, kAXWindowAttribute).flatMap(title(of:))
         return snapshot
     }
@@ -165,6 +173,20 @@ final class AccessibilityFocusReader: FocusReading {
             after = text(of: ref, CFRange(location: afterStart, length: min(Self.contextAfter, count - afterStart))) ?? ""
         }
         return InsertionContext(before: before, after: after)
+    }
+
+    func readField(of element: FocusedElement) -> FieldReading {
+        let ref = bounded(element.ref)
+        var selection: NSRange?
+        var rangeValue: CFTypeRef?
+        if AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
+           let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() {
+            var range = CFRange()
+            if AXValueGetValue(rangeValue as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 {
+                selection = NSRange(location: range.location, length: range.length)
+            }
+        }
+        return FieldReading(value: stringValue(ref, kAXValueAttribute), length: characterCount(ref), selection: selection)
     }
 
     /// The frontmost app, its focused element and whether that is secure: the few reads a correction watch repeats.
@@ -235,6 +257,18 @@ final class AccessibilityFocusReader: FocusReading {
             return protected
         }
         return false
+    }
+
+    /// Whether the element's value or selected text can be set, which static text never can unless it is a field.
+    private func isTextSettable(_ element: AXUIElement) -> Bool? {
+        var settable = DarwinBoolean(false)
+        var answered = false
+        for attribute in [kAXValueAttribute, kAXSelectedTextAttribute] {
+            guard AXUIElementIsAttributeSettable(element, attribute as CFString, &settable) == .success else { continue }
+            answered = true
+            if settable.boolValue { return true }
+        }
+        return answered ? false : nil
     }
 
     /// The field's length in UTF-16 units, from `AXNumberOfCharacters` or else the value; nil when the app says neither.

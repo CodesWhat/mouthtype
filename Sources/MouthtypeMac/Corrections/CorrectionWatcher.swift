@@ -79,6 +79,8 @@ extension DeliveryCardPresenter: CorrectionCards {
 protocol CorrectionObserving: AnyObject {
     func pasted(_ text: String, dictationID: String, target: FocusSnapshot?)
     func dictationStarted()
+    /// The read-back found the field unchanged after this dictation's paste, so there is nothing to watch.
+    func pasteDidNotLand(dictationID: String)
 }
 
 /// After a paste into a readable field, polls that field for up to 30 s. Once the text has held still for 2 s and the
@@ -197,6 +199,11 @@ final class CorrectionWatcher: CorrectionObserving {
 
     func dictationStarted() {
         stop("another dictation started")
+    }
+
+    func pasteDidNotLand(dictationID: String) {
+        guard watch?.dictationID == dictationID else { return }
+        stop("paste didn't land")
     }
 
     private func stop(_ reason: String) {

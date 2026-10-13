@@ -187,6 +187,22 @@ import Testing
         #expect(try store.dictation(id: id)?.finalText == "Hello again.")
     }
 
+    @Test func aVerdictSettlesTheOutcomeAndTheReceiptAfterTheFact() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try start(store)
+        try store.recordInsertion(id, InsertionRecord(finalText: "Hello.", method: "paste", outcome: "unknown", insertDoneMs: 900))
+        try store.recordInsertVerdict(id, outcome: "not landed")
+        var row = try #require(try store.dictation(id: id))
+        #expect(row.insertOutcome == "not landed" && row.pasteReceiptMs == nil && row.finalText == "Hello.")
+        try store.recordInsertVerdict(id, outcome: "confirmed", pasteReceiptMs: 41)
+        row = try #require(try store.dictation(id: id))
+        #expect(row.insertOutcome == "confirmed" && row.pasteReceiptMs == 41 && row.insertDoneMs == 900)
+        try store.recordInsertVerdict(id, outcome: "unknown")
+        #expect(try store.dictation(id: id)?.pasteReceiptMs == 41)
+        #expect(throws: TranscriptStoreError.unknownDictation("nope")) { try store.recordInsertVerdict("nope", outcome: "unknown") }
+    }
+
     @Test func onlyACancelledRowReopens() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }

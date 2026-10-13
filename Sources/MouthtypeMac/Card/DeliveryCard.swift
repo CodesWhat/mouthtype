@@ -59,6 +59,14 @@ struct DeliveryCard: Equatable, Sendable {
         DeliveryCard(kind: .pasteFailed, header: "Paste failed", transcript: text, actions: [.copy], countdown: nil)
     }
 
+    /// The read-back found the field unchanged after a paste. It reuses the failure kind: same colour, same Copy.
+    static func notLanded(_ text: String) -> DeliveryCard {
+        DeliveryCard(
+            kind: .pasteFailed, header: "Paste didn't land\nThe field didn't change", transcript: text,
+            actions: [.copy], countdown: nil
+        )
+    }
+
     static func cancelled() -> DeliveryCard {
         DeliveryCard(kind: .cancelled, header: "Cancelled", transcript: nil, actions: [.undo], countdown: undoWindow)
     }
@@ -81,6 +89,11 @@ struct DeliveryCard: Equatable, Sendable {
             kind: .forgetSpelling, header: "Forget this spelling?", transcript: nil, pair: pair,
             actions: [.forget, .keep], countdown: offerWindow
         )
+    }
+
+    /// The card a verdict calls for. Only "not landed" speaks.
+    static func forVerdict(_ verdict: PasteVerdict, transcript: String) -> DeliveryCard? {
+        verdict == .notLanded ? .notLanded(transcript) : nil
     }
 
     /// The card a delivery outcome calls for, nil when the text went where it was meant to.

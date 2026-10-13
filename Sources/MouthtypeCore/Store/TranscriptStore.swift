@@ -176,6 +176,14 @@ public final class TranscriptStore: Sendable {
         try update(id, columns)
     }
 
+    /// Settles an insertion after the fact: what the read-back verdict was, and how long the target took to read the
+    /// paste. A nil `pasteReceiptMs` leaves the column as it was.
+    public func recordInsertVerdict(_ id: String, outcome: String, pasteReceiptMs: Int? = nil) throws {
+        var columns: [(String, (any DatabaseValueConvertible)?)] = [("insert_outcome", outcome)]
+        if let pasteReceiptMs { columns.append(("paste_receipt_ms", pasteReceiptMs)) }
+        try update(id, columns)
+    }
+
     /// Ends an attempt that produced no insertion: cancelled, too_short, empty or failed.
     public func finish(_ id: String, status: DictationStatus, errorMessage: String? = nil) throws {
         switch status {

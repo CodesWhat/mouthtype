@@ -14,6 +14,8 @@ private final class FakePasteboard: PasteboardAccess {
     var contents = PasteboardSnapshot(items: [])
     var writes: [(text: String, markers: [String])] = []
     var snapshots = 0
+    /// The callback of the promise now on the pasteboard, as the system would run it.
+    var onRead: (@Sendable () -> Void)?
 
     func snapshot() -> PasteboardSnapshot {
         snapshots += 1
@@ -31,6 +33,14 @@ private final class FakePasteboard: PasteboardAccess {
         changeCount += 1
     }
 
+    func writePromise(_ string: String, markers: [String], onRead: @escaping @Sendable () -> Void) {
+        write(string, markers: markers)
+        self.onRead = onRead
+    }
+
+    /// Something reads the promised text.
+    func read() { onRead?() }
+
     func externalCopy(_ string: String) {
         contents = PasteboardSnapshot(items: [[text(string)]])
         changeCount += 1
@@ -40,15 +50,23 @@ private final class FakePasteboard: PasteboardAccess {
 @MainActor
 private final class FakePoster: PasteEventPosting {
     var posts = 0
+    var keyCodes: [CGKeyCode] = []
     var succeeds = true
     /// What the clipboard held when the paste event went out.
     var onPost: (() -> Void)?
 
-    func postPaste() -> Bool {
+    func postPaste(keyCode: CGKeyCode) -> Bool {
         posts += 1
+        keyCodes.append(keyCode)
         onPost?()
         return succeeds
     }
+}
+
+@MainActor
+private final class FakeKeys: PasteKeyResolving {
+    var code: CGKeyCode? = 9
+    func pasteKeyCode() -> CGKeyCode? { code }
 }
 
 @MainActor
@@ -57,8 +75,17 @@ private final class FakeFocus: FocusReading {
     var before: TextBeforeCursor = .unknown
     var isSecureInputEnabled = false
     var beforeReads = 0
+    /// What the field reads as on each call, the last one repeating. Empty reads as unreadable.
+    var readings: [FieldReading] = []
+    var reads = 0
 
     func snapshot() -> FocusSnapshot { current }
+
+    func readField(of element: FocusedElement) -> FieldReading {
+        defer { reads += 1 }
+        guard !readings.isEmpty else { return FieldReading() }
+        return readings[min(reads, readings.count - 1)]
+    }
 
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor {
         beforeReads += 1
@@ -88,16 +115,44 @@ private struct Rig {
     let pasteboard = FakePasteboard()
     let poster = FakePoster()
     let focus = FakeFocus()
+    let keys = FakeKeys()
     let pending = Pending()
     let inserter: TextInserter
 
     final class Pending {
+        /// Every delay ever scheduled, in order.
         var delays: [TimeInterval] = []
         var works: [@MainActor () -> Void] = []
+        private var waiting: [(delay: TimeInterval, work: @MainActor () -> Void)] = []
+
+        func add(_ delay: TimeInterval, _ work: @escaping @MainActor () -> Void) {
+            delays.append(delay)
+            works.append(work)
+            waiting.append((delay, work))
+        }
+
         @MainActor func runAll() {
-            let current = works
+            let current = waiting
             works = []
-            current.forEach { $0() }
+            waiting = []
+            current.forEach { $0.work() }
+        }
+
+        /// Fires only the earliest timer scheduled for `delay`, then runs `after`.
+        @MainActor func runFirst(_ delay: TimeInterval, after: () -> Void) {
+            guard let index = waiting.firstIndex(where: { $0.delay == delay }) else { return }
+            let due = waiting.remove(at: index)
+            works = waiting.map(\.work)
+            due.work()
+            after()
+        }
+
+        /// Fires what was scheduled for `delay`, as if that much time had passed.
+        @MainActor func run(_ delay: TimeInterval) {
+            let due = waiting.filter { $0.delay == delay }
+            waiting.removeAll { $0.delay == delay }
+            works = waiting.map(\.work)
+            due.forEach { $0.work() }
         }
     }
 
@@ -105,9 +160,8 @@ private struct Rig {
         let pending = pending
         let clock = clock
         let input = input
-        inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, schedule: { delay, work in
-            pending.delays.append(delay)
-            pending.works.append(work)
+        inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, keys: keys, schedule: { delay, work in
+            pending.add(delay, work)
         }, now: { clock.date }, inputGeneration: { input.value })
     }
 }
@@ -139,7 +193,7 @@ private struct Rig {
         let rig = Rig()
         rig.pasteboard.contents = original
         _ = await rig.inserter.deliver("hello", startFocus: nil)
-        #expect(rig.pending.delays == [0.25])
+        #expect(rig.pending.delays == [PasteboardSession.receiptCap])
         #expect(rig.pasteboard.contents != original)
         rig.pending.runAll()
         #expect(rig.pasteboard.contents == original)
@@ -473,6 +527,316 @@ private struct Rig {
         rig.pending.runAll()
         #expect(rig.pasteboard.contents.items.first?.contains(text("hello")) == true)
         #expect(rig.pasteboard.writes.last?.markers.contains("org.nspasteboard.ConcealedType") == true)
+    }
+
+    // MARK: - The paste key
+
+    @Test func theResolvedKeyIsTheOneThatIsPosted() async {
+        let rig = Rig()
+        rig.keys.code = 47
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(rig.poster.keyCodes == [47])
+    }
+
+    @Test func noPasteKeyFailsLoudlyAndLeavesTheTextOnTheClipboard() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        rig.keys.code = nil
+        let result = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(result.method == .clipboardOnly)
+        #expect(result.outcome == .failed("no paste key in this keyboard layout"))
+        #expect(result.finalText == "hello")
+        #expect(rig.poster.posts == 0)
+        #expect(rig.pending.works.isEmpty)
+        #expect(rig.pasteboard.contents.items.first?.contains(text("hello")) == true)
+        #expect(DeliveryCard.forDelivery(result, transcript: "hello")?.kind == .pasteFailed)
+    }
+
+    // MARK: - Read receipts
+
+    /// Lets the hop from the pasteboard's callback to the main actor run.
+    private func hop() async {
+        for _ in 0..<20 { await Task.yield() }
+    }
+
+    @Test func aReceiptRestoresTheClipboard200msLater() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(rig.pending.delays == [PasteboardSession.receiptCap])
+        rig.pasteboard.read()
+        await hop()
+        #expect(rig.pending.delays == [PasteboardSession.receiptCap, 0.2])
+        #expect(rig.pasteboard.contents != original)
+        rig.pending.run(0.2)
+        #expect(rig.pasteboard.contents == original)
+    }
+
+    @Test func theRestoreWaitsForTheLastReceipt() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.pasteboard.read()
+        await hop()
+        rig.pasteboard.read()
+        await hop()
+        #expect(rig.pending.delays == [PasteboardSession.receiptCap, 0.2, 0.2])
+        // The first receipt's timer fires, but a later receipt moved the deadline.
+        rig.pending.runFirst(0.2) {}
+        #expect(rig.pasteboard.contents != original)
+        rig.pending.run(0.2)
+        #expect(rig.pasteboard.contents == original)
+    }
+
+    @Test func noReceiptRestoresAtTheCap() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(PasteboardSession.receiptCap == 8)
+        rig.pending.run(PasteboardSession.receiptCap)
+        #expect(rig.pasteboard.contents == original)
+    }
+
+    @Test func aMovedChangeCountMeansNoRestoreAfterAReceipt() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.pasteboard.read()
+        await hop()
+        rig.pasteboard.externalCopy("user copied this")
+        rig.pending.run(0.2)
+        #expect(rig.pasteboard.contents.items == [[text("user copied this")]])
+    }
+
+    @Test func aReadBeforeTheChordIsNotAReceiptAndRestoresOnAFixedDelay() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        let board = rig.pasteboard
+        rig.poster.onPost = { board.read() }
+        var verified: [PasteVerification] = []
+        rig.inserter.observeVerification { verified.append($0) }
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        await hop()
+        await rig.inserter.waitForVerification()
+        #expect(rig.pending.delays == [PasteboardSession.unobservedDelay])
+        rig.pending.run(PasteboardSession.unobservedDelay)
+        #expect(rig.pasteboard.contents == original)
+        #expect(verified.count == 1 && verified.first?.receiptMs == nil)
+    }
+
+    @Test func aStaleReceiptFromAnEarlierPasteIsIgnored() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        _ = await rig.inserter.deliver("one", startFocus: nil)
+        let stale = rig.pasteboard.onRead
+        _ = await rig.inserter.deliver("two", startFocus: nil)
+        stale?()
+        await hop()
+        #expect(!rig.pending.delays.contains(0.2))
+        rig.pasteboard.read()
+        await hop()
+        #expect(rig.pending.delays.filter { $0 == 0.2 }.count == 1)
+        rig.pending.run(0.2)
+        #expect(rig.pasteboard.contents == original)
+    }
+
+    @Test func aReceiptAfterACopyDoesNotRestore() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        let promise = rig.pasteboard.onRead
+        #expect(rig.inserter.copyLast())
+        promise?()
+        await hop()
+        rig.pending.runAll()
+        #expect(rig.pasteboard.contents.items.first?.contains(text("hello")) == true)
+    }
+
+    // MARK: - Refusing a target that can't take text
+
+    @Test func aButtonIsRefusedAndTheTextStaysOnTheClipboard() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXButton", element: element(100))
+        let result = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(result.method == .clipboardOnly && result.outcome == .unknown)
+        #expect(result.finalText == "hello")
+        #expect(rig.poster.posts == 0 && rig.pending.works.isEmpty)
+        #expect(rig.pasteboard.contents.items.first?.contains(text("hello")) == true)
+        #expect(DeliveryCard.forDelivery(result, transcript: "hello")?.kind == .nowhere)
+        #expect(result.verificationID == nil)
+    }
+
+    @Test func containersAndUnknownRolesPasteAnyway() async {
+        for role in ["AXWebArea", "AXGroup", "AXWindow", "AXScrollArea", "AXNothingWeKnow", nil] {
+            let rig = Rig()
+            rig.focus.current = FocusSnapshot(pid: 100, role: role, element: element(100))
+            #expect(await rig.inserter.deliver("hello", startFocus: nil).method == .paste, "\(role ?? "nil")")
+        }
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100)
+        #expect(await rig.inserter.deliver("hello", startFocus: nil).method == .paste)
+    }
+
+    @Test func staticTextIsRefusedOnlyWhenItsTextCannotBeSet() async {
+        let fixed = Rig()
+        fixed.focus.current = FocusSnapshot(pid: 100, role: "AXStaticText", isTextSettable: false, element: element(100))
+        #expect(await fixed.inserter.deliver("hello", startFocus: nil).method == .clipboardOnly)
+        let field = Rig()
+        field.focus.current = FocusSnapshot(pid: 100, role: "AXStaticText", isTextSettable: true, element: element(100))
+        #expect(await field.inserter.deliver("hello", startFocus: nil).method == .paste)
+    }
+
+    // MARK: - The read-back
+
+    private static let before = FieldReading(value: "Hello", length: 5, selection: NSRange(location: 5, length: 0))
+
+    private func verified(_ rig: Rig, readings: [FieldReading], text: String = "world") async -> [PasteVerification] {
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        rig.focus.readings = readings
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver(text, startFocus: nil)
+        await rig.inserter.waitForVerification()
+        return seen
+    }
+
+    @Test func deliverDoesNotWaitForTheReadBack() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        let result = await rig.inserter.deliver("world", startFocus: nil)
+        #expect(result.method == .paste && result.verificationID != nil)
+        #expect(seen.isEmpty)
+        await rig.inserter.waitForVerification()
+        #expect(seen.count == 1)
+    }
+
+    @Test func aFieldThatNeverChangedIsNotLanded() async {
+        let rig = Rig()
+        let seen = await verified(rig, readings: [Self.before])
+        #expect(seen.map(\.verdict) == [.notLanded])
+        #expect(seen.first?.id == 1)
+        #expect(rig.focus.reads == 4)
+        #expect(rig.poster.posts == 1)
+    }
+
+    @Test func aFieldThatGrewIsConfirmedAtTheFirstReadAndStopsReading() async {
+        let rig = Rig()
+        let grown = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        let seen = await verified(rig, readings: [Self.before, grown])
+        #expect(seen.map(\.verdict) == [.confirmed])
+        #expect(rig.focus.reads == 2)
+    }
+
+    @Test func aLateLandingIsStillConfirmed() async {
+        let rig = Rig()
+        let grown = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        let seen = await verified(rig, readings: [Self.before, Self.before, Self.before, grown])
+        #expect(seen.map(\.verdict) == [.confirmed])
+    }
+
+    @Test func inputInBetweenIsUnknown() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        rig.input.value = 3
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.verdict) == [.unknown])
+    }
+
+    @Test func anUnknownInputCountIsUnknown() async {
+        let rig = Rig()
+        rig.input.value = nil
+        let seen = await verified(rig, readings: [Self.before])
+        #expect(seen.map(\.verdict) == [.unknown])
+    }
+
+    @Test func focusMovingIsUnknown() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(101))
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.verdict) == [.unknown])
+        #expect(rig.focus.reads == 1)
+    }
+
+    @Test func aFieldThatTurnsSecureIsNotRead() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        rig.focus.current = FocusSnapshot(pid: 100, isSecure: true, element: element(100))
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.verdict) == [.unknown])
+        #expect(rig.focus.reads == 1)
+    }
+
+    @Test func anUnreadableFieldIsUnknown() async {
+        let rig = Rig()
+        let seen = await verified(rig, readings: [])
+        #expect(seen.map(\.verdict) == [.unknown])
+    }
+
+    @Test func noFocusedElementMeansNothingToRead() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100)
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.verdict) == [.unknown])
+        #expect(rig.focus.reads == 0)
+    }
+
+    @Test func theReceiptTimeRidesAlongWithTheVerdict() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        rig.pasteboard.read()
+        await hop()
+        await rig.inserter.waitForVerification()
+        #expect((seen.first?.receiptMs ?? -1) >= 0)
+    }
+
+    @Test func aNewerDeliveryRetiresTheOlderReadBack() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        let first = await rig.inserter.deliver("one", startFocus: nil)
+        let second = await rig.inserter.deliver("two", startFocus: nil)
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.id) == [second.verificationID])
+        #expect(first.verificationID != second.verificationID)
+    }
+
+    @Test func cancellingTheReadBackSaysNothingAndNeverRepastes() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("one", startFocus: nil)
+        rig.inserter.cancelVerification()
+        await rig.inserter.waitForVerification()
+        #expect(seen.isEmpty)
+        #expect(rig.poster.posts == 1)
     }
 
     @Test func resultsMapOntoTheStoreVocabulary() {

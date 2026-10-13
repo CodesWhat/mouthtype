@@ -55,6 +55,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await CorrectionSelfTest.run() }
             return
         }
+        if PasteSelfTest.isRequested(in: arguments) {
+            Task { await PasteSelfTest.run() }
+            return
+        }
         if let path = PipelineSelfTest.path(in: arguments) {
             engineHost.start()
             cleanerHost.start()

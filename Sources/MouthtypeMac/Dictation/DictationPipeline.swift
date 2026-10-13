@@ -222,12 +222,22 @@ struct DictationPipeline: Sendable {
         await write(session, "recordInsertion") { store in
             try await store.recordInsertion(session.id, InsertionRecord(
                 finalText: result.finalText, detText: cleaned?.deterministicText ?? cleaned?.text, cleanup: cleaned?.cleanup, method: result.storeMethod,
-                outcome: result.storeOutcome, focusMoved: result.focusMoved, insertDoneMs: insertDoneMs,
+                outcome: result.storeOutcome, focusMoved: result.focusMoved, pasteReceiptMs: result.pasteReceiptMs,
+                insertDoneMs: insertDoneMs,
                 target: result.target?.target
             ))
         }
         if let edits = cleaned?.edits, !edits.isEmpty {
             await write(session, "appendEdits") { try await $0.appendEdits(session.id, edits) }
+        }
+    }
+
+    /// The read-back of a paste ended: the row's outcome becomes confirmed, not landed or stays unknown.
+    func recordVerdict(_ session: DictationSession, _ verification: PasteVerification) async {
+        await write(session, "recordInsertVerdict") { store in
+            try await store.recordInsertVerdict(
+                session.id, outcome: verification.verdict.storeOutcome, pasteReceiptMs: verification.receiptMs
+            )
         }
     }
 

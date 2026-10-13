@@ -30,6 +30,11 @@ public struct DeliveryResult: Sendable {
     public var target: FocusSnapshot?
     /// What was pasted or copied, with any spacing applied. Empty when nothing was delivered.
     public var finalText: String
+    /// Milliseconds from the paste chord to the target app reading the clipboard. Nil when it hadn't by the time
+    /// delivery returned, which is nearly always: the receipt arrives with the verification.
+    public var pasteReceiptMs: Int? = nil
+    /// Names the read-back verification started for this paste, when one was.
+    var verificationID: Int? = nil
 
     /// The store's `insert_method` vocabulary.
     public var storeMethod: String {

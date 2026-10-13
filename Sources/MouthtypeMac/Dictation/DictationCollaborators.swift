@@ -28,6 +28,8 @@ protocol DictationStoring: Sendable {
     func recordCapture(_ id: String, _ record: CaptureRecord) async throws
     func recordTranscription(_ id: String, _ record: TranscriptionRecord) async throws
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws
+    /// The read-back verdict for an insertion already written, with the paste receipt time if the target gave one.
+    func recordInsertVerdict(_ id: String, outcome: String, pasteReceiptMs: Int?) async throws
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws
     /// A cancelled row goes back to started, for an Undo that runs it after all.
     func reopen(_ id: String) async throws
@@ -48,9 +50,15 @@ protocol DictationInserting: AnyObject {
     func insertionContext() -> InsertionContext?
     /// The clipboard's text, for snippets that use `{clipboard}`.
     func clipboardText() -> String?
+    /// Hears how the read-back of each paste ended, on the main actor.
+    func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void)
+    /// Drops any read-back still waiting.
+    func cancelVerification()
 }
 
 extension DictationInserting {
+    func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void) {}
+    func cancelVerification() {}
     func insertionContext() -> InsertionContext? { nil }
     func clipboardText() -> String? { nil }
 }
@@ -138,6 +146,9 @@ struct TranscriptStoreWriter: DictationStoring {
         try store.recordTranscription(id, record)
     }
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws { try store.recordInsertion(id, record) }
+    func recordInsertVerdict(_ id: String, outcome: String, pasteReceiptMs: Int?) async throws {
+        try store.recordInsertVerdict(id, outcome: outcome, pasteReceiptMs: pasteReceiptMs)
+    }
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
         try store.recordLock(id, mode: mode, trigger: trigger)
     }

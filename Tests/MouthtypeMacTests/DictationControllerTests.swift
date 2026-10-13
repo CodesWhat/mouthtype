@@ -82,6 +82,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     private(set) var capture: CaptureRecord?
     private(set) var transcription: TranscriptionRecord?
     private(set) var insertion: InsertionRecord?
+    private(set) var verdicts: [(outcome: String, receiptMs: Int?)] = []
     private(set) var handsFreeLock: (DictationMode, DictationTrigger)?
     private(set) var finishes: [(DictationStatus, String?)] = []
     private(set) var reopens = 0
@@ -103,6 +104,9 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
         try run("recordTranscription") { transcription = record }
     }
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws { try run("recordInsertion") { insertion = record } }
+    func recordInsertVerdict(_ id: String, outcome: String, pasteReceiptMs: Int?) async throws {
+        try run("recordInsertVerdict") { verdicts.append((outcome, pasteReceiptMs)) }
+    }
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
         try run("recordLock") { handsFreeLock = (mode, trigger) }
     }
@@ -132,6 +136,8 @@ private final class FakeInserter: DictationInserting {
     var clipboard: String?
     private(set) var contextReads = 0
     private(set) var clipboardReads = 0
+    private(set) var cancelledVerifications = 0
+    private var verificationHandler: (@MainActor (PasteVerification) -> Void)?
 
     init(log: CallLog) {
         self.log = log
@@ -148,6 +154,12 @@ private final class FakeInserter: DictationInserting {
         startFocusSeen = startFocus
         return result
     }
+
+    func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void) { verificationHandler = handler }
+    func cancelVerification() { cancelledVerifications += 1 }
+
+    /// The read-back of a paste ends.
+    func verify(_ verification: PasteVerification) { verificationHandler?(verification) }
 
     func insertionContext() -> InsertionContext? {
         contextReads += 1
@@ -550,6 +562,8 @@ private struct Rig {
 private final class FakeCorrections: CorrectionObserving {
     var pastes: [(text: String, id: String, pid: pid_t?)] = []
     var starts = 0
+    var notLanded: [String] = []
+    func pasteDidNotLand(dictationID: String) { notLanded.append(dictationID) }
     func pasted(_ text: String, dictationID: String, target: FocusSnapshot?) { pastes.append((text, dictationID, target?.pid)) }
     func dictationStarted() { starts += 1 }
 }
@@ -892,6 +906,87 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.log.all.last == "pill.hide")
         #expect(rig.controller.phase == .idle)
         #expect(rig.finishedAttempts.count == 1)
+    }
+
+    // MARK: Read-back
+
+    private func pastedResult(id: Int? = 1) -> DeliveryResult {
+        DeliveryResult(
+            method: .paste, outcome: .unknown, focusMoved: false, target: FocusSnapshot(pid: 42), finalText: " Hello world.",
+            verificationID: id
+        )
+    }
+
+    @Test func aNotLandedVerdictUpdatesTheRowRaisesTheCardAndStopsTheWatcher() async {
+        let rig = Rig()
+        let corrections = FakeCorrections()
+        rig.controller.corrections = corrections
+        rig.inserter.result = pastedResult()
+        await rig.dictate()
+        #expect(rig.cards.presented.isEmpty)
+        rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
+        await rig.settle()
+        #expect(rig.store.verdicts.map(\.outcome) == ["not landed"])
+        #expect(rig.cards.presented == [.notLanded(" Hello world.")])
+        #expect(rig.cards.presented.first?.header == "Paste didn't land\nThe field didn't change")
+        #expect(rig.cards.presented.first?.actions == [.copy])
+        #expect(corrections.notLanded == [corrections.pastes.first?.id])
+    }
+
+    @Test func aConfirmedVerdictWritesTheOutcomeAndTheReceiptAndStaysSilent() async {
+        let rig = Rig()
+        let corrections = FakeCorrections()
+        rig.controller.corrections = corrections
+        rig.inserter.result = pastedResult()
+        await rig.dictate()
+        rig.inserter.verify(PasteVerification(id: 1, verdict: .confirmed, receiptMs: 37))
+        await rig.settle()
+        #expect(rig.store.verdicts.count == 1 && rig.store.verdicts.first?.outcome == "confirmed" && rig.store.verdicts.first?.receiptMs == 37)
+        #expect(rig.cards.presented.isEmpty && corrections.notLanded.isEmpty)
+    }
+
+    @Test func anUnknownVerdictStaysSilentAndKeepsTheOutcome() async {
+        let rig = Rig()
+        rig.inserter.result = pastedResult()
+        await rig.dictate()
+        rig.inserter.verify(PasteVerification(id: 1, verdict: .unknown, receiptMs: nil))
+        await rig.settle()
+        #expect(rig.store.verdicts.map(\.outcome) == ["unknown"])
+        #expect(rig.cards.presented.isEmpty)
+    }
+
+    @Test func aStaleVerdictIsDropped() async {
+        let rig = Rig()
+        rig.inserter.result = pastedResult(id: 2)
+        await rig.dictate()
+        rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
+        await rig.settle()
+        #expect(rig.store.verdicts.isEmpty && rig.cards.presented.isEmpty)
+        rig.inserter.verify(PasteVerification(id: 2, verdict: .confirmed, receiptMs: nil))
+        rig.inserter.verify(PasteVerification(id: 2, verdict: .notLanded, receiptMs: nil))
+        await rig.settle()
+        #expect(rig.store.verdicts.map(\.outcome) == ["confirmed"] && rig.cards.presented.isEmpty)
+    }
+
+    @Test func aNewDictationCancelsThePendingReadBack() async {
+        let rig = Rig()
+        rig.inserter.result = pastedResult()
+        await rig.dictate()
+        let before = rig.inserter.cancelledVerifications
+        await rig.controller.handle(.pressed(at: 1))
+        #expect(rig.inserter.cancelledVerifications == before + 1)
+        rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
+        await rig.settle()
+        #expect(rig.store.verdicts.isEmpty && rig.cards.presented.isEmpty)
+    }
+
+    @Test func aPasteWithNoReadBackWritesNoVerdict() async {
+        let rig = Rig()
+        rig.inserter.result = pastedResult(id: nil)
+        await rig.dictate()
+        rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
+        await rig.settle()
+        #expect(rig.store.verdicts.isEmpty && rig.cards.presented.isEmpty)
     }
 
     @Test func silenceNeverReachesTheEngine() async {

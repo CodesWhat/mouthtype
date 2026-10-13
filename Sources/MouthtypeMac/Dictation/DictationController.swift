@@ -42,6 +42,7 @@ final class DictationController {
     @ObservationIgnored private var undo: PendingUndo?
     @ObservationIgnored private var processing: Task<Void, Never>?
     @ObservationIgnored private var capTimer: Task<Void, Never>?
+    @ObservationIgnored private var verifying: PendingVerification?
 
     /// A cancelled dictation whose audio is kept for `DeliveryCard.undoWindow`.
     private struct PendingUndo {
@@ -49,6 +50,15 @@ final class DictationController {
         var audio: CapturedAudio
         var cancelledAt: UInt64
         var timer: Task<Void, Never>
+    }
+
+    /// A paste whose read-back hasn't ended. `arrived` holds a verdict that came before the attempt was wrapped up.
+    private struct PendingVerification {
+        var id: Int
+        var session: DictationSession
+        var text: String
+        var wrappedUp = false
+        var arrived: PasteVerification?
     }
 
     init(
@@ -70,6 +80,9 @@ final class DictationController {
         }
         cards.onDismissed = { [weak self] card in
             if card.kind == .cancelled { self?.discardPendingUndo() }
+        }
+        inserter.observeVerification { [weak self] verification in
+            self?.verificationEnded(verification)
         }
     }
 
@@ -123,8 +136,10 @@ final class DictationController {
             return
         }
 
-        // A new dictation ends the last one's card and the Undo it offered.
+        // A new dictation ends the last one's card and the Undo it offered, and the last paste's read-back.
         discardPendingUndo()
+        inserter.cancelVerification()
+        verifying = nil
         corrections?.dictationStarted()
 
         let startFocus = inserter.snapshotFocus()
@@ -252,6 +267,8 @@ final class DictationController {
         }
 
         let result = await inserter.deliver(cleaned.text, startFocus: session.startFocus)
+        // Before anything suspends: the read-back can end while the row is still being written.
+        verifying = result.verificationID.map { PendingVerification(id: $0, session: session, text: result.finalText) }
         await pipeline.recordInsertion(result, session: session, cleaned: cleaned)
         if result.method == .paste, result.outcome == .unknown {
             corrections?.pasted(result.finalText, dictationID: session.id, target: result.target)
@@ -259,6 +276,30 @@ final class DictationController {
         pill.hide()
         if let card = DeliveryCard.forDelivery(result, transcript: cleaned.text) { cards.present(card) }
         finished()
+        if verifying?.id == result.verificationID {
+            verifying?.wrappedUp = true
+            if let arrived = verifying?.arrived { verificationEnded(arrived) }
+        }
+    }
+
+    // MARK: Read-back
+
+    /// The inserter's read-back of a paste ended. Held until the attempt is wrapped up, so the row it updates exists
+    /// and the card it may raise isn't taken down by the attempt's own wrap-up.
+    private func verificationEnded(_ verification: PasteVerification) {
+        guard var pending = verifying, pending.id == verification.id else { return }
+        guard pending.wrappedUp else {
+            pending.arrived = verification
+            verifying = pending
+            return
+        }
+        verifying = nil
+        let session = pending.session
+        Task { await pipeline.recordVerdict(session, verification) }
+        guard verification.verdict == .notLanded else { return }
+        corrections?.pasteDidNotLand(dictationID: session.id)
+        guard phase == .idle, let card = DeliveryCard.forVerdict(verification.verdict, transcript: pending.text) else { return }
+        cards.present(card)
     }
 
     // MARK: Discard and cancel
