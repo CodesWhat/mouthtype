@@ -38,6 +38,7 @@ struct CleanTextCommand: AsyncParsableCommand {
     @Option(help: "Style preset: formal, casual or very-casual.") var style: StyleChoice = .formal
     @Option(help: "Also run S1-mini by Superwhisper at this level: light or medium. --file may be a .json list of cases; with no input the bundled acceptance cases run.")
     var smart: SmartLevel?
+    @Flag(help: "--smart: skip the self-correction rule, so the model sees the correction itself.") var noSelfCorrection = false
     @Option(help: "--smart: give up on the model after this many milliseconds instead of the word-based budget.")
     var smartTimeoutMs: Int?
 
@@ -108,7 +109,7 @@ struct CleanTextCommand: AsyncParsableCommand {
         var passed = 0
         var checked = 0
         for item in cases {
-            let run = await SmartRunner.run(item.input, rules: item.rules, level: level, style: style.preset.options, smart: smart)
+            let run = await SmartRunner.run(item.input, rules: item.rules, level: level, style: style.preset.options, smart: smart, selfCorrection: !noSelfCorrection)
             print("[\(item.id)] raw:     \(Self.escaped(item.input))")
             print("         det:     \(Self.escaped(run.deterministic))")
             print("         final:   \(Self.escaped(run.result.text))")

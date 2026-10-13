@@ -55,10 +55,10 @@ enum SmartRunner {
     /// The app's order: the deterministic pipeline, then the model, then the dictionary and the style again.
     static func run(
         _ raw: String, rules: [DictionaryRule] = [], level: CleanupLevel, style: StyleOptions = .formal,
-        smart: SmartCleanup
+        smart: SmartCleanup, selfCorrection: Bool = true
     ) async -> SmartRun {
         let det = TextPipeline().run(TextPipelineInput(
-            text: raw, dictionary: rules, options: TextPipelineOptions(style: style)))
+            text: raw, dictionary: rules, options: TextPipelineOptions(selfCorrection: selfCorrection, style: style)))
         let result = await smart.run(SmartCleanupRequest(text: det.text, level: level, style: style, dictionary: rules))
         return SmartRun(raw: raw, deterministic: det.text, result: result, edits: det.edits)
     }

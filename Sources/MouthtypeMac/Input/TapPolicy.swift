@@ -100,6 +100,19 @@ enum TapPolicy {
         return idleKeysReported || recording || hotkeyHeld ? .observe : .passThrough
     }
 
+    /// Whether the event is the user typing or clicking, for the paste-spacing fallback. Our own posted events, the
+    /// hotkey and events the tap swallowed for itself are not; an emulated Fn combo is, since its replacement reaches the app.
+    static func countsAsUserInput(_ sample: TapSample, decision: TapDecision, swallowedKey: UInt16?) -> Bool {
+        guard sample.kind == .keyDown, sample.userData != SyntheticEvents.stamp else { return false }
+        guard sample.keyCode != swallowedKey, sample.keyCode != HotkeyInputMapper.syntheticFnReleaseKeyCode else { return false }
+        return !decision.swallow || decision.replacement != nil
+    }
+
+    /// A mouse press, which counts as input but is never forwarded.
+    static func isPointerDown(_ type: CGEventType) -> Bool {
+        type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown
+    }
+
     /// Whether the hotkey is physically down after this event, or nil when the event says nothing about it.
     static func holdChange(_ sample: TapSample, swallowedKey: UInt16?, tracksFnFlag: Bool) -> Bool? {
         guard sample.userData != SyntheticEvents.stamp else { return nil }
@@ -139,6 +152,15 @@ final class TapShared: Sendable {
     let swallowed = Atomic<Int>(0)
     let emulated = Atomic<Int>(0)
     let stampedSeen = Atomic<Int>(0)
+    /// Bumped on every real keyDown and mouse press, forwarded nowhere. Only ever increases.
+    let userInput = Atomic<UInt64>(0)
+    /// Whether the taps are installed in a way that sees all keys and clicks. When false the count says nothing.
+    let inputTracked = Atomic<Bool>(false)
+
+    /// The input count, or nil when the taps can't vouch for it.
+    var userInputGeneration: UInt64? {
+        inputTracked.load(ordering: .relaxed) ? userInput.load(ordering: .relaxed) : nil
+    }
 
     func reset() {
         recording.store(false, ordering: .relaxed)
@@ -159,10 +181,12 @@ final class TapContext: Sendable {
     let tracksFnFlag: Bool
     /// Report keys typed while nothing is happening. Diagnostics only.
     let idleKeysReported: Bool
+    /// The tap counts keystrokes itself (no other tap does), forwarding nothing. Flag tap only.
+    let countsKeys: Bool
 
     init(
         role: TapRole, sink: AsyncStream<TapMessage>.Continuation, swallowedKey: UInt16?, shared: TapShared,
-        emulator: KeyEmulator? = nil, tracksFnFlag: Bool = false, idleKeysReported: Bool = false
+        emulator: KeyEmulator? = nil, tracksFnFlag: Bool = false, idleKeysReported: Bool = false, countsKeys: Bool = false
     ) {
         self.role = role
         self.sink = sink
@@ -171,6 +195,7 @@ final class TapContext: Sendable {
         self.emulator = emulator
         self.tracksFnFlag = tracksFnFlag
         self.idleKeysReported = idleKeysReported
+        self.countsKeys = countsKeys
     }
 }
 

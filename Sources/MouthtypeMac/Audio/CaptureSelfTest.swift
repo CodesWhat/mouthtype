@@ -17,10 +17,10 @@ enum CaptureSelfTest {
     static func run(capture: AudioCapture, seconds: Double) async {
         do {
             try await capture.start(keyDownAtNanos: HostClock.now())
-            var maxLevel: Float = 0
+            var maxLevel = LevelReading.floorDb
             let deadline = ContinuousClock.now + .seconds(seconds)
             while ContinuousClock.now < deadline {
-                maxLevel = max(maxLevel, capture.level)
+                maxLevel = max(maxLevel, capture.reading.db)
                 try await Task.sleep(for: .milliseconds(16))
             }
             let audio = try await capture.stop()
@@ -37,7 +37,7 @@ enum CaptureSelfTest {
                 + " captureStartMs=\(f(audio.captureStartMs)) audioMs=\(f(audio.audioMs))"
                 + " rmsDb=\(f(features.rmsDb, 1)) peakDb=\(f(features.peakDb, 1)) noiseFloorDb=\(f(features.noiseFloorDb, 1))"
                 + " voicedMs=\(f(features.voicedMs)) trimmedMs=\(f(Double(trimmed.samples.count) * 1000 / audio.sampleRate))"
-                + " headTrimmedMs=\(f(trimmed.headTrimmedMs)) levelMax=\(f(Double(maxLevel), 2)) wav=\(entry.url.path)"
+                + " headTrimmedMs=\(f(trimmed.headTrimmedMs)) levelMaxDb=\(f(Double(maxLevel), 1)) wav=\(entry.url.path)"
             Log.capture.info("\(line, privacy: .public)")
         } catch {
             await capture.cancel()

@@ -20,8 +20,8 @@ public actor AudioCapture {
         interleaved: false
     )!
 
-    /// 0...1, safe to read from any thread (the overlay reads it at 60 Hz).
-    public nonisolated var level: Float { meter.value }
+    /// The input level in dBFS, safe to read from any thread (the overlay reads it at 60 Hz).
+    public nonisolated var reading: LevelReading { meter.reading }
 
     private let meter = LevelMeter()
     private let input = HALInput(keepsPrepared: true)
@@ -61,7 +61,7 @@ public actor AudioCapture {
         let buffer = self.buffer
         let meter = self.meter
         let sink = InputSink(
-            deliver: Self.inputHandler(buffer: buffer, converters: converters, onLevel: { meter.update(rms: $0) }),
+            deliver: Self.inputHandler(buffer: buffer, converters: converters, onLevel: { meter.update(samples: $0) }),
             routeChanged: { buffer.markRouteChanged() },
             inputFailed: { buffer.recordInputFailure() }
         )
@@ -122,7 +122,7 @@ public actor AudioCapture {
     static func inputHandler(
         buffer: CaptureBuffer,
         converters: ConverterCache,
-        onLevel: (@Sendable (Float) -> Void)?
+        onLevel: (@Sendable (UnsafeBufferPointer<Float>) -> Void)?
     ) -> @Sendable (_ pcm: AVAudioPCMBuffer, _ firstFrame: UInt64, _ now: UInt64) -> Void {
         return { pcm, firstFrame, now in
             guard buffer.admit() else { return }
@@ -133,7 +133,7 @@ public actor AudioCapture {
             buffer.noteInput(firstFrameAt: firstFrame, firstSoundAt: firstSound)
             let converted = converters.convert(pcm) { chunk in
                 buffer.append(chunk, inputFrames: Int(pcm.frameLength), at: now)
-                onLevel?(computeRMS(chunk))
+                onLevel?(chunk)
             }
             if !converted { buffer.recordConversionFailure() }
         }

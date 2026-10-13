@@ -18,6 +18,21 @@ public enum SmartCleanupGuard {
         ["make", "that"], ["never", "mind"], ["correction"],
     ]
 
+    /// The model's text with the input's closing mark put back. A dictation that ended in "." or "?" or "!" keeps it:
+    /// the model may not turn a statement into a question or the reverse. An input with no closing mark leaves the
+    /// model free to add one.
+    public static func restoringTerminal(input: String, output: String) -> String {
+        guard let wanted = terminalMark(input) else { return output }
+        let body = output.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression)
+        guard let last = body.last, last != wanted, ".?!".contains(last) else { return output }
+        return String(body.dropLast()) + String(wanted)
+    }
+
+    private static func terminalMark(_ text: String) -> Character? {
+        guard let last = text.last(where: { !$0.isWhitespace }), ".?!".contains(last) else { return nil }
+        return last
+    }
+
     /// A reason to reject, or nil when the output is fine.
     public static func rejection(
         input: String, output: String, level: CleanupLevel, dictionary: [DictionaryRule] = [], snippets: [Snippet] = []

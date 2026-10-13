@@ -6,7 +6,8 @@ import Foundation
 /// pixel grid at 1x and 2x and don't shimmer as they grow.
 enum ClassicPillLayout {
     static let height: CGFloat = 28
-    static let holdWidth: CGFloat = 97
+    /// Side padding of 9 pt either way around the bar group, about the 7 pt above and below a full-height bar.
+    static let barSidePadding: CGFloat = 9
     /// The dot-like capsule the pill grows from and shrinks to.
     static let dotWidth: CGFloat = height
     static let barWidth: CGFloat = 2.25
@@ -14,7 +15,7 @@ enum ClassicPillLayout {
     static let maxBarHeight: CGFloat = 14.25
     static let controlDiameter: CGFloat = 18
     static let controlInset: CGFloat = 5
-    static let controlGap: CGFloat = 16
+    static let controlGap: CGFloat = 10
     static let messagePadding: CGFloat = 16
     static let messageVerticalPadding: CGFloat = 7
     static let messageMinWidth: CGFloat = 64
@@ -54,13 +55,12 @@ enum ClassicPillLayout {
         return width...max(width, snapEven(maxBarHeight, scale: scale))
     }
 
-    /// A smoothed 0...1 level as a bar height. A small dead zone keeps room noise at dots, and the gain and curve
-    /// make ordinary speech reach most of the range.
+    /// A smoothed 0...1 fraction as a bar height. The dB mapping and its knee are already in the fraction, so this is
+    /// linear: 0 is the resting dot, 1 the tallest bar.
     static func barHeight(fraction: Float, scale: CGFloat) -> CGFloat {
         let f = fraction.isFinite ? min(1, max(0, fraction)) : 0
-        let shaped = pow(min(1, max(0, (f - 0.03) * 1.45)), 0.8)
         let range = barHeightRange(scale: scale)
-        return snapEven(range.lowerBound + (range.upperBound - range.lowerBound) * CGFloat(shaped), scale: scale)
+        return snapEven(range.lowerBound + (range.upperBound - range.lowerBound) * CGFloat(f), scale: scale)
             .clamped(to: range)
     }
 
@@ -76,6 +76,11 @@ enum ClassicPillLayout {
     static func barsSpan(scale: CGFloat) -> CGFloat {
         let m = barMetrics(scale: scale)
         return 9 * m.pitch + m.width
+    }
+
+    /// The hold capsule: the bars with the same padding either side.
+    static func holdWidth(scale: CGFloat) -> CGFloat {
+        evenCeil(barsSpan(scale: scale) + 2 * barSidePadding, scale: scale)
     }
 
     static func lockedWidth(scale: CGFloat) -> CGFloat {
@@ -165,7 +170,7 @@ enum ClassicPillLayout {
 
     static func capsuleWidth(_ mode: Mode, scale: CGFloat) -> CGFloat {
         switch mode {
-        case .hold, .processing: evenCeil(holdWidth, scale: scale)
+        case .hold, .processing: holdWidth(scale: scale)
         case .locked: lockedWidth(scale: scale)
         case .message(let width, _): width
         }

@@ -41,7 +41,7 @@ public enum PillDemo {
         }
         let original = controller.levelSource
         let start = CACurrentMediaTime()
-        controller.levelSource = { syntheticLevel(at: CACurrentMediaTime() - start) }
+        controller.levelSource = { syntheticReading(at: CACurrentMediaTime() - start) }
         controller.slowAnimations(by: options.slowmo)
         controller.onControl = { control in Log.app.info("pill-demo control \(String(describing: control), privacy: .public)") }
         Log.app.info("pill-demo skin \(controller.skinKind.rawValue, privacy: .public) slowmo \(options.slowmo, privacy: .public)")
@@ -201,11 +201,50 @@ public enum PillDemo {
             .post(tap: .cghidEventTap)
     }
 
-    /// Syllable-like bursts under a slower swell, with a quiet gap at the start and end.
-    static func syntheticLevel(at t: TimeInterval) -> Float {
-        let swell = 0.5 + 0.5 * sin(t * 1.6)
-        let syllables = abs(sin(t * 7.3)) * abs(sin(t * 2.9 + 1))
-        let gate: Double = (t < 0.3 || t > 4.8) ? 0 : 1
-        return Float(min(1, 0.15 + 0.85 * swell * syllables) * gate)
+    /// One spoken word in the synthetic speech: when it starts, how long it lasts, how many syllables it has, its
+    /// peak level in dBFS and whether it is hissy ("s", "sh") rather than vowel-heavy.
+    struct DemoWord {
+        var start: TimeInterval
+        var length: TimeInterval
+        var syllables: Int
+        var peakDb: Float
+        var hissy: Bool
+    }
+
+    /// A phrase of words 0.18 to 0.4 s long with gaps of 0.1 to 0.3 s between them and a longer pause every few
+    /// words, at the levels measured on the built-in microphone: peaks around -26 to -18 dBFS, troughs near -50,
+    /// room noise near -57. The same schedule every run.
+    static let words: [DemoWord] = {
+        func unit(_ k: Int, _ salt: Int) -> Double {
+            let x = sin(Double(k) * 12.9898 + Double(salt) * 78.233) * 43758.5453
+            return x - x.rounded(.down)
+        }
+        var list: [DemoWord] = []
+        var t = 0.4
+        for k in 0..<80 {
+            let length = 0.18 + 0.22 * unit(k, 1)
+            list.append(DemoWord(
+                start: t, length: length, syllables: 1 + Int(unit(k, 2) * 2.99),
+                peakDb: Float(-34 + 14 * unit(k, 3)), hissy: unit(k, 4) > 0.8
+            ))
+            t += length + 0.1 + 0.2 * unit(k, 5) + (k % 6 == 5 ? 0.45 : 0)
+        }
+        return list
+    }()
+
+    /// What the microphone would report for that speech at time `t`.
+    static func syntheticReading(at t: TimeInterval) -> LevelReading {
+        let noise = Float(-57 + 1.5 * sin(t * 37.1) * sin(t * 5.3))
+        guard let word = words.last(where: { $0.start <= t }), t < word.start + word.length else {
+            return LevelReading(db: noise, low: noise - 2, mid: noise - 3, high: noise - 6)
+        }
+        let phase = (t - word.start) / word.length * Double(word.syllables)
+        let syllable = sin(.pi * (phase - phase.rounded(.down)))
+        let envelope = Float(max(0.003, syllable * syllable))
+        let db = max(noise, word.peakDb + 10 * log10(envelope))
+        if word.hissy {
+            return LevelReading(db: db, low: db - 16, mid: db - 8, high: db - 1)
+        }
+        return LevelReading(db: db, low: db - 2, mid: db - 7, high: db - 16)
     }
 }

@@ -132,7 +132,7 @@ public actor SmartCleanup {
 
         let passes = Self.passes(level: request.level, style: request.style, destination: request.destination)
         let cleaner = cleaner
-        let text = request.text
+        let text = CorrectionCommas.apply(request.text)
         let work = Task { () -> Result<String, Error> in
             do {
                 var output = text
@@ -157,7 +157,7 @@ public actor SmartCleanup {
         case let .failure(error):
             return finish(.failed, rejection: String(describing: error), sha: sha)
         case let .success(output):
-            let model = CleanupPrompt.sanitize(output)
+            let model = SmartCleanupGuard.restoringTerminal(input: request.text, output: CleanupPrompt.sanitize(output))
             let post = Self.reapply(model, request: request)
             if let reason = SmartCleanupGuard.rejection(
                 input: request.text, output: post.text, level: request.level, dictionary: request.dictionary,
@@ -172,7 +172,7 @@ public actor SmartCleanup {
     /// The dictionary and the style, over the model's text. Both are ours; the model takes no vocabulary.
     static func reapply(_ text: String, request: SmartCleanupRequest) -> TextPipelineResult {
         let options = TextPipelineOptions(
-            fillers: false, spokenCommands: false, numbers: false, dictionary: true, snippets: false, blend: false,
+            fillers: false, spokenCommands: false, selfCorrection: false, numbers: false, dictionary: true, snippets: false, blend: false,
             whitespace: true, style: request.style
         )
         return TextPipeline().run(TextPipelineInput(text: text, dictionary: request.dictionary, options: options))

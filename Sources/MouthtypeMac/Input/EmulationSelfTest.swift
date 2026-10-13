@@ -12,6 +12,7 @@ import Foundation
 enum EmulationSelfTest {
     private static let rightArrow: UInt16 = 124
     private static let end: UInt16 = 119
+    private static let f20: UInt16 = 90
 
     static func run(remap: FnRemap) async {
         guard let preferences = UserDefaults(suiteName: "com.codeswhat.mouthtype.emulation-selftest") else {
@@ -39,6 +40,7 @@ enum EmulationSelfTest {
         }
         check("always-on key tap installed in remap mode", service.keyTapInstalled)
         await probe(service, check: check)
+        await inputProbe(service, mode: "remap", check: check)
 
         // Off: the service goes back to the Fn flag source and the mapping is restored.
         let off = coordinator.setEnabled(false)
@@ -48,6 +50,7 @@ enum EmulationSelfTest {
         Log.probe.info("emulation-selftest: mapping now \(remap.currentDescription(), privacy: .public), health \(service.health.statusText, privacy: .public)")
         check("remap off: preference false", !coordinator.preferred)
         try? await Task.sleep(for: .milliseconds(300))
+        await inputProbe(service, mode: "fn-flag", check: check)
 
         // On again, live.
         let on = coordinator.setEnabled(true)
@@ -89,10 +92,28 @@ enum EmulationSelfTest {
         shared.pending.withLock { $0.removeAll() }
     }
 
-    private static func post(_ keyCode: UInt16, down: Bool, stamped: Bool) {
+    /// An unstamped F20 keyDown must bump the user-input count and a stamped one must not. Nothing is forwarded.
+    private static func inputProbe(_ service: HotkeyService, mode: String, check: (String, Bool) -> Void) async {
+        let shared = service.shared
+        check("\(mode): input count tracked", service.userInputGeneration != nil)
+        let start = shared.userInput.load(ordering: .relaxed)
+        post(f20, down: true, stamped: true, flags: 0)
+        post(f20, down: false, stamped: true, flags: 0)
+        try? await Task.sleep(for: .milliseconds(300))
+        let stamped = shared.userInput.load(ordering: .relaxed)
+        check("\(mode): stamped F20 not counted (\(stamped - start))", stamped == start)
+        post(f20, down: true, stamped: false, flags: 0)
+        post(f20, down: false, stamped: false, flags: 0)
+        try? await Task.sleep(for: .milliseconds(300))
+        let real = shared.userInput.load(ordering: .relaxed)
+        check("\(mode): unstamped F20 counted once (\(real - stamped))", real - stamped == 1)
+        Log.probe.info("emulation-selftest: \(mode, privacy: .public) input generation \(real, privacy: .public)")
+    }
+
+    private static func post(_ keyCode: UInt16, down: Bool, stamped: Bool, flags: UInt64? = nil) {
         let source = CGEventSource(stateID: .privateState)
         guard let event = CGEvent(keyboardEventSource: source, virtualKey: CGKeyCode(keyCode), keyDown: down) else { return }
-        event.flags = CGEventFlags(rawValue: CGEventFlags.maskNumericPad.rawValue | CGEventFlags.maskSecondaryFn.rawValue)
+        event.flags = CGEventFlags(rawValue: flags ?? (CGEventFlags.maskNumericPad.rawValue | CGEventFlags.maskSecondaryFn.rawValue))
         if stamped { event.setIntegerValueField(.eventSourceUserData, value: SyntheticEvents.stamp) }
         event.post(tap: .cgSessionEventTap)
     }

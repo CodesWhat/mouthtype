@@ -30,7 +30,7 @@ public final class PillController {
     private(set) var skin: any PillSkinView
 
     /// Read once per frame while recording. `PillDemo` swaps it for a synthetic curve.
-    var levelSource: @MainActor () -> Float
+    var levelSource: @MainActor () -> LevelReading
     /// A click on the cancel or stop control of a locked pill.
     var onControl: (@MainActor (PillControl) -> Void)?
 
@@ -46,7 +46,7 @@ public final class PillController {
     private var generation = 0
     private var pressedControl: PillControl?
 
-    public init(level: @escaping @MainActor () -> Float, defaults: UserDefaults = .standard) {
+    public init(level: @escaping @MainActor () -> LevelReading, defaults: UserDefaults = .standard) {
         levelSource = level
         skinKind = PillSkinPreference.current(defaults)
         skin = Self.makeSkin(skinKind)
@@ -183,7 +183,7 @@ public final class PillController {
     private func beginMeter() {
         bars.reset()
         lastTimestamp = nil
-        skin.showFractions(bars.step(level: 0, dt: 0))
+        skin.showFractions(bars.step(reading: .silence, dt: 0))
         updateChrome(now: CACurrentMediaTime())
         startLink()
     }
@@ -297,7 +297,7 @@ public final class PillController {
         case .recording, .handsFree:
             let dt = lastTimestamp.map { min(0.1, max(0.001, now - $0)) } ?? 1.0 / 60
             lastTimestamp = now
-            skin.showFractions(bars.step(level: levelSource(), dt: dt))
+            skin.showFractions(bars.step(reading: levelSource(), dt: dt))
             updateChrome(now: now)
             if state == .handsFree { updateInteractivity(pointer: NSEvent.mouseLocation) }
         case .processing:

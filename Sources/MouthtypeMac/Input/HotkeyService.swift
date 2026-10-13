@@ -102,7 +102,15 @@ public final class HotkeyService {
         self.thread = thread
         // A stream whose consumer was cancelled is finished, so each run gets its own.
         (messages, messageSink) = AsyncStream.makeStream(of: TapMessage.self)
-        guard let flagsTap = makeTap(.flags) else {
+        // The listen-only tap also counts keys and clicks (nothing forwarded). If macOS refuses that mask, fall back to
+        // the plain flag tap and leave the input count untracked, so the paste-spacing fallback stands down.
+        var flagsTap = makeTap(.flags, countsInput: true)
+        shared.inputTracked.store(flagsTap != nil, ordering: .relaxed)
+        if flagsTap == nil {
+            Log.hotkey.error("input-counting tap refused; paste spacing will not guess")
+            flagsTap = makeTap(.flags)
+        }
+        guard let flagsTap else {
             thread.stop()
             self.thread = nil
             throw StartError.tapCreateFailed
@@ -146,6 +154,9 @@ public final class HotkeyService {
             slot.tap?.teardown()
         }
         slots = [:]
+        // Input in the gap while the taps are down went unseen.
+        shared.userInput.wrappingAdd(1, ordering: .relaxed)
+        shared.inputTracked.store(false, ordering: .relaxed)
         thread?.stop()
         thread = nil
         messageSink.finish()
@@ -176,14 +187,18 @@ public final class HotkeyService {
         setRecording(false)
     }
 
-    private func makeTap(_ role: TapRole) -> EventTap? {
+    /// How many real key presses and clicks the taps have seen, or nil when they can't vouch for it.
+    var userInputGeneration: UInt64? { shared.userInputGeneration }
+
+    private func makeTap(_ role: TapRole, countsInput: Bool = false) -> EventTap? {
         guard let thread else { return nil }
         let remapped = role == .keys && swallowedKey != nil
         let context = TapContext(
             role: role, sink: messageSink, swallowedKey: role == .keys ? swallowedKey : nil, shared: shared,
-            emulator: remapped ? emulator : nil, tracksFnFlag: swallowedKey == nil, idleKeysReported: options.observesKeys
+            emulator: remapped ? emulator : nil, tracksFnFlag: swallowedKey == nil, idleKeysReported: options.observesKeys,
+            countsKeys: role == .flags && !keyTapStaysOn
         )
-        return EventTap(role: role, context: context, runLoop: thread.runLoop)
+        return EventTap(role: role, context: context, runLoop: thread.runLoop, countsInput: countsInput)
     }
 
     // MARK: - Samples

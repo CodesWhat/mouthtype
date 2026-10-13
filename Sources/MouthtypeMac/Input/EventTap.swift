@@ -53,12 +53,18 @@ final class EventTap {
     private let source: CFRunLoopSource
     private let retainedContext: Unmanaged<TapContext>
 
-    init?(role: TapRole, context: TapContext, runLoop: CFRunLoop) {
+    /// `countsInput` widens the listen-only flag tap to presses and clicks, which only bump a counter.
+    init?(role: TapRole, context: TapContext, runLoop: CFRunLoop, countsInput: Bool = false) {
         let mask: CGEventMask
         let options: CGEventTapOptions
         switch role {
         case .flags:
-            mask = 1 << CGEventType.flagsChanged.rawValue
+            var flagsMask: CGEventMask = 1 << CGEventType.flagsChanged.rawValue
+            if countsInput {
+                flagsMask |= Self.pointerMask
+                if context.countsKeys { flagsMask |= 1 << CGEventType.keyDown.rawValue }
+            }
+            mask = flagsMask
             options = .listenOnly
         case .keys:
             mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
@@ -89,6 +95,10 @@ final class EventTap {
         CFRunLoopAddSource(runLoop, source, .commonModes)
         CGEvent.tapEnable(tap: port, enable: true)
     }
+
+    static let pointerMask: CGEventMask =
+        (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
+        | (1 << CGEventType.otherMouseDown.rawValue)
 
     var isEnabled: Bool { CGEvent.tapIsEnabled(tap: port) }
 
@@ -128,6 +138,19 @@ private func tapCallback(
         context.sink.yield(.disabled(context.role))
         return Unmanaged.passUnretained(event)
     }
+    if TapPolicy.isPointerDown(type) {
+        if event.getIntegerValueField(.eventSourceUserData) != SyntheticEvents.stamp {
+            context.shared.userInput.wrappingAdd(1, ordering: .relaxed)
+        }
+        return Unmanaged.passUnretained(event)
+    }
+    if context.role == .flags, type == .keyDown {
+        if let sample = TapSample(type: type, event: event),
+           TapPolicy.countsAsUserInput(sample, decision: .passThrough, swallowedKey: nil) {
+            context.shared.userInput.wrappingAdd(1, ordering: .relaxed)
+        }
+        return Unmanaged.passUnretained(event)
+    }
     guard let sample = TapSample(type: type, event: event) else { return Unmanaged.passUnretained(event) }
     let shared = context.shared
     if sample.userData == SyntheticEvents.stamp { shared.stampedSeen.wrappingAdd(1, ordering: .relaxed) }
@@ -154,6 +177,9 @@ private func tapCallback(
         case let .set(value): shared.pending.withLock { $0[sample.keyCode] = value }
         case .clear: shared.pending.withLock { $0[sample.keyCode] = nil }
         }
+    }
+    if TapPolicy.countsAsUserInput(sample, decision: decision, swallowedKey: context.swallowedKey) {
+        shared.userInput.wrappingAdd(1, ordering: .relaxed)
     }
     if decision.swallow { shared.swallowed.wrappingAdd(1, ordering: .relaxed) }
     if decision.deliver { context.sink.yield(.sample(context.role, sample)) }

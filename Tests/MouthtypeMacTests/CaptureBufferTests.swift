@@ -125,10 +125,10 @@ func makePCM(sampleRate: Double, channels: AVAudioChannelCount, frames: AVAudioF
         let cache = ConverterCache(targetFormat: AudioCapture.targetFormat)
         buffer.reset(startedAt: 0)
         let meter = LevelMeter()
-        let handle = AudioCapture.inputHandler(buffer: buffer, converters: cache, onLevel: { meter.update(rms: $0) })
+        let handle = AudioCapture.inputHandler(buffer: buffer, converters: cache, onLevel: { meter.update(samples: $0) })
         handle(try makePCM(sampleRate: 48_000, channels: 1, frames: 4_800), 0, 0)
-        // A 0.5 sine is about -9 dBFS RMS, which maps to ~0.85 on a -60...0 scale.
-        #expect(meter.value > 0.7 && meter.value < 0.95)
+        // A 0.5 sine is about -9 dBFS RMS.
+        #expect(meter.reading.db > -11 && meter.reading.db < -7)
     }
 
     @Test func buffersOutsideARecordingAreCountedAndDropped() throws {

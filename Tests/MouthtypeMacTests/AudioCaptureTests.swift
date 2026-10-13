@@ -44,21 +44,39 @@ import Testing
         let capture = AudioCapture()
         await #expect(throws: CaptureError.self) { try await capture.stop() }
         await capture.cancel()
-        #expect(capture.level == 0)
+        #expect(capture.reading == .silence)
     }
 
-    @Test func levelMeterMapsDecibelsAndDecays() {
+    @Test func levelMeterReportsDecibelsAndSplitsBands() {
         let meter = LevelMeter()
-        #expect(meter.value == 0)
+        #expect(meter.reading == .silence)
+        func sine(_ hz: Float, amplitude: Float, count: Int = 1_600) -> [Float] {
+            (0..<count).map { amplitude * sin(2 * .pi * hz * Float($0) / LevelMeter.sampleRate) }
+        }
         meter.update(rms: 1)
-        #expect(meter.value == 1)
-        meter.update(rms: 0)
-        #expect(abs(meter.value - (1 - LevelMeter.decay)) < 1e-6)
-        meter.reset()
-        meter.update(rms: 0.001)   // -60 dBFS
-        #expect(meter.value == 0)
+        #expect(meter.reading.db == 0)
         meter.update(rms: 0.0316)  // -30 dBFS
-        #expect(abs(meter.value - 0.5) < 0.01)
+        #expect(abs(meter.reading.db + 30) < 0.1)
+        meter.update(rms: 0)
+        #expect(meter.reading.db == LevelReading.floorDb)
+
+        // A 150 Hz tone sits in the low band, 1 kHz in the mid band, 7 kHz in the high band.
+        meter.reset()
+        meter.update(samples: sine(150, amplitude: 0.1) + sine(150, amplitude: 0.1))
+        var r = meter.reading
+        #expect(r.low > r.mid + 3 && r.low > r.high + 12)
+        meter.reset()
+        meter.update(samples: sine(1_000, amplitude: 0.1) + sine(1_000, amplitude: 0.1))
+        r = meter.reading
+        #expect(r.mid > r.low + 12 && r.mid > r.high + 6)
+        meter.reset()
+        meter.update(samples: sine(7_000, amplitude: 0.1) + sine(7_000, amplitude: 0.1))
+        r = meter.reading
+        #expect(r.high > r.mid + 6 && r.high > r.low + 12)
+        // A 0.1-amplitude sine is -23 dBFS RMS.
+        #expect(abs(r.db + 23) < 0.3)
+        meter.reset()
+        #expect(meter.reading == .silence)
     }
 
     @Test func selfTestArgument() {

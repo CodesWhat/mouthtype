@@ -81,5 +81,51 @@
       { "heard": "drydock", "written": "Drydock" }
     ],
     "exact": ["Tell Hov the Mouthtype build is on Drydock."]
+  },
+  {
+    "id": "smart-13",
+    "input": "Let's do coffee at two actually three.",
+    "target": "Let's do coffee at 3.",
+    "mustContain": ["coffee at 3."],
+    "mustNotContain": ["2", "actually"]
+  },
+  {
+    "id": "smart-14",
+    "input": "Let's do coffee at two, actually three.",
+    "target": "Let's do coffee at 3.",
+    "mustContain": ["coffee at 3."],
+    "mustNotContain": ["2", "actually"]
+  },
+  {
+    "id": "smart-15",
+    "input": "Let's do coffee at two thirty actually three.",
+    "target": "Let's do coffee at 3.",
+    "mustContain": ["coffee at 3"],
+    "mustNotContain": ["2:30", "two"]
+  },
+  {
+    "id": "smart-16",
+    "input": "Send it to Dana no wait send it to Priya",
+    "target": "Send it to Priya.",
+    "exact": ["Send it to Priya."]
+  },
+  {
+    "id": "smart-17",
+    "input": "Tell Sam to leave on Monday actually Tuesday.",
+    "target": "Tell Sam to leave on Tuesday.",
+    "exact": ["Tell Sam to leave on Tuesday."]
+  },
+  {
+    "id": "smart-18",
+    "input": "Meet me in Boston actually Chicago.",
+    "target": "Meet me in Chicago.",
+    "exact": ["Meet me in Chicago."]
+  },
+  {
+    "id": "smart-19",
+    "input": "Also, can we get a like we should do the sounds for when it starts and stops.",
+    "target": "Also, can we get a, like, we should do the sounds for when it starts and stops. (the closing full stop stays)",
+    "mustContain": ["stops."],
+    "mustNotContain": ["stops?"]
   }
 ]

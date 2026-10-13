@@ -77,7 +77,13 @@ private final class TestClock {
 }
 
 @MainActor
+private final class InputCounter {
+    var value: UInt64? = 0
+}
+
+@MainActor
 private struct Rig {
+    let input = InputCounter()
     let clock = TestClock()
     let pasteboard = FakePasteboard()
     let poster = FakePoster()
@@ -98,10 +104,11 @@ private struct Rig {
     init() {
         let pending = pending
         let clock = clock
+        let input = input
         inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, schedule: { delay, work in
             pending.delays.append(delay)
             pending.works.append(work)
-        }, now: { clock.date })
+        }, now: { clock.date }, inputGeneration: { input.value })
     }
 }
 
@@ -274,6 +281,49 @@ private struct Rig {
         #expect(await rig.inserter.deliver("My name is Hove.", startFocus: nil).finalText == "My name is Hove.")
         rig.clock.advance(30)
         #expect(await rig.inserter.deliver("Damn, can you check", startFocus: nil).finalText == " Damn, can you check")
+    }
+
+    @Test func aKeyPressBetweenDeliveriesGetsNoSpace() async {
+        let rig = Rig()
+        _ = await rig.inserter.deliver("My name is Hove.", startFocus: nil)
+        rig.input.value = 1
+        #expect(await rig.inserter.deliver("Damn, can you check", startFocus: nil).finalText == "Damn, can you check")
+    }
+
+    @Test func aClickBetweenDeliveriesGetsNoSpaceAndOnlyTheNextOneRearms() async {
+        let rig = Rig()
+        _ = await rig.inserter.deliver("one", startFocus: nil)
+        rig.input.value = 5
+        #expect(await rig.inserter.deliver("two", startFocus: nil).finalText == "two")
+        #expect(await rig.inserter.deliver("three", startFocus: nil).finalText == " three")
+    }
+
+    @Test func theInputCountIsTakenAfterThePasteEventGoesOut() async {
+        let rig = Rig()
+        let input = rig.input
+        rig.poster.onPost = { input.value = (input.value ?? 0) + 2 }
+        _ = await rig.inserter.deliver("one", startFocus: nil)
+        #expect(await rig.inserter.deliver("two", startFocus: nil).finalText == " two")
+    }
+
+    @Test func unknownInputGetsNoSpace() async {
+        let rig = Rig()
+        rig.input.value = nil
+        _ = await rig.inserter.deliver("one", startFocus: nil)
+        #expect(await rig.inserter.deliver("two", startFocus: nil).finalText == "two")
+        rig.input.value = 0
+        _ = await rig.inserter.deliver("three", startFocus: nil)
+        rig.input.value = nil
+        #expect(await rig.inserter.deliver("four", startFocus: nil).finalText == "four")
+    }
+
+    @Test func aReadableContextIgnoresTheInputCount() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
+        _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.input.value = 9
+        rig.focus.before = .character("o")
+        #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == " world")
     }
 
     @Test func aListAfterAnUnreadablePasteStartsOnANewLineAndKeepsTheContinuation() async {

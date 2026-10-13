@@ -53,8 +53,8 @@ private struct Rules: VocabularyProviding {
 
 @MainActor
 @Suite struct SmartCleanupPipelineTests {
-    private let raw = "um let's do coffee at two actually three"
-    private let det = "Let's do coffee at two actually three"
+    private let raw = "um let's grab coffee at two"
+    private let det = "Let's grab coffee at two"
 
     private func pipeline(
         _ cleaner: ScriptedCleaner, level: CleanupLevel = .light, budgetMs: Int = 2000, rules: [DictionaryRule] = [],
@@ -80,18 +80,18 @@ private struct Rules: VocabularyProviding {
 
     @Test func theModelRunsOnTheDeterministicTextAndTheRecordSaysSo() async throws {
         let cleaner = ScriptedCleaner { text, _ in
-            #expect(text == "Let's do coffee at two actually three")
-            return "Let's do coffee at 3."
+            #expect(text == "Let's grab coffee at two")
+            return "Let's grab coffee at 2."
         }
         let (pipeline, _) = pipeline(cleaner)
         let cleaned = await clean(pipeline)
-        #expect(cleaned.text == "Let's do coffee at 3.")
+        #expect(cleaned.text == "Let's grab coffee at 2.")
         #expect(cleaned.deterministicText == det)
         let record = cleaned.cleanup
         #expect(record.cleanerID == "superwhisper-s1-mini" && record.cleanerRev == "rev1" && record.level == "light")
         #expect(record.outcome == "ok" && record.ms != nil && record.promptSha?.count == 12 && record.style == "formal")
         let llm = cleaned.edits.filter { $0.stage == "llm" }
-        #expect(llm.count == 1 && llm.first?.fromText == det && llm.first?.toText == "Let's do coffee at 3.")
+        #expect(llm.count == 1 && llm.first?.fromText == det && llm.first?.toText == "Let's grab coffee at 2.")
         #expect(cleaned.edits.contains { $0.stage == "filler" })
     }
 
@@ -148,7 +148,7 @@ private struct Rules: VocabularyProviding {
     }
 
     @Test func mediumIsRecordedAsMedium() async {
-        let cleaner = ScriptedCleaner(returning: "Let's do coffee at 3.")
+        let cleaner = ScriptedCleaner(returning: "Let's grab coffee at 2.")
         let (pipeline, _) = pipeline(cleaner, level: .medium)
         let cleaned = await clean(pipeline)
         #expect(cleaned.cleanup.level == "medium" && cleaned.cleanup.outcome == "ok")

@@ -18,6 +18,8 @@ public final class TextInserter {
     private let focus: FocusReading
     private let clipboard: PasteboardSession
     private let now: @MainActor () -> Date
+    /// How many real key presses and clicks have happened, or nil when that isn't known.
+    private let inputGeneration: @MainActor () -> UInt64?
     private var lastText: String?
     private var lastPaste: LastPaste?
 
@@ -28,11 +30,14 @@ public final class TextInserter {
         var element: FocusedElement?
         var finalCharacter: Character
         var date: Date
+        /// The input count right after the paste; nil when unknown.
+        var inputGeneration: UInt64?
     }
 
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
-    public init(syntheticStamp: Int64) {
+    public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?) {
         self.now = { Date() }
+        self.inputGeneration = inputGeneration
         self.focus = AccessibilityFocusReader()
         self.clipboard = PasteboardSession(
             pasteboard: SystemPasteboard(.general),
@@ -41,8 +46,9 @@ public final class TextInserter {
         )
     }
 
-    init(focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, schedule: @escaping PasteboardSession.Schedule, now: @escaping @MainActor () -> Date = { Date() }) {
+    init(focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, schedule: @escaping PasteboardSession.Schedule, now: @escaping @MainActor () -> Date = { Date() }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 }) {
         self.now = now
+        self.inputGeneration = inputGeneration
         self.focus = focus
         self.clipboard = PasteboardSession(
             pasteboard: pasteboard, poster: poster, restoreDelay: Self.restoreDelay, schedule: schedule
@@ -104,7 +110,8 @@ public final class TextInserter {
             }
             if let pid = now.pid, let last = spaced.last {
                 lastPaste = LastPaste(
-                    pid: pid, bundleID: now.bundleID, element: now.element, finalCharacter: last, date: self.now()
+                    pid: pid, bundleID: now.bundleID, element: now.element, finalCharacter: last, date: self.now(),
+                    inputGeneration: inputGeneration()
                 )
             }
             return DeliveryResult(method: .paste, outcome: .unknown, focusMoved: moved, target: now, finalText: spaced)
@@ -112,13 +119,14 @@ public final class TextInserter {
     }
 
     /// The last character we pasted, when the text before the cursor can't be read (Electron terminals expose no
-    /// Accessibility text) and the last paste went to the same app recently. Known limit: if the user typed or moved
-    /// the cursor between dictations in such an app we can't know, and may add a space that isn't needed.
+    /// Accessibility text), the last paste went to the same app recently, and no key or click has happened since.
+    /// When the input count is unknown the answer is no: a missing space is cheaper than a stray one.
     private func continuationCharacter(for target: FocusSnapshot) -> Character? {
         guard let last = lastPaste, let pid = target.pid, last.pid == pid, last.bundleID == target.bundleID else { return nil }
         if let element = last.element, let other = target.element, element != other { return nil }
         let age = now().timeIntervalSince(last.date)
         guard age >= 0, age <= Self.continuationWindow else { return nil }
+        guard let recorded = last.inputGeneration, inputGeneration() == recorded else { return nil }
         return last.finalCharacter
     }
 

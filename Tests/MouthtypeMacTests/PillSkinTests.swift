@@ -63,9 +63,9 @@ import Testing
     typealias L = ClassicPillLayout
 
     @Test func capsuleWidthPerState() {
-        #expect(L.capsuleWidth(.hold, scale: 2) == 97)
-        #expect(L.capsuleWidth(.processing, scale: 2) == 97)
-        #expect(L.capsuleWidth(.hold, scale: 1) == 98)
+        #expect(L.capsuleWidth(.hold, scale: 2) == 56)
+        #expect(L.capsuleWidth(.processing, scale: 2) == 56)
+        #expect(L.capsuleWidth(.hold, scale: 1) == 56)
         #expect(L.capsuleWidth(.locked, scale: 2) > L.capsuleWidth(.hold, scale: 2))
         #expect(L.capsuleWidth(.locked, scale: 2) == L.lockedWidth(scale: 2))
         for scale in [CGFloat(1), 2] {
@@ -74,6 +74,31 @@ import Testing
                 #expect(px == px.rounded() && Int(px) % 2 == 0)
             }
         }
+    }
+
+    @Test func holdCapsuleHugsTheBarsWithPaddingNearTheVerticalPadding() {
+        for scale in [CGFloat(1), 2] {
+            let capsule = L.capsuleFrame(width: L.capsuleWidth(.hold, scale: scale), bounds: CGSize(width: 368, height: 72), bottomMargin: 20, scale: scale)
+            let tallest = [CGFloat](repeating: L.barHeightRange(scale: scale).upperBound, count: 10)
+            let bars = L.barFrames(capsule: capsule, heights: tallest, scale: scale)
+            let side = bars.first!.minX - capsule.minX
+            #expect(side == capsule.maxX - bars.last!.maxX)
+            let vertical = bars[4].minY - capsule.minY
+            #expect(side >= 8 && side <= 10, "side padding \(side)")
+            #expect(abs(side - vertical) <= 3, "side \(side) against vertical \(vertical)")
+            // A true capsule: the end radius is half the height, so the width is at least the height.
+            #expect(capsule.width >= capsule.height && L.cornerRadius == capsule.height / 2)
+        }
+    }
+
+    @Test func lockedCapsuleHasNoDeadSpaceBetweenControlsAndBars() {
+        let capsule = L.capsuleFrame(width: L.lockedWidth(scale: 2), bounds: CGSize(width: 368, height: 72), bottomMargin: 20, scale: 2)
+        let controls = L.controlFrames(capsule: capsule)
+        let bars = L.barFrames(capsule: capsule, heights: [CGFloat](repeating: 6, count: 10), scale: 2)
+        let gap = bars.first!.minX - controls[.cancel]!.maxX
+        #expect(gap >= 8 && gap <= 12, "gap \(gap)")
+        #expect(gap == controls[.stop]!.minX - bars.last!.maxX)
+        #expect(L.lockedWidth(scale: 2) == 104)
     }
 
     @Test func barMetricsLandOnTheDeviceGrid() {
@@ -92,6 +117,9 @@ import Testing
         #expect(L.barHeight(fraction: 0.02, scale: 2) == range.lowerBound)
         #expect(L.barHeight(fraction: 1, scale: 2) == range.upperBound)
         #expect(L.barHeight(fraction: 0.5, scale: 2) > range.lowerBound + 4)
+        // Linear: half the fraction is about half the travel.
+        let mid = L.barHeight(fraction: 0.5, scale: 2)
+        #expect(abs(mid - (range.lowerBound + range.upperBound) / 2) <= 1)
         for f in [Float.nan, .infinity, -4, 9] { #expect(range.contains(L.barHeight(fraction: f, scale: 2))) }
         var last: CGFloat = 0
         for i in 0...100 {
@@ -102,7 +130,7 @@ import Testing
     }
 
     @Test func barFramesAreCentredSymmetricAndOnTheGrid() {
-        let capsule = L.capsuleFrame(width: 97, bounds: CGSize(width: 368, height: 72), bottomMargin: 20, scale: 2)
+        let capsule = L.capsuleFrame(width: 56, bounds: CGSize(width: 368, height: 72), bottomMargin: 20, scale: 2)
         #expect(capsule.midX == 184 && capsule.minY == 20 && capsule.height == 28)
         let heights = (0..<10).map { CGFloat($0 % 2 == 0 ? 6 : 14) }
         let frames = L.barFrames(capsule: capsule, heights: heights, scale: 2)

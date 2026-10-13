@@ -8,6 +8,43 @@ import Testing
         TapSample(kind: kind, keyCode: keyCode, flags: 0, timestamp: 0, userData: userData)
     }
 
+    @Test func ordinaryKeyDownsCountAsUserInput() {
+        let down = sample(.keyDown, 36)
+        #expect(TapPolicy.countsAsUserInput(down, decision: .passThrough, swallowedKey: nil))
+        let decision = TapPolicy.decide(down, role: .keys, recording: false, swallowedKey: 96, idleKeysReported: false)
+        #expect(TapPolicy.countsAsUserInput(down, decision: decision, swallowedKey: 96))
+    }
+
+    @Test func ourOwnEventsTheHotkeyAndKeyUpsDoNotCountAsUserInput() {
+        let stamped = sample(.keyDown, 9, userData: SyntheticEvents.stamp)
+        #expect(!TapPolicy.countsAsUserInput(stamped, decision: .passThrough, swallowedKey: nil))
+        #expect(!TapPolicy.countsAsUserInput(sample(.keyDown, 96), decision: TapDecision(swallow: true, deliver: true), swallowedKey: 96))
+        #expect(!TapPolicy.countsAsUserInput(sample(.keyDown, 179), decision: .passThrough, swallowedKey: nil))
+        #expect(!TapPolicy.countsAsUserInput(sample(.keyUp, 36), decision: .passThrough, swallowedKey: nil))
+        #expect(!TapPolicy.countsAsUserInput(sample(.flagsChanged, 55), decision: .passThrough, swallowedKey: nil))
+        // Escape swallowed to cancel a recording never reaches the app.
+        #expect(!TapPolicy.countsAsUserInput(sample(.keyDown, 53), decision: TapDecision(swallow: true, deliver: true), swallowedKey: nil))
+    }
+
+    @Test func anEmulatedFnComboCountsBecauseItsReplacementReachesTheApp() {
+        let decision = TapPolicy.decide(sample(.keyDown, 126), role: .keys, recording: false, swallowedKey: 96, hotkeyHeld: true)
+        #expect(decision.swallow && decision.replacement != nil)
+        #expect(TapPolicy.countsAsUserInput(sample(.keyDown, 126), decision: decision, swallowedKey: 96))
+    }
+
+    @Test func mouseDownsAreRecognisedAndMovesAreNot() {
+        for type in [CGEventType.leftMouseDown, .rightMouseDown, .otherMouseDown] { #expect(TapPolicy.isPointerDown(type)) }
+        for type in [CGEventType.leftMouseUp, .mouseMoved, .scrollWheel, .keyDown] { #expect(!TapPolicy.isPointerDown(type)) }
+    }
+
+    @Test func theInputGenerationIsNilUntilTheTapsVouchForIt() {
+        let shared = TapShared()
+        #expect(shared.userInputGeneration == nil)
+        shared.inputTracked.store(true, ordering: .relaxed)
+        shared.userInput.wrappingAdd(1, ordering: .relaxed)
+        #expect(shared.userInputGeneration == 1)
+    }
+
     @Test func flagsTapNeverSwallows() {
         let decision = TapPolicy.decide(sample(.flagsChanged, 63), role: .flags, recording: true, swallowedKey: nil)
         #expect(decision == .observe)

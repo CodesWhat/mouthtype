@@ -368,3 +368,91 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         SmartCleanupRequest(text: text, level: .light)
     }
 }
+
+@Suite struct SmartCleanupTerminalMarkTests {
+    private func restored(_ input: String, _ output: String) -> String {
+        SmartCleanupGuard.restoringTerminal(input: input, output: output)
+    }
+
+    @Test(arguments: [
+        TextCase("Also, can we get a like we should do the sounds.", "Also, can we get a like, we should do the sounds?"),
+        TextCase("Are you coming tomorrow?", "Are you coming tomorrow."),
+        TextCase("That was great.", "That was great!"),
+        TextCase("That was great!", "That was great."),
+        TextCase("Can you grab milk?", "Can you grab milk!"),
+    ])
+    func aChangedClosingMarkIsPutBack(_ c: TextCase) {
+        let expected = String(c.input.last!)
+        #expect(restored(c.input, c.expected) == String(c.expected.dropLast()) + expected)
+    }
+
+    @Test func theReportedSentenceKeepsItsFullStop() {
+        let input = "Also, can we get a like we should do the sounds for when it starts and stops."
+        let output = "Also, can we get a like, we should do the sounds for when it starts and stops?"
+        #expect(restored(input, output) == "Also, can we get a like, we should do the sounds for when it starts and stops.")
+    }
+
+    @Test func aMissingMarkInTheInputLeavesTheModelFree() {
+        #expect(restored("what's the capital of France", "What's the capital of France?") == "What's the capital of France?")
+        #expect(restored("we should leave earlier", "We should leave earlier.") == "We should leave earlier.")
+    }
+
+    @Test func anUnchangedOrAbsentOutputMarkIsLeftAlone() {
+        #expect(restored("It is done.", "It is done.") == "It is done.")
+        #expect(restored("It is done.", "It is done") == "It is done")
+        #expect(restored("It is done.\n", "It is done?\n") == "It is done.")
+    }
+
+    @Test func onlyTheLastSentenceIsConsidered() {
+        let input = "Are you there? I will wait."
+        #expect(restored(input, "Are you there? I will wait?") == "Are you there? I will wait.")
+        #expect(restored(input, "Are you there. I will wait.") == "Are you there. I will wait.")
+    }
+
+    @Test func theRunDeliversTheRestoredMark() async {
+        let input = "also can we get a like we should do the sounds for when it starts and stops."
+        let cleaner = FakeCleaner(returning: "Also, can we get a like, we should do the sounds for when it starts and stops?")
+        let result = await SmartCleanup(cleaner: cleaner).run(SmartCleanupRequest(text: input, level: .light))
+        #expect(result.outcome == .ok)
+        #expect(result.text.hasSuffix("stops."))
+    }
+}
+
+@Suite struct CorrectionCommasTests {
+    static let cases: [TextCase] = [
+        TextCase("Let's do coffee at two actually three.", "Let's do coffee at two, actually three."),
+        TextCase("Let's do coffee at two actually three", "Let's do coffee at two, actually three"),
+        TextCase("Send it to Dana no wait send it to Priya.", "Send it to Dana, no wait, send it to Priya."),
+        TextCase("Meet on Monday sorry Tuesday", "Meet on Monday, sorry Tuesday"),
+        TextCase("Ask Marcus I mean Marta about it", "Ask Marcus, I mean Marta about it"),
+        TextCase("Fly to Boston or rather New York", "Fly to Boston, or rather New York"),
+        TextCase("Bring the laptop, scratch that the tablet", "Bring the laptop, scratch that the tablet"),
+        TextCase("It's the fifth make that the sixth", "It's the fifth, make that the sixth"),
+        TextCase("Send 20 no sorry 30", "Send 20, no sorry, 30"),
+        // Already set off, or after an ordinary word: untouched.
+        TextCase("Let's do coffee at two, actually three.", "Let's do coffee at two, actually three."),
+        TextCase("I actually enjoyed the movie.", "I actually enjoyed the movie."),
+        TextCase("We actually did it.", "We actually did it."),
+        TextCase("Sorry about that.", "Sorry about that."),
+        TextCase("I mean it.", "I mean it."),
+        TextCase("Hello. Dana actually left.", "Hello. Dana actually left."),
+        TextCase("Do you want two? Actually three.", "Do you want two? Actually three."),
+        TextCase("", ""),
+        TextCase("actually", "actually"),
+    ]
+
+    @Test(arguments: cases)
+    func setsOffTheCorrection(_ c: TextCase) {
+        #expect(CorrectionCommas.apply(c.input) == c.expected)
+    }
+
+    @Test func theModelIsHandedTheCommasAndTheGuardSeesTheOriginal() async {
+        let cleaner = FakeCleaner { text, _ in
+            #expect(text == "Let's do coffee at two, actually three.")
+            return "Let's do coffee at 3."
+        }
+        let result = await SmartCleanup(cleaner: cleaner).run(
+            SmartCleanupRequest(text: "Let's do coffee at two actually three.", level: .light))
+        #expect(result.outcome == .ok && result.text == "Let's do coffee at 3.")
+    }
+}

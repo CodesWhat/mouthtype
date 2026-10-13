@@ -34,7 +34,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         FontRegistry.registerBundledFonts()
         // The two file/visual modes need no permissions and touch neither the remap, the mic nor the real database.
         if let demo = PillDemo.options(in: arguments) {
-            let pill = PillController(level: { 0 })
+            let pill = PillController(level: { .silence })
             if let skin = demo.skin { pill.setSkin(skin) }
             let cards = DeliveryCardController()
             cards.anchor = { [weak pill] in pill?.cardAnchor() }
@@ -64,8 +64,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         purgeAudio(archive: archive, store: store)
 
         let level = micCapture.capture
-        let pill = PillController(level: { level.level })
-        let inserter = TextInserter(syntheticStamp: SyntheticEvents.stamp)
+        let pill = PillController(level: { level.reading })
+        let inserter = TextInserter(syntheticStamp: SyntheticEvents.stamp, inputGeneration: { [weak self] in self?.hotkeyService?.userInputGeneration })
         let engine = HostEngine(host: engineHost)
         let sounds = SystemSoundPlayer()
         let cards = DeliveryCardController()
