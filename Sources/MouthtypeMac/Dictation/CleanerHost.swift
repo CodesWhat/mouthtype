@@ -1,0 +1,207 @@
+import Foundation
+import MouthtypeCore
+import Observation
+
+/// What the host needs from the local model. `MLXCleaner` is the real one; tests use a fake.
+protocol SmartModel: TextCleaner {
+    var isDownloaded: Bool { get }
+    var revision: String? { get }
+    var downloadSizeMB: Int { get }
+    func download(progress: @escaping @Sendable (Double) -> Void) async throws
+    func load() async throws
+    func unload() async
+}
+
+extension MLXCleaner: SmartModel {
+    nonisolated var downloadSizeMB: Int { spec.downloadSizeMB }
+}
+
+/// What the dictation pipeline asks of the model pass, so tests can stand in for the host.
+protocol SmartCleaning: Sendable {
+    /// The model once it can generate, waiting up to `limit` for a load in progress. Nil when it can't be used.
+    func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo?
+    func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult
+    /// A recording began: load the model now so the first cleanup doesn't wait for it.
+    func recordingStarted()
+}
+
+extension UserDefaults {
+    /// The stored cleanup level, exposed so changes made outside the app can be observed.
+    @objc dynamic var cleanupLevel: String? { string(forKey: CleanupSettings.Key.level) }
+}
+
+enum CleanerState: Equatable, Sendable {
+    /// Not on disk. Nothing is fetched until the user asks.
+    case absent
+    case downloading(fraction: Double)
+    case loading
+    /// On disk, not in memory: the level doesn't need it, or memory pressure unloaded it.
+    case unloaded
+    case ready(loadSeconds: Double)
+    case failed(message: String)
+}
+
+/// Owns the local cleanup model like `EngineHost` owns the speech engine: download on request, load when the level
+/// needs it, warm it, drop it when the level doesn't or memory is short. State is published for the menu.
+@MainActor
+@Observable
+final class CleanerHost: SmartCleaning {
+    private(set) var state: CleanerState
+
+    nonisolated let smart: SmartCleanup
+    @ObservationIgnored private let model: any SmartModel
+    @ObservationIgnored private let level: @MainActor () -> CleanupLevel
+    @ObservationIgnored private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private var downloadTask: Task<Void, Never>?
+    @ObservationIgnored private var pressure: (any DispatchSourceMemoryPressure)?
+    @ObservationIgnored private var defaultsObserver: NSKeyValueObservation?
+
+    init(
+        model: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
+        budget: @escaping @Sendable (Int) -> Duration = SmartCleanup.defaultBudget
+    ) {
+        self.model = model
+        self.level = level
+        smart = SmartCleanup(cleaner: model, budget: budget)
+        state = model.isDownloaded ? .unloaded : .absent
+    }
+
+    var modelName: String { CleanerCatalog.smartCleanupName }
+    var downloadSizeMB: Int { model.downloadSizeMB }
+
+    /// Watches for memory pressure and loads the model if the level wants it and it is on disk.
+    func start() {
+        if pressure == nil {
+            let source = DispatchSource.makeMemoryPressureSource(eventMask: [.warning, .critical], queue: .main)
+            source.setEventHandler { [weak self] in
+                Task { @MainActor in self?.unloadForMemoryPressure() }
+            }
+            source.resume()
+            pressure = source
+        }
+        if defaultsObserver == nil {
+            // The level can change from the menu or from outside (`defaults write`); either way the model follows.
+            defaultsObserver = UserDefaults.standard.observe(\.cleanupLevel, options: [.new]) { [weak self] _, _ in
+                Task { @MainActor in self?.levelChanged() }
+            }
+        }
+        levelChanged()
+    }
+
+    /// The level changed: load for light and medium, give the memory back for off and basic.
+    func levelChanged() {
+        if level().needsModel {
+            if case .failed = state { state = model.isDownloaded ? .unloaded : .absent }
+            ensureLoaded()
+        } else {
+            unload(reason: "level \(level().rawValue)")
+        }
+    }
+
+    func ensureLoaded() {
+        guard state == .unloaded, loadTask == nil else { return }
+        guard model.isDownloaded else {
+            state = .absent
+            return
+        }
+        state = .loading
+        loadTask = Task { [model] in
+            let clock = ContinuousClock()
+            let start = clock.now
+            do {
+                try await model.load()
+                let loadSeconds = (clock.now - start).seconds
+                let warmStart = clock.now
+                _ = try? await model.clean("warm up the cleanup model", context: CleanupContext())
+                Log.cleaner.info("model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
+                finishLoad(.ready(loadSeconds: loadSeconds))
+            } catch {
+                Log.cleaner.error("model \(model.id, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
+                finishLoad(.failed(message: error.localizedDescription))
+            }
+        }
+    }
+
+    private func finishLoad(_ result: CleanerState) {
+        loadTask = nil
+        state = result
+        // The level may have dropped to basic or off while it loaded.
+        if case .ready = result, !level().needsModel { unload(reason: "level \(level().rawValue)") }
+    }
+
+    func unloadForMemoryPressure() {
+        guard case .ready = state else { return }
+        unload(reason: "memory pressure")
+    }
+
+    private func unload(reason: String) {
+        guard case .ready = state else { return }
+        state = .unloaded
+        Task { [model] in await model.unload() }
+        Log.cleaner.info("model unloaded: \(reason, privacy: .public)")
+    }
+
+    // MARK: Download
+
+    /// Fetches the model from Hugging Face. Runs only when the user asks; a stopped download resumes.
+    func startDownload() {
+        guard state == .absent || { if case .failed = state { return true } else { return false } }(), downloadTask == nil else { return }
+        state = .downloading(fraction: 0)
+        downloadTask = Task { [model] in
+            do {
+                try await model.download { fraction in
+                    Task { @MainActor [weak self] in self?.downloadProgress(fraction) }
+                }
+                downloadTask = nil
+                state = .unloaded
+                Log.cleaner.info("model \(model.id, privacy: .public) downloaded")
+                levelChanged()
+            } catch is CancellationError {
+                downloadTask = nil
+                state = model.isDownloaded ? .unloaded : .absent
+            } catch {
+                downloadTask = nil
+                Log.cleaner.error("model download failed: \(error.localizedDescription, privacy: .public)")
+                state = .failed(message: error.localizedDescription)
+            }
+        }
+    }
+
+    func cancelDownload() {
+        downloadTask?.cancel()
+    }
+
+    private func downloadProgress(_ fraction: Double) {
+        guard case .downloading = state else { return }
+        state = .downloading(fraction: min(max(fraction, 0), 1))
+    }
+
+    // MARK: SmartCleaning
+
+    func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? {
+        let clock = ContinuousClock()
+        let deadline = clock.now + limit
+        if state == .unloaded { ensureLoaded() }
+        while true {
+            switch state {
+            case .ready:
+                return SmartCleanerInfo(id: model.id, revision: model.revision)
+            case .loading:
+                guard clock.now < deadline else { return nil }
+                try? await Task.sleep(for: .milliseconds(20))
+            default:
+                return nil
+            }
+        }
+    }
+
+    nonisolated func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
+        await smart.run(request)
+    }
+
+    nonisolated func recordingStarted() {
+        Task { @MainActor in
+            if self.level().needsModel { self.ensureLoaded() }
+        }
+    }
+}

@@ -140,6 +140,7 @@ final class DictationController {
         if startError == nil {
             sounds.playStart()
             pill.showRecording()
+            pipeline.smart?.recordingStarted()
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
         if let startError {
@@ -238,7 +239,8 @@ final class DictationController {
         let inputs = pipeline.cleanupInputs()
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
-        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard)
+        let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
+        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination)
         guard !cleaned.text.isEmpty else {
             await pipeline.finishEmpty(cleaned, session: session)
             pill.hide()

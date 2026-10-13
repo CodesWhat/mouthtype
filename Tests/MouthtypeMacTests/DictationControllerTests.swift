@@ -421,7 +421,7 @@ private struct Rig {
 
     @Test func theMasterSwitchOffDeliversTheRawText() async throws {
         var off = CleanupSettings()
-        off.enabled = false
+        off.level = .off
         let rig = Rig(settings: off)
         rig.engine.result.text = messy
         await rig.dictate()

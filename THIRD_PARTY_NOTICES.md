@@ -129,3 +129,32 @@ Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/
 - Licence: SIL OFL 1.1, `Sources/MouthtypeMac/Resources/Fonts/OFL-JetBrainsMono.txt`
 - Source: https://github.com/JetBrains/JetBrainsMono, tag v2.304 (commit cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9), `fonts/ttf/JetBrainsMono-Medium.ttf`
 - Used for: the Systema set's clocks and countdowns
+
+## S1-mini by Superwhisper
+
+https://huggingface.co/superwhisper/s1-mini, revision 88f6b15896c73bbb13a3b596e0afe8ea0d5150b4
+
+The local model behind light and medium cleanup. It is not bundled with Mouthtype. The user downloads it from Hugging
+Face on request, and it runs on the Mac through MLX. It is a fine-tune of Qwen3-0.6B (Copyright 2024 Alibaba Cloud,
+Apache License 2.0), Copyright 2026 Superwhisper.
+
+- Licence: Apache License, Version 2.0, plus one additional term. The full text is the repository's `LICENSE` file
+  (https://huggingface.co/superwhisper/s1-mini/blob/main/LICENSE) and `NOTICE`.
+- Used for: cleaning each dictation after the deterministic pass (`Sources/MouthtypeCore/MLXCleaner.swift`,
+  `Sources/MouthtypeCore/Smart/`)
+
+The additional term, quoted from the `LICENSE`:
+
+```
+ADDITIONAL TERM
+
+In addition to the terms of the Apache License, Version 2.0 above: any
+use, distribution, or integration of this model, whether unmodified or
+as part of a derivative work or product, must continue to identify it
+by its original name, "S1-mini" by "Superwhisper", using that exact
+capitalization, regardless of any other name under which the model or
+a product incorporating it is marketed or distributed.
+```
+
+Wherever the app names the model it writes exactly `S1-mini by Superwhisper`. The string lives in
+`CleanerCatalog.smartCleanupName`.

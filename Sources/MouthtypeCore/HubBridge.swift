@@ -7,6 +7,8 @@ import os
 /// Downloads model snapshots from the Hugging Face Hub, and serves a complete cached snapshot without touching the network.
 struct HubDownloader: MLXLMCommon.Downloader {
     private let client = HubClient()
+    /// Serve a complete cached snapshot or fail; never touch the network.
+    var offline = false
 
     func download(
         id: String,
@@ -19,9 +21,10 @@ struct HubDownloader: MLXLMCommon.Downloader {
             throw CleanerError.failed("Invalid Hugging Face repository id '\(id)'")
         }
         let ref = revision ?? "main"
-        if !useLatest, let snapshot = Self.completeSnapshot(repo: repo, ref: ref) {
+        if !useLatest || offline, let snapshot = Self.completeSnapshot(repo: repo, ref: ref) {
             return snapshot
         }
+        if offline { throw CleanerError.unavailable(reason: "\(id) is not downloaded") }
         let logger = ProgressLogger(label: id)
         return try await client.downloadSnapshot(
             of: repo,
@@ -36,6 +39,11 @@ struct HubDownloader: MLXLMCommon.Downloader {
 
     static func cacheDirectory(for id: String) -> URL? {
         Repo.ID(rawValue: id).map { HubCache.default.repoDirectory(repo: $0, kind: .model) }
+    }
+
+    /// The commit the cached snapshot is at, or nil when nothing is cached.
+    static func cachedRevision(id: String, revision: String = "main") -> String? {
+        Repo.ID(rawValue: id).flatMap { HubCache.default.resolveRevision(repo: $0, kind: .model, ref: revision) }
     }
 
     static func isCached(id: String, revision: String = "main") -> Bool {

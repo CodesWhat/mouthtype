@@ -1,16 +1,21 @@
 import Foundation
 import MouthtypeCore
 
-/// The Cleanup submenu's switches, kept in UserDefaults. Everything is on and the style is formal by default.
+/// The Cleanup submenu's switches, kept in UserDefaults. The level is light, every stage is on and the style is
+/// formal by default. Light and medium need the local model; without it the app runs as basic.
 struct CleanupSettings: Equatable, Sendable {
-    var enabled = true
+    var level = CleanupLevel.light
     var fillers = true
     var spokenCommands = true
     var numbers = true
     var style = StyleOptions.formal
 
+    var enabled: Bool { level != .off }
+
     enum Key {
-        static let enabled = "cleanupEnabled"
+        static let level = "cleanupLevel"
+        /// The master switch before levels existed. Read once so an old "off" is kept.
+        static let legacyEnabled = "cleanupEnabled"
         static let fillers = "cleanupFillers"
         static let spokenCommands = "cleanupSpokenCommands"
         static let numbers = "cleanupNumbers"
@@ -20,8 +25,10 @@ struct CleanupSettings: Equatable, Sendable {
 
     static func load(_ defaults: UserDefaults = .standard) -> CleanupSettings {
         func flag(_ key: String) -> Bool { defaults.object(forKey: key) as? Bool ?? true }
+        let stored = defaults.string(forKey: Key.level).flatMap(CleanupLevel.init(rawValue:))
+        let legacyOff = defaults.object(forKey: Key.legacyEnabled) as? Bool == false
         return CleanupSettings(
-            enabled: flag(Key.enabled), fillers: flag(Key.fillers), spokenCommands: flag(Key.spokenCommands),
+            level: stored ?? (legacyOff ? .off : .light), fillers: flag(Key.fillers), spokenCommands: flag(Key.spokenCommands),
             numbers: flag(Key.numbers),
             style: StyleOptions(
                 capitalisation: defaults.string(forKey: Key.capitalisation).flatMap(Capitalisation.init(rawValue:)) ?? .sentence,
@@ -31,7 +38,7 @@ struct CleanupSettings: Equatable, Sendable {
     }
 
     func save(to defaults: UserDefaults = .standard) {
-        defaults.set(enabled, forKey: Key.enabled)
+        defaults.set(level.rawValue, forKey: Key.level)
         defaults.set(fillers, forKey: Key.fillers)
         defaults.set(spokenCommands, forKey: Key.spokenCommands)
         defaults.set(numbers, forKey: Key.numbers)

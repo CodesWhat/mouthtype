@@ -39,6 +39,8 @@ struct CleanedDictation: Sendable {
     var text: String
     var edits: [EditOp]
     var cleanup: CleanupRecord
+    /// The deterministic pass's output, when the model pass changed it. Otherwise `text` is that output.
+    var deterministicText: String?
 }
 
 /// Everything after the audio is in hand, off the main actor: features, the WAV, the trim, the engine call, the
@@ -54,6 +56,8 @@ struct DictationPipeline: Sendable {
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
     var textPipeline = TextPipeline()
+    /// The local model pass for light and medium. Nil runs everything as basic.
+    var smart: (any SmartCleaning)?
 
     /// Cleanup slower than this is thrown away and the raw text goes out.
     static let cleanupBudgetMs = 50.0
@@ -145,15 +149,19 @@ struct DictationPipeline: Sendable {
         CleanupInputs(settings: settings(), dictionary: vocabulary.dictionary(), snippets: vocabulary.snippets(), now: clock.now())
     }
 
-    /// The deterministic cleanup. It cannot lose a dictation: past the time budget, or when it leaves nothing for
-    /// text that had words, the raw text is delivered instead. `context` and `clipboard` are used here and dropped.
+    /// The cleanup. The deterministic pass cannot lose a dictation: past the time budget, or when it leaves nothing
+    /// for text that had words, the raw text is delivered instead. At light and medium the local model then works on
+    /// its output, and anything it does wrong delivers the deterministic text. `context` and `clipboard` are used
+    /// here and dropped.
     func clean(
-        _ transcribed: TranscribedDictation, inputs: CleanupInputs, context: InsertionContext?, clipboard: String?
+        _ transcribed: TranscribedDictation, inputs: CleanupInputs, context: InsertionContext?, clipboard: String?,
+        destination: S1MiniControls.Destination = .general
     ) async -> CleanedDictation {
         let settings = inputs.settings
         guard settings.enabled else {
             return CleanedDictation(
-                text: transcribed.rawText, edits: [], cleanup: CleanupRecord(cleanerID: Self.cleanerID, outcome: "skipped")
+                text: transcribed.rawText, edits: [],
+                cleanup: CleanupRecord(cleanerID: Self.cleanerID, level: CleanupLevel.off.rawValue, outcome: "skipped")
             )
         }
         let clock = ContinuousClock()
@@ -164,18 +172,41 @@ struct DictationPipeline: Sendable {
         ))
         let elapsed = clock.now - start
         let ms = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
-        let record = CleanupRecord(
-            cleanerID: Self.cleanerID, style: settings.styleName, ms: Int(ms.rounded()), outcome: "ok"
+        var record = CleanupRecord(
+            cleanerID: Self.cleanerID, level: CleanupLevel.basic.rawValue, style: settings.styleName,
+            ms: Int(ms.rounded()), outcome: "ok"
         )
         if ms > Self.cleanupBudgetMs {
             Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the raw text")
-            var late = record
-            late.outcome = "timeout"
-            return CleanedDictation(text: transcribed.rawText, edits: transcribed.guardEdits, cleanup: late)
+            record.outcome = "timeout"
+            return CleanedDictation(text: transcribed.rawText, edits: transcribed.guardEdits, cleanup: record)
         }
         for note in result.notes { Log.app.info("cleanup note: \(note, privacy: .public)") }
-        Log.app.info("cleanup ok ms=\(ms, format: .fixed(precision: 2)) edits=\(result.edits.count + transcribed.guardEdits.count)")
-        return CleanedDictation(text: result.text, edits: transcribed.guardEdits + result.edits, cleanup: record)
+        let edits = transcribed.guardEdits + result.edits
+        Log.app.info("cleanup ok ms=\(ms, format: .fixed(precision: 2)) edits=\(edits.count)")
+
+        let level = settings.level
+        guard level.needsModel, !result.text.isEmpty, let smart,
+              let model = await smart.readiness(waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text)))
+        else { return CleanedDictation(text: result.text, edits: edits, cleanup: record) }
+
+        let modelResult = await smart.run(SmartCleanupRequest(
+            text: result.text, level: level, style: settings.style, destination: destination,
+            dictionary: inputs.dictionary, snippets: inputs.snippets
+        ))
+        record.cleanerID = model.id
+        record.cleanerRev = model.revision
+        record.level = level.rawValue
+        record.ms = (record.ms ?? 0) + modelResult.milliseconds
+        record.outcome = modelResult.outcome.rawValue
+        record.promptSha = modelResult.promptSHA
+        if let reason = modelResult.rejection {
+            Log.cleaner.info("smart cleanup \(modelResult.outcome.rawValue, privacy: .public): \(reason, privacy: .public)")
+        }
+        Log.cleaner.info("smart cleanup \(modelResult.outcome.rawValue, privacy: .public) ms=\(modelResult.milliseconds)")
+        let modelEdits = (modelResult.edit(from: result.text).map { [$0] } ?? []) + modelResult.postEdits
+        return CleanedDictation(text: modelResult.text, edits: edits + modelEdits, cleanup: record,
+                                deterministicText: modelResult.text == result.text ? nil : result.text)
     }
 
     static let cleanerID = "deterministic"
@@ -190,7 +221,7 @@ struct DictationPipeline: Sendable {
         let insertDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
         await write(session, "recordInsertion") { store in
             try await store.recordInsertion(session.id, InsertionRecord(
-                finalText: result.finalText, detText: cleaned?.text, cleanup: cleaned?.cleanup, method: result.storeMethod,
+                finalText: result.finalText, detText: cleaned?.deterministicText ?? cleaned?.text, cleanup: cleaned?.cleanup, method: result.storeMethod,
                 outcome: result.storeOutcome, focusMoved: result.focusMoved, insertDoneMs: insertDoneMs,
                 target: result.target?.target
             ))

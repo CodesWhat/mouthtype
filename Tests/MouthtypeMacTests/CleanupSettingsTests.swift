@@ -13,9 +13,10 @@ import MouthtypeCore
         return defaults
     }
 
-    @Test func defaultsAreEverythingOnAndFormal() {
+    @Test func defaultsAreLightEverythingOnAndFormal() {
         let settings = CleanupSettings.load(defaults())
         #expect(settings == CleanupSettings())
+        #expect(settings.level == .light && settings.enabled)
         #expect(settings.enabled && settings.fillers && settings.spokenCommands && settings.numbers)
         #expect(settings.style == .formal && settings.styleName == "formal")
         #expect(settings.pipelineOptions == TextPipelineOptions())
@@ -33,9 +34,41 @@ import MouthtypeCore
         #expect(settings.pipelineOptions.fillers == false && settings.pipelineOptions.spokenCommands)
     }
 
+    @Test func theLevelRoundTripsAndEveryLevelIsStored() {
+        for level in CleanupLevel.allCases {
+            let d = defaults()
+            var settings = CleanupSettings()
+            settings.level = level
+            settings.save(to: d)
+            #expect(CleanupSettings.load(d).level == level)
+            #expect(d.string(forKey: "cleanupLevel") == level.rawValue)
+        }
+    }
+
+    @Test func anOldMasterSwitchOffBecomesTheOffLevel() {
+        let d = defaults()
+        d.set(false, forKey: "cleanupEnabled")
+        #expect(CleanupSettings.load(d).level == .off)
+        d.set("medium", forKey: "cleanupLevel")
+        #expect(CleanupSettings.load(d).level == .medium)
+        let fresh = defaults()
+        fresh.set(true, forKey: "cleanupEnabled")
+        #expect(CleanupSettings.load(fresh).level == .light)
+    }
+
+    @Test func onlyOffTurnsTheStagesOffAndTheModelLevelsRunThemAll() {
+        var settings = CleanupSettings()
+        for level in [CleanupLevel.basic, .light, .medium] {
+            settings.level = level
+            #expect(settings.pipelineOptions == TextPipelineOptions())
+        }
+        settings.level = .off
+        #expect(settings.pipelineOptions == .none)
+    }
+
     @Test func masterOffBypassesEveryStageAndStyle() {
         var settings = CleanupSettings()
-        settings.enabled = false
+        settings.level = .off
         settings.style = StylePreset.veryCasual.options
         #expect(settings.pipelineOptions == .none)
     }
@@ -56,15 +89,15 @@ import MouthtypeCore
         _ = item.target?.perform(item.action, with: item)
     }
 
-    @Test func theMenuHasTheMasterStageAndToneItems() {
+    @Test func theMenuHasTheLevelStageAndToneItems() {
         let menu = submenu(CleanupMenuSection(defaults: defaults()))
         for title in [
-            "Clean up dictation", "Remove fillers", "Spoken commands and lists", "Format numbers", "Formal", "Casual",
+            "Off", "Basic", "Light", "Medium", "Remove fillers", "Spoken commands and lists", "Format numbers", "Formal", "Casual",
             "Very casual", "Custom", "Lowercase sentence starts", "Drop final full stop",
         ] {
             #expect(menu.items.contains { $0.title == title }, "\(title)")
         }
-        #expect(item(menu, "Clean up dictation").state == .on)
+        #expect(item(menu, "Light").state == .on && item(menu, "Basic").state == .off)
         #expect(item(menu, "Formal").state == .on && item(menu, "Custom").state == .off)
     }
 
@@ -92,16 +125,28 @@ import MouthtypeCore
         withExtendedLifetime(section) {}
     }
 
-    @Test func togglesPersistAndTheMasterGreysTheRest() {
+    @Test func theLevelsAreRadioItems() {
+        let d = defaults()
+        let section = CleanupMenuSection(defaults: d)
+        let menu = submenu(section)
+        click(item(menu, "Medium"))
+        #expect(CleanupSettings.load(d).level == .medium)
+        #expect(["Off", "Basic", "Light"].allSatisfy { item(menu, $0).state == .off } && item(menu, "Medium").state == .on)
+        click(item(menu, "Basic"))
+        #expect(CleanupSettings.load(d).level == .basic && item(menu, "Basic").state == .on && item(menu, "Medium").state == .off)
+        withExtendedLifetime(section) {}
+    }
+
+    @Test func togglesPersistAndOffGreysTheRest() {
         let d = defaults()
         let section = CleanupMenuSection(defaults: d)
         let menu = submenu(section)
         click(item(menu, "Remove fillers"))
         #expect(CleanupSettings.load(d).fillers == false && item(menu, "Remove fillers").state == .off)
-        click(item(menu, "Clean up dictation"))
+        click(item(menu, "Off"))
         #expect(CleanupSettings.load(d).enabled == false)
         #expect(!item(menu, "Remove fillers").isEnabled && !item(menu, "Casual").isEnabled)
-        #expect(item(menu, "Clean up dictation").isEnabled)
+        #expect(item(menu, "Light").isEnabled)
         withExtendedLifetime(section) {}
     }
 }

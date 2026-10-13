@@ -5,10 +5,13 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     public var vocabulary: [String]
     /// The app the text will be pasted into, when known.
     public var appName: String?
+    /// The control line for S1-mini. Other cleaners ignore it.
+    public var s1Controls: S1MiniControls
 
-    public init(vocabulary: [String] = [], appName: String? = nil) {
+    public init(vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark) {
         self.vocabulary = vocabulary
         self.appName = appName
+        self.s1Controls = s1Controls
     }
 }
 

@@ -2,6 +2,24 @@ import AppKit
 import Foundation
 import MouthtypeCore
 
+/// Debug arguments for the model pass in a self-test: `--cleanup-level <off|basic|light|medium>` overrides the
+/// stored level and `--smart-timeout-ms <n>` replaces the word-based time budget.
+enum SmartTestOptions {
+    static func level(in arguments: [String]) -> CleanupLevel? {
+        value(of: "--cleanup-level", in: arguments).flatMap(CleanupLevel.init(rawValue:))
+    }
+
+    static func budget(in arguments: [String]) -> @Sendable (Int) -> Duration {
+        guard let ms = value(of: "--smart-timeout-ms", in: arguments).flatMap(Int.init) else { return SmartCleanup.defaultBudget }
+        return { _ in .milliseconds(ms) }
+    }
+
+    private static func value(of flag: String, in arguments: [String]) -> String? {
+        guard let index = arguments.firstIndex(of: flag), arguments.indices.contains(index + 1) else { return nil }
+        return arguments[index + 1]
+    }
+}
+
 /// `--pipeline-selftest <audio file>`: run the post-capture path on a file against a temporary database and
 /// archive, log one line (category `selftest`), quit. Needs no permissions; skips capture and paste.
 @MainActor
@@ -14,7 +32,7 @@ enum PipelineSelfTest {
         return arguments[index + 1]
     }
 
-    static func run(path: String, engineHost: EngineHost) async {
+    static func run(path: String, engineHost: EngineHost, cleanerHost: CleanerHost) async {
         do {
             let samples = try AudioLoading.loadSamples(from: URL(fileURLWithPath: path))
             try await waitForEngine(engineHost)
@@ -24,10 +42,15 @@ enum PipelineSelfTest {
             let databaseURL = directory.appendingPathComponent("mouthtype.sqlite")
             let archive = AudioArchive(supportDirectory: directory)
             let clock = SystemDictationClock()
-            let pipeline = DictationPipeline(
+            var pipeline = DictationPipeline(
                 store: TranscriptStoreWriter(store: try TranscriptStore(url: databaseURL)), archive: archive,
                 engine: HostEngine(host: engineHost), clock: clock
             )
+            if let level = SmartTestOptions.level(in: CommandLine.arguments) {
+                pipeline.settings = { var settings = CleanupSettings.load(); settings.level = level; return settings }
+            }
+            pipeline.smart = cleanerHost
+            if pipeline.settings().level.needsModel { try await waitForCleaner(cleanerHost) }
 
             let audioMs = Double(samples.count) * 1000 / AudioCapture.targetSampleRate
             let audio = CapturedAudio(
@@ -61,6 +84,7 @@ enum PipelineSelfTest {
                 + " clipS=\(String(format: "%.2f", audioMs / 1000)) asrMs=\(transcribed?.asrDoneMs.description ?? "none")"
                 + " voicedMs=\(Int(features.voicedMs.rounded())) db=\(databaseURL.path) archive=\(archive.directory.path)"
             Log.selftest.info("\(line, privacy: .public)")
+            Log.selftest.info("pipeline selftest cleaner=\(String(describing: cleanerHost.state), privacy: .public)")
         } catch {
             Log.selftest.error("pipeline selftest failed: \(String(describing: error), privacy: .public)")
         }
@@ -77,6 +101,17 @@ enum PipelineSelfTest {
             }
         }
         throw SelfTestError.engineTimeout
+    }
+
+    /// Waits for the model to load, or gives up when it isn't on disk or fails; the cleanup then runs as basic.
+    private static func waitForCleaner(_ host: CleanerHost) async throws {
+        let deadline = ContinuousClock.now + engineTimeout
+        while ContinuousClock.now < deadline {
+            switch host.state {
+            case .ready, .absent, .failed: return
+            default: try await Task.sleep(for: .milliseconds(100))
+            }
+        }
     }
 
     enum SelfTestError: Error {

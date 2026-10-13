@@ -4,6 +4,11 @@ import MouthtypeCore
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let engineHost = EngineHost()
+    private let cleanerHost = CleanerHost(
+        model: CleanerCatalog.makeSmartCleanup(), level: { CleanupSettings.load().level },
+        budget: SmartTestOptions.budget(in: CommandLine.arguments)
+    )
+    private let dictionary = FileVocabulary()
     private let micCapture = MicCapture()
     private let microphoneSection = MicrophoneMenuSection()
     private let systemSection = SystemAccessMenuSection()
@@ -47,7 +52,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let path = PipelineSelfTest.path(in: arguments) {
             engineHost.start()
-            Task { await PipelineSelfTest.run(path: path, engineHost: engineHost) }
+            cleanerHost.start()
+            Task { await PipelineSelfTest.run(path: path, engineHost: engineHost, cleanerHost: cleanerHost) }
             return
         }
 
@@ -69,11 +75,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         cards.onDismiss = { [weak presenter] in presenter?.userDismissed() }
         cardController = cards
         cardPresenter = presenter
+        var pipeline = DictationPipeline(
+            store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
+        )
+        pipeline.vocabulary = dictionary
+        pipeline.smart = cleanerHost
         let dictation = DictationController(
-            capture: micCapture, engine: engine,
-            pipeline: DictationPipeline(
-                store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
-            ),
+            capture: micCapture, engine: engine, pipeline: pipeline,
             inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock(), cards: presenter
         )
         self.pill = pill
@@ -87,7 +95,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: history)
         menuBar.add(section: PillSkinMenuSection(onSelect: { [weak pill] kind in pill?.setSkin(kind) }))
         menuBar.add(section: TextFontMenuSection())
-        menuBar.add(section: CleanupMenuSection())
+        menuBar.add(section: CleanupMenuSection(cleaner: cleanerHost, dictionary: dictionary))
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
@@ -116,6 +124,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         refreshGlobeCheck()
         engineHost.start()
+        cleanerHost.start()
         Task { await setUpCapture() }
 
         accessibility.onChange = { [weak self] granted in self?.accessibilityChanged(granted) }

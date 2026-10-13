@@ -1,14 +1,24 @@
 import AppKit
 import MouthtypeCore
 
-/// The Cleanup submenu: the master switch, one switch per deterministic stage, and the tone. Presets set the two
-/// tone switches; changing a switch on its own shows the preset as Custom.
+/// The Cleanup submenu: the level, the state of the local model, one switch per deterministic stage, the tone and the
+/// dictionary file. Presets set the two tone switches; changing a switch on its own shows the preset as Custom.
 @MainActor
 final class CleanupMenuSection: NSObject, MenuSection {
     private let defaults: UserDefaults
+    private let cleaner: CleanerHost?
+    private let dictionary: FileVocabulary?
+    private let confirmDownload: @MainActor (_ sizeMB: Int) -> Bool
+    private let openFile: @MainActor (URL) -> Void
     private let parent = NSMenuItem(title: "Cleanup", action: nil, keyEquivalent: "")
     private let submenu = NSMenu(title: "Cleanup")
-    private let masterItem = NSMenuItem(title: "Clean up dictation", action: nil, keyEquivalent: "")
+    private var levelItems: [CleanupLevel: NSMenuItem] = [:]
+    private let modelStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let fallbackItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let downloadItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let cancelDownloadItem = NSMenuItem(title: "Cancel Download", action: nil, keyEquivalent: "")
+    private let editDictionaryItem = NSMenuItem(title: "Edit Dictionary\u{2026}", action: nil, keyEquivalent: "")
+    private let dictionaryErrorItem = NSMenuItem(title: "dictionary.json has an error", action: nil, keyEquivalent: "")
     private let fillersItem = NSMenuItem(title: "Remove fillers", action: nil, keyEquivalent: "")
     private let commandsItem = NSMenuItem(title: "Spoken commands and lists", action: nil, keyEquivalent: "")
     private let numbersItem = NSMenuItem(title: "Format numbers", action: nil, keyEquivalent: "")
@@ -19,18 +29,41 @@ final class CleanupMenuSection: NSObject, MenuSection {
 
     var items: [NSMenuItem] { [parent] }
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard, cleaner: CleanerHost? = nil, dictionary: FileVocabulary? = nil,
+        confirmDownload: @escaping @MainActor (_ sizeMB: Int) -> Bool = CleanupMenuSection.askToDownload,
+        openFile: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
+    ) {
         self.defaults = defaults
+        self.cleaner = cleaner
+        self.dictionary = dictionary
+        self.confirmDownload = confirmDownload
+        self.openFile = openFile
         super.init()
         for (item, action) in [
-            (masterItem, #selector(toggleMaster(_:))), (fillersItem, #selector(toggleFillers(_:))),
+            (downloadItem, #selector(download(_:))), (cancelDownloadItem, #selector(cancelDownload(_:))),
+            (editDictionaryItem, #selector(editDictionary(_:))), (fillersItem, #selector(toggleFillers(_:))),
             (commandsItem, #selector(toggleCommands(_:))), (numbersItem, #selector(toggleNumbers(_:))),
             (capitalisationItem, #selector(toggleCapitalisation(_:))), (endingItem, #selector(toggleEnding(_:))),
         ] {
             item.action = action
             item.target = self
         }
-        submenu.addItem(masterItem)
+        let levelHeader = NSMenuItem(title: "Level", action: nil, keyEquivalent: "")
+        levelHeader.isEnabled = false
+        submenu.addItem(levelHeader)
+        for level in CleanupLevel.allCases {
+            let item = NSMenuItem(title: level.title, action: #selector(selectLevel(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = level.rawValue
+            submenu.addItem(item)
+            levelItems[level] = item
+        }
+        for item in [modelStatusItem, fallbackItem, dictionaryErrorItem] { item.isEnabled = false }
+        submenu.addItem(modelStatusItem)
+        submenu.addItem(fallbackItem)
+        submenu.addItem(downloadItem)
+        submenu.addItem(cancelDownloadItem)
         submenu.addItem(.separator())
         submenu.addItem(fillersItem)
         submenu.addItem(commandsItem)
@@ -51,13 +84,90 @@ final class CleanupMenuSection: NSObject, MenuSection {
         submenu.addItem(.separator())
         submenu.addItem(capitalisationItem)
         submenu.addItem(endingItem)
+        submenu.addItem(.separator())
+        submenu.addItem(editDictionaryItem)
+        submenu.addItem(dictionaryErrorItem)
         parent.submenu = submenu
         refresh()
+        observeModelState()
+    }
+
+    /// The state line follows the model while the menu is open (download progress, load finishing).
+    private func observeModelState() {
+        guard let cleaner else { return }
+        withObservationTracking {
+            _ = cleaner.state
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                self?.refreshModelItems()
+                self?.observeModelState()
+            }
+        }
+    }
+
+    private func refreshModelItems() {
+        let level = CleanupSettings.load(defaults).level
+        guard let cleaner else {
+            for item in [modelStatusItem, fallbackItem, downloadItem, cancelDownloadItem] { item.isHidden = true }
+            return
+        }
+        let name = cleaner.modelName
+        var absent = false
+        var downloading = false
+        var ready = false
+        switch cleaner.state {
+        case .absent:
+            absent = true
+            modelStatusItem.title = "\(name): not downloaded"
+        case let .downloading(fraction):
+            downloading = true
+            modelStatusItem.title = "\(name): downloading \(Int((fraction * 100).rounded()))%"
+        case .loading:
+            modelStatusItem.title = "\(name): loading\u{2026}"
+        case .unloaded:
+            modelStatusItem.title = "\(name): downloaded, loads when needed"
+        case .ready:
+            ready = true
+            modelStatusItem.title = "\(name): ready"
+        case let .failed(message):
+            absent = true
+            modelStatusItem.title = "\(name): failed (\(message))"
+        }
+        downloadItem.title = "Download Smart Cleanup Model\u{2026} (\(Self.sizeText(cleaner.downloadSizeMB)))"
+        downloadItem.isHidden = !absent
+        cancelDownloadItem.isHidden = !downloading
+        fallbackItem.title = "Smart cleanup isn't ready, so dictations use Basic"
+        fallbackItem.isHidden = !(level.needsModel && !ready)
+    }
+
+    static func sizeText(_ megabytes: Int) -> String {
+        megabytes >= 1000 ? String(format: "%.1f GB", Double(megabytes) / 1000) : "\(megabytes) MB"
+    }
+
+    static func askToDownload(sizeMB: Int) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Download \(CleanerCatalog.smartCleanupName)?"
+        alert.informativeText = "It's \(sizeText(sizeMB)), fetched from Hugging Face, and runs on this Mac. "
+            + "Light and medium cleanup use it. Nothing else is downloaded."
+        alert.addButton(withTitle: "Download")
+        alert.addButton(withTitle: "Cancel")
+        NSApp.activate()
+        return alert.runModal() == .alertFirstButtonReturn
     }
 
     func refresh() {
         let settings = CleanupSettings.load(defaults)
-        masterItem.state = settings.enabled ? .on : .off
+        for (level, item) in levelItems { item.state = level == settings.level ? .on : .off }
+        refreshModelItems()
+        dictionary?.reloadIfChanged()
+        editDictionaryItem.isHidden = dictionary == nil
+        switch dictionary?.status {
+        case let .error(message):
+            dictionaryErrorItem.title = "dictionary.json has an error: \(message)"
+            dictionaryErrorItem.isHidden = false
+        default:
+            dictionaryErrorItem.isHidden = true
+        }
         fillersItem.state = settings.fillers ? .on : .off
         commandsItem.state = settings.spokenCommands ? .on : .off
         numbersItem.state = settings.numbers ? .on : .off
@@ -78,7 +188,32 @@ final class CleanupMenuSection: NSObject, MenuSection {
         refresh()
     }
 
-    @objc private func toggleMaster(_ sender: NSMenuItem) { update { $0.enabled.toggle() } }
+    @objc private func selectLevel(_ sender: NSMenuItem) {
+        guard let level = (sender.representedObject as? String).flatMap(CleanupLevel.init(rawValue:)) else { return }
+        update { $0.level = level }
+        cleaner?.levelChanged()
+        refreshModelItems()
+    }
+
+    @objc private func download(_ sender: NSMenuItem) {
+        guard let cleaner, confirmDownload(cleaner.downloadSizeMB) else { return }
+        cleaner.startDownload()
+        refreshModelItems()
+    }
+
+    @objc private func cancelDownload(_ sender: NSMenuItem) {
+        cleaner?.cancelDownload()
+    }
+
+    @objc private func editDictionary(_ sender: NSMenuItem) {
+        guard let dictionary else { return }
+        do {
+            openFile(try dictionary.createIfMissing())
+        } catch {
+            Log.app.error("dictionary file not created: \(String(describing: error), privacy: .public)")
+        }
+        refresh()
+    }
     @objc private func toggleFillers(_ sender: NSMenuItem) { update { $0.fillers.toggle() } }
     @objc private func toggleCommands(_ sender: NSMenuItem) { update { $0.spokenCommands.toggle() } }
     @objc private func toggleNumbers(_ sender: NSMenuItem) { update { $0.numbers.toggle() } }
