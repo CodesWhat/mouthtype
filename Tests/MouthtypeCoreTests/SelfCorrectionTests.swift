@@ -50,6 +50,10 @@ import Testing
         TextCase("Lunch at 5 pm, actually 6 pm.", "Lunch at 6 pm."),
         TextCase("Lunch at five o'clock, actually six o'clock.", "Lunch at six o'clock."),
         TextCase("Lunch at ten oh five, actually ten oh eight.", "Lunch at ten oh eight."),
+        TextCase("Lunch at two thirty, actually three.", "Lunch at 3:00."),
+        TextCase("Make it two thirty actually three.", "Make it 3:00."),
+        TextCase("Lunch at 2:30, actually 3.", "Lunch at 3:00."),
+        TextCase("Lunch at two thirty p m, actually three.", "Lunch at 3:00."),
         // Money and percent.
         TextCase("It costs twenty dollars, actually thirty dollars.", "It costs thirty dollars."),
         TextCase("It costs $20, I mean $30.", "It costs $30."),
@@ -118,12 +122,14 @@ import Testing
         "Meet at two, actually Tuesday.",
         "It costs twenty dollars, no, thirty.",
         "Growth was ten percent, actually twelve.",
-        "Lunch at two thirty, actually three.",
         "It's March fifth, actually the sixth.",
         "See you Monday, actually in April.",
         // A repeated preposition has to match the one before A.
         "Meet on two, actually at three.",
         "Meet at two, actually on Tuesday.",
+        "Lunch at 2:30, actually three people are coming.",
+        "Make it two thirty actually thirteen.",
+        "Make it two thirty actually three copies.",
         // Nothing to correct.
         "Two",
         "",

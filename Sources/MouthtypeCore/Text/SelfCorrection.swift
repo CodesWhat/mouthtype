@@ -12,6 +12,7 @@ import Foundation
 /// ("twenty dollars, no, thirty"), when anything but spaces and one comma sits between the pieces, or when a
 /// sentence boundary does. Names and phrases are left to the model.
 ///
+/// A clock time can also be corrected to a bare hour at the end of a sentence.
 /// English only.
 public struct SelfCorrection: Sendable {
     public static let stageName = "self-correction"
@@ -387,7 +388,7 @@ public struct SelfCorrection: Sendable {
                 if a.start > 0, inside(a.start - 1, a.start), isNumberLike(a.start - 1) { c += 1; continue }
                 let lead = a.start > 0 && linked(a.start - 1, a.start) ? tokens[a.start - 1].lower : nil
 
-                var last: (start: Int, end: Int)?
+                var last: (start: Int, end: Int, bareHour: Int?)?
                 var cursor = c
                 var cueAt = c
                 var length_ = length
@@ -404,7 +405,7 @@ public struct SelfCorrection: Sendable {
 
                 let start = tokens[a.start].start
                 let end = tokens[last.end - 1].end
-                var replacement = String(chars[tokens[last.start].start..<end])
+                var replacement = last.bareHour.map { "\($0):00" } ?? String(chars[tokens[last.start].start..<end])
                 if chars[start].isUppercase, let f = replacement.first, f.isLowercase {
                     replacement = f.uppercased() + replacement.dropFirst()
                 }
@@ -416,16 +417,21 @@ public struct SelfCorrection: Sendable {
 
         /// B straight after the cue that ends at `cueEnd`: the longest value of one of A's kinds, after an optional
         /// repeat of the word that stood before A.
-        private func value(after cueEnd: Int, kinds: [Kind], lead: String?) -> (start: Int, end: Int)? {
+        private func value(after cueEnd: Int, kinds: [Kind], lead: String?) -> (start: Int, end: Int, bareHour: Int?)? {
             var b = cueEnd + 1
             guard b < tokens.count, linked(cueEnd, b) else { return nil }
             if SelfCorrection.prepositions.contains(tokens[b].lower) {
                 guard tokens[b].lower == lead, b + 1 < tokens.count, inside(b, b + 1) else { return nil }
                 b += 1
             }
-            let best = candidates(at: b).filter { kinds.contains($0.kind) }.map(\.end).max()
-            guard let best else { return nil }
-            return (b, best)
+            let values = candidates(at: b)
+            if let best = values.filter({ kinds.contains($0.kind) }).map(\.end).max() { return (b, best, nil) }
+            if kinds.contains(.time), values.contains(where: { $0.kind == .number && $0.end == b + 1 }),
+               let hour = NumberWords.units[tokens[b].lower] ?? NumberWords.teens[tokens[b].lower] ?? Int(tokens[b].lower),
+               (1...12).contains(hour), b + 1 == tokens.count || gap(b, b + 1) == .boundary {
+                return (b, b + 1, hour)
+            }
+            return nil
         }
     }
 }
