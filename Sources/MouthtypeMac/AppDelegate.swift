@@ -26,6 +26,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inserter: TextInserter?
     private var correctionWatcher: CorrectionWatcher?
     private var dictation: DictationController?
+    private var recovery: CrashRecovery?
+    private var recoveryChecked = false
+    private let launchedAt = Date()
     private var inputStarted = false
     private var preparingCapture = false
 
@@ -59,6 +62,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await PasteSelfTest.run() }
             return
         }
+        if let options = RecoverySelfTest.options(in: arguments) {
+            engineHost.start()
+            Task { await RecoverySelfTest.run(options: options, engineHost: engineHost) }
+            return
+        }
         if let path = PipelineSelfTest.path(in: arguments) {
             engineHost.start()
             cleanerHost.start()
@@ -75,6 +83,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let level = micCapture.capture
         let pill = PillController(level: { level.reading })
         let inserter = TextInserter(syntheticStamp: SyntheticEvents.stamp, inputGeneration: { [weak self] in self?.hotkeyService?.userInputGeneration })
+        if let store {
+            do { try inserter.restoreLast(from: store) }
+            catch { Log.app.error("last transcript unavailable: \(error.localizedDescription, privacy: .public)") }
+        }
         let engine = HostEngine(host: engineHost)
         let sounds = ClickSoundPlayer()
         let cards = DeliveryCardController()
@@ -96,6 +108,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         self.pill = pill
         self.inserter = inserter
         self.dictation = dictation
+        if let store {
+            recovery = CrashRecovery(
+                store: store, archive: archive, pipeline: pipeline, cards: presenter, pill: pill, clock: SystemDictationClock(),
+                launchedAt: launchedAt
+            )
+        }
         let watcher = CorrectionWatcher(
             reader: AccessibilityFieldReader(), dictionary: dictionary, ledger: CorrectionLedger(),
             store: store.map(CorrectionStoreWriter.init), cards: presenter, clock: SystemDictationClock(),
@@ -111,6 +129,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: microphoneSection)
         menuBar.add(section: systemSection)
         menuBar.add(section: history)
+        if let recovery {
+            recovery.canRecover = { [weak dictation, weak engineHost] in
+                guard dictation?.phase == .idle, let engineHost else { return false }
+                if case .ready = engineHost.state { return true }
+                return false
+            }
+            menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover))
+            recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
+            dictation.canStartRecording = { [weak recovery] in recovery?.isRecovering != true }
+        }
         menuBar.add(section: PillSkinMenuSection(onSelect: { [weak pill] kind in pill?.setSkin(kind) }))
         menuBar.add(section: TextFontMenuSection())
         menuBar.add(section: CleanupMenuSection(cleaner: cleanerHost, dictionary: dictionary))
@@ -143,6 +171,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshGlobeCheck()
         engineHost.start()
         cleanerHost.start()
+        offerRecoveryWhenReady()
         Task { await setUpCapture() }
 
         accessibility.onChange = { [weak self] granted in self?.accessibilityChanged(granted) }
@@ -240,6 +269,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         } onChange: { [weak self] in
             Task { @MainActor in self?.trackStatus() }
         }
+    }
+
+    /// Once the engine is up, offers the dictation a crash cut off. Looks once per launch.
+    private func offerRecoveryWhenReady() {
+        guard let recovery, !recoveryChecked else { return }
+        guard case .ready = engineHost.state else {
+            withObservationTracking {
+                _ = engineHost.state
+            } onChange: { [weak self] in
+                Task { @MainActor in self?.offerRecoveryWhenReady() }
+            }
+            return
+        }
+        recoveryChecked = true
+        Task { await recovery.offerIfNeeded() }
     }
 
     private func accessibilityChanged(_ granted: Bool) {

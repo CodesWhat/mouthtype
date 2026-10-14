@@ -9,7 +9,22 @@ protocol DictationCapturing: AnyObject {
     var isPrepared: Bool { get }
     func start(keyDownAtNanos: UInt64) async throws
     func stop() async throws -> CapturedAudio
+    /// Like `stop`, but a capture cut short by the input going away is returned instead of thrown.
+    func stopSalvaging() async throws -> CapturedAudio
+    /// What the recording in progress has captured from sample `offset` on.
+    func partialSamples(from offset: Int) async -> [Float]
     func cancel() async
+    /// Fired on the main actor when the input is lost mid-recording.
+    var onInterrupted: (@MainActor () -> Void)? { get set }
+}
+
+extension DictationCapturing {
+    func stopSalvaging() async throws -> CapturedAudio { try await stop() }
+    func partialSamples(from offset: Int) async -> [Float] { [] }
+    var onInterrupted: (@MainActor () -> Void)? {
+        get { nil }
+        set {}
+    }
 }
 
 enum EngineReadiness: Equatable {
@@ -40,6 +55,16 @@ protocol DictationStoring: Sendable {
 protocol DictationArchiving: Sendable {
     /// Writes the WAV and returns where it landed.
     func archive(samples: [Float], id: String) throws -> URL
+    /// Whether a recording in progress is saved as it goes.
+    var writesPartials: Bool { get }
+    func appendPartial(samples: [Float], id: String) throws
+    func discardPartial(id: String)
+}
+
+extension DictationArchiving {
+    var writesPartials: Bool { false }
+    func appendPartial(samples: [Float], id: String) throws {}
+    func discardPartial(id: String) {}
 }
 
 @MainActor
@@ -111,7 +136,17 @@ final class MicCapture: DictationCapturing {
 
     func start(keyDownAtNanos: UInt64) async throws { try await capture.start(keyDownAtNanos: keyDownAtNanos) }
     func stop() async throws -> CapturedAudio { try await capture.stop() }
+    func stopSalvaging() async throws -> CapturedAudio { try await capture.stop(salvaging: true) }
+    func partialSamples(from offset: Int) async -> [Float] { await capture.partialSamples(from: offset) }
     func cancel() async { await capture.cancel() }
+
+    var onInterrupted: (@MainActor () -> Void)? {
+        didSet {
+            let handler = onInterrupted.map(CaptureInterruption.hop)
+            let capture = capture
+            Task { await capture.setInterruptionHandler(handler) }
+        }
+    }
 }
 
 /// The engine `EngineHost` loads. Transcription itself runs on the engine's own executor, not the main actor.
@@ -163,6 +198,8 @@ extension AudioArchive: DictationArchiving {
     func archive(samples: [Float], id: String) throws -> URL {
         try write(samples: samples, id: id).url
     }
+
+    var writesPartials: Bool { true }
 }
 extension TextInserter: DictationInserting {}
 extension PillController: DictationPill {}

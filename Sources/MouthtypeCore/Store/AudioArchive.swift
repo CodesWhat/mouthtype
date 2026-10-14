@@ -26,13 +26,44 @@ public struct AudioArchive: Sendable {
         directory.appendingPathComponent("\(id).wav")
     }
 
+    /// The in-progress copy of a recording that has not ended yet.
+    public func partialURL(for id: String) -> URL {
+        directory.appendingPathComponent("\(id).partial.wav")
+    }
+
+    /// Writes the finished recording, then drops its in-progress copy.
     @discardableResult
     public func write(samples: [Float], id: String) throws -> Entry {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = Self.wavData(samples: samples)
         let url = url(for: id)
         try data.write(to: url, options: .atomic)
+        discardPartial(id: id)
         return Entry(url: url, byteSize: data.count)
+    }
+
+    /// Adds the next stretch of a recording in progress to `<id>.partial.wav`. The header claims the largest size a
+    /// WAV can, so the file reads back as far as it got if the app dies mid-recording.
+    public func appendPartial(samples: [Float], id: String) throws {
+        guard !samples.isEmpty else { return }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = partialURL(for: id)
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try Self.header(riffSize: .max, dataSize: .max).write(to: url, options: .atomic)
+        }
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Self.pcm(samples))
+    }
+
+    public func discardPartial(id: String) {
+        try? FileManager.default.removeItem(at: partialURL(for: id))
+    }
+
+    /// The samples of a WAV at `url`, cut at the end of the file when its header claims more.
+    public static func read(contentsOf url: URL) throws -> [Float] {
+        try samples(fromWAV: Data(contentsOf: url))
     }
 
     public func read(id: String) throws -> [Float] {
@@ -64,9 +95,15 @@ public struct AudioArchive: Sendable {
 
     static func wavData(samples: [Float]) -> Data {
         let dataSize = UInt32(samples.count * 2)
-        var data = Data(capacity: 44 + Int(dataSize))
+        var data = header(riffSize: 36 + dataSize, dataSize: dataSize)
+        data.append(pcm(samples))
+        return data
+    }
+
+    private static func header(riffSize: UInt32, dataSize: UInt32) -> Data {
+        var data = Data(capacity: 44)
         data.append(contentsOf: Array("RIFF".utf8))
-        data.append(le32(36 + dataSize))
+        data.append(le32(riffSize))
         data.append(contentsOf: Array("WAVEfmt ".utf8))
         data.append(le32(16))
         data.append(le16(1))                            // PCM
@@ -77,6 +114,11 @@ public struct AudioArchive: Sendable {
         data.append(le16(16))                           // bits per sample
         data.append(contentsOf: Array("data".utf8))
         data.append(le32(dataSize))
+        return data
+    }
+
+    private static func pcm(_ samples: [Float]) -> Data {
+        var data = Data(capacity: samples.count * 2)
         for s in samples {
             let clamped = max(-1, min(1, s))
             data.append(le16(UInt16(bitPattern: Int16(clamped * 32767))))

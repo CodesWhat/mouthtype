@@ -201,14 +201,44 @@ private final class FakeClipboard: ClipboardWriting {
         #expect(dismissed == 0 && surface.visible == nil)
     }
 
-    @Test func theAPIShowsAnInsertAndCopyPair() {
+    @Test func aRecoveredDictationOffersCopyOnly() {
         let (presenter, surface, _, _) = rig()
-        var inserted = 0
-        presenter.onInsert = { inserted += 1 }
         presenter.present(.recovered("recovered text"))
-        #expect(surface.visible?.card.actions == [.insert, .copy])
+        #expect(surface.visible?.card.actions == [.copy])
+    }
+
+    @Test func aCardsOwnHandlersRunOnItsButtonsAndGoWithTheCard() {
+        let (presenter, surface, _, _) = rig()
+        var log: [String] = []
+        presenter.present(.micDisconnected(seconds: 4), actions: [.insert: { log.append("insert") }, .discard: { log.append("discard") }])
         presenter.perform(.insert)
-        #expect(inserted == 1 && surface.visible == nil)
+        #expect(log == ["insert"] && surface.visible == nil)
+
+        presenter.present(.micDisconnected(seconds: 4), actions: [.insert: { log.append("insert2") }, .discard: { log.append("discard") }])
+        presenter.perform(.discard)
+        presenter.perform(.insert)
+        #expect(log == ["insert", "discard"])
+
+        presenter.present(.recoverOffer(seconds: 12, ago: 120, older: 0), actions: [.recover: { log.append("recover") }])
+        presenter.dismiss()
+        presenter.perform(.recover)
+        #expect(log == ["insert", "discard"])
+        presenter.present(.recoverOffer(seconds: 12, ago: 120, older: 0), actions: [.recover: { log.append("recover") }])
+        presenter.perform(.recover)
+        #expect(log == ["insert", "discard", "recover"])
+    }
+
+    @Test func theRecoveryCardsReadAsHeadlineAndDetailLines() {
+        let offer = DeliveryCard.recoverOffer(seconds: 12, ago: 125, older: 0)
+        #expect(offer.header == "Recover your last dictation?\n12 seconds, 2 minutes ago")
+        #expect(offer.actions == [.recover, .discard] && offer.countdown == nil && offer.kind.isQuiet)
+        #expect(DeliveryCard.recoverOffer(seconds: 61, ago: 30, older: 2).header
+                == "Recover your last dictation?\n1 minute 1 second, just now\nand 2 older ones in Saved Recordings")
+        #expect(DeliveryCard.recoverOffer(seconds: 1, ago: 7200, older: 1).header.hasSuffix("1 second, 2 hours ago\nand 1 older one in Saved Recordings"))
+        let mic = DeliveryCard.micDisconnected(seconds: 7.4)
+        #expect(mic.header == "Microphone disconnected\n7 seconds recorded" && mic.actions == [.insert, .discard] && !mic.kind.isQuiet)
+        let limit = DeliveryCard.limitWarning(stopsAfter: 20 * 60)
+        #expect(limit.header == "One minute left\nRecording stops at 20 minutes" && limit.actions.isEmpty)
     }
 
     @Test func eachCardCaseHasItsHeaderAndActions() {

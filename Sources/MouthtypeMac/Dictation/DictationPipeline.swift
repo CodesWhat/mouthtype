@@ -79,6 +79,25 @@ struct DictationPipeline: Sendable {
         }
     }
 
+    /// Adds the next stretch of a recording in progress to its in-progress copy. False when it couldn't be written.
+    func appendPartial(_ samples: [Float], session: DictationSession) async -> Bool {
+        guard let archive, archive.writesPartials else { return false }
+        return await Task.detached {
+            do {
+                try archive.appendPartial(samples: samples, id: session.id)
+                return true
+            } catch {
+                Log.app.error("partial audio write failed: \(String(describing: error), privacy: .public)")
+                return false
+            }
+        }.value
+    }
+
+    /// A recording that was thrown away takes its in-progress copy with it.
+    func discardPartial(_ session: DictationSession) {
+        archive?.discardPartial(id: session.id)
+    }
+
     /// Features on the untrimmed samples, the WAV before any transcribing, then the capture row.
     func recordCapture(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> AudioFeatures {
         let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))

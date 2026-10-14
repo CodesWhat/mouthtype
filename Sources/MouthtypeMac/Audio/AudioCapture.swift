@@ -31,8 +31,18 @@ public actor AudioCapture {
     private var device = InputDevice(sampleRate: 0, channels: 0)
     private var delivered = InputDevice(sampleRate: 0, channels: 0)
     private var startDelay: TimeInterval = 0
+    private var interruption: (@Sendable () -> Void)?
+
+    /// Failed input buffers in one recording before the input counts as lost.
+    static let inputFailureLimit = 20
 
     public init() {}
+
+    /// Called once from the input's own thread when a recording's input is lost: the device went away, the default
+    /// input moved, or the input stopped delivering. Build the handler with `CaptureInterruption.hop`.
+    public func setInterruptionHandler(_ handler: (@Sendable () -> Void)?) {
+        interruption = handler
+    }
 
     /// Builds the audio unit without starting it. Call at launch once microphone access is granted.
     public func prepare() throws {
@@ -60,10 +70,12 @@ public actor AudioCapture {
         meter.reset()
         let buffer = self.buffer
         let meter = self.meter
+        let interrupted = interruption
+        let failureLimit = Self.inputFailureLimit
         let sink = InputSink(
             deliver: Self.inputHandler(buffer: buffer, converters: converters, onLevel: { meter.update(samples: $0) }),
-            routeChanged: { buffer.markRouteChanged() },
-            inputFailed: { buffer.recordInputFailure() }
+            routeChanged: { if buffer.markRouteChanged() { interrupted?() } },
+            inputFailed: { if buffer.recordInputFailure() == failureLimit { interrupted?() } }
         )
         do {
             delivered = try input.start(device: device, sink: sink)
@@ -78,7 +90,8 @@ public actor AudioCapture {
 
     /// Stops recording and returns the captured samples. Throws `CaptureError.routeChanged` instead of returning a
     /// partial capture if the input route changed mid-recording, and `.notRecording` if nothing was started.
-    public func stop() throws -> CapturedAudio {
+    /// With `salvaging` the partial capture is returned instead.
+    public func stop(salvaging: Bool = false) throws -> CapturedAudio {
         guard recording else { throw CaptureError.notRecording }
         recording = false
         input.stop()
@@ -88,7 +101,7 @@ public actor AudioCapture {
         converters.drain { buffer.appendTail($0) }
         let stats = buffer.currentStats
         logStats(stats)
-        let samples = try buffer.finish()
+        let samples = salvaging ? buffer.finishSalvaging().samples : try buffer.finish()
 
         func ms(_ seconds: TimeInterval?) -> Double? { seconds.map { $0 * 1000 } }
         return CapturedAudio(
@@ -102,6 +115,11 @@ public actor AudioCapture {
             captureStartMs: startDelay * 1000,
             audioMs: Double(samples.count) * 1000 / Self.targetSampleRate
         )
+    }
+
+    /// What the recording in progress has captured from sample `offset` on. Empty when idle.
+    public func partialSamples(from offset: Int) -> [Float] {
+        recording ? buffer.samples(from: offset) : []
     }
 
     /// Discards a recording in progress. Safe when idle.

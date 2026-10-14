@@ -71,7 +71,9 @@ enum PasteSelfTest {
         cards.onAction = { [weak presenter] action in presenter?.perform(action) }
         cards.onDismiss = { [weak presenter] in presenter?.userDismissed() }
 
-        let inserter = TextInserter(syntheticStamp: SyntheticEvents.stamp, inputGeneration: { 0 })
+        let inserter = TextInserter(
+            syntheticStamp: SyntheticEvents.stamp, inputGeneration: { 0 }, restrictedToPID: ProcessInfo.processInfo.processIdentifier
+        )
         var verdicts: [PasteVerification] = []
         inserter.observeVerification { verdicts.append($0) }
 
@@ -194,8 +196,8 @@ enum PasteSelfTest {
     }
 
     private static func saveShot(window: Int, name: String) async {
-        let directory = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-            .appendingPathComponent("build/pill-shots/classic", isDirectory: true)
+        let directory = Bundle.main.bundleURL.deletingLastPathComponent()
+            .appendingPathComponent("pill-shots/classic", isDirectory: true)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent(name)
         let process = Process()

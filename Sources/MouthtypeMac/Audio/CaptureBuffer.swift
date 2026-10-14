@@ -63,10 +63,21 @@ final class CaptureBuffer: @unchecked Sendable {
         return closedBuffers
     }
 
-    func recordInputFailure() {
+    /// Counts a buffer the input failed to deliver and returns how many have failed in this recording.
+    @discardableResult
+    func recordInputFailure() -> Int {
         lock.lock()
         defer { lock.unlock() }
         stats.inputFailures += 1
+        return stats.inputFailures
+    }
+
+    /// A copy of what has been captured from sample `offset` on, for the in-progress copy on disk.
+    func samples(from offset: Int) -> [Float] {
+        lock.lock()
+        defer { lock.unlock() }
+        guard offset < samples.count else { return [] }
+        return Array(samples[max(0, offset)...])
     }
 
     /// Appends converted 16 kHz samples from one tap callback.
@@ -119,10 +130,14 @@ final class CaptureBuffer: @unchecked Sendable {
 
     /// Called from the configuration-change notification. Only sets a flag;
     /// the engine is torn down in `stop()`, never inside the notification.
-    func markRouteChanged() {
+    /// True the first time it is set in a recording.
+    @discardableResult
+    func markRouteChanged() -> Bool {
         lock.lock()
         defer { lock.unlock() }
+        let first = !routeChanged
         routeChanged = true
+        return first
     }
 
     var currentStats: Stats {
@@ -136,14 +151,21 @@ final class CaptureBuffer: @unchecked Sendable {
     /// `CaptureError.routeChanged`, so it is never delivered as a success.
     /// Either way the buffer is empty afterwards.
     func finish() throws -> [Float] {
+        let (captured, changed) = finishSalvaging()
+        if changed { throw CaptureError.routeChanged }
+        return captured
+    }
+
+    /// Ends the recording and returns its samples even if the route changed, with whether it did. For a stop that
+    /// keeps a partial capture instead of throwing it away.
+    func finishSalvaging() -> (samples: [Float], routeChanged: Bool) {
         lock.lock()
+        defer { lock.unlock() }
         let captured = samples
         let changed = routeChanged
         samples.removeAll(keepingCapacity: true)
         routeChanged = false
         isOpen = false
-        lock.unlock()
-        if changed { throw CaptureError.routeChanged }
-        return captured
+        return (captured, changed)
     }
 }

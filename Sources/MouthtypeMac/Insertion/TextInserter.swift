@@ -22,6 +22,7 @@ public final class TextInserter {
     private let now: @MainActor () -> Date
     /// How many real key presses and clicks have happened, or nil when that isn't known.
     private let inputGeneration: @MainActor () -> UInt64?
+    private let restrictedToPID: pid_t?
     private var lastText: String?
     private var lastPaste: LastPaste?
     /// Bumped by every delivery. A verification that finds it moved on is stale and says nothing.
@@ -41,25 +42,28 @@ public final class TextInserter {
     }
 
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
-    public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?) {
+    public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
         self.now = { Date() }
         self.inputGeneration = inputGeneration
+        self.restrictedToPID = restrictedToPID
         self.focus = AccessibilityFocusReader()
         self.keys = SystemPasteKeyResolver()
         self.sleep = { try await Task.sleep(for: .seconds($0)) }
         self.clipboard = PasteboardSession(
             pasteboard: SystemPasteboard(.general),
-            poster: SystemPasteEventPoster(stamp: syntheticStamp)
+            poster: SystemPasteEventPoster(stamp: syntheticStamp, targetPID: restrictedToPID)
         )
     }
 
     init(
         focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, keys: PasteKeyResolving,
         schedule: @escaping PasteboardSession.Schedule, sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
-        now: @escaping @MainActor () -> Date = { Date() }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 }
+        now: @escaping @MainActor () -> Date = { Date() }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
+        restrictedToPID: pid_t? = nil
     ) {
         self.now = now
         self.inputGeneration = inputGeneration
+        self.restrictedToPID = restrictedToPID
         self.focus = focus
         self.keys = keys
         self.sleep = sleep
@@ -87,6 +91,10 @@ public final class TextInserter {
 
     /// The last transcript handed to `deliver`, whether or not it landed.
     var lastDelivered: String? { lastText }
+
+    func restoreLast(from store: TranscriptStore) throws {
+        lastText = try store.lastTranscript()
+    }
 
     public func snapshotFocus() -> FocusSnapshot {
         focus.snapshot()
@@ -116,6 +124,10 @@ public final class TextInserter {
         let generation = deliveryGeneration
         cancelVerification()
         var now = focus.snapshot()
+        if let restrictedToPID, now.pid != restrictedToPID {
+            Log.app.error("self-test focus moved; no paste or clipboard write")
+            return DeliveryResult(method: .none, outcome: .failed("self-test focus moved"), focusMoved: true, target: nil, finalText: "")
+        }
         let secureInput = focus.isSecureInputEnabled
         let moved = startFocus?.hasChanged(to: now) ?? false
 
@@ -150,7 +162,8 @@ public final class TextInserter {
                 )
             }
             // What the field looked like before the chord, for the read-back to compare with.
-            let fieldBefore = now.element.map { focus.readField(of: $0) }
+            let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
+                ? now.element.map { focus.readField(of: $0) } : nil
             guard clipboard.paste(spaced, keyCode: keyCode) else {
                 clipboard.copy(spaced)
                 Log.app.error("could not post the paste event; transcript left on the clipboard")
@@ -187,7 +200,7 @@ public final class TextInserter {
                 do { try await self?.sleep(offset - elapsed) } catch { return }
                 elapsed = offset
                 guard let self, !Task.isCancelled, self.deliveryGeneration == generation else { return }
-                // Without a readable field before the paste there is nothing to compare with; wait the last read out
+                // Without a trustworthy field baseline there is nothing to compare with; wait the last read out
                 // so the receipt is in.
                 guard let baseline else { continue }
                 let observation = self.observe(target)
@@ -252,9 +265,11 @@ final class SystemPasteEventPoster: PasteEventPosting {
     static let postLocation: CGEventTapLocation = .cgSessionEventTap
 
     private let stamp: Int64
+    private let targetPID: pid_t?
 
-    init(stamp: Int64) {
+    init(stamp: Int64, targetPID: pid_t? = nil) {
         self.stamp = stamp
+        self.targetPID = targetPID
     }
 
     /// From a private source with its flags set explicitly. An event with a nil source inherits the modifiers the
@@ -268,7 +283,8 @@ final class SystemPasteEventPoster: PasteEventPosting {
         for event in [down, up] {
             event.flags = .maskCommand
             event.setIntegerValueField(.eventSourceUserData, value: stamp)
-            event.post(tap: Self.postLocation)
+            if let targetPID { event.postToPid(targetPID) }
+            else { event.post(tap: Self.postLocation) }
         }
         return true
     }

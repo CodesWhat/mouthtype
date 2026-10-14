@@ -175,3 +175,62 @@ func makePCM(sampleRate: Double, channels: AVAudioChannelCount, frames: AVAudioF
         #expect(b - a < 1_000_000_000)
     }
 }
+
+@Suite struct CaptureBufferInterruptionTests {
+    private func append(_ samples: [Float], to buffer: CaptureBuffer) {
+        samples.withUnsafeBufferPointer { buffer.append($0, inputFrames: 0, at: 0) }
+    }
+
+    @Test func aSalvagingFinishKeepsWhatWasCapturedAfterARouteChange() throws {
+        let buffer = CaptureBuffer()
+        buffer.reset(startedAt: 0)
+        append([0.1, 0.2, 0.3], to: buffer)
+        #expect(buffer.markRouteChanged())
+        let (samples, changed) = buffer.finishSalvaging()
+        #expect(samples == [0.1, 0.2, 0.3] && changed)
+        buffer.reset(startedAt: 0)
+        append([0.5], to: buffer)
+        buffer.markRouteChanged()
+        #expect(throws: CaptureError.self) { try buffer.finish() }
+    }
+
+    @Test func aRouteChangeIsAnnouncedOnlyTheFirstTimePerRecording() {
+        let buffer = CaptureBuffer()
+        buffer.reset(startedAt: 0)
+        #expect(buffer.markRouteChanged())
+        #expect(!buffer.markRouteChanged())
+        buffer.reset(startedAt: 0)
+        #expect(buffer.markRouteChanged())
+    }
+
+    @Test func inputFailuresAreCounted() {
+        let buffer = CaptureBuffer()
+        buffer.reset(startedAt: 0)
+        #expect(buffer.recordInputFailure() == 1 && buffer.recordInputFailure() == 2)
+    }
+
+    @Test func theTailFromAnOffsetIsWhatHasntBeenSavedYet() {
+        let buffer = CaptureBuffer()
+        buffer.reset(startedAt: 0)
+        #expect(buffer.samples(from: 0).isEmpty)
+        append([1, 2, 3, 4], to: buffer)
+        #expect(buffer.samples(from: 0) == [1, 2, 3, 4] && buffer.samples(from: 3) == [4] && buffer.samples(from: 4).isEmpty)
+        append([5], to: buffer)
+        #expect(buffer.samples(from: 4) == [5])
+    }
+
+    /// Core Audio calls the handler on its own thread; the hop must reach the main actor without the runtime's
+    /// isolation check firing.
+    @Test @MainActor func theHandlerRunsOnTheMainActorWhenCalledFromAnotherThread() async {
+        var ran = 0
+        let hop = CaptureInterruption.hop { MainActor.assertIsolated(); ran += 1 }
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global().async {
+                hop()
+                continuation.resume()
+            }
+        }
+        for _ in 0..<50 where ran == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(ran == 1)
+    }
+}

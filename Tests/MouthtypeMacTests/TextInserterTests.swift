@@ -2,6 +2,7 @@
 import ApplicationServices
 import Foundation
 import Testing
+import MouthtypeCore
 @testable import MouthtypeMac
 
 private func text(_ s: String) -> PasteboardRepresentation {
@@ -156,18 +157,48 @@ private struct Rig {
         }
     }
 
-    init() {
+    init(restrictedToPID: pid_t? = nil) {
         let pending = pending
         let clock = clock
         let input = input
         inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, keys: keys, schedule: { delay, work in
             pending.add(delay, work)
-        }, now: { clock.date }, inputGeneration: { input.value })
+        }, now: { clock.date }, inputGeneration: { input.value }, restrictedToPID: restrictedToPID)
     }
 }
 
 @MainActor
 @Suite struct TextInserterTests {
+    @Test(arguments: [Optional<pid_t>.none, 200])
+    func aSelfTestCannotPasteOrCopyIntoAnotherProcess(pid: pid_t?) async {
+        let rig = Rig(restrictedToPID: 100)
+        rig.focus.current.pid = pid
+        let result = await rig.inserter.deliver("Only for the test window", startFocus: nil)
+        #expect(result.method == .none)
+        #expect(rig.poster.posts == 0 && rig.pasteboard.writes.isEmpty)
+    }
+
+    @Test func aSelfTestCanStillPasteIntoItsOwnProcess() async {
+        let rig = Rig(restrictedToPID: 100)
+        let result = await rig.inserter.deliver("Only for the test window", startFocus: nil)
+        #expect(result.method == .paste && rig.poster.posts == 1)
+    }
+
+    @Test func restoredHistoryCanBeCopiedAndPastedWithoutAClipboardWriteAtLaunch() async throws {
+        let rig = Rig()
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-last-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("history.sqlite"))
+        let id = try store.begin(DictationStart())
+        try store.recordInsertion(id, InsertionRecord(finalText: "Saved before restart"))
+        try rig.inserter.restoreLast(from: store)
+        #expect(rig.pasteboard.writes.isEmpty && rig.poster.posts == 0)
+        #expect(rig.inserter.copyLast())
+        #expect(rig.pasteboard.writes.last?.text == "Saved before restart")
+        let delivered = await rig.inserter.pasteLast()
+        #expect(delivered?.finalText == "Saved before restart" && rig.poster.posts == 1)
+    }
+
     private let original = PasteboardSnapshot(items: [
         [
             PasteboardRepresentation(type: "public.png", data: Data([0x89, 0x50, 0x4E, 0x47])),
@@ -721,6 +752,18 @@ private struct Rig {
         #expect(seen.first?.id == 1)
         #expect(rig.focus.reads == 4)
         #expect(rig.poster.posts == 1)
+    }
+
+    @Test func aTerminalScreenDoesNotProveThatInputWasLost() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.apple.Terminal", role: "AXTextArea", element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        let result = await rig.inserter.deliver("world", startFocus: nil)
+        await rig.inserter.waitForVerification()
+        #expect(result.method == .paste && rig.poster.posts == 1)
+        #expect(seen.map(\.verdict) == [.unknown])
     }
 
     @Test func aFieldThatGrewIsConfirmedAtTheFirstReadAndStopsReading() async {

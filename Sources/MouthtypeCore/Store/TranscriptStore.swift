@@ -284,11 +284,48 @@ public final class TranscriptStore: Sendable {
         }
     }
 
+    /// Rows that never reached an end state (started, recorded or transcribed) and began in `[start, end)`, newest first.
+    public func unfinished(from start: Date, before end: Date) throws -> [DictationRecord] {
+        try pool.read { db in
+            try DictationRecord.fetchAll(db, sql: """
+                SELECT * FROM dictation WHERE status IN (?, ?, ?) AND started_at >= ? AND started_at < ?
+                ORDER BY started_at DESC
+                """, arguments: [
+                    DictationStatus.started, DictationStatus.recorded, DictationStatus.transcribed,
+                    start.timeIntervalSince1970, end.timeIntervalSince1970,
+                ])
+        }
+    }
+
     public func recent(limit: Int) throws -> [DictationRecord] {
         try pool.read { db in
             try DictationRecord.fetchAll(db, sql: """
                 SELECT * FROM dictation WHERE final_text IS NOT NULL ORDER BY started_at DESC LIMIT ?
                 """, arguments: [limit])
+        }
+    }
+
+    public func lastTranscript() throws -> String? {
+        try pool.read { db in
+            try String.fetchOne(db, sql: """
+                SELECT final_text FROM dictation
+                WHERE status = ? AND final_text IS NOT NULL AND TRIM(final_text) != ''
+                    AND COALESCE(is_secure, 0) = 0
+                ORDER BY started_at DESC LIMIT 1
+                """, arguments: [DictationStatus.inserted])
+        }
+    }
+
+    public func savedRecordingCandidates(from start: Date, before launch: Date) throws -> [DictationRecord] {
+        try pool.read { db in
+            try DictationRecord.fetchAll(db, sql: """
+                SELECT * FROM dictation WHERE started_at >= ? AND COALESCE(is_secure, 0) = 0
+                    AND (status = ? OR (status IN (?, ?, ?) AND started_at < ?))
+                ORDER BY started_at DESC
+                """, arguments: [
+                    start.timeIntervalSince1970, DictationStatus.failed,
+                    DictationStatus.started, DictationStatus.recorded, DictationStatus.transcribed, launch.timeIntervalSince1970,
+                ])
         }
     }
 

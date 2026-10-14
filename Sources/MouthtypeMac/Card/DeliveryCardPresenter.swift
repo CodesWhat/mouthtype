@@ -23,12 +23,17 @@ final class SystemClipboard: ClipboardWriting {
 /// What the controller needs from the card.
 @MainActor
 protocol DictationCards: AnyObject {
-    func present(_ card: DeliveryCard)
+    /// `actions` are what Insert, Recover and Discard do for this card alone; they go when the card does.
+    func present(_ card: DeliveryCard, actions: [CardAction: @MainActor () -> Void])
     func dismiss()
     /// Undo was clicked.
     var onUndo: (@MainActor () -> Void)? { get set }
     /// The dismiss control was clicked.
     var onDismissed: (@MainActor (DeliveryCard) -> Void)? { get set }
+}
+
+extension DictationCards {
+    func present(_ card: DeliveryCard) { present(card, actions: [:]) }
 }
 
 /// How a spelling question ended.
@@ -61,6 +66,7 @@ final class DeliveryCardPresenter: DictationCards {
     /// A spelling question ended, once, however it ended.
     var onOfferResolved: (@MainActor (DeliveryCard, OfferResolution) -> Void)?
     private var openOffer: DeliveryCard?
+    private var handlers: [CardAction: @MainActor () -> Void] = [:]
 
     init(surface: any CardSurface, clipboard: any ClipboardWriting, clock: any DictationClock) {
         self.surface = surface
@@ -68,8 +74,9 @@ final class DeliveryCardPresenter: DictationCards {
         self.clock = clock
     }
 
-    func present(_ card: DeliveryCard) {
+    func present(_ card: DeliveryCard, actions: [CardAction: @MainActor () -> Void] = [:]) {
         resolveOffer(.replaced)
+        handlers = actions
         generation += 1
         state = CardViewState(card: card)
         surface.render(state)
@@ -86,6 +93,7 @@ final class DeliveryCardPresenter: DictationCards {
 
     func dismiss() {
         resolveOffer(.replaced)
+        handlers = [:]
         generation += 1
         guard state != nil else { return }
         state = nil
@@ -115,9 +123,11 @@ final class DeliveryCardPresenter: DictationCards {
         case .undo:
             dismiss()
             onUndo?()
-        case .insert:
+        case .insert, .recover, .discard:
+            let handler = handlers[action]
             dismiss()
-            onInsert?()
+            if action == .insert { onInsert?() }
+            handler?()
         case .save, .forget:
             guard onOfferAccepted?(current.card) ?? true else {
                 resolveOffer(.declined)

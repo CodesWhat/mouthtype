@@ -101,7 +101,7 @@ enum CardPalette {
     static let warn = NSColor(hex: 0xFF453A)
 
     /// The status dot and countdown bar: red for a delivery problem, the quiet ink for a question.
-    static func accent(for kind: DeliveryCard.Kind) -> NSColor { kind.isOffer ? ink : warn }
+    static func accent(for kind: DeliveryCard.Kind) -> NSColor { kind.isQuiet ? ink : warn }
 }
 
 /// The card: the dark surface, the reason line with its status dot, the transcript, the buttons and the dismiss
@@ -373,6 +373,10 @@ final class DeliveryCardView: NSView {
             return [text("Not now", color: color)]
         case .keep:
             return [text("Keep", color: color)]
+        case .recover:
+            return [text("Recover", color: color)]
+        case .discard:
+            return [text("Discard", color: color)]
         }
     }
 

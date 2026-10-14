@@ -82,7 +82,7 @@ enum CardLayout {
             transcript = CGRect(x: left, y: y, width: contentWidth, height: ceil(scrolls ? cap : textHeight))
             y += transcript?.height ?? 0
         }
-        y += transcriptBottom
+        if !input.buttonLabelWidths.isEmpty { y += transcriptBottom }
 
         var buttons: [CGRect] = []
         var x = right
@@ -92,7 +92,7 @@ enum CardLayout {
             buttons.insert(CGRect(x: x, y: y, width: w, height: buttonHeight), at: 0)
             x -= buttonGap
         }
-        y += buttonHeight
+        if !buttons.isEmpty { y += buttonHeight }
 
         y += insets.bottom
         let bar = input.hasCountdownBar ? CGRect(x: 0, y: y - barHeight, width: width, height: barHeight) : nil

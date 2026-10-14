@@ -1,7 +1,7 @@
 import Foundation
 
 enum CardAction: Equatable, Sendable {
-    case copy, insert, undo, save, notNow, forget, keep
+    case copy, insert, undo, save, notNow, forget, keep, recover, discard
 
     var title: String {
         switch self {
@@ -12,6 +12,8 @@ enum CardAction: Equatable, Sendable {
         case .notNow: "Not now"
         case .forget: "Forget"
         case .keep: "Keep"
+        case .recover: "Recover"
+        case .discard: "Discard"
         }
     }
 }
@@ -26,9 +28,13 @@ struct SpellingPair: Equatable, Sendable {
 struct DeliveryCard: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
         case secure, nowhere, pasteFailed, cancelled, recovered, rememberSpelling, forgetSpelling
+        case recoverOffer, micDisconnected, limitWarning
 
         /// A question about the dictionary rather than a report on a delivery.
         var isOffer: Bool { self == .rememberSpelling || self == .forgetSpelling }
+
+        /// A card that asks or reports something good rather than a failure, so it wears the quiet ink, not the error red.
+        var isQuiet: Bool { isOffer || self == .recoverOffer || self == .recovered }
     }
 
     /// How long Undo stays offered after a cancel.
@@ -71,9 +77,48 @@ struct DeliveryCard: Equatable, Sendable {
         DeliveryCard(kind: .cancelled, header: "Cancelled", transcript: nil, actions: [.undo], countdown: undoWindow)
     }
 
-    /// For the recovery flow to come: Insert and Copy side by side.
+    /// The result of a recovery. Copy only: the focus at launch isn't where the dictation was meant to go.
     static func recovered(_ text: String) -> DeliveryCard {
-        DeliveryCard(kind: .recovered, header: "Recovered a dictation", transcript: text, actions: [.insert, .copy], countdown: nil)
+        DeliveryCard(kind: .recovered, header: "Recovered a dictation", transcript: text, actions: [.copy], countdown: nil)
+    }
+
+    /// A launch found a dictation a crash cut off. `ago` is the age of the dictation, `older` how many more were set aside.
+    static func recoverOffer(seconds: Double, ago: TimeInterval, older: Int) -> DeliveryCard {
+        var header = "Recover your last dictation?\n\(durationText(seconds)), \(agoText(ago))"
+        if older > 0 { header += "\nand \(older) older \(older == 1 ? "one" : "ones") in Saved Recordings" }
+        return DeliveryCard(kind: .recoverOffer, header: header, transcript: nil, actions: [.recover, .discard], countdown: nil)
+    }
+
+    /// The input went away mid-recording; what was captured is saved and waits for Insert or Discard.
+    static func micDisconnected(seconds: Double) -> DeliveryCard {
+        let count = max(1, Int(seconds.rounded()))
+        return DeliveryCard(
+            kind: .micDisconnected, header: "Microphone disconnected\n\(count) \(count == 1 ? "second" : "seconds") recorded",
+            transcript: nil, actions: [.insert, .discard], countdown: nil
+        )
+    }
+
+    /// A minute before a recording is stopped for length.
+    static func limitWarning(stopsAfter: TimeInterval) -> DeliveryCard {
+        DeliveryCard(
+            kind: .limitWarning, header: "One minute left\nRecording stops at \(durationText(stopsAfter))", transcript: nil,
+            actions: [], countdown: nil
+        )
+    }
+
+    static func durationText(_ seconds: Double) -> String {
+        let total = max(1, Int(seconds.rounded()))
+        func unit(_ n: Int, _ name: String) -> String { "\(n) \(name)\(n == 1 ? "" : "s")" }
+        guard total >= 60 else { return unit(total, "second") }
+        let minutes = total / 60, rest = total % 60
+        return rest == 0 ? unit(minutes, "minute") : "\(unit(minutes, "minute")) \(unit(rest, "second"))"
+    }
+
+    static func agoText(_ age: TimeInterval) -> String {
+        func unit(_ n: Int, _ name: String) -> String { "\(n) \(name)\(n == 1 ? "" : "s") ago" }
+        if age < 60 { return "just now" }
+        if age < 3600 { return unit(Int(age / 60), "minute") }
+        return unit(Int(age / 3600), "hour")
     }
 
     static func rememberSpelling(_ pair: SpellingPair) -> DeliveryCard {

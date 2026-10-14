@@ -4,6 +4,19 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct TranscriptStoreTests {
+    @Test func lastTranscriptSkipsEmptyAndSecureRowsEvenAfterManyAttempts() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        #expect(try store.lastTranscript() == nil)
+        let first = try store.begin(DictationStart(startedAt: Self.noon))
+        try store.recordInsertion(first, InsertionRecord(finalText: "Keep this text"))
+        for n in 1...30 {
+            let id = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(Double(n))))
+            try store.recordInsertion(id, InsertionRecord(finalText: n == 30 ? "private" : "", target: DictationTarget(isSecure: true)))
+        }
+        #expect(try store.lastTranscript() == "Keep this text")
+    }
+
     private static let utc = TimeZone(identifier: "UTC")!
     /// 2026-10-12 12:00:00 UTC
     private static let noon = Date(timeIntervalSince1970: 1_791_806_400)
