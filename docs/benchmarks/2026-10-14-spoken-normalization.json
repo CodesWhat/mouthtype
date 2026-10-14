@@ -6,7 +6,7 @@
     "Text-only ASR-shaped inputs; this does not evaluate microphone recognition or actual paste delivery.",
     "37 development cases and 10 held-out variants. Prompts and guards were developed using the first 37.",
     "One timed call per case after warm-up; latency excludes model loading and is not a stable long-run performance estimate.",
-    "Budgets differ by intended product configuration: native S1 uses 400+12ms/word capped at2500ms; general models use1200+20ms/word capped at4000ms.",
+    "Historical initial-run budgets: native S1 used 400 + 12 ms/word, capped at 2500 ms; general models used 1200 + 20 ms/word, capped at 4000 ms. Later deadline changes are recorded in the long-dictation follow-up.",
     "Automatic checks are case-insensitive exact alternatives; failures include harmless article omissions. Original 19 acceptance cases use their existing checks.",
     "No external judge and no direct Wispr comparison. All inputs are synthetic; no private dictation or audio was uploaded."
   ],

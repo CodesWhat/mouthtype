@@ -1,6 +1,6 @@
 # Spoken normalization, 2026-10-14
 
-Gemma 4 E4B is the selected local cleanup model. This comparison targets spoken-to-written formatting rather than only preserving technical text that is already formatted.
+Gemma 4 E4B is the selected local cleanup model. This comparison targets spoken-to-written formatting rather than only preserving technical text that is already formatted. This report records the earlier configurations; later changes are covered in [long-dictation deadlines](2026-10-14-long-dictation.md) and [faithful cleanup](2026-10-14-faithful-cleanup.md).
 
 | Model | Passes | Development (37) | Held out (10) | Median | p95 |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -18,7 +18,7 @@ Measured on Apple M4 Pro / 48 GB, release arm64, using cached local models. Time
 - Repeated letters inside spelled acronyms survive the filler pass.
 - Checks preserve acronym letters, quantities, negations and question intent while accepting equivalent written notation.
 - Reference text is bounded to 600 characters before the cursor and 300 after it, kept separate from the transcript. Exact context copying is rejected.
-- General models use a clarity instruction for Medium. Unresolved explicit corrections get a separate focused pass on the same model, within the shared deadline. Cursor blending is reapplied after generation.
+- The original general-model configuration used a clarity instruction for Medium, removed in the later faithful-cleanup follow-up. Unresolved explicit corrections get a separate focused pass on the same model, within the shared deadline. Cursor blending is reapplied after generation.
 
 ## Regression checks
 
