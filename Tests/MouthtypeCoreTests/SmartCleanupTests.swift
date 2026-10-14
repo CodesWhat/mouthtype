@@ -67,27 +67,38 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
 @Suite struct SmartCleanupRunTests {
     private let sentence = "we should leave earlier to beat the traffic"
 
-    @Test func knownSpellingsJoinWithClearProjectWording() async {
+    @Test(arguments: [false, true])
+    func knownSpellingsJoinWithClearProjectWording(native: Bool) async {
         let cleaner = FakeCleaner { text, _ in text }
-        cleaner.usesNativeControls = false
+        cleaner.usesNativeControls = native
         let result = await smart(cleaner).run(SmartCleanupRequest(text: "dry dock build", level: .light,
             context: InsertionContext(before: "Project: Drydock\n")))
         #expect(result.outcome == .ok && result.text == "Drydock build")
         #expect(cleaner.calls == 1)
     }
 
-    @Test(arguments: ["the boat is in dry dock", "dry dock"])
-    func uncertainUsesKeepTheirOrdinaryWords(input: String) async {
+    @Test(arguments: [false, true])
+    func projectSpellingSurvivesAModelSplittingItAgain(native: Bool) async {
+        let cleaner = FakeCleaner { text, _ in text.replacingOccurrences(of: "Drydock", with: "dry dock") }
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: "dry dock build", level: .light,
+            context: InsertionContext(before: "Project: Drydock\n")))
+        #expect(result.outcome == .ok && result.text == "Drydock build")
+    }
+
+    @Test(arguments: ["the boat is in dry dock", "dry dock"], [false, true])
+    func uncertainUsesKeepTheirOrdinaryWords(input: String, native: Bool) async {
         let cleaner = FakeCleaner { text, _ in text }
-        cleaner.usesNativeControls = false
+        cleaner.usesNativeControls = native
         let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
             context: InsertionContext(before: "Project: Drydock\n")))
         #expect(result.outcome == .ok && result.text.lowercased() == input)
     }
 
-    @Test func ordinaryWordsCannotBeJoinedByTheLaterCleanupPass() async {
+    @Test(arguments: [false, true])
+    func ordinaryWordsCannotBeJoinedByTheLaterCleanupPass(native: Bool) async {
         let cleaner = FakeCleaner(returning: "Please tell the team that the boat is in Drydock today.")
-        cleaner.usesNativeControls = false
+        cleaner.usesNativeControls = native
         let input = "Please tell the team that the boat is in dry dock today."
         let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
             context: InsertionContext(before: "Project: Drydock\n")))

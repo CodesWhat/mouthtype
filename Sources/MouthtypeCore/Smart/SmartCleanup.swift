@@ -134,7 +134,7 @@ public actor SmartCleanup {
 
         let context = CleanupContext(vocabulary: request.dictionary.map(\.written), appName: request.appName,
             level: request.level, before: request.context?.before, after: request.context?.after)
-        let joining = cleaner.usesNativeControls ? [] : NameJoining.candidates(in: request.text,
+        let joining = NameJoining.candidates(in: request.text,
             spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
         let text = CorrectionCommas.apply(request.text)
         let settleCorrections = !cleaner.usesNativeControls && text.range(
@@ -153,10 +153,10 @@ public actor SmartCleanup {
             ? Self.passes(level: request.level, style: request.style, destination: request.destination)
             : [S1MiniControls.benchmark]
         let cleaner = cleaner
+        let approved = joining.filter { NameJoining.isProjectReference($0, in: request.text) }
         let correctionContext = CleanupContext(correctionsOnly: true)
         let work = Task { () -> Result<Draft, Error> in
             do {
-                let approved = joining.filter { NameJoining.isProjectReference($0, in: request.text) }
                 let ordinary = joining.filter { !approved.contains($0) }
                 let guardInput = NameJoining.applying(approved, to: request.text)
                 var output = CorrectionCommas.apply(guardInput)
@@ -200,7 +200,10 @@ public actor SmartCleanup {
             }) {
                 return finish(.guardRejected, rejection: "surrounding text copied into output", sha: sha)
             }
-            let post = Self.reapply(model, request: request, deferredNames: Set(joining.map(\.written)))
+            let restoredNames = NameJoining.candidates(in: model, spellings: approved.map(\.written))
+                .filter { NameJoining.isProjectReference($0, in: model) }
+            let post = Self.reapply(NameJoining.applying(restoredNames, to: model), request: request,
+                deferredNames: Set(joining.map(\.written)))
             guard NameJoining.preservesOrdinary(draft.ordinary, in: post.text) else {
                 return finish(.guardRejected, rejection: "ordinary words changed into a name", sha: sha)
             }
