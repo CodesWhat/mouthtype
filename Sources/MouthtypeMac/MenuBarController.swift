@@ -90,7 +90,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
         title.isEnabled = false
         menu.addItem(title)
         engineStatusItem.isEnabled = false
-        engineStatusItem.title = engineHost.state.statusText
+        engineStatusItem.title = engineHost.statusText
         menu.addItem(engineStatusItem)
         for section in sections {
             menu.addItem(.separator())
@@ -105,7 +105,7 @@ public final class MenuBarController: NSObject, NSMenuDelegate {
 
     private func observeEngineState() {
         withObservationTracking {
-            engineStatusItem.title = engineHost.state.statusText
+            engineStatusItem.title = engineHost.statusText
         } onChange: { [weak self] in
             Task { @MainActor in self?.observeEngineState() }
         }

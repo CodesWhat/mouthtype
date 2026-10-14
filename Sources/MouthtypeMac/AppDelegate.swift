@@ -128,6 +128,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let history = HistoryMenuSection(store: store)
         menuBar.add(section: microphoneSection)
         menuBar.add(section: systemSection)
+        menuBar.add(section: EngineRetryMenuSection(host: engineHost))
         menuBar.add(section: history)
         if let recovery {
             recovery.canRecover = { [weak dictation, weak engineHost] in
@@ -145,7 +146,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
+        menuBar.add(section: HelpMenuSection())
         self.menuBar = menuBar
+        microphoneSection.onStatusChanged = { [weak self] status in
+            guard let self, status == .authorized, !self.micCapture.isPrepared, !self.preparingCapture else { return }
+            Task { _ = await self.prepareCapture() }
+        }
         historySection = history
         dictation.onAttemptFinished = { [weak menuBar] in menuBar?.refresh() }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }

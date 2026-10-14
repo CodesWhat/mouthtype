@@ -27,6 +27,19 @@ public final class EngineHost {
 
     public private(set) var state: EngineState = .loading
     public private(set) var engine: (any Transcriber)?
+    public private(set) var preparation: EnginePreparation = .loadingModel
+    private var warmingUp = false
+
+    public var statusText: String {
+        guard state == .loading else { return state.statusText }
+        if warmingUp { return "Warming up speech model…" }
+        switch preparation {
+        case let .downloading(fraction):
+            return "Downloading speech model: \(Int((min(max(fraction, 0), 1) * 100).rounded()))%"
+        case .compiling: return "Preparing downloaded speech model…"
+        case .loadingModel: return state.statusText
+        }
+    }
 
     @ObservationIgnored private let engineID: String
     @ObservationIgnored private let makeEngine: @Sendable (String) throws -> any Transcriber
@@ -42,21 +55,33 @@ public final class EngineHost {
 
     public func start() {
         guard task == nil else { return }
-        task = Task { await load() }
+        if case .ready = state { return }
+        state = .loading
+        task = Task {
+            await load()
+            task = nil
+        }
     }
 
     func load() async {
         state = .loading
+        preparation = .loadingModel
+        warmingUp = false
         Log.engine.info("engine \(self.engineID, privacy: .public) loading")
         let clock = ContinuousClock()
         do {
             let transcriber = try makeEngine(engineID)
             let loadStart = clock.now
-            try await transcriber.prepare()
+            if let reporting = transcriber as? any PreparationReporting {
+                try await reporting.prepare { [weak self] stage in await self?.report(stage) }
+            } else {
+                try await transcriber.prepare()
+            }
             let loadSeconds = (clock.now - loadStart).seconds
             Log.engine.info("engine \(self.engineID, privacy: .public) prepared in \(loadSeconds, format: .fixed(precision: 2))s")
 
             let warmStart = clock.now
+            warmingUp = true
             _ = try await transcriber.transcribe(samples: [Float](repeating: 0, count: 16_000))
             let warmSeconds = (clock.now - warmStart).seconds
             Log.engine.info("engine \(self.engineID, privacy: .public) warm-up in \(warmSeconds, format: .fixed(precision: 2))s")
@@ -68,6 +93,11 @@ public final class EngineHost {
             state = .failed(message: error.localizedDescription)
             Log.engine.error("engine \(self.engineID, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
         }
+    }
+
+    private func report(_ stage: EnginePreparation) {
+        guard state == .loading, !warmingUp else { return }
+        preparation = stage
     }
 }
 

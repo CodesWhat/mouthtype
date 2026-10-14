@@ -5,6 +5,8 @@ import Foundation
 /// Microphone authorization: asking once when the system has never asked, and
 /// refusing to start capture when access is missing.
 public enum MicrophoneAccess {
+    public static let settingsURL = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!
+
     public static var status: AVAuthorizationStatus {
         AVCaptureDevice.authorizationStatus(for: .audio)
     }
