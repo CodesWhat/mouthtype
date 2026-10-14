@@ -181,6 +181,16 @@ public struct SelfCorrection: Sendable {
             return 0
         }
 
+        private func meridiemSuffix(from start: Int, to end: Int) -> String {
+            for i in start..<end {
+                let word = tokens[i].lower
+                let split = (word == "a" || word == "p") && i + 1 < end
+                    && tokens[i + 1].lower == "m" && inside(i, i + 1)
+                if isMeridiemWord(word) || split { return word.hasPrefix("p") ? " PM" : " AM" }
+            }
+            return ""
+        }
+
         /// Value of the number words in `from..<to`, nil when they do not parse as one cardinal.
         private func cardinal(_ from: Int, _ to: Int) -> Int? {
             if to - from == 1, tokens[from].lower == "zero" { return 0 }
@@ -405,7 +415,7 @@ public struct SelfCorrection: Sendable {
 
                 let start = tokens[a.start].start
                 let end = tokens[last.end - 1].end
-                var replacement = last.bareHour.map { "\($0):00" } ?? String(chars[tokens[last.start].start..<end])
+                var replacement = last.bareHour.map { "\($0):00" + meridiemSuffix(from: a.start, to: c) } ?? String(chars[tokens[last.start].start..<end])
                 if chars[start].isUppercase, let f = replacement.first, f.isLowercase {
                     replacement = f.uppercased() + replacement.dropFirst()
                 }
@@ -426,9 +436,11 @@ public struct SelfCorrection: Sendable {
             }
             let values = candidates(at: b)
             if let best = values.filter({ kinds.contains($0.kind) }).map(\.end).max() { return (b, best, nil) }
+            let sentenceEnd = b + 1 == tokens.count || chars[tokens[b].end..<tokens[b + 1].start]
+                .contains(where: { $0 == "." || $0 == "!" || $0 == "?" })
             if kinds.contains(.time), values.contains(where: { $0.kind == .number && $0.end == b + 1 }),
                let hour = NumberWords.units[tokens[b].lower] ?? NumberWords.teens[tokens[b].lower] ?? Int(tokens[b].lower),
-               (1...12).contains(hour), b + 1 == tokens.count || gap(b, b + 1) == .boundary {
+               (1...12).contains(hour), sentenceEnd {
                 return (b, b + 1, hour)
             }
             return nil
