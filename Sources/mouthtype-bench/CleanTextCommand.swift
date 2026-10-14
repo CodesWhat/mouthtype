@@ -22,7 +22,7 @@ enum StyleChoice: String, ExpressibleByArgument, CaseIterable {
 }
 
 /// `mouthtype-bench clean`: runs the deterministic text pipeline on typed text, a file of utterances, or the
-/// app's own transcript history (opened read-only). With `--smart` the S1-mini pass runs after it, as in the app.
+/// app's own transcript history (opened read-only). With `--smart` the local model runs after it, as in the app.
 struct CleanTextCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "clean",
@@ -36,11 +36,15 @@ struct CleanTextCommand: AsyncParsableCommand {
     @Option(help: "History: only dictations since this ISO date (2026-10-01 or 2026-10-01T09:00:00Z).") var since: String?
     @Option(help: "History: also write the comparison as a Markdown table to this path.") var markdown: String?
     @Option(help: "Style preset: formal, casual or very-casual.") var style: StyleChoice = .formal
-    @Option(help: "Also run S1-mini by Superwhisper at this level: light or medium. --file may be a .json list of cases; with no input the bundled acceptance cases run.")
+    @Option(help: "Also run local smart cleanup at this level: light or medium. --file may be a .json list of cases; with no input the bundled acceptance cases run.")
     var smart: SmartLevel?
     @Flag(help: "--smart: skip the self-correction rule, so the model sees the correction itself.") var noSelfCorrection = false
     @Option(help: "--smart: give up on the model after this many milliseconds instead of the word-based budget.")
     var smartTimeoutMs: Int?
+    @Option(help: "--smart: cached local cleaner to evaluate. Default: the app's current cleaner.")
+    var cleaner: String?
+    @Option(help: "--smart: write delivered outputs, checks and timings as JSON.")
+    var result: String?
 
     func validate() throws {
         let modes = [text != nil, file != nil, history].filter { $0 }.count
@@ -49,6 +53,8 @@ struct CleanTextCommand: AsyncParsableCommand {
         }
         if smart != nil, history { throw ValidationError("--smart does not apply to --history.") }
         if smartTimeoutMs != nil, smart == nil { throw ValidationError("--smart-timeout-ms needs --smart.") }
+        if cleaner != nil || result != nil, smart == nil { throw ValidationError("--cleaner and --result need --smart.") }
+        if let smartTimeoutMs, smartTimeoutMs < 1 { throw ValidationError("--smart-timeout-ms must be positive.") }
         if markdown != nil, !history { throw ValidationError("--markdown only applies to --history.") }
         if since != nil, !history { throw ValidationError("--since only applies to --history.") }
         if limit < 1 { throw ValidationError("--limit must be at least 1.") }
@@ -80,17 +86,21 @@ struct CleanTextCommand: AsyncParsableCommand {
     }
 
     private func runSmart(level: CleanupLevel) async throws {
-        let cleaner = CleanerCatalog.makeSmartCleanup()
+        let id = cleaner ?? CleanerCatalog.smartCleanupID
+        guard let spec = CleanerCatalog.mlxSpec(id: id), let cleaner = try CleanerCatalog.make(id: id) as? MLXCleaner else {
+            throw ValidationError("--cleaner must name a local MLX cleaner.")
+        }
         guard cleaner.isDownloaded else {
-            throw ValidationError("\(CleanerCatalog.smartCleanupName) is not on disk. Run the cleanup benchmark once to download it.")
+            throw ValidationError("\(spec.displayName) is not on disk. Download it before this offline comparison.")
         }
         try await cleaner.load()
         _ = try? await cleaner.clean("warm up the model before timing it", context: CleanupContext())
+        let observed = ObservedCleaner(cleaner)
         let smart: SmartCleanup
         if let ms = smartTimeoutMs {
-            smart = SmartCleanup(cleaner: cleaner, budget: { _ in .milliseconds(ms) })
+            smart = SmartCleanup(cleaner: observed, budget: { _ in .milliseconds(ms) })
         } else {
-            smart = SmartCleanup(cleaner: cleaner)
+            smart = SmartCleanup(cleaner: observed)
         }
 
         var cases: [SmartCase] = []
@@ -108,8 +118,11 @@ struct CleanTextCommand: AsyncParsableCommand {
         }
         var passed = 0
         var checked = 0
+        var records: [SmartDeliveryRecord] = []
         for item in cases {
-            let run = await SmartRunner.run(item.input, rules: item.rules, level: level, style: style.preset.options, smart: smart, selfCorrection: !noSelfCorrection)
+            await observed.reset()
+            let run = await SmartRunner.run(item.input, rules: item.rules, level: level, style: style.preset.options, smart: smart, selfCorrection: !noSelfCorrection,
+                                            context: item.before == nil && item.after == nil ? nil : InsertionContext(before: item.before, after: item.after), appName: item.appName)
             print("[\(item.id)] raw:     \(Self.escaped(item.input))")
             print("         det:     \(Self.escaped(run.deterministic))")
             print("         final:   \(Self.escaped(run.result.text))")
@@ -123,6 +136,14 @@ struct CleanTextCommand: AsyncParsableCommand {
             }
             print("         outcome: \(run.result.outcome.rawValue)\(note)  \(run.result.milliseconds) ms\(verdict)")
             print("")
+            records.append(SmartDeliveryRecord(id: item.id, cleanerID: id, level: level.rawValue, input: item.input,
+                deterministic: run.deterministic, delivered: run.result.text, outcome: run.result.outcome.rawValue,
+                milliseconds: run.result.milliseconds, rejection: run.result.rejection, failure: item.failure(for: run.result.text), proposed: await observed.proposed))
+        }
+        if let result {
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(records).write(to: URL(fileURLWithPath: result), options: .atomic)
         }
         if checked > 0 { print("\(passed)/\(checked) cases pass the automatic checks at \(level.rawValue)") }
         if passed < checked { throw ExitCode.failure }

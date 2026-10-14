@@ -34,6 +34,7 @@ public struct FillerRemover: Sendable {
         let chars: [Character]
         let n: Int
         let words: [ScanWord]
+        let spelledLetters: Set<Int>
         var removed: [Bool]
         var spans: [TextSpan] = []
         var kept: [Int] = []
@@ -42,7 +43,27 @@ public struct FillerRemover: Sendable {
         init(chars: [Character]) {
             self.chars = chars
             self.n = chars.count
-            self.words = TextScan.words(chars, TextScan.lowered(chars))
+            let words = TextScan.words(chars, TextScan.lowered(chars))
+            self.words = words
+            var spelled = Set<Int>()
+            var run: [Int] = []
+            func finishRun() {
+                if run.count >= 3, Set(run.map { words[$0].lower }).count > 1 {
+                    spelled.formUnion(run)
+                } else if run.count >= 2, run.allSatisfy({ words[$0].lower != "i" && chars[words[$0].start].isUppercase }) {
+                    spelled.formUnion(run)
+                }
+                run.removeAll(keepingCapacity: true)
+            }
+            for index in 0...words.count {
+                if index < words.count, words[index].end - words[index].start == 1, chars[words[index].start].isLetter {
+                    if let last = run.last, !TextScan.onlySpaces(chars, words[last].end, words[index].start) { finishRun() }
+                    run.append(index)
+                } else {
+                    finishRun()
+                }
+            }
+            self.spelledLetters = spelled
             self.removed = [Bool](repeating: false, count: chars.count)
         }
 
@@ -148,6 +169,7 @@ public struct FillerRemover: Sendable {
         func isStutter(_ k: Int, previous p: Int) -> Bool {
             let wk = words[k], wp = words[p]
             guard wk.lower == wp.lower else { return false }
+            if spelledLetters.contains(k), spelledLetters.contains(p) { return false }
             let t = wk.lower
             guard t.contains(where: { $0.isLetter }), !t.contains(where: { $0.isNumber }) else { return false }
             guard !FillerRemover.doubledAllowList.contains(t), !NumberWords.isNumberWord(t) else { return false }

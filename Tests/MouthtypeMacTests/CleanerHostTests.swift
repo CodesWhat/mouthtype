@@ -4,6 +4,20 @@ import Testing
 import MouthtypeCore
 @testable import MouthtypeMac
 
+@Suite struct SmartLaunchOptionsTests {
+    @Test func normalLaunchLeavesTheModelBudgetUnchanged() {
+        let normal: (@Sendable (Int) -> Duration)? = SmartTestOptions.budget(in: ["Mouthtype"])
+        let invalid: (@Sendable (Int) -> Duration)? = SmartTestOptions.budget(in: ["Mouthtype", "--smart-timeout-ms", "invalid"])
+        #expect(normal == nil)
+        #expect(invalid == nil)
+    }
+
+    @Test func diagnosticLaunchCanOverrideTheModelBudget() {
+        let budget: (@Sendable (Int) -> Duration)? = SmartTestOptions.budget(in: ["Mouthtype", "--smart-timeout-ms", "9000"])
+        #expect(budget?(3) == .milliseconds(9000))
+    }
+}
+
 /// Holds a download open until `release()`.
 actor DownloadGate {
     private var open = false
@@ -36,6 +50,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     var loadError: Error?
     var progressSteps: [Double] = [0.25, 0.5, 1]
     var downloadGate: DownloadGate?
+    var unloadGate: DownloadGate?
 
     init(downloaded: Bool) { _downloaded = downloaded }
 
@@ -64,6 +79,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     }
 
     func unload() async {
+        await unloadGate?.wait()
         lock.withLock {
             unloads += 1
             _loaded = false
@@ -73,6 +89,22 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
 @MainActor
 @Suite struct CleanerHostTests {
+    @Test func switchingBackToLightWaitsForTheEarlierUnload() async {
+        let gate = DownloadGate()
+        let (host, model, level) = host(downloaded: true) { $0.unloadGate = gate }
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        level.value = .basic
+        host.levelChanged()
+        level.value = .light
+        host.levelChanged()
+        for _ in 0..<50 { await Task.yield() }
+        #expect(model.loads == 1)
+        await gate.release()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        #expect(model.loads == 2 && model.unloads == 1 && model.isLoaded)
+    }
+
     private final class Level {
         var value = CleanupLevel.light
     }
@@ -128,8 +160,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         await settle(host) { if case .ready = $0 { true } else { false } }
         level.value = .basic
         host.levelChanged()
-        await settle(host) { $0 == .unloaded }
-        try? await Task.sleep(for: .milliseconds(20))
+        await settle(host) { $0 == .unloaded && model.unloads == 1 && !model.isLoaded }
         #expect(host.state == .unloaded && model.unloads == 1 && !model.isLoaded)
         level.value = .medium
         host.levelChanged()
@@ -217,18 +248,18 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
     @Test func anAbsentModelShowsItsNameStateAndSizeBeforeDownloading() {
         let (section, _, _, menu) = make(downloaded: false)
-        #expect(item(menu, prefix: "S1-mini by Superwhisper: not downloaded")?.isHidden == false)
+        #expect(item(menu, prefix: "Gemma 4 E4B: not downloaded")?.isHidden == false)
         let download = item(menu, prefix: "Download Smart Cleanup Model")
         #expect(download?.title == "Download Smart Cleanup Model\u{2026} (1.4 GB)" && download?.isHidden == false)
         #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == false)
         withExtendedLifetime(section) {}
     }
 
-    @Test func theModelIsNamedExactlyAsItsLicenceRequires() {
-        #expect(CleanerCatalog.smartCleanupName == "S1-mini by Superwhisper")
+    @Test func theMenuNamesTheSelectedQualityModel() {
+        #expect(CleanerCatalog.smartCleanupName == "Gemma 4 E4B")
         let (section, host, _, menu) = make(downloaded: false)
-        #expect(host.modelName == "S1-mini by Superwhisper")
-        #expect(menu.items.contains { $0.title.hasPrefix("S1-mini by Superwhisper:") })
+        #expect(host.modelName == "Gemma 4 E4B")
+        #expect(menu.items.contains { $0.title.hasPrefix("Gemma 4 E4B:") })
         withExtendedLifetime(section) {}
     }
 
@@ -237,7 +268,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         host.start()
         for _ in 0..<100 { if case .ready = host.state { break }; try? await Task.sleep(for: .milliseconds(10)) }
         section.refresh()
-        #expect(item(menu, prefix: "S1-mini by Superwhisper: ready") != nil)
+        #expect(item(menu, prefix: "Gemma 4 E4B: ready") != nil)
         #expect(item(menu, prefix: "Download Smart Cleanup Model")?.isHidden == true)
         #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == true)
     }

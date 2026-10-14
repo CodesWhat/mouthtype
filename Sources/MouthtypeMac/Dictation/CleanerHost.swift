@@ -52,13 +52,14 @@ final class CleanerHost: SmartCleaning {
     @ObservationIgnored private let model: any SmartModel
     @ObservationIgnored private let level: @MainActor () -> CleanupLevel
     @ObservationIgnored private var loadTask: Task<Void, Never>?
+    @ObservationIgnored private var unloadTask: Task<Void, Never>?
     @ObservationIgnored private var downloadTask: Task<Void, Never>?
     @ObservationIgnored private var pressure: (any DispatchSourceMemoryPressure)?
     @ObservationIgnored private var defaultsObserver: NSKeyValueObservation?
 
     init(
         model: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-        budget: @escaping @Sendable (Int) -> Duration = SmartCleanup.defaultBudget
+        budget: (@Sendable (Int) -> Duration)? = nil
     ) {
         self.model = model
         self.level = level
@@ -105,7 +106,9 @@ final class CleanerHost: SmartCleaning {
             return
         }
         state = .loading
+        let unloading = unloadTask
         loadTask = Task { [model] in
+            await unloading?.value
             let clock = ContinuousClock()
             let start = clock.now
             do {
@@ -137,7 +140,10 @@ final class CleanerHost: SmartCleaning {
     private func unload(reason: String) {
         guard case .ready = state else { return }
         state = .unloaded
-        Task { [model] in await model.unload() }
+        unloadTask = Task { [model] in
+            await model.unload()
+            unloadTask = nil
+        }
         Log.cleaner.info("model unloaded: \(reason, privacy: .public)")
     }
 

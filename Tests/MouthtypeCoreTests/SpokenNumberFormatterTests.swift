@@ -2,6 +2,24 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct SpokenNumberFormatterTests {
+    @Test(arguments: [
+        ("three D glasses", "3-D glasses"),
+        ("Three d glasses", "3-D glasses"),
+        ("two D drawing", "2-D drawing"),
+        ("a 3 D printer", "a 3-D printer"),
+        ("four D cinema", "4-D cinema"),
+    ])
+    func dimensionalAbbreviations(input: String, expected: String) {
+        let out = format(input)
+        #expect(out.text == expected)
+        #expect(TextTestSupport.replay(out.edits, on: input) == TextTestSupport.stripWhitespace(expected))
+    }
+
+    @Test(arguments: ["three days", "three D's", "three, D glasses", "3D glasses", "3-D glasses", "three D chords", "two D batteries", "four D cells", "three D grades"])
+    func dimensionsLeaveOrdinaryCountsAndExistingAbbreviationsAlone(_ input: String) {
+        #expect(format(input).text == input)
+    }
+
     private func format(_ text: String) -> StageResult {
         SpanRewriter.apply(SpokenNumberFormatter().spans(in: text), to: Array(text), stage: "number format")
     }

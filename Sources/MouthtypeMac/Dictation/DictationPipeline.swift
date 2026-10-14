@@ -155,7 +155,7 @@ struct DictationPipeline: Sendable {
     /// here and dropped.
     func clean(
         _ transcribed: TranscribedDictation, inputs: CleanupInputs, context: InsertionContext?, clipboard: String?,
-        destination: S1MiniControls.Destination = .general
+        destination: S1MiniControls.Destination = .general, appName: String? = nil
     ) async -> CleanedDictation {
         let settings = inputs.settings
         guard settings.enabled else {
@@ -167,7 +167,7 @@ struct DictationPipeline: Sendable {
         let clock = ContinuousClock()
         let start = clock.now
         let result = textPipeline.run(TextPipelineInput(
-            text: transcribed.text, dictionary: inputs.dictionary, snippets: inputs.snippets, context: context,
+            text: transcribed.text, dictionary: inputs.dictionary.filter { !settings.level.needsModel || smart == nil || !$0.isJoinedSpelling }, snippets: inputs.snippets, context: context,
             now: inputs.now, clipboard: clipboard, options: settings.pipelineOptions
         ))
         let elapsed = clock.now - start
@@ -192,7 +192,7 @@ struct DictationPipeline: Sendable {
 
         let modelResult = await smart.run(SmartCleanupRequest(
             text: result.text, level: level, style: settings.style, destination: destination,
-            dictionary: inputs.dictionary, snippets: inputs.snippets
+            dictionary: inputs.dictionary, snippets: inputs.snippets, context: context, appName: appName
         ))
         record.cleanerID = model.id
         record.cleanerRev = model.revision

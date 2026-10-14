@@ -73,9 +73,29 @@ private struct Rules: VocabularyProviding {
         return (pipeline, smart)
     }
 
-    private func clean(_ pipeline: DictationPipeline, text: String? = nil) async -> CleanedDictation {
+    private func clean(_ pipeline: DictationPipeline, text: String? = nil, context: InsertionContext? = nil, appName: String? = nil) async -> CleanedDictation {
         let transcribed = TranscribedDictation(text: text ?? raw, rawText: text ?? raw, asrDoneMs: 0, words: [])
-        return await pipeline.clean(transcribed, inputs: pipeline.cleanupInputs(), context: nil, clipboard: nil)
+        return await pipeline.clean(transcribed, inputs: pipeline.cleanupInputs(), context: context, clipboard: nil, appName: appName)
+    }
+
+    @Test func joiningDictionaryEntriesWaitForContextInsteadOfRewritingPhysicalObjects() async {
+        let cleaner = ScriptedCleaner { text, _ in text }
+        let rules = [DictionaryRule(heard: "dry dock", written: "Drydock"), DictionaryRule(heard: "drydock", written: "Drydock")]
+        let (pipeline, _) = pipeline(cleaner, rules: rules)
+        let result = await clean(pipeline, text: "the boat is in dry dock")
+        #expect(result.text == "The boat is in dry dock")
+    }
+
+    @Test func cursorAndAppContextReachTheCleanupModel() async {
+        let cleaner = ScriptedCleaner { _, context in
+            #expect(context.before == "Recipient: Mary\n")
+            #expect(context.after == nil)
+            #expect(context.appName == "Mail")
+            return "Send this to Mary."
+        }
+        let (pipeline, _) = pipeline(cleaner)
+        let result = await clean(pipeline, text: "send this to merry", context: InsertionContext(before: "Recipient: Mary\n"), appName: "Mail")
+        #expect(result.text == "Send this to Mary." && result.cleanup.outcome == "ok")
     }
 
     @Test func theModelRunsOnTheDeterministicTextAndTheRecordSaysSo() async throws {
@@ -123,11 +143,11 @@ private struct Rules: VocabularyProviding {
         #expect(!cleaned.edits.contains { $0.stage == "llm" })
     }
 
-    @Test func shortInputSkipsTheModel() async {
-        let cleaner = ScriptedCleaner(returning: "x")
+    @Test func shortInputReachesTheModel() async {
+        let cleaner = ScriptedCleaner(returning: "See you soon.")
         let (pipeline, _) = pipeline(cleaner)
         let cleaned = await clean(pipeline, text: "see you soon")
-        #expect(cleaned.text == "See you soon" && cleaned.cleanup.outcome == "skipped" && cleaner.calls == 0)
+        #expect(cleaned.text == "See you soon." && cleaned.cleanup.outcome == "ok" && cleaner.calls == 1)
         #expect(cleaned.cleanup.cleanerID == "superwhisper-s1-mini")
     }
 

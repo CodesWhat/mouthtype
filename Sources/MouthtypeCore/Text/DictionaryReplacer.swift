@@ -14,6 +14,12 @@ public struct DictionaryRule: Sendable, Equatable, Hashable, Codable {
         self.written = written
         self.starred = starred
     }
+
+    public var isJoinedSpelling: Bool {
+        let parts = heard.split(whereSeparator: \.isWhitespace)
+        return parts.count > 1 && parts.allSatisfy { $0.allSatisfy(\.isLetter) }
+            && written.allSatisfy(\.isLetter) && parts.joined().caseInsensitiveCompare(written) == .orderedSame
+    }
 }
 
 /// The dictionary stage: rewrites each rule's `heard` to its `written` form in one pass, so rules cannot chain.

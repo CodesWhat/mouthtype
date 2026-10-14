@@ -7,19 +7,39 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     public var appName: String?
     /// The control line for S1-mini. Other cleaners ignore it.
     public var s1Controls: S1MiniControls
+    public var level: CleanupLevel
+    public var before: String?
+    public var after: String?
+    public var correctionsOnly: Bool
 
-    public init(vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark) {
+    public init(vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
+                level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false) {
         self.vocabulary = vocabulary
         self.appName = appName
         self.s1Controls = s1Controls
+        self.level = level
+        self.before = before.flatMap { value in
+            let bounded = String(value.suffix(600))
+            return bounded.allSatisfy(\.isWhitespace) ? nil : bounded
+        }
+        self.after = after.flatMap { value in
+            let bounded = String(value.prefix(300))
+            return bounded.allSatisfy(\.isWhitespace) ? nil : bounded
+        }
+        self.correctionsOnly = correctionsOnly
     }
 }
 
 public protocol TextCleaner: Sendable {
     var id: String { get }                 // stable slug, e.g. "gemma-4-e2b-it-4bit"
     var displayName: String { get }
+    var usesNativeControls: Bool { get }
     func prepare() async throws            // download if needed + load; idempotent
     func clean(_ transcript: String, context: CleanupContext) async throws -> String
+}
+
+extension TextCleaner {
+    public var usesNativeControls: Bool { false }
 }
 
 public struct CleanupResult: Sendable, Equatable {

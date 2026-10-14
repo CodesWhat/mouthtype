@@ -17,7 +17,7 @@ public struct InsertionContext: Sendable, Equatable {
 ///   break sits between it and the cursor): lowercase the first letter, unless the first word is `I`/`I'm`/...,
 ///   an all-caps acronym, a mixed-case word (`McDonald`, `iPhone`), or one a dictionary rule or snippet wrote
 ///   (`protectedWords`).
-/// - `after` starts with text (not whitespace, not the end): drop one trailing full stop (not an ellipsis).
+/// - `after` starts with text, allowing spaces/tabs but not a new line: drop one trailing full stop (not an ellipsis).
 /// - Otherwise, at the start of a sentence or with no context, capitalise the first letter (same exceptions).
 ///
 /// Known miss: a proper noun that starts the result mid-sentence ("Sarah said yes") is lowercased, because
@@ -77,7 +77,7 @@ public struct BlendStage: Sendable {
         }
 
         // A full stop before text that already follows the cursor.
-        if let after = context?.after, let first = after.first, !first.isWhitespace {
+        if let after = context?.after, let first = after.drop(while: { $0 == " " || $0 == "\t" }).first, !first.isWhitespace {
             var e = chars.count
             while e > 0, chars[e - 1].isWhitespace { e -= 1 }
             if e > 0, chars[e - 1] == ".", !(e > 1 && chars[e - 2] == ".") {

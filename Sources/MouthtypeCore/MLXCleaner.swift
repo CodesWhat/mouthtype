@@ -27,6 +27,7 @@ public actor MLXCleaner: MeasuredCleaner {
     public nonisolated let displayName: String
     public nonisolated let modelDirectory: URL?
     public nonisolated let usesSharedPrompt: Bool
+    public nonisolated var usesNativeControls: Bool { spec.promptFormat == .s1Mini }
     public nonisolated let license: String?
     public nonisolated let spec: Spec
 
@@ -102,7 +103,7 @@ public actor MLXCleaner: MeasuredCleaner {
         var additionalContext: [String: any Sendable]?
         switch spec.promptFormat {
         case .shared:
-            messages = [.system(CleanupPrompt.system(for: context)), .user(CleanupPrompt.user(transcript))]
+            messages = [.system(CleanupPrompt.system(for: context)), .user(CleanupPrompt.user(transcript, context: context))]
         case .s1Mini:
             messages = [.system(S1MiniPrompt.system), .user(S1MiniPrompt.user(transcript, controls: context.s1Controls))]
             additionalContext = ["enable_thinking": false]

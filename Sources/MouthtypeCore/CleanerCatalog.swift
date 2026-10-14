@@ -42,7 +42,8 @@ public enum CleanerCatalog {
             repo: "mlx-community/gemma-4-e2b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: nil),
         MLXCleaner.Spec(
             id: "gemma-4-e4b-it-4bit", displayName: "Gemma 4 E4B it (MLX 4-bit)",
-            repo: "mlx-community/gemma-4-e4b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: nil),
+            repo: "mlx-community/gemma-4-e4b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: "Gemma Terms of Use",
+            downloadSizeMB: 5150),
         MLXCleaner.Spec(
             id: "qwen3-4b-instruct-2507-4bit", displayName: "Qwen3 4B Instruct 2507 (MLX 4-bit)",
             repo: "mlx-community/Qwen3-4B-Instruct-2507-4bit", quantization: "4-bit", promptFormat: .shared, license: nil),
@@ -60,11 +61,11 @@ public enum CleanerCatalog {
     ]
 
     /// The model the app's smart cleanup runs. Wherever it is named in the UI it reads exactly this.
-    public static let smartCleanupID = "superwhisper-s1-mini"
-    public static let smartCleanupName = "S1-mini by Superwhisper"
+    public static let smartCleanupID = "gemma-4-e4b-it-4bit"
+    public static let smartCleanupName = "Gemma 4 E4B"
 
     public static func makeSmartCleanup() -> MLXCleaner {
-        guard let spec = mlxSpec(id: smartCleanupID) else { preconditionFailure("S1-mini is missing from the catalog") }
+        guard let spec = mlxSpec(id: smartCleanupID) else { preconditionFailure("Smart cleanup model is missing from the catalog") }
         return MLXCleaner(spec: spec)
     }
 

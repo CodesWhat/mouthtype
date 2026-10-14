@@ -1,0 +1,152 @@
+[
+  {
+    "id": "drydock-project",
+    "input": "the dry dock build passed",
+    "target": "The Drydock build passed",
+    "before": "Project: Drydock\n",
+    "exact": [
+      "The Drydock build passed",
+      "The Drydock build passed."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "drydock-ordinary",
+    "input": "the boat is still on the dry dock",
+    "target": "The boat is still on the dry dock",
+    "before": "Project: Drydock\n",
+    "exact": [
+      "The boat is still on the dry dock",
+      "The boat is still on the dry dock."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "sockguard-project",
+    "input": "deploy the sock guard update",
+    "target": "Deploy the Sockguard update",
+    "before": "Project: Sockguard\n",
+    "exact": [
+      "Deploy the Sockguard update",
+      "Deploy the Sockguard update."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "sockguard-ordinary",
+    "input": "replace the sock guard on the bike",
+    "target": "Replace the sock guard on the bike",
+    "before": "Project: Sockguard\n",
+    "exact": [
+      "Replace the sock guard on the bike",
+      "Replace the sock guard on the bike."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "portwing-project",
+    "input": "the port wing repository needs a fix",
+    "target": "The Portwing repository needs a fix",
+    "before": "Project: Portwing\n",
+    "exact": [
+      "The Portwing repository needs a fix",
+      "The Portwing repository needs a fix."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "portwing-ordinary",
+    "input": "the airplane has a dent on its port wing",
+    "target": "The airplane has a dent on its port wing",
+    "before": "Project: Portwing\n",
+    "exact": [
+      "The airplane has a dent on its port wing",
+      "The airplane has a dent on its port wing."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "workbench-project",
+    "input": "open the work bench repository",
+    "target": "Open the Workbench repository",
+    "before": "Project: Workbench\n",
+    "exact": [
+      "Open the Workbench repository",
+      "Open the Workbench repository."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "workbench-ordinary",
+    "input": "put the hammer on the work bench",
+    "target": "Put the hammer on the work bench",
+    "before": "Project: Workbench\n",
+    "exact": [
+      "Put the hammer on the work bench",
+      "Put the hammer on the work bench."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "papertrail-project",
+    "input": "restart the paper trail service",
+    "target": "Restart the Papertrail service",
+    "before": "Project: Papertrail\n",
+    "exact": [
+      "Restart the Papertrail service",
+      "Restart the Papertrail service."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "papertrail-ordinary",
+    "input": "the investigation left a paper trail",
+    "target": "The investigation left a paper trail",
+    "before": "Project: Papertrail\n",
+    "exact": [
+      "The investigation left a paper trail",
+      "The investigation left a paper trail."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "drydock-project-dictionary",
+    "input": "the dry dock build passed",
+    "target": "The Drydock build passed",
+    "exact": [
+      "The Drydock build passed",
+      "The Drydock build passed."
+    ],
+    "caseSensitive": true,
+    "dictionary": [
+      {
+        "heard": "dry dock",
+        "written": "Drydock"
+      },
+      {
+        "heard": "drydock",
+        "written": "Drydock"
+      }
+    ]
+  },
+  {
+    "id": "drydock-ordinary-dictionary",
+    "input": "the boat is still on the dry dock",
+    "target": "The boat is still on the dry dock",
+    "exact": [
+      "The boat is still on the dry dock",
+      "The boat is still on the dry dock."
+    ],
+    "caseSensitive": true,
+    "dictionary": [
+      {
+        "heard": "dry dock",
+        "written": "Drydock"
+      },
+      {
+        "heard": "drydock",
+        "written": "Drydock"
+      }
+    ]
+  }
+]

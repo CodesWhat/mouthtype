@@ -3,6 +3,13 @@ import Testing
 @testable import mouthtype_bench
 
 @Suite struct CleanupCheckerTests {
+    @Test func nameChecksCanRequireExactCasing() throws {
+        let data = Data(#"{"id":"case","input":"we may ship","target":"We may ship","exact":["We may ship"],"caseSensitive":true}"#.utf8)
+        let testCase = try JSONDecoder().decode(SmartCase.self, from: data)
+        #expect(testCase.failure(for: "We may ship") == nil)
+        #expect(testCase.failure(for: "We May ship") != nil)
+    }
+
     private func makeCase(
         input: String = "um hello there", mustContain: [String] = [], mustNotContain: [String] = [],
         max: Double? = nil, min: Double? = nil

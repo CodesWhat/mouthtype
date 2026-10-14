@@ -74,7 +74,7 @@ import Testing
 
     @Test func dropsTrailingStopBeforeFollowingText() {
         #expect(blend("send it.", before: "please ", after: "now") == "send it")
-        #expect(blend("send it.", before: "please", after: " now") == "send it.")
+        #expect(blend("send it.", before: "please", after: " now") == "send it")
         #expect(blend("send it.", before: "please", after: "") == "send it.")
         #expect(blend("send it.", before: "please", after: nil) == "send it.")
         #expect(blend("send it.", before: "please", after: "\nnext") == "send it.")

@@ -38,7 +38,7 @@ public final class AppleCleaner: MeasuredCleaner {
             let start = clock.now
             var text = ""
             var firstOutput: Double?
-            for try await snapshot in session.streamResponse(to: CleanupPrompt.user(transcript), options: options) {
+            for try await snapshot in session.streamResponse(to: CleanupPrompt.user(transcript, context: context), options: options) {
                 text = snapshot.content
                 if firstOutput == nil, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     firstOutput = (clock.now - start).seconds

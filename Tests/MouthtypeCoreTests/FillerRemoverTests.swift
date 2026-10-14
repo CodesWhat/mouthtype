@@ -2,6 +2,10 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct FillerRemoverTests {
+    @Test(arguments: ["use H T T P S", "the S S L certificate", "an I E E E standard", "use h t t p s"])
+    func spelledLettersAreNotStutters(_ text: String) {
+        #expect(FillerRemover().apply(text).text == text)
+    }
     static let removals: [TextCase] = [
         TextCase("um so I think we should uh ship it", "So I think we should ship it"),
         TextCase("Um, so we go", "So we go"),

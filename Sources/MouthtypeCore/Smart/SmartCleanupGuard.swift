@@ -9,7 +9,7 @@ public enum SmartCleanupGuard {
     /// Share of the output's content words that may be new, past which it is answering rather than transcribing.
     public static func maximumNovel(for level: CleanupLevel) -> Double { level == .medium ? 0.6 : 0.5 }
 
-    /// How many words either side of a number or name a self-correction cue still excuses it.
+    /// How far after an abandoned number or name its correction cue may appear.
     static let cueReach = 4
 
     /// Phrases a speaker uses to replace what they just said. Matched as whole words.
@@ -35,7 +35,8 @@ public enum SmartCleanupGuard {
 
     /// A reason to reject, or nil when the output is fine.
     public static func rejection(
-        input: String, output: String, level: CleanupLevel, dictionary: [DictionaryRule] = [], snippets: [Snippet] = []
+        input: String, output: String, level: CleanupLevel, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
+        nearbySpellings: [String] = []
     ) -> String? {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "empty output" }
@@ -44,14 +45,33 @@ public enum SmartCleanupGuard {
         let limit = CleanupLimits.maxOutputTokens(for: input)
         if outputWords > limit { return "output has \(outputWords) words, over the \(limit) limit" }
 
-        if let missing = missingNumber(input: input, output: trimmed) { return "number \(missing) missing or changed" }
+        if let reason = changedIntent(input: input, output: trimmed) { return reason }
+        let comparableInput = writtenForm(input)
+        let comparableOutput = writtenForm(trimmed)
+        let outputSpellings = Set(comparableOutput.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
+        for word in comparableInput.split(whereSeparator: \.isWhitespace).map(stripped)
+        where word.count > 1 && word.contains(where: \.isLetter) && word.allSatisfy({ $0.isUppercase || $0.isNumber }) {
+            if !outputSpellings.contains(word.lowercased()) { return "acronym \(word) missing or changed" }
+        }
+
+        if let missing = missingNumber(input: comparableInput, output: comparableOutput) { return "number \(missing) missing or changed" }
         if let missing = missingTerm(input: input, output: trimmed, dictionary: dictionary, snippets: snippets) {
             return "\"\(missing)\" missing"
         }
-        if let missing = missingName(input: input, output: trimmed) { return "name \"\(missing)\" missing" }
+        if let missing = missingName(input: comparableInput, output: comparableOutput) { return "name \"\(missing)\" missing" }
 
-        let inputWords = contentWords(input)
-        let outputContent = contentWords(trimmed)
+        let nearbyNames = Set(nearbySpellings.map { $0.lowercased() })
+        let inputParts = input.split(whereSeparator: \.isWhitespace).map(String.init)
+        let outputParts = Set(trimmed.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
+        for (index, part) in inputParts.enumerated() {
+            let word = stripped(part).lowercased()
+            if nearbyNames.contains(word), !outputParts.contains(word), !laterCue(tokens: inputParts, position: index) {
+                return "nearby spelling \"\(word)\" changed"
+            }
+        }
+
+        let inputWords = contentWords(comparableInput)
+        let outputContent = contentWords(comparableOutput)
         if !inputWords.isEmpty {
             let kept = Double(inputWords.filter { present($0, in: outputContent) }.count) / Double(inputWords.count)
             if kept < minimumKept(for: level) {
@@ -68,6 +88,88 @@ public enum SmartCleanupGuard {
     }
 
     // MARK: Words
+
+    static func changedIntent(input: String, output: String) -> String? {
+        func negatives(_ text: String) -> Int {
+            let words = TextMetrics.normalizedWords(text)
+            return words.indices.filter { index in
+                let word = words[index]
+                let next = index + 1 < words.count ? words[index + 1] : ""
+                if word == "no", ["wait", "sorry"].contains(next) { return false }
+                if word == "never", next == "mind" { return false }
+                return ["no", "not", "never", "neither", "nor", "without", "cannot"].contains(word) || word.hasSuffix("n't")
+            }.count
+        }
+        if negatives(input) != negatives(output) { return "negation changed" }
+        func timeOfDay(_ text: String) -> Set<String> {
+            var values = Set<String>()
+            let pattern = #"(?i)(?<!\p{L})([ap])[. \t]*m\.?(?!\p{L})"#
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                let source = text as NSString
+                for match in regex.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                    guard let range = Range(match.range, in: text) else { continue }
+                    let previous = text[..<range.lowerBound].split(whereSeparator: \.isWhitespace).last.map(String.init) ?? ""
+                    if previous.contains(where: \.isNumber) || NumberWords.isNumberWord(previous.lowercased()) {
+                        values.insert(source.substring(with: match.range(at: 1)).lowercased())
+                    }
+                }
+            }
+            let words = Set(TextMetrics.normalizedWords(text))
+            if !words.isDisjoint(with: ["morning", "midnight"]) { values.insert("a") }
+            if !words.isDisjoint(with: ["afternoon", "evening", "tonight", "noon"]) { values.insert("p") }
+            return values
+        }
+        if !timeOfDay(output).isSubset(of: timeOfDay(input)) { return "time of day added or changed" }
+        let questions = ["what", "what's", "who", "who's", "where", "where's", "when", "why", "how", "which"]
+        if let first = TextMetrics.normalizedWords(input).first, questions.contains(first),
+           let next = TextMetrics.normalizedWords(output).first, !questions.contains(next) {
+            return "question changed into a statement"
+        }
+        return nil
+    }
+
+    /// Equivalent spoken and written spellings for comparison, never for delivery.
+    static func writtenForm(_ text: String) -> String {
+        func replace(_ text: String, pattern: String, transform: (NSTextCheckingResult, NSString) -> String) -> String {
+            let source = text as NSString
+            guard let expression = try? NSRegularExpression(pattern: pattern) else { return text }
+            let matches = expression.matches(in: text, range: NSRange(location: 0, length: source.length))
+            var result = text
+            for match in matches.reversed() {
+                guard let range = Range(match.range, in: result) else { continue }
+                result.replaceSubrange(range, with: transform(match, source))
+            }
+            return result
+        }
+        let digits = ["zero": "0", "oh": "0", "one": "1", "two": "2", "three": "3", "four": "4", "five": "5", "six": "6", "seven": "7", "eight": "8", "nine": "9"]
+        let digitPattern = "(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)"
+        var result = replace(text, pattern: "(?<![\\p{L}\\p{N}])(?:[A-Z][ \\t.-]+){1,}[A-Z](?![\\p{L}\\p{N}])") { match, source in
+            source.substring(with: match.range).filter(\.isLetter)
+        }
+        result = replace(result, pattern: "\\b([A-Z]{2,})-([A-Z])\\b") { match, source in
+            source.substring(with: match.range(at: 1)) + source.substring(with: match.range(at: 2))
+        }
+        result = replace(result, pattern: #"\bUSB[ \t]+([ABC])\b"#) { match, source in
+            "USB" + source.substring(with: match.range(at: 1))
+        }
+        result = replace(result, pattern: "(?i)\\b\(digitPattern)(?:\\s+\(digitPattern))+\\b") { match, source in
+            let words = source.substring(with: match.range).lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+            guard words.contains("oh") || words.contains("zero") else { return source.substring(with: match.range) }
+            return words.compactMap { digits[$0] }.joined()
+        }
+        for _ in 0..<4 {
+            result = replace(result, pattern: "(?i)\\b(\\d+(?:\\.\\d+)*)\\s+point\\s+(\(digitPattern)|\\d+)\\b") { match, source in
+                let value = source.substring(with: match.range(at: 2)).lowercased()
+                return source.substring(with: match.range(at: 1)) + "." + (digits[value] ?? value)
+            }
+        }
+        result = replace(result, pattern: "\\b([A-Z]{2,})\\s+(\(digitPattern))\\b") { match, source in
+            source.substring(with: match.range(at: 1)) + (digits[source.substring(with: match.range(at: 2))] ?? "")
+        }
+        return replace(result, pattern: "\\b(\(digitPattern))\\s+([A-Z]{1,3})\\b") { match, source in
+            (digits[source.substring(with: match.range(at: 1))] ?? "") + source.substring(with: match.range(at: 2))
+        }
+    }
 
     static func contentWords(_ text: String) -> [String] {
         var seen = Set<String>()
@@ -123,8 +225,11 @@ public enum SmartCleanupGuard {
                 let joins = (character == "," || character == ".") && previous?.isNumber == true
                 if character.isNumber {
                     digits.append(character)
+                } else if joins, character == "." {
+                    digits.append(character)
                 } else if !joins {
-                    if !digits.isEmpty { found.append(Quantity(accepted: [digits], position: position, label: digits)) }
+                    let value = digits.trimmingCharacters(in: CharacterSet(charactersIn: "."))
+                    if !value.isEmpty { found.append(Quantity(accepted: [value], position: position, label: value)) }
                     digits = ""
                 }
                 previous = character
@@ -139,7 +244,7 @@ public enum SmartCleanupGuard {
         spellings.formUnion(output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
         let tokens = input.split(whereSeparator: \.isWhitespace).map(String.init)
         for quantity in quantities(in: input) where quantity.accepted.isDisjoint(with: spellings) {
-            if !nearCue(tokens: tokens, position: quantity.position) { return quantity.label }
+            if !laterCue(tokens: tokens, position: quantity.position) { return quantity.label }
         }
         return nil
     }
@@ -160,7 +265,8 @@ public enum SmartCleanupGuard {
             guard let first = word.first, first.isUppercase, word.count > 1, !isIContraction(word) else { continue }
             let previous = tokens[index - 1]
             if let end = previous.last, ".!?:\n".contains(end) || previous.hasPrefix("-") { continue }
-            if outputTokens.contains(word) || nearCue(tokens: tokens, position: index) { continue }
+            let acronymKept = word == word.uppercased() && outputTokens.contains { $0.caseInsensitiveCompare(word) == .orderedSame }
+            if outputTokens.contains(word) || acronymKept || laterCue(tokens: tokens, position: index) { continue }
             return word
         }
         return nil
@@ -177,10 +283,10 @@ public enum SmartCleanupGuard {
         word == "I" || word.hasPrefix("I'") || word.hasPrefix("I\u{2019}")
     }
 
-    /// Whether a correction cue sits within `cueReach` words of `position`.
-    static func nearCue(tokens: [String], position: Int) -> Bool {
+    /// Only an abandoned value before a correction cue may disappear; the replacement must survive.
+    static func laterCue(tokens: [String], position: Int) -> Bool {
         let lower = tokens.map { stripped($0).lowercased() }
-        let range = max(0, position - cueReach)...min(lower.count - 1, position + cueReach)
+        let range = position...min(lower.count - 1, position + cueReach)
         for start in range {
             for cue in correctionCues where start + cue.count <= lower.count && Array(lower[start..<(start + cue.count)]) == cue {
                 return true

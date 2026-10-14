@@ -6,6 +6,7 @@ import Testing
 final class FakeCleaner: TextCleaner, @unchecked Sendable {
     let id = "fake"
     let displayName = "Fake"
+    var usesNativeControls = true
     private let lock = NSLock()
     private var running = 0
     private(set) var calls = 0
@@ -66,6 +67,110 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
 @Suite struct SmartCleanupRunTests {
     private let sentence = "we should leave earlier to beat the traffic"
 
+    @Test func knownSpellingsJoinWithClearProjectWording() async {
+        let cleaner = FakeCleaner { text, _ in text }
+        cleaner.usesNativeControls = false
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: "dry dock build", level: .light,
+            context: InsertionContext(before: "Project: Drydock\n")))
+        #expect(result.outcome == .ok && result.text == "Drydock build")
+        #expect(cleaner.calls == 1)
+    }
+
+    @Test(arguments: ["the boat is in dry dock", "dry dock"])
+    func uncertainUsesKeepTheirOrdinaryWords(input: String) async {
+        let cleaner = FakeCleaner { text, _ in text }
+        cleaner.usesNativeControls = false
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "Project: Drydock\n")))
+        #expect(result.outcome == .ok && result.text.lowercased() == input)
+    }
+
+    @Test func ordinaryWordsCannotBeJoinedByTheLaterCleanupPass() async {
+        let cleaner = FakeCleaner(returning: "Please tell the team that the boat is in Drydock today.")
+        cleaner.usesNativeControls = false
+        let input = "Please tell the team that the boat is in dry dock today."
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "Project: Drydock\n")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+    }
+
+    @Test func unresolvedCorrectionsAreSettledBeforeGeneralNormalization() async {
+        let cleaner = FakeCleaner(returning: "Let's do coffee at 3.")
+        cleaner.usesNativeControls = false
+        let result = await smart(cleaner).run(request("Let's do coffee at 2:30 actually 3."))
+        #expect(result.outcome == .ok && result.text == "Let's do coffee at 3.")
+        #expect(cleaner.calls == 2)
+        #expect(cleaner.contexts.first?.correctionsOnly == true)
+        #expect(cleaner.contexts.last?.correctionsOnly == false)
+    }
+
+    @Test func surroundingTextCannotBecomePartOfTheDictation() async {
+        let cleaner = FakeCleaner(returning: "Project: Drydock\nThe Drydock project build passed.")
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: "the dry dock project build passed", level: .light,
+            context: InsertionContext(before: "Project: Drydock\nLatest update:\n")))
+        #expect(result.outcome == .guardRejected && result.text == "the dry dock project build passed")
+    }
+
+    @Test func anExistingContextSpellingCannotBecomeAnotherName() async {
+        let cleaner = FakeCleaner(returning: "Send this to Mary.")
+        cleaner.usesNativeControls = false
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: "send this to merry", level: .light,
+            context: InsertionContext(before: "Participants: Mary, Merry\n")))
+        #expect(result.outcome == .guardRejected)
+        #expect(result.text == "send this to merry")
+    }
+
+    @Test func nearbySpellingsStillAllowExplicitCorrectionsAndWholeWordMatches() async {
+        let cleaner = FakeCleaner(returning: "Send this to Mary.")
+        cleaner.usesNativeControls = false
+        let context = InsertionContext(before: "Participants: Mary, Merry\n")
+        let corrected = await smart(cleaner).run(SmartCleanupRequest(text: "send this to merry actually Mary", level: .light, context: context))
+        #expect(corrected.outcome == .ok)
+        let spelling = await smart(cleaner).run(SmartCleanupRequest(text: "send this to merry", level: .light,
+            context: InsertionContext(before: "Recipient: Mary Jensen\n")))
+        #expect(spelling.outcome == .ok)
+    }
+
+    @Test func sharedModelsReceiveBoundedContextAndRunMediumOnce() async {
+        let cleaner = FakeCleaner(returning: "Send this to Mary.")
+        cleaner.usesNativeControls = false
+        let rules = [DictionaryRule(heard: "dry dock", written: "Drydock")]
+        let result = await smart(cleaner).run(SmartCleanupRequest(
+            text: "send this to merry", level: .medium, dictionary: rules,
+            context: InsertionContext(before: String(repeating: "x", count: 800) + "Recipient: Mary\n", after: String(repeating: "y", count: 500)), appName: "Mail"))
+        #expect(result.outcome == .ok)
+        #expect(cleaner.calls == 1)
+        #expect(cleaner.contexts.first?.level == .medium)
+        #expect(cleaner.contexts.first?.vocabulary == ["Drydock"])
+        #expect(cleaner.contexts.first?.before?.count == 600)
+        #expect(cleaner.contexts.first?.before?.hasSuffix("Recipient: Mary\n") == true)
+        #expect(cleaner.contexts.first?.after?.count == 300)
+        #expect(cleaner.contexts.first?.appName == "Mail")
+    }
+
+    @Test func modelOutputFitsTheCursorAfterGeneration() async {
+        let cleaner = FakeCleaner(returning: "Ready for review.")
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: "ready for review", level: .light,
+            context: InsertionContext(before: "The change is ", after: " when you are free.")))
+        #expect(result.outcome == .ok && result.text == "ready for review")
+    }
+
+    @Test func theQualityModelHasTimeToFinishWithoutChangingTheNativeBudget() async {
+        let quality = FakeCleaner { text, _ in
+            try await Task.sleep(for: .milliseconds(600))
+            return text
+        }
+        quality.usesNativeControls = false
+        let result = await smart(quality).run(request(sentence))
+        #expect(result.outcome == .ok)
+        let native = FakeCleaner { text, _ in
+            try await Task.sleep(for: .milliseconds(600))
+            return text
+        }
+        let fallback = await smart(native).run(request(sentence))
+        #expect(fallback.outcome == .timeout && fallback.text == sentence)
+    }
+
     @Test func anAcceptedOutputIsDeliveredAndLoggedAsOneEdit() async {
         let cleaner = FakeCleaner(returning: "We should leave earlier to beat the traffic.")
         let result = await smart(cleaner).run(request(sentence))
@@ -93,10 +198,25 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
 
     // MARK: Skips
 
-    @Test func underFourWordsSkipsTheModel() async {
+    @Test func shortPhrasesReachTheModel() async {
+        let cleaner = FakeCleaner(returning: "A 4K monitor.")
+        let result = await smart(cleaner).run(request("a four K monitor"))
+        #expect(result.outcome == .ok && result.text == "A 4K monitor." && cleaner.calls == 1)
+        let short = FakeCleaner(returning: "USB-C")
+        let abbreviation = await smart(short).run(request("U S B C"))
+        #expect(abbreviation.outcome == .ok && abbreviation.text == "USB-C")
+        let two = FakeCleaner(returning: "4K")
+        let resolution = await smart(two).run(request("four K"))
+        #expect(resolution.outcome == .ok && resolution.text == "4K" && two.calls == 1)
+    }
+
+    @Test func emptyAndSingleWordsStayImmediate() async {
         let cleaner = FakeCleaner(returning: "x")
-        let result = await smart(cleaner).run(request("see you soon"))
-        #expect(result.outcome == .skipped && result.text == "see you soon" && cleaner.calls == 0)
+        for text in ["", " ", "Yes", "No"] {
+            let result = await smart(cleaner).run(request(text))
+            #expect(result.outcome == .skipped && result.text == text)
+        }
+        #expect(cleaner.calls == 0)
     }
 
     @Test func overFourHundredWordsSkipsTheModel() async {
@@ -230,6 +350,39 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
 }
 
 @Suite struct SmartCleanupGuardTests {
+    @Test(arguments: [
+        ("do not enable the public endpoint", "Enable the public endpoint."),
+        ("don't ship it", "Ship it."),
+        ("ship it", "Don't ship it."),
+        ("No", "Yes"),
+        ("never expose the secret", "Expose the secret."),
+        ("I actually do not want to ship", "I actually want to ship."),
+        ("what's the capital of France", "The capital of France"),
+        ("use H T T P S for the endpoint", "Use HTTP for the endpoint."),
+        ("A B C D E F", "ABCDEG"),
+        ("meet at 2 actually 3", "Meet at 4."),
+        ("meet at three", "Meet at 3 PM."),
+        ("I am meeting at three", "I am meeting at 3 AM."),
+        ("meet at three PM", "Meet at 3 AM."),
+        ("Send it to Dana no wait Priya", "Send it to Morgan."),
+    ])
+    func meaningChangesAreRejected(input: String, output: String) {
+        #expect(reason(input, output) != nil)
+    }
+
+    @Test(arguments: [
+        ("U S B C", "USB-C"),
+        ("Grab the USB C cables", "Grab the USB-C cables."),
+        ("four K", "4K"),
+        ("enable I P V six on the router", "Enable IPv6 on the router."),
+        ("the A P I returns a four oh four error", "The API returns a 404 error."),
+        ("we need version 2.5 point one", "We need version 2.5.1."),
+        ("do not ship it", "Don't ship it."),
+    ])
+    func equivalentWrittenFormsAreAccepted(input: String, output: String) {
+        #expect(reason(input, output) == nil)
+    }
+
     private func reason(_ input: String, _ output: String, level: CleanupLevel = .light, rules: [DictionaryRule] = []) -> String? {
         SmartCleanupGuard.rejection(input: input, output: output, level: level, dictionary: rules)
     }
@@ -274,7 +427,7 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
     }
 
     @Test func formattingDoesNotChangeANumber() {
-        #expect(reason("it costs 1,000 dollars at 3:30 today", "It costs $1000 at 3:30pm today.") == nil)
+        #expect(reason("it costs 1,000 dollars at 3:30pm today", "It costs $1000 at 3:30pm today.") == nil)
     }
 
     @Test func aSelfCorrectionExcusesTheNumberItReplaces() {

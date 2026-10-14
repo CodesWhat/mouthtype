@@ -1,0 +1,52 @@
+[
+  {
+    "id": "clock-hour",
+    "input": "Let's do coffee at two thirty actually three.",
+    "target": "Let's do coffee at 3.",
+    "mustNotContain": [
+      "2:30",
+      "actually"
+    ],
+    "exact": [
+      "Let's do coffee at 3.",
+      "Let's do coffee at three.",
+      "Let's do coffee at 3",
+      "Let's do coffee at three"
+    ]
+  },
+  {
+    "id": "clock-hour-held-out",
+    "input": "Meet at 4:45 no wait 5.",
+    "target": "Meet at 5.",
+    "mustNotContain": [
+      "4:45",
+      "wait"
+    ],
+    "exact": [
+      "Meet at 5.",
+      "Meet at five.",
+      "Meet at 5",
+      "Meet at five"
+    ]
+  },
+  {
+    "id": "clock-minute",
+    "input": "Meet at 2:30 actually 3:15.",
+    "target": "Meet at 3:15.",
+    "mustNotContain": [
+      "2:30",
+      "actually"
+    ],
+    "mustContain": [
+      "3:15"
+    ]
+  },
+  {
+    "id": "ordinary-actually",
+    "input": "I actually enjoyed the movie.",
+    "target": "I actually enjoyed the movie.",
+    "exact": [
+      "I actually enjoyed the movie."
+    ]
+  }
+]

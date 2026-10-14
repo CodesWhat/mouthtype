@@ -258,7 +258,8 @@ final class DictationController {
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
-        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination)
+        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination,
+                                           appName: session.startFocus?.appName)
         guard !cleaned.text.isEmpty else {
             await pipeline.finishEmpty(cleaned, session: session)
             pill.hide()
