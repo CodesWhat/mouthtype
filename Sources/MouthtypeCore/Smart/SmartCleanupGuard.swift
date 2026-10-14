@@ -4,10 +4,10 @@ import Foundation
 /// failure seen with small models: output that is empty, runs away, drops the speaker's words, changes a number,
 /// loses a name or a dictionary spelling, or answers the dictation instead of transcribing it.
 public enum SmartCleanupGuard {
-    /// Share of the input's content words the output must keep. `medium` rewrites more, so it may drop more.
-    public static func minimumKept(for level: CleanupLevel) -> Double { level == .medium ? 0.3 : 0.5 }
+    /// Share of the input's content words the output must keep at either model cleanup level.
+    public static func minimumKept(for level: CleanupLevel) -> Double { 0.5 }
     /// Share of the output's content words that may be new, past which it is answering rather than transcribing.
-    public static func maximumNovel(for level: CleanupLevel) -> Double { level == .medium ? 0.6 : 0.5 }
+    public static func maximumNovel(for level: CleanupLevel) -> Double { 0.5 }
 
     /// How far after an abandoned number or name its correction cue may appear.
     static let cueReach = 4
@@ -101,6 +101,17 @@ public enum SmartCleanupGuard {
             }.count
         }
         if negatives(input) != negatives(output) { return "negation changed" }
+        let certainty: Set<String> = ["probably", "maybe", "perhaps", "might", "must", "should", "could", "would"]
+        func words(_ text: String) -> [String] {
+            TextMetrics.normalizedWords(text).map { $0.hasSuffix("n't") ? String($0.dropLast(3)) : $0 }
+        }
+        let inputWords = words(input)
+        let outputWords = Set(words(output))
+        if !outputWords.intersection(certainty).isSubset(of: Set(inputWords)) { return "certainty changed" }
+        for (index, word) in inputWords.enumerated()
+        where certainty.contains(word) && !outputWords.contains(word) {
+            if !laterCue(tokens: inputWords, position: index) { return "certainty changed" }
+        }
         func timeOfDay(_ text: String) -> Set<String> {
             var values = Set<String>()
             let pattern = #"(?i)(?<!\p{L})([ap])[. \t]*m\.?(?!\p{L})"#

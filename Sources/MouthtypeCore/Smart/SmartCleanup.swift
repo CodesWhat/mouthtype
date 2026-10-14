@@ -92,18 +92,11 @@ public actor SmartCleanup {
         min(.milliseconds(1200) + .milliseconds(30) * words, .seconds(12))
     }
 
-    /// The control lines to run, in order. S1-mini has no control for rewording, so `medium` is its strongest
-    /// editing setting: the formal register, which smooths colloquialisms and expands contractions. Formal alone
-    /// leaves self-corrections in ("at 2, actually, 3"), so it runs second, on text the semi-formal pass has
-    /// already settled. It applies only to the formal writing style; casual styles keep their contractions, and
-    /// there `medium` differs from `light` in the output check alone. Casing and the final full stop are the
-    /// style stage's job after the model, so the model always gets a sentence-case register.
+    /// Native cleanup preserves the spoken register; casing and punctuation are applied afterward.
     public static func passes(
         level: CleanupLevel, style: StyleOptions, destination: S1MiniControls.Destination = .general
     ) -> [S1MiniControls] {
-        let settle = S1MiniControls(styling: .semiFormal, structure: .lists, destination: destination)
-        guard level == .medium, style.preset == .formal else { return [settle] }
-        return [settle, S1MiniControls(styling: .formal, structure: .lists, destination: destination)]
+        [S1MiniControls(styling: .semiFormal, structure: .lists, destination: destination)]
     }
 
     private let cleaner: any TextCleaner

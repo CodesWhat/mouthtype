@@ -2,6 +2,13 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct CleanerCatalogTests {
+    @Test func cleanupStrengthDoesNotAuthorizeRephrasing() {
+        let light = CleanupPrompt.system(for: CleanupContext(level: .light))
+        let medium = CleanupPrompt.system(for: CleanupContext(level: .medium))
+        #expect(light == medium)
+        #expect(medium.contains("Do not paraphrase"))
+    }
+
     @Test func emptyFieldContextDoesNotChangeThePrompt() {
         let empty = CleanupContext(before: "", after: " \t\n")
         #expect(CleanupPrompt.system(for: empty) == CleanupPrompt.systemPrompt)

@@ -320,19 +320,19 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(passes.map(\.line) == ["[Styling: semi-formal] [Structure: lists] [Context: general]"])
     }
 
-    @Test func mediumAddsAFormalPassForTheFormalStyleOnly() {
-        #expect(SmartCleanup.passes(level: .medium, style: .formal).map(\.styling) == [.semiFormal, .formal])
+    @Test func mediumDoesNotAddARewritingPass() {
+        #expect(SmartCleanup.passes(level: .medium, style: .formal).map(\.styling) == [.semiFormal])
         #expect(SmartCleanup.passes(level: .medium, style: StylePreset.casual.options).map(\.styling) == [.semiFormal])
         #expect(SmartCleanup.passes(level: .medium, style: StylePreset.veryCasual.options).map(\.styling) == [.semiFormal])
         #expect(SmartCleanup.passes(level: .light, style: .formal, destination: .email).first?.destination == .email)
     }
 
-    @Test func mediumFeedsTheSecondPassTheFirstPassOutput() async {
-        let cleaner = FakeCleaner { text, context in
-            context.s1Controls.styling == .formal ? text.replacingOccurrences(of: "We're", with: "We are") : "We're leaving early to beat the traffic."
+    @Test func mediumPreservesContractionsWithoutASecondFormalPass() async {
+        let cleaner = FakeCleaner { _, context in
+            context.s1Controls.styling == .formal ? "We are leaving early to beat the traffic." : "We're leaving early to beat the traffic."
         }
-        let result = await smart(cleaner).run(request("we should leave early to beat the traffic", level: .medium))
-        #expect(result.text == "We are leaving early to beat the traffic." && cleaner.calls == 2)
+        let result = await smart(cleaner).run(request("we're leaving early to beat the traffic", level: .medium))
+        #expect(result.text == "We're leaving early to beat the traffic." && cleaner.calls == 1)
     }
 
     @Test func mailAppsGetTheEmailLayout() {
@@ -423,11 +423,19 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(reason(input, "The budget review needs approval.", level: .light) == nil)
     }
 
-    @Test func mediumAllowsMoreToBeDropped() {
+    @Test func mediumRejectsTheSameLossOfContentAsLight() {
         let input = "so basically the quarterly budget review needs finance approval before friday for sure"
         let output = "The budget review needs."
         #expect(reason(input, output, level: .light) != nil)
-        #expect(reason(input, output, level: .medium) == nil)
+        #expect(reason(input, output, level: .medium) != nil)
+    }
+
+    @Test(arguments: [CleanupLevel.light, .medium])
+    func certaintySurvivesCleanup(level: CleanupLevel) {
+        #expect(reason("we should probably move the meeting", "We will move the meeting.", level: level) != nil)
+        #expect(reason("we could meet tomorrow", "We should meet tomorrow.", level: level) != nil)
+        #expect(reason("we should probably we should probably move the meeting", "We should probably move the meeting.", level: level) == nil)
+        #expect(reason("we might meet Tuesday actually we must meet Wednesday", "We must meet Wednesday.", level: level) == nil)
     }
 
     @Test func fillersGoneIsNotLoss() {

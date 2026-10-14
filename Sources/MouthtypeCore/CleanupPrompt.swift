@@ -32,9 +32,6 @@ public enum CleanupPrompt {
         if let appName = context.appName, !appName.isEmpty {
             prompt += "\n\nThe cleaned text will be pasted into \(appName). Use that only to judge formatting. Never mention it."
         }
-        if context.level == .medium {
-            prompt += "\n\nFor this dictation, you may also simplify awkward phrasing for clarity. Preserve all facts, requests, questions, negations, names, numbers, technical details and the speaker's tone. Do not summarize or add information."
-        }
         if !reference(context).isEmpty {
             prompt += "\n\nThe <reference> block lists optional spelling hints from nearby text. Use a hint only when the speaker is referring to that name or term. Prefer a name whose letters already match the transcript over a different soundalike. A project or product name may have been transcribed as separate ordinary words; join them to match a hint when the sentence refers to that project or product. Ordinary words such as merry, mark and may must keep their ordinary spelling and casing when used as ordinary words. Do not insert unspoken names or surnames. Return the entire cleaned transcript, including its requests and verbs. If evidence is unclear, keep the transcript's wording."
         }
