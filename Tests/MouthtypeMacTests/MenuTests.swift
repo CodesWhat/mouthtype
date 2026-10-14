@@ -1,4 +1,5 @@
 import AppKit
+import AVFAudio
 import Foundation
 import ServiceManagement
 import Testing
@@ -118,14 +119,24 @@ private final class FakeLoginService: LoginItemService {
 
 @MainActor
 @Suite struct SoundTests {
-    @Test func theThreeSystemSoundsLoad() throws {
-        for name in [SystemSoundPlayer.startName, SystemSoundPlayer.stopName, SystemSoundPlayer.errorName] {
-            #expect(NSSound(named: name) != nil, "\(name) did not load")
+    @Test func clickReplacesTheSystemCueNames() {
+        #expect(ClickSoundPlayer.startName == "start")
+        #expect(ClickSoundPlayer.stopName == "stop")
+        #expect(ClickSoundPlayer.lockName == "lock")
+        #expect(ClickSoundPlayer.errorName == "error")
+    }
+
+    @Test func allFourClickCuesDecodeWithoutLooping() throws {
+        for name in [ClickSoundPlayer.startName, ClickSoundPlayer.stopName, ClickSoundPlayer.lockName, ClickSoundPlayer.errorName] {
+            let url = try #require(ClickSoundPlayer.cueURL(name))
+            let player = try AVAudioPlayer(contentsOf: url)
+            #expect(player.duration > 0 && player.duration < 0.4)
+            #expect(player.numberOfLoops == 0)
         }
-        #expect(Set([SystemSoundPlayer.startName, SystemSoundPlayer.stopName, SystemSoundPlayer.errorName]).count == 3)
+        #expect(Set([ClickSoundPlayer.startName, ClickSoundPlayer.stopName, ClickSoundPlayer.errorName]).count == 3)
         let suite = "SoundTests-\(UUID().uuidString)"
         defer { UserDefaults(suiteName: suite)?.removePersistentDomain(forName: suite) }
-        #expect(SystemSoundPlayer(defaults: UserDefaults(suiteName: suite)!).loadedAll)
+        #expect(ClickSoundPlayer(defaults: UserDefaults(suiteName: suite)!).loadedAll)
     }
 
     @Test func soundsDefaultToOnAndFollowTheSwitch() {

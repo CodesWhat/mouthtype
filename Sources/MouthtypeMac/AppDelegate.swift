@@ -76,7 +76,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let pill = PillController(level: { level.reading })
         let inserter = TextInserter(syntheticStamp: SyntheticEvents.stamp, inputGeneration: { [weak self] in self?.hotkeyService?.userInputGeneration })
         let engine = HostEngine(host: engineHost)
-        let sounds = SystemSoundPlayer()
+        let sounds = ClickSoundPlayer()
         let cards = DeliveryCardController()
         cards.anchor = { [weak pill] in pill?.cardAnchor() }
         let presenter = DeliveryCardPresenter(surface: cards, clipboard: SystemClipboard(), clock: SystemDictationClock())

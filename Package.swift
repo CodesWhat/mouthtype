@@ -37,7 +37,7 @@ let package = Package(
         .target(
             name: "MouthtypeMac",
             dependencies: ["MouthtypeCore", "FnRemapKit"],
-            resources: [.copy("Resources/Pill"), .copy("Resources/MenuBar"), .copy("Resources/Fonts")]
+            resources: [.copy("Resources/Pill"), .copy("Resources/MenuBar"), .copy("Resources/Fonts"), .copy("Resources/Sounds")]
         ),
         .executableTarget(
             name: "Mouthtype",

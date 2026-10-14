@@ -1,4 +1,5 @@
 import AppKit
+import AVFAudio
 
 @MainActor
 protocol SoundPlayer: AnyObject {
@@ -20,28 +21,35 @@ enum SoundPreference {
     }
 }
 
-/// macOS system sounds at a low volume, loaded once at launch so the first cue plays without a load delay.
+/// The Click cues are decoded and prepared at launch, before the first key press.
 @MainActor
-final class SystemSoundPlayer: SoundPlayer {
-    static let startName = "Tink"
-    static let stopName = "Pop"
-    static let lockName = "Morse"
-    static let errorName = "Basso"
-    static let volume: Float = 0.3
+final class ClickSoundPlayer: SoundPlayer {
+    static let startName = "start"
+    static let stopName = "stop"
+    static let lockName = "lock"
+    static let errorName = "error"
+    static let volume: Float = 0.5
 
     private let defaults: UserDefaults
-    private let start: NSSound?
-    private let stop: NSSound?
-    private let lock: NSSound?
-    private let error: NSSound?
+    private let start: AVAudioPlayer?
+    private let stop: AVAudioPlayer?
+    private let lock: AVAudioPlayer?
+    private let error: AVAudioPlayer?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        func load(_ name: String) -> NSSound? {
-            let sound = NSSound(named: name)
-            sound?.volume = Self.volume
-            if sound == nil { Log.app.error("system sound \(name, privacy: .public) not found") }
-            return sound
+        func load(_ name: String) -> AVAudioPlayer? {
+            do {
+                guard let url = Self.cueURL(name) else { throw CocoaError(.fileNoSuchFile) }
+                let sound = try AVAudioPlayer(contentsOf: url)
+                sound.volume = Self.volume
+                sound.numberOfLoops = 0
+                guard sound.prepareToPlay() else { throw CocoaError(.fileReadUnknown) }
+                return sound
+            } catch {
+                Log.app.error("Click cue \(name, privacy: .public) unavailable: \(error.localizedDescription, privacy: .public)")
+                return nil
+            }
         }
         start = load(Self.startName)
         stop = load(Self.stopName)
@@ -51,14 +59,20 @@ final class SystemSoundPlayer: SoundPlayer {
 
     var loadedAll: Bool { start != nil && stop != nil && lock != nil && error != nil }
 
-    func playStart() { play(start) }
-    func playStop() { play(stop) }
-    func playLock() { play(lock) }
-    func playError() { play(error) }
+    static func cueURL(_ name: String) -> URL? {
+        Bundle.module.url(forResource: name, withExtension: "wav", subdirectory: "Sounds/Click")
+    }
 
-    private func play(_ sound: NSSound?) {
+    func playStart() { play(start, name: Self.startName) }
+    func playStop() { play(stop, name: Self.stopName) }
+    func playLock() { play(lock, name: Self.lockName) }
+    func playError() { play(error, name: Self.errorName) }
+
+    private func play(_ sound: AVAudioPlayer?, name: String) {
         guard SoundPreference.isEnabled(defaults), let sound else { return }
         sound.stop()
-        sound.play()
+        sound.currentTime = 0
+        if sound.play() { Log.app.info("Click cue \(name, privacy: .public)") }
+        else { Log.app.error("Click cue \(name, privacy: .public) could not play") }
     }
 }
