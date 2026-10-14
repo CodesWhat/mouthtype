@@ -47,7 +47,7 @@ public final class EngineHost {
 
     public init(
         engineID: String = EngineHost.defaultEngineID,
-        makeEngine: @escaping @Sendable (String) throws -> any Transcriber = { try EngineCatalog.make(id: $0) }
+        makeEngine: @escaping @Sendable (String) throws -> any Transcriber = { try EngineCatalog.make(id: $0, englishHint: true) }
     ) {
         self.engineID = engineID
         self.makeEngine = makeEngine

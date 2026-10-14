@@ -4,6 +4,24 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct SpeechDetectionTests {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MOUTHTYPE_ENGLISH_FIXTURES"] != nil))
+    func englishSpeechDoesNotBecomeCyrillic() async throws {
+        struct Fixture: Decodable {
+            var path: String
+            var expected: String
+        }
+        let path = try #require(ProcessInfo.processInfo.environment["MOUTHTYPE_ENGLISH_FIXTURES"])
+        let fixtures = try JSONDecoder().decode([Fixture].self, from: Data(contentsOf: URL(fileURLWithPath: path)))
+        let engine = try EngineCatalog.make(id: "parakeet-tdt-v3", englishHint: true)
+        try await engine.prepare()
+        for fixture in fixtures {
+            let samples = try AudioLoading.loadSamples(from: URL(fileURLWithPath: fixture.path))
+            let result = try await engine.transcribe(samples: SilenceTrimmer.trim(samples).samples)
+            #expect(result.text.range(of: "\\p{sc=Cyrillic}", options: .regularExpression) == nil)
+            #expect(result.text.lowercased().filter(\.isLetter) == fixture.expected.lowercased().filter(\.isLetter), "\(result.text)")
+        }
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["MOUTHTYPE_SPEECH_FIXTURES"] != nil))
     func archivedEmptyTakesHaveNoSpeechAndSpokenWordsSurvive() async throws {
         struct Fixture: Decodable {
@@ -13,7 +31,7 @@ import Testing
         let path = try #require(ProcessInfo.processInfo.environment["MOUTHTYPE_SPEECH_FIXTURES"])
         let fixtures = try JSONDecoder().decode([Fixture].self, from: Data(contentsOf: URL(fileURLWithPath: path)))
         let detector = try await VadManager(config: VadConfig(defaultThreshold: 0.5))
-        let engine = try EngineCatalog.make(id: "parakeet-tdt-v3")
+        let engine = try EngineCatalog.make(id: "parakeet-tdt-v3", englishHint: true)
         try await engine.prepare()
         for fixture in fixtures {
             let samples = try AudioLoading.loadSamples(from: URL(fileURLWithPath: fixture.path))

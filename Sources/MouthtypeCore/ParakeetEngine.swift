@@ -12,11 +12,13 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
     public nonisolated let modelDirectory: URL
 
     private let version: AsrModelVersion
+    private let language: Language?
     private var manager: AsrManager?
     private var speechDetector: VadManager?
 
-    init(version: AsrModelVersion) {
+    init(version: AsrModelVersion, language: Language? = nil) {
         self.version = version
+        self.language = language
         switch version {
         case .v2:
             id = Self.v2ID
@@ -78,7 +80,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
                 Task { await report(stage) }
             })
             var state = TdtDecoderState.make(decoderLayers: await newManager.decoderLayerCount)
-            _ = try await newManager.transcribe([Float](repeating: 0, count: 16_000), decoderState: &state)
+            _ = try await newManager.transcribe([Float](repeating: 0, count: 16_000), decoderState: &state, language: version == .v3 ? language : nil)
         }
         manager = newManager
         speechDetector = newDetector
@@ -103,7 +105,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
             )
         }
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-        let result = try await manager.transcribe(samples, decoderState: &state)
+        let result = try await manager.transcribe(samples, decoderState: &state, language: version == .v3 ? language : nil)
         let elapsed = (clock.now - start).seconds
         let units = (result.tokenTimings ?? []).map {
             SubwordUnit(text: $0.token, start: $0.startTime, end: $0.endTime, confidence: $0.confidence)
