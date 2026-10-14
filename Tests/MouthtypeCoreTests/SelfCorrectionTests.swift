@@ -57,6 +57,8 @@ import Testing
         TextCase("Lunch at 2:30 PM, actually three.", "Lunch at 3:00 PM."),
         TextCase("Breakfast at 8:30 a.m., actually nine.", "Breakfast at 9:00 AM."),
         TextCase("Breakfast at eight thirty a m, actually nine.", "Breakfast at 9:00 AM."),
+        TextCase("Lunch at 2:30 PM, actually 3:15 AM, no wait four.", "Lunch at 4:00 AM."),
+        TextCase("Lunch at two thirty a m, actually three p m, no wait four.", "Lunch at 4:00 PM."),
         // Money and percent.
         TextCase("It costs twenty dollars, actually thirty dollars.", "It costs thirty dollars."),
         TextCase("It costs $20, I mean $30.", "It costs $30."),

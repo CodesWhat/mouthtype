@@ -182,7 +182,7 @@ public struct SelfCorrection: Sendable {
         }
 
         private func meridiemSuffix(from start: Int, to end: Int) -> String {
-            for i in start..<end {
+            for i in (start..<end).reversed() {
                 let word = tokens[i].lower
                 let split = (word == "a" || word == "p") && i + 1 < end
                     && tokens[i + 1].lower == "m" && inside(i, i + 1)
@@ -415,7 +415,7 @@ public struct SelfCorrection: Sendable {
 
                 let start = tokens[a.start].start
                 let end = tokens[last.end - 1].end
-                var replacement = last.bareHour.map { "\($0):00" + meridiemSuffix(from: a.start, to: c) } ?? String(chars[tokens[last.start].start..<end])
+                var replacement = last.bareHour.map { "\($0):00" + meridiemSuffix(from: a.start, to: last.start) } ?? String(chars[tokens[last.start].start..<end])
                 if chars[start].isUppercase, let f = replacement.first, f.isLowercase {
                     replacement = f.uppercased() + replacement.dropFirst()
                 }
