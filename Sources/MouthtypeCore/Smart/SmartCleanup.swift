@@ -89,7 +89,7 @@ public actor SmartCleanup {
     }
 
     public static func qualityBudget(words: Int) -> Duration {
-        min(.milliseconds(1200) + .milliseconds(20) * words, .milliseconds(4000))
+        min(.milliseconds(1200) + .milliseconds(30) * words, .seconds(12))
     }
 
     /// The control lines to run, in order. S1-mini has no control for rewording, so `medium` is its strongest
@@ -148,7 +148,7 @@ public actor SmartCleanup {
             of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
             options: [.regularExpression, .caseInsensitive]) != nil
         let allowance = customBudget || cleaner.usesNativeControls ? budget(words)
-            : min(budget(words) * (settleCorrections ? 2 : 1), .milliseconds(4000))
+            : min(budget(words) * (settleCorrections ? 2 : 1), .seconds(12))
         let deadline = start + allowance
         // A generation that outlived its own timeout still holds the model; wait for it, within this budget.
         while let busy = current {

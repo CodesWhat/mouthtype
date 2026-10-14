@@ -36,6 +36,15 @@ struct SmartRealModelTests {
 
 @Suite(.serialized, .enabled(if: CleanerCatalog.makeSmartCleanup().isDownloaded, "Quality cleanup model is not on disk"))
 struct QualityRealModelTests {
+    @Test func longReadThroughKeepsMeaningAndRemovesRestarts() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixtures = root.appendingPathComponent("Tests/Fixtures/long-read-through.json")
+        let result = try cleanupBench(["clean", "--smart", "light", "--file", fixtures.path, "--smart-timeout-ms", "10000"])
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("1/1 cases pass"), "\(result.output)")
+        #expect(!result.output.contains("outcome: timeout"), "\(result.output)")
+    }
+
     @Test(arguments: ["light", "medium"])
     func projectJoiningPreservesOrdinaryNouns(level: String) throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

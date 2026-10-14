@@ -244,6 +244,22 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(SmartCleanup.defaultBudget(words: 400) == .milliseconds(2500))
     }
 
+    @Test func qualityDeadlineScalesToLongDictations() {
+        #expect(SmartCleanup.qualityBudget(words: 157) >= .milliseconds(5500))
+        #expect(SmartCleanup.qualityBudget(words: 400) <= .seconds(12))
+    }
+
+    @Test func aLongGeneralModelPassCanFinishBeyondFourSeconds() async {
+        let text = String(repeating: "I want to keep this sentence. ", count: 23).trimmingCharacters(in: .whitespaces)
+        let cleaner = FakeCleaner { _, _ in
+            try await Task.sleep(for: .milliseconds(4200))
+            return text
+        }
+        cleaner.usesNativeControls = false
+        let result = await SmartCleanup(cleaner: cleaner).run(request(text))
+        #expect(result.outcome == .ok && result.modelText == text)
+    }
+
     @Test func aSlowModelTimesOutAndTheInputIsDelivered() async {
         let cleaner = FakeCleaner { _, _ in
             try await Task.sleep(for: .seconds(5))
