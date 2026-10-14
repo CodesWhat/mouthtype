@@ -600,7 +600,7 @@ private final class FakeCorrections: CorrectionObserving {
 
         #expect(rig.log.all == [
             "card.dismiss", "inserter.snapshot", "capture.start", "sound.start", "pill.recording", "store.begin",
-            "capture.stop", "sound.stop", "pill.processing",
+            "pill.processing", "capture.stop", "sound.stop",
             "archive.write", "store.recordCapture", "engine.transcribe", "store.recordTranscription",
             "inserter.deliver", "store.recordInsertion", "pill.hide",
         ])

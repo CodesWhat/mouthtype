@@ -230,6 +230,7 @@ final class DictationController {
         phase = .processing
         session = nil
         endHandsFree()
+        pill.showProcessing()
         processing = Task { await process(current, releasedAt: nanos) }
     }
 
@@ -237,7 +238,6 @@ final class DictationController {
         do {
             let audio = try await capture.stop()
             sounds.playStop()
-            pill.showProcessing()
             try await transcribeAndDeliver(audio, session: session, keyUpAt: releasedAt)
         } catch {
             await fail(session, error)

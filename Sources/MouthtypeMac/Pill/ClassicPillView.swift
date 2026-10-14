@@ -330,7 +330,7 @@ final class ClassicPillView: NSView, PillSkinView {
         let barsOpacity: Float
         switch new {
         case .hold, .locked: barsOpacity = 1
-        case .processing: barsOpacity = 0.55
+        case .processing: barsOpacity = 1
         case .message: barsOpacity = 0
         }
         set(barsLayer, "opacity", barsOpacity, barsOpacity > 0 ? fadeIn : fadeOut)
@@ -390,10 +390,8 @@ final class ClassicPillView: NSView, PillSkinView {
 
     func updateProcessing(time: TimeInterval) {
         guard mode == .processing else { return }
-        let targets = ClassicPillLayout.processingFractions(time: time, count: BarModel.barCount)
+        let next = ClassicPillLayout.processingFractions(time: time, count: BarModel.barCount)
             .map { ClassicPillLayout.barHeight(fraction: $0, scale: scale) }
-        // Ease toward the wave so the bars settle into it from wherever the recording left them.
-        let next = zip(heights, targets).map { ClassicPillLayout.snapEven($0 + ($1 - $0) * 0.2, scale: scale) }
         guard next != heights else { return }
         heights = next
         layoutBars()

@@ -164,6 +164,23 @@ import Testing
 }
 
 @MainActor
+@Suite struct ClassicPillProcessingTests {
+    @Test func loadingBarsActuallyMoveOnThePixelGrid() throws {
+        let view = ClassicPillView(frame: NSRect(x: 0, y: 0, width: 360, height: 80))
+        view.showFractions([Float](repeating: 0.2, count: 10))
+        view.beginProcessing()
+        let container = try #require(view.layer?.sublayers?.first)
+        let meter = try #require(container.sublayers?[4])
+        let bars = try #require(meter.sublayers)
+        #expect(meter.opacity >= 0.85)
+        view.updateProcessing(time: 0)
+        let initial = bars.map { $0.bounds.height }
+        for frame in 1...24 { view.updateProcessing(time: Double(frame) / 60) }
+        #expect(bars.map { $0.bounds.height } != initial)
+    }
+}
+
+@MainActor
 @Suite struct PillHitTests {
     @Test func targetsGrowToAtLeast24ButNeverShrink() {
         let small = PillHit.target(for: CGRect(x: 100, y: 10, width: 11, height: 11))
