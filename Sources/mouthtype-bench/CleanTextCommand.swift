@@ -45,6 +45,10 @@ struct CleanTextCommand: AsyncParsableCommand {
     var cleaner: String?
     @Option(help: "--smart: write delivered outputs, checks and timings as JSON.")
     var result: String?
+    @Option(help: "S1-mini comparison only: casual, semi-casual, semi-formal or formal.")
+    var s1Style: String?
+    @Option(help: "S1-mini comparison only: prose or lists.")
+    var s1Structure: String?
 
     func validate() throws {
         let modes = [text != nil, file != nil, history].filter { $0 }.count
@@ -55,6 +59,17 @@ struct CleanTextCommand: AsyncParsableCommand {
         if smartTimeoutMs != nil, smart == nil { throw ValidationError("--smart-timeout-ms needs --smart.") }
         if cleaner != nil || result != nil, smart == nil { throw ValidationError("--cleaner and --result need --smart.") }
         if let smartTimeoutMs, smartTimeoutMs < 1 { throw ValidationError("--smart-timeout-ms must be positive.") }
+        if s1Style != nil || s1Structure != nil {
+            guard smart != nil, cleaner == "superwhisper-s1-mini" else {
+                throw ValidationError("--s1-style and --s1-structure require --smart and --cleaner superwhisper-s1-mini.")
+            }
+        }
+        if let s1Style, S1MiniControls.Styling(rawValue: s1Style) == nil {
+            throw ValidationError("Unknown S1-mini style: \(s1Style).")
+        }
+        if let s1Structure, S1MiniControls.Structure(rawValue: s1Structure) == nil {
+            throw ValidationError("Unknown S1-mini structure: \(s1Structure).")
+        }
         if markdown != nil, !history { throw ValidationError("--markdown only applies to --history.") }
         if since != nil, !history { throw ValidationError("--since only applies to --history.") }
         if limit < 1 { throw ValidationError("--limit must be at least 1.") }
@@ -95,7 +110,8 @@ struct CleanTextCommand: AsyncParsableCommand {
         }
         try await cleaner.load()
         _ = try? await cleaner.clean("warm up the model before timing it", context: CleanupContext())
-        let observed = ObservedCleaner(cleaner)
+        let observed = ObservedCleaner(cleaner, styling: s1Style.flatMap(S1MiniControls.Styling.init(rawValue:)),
+            structure: s1Structure.flatMap(S1MiniControls.Structure.init(rawValue:)))
         let smart: SmartCleanup
         if let ms = smartTimeoutMs {
             smart = SmartCleanup(cleaner: observed, budget: { _ in .milliseconds(ms) })

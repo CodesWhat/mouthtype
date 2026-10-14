@@ -1,5 +1,7 @@
+import ArgumentParser
 import Foundation
 import Testing
+import MouthtypeCore
 @testable import mouthtype_bench
 
 @Suite struct CleanupCheckerTests {
@@ -124,5 +126,37 @@ import Testing
         let two = JudgeItem(testCase: base, output: "two").cacheKey
         #expect(one != two)
         #expect(one == JudgeItem(testCase: base, output: "one").cacheKey)
+    }
+}
+
+@Suite struct NativeCleanupBenchmarkTests {
+    @Test func comparisonControlsReachTheModelWithoutReplacingDestination() async throws {
+        let base = FakeCleaner { text, _ in text }
+        let observed = ObservedCleaner(base, styling: .semiCasual, structure: .prose)
+        _ = try await observed.clean("hello there", context: CleanupContext(s1Controls:
+            S1MiniControls(destination: .email)))
+        #expect(base.contexts.first?.s1Controls == S1MiniControls(styling: .semiCasual, structure: .prose, destination: .email))
+    }
+
+    @Test func nativeControlsCanBeComparedWithoutChangingAppSettings() throws {
+        let command = try CleanTextCommand.parse([
+            "--smart", "light", "--cleaner", "superwhisper-s1-mini",
+            "--text", "the main thing the main thing is the build",
+            "--s1-style", "semi-casual", "--s1-structure", "prose",
+        ])
+        try command.validate()
+    }
+
+    @Test func nativeControlsRejectOtherModelsAndUnknownValues() throws {
+        for args in [
+            ["--smart", "light", "--cleaner", "gemma-4-e4b-it-4bit", "--text", "hello there", "--s1-style", "casual"],
+            ["--smart", "light", "--cleaner", "superwhisper-s1-mini", "--text", "hello there", "--s1-style", "invented"],
+            ["--text", "hello there", "--s1-structure", "lists"],
+        ] {
+            #expect(throws: (any Error).self) {
+                let command = try CleanTextCommand.parse(args)
+                try command.validate()
+            }
+        }
     }
 }

@@ -74,11 +74,15 @@ actor ObservedCleaner: TextCleaner {
     nonisolated let displayName: String
     nonisolated let usesNativeControls: Bool
     private let base: any TextCleaner
+    private let styling: S1MiniControls.Styling?
+    private let structure: S1MiniControls.Structure?
     private var attempt = 0
     private(set) var proposed: String?
 
-    init(_ base: any TextCleaner) {
+    init(_ base: any TextCleaner, styling: S1MiniControls.Styling? = nil, structure: S1MiniControls.Structure? = nil) {
         self.base = base
+        self.styling = styling
+        self.structure = structure
         id = base.id
         displayName = base.displayName
         usesNativeControls = base.usesNativeControls
@@ -88,6 +92,11 @@ actor ObservedCleaner: TextCleaner {
     func reset() { attempt += 1; proposed = nil }
     func clean(_ transcript: String, context: CleanupContext) async throws -> String {
         let generation = attempt
+        var context = context
+        if usesNativeControls {
+            if let styling { context.s1Controls.styling = styling }
+            if let structure { context.s1Controls.structure = structure }
+        }
         let output = try await base.clean(transcript, context: context)
         if generation == attempt { proposed = output }
         return output
