@@ -48,6 +48,12 @@ public struct SnippetExpander: Sendable {
         self.dateFormatter = dateFormatter
     }
 
+    /// The configured triggers heard in order, even when the replacement is identical to the trigger.
+    public func matchingTriggers(in text: String) -> [String] {
+        let chars = Array(text)
+        return matcher.matches(chars, lower: TextScan.lowered(chars)).map { snippets[$0.pattern].trigger }
+    }
+
     public func apply(_ text: String) -> StageResult {
         guard !matcher.isEmpty, !text.isEmpty else { return StageResult(text: text) }
         let chars = Array(text)

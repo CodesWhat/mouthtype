@@ -9,6 +9,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
     private let cleaner: (any CleanupModelManaging)?
     private let dictionary: FileVocabulary?
     private let confirmDownload: @MainActor (_ name: String, _ sizeMB: Int) -> Bool
+    private let managePhrases: (@MainActor () -> Void)?
+    private let phrasesItem = NSMenuItem(title: "Phrase Replacements…", action: nil, keyEquivalent: "")
     private let openFile: @MainActor (URL) -> Void
     private let parent = NSMenuItem(title: "Cleanup", action: nil, keyEquivalent: "")
     private let submenu = NSMenu(title: "Cleanup")
@@ -33,6 +35,7 @@ final class CleanupMenuSection: NSObject, MenuSection {
     init(
         defaults: UserDefaults = .standard, cleaner: (any CleanupModelManaging)? = nil, dictionary: FileVocabulary? = nil,
         confirmDownload: @escaping @MainActor (_ name: String, _ sizeMB: Int) -> Bool = CleanupMenuSection.askToDownload,
+        managePhrases: (@MainActor () -> Void)? = nil,
         openFile: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     ) {
         self.defaults = defaults
@@ -40,8 +43,10 @@ final class CleanupMenuSection: NSObject, MenuSection {
         self.dictionary = dictionary
         self.confirmDownload = confirmDownload
         self.openFile = openFile
+        self.managePhrases = managePhrases
         super.init()
         for (item, action) in [
+            (phrasesItem, #selector(editPhrases(_:))),
             (downloadItem, #selector(download(_:))), (cancelDownloadItem, #selector(cancelDownload(_:))),
             (editDictionaryItem, #selector(editDictionary(_:))), (learnItem, #selector(toggleLearn(_:))), (fillersItem, #selector(toggleFillers(_:))),
             (commandsItem, #selector(toggleCommands(_:))), (numbersItem, #selector(toggleNumbers(_:))),
@@ -88,6 +93,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
         submenu.addItem(.separator())
         submenu.addItem(learnItem)
         submenu.addItem(editDictionaryItem)
+        submenu.addItem(phrasesItem)
+        phrasesItem.isEnabled = managePhrases != nil
         submenu.addItem(dictionaryErrorItem)
         parent.submenu = submenu
         refresh()
@@ -207,6 +214,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
     @objc private func cancelDownload(_ sender: NSMenuItem) {
         cleaner?.cancelDownload()
     }
+
+    @objc private func editPhrases(_ sender: NSMenuItem) { managePhrases?() }
 
     @objc private func editDictionary(_ sender: NSMenuItem) {
         guard let dictionary else { return }

@@ -10,6 +10,13 @@ import Testing
         SnippetExpander(snippets: snippets, now: now, clipboard: clipboard, dateFormatter: fixedDate)
     }
 
+    @Test func matchingTriggersIncludeIdenticalReplacementsAndRespectBoundaries() {
+        let e = expander([Snippet(trigger: "my email", expansion: "my email"),
+                          Snippet(trigger: "email", expansion: "elsewhere")])
+        #expect(e.matchingTriggers(in: "my email, MY EMAIL and emails") == ["my email", "my email"])
+        #expect(e.apply("my email").edits.isEmpty)
+    }
+
     @Test func triggerAloneExpands() {
         let s = expander([Snippet(trigger: "my address", expansion: "1 Main St, Springfield")])
         #expect(s.apply("my address").text == "1 Main St, Springfield")

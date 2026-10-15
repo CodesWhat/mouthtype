@@ -9,6 +9,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         budget: SmartTestOptions.budget(in: CommandLine.arguments)
     )
     private let dictionary = FileVocabulary()
+    private let phrases = FilePhrases()
+    private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
     private let micCapture = MicCapture()
     private let microphoneSection = MicrophoneMenuSection()
     private let systemSection = SystemAccessMenuSection()
@@ -99,7 +101,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         var pipeline = DictationPipeline(
             store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
         )
-        pipeline.vocabulary = dictionary
+        pipeline.vocabulary = SavedVocabulary(words: dictionary, phrases: phrases)
         pipeline.smart = cleanerHost
         let dictation = DictationController(
             capture: micCapture, engine: engine, pipeline: pipeline,
@@ -142,7 +144,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         menuBar.add(section: PillSkinMenuSection(onSelect: { [weak pill] kind in pill?.setSkin(kind) }))
         menuBar.add(section: TextFontMenuSection())
-        menuBar.add(section: CleanupMenuSection(cleaner: cleanerHost, dictionary: dictionary))
+        menuBar.add(section: CleanupMenuSection(cleaner: cleanerHost, dictionary: dictionary,
+            managePhrases: { [weak self] in self?.phraseWindow.present() }))
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))

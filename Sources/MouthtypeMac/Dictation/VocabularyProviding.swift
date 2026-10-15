@@ -11,3 +11,10 @@ struct EmptyVocabulary: VocabularyProviding {
     func dictionary() -> [DictionaryRule] { [] }
     func snippets() -> [Snippet] { [] }
 }
+
+struct SavedVocabulary: VocabularyProviding {
+    let words: FileVocabulary
+    let phrases: FilePhrases
+    func dictionary() -> [DictionaryRule] { words.dictionary() }
+    func snippets() -> [Snippet] { phrases.snippets() }
+}

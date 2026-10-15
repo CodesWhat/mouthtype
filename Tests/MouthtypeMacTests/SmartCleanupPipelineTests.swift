@@ -47,8 +47,9 @@ private final class StubSmart: SmartCleaning, @unchecked Sendable {
 
 private struct Rules: VocabularyProviding {
     var rules: [DictionaryRule] = []
+    var phrases: [Snippet] = []
     func dictionary() -> [DictionaryRule] { rules }
-    func snippets() -> [Snippet] { [] }
+    func snippets() -> [Snippet] { phrases }
 }
 
 @MainActor
@@ -58,7 +59,7 @@ private struct Rules: VocabularyProviding {
 
     private func pipeline(
         _ cleaner: ScriptedCleaner, level: CleanupLevel = .light, budgetMs: Int = 2000, rules: [DictionaryRule] = [],
-        style: StyleOptions = .formal, ready: Bool = true
+        style: StyleOptions = .formal, ready: Bool = true, snippets: [Snippet] = []
     ) -> (DictationPipeline, StubSmart) {
         let smart = StubSmart(SmartCleanup(cleaner: cleaner, budget: { _ in .milliseconds(budgetMs) }))
         if !ready { smart.info = nil }
@@ -68,14 +69,94 @@ private struct Rules: VocabularyProviding {
         chosen.style = style
         let settings = chosen
         pipeline.settings = { settings }
-        pipeline.vocabulary = Rules(rules: rules)
+        pipeline.vocabulary = Rules(rules: rules, phrases: snippets)
         pipeline.smart = smart
         return (pipeline, smart)
     }
 
-    private func clean(_ pipeline: DictationPipeline, text: String? = nil, context: InsertionContext? = nil, appName: String? = nil) async -> CleanedDictation {
+    private func clean(_ pipeline: DictationPipeline, text: String? = nil, context: InsertionContext? = nil, appName: String? = nil, clipboard: String? = nil) async -> CleanedDictation {
         let transcribed = TranscribedDictation(text: text ?? raw, rawText: text ?? raw, asrDoneMs: 0, words: [])
-        return await pipeline.clean(transcribed, inputs: pipeline.cleanupInputs(), context: context, clipboard: nil, appName: appName)
+        return await pipeline.clean(transcribed, inputs: pipeline.cleanupInputs(), context: context, clipboard: clipboard, appName: appName)
+    }
+
+    @Test(arguments: [CleanupLevel.basic, .light, .medium], StylePreset.allCases)
+    func savedReplacementTextSurvivesEveryCleanupLevelAndTone(level: CleanupLevel, style: StylePreset) async {
+        let expansion = "  Best regards,\n\tScott  "
+        let cleaner = ScriptedCleaner { text, _ in
+            #expect(!text.contains("Best regards") && !text.contains("Scott"))
+            return text
+        }
+        let (pipeline, _) = pipeline(cleaner, level: level, style: style.options,
+            snippets: [Snippet(trigger: "my signature", expansion: expansion)])
+        let result = await clean(pipeline, text: "my signature")
+        #expect(result.text == expansion)
+        #expect(result.edits.contains { $0.stage == "snippet" && $0.fromText?.lowercased() == "my signature" && $0.toText == expansion.trimmingCharacters(in: CharacterSet(charactersIn: " \t")) })
+    }
+
+    @Test func aConfiguredEmailExpandsWithinASentenceAfterTheModel() async {
+        let cleaner = ScriptedCleaner(returning: "Send this to my JSQ email please.")
+        let (pipeline, _) = pipeline(cleaner,
+            snippets: [Snippet(trigger: "my JSQ email", expansion: "configured@example.com")])
+        #expect(await clean(pipeline, text: "send this to my JSQ email please").text == "Send this to configured@example.com please.")
+    }
+
+    @Test func aTriggerThatDeterministicCleanupWouldRemoveStillExpands() async {
+        let (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic,
+            snippets: [Snippet(trigger: "um my email", expansion: "configured@example.com")])
+        #expect(await clean(pipeline, text: "um my email").text == "configured@example.com")
+    }
+
+    @Test func aModelCannotActivateAnUnspokenTrigger() async {
+        let (pipeline, _) = pipeline(ScriptedCleaner(returning: "Write a friendly note with my work email."),
+            snippets: [Snippet(trigger: "my work email", expansion: "configured@example.com")])
+        let result = await clean(pipeline, text: "write a friendly note")
+        #expect(result.text == "Write a friendly note")
+        #expect(result.cleanup.outcome == "guard-rejected")
+    }
+
+    @Test func variablesUseTheCapturedDateAndClipboardWithoutModelEdits() async {
+        let (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text },
+            snippets: [Snippet(trigger: "my note", expansion: "{DATE}\n{CLIPBOARD}")])
+        var inputs = pipeline.cleanupInputs()
+        inputs.now = Date(timeIntervalSince1970: 1_791_763_200)
+        #expect(inputs.needsClipboard)
+        let result = await pipeline.clean(TranscribedDictation(text: "my note", rawText: "my note", asrDoneMs: 0, words: []),
+            inputs: inputs, context: nil, clipboard: "  unchanged {date}\nsecond line  ")
+        let date = SnippetExpander.defaultDateFormatter(inputs.now)
+        #expect(result.text == date + "\n  unchanged {date}\nsecond line  ")
+    }
+
+    @Test func modelCannotRemoveOrChangeASpokenTrigger() async {
+        let (pipeline, _) = pipeline(ScriptedCleaner(returning: "Use my personal email please."),
+            snippets: [Snippet(trigger: "my work email", expansion: "work@example.com"),
+                       Snippet(trigger: "my personal email", expansion: "private@example.com")])
+        let result = await clean(pipeline, text: "use my work email please")
+        #expect(result.text == "Use work@example.com please")
+        #expect(result.cleanup.outcome == "guard-rejected")
+    }
+
+    @Test func unavailableModelStillExpandsButOffDoesNot() async {
+        let phrase = Snippet(trigger: "my email", expansion: "configured@example.com")
+        let (basic, _) = pipeline(ScriptedCleaner(returning: "never"), ready: false, snippets: [phrase])
+        #expect(await clean(basic, text: "my email").text == phrase.expansion)
+        let (off, _) = pipeline(ScriptedCleaner(returning: "never"), level: .off, snippets: [phrase])
+        #expect(await clean(off, text: "my email").text == "my email")
+    }
+
+    @Test func capturedVocabularyIsUsedEvenAfterTheFileChanges() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = FilePhrases(url: directory.appendingPathComponent("phrases.json"))
+        let phrase = Snippet(trigger: "my email", expansion: "first@example.com")
+        try store.save(original: nil, phrase: phrase)
+        var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text })
+        pipeline.vocabulary = SavedVocabulary(words: FileVocabulary(url: directory.appendingPathComponent("dictionary.json")), phrases: store)
+        let captured = pipeline.cleanupInputs()
+        try store.save(original: phrase, phrase: Snippet(trigger: phrase.trigger, expansion: "second@example.com"))
+        let result = await pipeline.clean(TranscribedDictation(text: "my email", rawText: "my email", asrDoneMs: 0, words: []),
+                                          inputs: captured, context: nil, clipboard: nil)
+        #expect(result.text == "first@example.com")
+        #expect(pipeline.cleanupInputs().snippets.first?.expansion == "second@example.com")
     }
 
     @Test func joiningDictionaryEntriesWaitForContextInsteadOfRewritingPhysicalObjects() async {

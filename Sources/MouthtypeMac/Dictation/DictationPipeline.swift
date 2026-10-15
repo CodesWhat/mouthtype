@@ -30,7 +30,7 @@ struct CleanupInputs: Sendable {
     var now: Date
 
     var needsClipboard: Bool {
-        settings.enabled && settings.pipelineOptions.snippets && snippets.contains { $0.expansion.contains("{clipboard}") }
+        settings.enabled && settings.pipelineOptions.snippets && snippets.contains { $0.expansion.localizedCaseInsensitiveContains("{clipboard}") }
     }
 }
 
@@ -185,10 +185,22 @@ struct DictationPipeline: Sendable {
         }
         let clock = ContinuousClock()
         let start = clock.now
-        let result = textPipeline.run(TextPipelineInput(
-            text: transcribed.text, dictionary: inputs.dictionary.filter { !settings.level.needsModel || smart == nil || !$0.isJoinedSpelling }, snippets: inputs.snippets, context: context,
-            now: inputs.now, clipboard: clipboard, options: settings.pipelineOptions
+        let phrases = SnippetExpander(snippets: settings.pipelineOptions.snippets ? inputs.snippets : [],
+                                     now: inputs.now, clipboard: clipboard)
+        let spoken = phrases.matchingTriggers(in: transcribed.text)
+        var options = settings.pipelineOptions
+        options.snippets = false
+        var result = textPipeline.run(TextPipelineInput(
+            text: transcribed.text, dictionary: inputs.dictionary.filter { !settings.level.needsModel || smart == nil || !$0.isJoinedSpelling }, snippets: [], context: context,
+            now: inputs.now, clipboard: clipboard, options: options
         ))
+        // Cleanup may remove a filler or format a number that is part of a saved trigger.
+        // Keep the spoken trigger intact rather than silently losing its replacement.
+        if !spoken.isEmpty, phrases.matchingTriggers(in: result.text) != spoken {
+            result = TextPipelineResult(text: transcribed.text)
+        }
+        let expanded = phrases.apply(result.text)
+        let expected = phrases.matchingTriggers(in: result.text)
         let elapsed = clock.now - start
         let ms = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
         var record = CleanupRecord(
@@ -206,13 +218,13 @@ struct DictationPipeline: Sendable {
 
         let level = settings.level
         guard level.needsModel, !result.text.isEmpty, let smart else {
-            return CleanedDictation(text: result.text, edits: edits, cleanup: record)
+            return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         guard let delivery = await smart.runReady(SmartCleanupRequest(
             text: result.text, level: level, style: settings.style, destination: destination,
-            dictionary: inputs.dictionary, snippets: inputs.snippets, context: context, appName: appName
+            dictionary: inputs.dictionary, snippets: [], context: context, appName: appName
         ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
-            return CleanedDictation(text: result.text, edits: edits, cleanup: record)
+            return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         let model = delivery.model
         let modelResult = delivery.result
@@ -226,9 +238,14 @@ struct DictationPipeline: Sendable {
             Log.cleaner.info("smart cleanup \(modelResult.outcome.rawValue, privacy: .public): \(reason, privacy: .public)")
         }
         Log.cleaner.info("smart cleanup \(modelResult.outcome.rawValue, privacy: .public) ms=\(modelResult.milliseconds)")
+        let final = phrases.apply(modelResult.text)
+        guard phrases.matchingTriggers(in: modelResult.text) == expected else {
+            record.outcome = "guard-rejected"
+            return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
+        }
         let modelEdits = (modelResult.edit(from: result.text).map { [$0] } ?? []) + modelResult.postEdits
-        return CleanedDictation(text: modelResult.text, edits: edits + modelEdits, cleanup: record,
-                                deterministicText: modelResult.text == result.text ? nil : result.text)
+        return CleanedDictation(text: final.text, edits: edits + modelEdits + final.edits, cleanup: record,
+                                deterministicText: final.text == expanded.text ? nil : expanded.text)
     }
 
     static let cleanerID = "deterministic"
