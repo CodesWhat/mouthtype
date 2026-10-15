@@ -3,7 +3,8 @@ import Foundation
 /// Collapses runs of spaces, removes the space before `, . ; : ? ! … )` and after `(`, trims the ends of the text
 /// and of every line, and keeps intended newlines. Not logged: it only tidies.
 ///
-/// A `.` or `:` directly followed by a letter or digit keeps its space (`open .gitignore`, `at .5`), and `:)`
+/// A `.` or `:` directly followed by a letter or digit keeps its space (`open .gitignore`, `at .5`), as do `./`
+/// and `../` relative paths. `:)`
 /// `;)` `:(` smileys keep theirs.
 public struct WhitespaceNormalizer: Sendable {
     public init() {}
@@ -49,6 +50,7 @@ public struct WhitespaceNormalizer: Sendable {
             return true
         case ".":
             if let next, TextScan.isWordChar(next) { return false }
+            if next == "/" || (next == "." && i + 2 < chars.count && chars[i + 2] == "/") { return false }
             return true
         default:
             return false

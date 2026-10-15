@@ -1,0 +1,116 @@
+[
+  {
+    "id": "relative-command",
+    "input": "Run ./dusting --mode testing.",
+    "target": "Run ./dusting --mode testing.",
+    "exact": [
+      "Run ./dusting --mode testing."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "parent-relative",
+    "input": "Open ../notes.txt now.",
+    "target": "Open ../notes.txt now.",
+    "exact": [
+      "Open ../notes.txt now."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "double-parent-relative",
+    "input": "Run ../../bin/check now.",
+    "target": "Run ../../bin/check now.",
+    "exact": [
+      "Run ../../bin/check now."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "leading-relative",
+    "input": "./dusting --mode testing.",
+    "target": "./dusting --mode testing.",
+    "exact": [
+      "./dusting --mode testing."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "unicode-relative",
+    "input": "Open ./資料/notes.txt now.",
+    "target": "Open ./資料/notes.txt now.",
+    "exact": [
+      "Open ./資料/notes.txt now."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "hidden-file",
+    "input": "Open .gitignore now.",
+    "target": "Open .gitignore now.",
+    "exact": [
+      "Open .gitignore now."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "quoted-label",
+    "input": "The label says \"dusting\".",
+    "target": "The label says \"dusting\".",
+    "exact": [
+      "The label says \"dusting\".",
+      "The label says “dusting”."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "curly-quoted-label",
+    "input": "The label says “dusting”.",
+    "target": "The label says “dusting”.",
+    "exact": [
+      "The label says “dusting”.",
+      "The label says \"dusting\"."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "quoted-ordinary-word",
+    "input": "Select \"merry\" in the list.",
+    "target": "Select \"merry\" in the list.",
+    "exact": [
+      "Select \"merry\" in the list.",
+      "Select “merry” in the list."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "quoted-case",
+    "input": "Use \"mark\" here.",
+    "target": "Use \"mark\" here.",
+    "exact": [
+      "Use \"mark\" here.",
+      "Use “mark” here."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "quoted-question",
+    "input": "She said \"Ready?\"",
+    "target": "She said \"Ready?\"",
+    "exact": [
+      "She said \"Ready?\"",
+      "She said “Ready?”"
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "quoted-path",
+    "input": "Open \"../notes.txt\" now.",
+    "target": "Open \"../notes.txt\" now.",
+    "exact": [
+      "Open \"../notes.txt\" now.",
+      "Open “../notes.txt” now."
+    ],
+    "caseSensitive": true
+  }
+]

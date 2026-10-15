@@ -18,6 +18,38 @@ import Testing
     }
 
     @Test(arguments: [
+        ("Run ./dusting --mode testing.", "Run /dusting --mode testing."),
+        ("Open ../notes.txt", "Open ./notes.txt"),
+        ("Open ../../notes.txt", "Open /notes.txt"),
+        ("The label says \"dusting\".", "The label says \"dusting.\""),
+        ("The label says “dusting”.", "The label says “dusting.”"),
+        ("Use \"mark\" here.", "Use \"Mark\" here."),
+        ("Select \"merry\" in the list.", "Select \"Mary\" in the list."),
+        ("She said \"Ready?\"", "She said \"Ready.\""),
+    ], [false, true])
+    func changedRelativePathsAndQuotedLabelsFallBackToTheCurrentTake(item: (String, String), native: Bool) async {
+        let cleaner = FakeCleaner(returning: item.1)
+        cleaner.usesNativeControls = native
+        let result = await SmartCleanup(cleaner: cleaner).run(SmartCleanupRequest(text: item.0, level: .light))
+        #expect(result.outcome == .guardRejected)
+        #expect(result.text == item.0)
+    }
+
+    @Test(arguments: [
+        ("The label says \"dusting\".", "The label says “dusting”."),
+        ("The label says “dusting”.", "The label says \"dusting\"."),
+        ("Use \"old\" actually \"new\"", "Use \"new\""),
+        ("I'm testing this", "I'm testing this."),
+        ("Use a 6\" screw and a 4\" bolt.", "Use a 6-inch screw and a 4-inch bolt."),
+        ("Open ./notes.txt", "Open ./notes.txt."),
+    ])
+    func unchangedLabelsQuoteStylingAndExplicitCorrectionsAreAllowed(item: (String, String)) async {
+        let result = await SmartCleanup(cleaner: FakeCleaner(returning: item.1))
+            .run(SmartCleanupRequest(text: item.0, level: .light))
+        #expect(result.outcome == .ok && result.text == item.1)
+    }
+
+    @Test(arguments: [
         ("send this to jon@example.com", "Send this to jon@example.com."),
         ("open /jon/reports, please", "Open /jon/reports, please."),
         ("use `merry berry` here", "Use `merry berry` here."),

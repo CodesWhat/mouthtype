@@ -292,12 +292,20 @@ public enum SmartCleanupGuard {
     // MARK: Names and spellings
 
     private static func missingLiteral(input: String, output: String) -> String? {
-        guard let expression = try? NSRegularExpression(pattern: #"`[^`\r\n]+`|[^\s`]*[@/\\][^\s`]*"#) else { return nil }
-        let wrappers = CharacterSet(charactersIn: ".,;:!?()[]{}\"'“”‘’")
+        guard let expression = try? NSRegularExpression(
+            pattern: #"`[^`\r\n]+`|(?<![\p{L}\p{N}])"[^"\r\n]+"(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])“[^”\r\n]+”(?![\p{L}\p{N}])|[^\s`]*[@/\\][^\s`]*"#
+        ) else { return nil }
+        let wrappers = Set(".,;:!?()[]{}\"'“”‘’")
+        let leadingWrappers = wrappers.subtracting(["."])
         func matches(_ text: String) -> [(String, Range<String.Index>)] {
             expression.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
                 guard let range = Range(match.range, in: text) else { return nil }
-                let value = String(text[range]).trimmingCharacters(in: wrappers)
+                let raw = text[range]
+                if raw.first == "\"" || raw.first == "“" {
+                    return ("\"" + raw.dropFirst().dropLast() + "\"", range)
+                }
+                let leadingTrimmed = text[range].drop(while: leadingWrappers.contains)
+                let value = String(leadingTrimmed.reversed().drop(while: wrappers.contains).reversed())
                 guard value.contains("`") || value.contains(where: \.isLetter) else { return nil }
                 return (value, range)
             }
