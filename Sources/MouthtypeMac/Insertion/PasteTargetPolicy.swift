@@ -10,6 +10,11 @@ enum PasteTargetPolicy {
         bundleID != "com.apple.Terminal"
     }
 
+    static func unchangedProvesFailure(bundleID: String?) -> Bool {
+        // Orca can consume the paste while its Accessibility field stays unchanged.
+        bundleID != "com.stablyai.orca" && bundleID != "com.apple.Terminal"
+    }
+
     static let notEditableRoles: Set<String> = [
         "AXButton", "AXMenuItem", "AXMenuBarItem", "AXMenuButton", "AXMenu", "AXMenuBar", "AXCheckBox", "AXRadioButton",
         "AXImage", "AXSlider", "AXPopUpButton",

@@ -414,6 +414,25 @@ private struct Rig {
         #expect(await rig.inserter.deliver("Damn, can you check", startFocus: nil).finalText == " Damn, can you check")
     }
 
+    @Test(arguments: [false, true])
+    func staleOrcaContextCannotJoinConsecutiveSentences(reportsSpace: Bool) async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", role: "AXTextField", element: element(100))
+        rig.focus.before = reportsSpace ? .character(" ") : .start
+        _ = await rig.inserter.deliver("This sentence is running together.", startFocus: nil)
+        rig.clock.advance(15)
+        #expect(await rig.inserter.deliver("It doesn't seem like spacing works.", startFocus: nil).finalText == " It doesn't seem like spacing works.")
+    }
+
+    @Test func submittingOrMovingWithinOrcaDoesNotReuseTheOldSentenceEnding() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", role: "AXTextField", element: element(100))
+        rig.focus.before = .start
+        _ = await rig.inserter.deliver("Previous message.", startFocus: nil)
+        rig.input.value = 1
+        #expect(await rig.inserter.deliver("New message.", startFocus: nil).finalText == "New message.")
+    }
+
     @Test func aKeyPressBetweenDeliveriesGetsNoSpace() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("My name is Hove.", startFocus: nil)
@@ -810,6 +829,31 @@ private struct Rig {
         await rig.inserter.waitForVerification()
         #expect(result.method == .paste && rig.poster.posts == 1)
         #expect(seen.map(\.verdict) == [.unknown])
+    }
+
+    @Test func anUnchangedOrcaFieldDoesNotProveThatInputWasLost() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", role: "AXTextField", element: element(100))
+        rig.focus.readings = [Self.before]
+        rig.poster.onPost = { rig.pasteboard.read() }
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        let result = await rig.inserter.deliver("world", startFocus: nil)
+        await rig.inserter.waitForVerification()
+        #expect(result.method == .paste && rig.poster.posts == 1)
+        #expect(seen.map(\.verdict) == [.unknown])
+        #expect(seen.allSatisfy { DeliveryCard.forVerdict($0.verdict, transcript: "world") == nil })
+    }
+
+    @Test func anOrcaFieldThatActuallyUpdatesCanStillConfirmDelivery() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", role: "AXTextField", element: element(100))
+        rig.focus.readings = [Self.before, FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.verdict) == [.confirmed])
     }
 
     @Test func aFieldThatGrewIsConfirmedAtTheFirstReadAndStopsReading() async {

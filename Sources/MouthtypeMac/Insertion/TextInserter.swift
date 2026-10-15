@@ -148,8 +148,9 @@ public final class TextInserter {
                 Log.app.info("focused \(now.role ?? "element", privacy: .public) can't take text; transcript left on the clipboard")
                 return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
             }
+            let reliableReadBack = PasteTargetPolicy.unchangedProvesFailure(bundleID: now.bundleID)
             var before = now.element.map { focus.textBeforeCursor(of: $0) } ?? .unknown
-            if case .unknown = before, let preceding = continuationCharacter(for: now) {
+            if !reliableReadBack || before == .unknown, let preceding = continuationCharacter(for: now) {
                 before = .character(preceding)
             }
             let spaced = Spacing.spaced(text, before: before)
@@ -181,7 +182,8 @@ public final class TextInserter {
             }
             startVerification(
                 generation: generation, pasted: spaced, target: now,
-                baseline: fieldBefore.map { PasteVerifier.Baseline(reading: $0, input: afterInput) }
+                baseline: fieldBefore.map { PasteVerifier.Baseline(reading: $0, input: afterInput,
+                    unchangedProvesFailure: reliableReadBack) }
             )
             return DeliveryResult(
                 method: .paste, outcome: .unknown, focusMoved: moved, target: now, finalText: spaced,

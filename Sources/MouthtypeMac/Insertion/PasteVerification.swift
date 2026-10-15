@@ -44,6 +44,7 @@ enum PasteVerifier {
         var reading: FieldReading
         /// How many real key presses and clicks had happened right after the paste; nil when unknown.
         var input: UInt64?
+        var unchangedProvesFailure = true
     }
 
     struct Observation: Equatable, Sendable {
@@ -68,7 +69,8 @@ enum PasteVerifier {
     static func judge(baseline: Baseline?, pasted: String, observations: [Observation], expected: Int) -> PasteVerdict {
         guard let baseline else { return .unknown }
         if observations.contains(where: { confirms($0, baseline: baseline, pasted: pasted) }) { return .confirmed }
-        guard observations.count == expected, baseline.reading.isComplete, let input = baseline.input else { return .unknown }
+        guard baseline.unchangedProvesFailure, observations.count == expected,
+              baseline.reading.isComplete, let input = baseline.input else { return .unknown }
         for observation in observations {
             guard observation.focusSame, let now = observation.reading, now.isComplete, observation.input == input,
                   now == baseline.reading else { return .unknown }
