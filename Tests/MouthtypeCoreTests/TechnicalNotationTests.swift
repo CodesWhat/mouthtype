@@ -89,6 +89,10 @@ import Testing
     @Test(arguments: [
         TextCase("a four K monitor", "A 4K monitor"),
         TextCase("an eight K camera", "An 8K camera"),
+        TextCase("buy four K monitors", "Buy 4K monitors"),
+        TextCase("a twenty four K display", "A 24K display"),
+        TextCase("thirty two K cameras", "32K cameras"),
+        TextCase("thirty three K screens", "33 K screens"),
         TextCase("the 4 K display", "The 4K display"),
         TextCase("a five K screen", "A 5K screen"),
         TextCase("four K dollars", "Four K dollars"),

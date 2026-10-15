@@ -107,12 +107,14 @@ public struct SpokenNumberFormatter: NumberFormatting {
         }
 
         func resolution(at i: Int) -> (TextSpan, Int)? {
-            guard i + 2 < words.count, words[i + 1].lower == "k", gap(i, i + 1), gap(i + 1, i + 2),
-                  let value = NumberWords.units[words[i].lower] ?? NumberWords.teens[words[i].lower] ?? Int(words[i].lower),
-                  (1...32).contains(value),
-                  ["monitor", "camera", "display", "screen", "resolution", "video", "footage", "panel", "projector", "television"].contains(words[i + 2].lower)
-            else { return nil }
-            return (span(i, i + 1, "\(value)K"), i + 2)
+            let run = scanRun(from: i)
+            let end = run.end > i ? run.end : i + 1
+            guard end + 1 < words.count, words[end].lower == "k", gap(end - 1, end), gap(end, end + 1),
+                  let value = run.end > i ? run.value : Int(words[i].lower), (1...32).contains(value) else { return nil }
+            let noun = words[end + 1].lower
+            let devices = ["monitor", "camera", "display", "screen", "resolution", "video", "footage", "panel", "projector", "television"]
+            guard devices.contains(noun) || (noun.hasSuffix("s") && devices.contains(String(noun.dropLast()))) else { return nil }
+            return (span(i, end, "\(value)K"), end + 1)
         }
 
         // MARK: Cardinal runs
