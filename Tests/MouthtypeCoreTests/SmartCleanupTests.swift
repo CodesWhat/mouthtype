@@ -186,6 +186,60 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
             references: ["Before that. I am pausing again for testing. After that."]))
     }
 
+    @Test(arguments: [false, true])
+    func copiedContextAfterACorrectedTakeIsRejected(native: Bool) async {
+        let input = "And I stop there and I'm starting again for dusting."
+        let cleaner = FakeCleaner(returning: "And I stopped there and I'm starting again for dusting. And I just stopped there to start again, just for testing.")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "Earlier in this draft. And I just stopped there to start again, just for testing. Keep going. ")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test(arguments: [false, true])
+    func copiedContextBeforeAContractedTakeIsRejected(native: Bool) async {
+        let input = "I am pausing again for dusting."
+        let cleaner = FakeCleaner(returning: "I am pausing again for testing. I'm pausing again for dusting.")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(after: "Check the microphone. I am pausing again for testing. Keep going. ")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test(arguments: [
+        ("I am pausing again for dusting.", "I am pausing again for testing."),
+        ("I am testing microphone again today.", "I am testing the microphone again today."),
+        ("We can meet Tuesday, actually Wednesday afternoon.", "We can meet Wednesday afternoon."),
+    ], [false, true])
+    func aCorrectedTakeMayMatchAnEntireContextLine(item: (String, String), native: Bool) async {
+        let cleaner = FakeCleaner(returning: item.1)
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: item.0, level: .light,
+            context: InsertionContext(before: item.1)))
+        #expect(result.outcome == .ok && result.text == item.1)
+    }
+
+    @Test func copiedContextIsRejectedAtTheTakeWordLimit() {
+        let words = (0..<SmartCleanup.maxWords).map { "piece\($0)" }
+        let input = words.joined(separator: " ")
+        let output = (["changed"] + words.dropFirst() + ["words", "from", "the", "earlier", "draft"]).joined(separator: " ")
+        #expect(SmartCleanupGuard.copiesSurroundingText(input: input, output: output,
+            references: ["Notes. Words from the earlier draft. Keep going."]))
+    }
+
+    @Test(arguments: [false, true])
+    func anUnspokenSurnameCrossingTheRetainedTakeBoundaryIsRejected(native: Bool) async {
+        let input = "Send this to Sam."
+        let cleaner = FakeCleaner(returning: "Send this to Sam Spade.")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "Sam Spade")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
     @Test func anExistingContextSpellingCannotBecomeAnotherName() async {
         let cleaner = FakeCleaner(returning: "Send this to Mary.")
         cleaner.usesNativeControls = false
