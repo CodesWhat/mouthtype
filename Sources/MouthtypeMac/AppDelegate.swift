@@ -5,7 +5,7 @@ import MouthtypeCore
 public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let engineHost = EngineHost()
     private let cleanerHost = CleanupSelection(
-        fast: CleanerCatalog.makeSmartCleanup(level: .light), thorough: CleanerCatalog.makeSmartCleanup(level: .medium), level: { CleanupSettings.load().level },
+        fast: CleanerCatalog.makeSmartCleanup(level: .light), thorough: CleanerCatalog.makeSmartCleanup(level: .medium), level: { SmartTestOptions.modelLevel(in: CommandLine.arguments, saved: CleanupSettings.load().level) },
         budget: SmartTestOptions.budget(in: CommandLine.arguments)
     )
     private let dictionary = FileVocabulary()

@@ -96,7 +96,13 @@ final class CleanerHost: CleanupModelManaging {
         state = model.isDownloaded ? .unloaded : .absent
     }
 
-    var modelName: String { model.displayName }
+    var modelName: String {
+        switch model.id {
+        case "superwhisper-s1-mini": "S1-mini by Superwhisper"
+        case CleanerCatalog.smartCleanupID: CleanerCatalog.smartCleanupName
+        default: model.displayName
+        }
+    }
     var downloadSizeMB: Int { model.downloadSizeMB }
 
     /// Watches for memory pressure and loads the model if the level wants it and it is on disk.

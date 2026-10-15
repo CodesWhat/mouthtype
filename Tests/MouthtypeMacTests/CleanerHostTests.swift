@@ -12,6 +12,12 @@ import MouthtypeCore
         #expect(invalid == nil)
     }
 
+    @Test func onlyPipelineSelfTestsOverrideTheHostModelChoice() {
+        #expect(SmartTestOptions.modelLevel(in: ["Mouthtype", "--pipeline-selftest", "audio.wav", "--cleanup-level", "medium"], saved: .light) == .medium)
+        #expect(SmartTestOptions.modelLevel(in: ["Mouthtype", "--cleanup-level", "medium"], saved: .light) == .light)
+        #expect(SmartTestOptions.modelLevel(in: ["Mouthtype", "--pipeline-selftest", "audio.wav"], saved: .medium) == .medium)
+    }
+
     @Test func diagnosticLaunchCanOverrideTheModelBudget() {
         let budget: (@Sendable (Int) -> Duration)? = SmartTestOptions.budget(in: ["Mouthtype", "--smart-timeout-ms", "9000"])
         #expect(budget?(3) == .milliseconds(9000))

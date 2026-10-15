@@ -9,6 +9,10 @@ enum SmartTestOptions {
         value(of: "--cleanup-level", in: arguments).flatMap(CleanupLevel.init(rawValue:))
     }
 
+    static func modelLevel(in arguments: [String], saved: CleanupLevel) -> CleanupLevel {
+        arguments.contains("--pipeline-selftest") ? level(in: arguments) ?? saved : saved
+    }
+
     static func budget(in arguments: [String]) -> (@Sendable (Int) -> Duration)? {
         guard let ms = value(of: "--smart-timeout-ms", in: arguments).flatMap(Int.init) else { return nil }
         return { _ in .milliseconds(ms) }

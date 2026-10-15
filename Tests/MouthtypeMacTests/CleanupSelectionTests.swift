@@ -15,6 +15,8 @@ import MouthtypeCore
         #expect(CleanerCatalog.smartCleanupID(for: .medium) == "gemma-4-e4b-it-4bit")
         #expect(CleanupLevel(rawValue: "light") == .light)
         #expect(CleanupLevel(rawValue: "medium") == .medium)
+        let host = CleanerHost(model: CleanerCatalog.makeSmartCleanup(level: .light), level: { .light })
+        #expect(host.modelName == "S1-mini by Superwhisper")
     }
 
     private final class Choice { var level = CleanupLevel.light }
@@ -36,6 +38,19 @@ import MouthtypeCore
         for _ in 0..<100 where fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(!fast.isLoaded)
         #expect(thorough.isLoaded)
+    }
+
+    @Test func aSelectionChangeDuringLoadingKeepsTheCapturedModelAvailable() async {
+        let choice = Choice()
+        let fast = FakeSmartModel(downloaded: true, id: "fast")
+        fast.loadDelay = .milliseconds(80)
+        let selection = CleanupSelection(fast: fast, thorough: FakeSmartModel(downloaded: true, id: "thorough"), level: { choice.level })
+        let request = Task { await selection.runReady(SmartCleanupRequest(text: "Keep the wording.", level: .light), waitingUpTo: .seconds(2)) }
+        try? await Task.sleep(for: .milliseconds(20))
+        choice.level = .medium; selection.levelChanged()
+        #expect(await request.value?.model.id == "fast")
+        for _ in 0..<100 where fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(!fast.isLoaded)
     }
 
     @Test func unavailableFastDoesNotDownloadOrUseThorough() async {
