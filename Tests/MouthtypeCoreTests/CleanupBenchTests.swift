@@ -160,3 +160,25 @@ import MouthtypeCore
         }
     }
 }
+
+@Suite struct CleanupTimingRecordTests {
+    @Test func totalTimeIncludesAwaitedModelWork() async {
+        let cleaner = FakeCleaner { text, _ in
+            try await Task.sleep(for: .milliseconds(30))
+            return text
+        }
+        let run = await SmartRunner.run("the G P U needs a driver", level: .light, smart: SmartCleanup(cleaner: cleaner))
+        #expect(run.deterministic == "The GPU needs a driver")
+        #expect(run.totalCleanupMilliseconds >= 20)
+        #expect(run.totalCleanupMilliseconds >= run.deterministicMilliseconds)
+    }
+
+    @Test func recordsIncludeDeterministicAndTotalCleanupTime() throws {
+        let data = Data(#"{"id":"t","cleanerID":"s1","level":"light","input":"G P U","deterministic":"GPU","delivered":"GPU","outcome":"skipped","milliseconds":0,"deterministicMilliseconds":0.5,"totalCleanupMilliseconds":0.7}"#.utf8)
+        let record = try JSONDecoder().decode(SmartDeliveryRecord.self, from: data)
+        let encoded = try JSONEncoder().encode(record)
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(object["deterministicMilliseconds"] as? Double == 0.5)
+        #expect(object["totalCleanupMilliseconds"] as? Double == 0.7)
+    }
+}

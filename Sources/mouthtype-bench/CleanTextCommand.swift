@@ -154,7 +154,9 @@ struct CleanTextCommand: AsyncParsableCommand {
             print("")
             records.append(SmartDeliveryRecord(id: item.id, cleanerID: id, level: level.rawValue, input: item.input,
                 deterministic: run.deterministic, delivered: run.result.text, outcome: run.result.outcome.rawValue,
-                milliseconds: run.result.milliseconds, rejection: run.result.rejection, failure: item.failure(for: run.result.text), proposed: await observed.proposed))
+                milliseconds: run.result.milliseconds, deterministicMilliseconds: run.deterministicMilliseconds,
+                totalCleanupMilliseconds: run.totalCleanupMilliseconds, rejection: run.result.rejection,
+                failure: item.failure(for: run.result.text), proposed: await observed.proposed))
         }
         if let result {
             let encoder = JSONEncoder()
