@@ -212,6 +212,8 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         ("I am pausing again for dusting.", "I am pausing again for testing."),
         ("I am testing microphone again today.", "I am testing the microphone again today."),
         ("We can meet Tuesday, actually Wednesday afternoon.", "We can meet Wednesday afternoon."),
+        ("Try dusting again.", "Try testing again."),
+        ("I'm pausing again for dusting.", "I'm Pausing Again For Testing."),
     ], [false, true])
     func aCorrectedTakeMayMatchAnEntireContextLine(item: (String, String), native: Bool) async {
         let cleaner = FakeCleaner(returning: item.1)
@@ -236,6 +238,24 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         cleaner.usesNativeControls = native
         let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
             context: InsertionContext(before: "Sam Spade")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test(arguments: [
+        ("send this to sam howard.", "Send this to Sam Spade.", "Sam Spade"),
+        ("sam howard junior", "Sam Spade Junior", "Sam Spade Junior"),
+        ("sam van howard", "Sam van Spade", "Sam van Spade"),
+        ("iphone macbook pro", "iPhone MacBook Air", "iPhone MacBook Air"),
+        ("iphone 15 pro", "iPhone 15 Air", "iPhone 15 Air"),
+        ("it systems inc", "IT Services Inc", "IT Services Inc"),
+    ], [false, true])
+    func aShortContextNameCannotReplaceAnExplicitLowercaseSurname(item: (String, String, String), native: Bool) async {
+        let input = item.0
+        let cleaner = FakeCleaner(returning: item.1)
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: item.2)))
         #expect(result.outcome == .guardRejected && result.text == input)
         #expect(result.rejection == "surrounding text copied into output")
     }

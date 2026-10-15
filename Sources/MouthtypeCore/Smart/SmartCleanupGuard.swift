@@ -69,14 +69,27 @@ public enum SmartCleanupGuard {
             }
             return count
         }
+        let particles: Set<String> = ["de", "del", "da", "di", "do", "dos", "du", "van", "von", "der", "den", "la", "le", "of", "the", "and", "jr", "sr", "junior", "senior"]
+        let subjects: Set<String> = ["i", "we", "you", "he", "she", "it", "they"]
         let lines = references.flatMap { $0.split(whereSeparator: \.isNewline) }.map { line in
             let text = line.trimmingCharacters(in: .whitespaces)
-            return (characters: text.count, words: TextMetrics.normalizedWords(text))
+            let parts = text.split(whereSeparator: \.isWhitespace).map(Self.stripped).filter { !$0.isEmpty }
+            let words = TextMetrics.normalizedWords(text)
+            let subject = words.first?.split(separator: "'").first.map(String.init) ?? ""
+            let first = parts.first ?? ""
+            let isSubject = subjects.contains(subject) && (first == "I" || first.contains(where: \.isLowercase))
+            let isNameLabel = parts.contains { $0.contains(where: \.isUppercase) }
+                && !isSubject
+                && parts.allSatisfy { particles.contains($0.lowercased()) || $0.contains(where: \.isUppercase) || $0.allSatisfy(\.isNumber) }
+            return (characters: text.count, words: words, isNameLabel: isNameLabel)
         }
         for line in lines where line.characters >= 8 && !line.words.isEmpty {
             let reference = phrase(line.words)
+            // Only a complete corrected take may match a reference line. A shorter name/label
+            // inside it keeps the existing full-line protection against unspoken replacements.
+            let allowed = !line.isNameLabel && retainedPhrase == reference ? 1 : 0
             if !inputPhrase.contains(reference),
-               occurrences(of: reference, in: outputPhrase) > occurrences(of: reference, in: retainedPhrase) { return true }
+               occurrences(of: reference, in: outputPhrase) > allowed { return true }
         }
 
         guard hasRetainedTake else { return false }
