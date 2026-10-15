@@ -57,7 +57,7 @@ struct PhraseEditorView: View {
             HStack(alignment: .top, spacing: 0) {
                 library.frame(width: 252)
                 Divider()
-                ScrollView { form }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                form.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             Divider()
             Text("Works with Basic, Fast and Thorough. Cleanup Off leaves your words unchanged.")
@@ -106,6 +106,23 @@ struct PhraseEditorView: View {
     }
 
     private var form: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ScrollView { fields.padding(24) }
+            HStack {
+                if editor.original != nil {
+                    Button("Delete", role: .destructive) { confirmDelete = true }
+                        .disabled(editor.isDirty || editor.loadFailed)
+                }
+                Spacer()
+                Button("Cancel") { editor.cancel() }.disabled(!editor.isDirty)
+                Button("Save Phrase") { editor.save() }.buttonStyle(.borderedProminent)
+                    .disabled(!editor.canSave)
+            }
+            .padding(.horizontal, 24).padding(.bottom, 20)
+        }
+    }
+
+    private var fields: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text(editor.original == nil ? "New phrase" : "Edit phrase").font(.title3.weight(.semibold))
@@ -137,16 +154,6 @@ struct PhraseEditorView: View {
                 Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.red)
                     .font(.callout).fixedSize(horizontal: false, vertical: true)
             }
-            HStack {
-                if editor.original != nil {
-                    Button("Delete", role: .destructive) { confirmDelete = true }
-                        .disabled(editor.isDirty || editor.loadFailed)
-                }
-                Spacer()
-                Button("Cancel") { editor.cancel() }.disabled(!editor.isDirty)
-                Button("Save Phrase") { editor.save() }.buttonStyle(.borderedProminent)
-                    .disabled(!editor.canSave)
-            }
-        }.padding(24)
+        }
     }
 }
