@@ -184,6 +184,12 @@ final class TapContext: Sendable {
     /// The tap counts keystrokes itself (no other tap does), forwarding nothing. Flag tap only.
     let countsKeys: Bool
 
+    func countPassiveKey(_ sample: TapSample) {
+        if TapPolicy.countsAsUserInput(sample, decision: .passThrough, swallowedKey: swallowedKey) {
+            shared.userInput.wrappingAdd(1, ordering: .relaxed)
+        }
+    }
+
     init(
         role: TapRole, sink: AsyncStream<TapMessage>.Continuation, swallowedKey: UInt16?, shared: TapShared,
         emulator: KeyEmulator? = nil, tracksFnFlag: Bool = false, idleKeysReported: Bool = false, countsKeys: Bool = false

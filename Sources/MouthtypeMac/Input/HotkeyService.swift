@@ -192,13 +192,16 @@ public final class HotkeyService {
 
     private func makeTap(_ role: TapRole, countsInput: Bool = false) -> EventTap? {
         guard let thread else { return nil }
+        return EventTap(role: role, context: tapContext(for: role), runLoop: thread.runLoop, countsInput: countsInput)
+    }
+
+    func tapContext(for role: TapRole) -> TapContext {
         let remapped = role == .keys && swallowedKey != nil
-        let context = TapContext(
-            role: role, sink: messageSink, swallowedKey: role == .keys ? swallowedKey : nil, shared: shared,
+        return TapContext(
+            role: role, sink: messageSink, swallowedKey: swallowedKey, shared: shared,
             emulator: remapped ? emulator : nil, tracksFnFlag: swallowedKey == nil, idleKeysReported: options.observesKeys,
             countsKeys: role == .flags && !keyTapStaysOn
         )
-        return EventTap(role: role, context: context, runLoop: thread.runLoop, countsInput: countsInput)
     }
 
     // MARK: - Samples

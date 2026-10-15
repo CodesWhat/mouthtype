@@ -331,6 +331,28 @@ private struct Rig {
         #expect(rig.pasteboard.writes.map(\.text) == [passage])
     }
 
+    @Test(arguments: [UInt16(80), 96])
+    func pressingTheDictationKeyBetweenTakesPreservesTheOrcaSentenceBoundary(key: UInt16) async {
+        let service = HotkeyService(options: .init(source: .remapped(keyCode: key)), otherKeysHeld: { _ in false })
+        service.shared.inputTracked.store(true, ordering: .relaxed)
+        let passive = service.tapContext(for: .flags)
+        let rig = Rig()
+        rig.focus.current.bundleID = "com.stablyai.orca"
+        rig.focus.current.element = element(100)
+        rig.focus.before = .start
+        rig.input.value = service.userInputGeneration
+        _ = await rig.inserter.deliver("First sentence.", startFocus: nil)
+        // The listen-only tap sees the real remapped Fn key before the active tap consumes it.
+        passive.countPassiveKey(TapSample(kind: .keyDown, keyCode: key, flags: 0, timestamp: 0))
+        rig.input.value = service.userInputGeneration
+        let next = await rig.inserter.deliver("Second sentence.", startFocus: nil)
+        #expect(next.finalText == " Second sentence.")
+        // A real Send key still invalidates the remembered boundary.
+        passive.countPassiveKey(TapSample(kind: .keyDown, keyCode: 36, flags: 0, timestamp: 0))
+        rig.input.value = service.userInputGeneration
+        #expect(await rig.inserter.deliver("A new message.", startFocus: nil).finalText == "A new message.")
+    }
+
     @Test func systemPosterSendsOneStampedCommandVPairToTheDestination() {
         var pids: [pid_t] = []
         var types: [CGEventType] = []

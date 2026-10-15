@@ -8,6 +8,30 @@ import Testing
         TapSample(kind: kind, keyCode: keyCode, flags: 0, timestamp: 0, userData: userData)
     }
 
+    @MainActor @Test(arguments: [UInt16(80), 96])
+    func passiveListenerUsesTheConfiguredDictationKeyInsteadOfCountingItAsTyping(key: UInt16) {
+        let service = HotkeyService(options: .init(source: .remapped(keyCode: key)), otherKeysHeld: { _ in false })
+        let passive = service.tapContext(for: .flags)
+        service.shared.inputTracked.store(true, ordering: .relaxed)
+        #expect(passive.swallowedKey == key)
+        passive.countPassiveKey(sample(.keyDown, key))
+        #expect(service.userInputGeneration == 0)
+        passive.countPassiveKey(sample(.keyDown, 36))
+        #expect(service.userInputGeneration == 1)
+    }
+
+    @MainActor @Test func nativeFnFlagsAndSyntheticReleaseDoNotCountButAnUnmappedFunctionKeyDoes() {
+        let service = HotkeyService(options: .init(source: .fnFlag), otherKeysHeld: { _ in false })
+        let passive = service.tapContext(for: .flags)
+        service.shared.inputTracked.store(true, ordering: .relaxed)
+        passive.countPassiveKey(sample(.flagsChanged, 63))
+        passive.countPassiveKey(sample(.keyDown, 179))
+        passive.countPassiveKey(sample(.keyDown, 9, userData: SyntheticEvents.stamp))
+        #expect(service.userInputGeneration == 0)
+        passive.countPassiveKey(sample(.keyDown, 80))
+        #expect(service.userInputGeneration == 1)
+    }
+
     @Test func ordinaryKeyDownsCountAsUserInput() {
         let down = sample(.keyDown, 36)
         #expect(TapPolicy.countsAsUserInput(down, decision: .passThrough, swallowedKey: nil))

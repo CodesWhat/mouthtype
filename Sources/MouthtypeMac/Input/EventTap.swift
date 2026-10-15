@@ -145,10 +145,7 @@ private func tapCallback(
         return Unmanaged.passUnretained(event)
     }
     if context.role == .flags, type == .keyDown {
-        if let sample = TapSample(type: type, event: event),
-           TapPolicy.countsAsUserInput(sample, decision: .passThrough, swallowedKey: nil) {
-            context.shared.userInput.wrappingAdd(1, ordering: .relaxed)
-        }
+        if let sample = TapSample(type: type, event: event) { context.countPassiveKey(sample) }
         return Unmanaged.passUnretained(event)
     }
     guard let sample = TapSample(type: type, event: event) else { return Unmanaged.passUnretained(event) }
