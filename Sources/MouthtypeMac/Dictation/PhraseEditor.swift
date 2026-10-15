@@ -28,7 +28,7 @@ import Observation
             items = try store.all()
             loadFailed = false
             error = nil
-            if let original { setDraft(items.first { $0.trigger == original.trigger }) }
+            if let original { setDraft(items.first { FilePhrases.triggerKey($0.trigger) == FilePhrases.triggerKey(original.trigger) }) }
         } catch {
             self.error = error.localizedDescription
             loadFailed = true

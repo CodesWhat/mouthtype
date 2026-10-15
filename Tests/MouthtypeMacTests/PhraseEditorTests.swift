@@ -75,6 +75,21 @@ import MouthtypeCore
         #expect(!editor.loadFailed && editor.items.map(\.trigger) == ["new phrase"])
     }
 
+    @Test func reloadPreservesTheSelectionAfterAnExternalCapitalizationChange() throws {
+        let dir = try directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = FilePhrases(url: dir.appendingPathComponent("phrases.json"))
+        let before = Snippet(trigger: "my email", expansion: "before@example.com")
+        let after = Snippet(trigger: "My Email", expansion: "after@example.com")
+        try store.save(original: nil, phrase: before)
+        let editor = PhraseEditor(store: store)
+        editor.select(before)
+        try store.save(original: before, phrase: after)
+        editor.reload()
+        #expect(editor.original == after && editor.trigger == after.trigger && editor.expansion == after.expansion)
+        #expect(!editor.isDirty)
+    }
+
     @Test func backgroundPreview() throws {
         guard let path = ProcessInfo.processInfo.environment["MOUTHTYPE_PHRASE_PREVIEW"] else { return }
         let dir = try directory()
@@ -85,6 +100,7 @@ import MouthtypeCore
         try store.save(original: nil, phrase: Snippet(trigger: "today's date", expansion: "{date}"))
         let editor = PhraseEditor(store: store)
         editor.select(phrase)
+        FontRegistry.registerBundledFonts()
         let view = NSHostingView(rootView: PhraseEditorView(editor: editor))
         view.frame = NSRect(x: 0, y: 0, width: 900, height: 620)
         view.layoutSubtreeIfNeeded()
@@ -92,6 +108,16 @@ import MouthtypeCore
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let image = try #require(bitmap.representation(using: .png, properties: [:]))
         try image.write(to: URL(fileURLWithPath: path))
+        editor.newPhrase()
+        editor.trigger = "MY WORK EMAIL"
+        editor.expansion = "A duplicate should show this error."
+        editor.save()
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 540)
+        view.layoutSubtreeIfNeeded()
+        let small = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: small)
+        try #require(small.representation(using: .png, properties: [:]))
+            .write(to: URL(fileURLWithPath: path + ".small.png"))
     }
 
     @Test func phraseMenuActionWorksWithCleanupOff() throws {
