@@ -404,7 +404,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.shortcutWindow = nil
             guard !self.isTerminating else { return }
-            if let error = self.activateShortcut(ShortcutSettings.load()) { self.pill?.showMessage(error) }
+            if let error = self.activateShortcut(ShortcutSettings.load()) {
+                self.pill?.showMessage(error)
+                self.hotkeyLogTask?.cancel()
+                self.hotkeyLogTask = nil
+                self.hotkeyService = nil
+                self.inputStarted = false
+            }
             if self.accessibility.isGranted { self.startInput() }
             self.registerGlobalShortcuts()
             self.refreshGlobeCheck()
