@@ -53,8 +53,8 @@ public enum SmartCleanupGuard {
             guard words.count >= 4 else { return [] }
             return Set((0...(words.count - 4)).map { words[$0..<($0 + 4)].joined(separator: " ") })
         }
-        let referenceWindows = references.reduce(into: Set<String>()) {
-            $0.formUnion(windows(TextMetrics.normalizedWords($1)))
+        let referenceWindows = references.flatMap { $0.split(whereSeparator: \.isNewline) }.reduce(into: Set<String>()) {
+            $0.formUnion(windows(TextMetrics.normalizedWords(String($1))))
         }.subtracting(windows(inputWords))
         let prefix = TextMetrics.normalizedWords(String(outputPhrase[..<take.lowerBound]))
         let suffix = TextMetrics.normalizedWords(String(outputPhrase[take.upperBound...]))

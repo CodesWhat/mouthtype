@@ -176,6 +176,8 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
             references: ["Earlier one two three four later"]))
         #expect(!SmartCleanupGuard.copiesSurroundingText(input: "the take", output: "the take one two three four",
             references: ["Earlier one two", "three four later"]))
+        #expect(!SmartCleanupGuard.copiesSurroundingText(input: "the take", output: "the take one two three four",
+            references: ["Earlier one two\nthree four later"]))
     }
 
     @Test func repeatingWordsAlreadyInTheTakeIsNotSurroundingTextCopy() {
