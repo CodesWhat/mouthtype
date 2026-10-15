@@ -71,17 +71,38 @@ public enum SmartCleanupGuard {
         }
         let particles: Set<String> = ["de", "del", "da", "di", "do", "dos", "du", "van", "von", "der", "den", "la", "le", "of", "the", "and", "jr", "sr", "junior", "senior"]
         let subjects: Set<String> = ["i", "we", "you", "he", "she", "it", "they"]
-        let lines = references.flatMap { $0.split(whereSeparator: \.isNewline) }.map { line in
+        let lines = references.flatMap { $0.split(whereSeparator: \.isNewline) }.flatMap { line -> [(characters: Int, words: [String], isNameLabel: Bool)] in
             let text = line.trimmingCharacters(in: .whitespaces)
             let parts = text.split(whereSeparator: \.isWhitespace).map(Self.stripped).filter { !$0.isEmpty }
             let words = TextMetrics.normalizedWords(text)
             let subject = words.first?.split(separator: "'").first.map(String.init) ?? ""
             let first = parts.first ?? ""
             let isSubject = subjects.contains(subject) && (first == "I" || first.contains(where: \.isLowercase))
-            let isNameLabel = parts.contains { $0.contains(where: \.isUppercase) }
-                && !isSubject
-                && parts.allSatisfy { particles.contains($0.lowercased()) || $0.contains(where: \.isUppercase) || $0.allSatisfy(\.isNumber) }
-            return (characters: text.count, words: words, isNameLabel: isNameLabel)
+            func labelPart(_ part: String) -> Bool {
+                !part.isEmpty && (particles.contains(part.lowercased()) || part.contains(where: \.isUppercase) || part.allSatisfy(\.isNumber))
+            }
+            let allLabelParts = parts.allSatisfy(labelPart)
+            let isNameLabel = !isSubject && allLabelParts && parts.contains { $0.contains(where: \.isUppercase) }
+            var result = [(characters: text.count, words: words, isNameLabel: isNameLabel)]
+            // Names embedded in a sentence keep the same protection as a standalone label.
+            // A fully title-cased subject sentence remains eligible for ordinary corrections.
+            if !allLabelParts {
+                var group: [String] = []
+                for part in parts + [""] {
+                    if labelPart(part) {
+                        group.append(part)
+                    } else {
+                        while group.first.map({ !$0.contains(where: \.isUppercase) }) == true { group.removeFirst() }
+                        while group.last.map({ !$0.contains(where: \.isUppercase) }) == true { group.removeLast() }
+                        if group.filter({ $0.contains(where: \.isUppercase) }).count >= 2 {
+                            let name = group.joined(separator: " ")
+                            result.append((characters: name.count, words: TextMetrics.normalizedWords(name), isNameLabel: true))
+                        }
+                        group.removeAll(keepingCapacity: true)
+                    }
+                }
+            }
+            return result
         }
         for line in lines where line.characters >= 8 && !line.words.isEmpty {
             let reference = phrase(line.words)

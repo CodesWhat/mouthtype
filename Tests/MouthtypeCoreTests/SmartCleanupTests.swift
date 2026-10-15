@@ -214,6 +214,8 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         ("We can meet Tuesday, actually Wednesday afternoon.", "We can meet Wednesday afternoon."),
         ("Try dusting again.", "Try testing again."),
         ("I'm pausing again for dusting.", "I'm Pausing Again For Testing."),
+        ("sam howard is ready.", "Sam Howard is ready."),
+        ("sam howard, actually sam spade is ready.", "Sam Spade is ready."),
     ], [false, true])
     func aCorrectedTakeMayMatchAnEntireContextLine(item: (String, String), native: Bool) async {
         let cleaner = FakeCleaner(returning: item.1)
@@ -244,6 +246,9 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
 
     @Test(arguments: [
         ("send this to sam howard.", "Send this to Sam Spade.", "Sam Spade"),
+        ("sam howard is ready.", "Sam Spade is ready.", "Sam Spade is ready."),
+        ("i sent it to sam howard.", "I sent it to Sam Spade.", "I sent it to Sam Spade."),
+        ("the iphone 15 pro is ready.", "The iPhone 15 Air is ready.", "The iPhone 15 Air is ready."),
         ("sam howard junior", "Sam Spade Junior", "Sam Spade Junior"),
         ("sam van howard", "Sam van Spade", "Sam van Spade"),
         ("iphone macbook pro", "iPhone MacBook Air", "iPhone MacBook Air"),
