@@ -6,9 +6,9 @@ import MouthtypeCore
 @MainActor
 final class CleanupMenuSection: NSObject, MenuSection {
     private let defaults: UserDefaults
-    private let cleaner: CleanerHost?
+    private let cleaner: (any CleanupModelManaging)?
     private let dictionary: FileVocabulary?
-    private let confirmDownload: @MainActor (_ sizeMB: Int) -> Bool
+    private let confirmDownload: @MainActor (_ name: String, _ sizeMB: Int) -> Bool
     private let openFile: @MainActor (URL) -> Void
     private let parent = NSMenuItem(title: "Cleanup", action: nil, keyEquivalent: "")
     private let submenu = NSMenu(title: "Cleanup")
@@ -31,8 +31,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
     var items: [NSMenuItem] { [parent] }
 
     init(
-        defaults: UserDefaults = .standard, cleaner: CleanerHost? = nil, dictionary: FileVocabulary? = nil,
-        confirmDownload: @escaping @MainActor (_ sizeMB: Int) -> Bool = CleanupMenuSection.askToDownload,
+        defaults: UserDefaults = .standard, cleaner: (any CleanupModelManaging)? = nil, dictionary: FileVocabulary? = nil,
+        confirmDownload: @escaping @MainActor (_ name: String, _ sizeMB: Int) -> Bool = CleanupMenuSection.askToDownload,
         openFile: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     ) {
         self.defaults = defaults
@@ -146,11 +146,11 @@ final class CleanupMenuSection: NSObject, MenuSection {
         megabytes >= 1000 ? String(format: "%.1f GB", Double(megabytes) / 1000) : "\(megabytes) MB"
     }
 
-    static func askToDownload(sizeMB: Int) -> Bool {
+    static func askToDownload(name: String, sizeMB: Int) -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Download \(CleanerCatalog.smartCleanupName)?"
+        alert.messageText = "Download \(name)?"
         alert.informativeText = "It's \(sizeText(sizeMB)), fetched from Hugging Face, and runs on this Mac. "
-            + "Light and medium cleanup use it. Nothing else is downloaded."
+            + "Only the selected cleanup model is downloaded."
         alert.addButton(withTitle: "Download")
         alert.addButton(withTitle: "Cancel")
         NSApp.activate()
@@ -199,8 +199,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
     }
 
     @objc private func download(_ sender: NSMenuItem) {
-        guard let cleaner, confirmDownload(cleaner.downloadSizeMB) else { return }
-        cleaner.startDownload()
+        guard let target = cleaner?.downloadTarget, confirmDownload(target.modelName, target.downloadSizeMB) else { return }
+        target.startDownload()
         refreshModelItems()
     }
 

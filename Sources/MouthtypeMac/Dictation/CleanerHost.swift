@@ -23,6 +23,35 @@ protocol SmartCleaning: Sendable {
     func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult
     /// A recording began: load the model now so the first cleanup doesn't wait for it.
     func recordingStarted()
+    func runReady(_ request: SmartCleanupRequest, waitingUpTo limit: Duration) async -> ReadyCleanup?
+}
+
+struct ReadyCleanup: Sendable {
+    var model: SmartCleanerInfo
+    var result: SmartCleanupResult
+}
+
+extension SmartCleaning {
+    func runReady(_ request: SmartCleanupRequest, waitingUpTo limit: Duration) async -> ReadyCleanup? {
+        guard let model = await readiness(waitingUpTo: limit) else { return nil }
+        return ReadyCleanup(model: model, result: await run(request))
+    }
+}
+
+@MainActor
+protocol CleanupModelManaging: SmartCleaning {
+    var state: CleanerState { get }
+    var modelName: String { get }
+    var downloadSizeMB: Int { get }
+    var downloadTarget: any CleanupModelManaging { get }
+    func start()
+    func levelChanged()
+    func startDownload()
+    func cancelDownload()
+}
+
+extension CleanupModelManaging {
+    var downloadTarget: any CleanupModelManaging { self }
 }
 
 extension UserDefaults {
@@ -45,7 +74,7 @@ enum CleanerState: Equatable, Sendable {
 /// needs it, warm it, drop it when the level doesn't or memory is short. State is published for the menu.
 @MainActor
 @Observable
-final class CleanerHost: SmartCleaning {
+final class CleanerHost: CleanupModelManaging {
     private(set) var state: CleanerState
 
     nonisolated let smart: SmartCleanup
@@ -67,7 +96,7 @@ final class CleanerHost: SmartCleaning {
         state = model.isDownloaded ? .unloaded : .absent
     }
 
-    var modelName: String { CleanerCatalog.smartCleanupName }
+    var modelName: String { model.displayName }
     var downloadSizeMB: Int { model.downloadSizeMB }
 
     /// Watches for memory pressure and loads the model if the level wants it and it is on disk.

@@ -92,12 +92,12 @@ import MouthtypeCore
     @Test func theMenuHasTheLevelStageAndToneItems() {
         let menu = submenu(CleanupMenuSection(defaults: defaults()))
         for title in [
-            "Off", "Basic", "Light", "Medium", "Remove fillers", "Spoken commands and lists", "Format numbers", "Formal", "Casual",
+            "Off", "Basic", "Fast", "Thorough", "Remove fillers", "Spoken commands and lists", "Format numbers", "Formal", "Casual",
             "Very casual", "Custom", "Lowercase sentence starts", "Drop final full stop",
         ] {
             #expect(menu.items.contains { $0.title == title }, "\(title)")
         }
-        #expect(item(menu, "Light").state == .on && item(menu, "Basic").state == .off)
+        #expect(item(menu, "Fast").state == .on && item(menu, "Basic").state == .off)
         #expect(item(menu, "Formal").state == .on && item(menu, "Custom").state == .off)
     }
 
@@ -129,11 +129,11 @@ import MouthtypeCore
         let d = defaults()
         let section = CleanupMenuSection(defaults: d)
         let menu = submenu(section)
-        click(item(menu, "Medium"))
+        click(item(menu, "Thorough"))
         #expect(CleanupSettings.load(d).level == .medium)
-        #expect(["Off", "Basic", "Light"].allSatisfy { item(menu, $0).state == .off } && item(menu, "Medium").state == .on)
+        #expect(["Off", "Basic", "Fast"].allSatisfy { item(menu, $0).state == .off } && item(menu, "Thorough").state == .on)
         click(item(menu, "Basic"))
-        #expect(CleanupSettings.load(d).level == .basic && item(menu, "Basic").state == .on && item(menu, "Medium").state == .off)
+        #expect(CleanupSettings.load(d).level == .basic && item(menu, "Basic").state == .on && item(menu, "Thorough").state == .off)
         withExtendedLifetime(section) {}
     }
 
@@ -146,7 +146,7 @@ import MouthtypeCore
         click(item(menu, "Off"))
         #expect(CleanupSettings.load(d).enabled == false)
         #expect(!item(menu, "Remove fillers").isEnabled && !item(menu, "Casual").isEnabled)
-        #expect(item(menu, "Light").isEnabled)
+        #expect(item(menu, "Fast").isEnabled)
         withExtendedLifetime(section) {}
     }
 }

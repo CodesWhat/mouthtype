@@ -1,8 +1,8 @@
 import Foundation
 import MouthtypeCore
 
-/// The Cleanup submenu's switches, kept in UserDefaults. The level is light, every stage is on and the style is
-/// formal by default. Light and medium need the local model; without it the app runs as basic.
+/// The Cleanup submenu's switches, kept in UserDefaults. The level is Fast, every stage is on and the style is
+/// formal by default. Fast and Thorough need their selected model; without it the app runs as Basic.
 struct CleanupSettings: Equatable, Sendable {
     var level = CleanupLevel.light
     var fillers = true

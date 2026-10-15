@@ -37,8 +37,8 @@ actor DownloadGate {
 
 /// A stand-in for the model: on disk or not, loads when told, counts what happens.
 final class FakeSmartModel: SmartModel, @unchecked Sendable {
-    let id = "fake-model"
-    let displayName = "Fake"
+    let id: String
+    let displayName: String
     let downloadSizeMB = 1447
     private let lock = NSLock()
     private var _downloaded: Bool
@@ -52,7 +52,9 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     var downloadGate: DownloadGate?
     var unloadGate: DownloadGate?
 
-    init(downloaded: Bool) { _downloaded = downloaded }
+    init(downloaded: Bool, id: String = "fake-model", name: String = "Fake") {
+        _downloaded = downloaded; self.id = id; displayName = name
+    }
 
     var isDownloaded: Bool { lock.withLock { _downloaded } }
     var isLoaded: Bool { lock.withLock { _loaded } }
@@ -240,7 +242,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         settings.save(to: d)
         let model = FakeSmartModel(downloaded: downloaded)
         let host = CleanerHost(model: model, level: { CleanupSettings.load(d).level })
-        let section = CleanupMenuSection(defaults: d, cleaner: host, confirmDownload: confirm)
+        let section = CleanupMenuSection(defaults: d, cleaner: host, confirmDownload: { _, size in confirm(size) })
         return (section, host, model, section.items[0].submenu!)
     }
 
@@ -248,7 +250,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
     @Test func anAbsentModelShowsItsNameStateAndSizeBeforeDownloading() {
         let (section, _, _, menu) = make(downloaded: false)
-        #expect(item(menu, prefix: "Gemma 4 E4B: not downloaded")?.isHidden == false)
+        #expect(item(menu, prefix: "Fake: not downloaded")?.isHidden == false)
         let download = item(menu, prefix: "Download Smart Cleanup Model")
         #expect(download?.title == "Download Smart Cleanup Model\u{2026} (1.4 GB)" && download?.isHidden == false)
         #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == false)
@@ -258,8 +260,8 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     @Test func theMenuNamesTheSelectedQualityModel() {
         #expect(CleanerCatalog.smartCleanupName == "Gemma 4 E4B")
         let (section, host, _, menu) = make(downloaded: false)
-        #expect(host.modelName == "Gemma 4 E4B")
-        #expect(menu.items.contains { $0.title.hasPrefix("Gemma 4 E4B:") })
+        #expect(host.modelName == "Fake")
+        #expect(menu.items.contains { $0.title.hasPrefix("Fake:") })
         withExtendedLifetime(section) {}
     }
 
@@ -268,7 +270,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         host.start()
         for _ in 0..<100 { if case .ready = host.state { break }; try? await Task.sleep(for: .milliseconds(10)) }
         section.refresh()
-        #expect(item(menu, prefix: "Gemma 4 E4B: ready") != nil)
+        #expect(item(menu, prefix: "Fake: ready") != nil)
         #expect(item(menu, prefix: "Download Smart Cleanup Model")?.isHidden == true)
         #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == true)
     }
@@ -305,7 +307,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         host.start()
         try? await Task.sleep(for: .milliseconds(30))
         #expect(model.loads == 0)
-        let light = menu.items.first { $0.title == "Light" }!
+        let light = menu.items.first { $0.title == "Fast" }!
         _ = light.target?.perform(light.action, with: light)
         for _ in 0..<100 where model.loads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(model.loads == 1 && CleanupSettings.load(d).level == .light)

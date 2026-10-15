@@ -32,7 +32,7 @@ enum PipelineSelfTest {
         return arguments[index + 1]
     }
 
-    static func run(path: String, engineHost: EngineHost, cleanerHost: CleanerHost) async {
+    static func run(path: String, engineHost: EngineHost, cleanerHost: any CleanupModelManaging) async {
         do {
             let samples = try AudioLoading.loadSamples(from: URL(fileURLWithPath: path))
             try await waitForEngine(engineHost)
@@ -104,7 +104,7 @@ enum PipelineSelfTest {
     }
 
     /// Waits for the model to load, or gives up when it isn't on disk or fails; the cleanup then runs as basic.
-    private static func waitForCleaner(_ host: CleanerHost) async throws {
+    private static func waitForCleaner(_ host: any CleanupModelManaging) async throws {
         let deadline = ContinuousClock.now + engineTimeout
         while ContinuousClock.now < deadline {
             switch host.state {

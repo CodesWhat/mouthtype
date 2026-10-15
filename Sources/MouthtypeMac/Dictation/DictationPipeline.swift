@@ -205,14 +205,17 @@ struct DictationPipeline: Sendable {
         Log.app.info("cleanup ok ms=\(ms, format: .fixed(precision: 2)) edits=\(edits.count)")
 
         let level = settings.level
-        guard level.needsModel, !result.text.isEmpty, let smart,
-              let model = await smart.readiness(waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text)))
-        else { return CleanedDictation(text: result.text, edits: edits, cleanup: record) }
-
-        let modelResult = await smart.run(SmartCleanupRequest(
+        guard level.needsModel, !result.text.isEmpty, let smart else {
+            return CleanedDictation(text: result.text, edits: edits, cleanup: record)
+        }
+        guard let delivery = await smart.runReady(SmartCleanupRequest(
             text: result.text, level: level, style: settings.style, destination: destination,
             dictionary: inputs.dictionary, snippets: inputs.snippets, context: context, appName: appName
-        ))
+        ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
+            return CleanedDictation(text: result.text, edits: edits, cleanup: record)
+        }
+        let model = delivery.model
+        let modelResult = delivery.result
         record.cleanerID = model.id
         record.cleanerRev = model.revision
         record.level = level.rawValue

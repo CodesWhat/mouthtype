@@ -60,12 +60,16 @@ public enum CleanerCatalog {
             downloadSizeMB: 1447),
     ]
 
-    /// The model the app's smart cleanup runs. Wherever it is named in the UI it reads exactly this.
+    /// The Thorough model, also retained as the benchmark factory default.
     public static let smartCleanupID = "gemma-4-e4b-it-4bit"
     public static let smartCleanupName = "Gemma 4 E4B"
 
-    public static func makeSmartCleanup() -> MLXCleaner {
-        guard let spec = mlxSpec(id: smartCleanupID) else { preconditionFailure("Smart cleanup model is missing from the catalog") }
+    public static func smartCleanupID(for level: CleanupLevel) -> String {
+        level == .medium ? smartCleanupID : "superwhisper-s1-mini"
+    }
+
+    public static func makeSmartCleanup(level: CleanupLevel = .medium) -> MLXCleaner {
+        guard let spec = mlxSpec(id: smartCleanupID(for: level)) else { preconditionFailure("Smart cleanup model is missing from the catalog") }
         return MLXCleaner(spec: spec)
     }
 
