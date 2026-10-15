@@ -260,6 +260,38 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(result.rejection == "surrounding text copied into output")
     }
 
+    @Test func correctedTakeCopyDetectionCoversEditPositions() {
+        let input = "I am pausing again for dusting."
+        let words = TextMetrics.normalizedWords(input)
+        let copied = "I am pausing again for testing."
+        let references = ["Notes from this draft. \(copied) Continue here."]
+        var variants: [[String]] = [["I'm"] + words.dropFirst(2)]
+        for index in words.indices {
+            var changed = words
+            changed[index] = "now"
+            variants.append(changed)
+            var removed = words
+            removed.remove(at: index)
+            variants.append(removed)
+            for second in (index + 1)..<words.count {
+                var pair = changed
+                pair[second] = "now"
+                variants.append(pair)
+            }
+        }
+        for index in 0...words.count {
+            var inserted = words
+            inserted.insert("now", at: index)
+            variants.append(inserted)
+        }
+        for words in variants {
+            let take = words.joined(separator: " ")
+            #expect(!SmartCleanupGuard.copiesSurroundingText(input: input, output: take, references: references), "\(take)")
+            #expect(SmartCleanupGuard.copiesSurroundingText(input: input, output: copied + " " + take, references: references), "\(take)")
+            #expect(SmartCleanupGuard.copiesSurroundingText(input: input, output: take + " " + copied, references: references), "\(take)")
+        }
+    }
+
     @Test func anExistingContextSpellingCannotBecomeAnotherName() async {
         let cleaner = FakeCleaner(returning: "Send this to Mary.")
         cleaner.usesNativeControls = false
