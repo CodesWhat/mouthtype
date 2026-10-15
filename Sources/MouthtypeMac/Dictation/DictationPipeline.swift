@@ -98,6 +98,25 @@ struct DictationPipeline: Sendable {
         archive?.discardPartial(id: session.id)
     }
 
+    func recoverPartial(_ session: DictationSession) async -> CapturedAudio? {
+        guard let archive else { return nil }
+        return await Task.detached {
+            do {
+                let samples = try archive.readPartial(id: session.id)
+                guard !samples.isEmpty else { return nil as CapturedAudio? }
+                return CapturedAudio(
+                    samples: samples, sampleRate: Double(AudioArchive.sampleRate),
+                    deviceUID: nil, deviceName: nil, deviceTransport: "recovered",
+                    firstSampleMs: nil, firstNonzeroMs: nil, captureStartMs: 0,
+                    audioMs: Double(samples.count) * 1000 / Double(AudioArchive.sampleRate)
+                )
+            } catch {
+                Log.app.error("partial audio recovery failed: \(String(describing: error), privacy: .public)")
+                return nil
+            }
+        }.value
+    }
+
     /// Features on the untrimmed samples, the WAV before any transcribing, then the capture row.
     func recordCapture(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> AudioFeatures {
         let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))

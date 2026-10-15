@@ -397,7 +397,7 @@ private struct Rig {
     init(
         audio: CapturedAudio = capturedTone(), withStore: Bool = true, settings: CleanupSettings = CleanupSettings(),
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
-        limits: DictationController.Limits = .standard, partials: Bool = false
+        limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -409,7 +409,7 @@ private struct Rig {
         let clock = FakeClock(start: keyUp)
         self.clock = clock
         var pipeline = DictationPipeline(
-            store: withStore ? store : nil, archive: FakeArchive(log: log, writesPartials: partials), engine: engine, clock: clock
+            store: withStore ? store : nil, archive: archive ?? FakeArchive(log: log, writesPartials: partials), engine: engine, clock: clock
         )
         pipeline.settings = { settings }
         pipeline.vocabulary = vocabulary
@@ -1437,11 +1437,69 @@ private final class SlowCapture: DictationCapturing {
 
     // MARK: Microphone lost
 
+    @Test(arguments: [true, false], [true, false])
+    func aLostMicrophoneRecoversTheSavedPartialWhenFinalizationFails(throwsOnStop: Bool, insert: Bool) async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-interruption-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let archive = AudioArchive(supportDirectory: dir)
+        let rig = Rig(archive: archive)
+        await rig.controller.handle(.pressed(at: keyDown))
+        let id = try #require(rig.store.start?.id)
+        let samples = capturedTone().samples
+        try archive.appendPartial(samples: samples, id: id)
+        rig.capture.stopError = throwsOnStop ? Boom() : nil
+        rig.capture.audio.samples = []
+
+        rig.capture.interrupt()
+        await rig.until { rig.controller.phase == .idle }
+
+        #expect(rig.cards.presented.last == .micDisconnected(seconds: 2))
+        #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
+        #expect(rig.store.finishes.isEmpty)
+        #expect(rig.store.capture?.audioPath == archive.url(for: id).path)
+        let restored = try? archive.read(id: id)
+        #expect(restored?.count == samples.count)
+
+        if insert {
+            rig.cards.click(.insert)
+            await rig.until { !rig.inserter.delivered.isEmpty }
+            await rig.controller.waitForProcessing()
+            #expect(rig.inserter.delivered == ["Hello world."])
+        } else {
+            await rig.controller.discardInterrupted()
+            await rig.controller.insertInterrupted()
+            await rig.controller.handle(.released(at: keyUp))
+            #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
+            #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        }
+    }
+
+    @Test func failedPartialRecoveryKeepsTheOriginalFile() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-interruption-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let archive = AudioArchive(supportDirectory: dir)
+        let rig = Rig(archive: archive)
+        await rig.controller.handle(.pressed(at: keyDown))
+        let id = try #require(rig.store.start?.id)
+        try FileManager.default.createDirectory(at: archive.directory, withIntermediateDirectories: true)
+        let original = Data("incomplete WAV".utf8)
+        try original.write(to: archive.partialURL(for: id))
+        rig.capture.stopError = Boom()
+
+        rig.capture.interrupt()
+        await rig.until { rig.controller.phase == .idle }
+
+        #expect(try Data(contentsOf: archive.partialURL(for: id)) == original)
+        #expect(rig.store.finishes.map(\.0) == [.failed])
+        #expect(rig.cards.presented.isEmpty && rig.inserter.delivered.isEmpty)
+        #expect(rig.pill.messages.last?.detail == "No audio could be recovered")
+    }
+
     @Test func aLostMicrophoneKeepsTheAudioAndOffersInsertOrDiscard() async {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
         rig.capture.interrupt()
-        await rig.settle()
+        await rig.until { rig.controller.phase == .idle }
 
         let card = rig.cards.presented.last
         #expect(card == .micDisconnected(seconds: 2))
@@ -1462,7 +1520,7 @@ private final class SlowCapture: DictationCapturing {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
         rig.capture.interrupt()
-        await rig.settle()
+        await rig.until { rig.controller.phase == .idle }
         rig.cards.click(.insert)
         await rig.until { rig.controller.phase == .processing }
         await rig.controller.waitForProcessing()
@@ -1476,7 +1534,7 @@ private final class SlowCapture: DictationCapturing {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
         rig.capture.interrupt()
-        await rig.settle()
+        await rig.until { rig.controller.phase == .idle }
         rig.cards.click(.discard)
         await rig.settle()
         #expect(rig.store.finishes.map(\.0) == [.cancelled])
@@ -1493,7 +1551,7 @@ private final class SlowCapture: DictationCapturing {
         ))
         await rig.controller.handle(.pressed(at: keyDown))
         rig.capture.interrupt()
-        await rig.settle()
+        await rig.until { rig.controller.phase == .idle }
         #expect(rig.store.finishes.map(\.0) == [.failed])
         #expect(rig.cards.presented.isEmpty)
         #expect(rig.pill.messages.first?.headline == "Microphone disconnected")
@@ -1513,7 +1571,7 @@ private final class SlowCapture: DictationCapturing {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
         rig.capture.interrupt()
-        await rig.settle()
+        await rig.until { rig.controller.phase == .idle }
         await rig.controller.handle(.pressed(at: keyDown + 50))
         #expect(rig.controller.phase == .recording)
         rig.cards.click(.insert)

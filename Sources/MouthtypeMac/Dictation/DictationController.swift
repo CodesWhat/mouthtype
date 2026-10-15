@@ -515,12 +515,14 @@ final class DictationController {
             await capture.cancel()
         }
         await saving?.value
+        if salvaged?.samples.isEmpty != false {
+            salvaged = await pipeline.recoverPartial(current)
+        }
         sounds.playError()
         pill.hide()
         guard let audio = salvaged, !audio.samples.isEmpty else {
-            pipeline.discardPartial(current)
             await pipeline.finish(current, .failed, errorMessage: "microphone disconnected")
-            pill.showMessage(PillMessage("Microphone disconnected", detail: "Nothing was recorded", isError: true), duration: 3)
+            pill.showMessage(PillMessage("Microphone disconnected", detail: "No audio could be recovered", isError: true), duration: 3)
             finished()
             return
         }

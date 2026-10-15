@@ -58,12 +58,14 @@ protocol DictationArchiving: Sendable {
     /// Whether a recording in progress is saved as it goes.
     var writesPartials: Bool { get }
     func appendPartial(samples: [Float], id: String) throws
+    func readPartial(id: String) throws -> [Float]
     func discardPartial(id: String)
 }
 
 extension DictationArchiving {
     var writesPartials: Bool { false }
     func appendPartial(samples: [Float], id: String) throws {}
+    func readPartial(id: String) throws -> [Float] { [] }
     func discardPartial(id: String) {}
 }
 
@@ -200,6 +202,12 @@ extension AudioArchive: DictationArchiving {
     }
 
     var writesPartials: Bool { true }
+
+    func readPartial(id: String) throws -> [Float] {
+        let url = partialURL(for: id)
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        return try Self.read(contentsOf: url)
+    }
 }
 extension TextInserter: DictationInserting {}
 extension PillController: DictationPill {}
