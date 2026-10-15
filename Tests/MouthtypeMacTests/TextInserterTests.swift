@@ -116,6 +116,15 @@ private final class InputCounter {
 }
 
 @MainActor
+private final class BatchPauses {
+    var observe: ((TimeInterval) -> Void)?
+    func pause(_ delay: TimeInterval) async {
+        observe?(delay)
+        await Task.yield()
+    }
+}
+
+@MainActor
 private struct Rig {
     let input = InputCounter()
     let clock = TestClock()
@@ -124,6 +133,7 @@ private struct Rig {
     let focus = FakeFocus()
     let keys = FakeKeys()
     let pending = Pending()
+    let pauses = BatchPauses()
     let inserter: TextInserter
 
     final class Pending {
@@ -163,18 +173,133 @@ private struct Rig {
         }
     }
 
-    init(restrictedToPID: pid_t? = nil) {
+    init(restrictedToPID: pid_t? = nil, chunks: Bool = false) {
+        let pauses = pauses
         let pending = pending
         let clock = clock
         let input = input
         inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, keys: keys, schedule: { delay, work in
             pending.add(delay, work)
-        }, now: { clock.date }, inputGeneration: { input.value }, restrictedToPID: restrictedToPID)
+        }, sleep: { delay in if chunks { await pauses.pause(delay) } }, now: { clock.date }, inputGeneration: { input.value },
+                                restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks })
     }
 }
 
 @MainActor
 @Suite struct TextInserterTests {
+    @Test func longPasteWaitsForEachReceiptAndRestoresOneOriginalClipboard() async {
+        let rig = Rig(chunks: true)
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original clipboard")]])
+        let original = rig.pasteboard.contents
+        rig.poster.onPost = { Task { @MainActor in rig.pasteboard.read() } }
+        let passage = String(repeating: "Sentence 👩🏽‍💻.\n", count: 180)
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        #expect(result.method == .paste && result.outcome == .unknown)
+        #expect(rig.poster.posts > 1)
+        #expect(rig.pasteboard.writes.map(\.text).joined() == passage)
+        #expect(rig.pasteboard.snapshots == 1)
+        #expect(rig.poster.targetPIDs.allSatisfy { $0 == 100 })
+        rig.pending.runAll()
+        #expect(rig.pasteboard.contents == original)
+    }
+
+    @Test func longPasteWithoutAReceiptStopsAfterTheFirstPart() async {
+        let rig = Rig(chunks: true)
+        let passage = String(repeating: "word ", count: 600)
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        #expect(rig.poster.posts == 1)
+        #expect(result.outcome == .partialPaste)
+        #expect(result.finalText == passage)
+        #expect(DeliveryCard.forDelivery(result, transcript: passage)?.header.contains("Some text") == true)
+    }
+
+    @Test(arguments: ["focus", "window", "input", "clipboard", "secure", "cancel"])
+    func longPasteStopsOnInterference(change: String) async {
+        let rig = Rig(chunks: true)
+        let passage = String(repeating: "word ", count: 600)
+        rig.poster.onPost = {
+            Task { @MainActor in
+                rig.pasteboard.read()
+                switch change {
+                case "focus": rig.focus.current.pid = 101
+                case "window": rig.focus.current.windowTitle = "Another tab"
+                case "input": rig.input.value = 1
+                case "clipboard": rig.pasteboard.externalCopy("new user copy")
+                case "secure": rig.focus.isSecureInputEnabled = true
+                default: rig.inserter.cancelVerification()
+                }
+            }
+        }
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        #expect(rig.poster.posts == 1)
+        #expect(result.outcome == .partialPaste)
+        rig.pending.runAll()
+        if change == "clipboard" {
+            #expect(rig.pasteboard.contents == PasteboardSnapshot(items: [[text("new user copy")]]))
+        }
+    }
+
+    @Test func chunkingNeverTreatsAnEarlyClipboardManagerReadAsPermissionToAdvance() async {
+        let rig = Rig(chunks: true)
+        rig.poster.onPost = { rig.pasteboard.read() }
+        let result = await rig.inserter.deliver(String(repeating: "word ", count: 600), startFocus: nil)
+        #expect(result.outcome == .partialPaste && rig.poster.posts == 1)
+    }
+
+    @Test func aConcurrentDeliveryCannotInterleaveWithAPartialPaste() async throws {
+        let rig = Rig(chunks: true)
+        var other: Task<DeliveryResult, Never>?
+        rig.poster.onPost = {
+            if other == nil { other = Task { await rig.inserter.deliver("new dictation", startFocus: nil) } }
+            Task { @MainActor in rig.pasteboard.read() }
+        }
+        let passage = String(repeating: "word ", count: 600)
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        let concurrent = try #require(other)
+        #expect(await concurrent.value.method == .none)
+        #expect(result.outcome == .unknown && rig.pasteboard.writes.map(\.text).joined() == passage)
+    }
+
+    @Test func aFailedChunkDoesNotAutomaticallyRetryOrReplaceTheClipboardWithTheWholePassage() async {
+        let rig = Rig(chunks: true)
+        rig.poster.succeeds = false
+        let passage = String(repeating: "word ", count: 600)
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        #expect(result.outcome == .partialPaste && result.storeOutcome == "unknown")
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(rig.pasteboard.writes.first?.text != passage)
+        rig.pending.runAll()
+        #expect(!rig.inserter.isRestorePending)
+    }
+
+    @Test func aLateReceiptGetsItsOwnSettleDelayBeforeTheNextPart() async {
+        let rig = Rig(chunks: true)
+        var settles = 0
+        var postsAtSecondSettle: Int?
+        defer { rig.pauses.observe = nil }
+        rig.pauses.observe = { delay in
+            guard delay == PasteboardSession.receiptSettle else { return }
+            settles += 1
+            if settles == 1 { rig.pasteboard.read() }
+            if settles == 2 { postsAtSecondSettle = rig.poster.posts }
+        }
+        rig.poster.onPost = { Task { @MainActor in rig.pasteboard.read() } }
+        let result = await rig.inserter.deliver(String(repeating: "word ", count: 600), startFocus: nil)
+        #expect(result.outcome == .unknown)
+        #expect(postsAtSecondSettle == 1)
+    }
+
+    @Test func aNewPasteBorrowsTheUsersLatestCopyInsteadOfAnOlderPendingSnapshot() async {
+        let rig = Rig(chunks: true)
+        _ = await rig.inserter.deliver("first take", startFocus: nil)
+        rig.pasteboard.externalCopy("new user copy")
+        let copied = rig.pasteboard.contents
+        rig.poster.onPost = { Task { @MainActor in rig.pasteboard.read() } }
+        _ = await rig.inserter.deliver(String(repeating: "word ", count: 600), startFocus: nil)
+        rig.pending.runAll()
+        #expect(rig.pasteboard.contents == copied)
+    }
+
     @Test func systemPosterSendsOneStampedCommandVPairToTheDestination() {
         var pids: [pid_t] = []
         var types: [CGEventType] = []

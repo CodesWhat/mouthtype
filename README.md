@@ -18,6 +18,11 @@ Open **Cleanup → Phrase Replacements…** to save a spoken phrase and the exac
 
 Replacements expand after cleanup, so their spelling, capitalization, spaces, and line breaks survive Basic, Fast, Thorough, and every tone. A model that changes the spoken triggers falls back to Basic text. `{date}` inserts the current long date in your locale; `{clipboard}` inserts the clipboard text captured for that dictation, or nothing if no text is available. Inserted text is never expanded again. Punctuation outside the spoken trigger stays outside the replacement. Cleanup Off also turns phrase expansion off.
 
+For a terminal that loses text from large pastes, focus its window and enable **Paste Options → Split Long Pastes in [app]**. This is off by default and saved separately for Terminal, iTerm2, Ghostty, kitty and WezTerm. It applies to all windows of the selected terminal app, including CLI editors such as Claude Code and Codex CLI; it does not detect the program running inside a terminal.
+
+Split pastes preserve the text exactly and never send Return. Each part waits for a clipboard read and a settling delay before the next part. Typing, focus changes, a new clipboard copy, cancellation, an unread part, or the eight-second overall limit stop the paste. A read permits advancing the clipboard; it does not prove insertion. The original clipboard is restored unless you copied something else. An interrupted paste offers the full transcript with Copy and warns that some text may already be there. Check the field before pasting the full copy, to avoid duplicates. Per-app paste chords and typed delivery remain planned.
+
+
 
 ## Choose cleanup strength and writing style
 

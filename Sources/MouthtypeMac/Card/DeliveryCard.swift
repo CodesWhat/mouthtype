@@ -146,6 +146,9 @@ struct DeliveryCard: Equatable, Sendable {
         let text = result.finalText.isEmpty ? transcript : result.finalText
         switch (result.method, result.outcome) {
         case (_, .secureDiscard): return .secure(text)
+        case (_, .partialPaste):
+            return DeliveryCard(kind: .pasteFailed, header: "Paste stopped\nSome text may already be there", transcript: text,
+                                actions: [.copy], countdown: nil)
         case (_, .failed): return .pasteFailed(text)
         case (.clipboardOnly, _): return .nowhere(text)
         default: return nil

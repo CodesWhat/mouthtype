@@ -146,6 +146,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: TextFontMenuSection())
         menuBar.add(section: CleanupMenuSection(cleaner: cleanerHost, dictionary: dictionary,
             managePhrases: { [weak self] in self?.phraseWindow.present() }))
+        menuBar.add(section: PasteMenuSection())
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))

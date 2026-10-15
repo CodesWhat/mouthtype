@@ -15,6 +15,7 @@ public final class TextInserter {
     /// How long after a paste its last character still stands in for an unreadable text-before-cursor.
     static let continuationWindow: TimeInterval = 5 * 60
 
+    private let chunkedPaste: @MainActor (String?) -> Bool
     private let focus: FocusReading
     private let clipboard: PasteboardSession
     private let keys: PasteKeyResolving
@@ -23,6 +24,8 @@ public final class TextInserter {
     /// How many real key presses and clicks have happened, or nil when that isn't known.
     private let inputGeneration: @MainActor () -> UInt64?
     private let restrictedToPID: pid_t?
+    private var batchActive = false
+    private var batchGeneration = 0
     private var lastText: String?
     private var lastPaste: LastPaste?
     /// Bumped by every delivery. A verification that finds it moved on is stale and says nothing.
@@ -43,6 +46,7 @@ public final class TextInserter {
 
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
     public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
+        self.chunkedPaste = { PasteSettings.chunksEnabled($0) }
         self.now = { Date() }
         self.inputGeneration = inputGeneration
         self.restrictedToPID = restrictedToPID
@@ -59,8 +63,9 @@ public final class TextInserter {
         focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, keys: PasteKeyResolving,
         schedule: @escaping PasteboardSession.Schedule, sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
         now: @escaping @MainActor () -> Date = { Date() }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
-        restrictedToPID: pid_t? = nil
+        restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false }
     ) {
+        self.chunkedPaste = chunkedPaste
         self.now = now
         self.inputGeneration = inputGeneration
         self.restrictedToPID = restrictedToPID
@@ -77,6 +82,7 @@ public final class TextInserter {
 
     /// A new dictation ends the last paste's read-back. Its row keeps "unknown".
     func cancelVerification() {
+        batchGeneration += 1
         verification?.cancel()
         verification = nil
     }
@@ -114,11 +120,15 @@ public final class TextInserter {
 
     /// Pastes `text` into whatever has focus now. `startFocus` only decides `focusMoved`.
     ///
-    /// Nothing in here suspends, so two deliveries can't interleave their clipboard writes; the generation only
-    /// retires the read-back of an older one. The read-back runs after this returns and never posts a paste again.
+    /// Opt-in long pastes wait between parts, holding one clipboard lease and refusing concurrent delivery.
+    /// The read-back runs after this returns and never posts a paste again.
     public func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult {
         guard !text.isEmpty else {
             return DeliveryResult(method: .none, outcome: .unknown, focusMoved: false, target: nil, finalText: "")
+        }
+        guard !batchActive else {
+            return DeliveryResult(method: .none, outcome: .failed("Another paste is still in progress"),
+                                  focusMoved: false, target: nil, finalText: text)
         }
         deliveryGeneration += 1
         let generation = deliveryGeneration
@@ -165,7 +175,18 @@ public final class TextInserter {
             // What the field looked like before the chord, for the read-back to compare with.
             let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
                 ? now.element.map { focus.readField(of: $0) } : nil
-            guard clipboard.paste(spaced, keyCode: keyCode, targetPID: now.pid) else {
+            if chunkedPaste(now.bundleID), spaced.utf8.count > PasteChunks.byteLimit {
+                guard let parts = PasteChunks.parts(spaced), inputGeneration() != nil else {
+                    clipboard.copy(spaced)
+                    return DeliveryResult(method: .clipboardOnly, outcome: .failed("Long paste cannot be split safely"),
+                                          focusMoved: moved, target: now, finalText: spaced)
+                }
+                guard await pasteInParts(parts, keyCode: keyCode, target: now) else {
+                    lastPaste = nil
+                    return DeliveryResult(method: .paste, outcome: .partialPaste,
+                                          focusMoved: moved, target: now, finalText: spaced)
+                }
+            } else if !clipboard.paste(spaced, keyCode: keyCode, targetPID: now.pid) {
                 clipboard.copy(spaced)
                 Log.app.error("could not post the paste event; transcript left on the clipboard")
                 return DeliveryResult(
@@ -190,6 +211,47 @@ public final class TextInserter {
                 verificationID: generation
             )
         }
+    }
+
+    private func pasteInParts(_ parts: [String], keyCode: CGKeyCode, target: FocusSnapshot) async -> Bool {
+        batchActive = true
+        clipboard.beginBatch()
+        defer {
+            clipboard.finishBatch()
+            batchActive = false
+        }
+        let input = inputGeneration()
+        let generation = batchGeneration
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(8))
+        func mayContinue() -> Bool {
+            let current = focus.snapshot()
+            return !Task.isCancelled && generation == batchGeneration && clock.now < deadline
+                && input != nil && inputGeneration() == input && !focus.isSecureInputEnabled && !current.isSecure
+                && current.pid == target.pid && current.bundleID == target.bundleID
+                && current.windowTitle == target.windowTitle && current.element == target.element
+        }
+        for part in parts {
+            guard mayContinue(), clipboard.paste(part, keyCode: keyCode, targetPID: target.pid) else { return false }
+            let lease = clipboard.pasteGeneration
+            // A receipt only permits advancing the clipboard. It never proves the text was inserted.
+            var read = false
+            for _ in 0..<50 {
+                guard mayContinue(), clipboard.holdsPaste(lease) else { return false }
+                if clipboard.firstReceiptMs != nil { read = true; break }
+                do { try await sleep(0.02) } catch { return false }
+            }
+            guard read else { return false }
+            var settled = false
+            for _ in 0..<40 {
+                let reads = clipboard.readCount
+                do { try await sleep(PasteboardSession.receiptSettle) } catch { return false }
+                guard mayContinue(), clipboard.holdsPaste(lease) else { return false }
+                if clipboard.readCount == reads { settled = true; break }
+            }
+            guard settled else { return false }
+        }
+        return true
     }
 
     /// Re-reads the field after the chord and reports. A task of its own so `deliver` doesn't wait for it.
@@ -331,6 +393,7 @@ final class PasteReceipts: @unchecked Sendable {
     private var armedAt: UInt64?
     private var firstAt: UInt64?
     private var early = 0
+    private var reads = 0
 
     /// Called right after the chord was posted. Returns how many reads came before it.
     func arm() -> Int {
@@ -347,10 +410,13 @@ final class PasteReceipts: @unchecked Sendable {
                 early += 1
                 return false
             }
+            reads += 1
             if firstAt == nil { firstAt = DispatchTime.now().uptimeNanoseconds }
             return true
         }
     }
+
+    var readCount: Int { lock.withLock { reads } }
 
     /// Chord to first counted read, in whole ms.
     var firstReceiptMs: Int? {
@@ -405,6 +471,7 @@ final class PasteboardSession {
     /// Bumped on every receipt; of the settle timers, only the latest runs.
     private var receiptCount = 0
     private var receipts: PasteReceipts?
+    private var holdingRestore = false
 
     init(pasteboard: PasteboardAccess, poster: PasteEventPosting, schedule: @escaping Schedule = PasteboardSession.mainSchedule) {
         self.pasteboard = pasteboard
@@ -414,6 +481,23 @@ final class PasteboardSession {
 
     var isRestorePending: Bool { saved != nil }
 
+    var pasteGeneration: Int { generation }
+    var readCount: Int { receipts?.readCount ?? 0 }
+
+    func holdsPaste(_ expected: Int) -> Bool {
+        generation == expected && saved != nil && pasteboard.changeCount == ourChangeCount
+    }
+
+    func beginBatch() { holdingRestore = true }
+
+    func finishBatch() {
+        holdingRestore = false
+        let current = generation
+        schedule(firstReceiptMs == nil ? Self.receiptCap : Self.receiptSettle) { [weak self] in
+            self?.restore(ifGeneration: current)
+        }
+    }
+
     /// Chord to first read of the current paste, in ms; nil until something read it.
     var firstReceiptMs: Int? { receipts?.firstReceiptMs }
 
@@ -421,7 +505,7 @@ final class PasteboardSession {
 
     /// False when the paste event could not be posted; the clipboard then still holds `text` and no restore is scheduled.
     func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?) -> Bool {
-        if saved == nil {
+        if saved == nil || pasteboard.changeCount != ourChangeCount {
             saved = pasteboard.snapshot()
         }
         generation += 1
@@ -474,7 +558,7 @@ final class PasteboardSession {
     }
 
     private func restore(ifGeneration expected: Int, receiptCount expectedCount: Int? = nil) {
-        guard expected == generation, let snapshot = saved else { return }
+        guard !holdingRestore, expected == generation, let snapshot = saved else { return }
         if let expectedCount, expectedCount != receiptCount { return }
         saved = nil
         guard pasteboard.changeCount == ourChangeCount else {

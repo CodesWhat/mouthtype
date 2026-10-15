@@ -21,7 +21,7 @@ enum DeliveryDecision: Equatable {
 
 public struct DeliveryResult: Sendable {
     public enum Method: Sendable, Equatable { case paste, clipboardOnly, none }
-    public enum Outcome: Sendable, Equatable { case unknown, secureDiscard, failed(String) }
+    public enum Outcome: Sendable, Equatable { case unknown, secureDiscard, failed(String), partialPaste }
 
     public var method: Method
     public var outcome: Outcome
@@ -48,7 +48,7 @@ public struct DeliveryResult: Sendable {
     /// The store's `insert_outcome` vocabulary.
     public var storeOutcome: String {
         switch outcome {
-        case .unknown: "unknown"
+        case .unknown, .partialPaste: "unknown"
         case .secureDiscard: "secure discard"
         case .failed: "not landed"
         }
