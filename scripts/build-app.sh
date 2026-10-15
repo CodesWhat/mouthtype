@@ -3,9 +3,9 @@
 # Builds the release binary and wraps it in a signed Mouthtype.app.
 #   scripts/build-app.sh [version]        → build/Mouthtype.app
 #
-# The version (a tag such as v0.1.0 or 0.1.0) goes into
-# CFBundleShortVersionString and CFBundleVersion. Without one it comes from
-# the latest tag, or 0.1.0.
+# Release metadata comes from packaging/Version.plist. An optional version argument
+# overrides the display/marketing version for a local build; the build number stays
+# in Version.plist. Prerelease labels are kept out of Apple's numeric version fields.
 #
 # The mouthtype-fn-guard helper sits next to the app binary in Contents/MacOS. The app spawns it while the Fn
 # remap is applied; it clears the remap if the app dies without restoring it.
@@ -29,8 +29,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-VERSION="${1:-$(git describe --tags --abbrev=0 2>/dev/null || echo 0.1.0)}"
+VERSION="${1:-$(/usr/libexec/PlistBuddy -c 'Print :MouthtypeDisplayVersion' packaging/Version.plist)}"
 VERSION="${VERSION#v}"
+SHORT_VERSION="${VERSION%%-*}"
+BUILD_VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' packaging/Version.plist)"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.[1-9][0-9]*)?$ ]] || [[ ! "$BUILD_VERSION" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Invalid release version or build number" >&2
+    exit 1
+fi
 OUT="${MOUTHTYPE_BUILD_DIR:-build}"
 APP="$OUT/Mouthtype.app"
 
@@ -51,8 +57,10 @@ cp "$BIN_DIR/mouthtype-fn-guard" "$APP/Contents/MacOS/mouthtype-fn-guard"
 strip -x "$APP/Contents/MacOS/mouthtype-fn-guard"
 cp packaging/Info.plist "$APP/Contents/Info.plist"
 cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
-plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
-plutil -replace CFBundleVersion -string "$VERSION" "$APP/Contents/Info.plist"
+plutil -replace CFBundleShortVersionString -string "$SHORT_VERSION" "$APP/Contents/Info.plist"
+plutil -replace CFBundleVersion -string "$BUILD_VERSION" "$APP/Contents/Info.plist"
+plutil -insert MouthtypeDisplayVersion -string "$VERSION" "$APP/Contents/Info.plist"
+plutil -insert MouthtypeSourceRevision -string "$(git rev-parse HEAD)" "$APP/Contents/Info.plist"
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 # The bench target's fixtures bundle shares the products directory but isn't the app's.
