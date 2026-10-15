@@ -1,0 +1,2294 @@
+{
+  "date": "2026-10-15",
+  "baseline": "67c0c5846d8ee042e96e844f4ec62893a8a86ed1",
+  "guardCommit": "78f82199206c6f16f600176eabe430ecdedc4a72",
+  "configuration": "debug",
+  "caseSensitive": true,
+  "fixtures": "Tests/Fixtures/context-name-selection.json",
+  "results": [
+    {
+      "cleanerID": "superwhisper-s1-mini",
+      "level": "light",
+      "beforePassed": 26,
+      "afterPassed": 26,
+      "total": 40,
+      "literalBeforePassed": 3,
+      "literalAfterPassed": 3,
+      "cases": [
+        {
+          "id": "barry-person",
+          "input": "send the note to barry",
+          "accepted": [
+            "Send the note to Barry",
+            "Send the note to Barry."
+          ],
+          "before": "Send the note to Barry.",
+          "after": "Send the note to Barry.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "barry-ordinary",
+          "input": "the berry fell off the bush",
+          "accepted": [
+            "The berry fell off the bush",
+            "The berry fell off the bush."
+          ],
+          "before": "The berry fell off the bush.",
+          "after": "The berry fell off the bush.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-person",
+          "input": "the meeting is with reed",
+          "accepted": [
+            "The meeting is with Reed",
+            "The meeting is with Reed."
+          ],
+          "before": "The meeting is with Reed.",
+          "after": "The meeting is with Reed.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-ordinary",
+          "input": "the reed bent in the wind",
+          "accepted": [
+            "The reed bent in the wind",
+            "The reed bent in the wind."
+          ],
+          "before": "The reed bent in the wind.",
+          "after": "The reed bent in the wind.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "will-person",
+          "input": "tell will about the build",
+          "accepted": [
+            "Tell Will about the build",
+            "Tell Will about the build."
+          ],
+          "before": "Tell will about the build",
+          "after": "Tell will about the build",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "nearby spelling \"will\" changed"
+        },
+        {
+          "id": "will-ordinary",
+          "input": "we will ship today",
+          "accepted": [
+            "We will ship today",
+            "We will ship today."
+          ],
+          "before": "We will ship today.",
+          "after": "We will ship today.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "may-person",
+          "input": "ask may to review the build",
+          "accepted": [
+            "Ask May to review the build",
+            "Ask May to review the build."
+          ],
+          "before": "Ask may to review the build.",
+          "after": "Ask may to review the build.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "may-ordinary",
+          "input": "we may ship today",
+          "accepted": [
+            "We may ship today",
+            "We may ship today."
+          ],
+          "before": "We may ship today.",
+          "after": "We may ship today.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "rose-person",
+          "input": "send the update to rose",
+          "accepted": [
+            "Send the update to Rose",
+            "Send the update to Rose."
+          ],
+          "before": "Send the update to Rose.",
+          "after": "Send the update to Rose.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "rose-ordinary",
+          "input": "the rose needs water",
+          "accepted": [
+            "The rose needs water",
+            "The rose needs water."
+          ],
+          "before": "The rose needs water.",
+          "after": "The rose needs water.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mark-person",
+          "input": "send it to mark",
+          "accepted": [
+            "Send it to Mark",
+            "Send it to Mark."
+          ],
+          "before": "Send it to Mark.",
+          "after": "Send it to Mark.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mark-ordinary",
+          "input": "please mark the task done",
+          "accepted": [
+            "Please mark the task done",
+            "Please mark the task done."
+          ],
+          "before": "Please mark the task done.",
+          "after": "Please mark the task done.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-person",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to Mary",
+            "Send this to Mary."
+          ],
+          "before": "Send this to merry.",
+          "after": "Send this to merry.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-ordinary",
+          "input": "everyone felt merry after the meeting",
+          "accepted": [
+            "Everyone felt merry after the meeting",
+            "Everyone felt merry after the meeting."
+          ],
+          "before": "Everyone felt merry after the meeting.",
+          "after": "Everyone felt merry after the meeting.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-person",
+          "input": "the meeting is with jon",
+          "accepted": [
+            "The meeting is with John",
+            "The meeting is with John."
+          ],
+          "before": "The meeting is with Jon.",
+          "after": "The meeting is with Jon.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-person-second",
+          "input": "the participant is jon",
+          "accepted": [
+            "The participant is John",
+            "The participant is John."
+          ],
+          "before": "The participant is Jon.",
+          "after": "The participant is Jon.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-already-matching",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to Merry",
+            "Send this to Merry."
+          ],
+          "before": "Send this to merry.",
+          "after": "Send this to merry.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-already-matching",
+          "input": "the meeting is with jon",
+          "accepted": [
+            "The meeting is with Jon",
+            "The meeting is with Jon."
+          ],
+          "before": "The meeting is with Jon.",
+          "after": "The meeting is with Jon.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-soundalike",
+          "input": "send the note to reid",
+          "accepted": [
+            "Send the note to Reed",
+            "Send the note to Reed."
+          ],
+          "before": "Send the note to Reid.",
+          "after": "Send the note to Reid.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "stephen-soundalike",
+          "input": "ask steven to review the build",
+          "accepted": [
+            "Ask Stephen to review the build",
+            "Ask Stephen to review the build."
+          ],
+          "before": "Ask Steven to review the build.",
+          "after": "Ask Steven to review the build.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "brian-soundalike",
+          "input": "the meeting is with bryan",
+          "accepted": [
+            "The meeting is with Brian",
+            "The meeting is with Brian."
+          ],
+          "before": "The meeting is with Bryan.",
+          "after": "The meeting is with Bryan.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sean-soundalike",
+          "input": "send this to shawn",
+          "accepted": [
+            "Send this to Sean",
+            "Send this to Sean."
+          ],
+          "before": "Send this to Shawn.",
+          "after": "Send this to Shawn.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sarah-soundalike",
+          "input": "send this to sara",
+          "accepted": [
+            "Send this to Sarah",
+            "Send this to Sarah."
+          ],
+          "before": "Send this to Sara.",
+          "after": "Send this to Sara.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jeff-soundalike",
+          "input": "the meeting is with geoff",
+          "accepted": [
+            "The meeting is with Jeff",
+            "The meeting is with Jeff."
+          ],
+          "before": "The meeting is with Geoff.",
+          "after": "The meeting is with Geoff.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sam-not-sim",
+          "input": "send this to Sam",
+          "accepted": [
+            "Send this to Sam",
+            "Send this to Sam."
+          ],
+          "before": "Send this to Sam.",
+          "after": "Send this to Sam.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "morrow-not-mary",
+          "input": "the meeting is with Morrow",
+          "accepted": [
+            "The meeting is with Morrow",
+            "The meeting is with Morrow."
+          ],
+          "before": "The meeting is with Morrow.",
+          "after": "The meeting is with Morrow.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "read-purpose",
+          "input": "send this to read later",
+          "accepted": [
+            "Send this to read later",
+            "Send this to read later."
+          ],
+          "before": "Send this to read later.",
+          "after": "Send this to read later.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "read-ordinary",
+          "input": "please read the update",
+          "accepted": [
+            "Please read the update",
+            "Please read the update."
+          ],
+          "before": "Please read the update.",
+          "after": "Please read the update.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "hail-purpose",
+          "input": "send this to hail a cab",
+          "accepted": [
+            "Send this to hail a cab",
+            "Send this to hail a cab."
+          ],
+          "before": "Send this to Hail a Cab.",
+          "after": "Send this to Hail a Cab.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jon-explicit-surname",
+          "input": "the meeting is with Jon Doe",
+          "accepted": [
+            "The meeting is with Jon Doe",
+            "The meeting is with Jon Doe."
+          ],
+          "before": "The meeting is with Jon Doe.",
+          "after": "The meeting is with Jon Doe.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reid-explicit-surname",
+          "input": "send the note to Reid Thompson",
+          "accepted": [
+            "Send the note to Reid Thompson",
+            "Send the note to Reid Thompson."
+          ],
+          "before": "Send the note to Reid Thompson.",
+          "after": "Send the note to Reid Thompson.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "shon-unlisted-name",
+          "input": "the meeting is with Shon",
+          "accepted": [
+            "The meeting is with Shon",
+            "The meeting is with Shon."
+          ],
+          "before": "The meeting is with Shon.",
+          "after": "The meeting is with Shon.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "merry-listed-name",
+          "input": "send this to Merry",
+          "accepted": [
+            "Send this to Merry",
+            "Send this to Merry."
+          ],
+          "before": "Send this to Merry.",
+          "after": "Send this to Merry.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jon-listed-name",
+          "input": "the meeting is with Jon",
+          "accepted": [
+            "The meeting is with Jon",
+            "The meeting is with Jon."
+          ],
+          "before": "The meeting is with Jon.",
+          "after": "The meeting is with Jon.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "quoted-label",
+          "input": "send this to the label \"merry\"",
+          "accepted": [
+            "Send this to the label \"merry\"",
+            "Send this to the label \"merry\"."
+          ],
+          "before": "Send this to the label \"Merry.\"",
+          "after": "Send this to the label \"Merry.\"",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "literal-code",
+          "input": "send this to `merry`",
+          "accepted": [
+            "Send this to `merry`",
+            "Send this to `merry`."
+          ],
+          "before": "Send this to `merry`.",
+          "after": "Send this to `merry`.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "literal-address",
+          "input": "send this to jon@example.com",
+          "accepted": [
+            "Send this to jon@example.com",
+            "Send this to jon@example.com."
+          ],
+          "before": "Send this to jon@example.com.",
+          "after": "Send this to jon@example.com.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "literal-path",
+          "input": "send this to jon/reports",
+          "accepted": [
+            "Send this to jon/reports",
+            "Send this to jon/reports."
+          ],
+          "before": "Send this to jon/reports.",
+          "after": "Send this to jon/reports.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "nonpeople-field",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to merry",
+            "Send this to merry."
+          ],
+          "before": "Send this to merry.",
+          "after": "Send this to merry.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-adjective",
+          "input": "the team felt merry",
+          "accepted": [
+            "The team felt merry",
+            "The team felt merry."
+          ],
+          "before": "The team felt merry.",
+          "after": "The team felt merry.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        }
+      ]
+    },
+    {
+      "cleanerID": "superwhisper-s1-mini",
+      "level": "medium",
+      "beforePassed": 26,
+      "afterPassed": 26,
+      "total": 40,
+      "literalBeforePassed": 3,
+      "literalAfterPassed": 3,
+      "cases": [
+        {
+          "id": "barry-person",
+          "input": "send the note to barry",
+          "accepted": [
+            "Send the note to Barry",
+            "Send the note to Barry."
+          ],
+          "before": "Send the note to Barry.",
+          "after": "Send the note to Barry.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "barry-ordinary",
+          "input": "the berry fell off the bush",
+          "accepted": [
+            "The berry fell off the bush",
+            "The berry fell off the bush."
+          ],
+          "before": "The berry fell off the bush.",
+          "after": "The berry fell off the bush.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-person",
+          "input": "the meeting is with reed",
+          "accepted": [
+            "The meeting is with Reed",
+            "The meeting is with Reed."
+          ],
+          "before": "The meeting is with Reed.",
+          "after": "The meeting is with Reed.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-ordinary",
+          "input": "the reed bent in the wind",
+          "accepted": [
+            "The reed bent in the wind",
+            "The reed bent in the wind."
+          ],
+          "before": "The reed bent in the wind.",
+          "after": "The reed bent in the wind.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "will-person",
+          "input": "tell will about the build",
+          "accepted": [
+            "Tell Will about the build",
+            "Tell Will about the build."
+          ],
+          "before": "Tell will about the build",
+          "after": "Tell will about the build",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "nearby spelling \"will\" changed"
+        },
+        {
+          "id": "will-ordinary",
+          "input": "we will ship today",
+          "accepted": [
+            "We will ship today",
+            "We will ship today."
+          ],
+          "before": "We will ship today.",
+          "after": "We will ship today.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "may-person",
+          "input": "ask may to review the build",
+          "accepted": [
+            "Ask May to review the build",
+            "Ask May to review the build."
+          ],
+          "before": "Ask may to review the build.",
+          "after": "Ask may to review the build.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "may-ordinary",
+          "input": "we may ship today",
+          "accepted": [
+            "We may ship today",
+            "We may ship today."
+          ],
+          "before": "We may ship today.",
+          "after": "We may ship today.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "rose-person",
+          "input": "send the update to rose",
+          "accepted": [
+            "Send the update to Rose",
+            "Send the update to Rose."
+          ],
+          "before": "Send the update to Rose.",
+          "after": "Send the update to Rose.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "rose-ordinary",
+          "input": "the rose needs water",
+          "accepted": [
+            "The rose needs water",
+            "The rose needs water."
+          ],
+          "before": "The rose needs water.",
+          "after": "The rose needs water.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mark-person",
+          "input": "send it to mark",
+          "accepted": [
+            "Send it to Mark",
+            "Send it to Mark."
+          ],
+          "before": "Send it to Mark.",
+          "after": "Send it to Mark.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mark-ordinary",
+          "input": "please mark the task done",
+          "accepted": [
+            "Please mark the task done",
+            "Please mark the task done."
+          ],
+          "before": "Please mark the task done.",
+          "after": "Please mark the task done.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-person",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to Mary",
+            "Send this to Mary."
+          ],
+          "before": "Send this to merry.",
+          "after": "Send this to merry.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-ordinary",
+          "input": "everyone felt merry after the meeting",
+          "accepted": [
+            "Everyone felt merry after the meeting",
+            "Everyone felt merry after the meeting."
+          ],
+          "before": "Everyone felt merry after the meeting.",
+          "after": "Everyone felt merry after the meeting.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-person",
+          "input": "the meeting is with jon",
+          "accepted": [
+            "The meeting is with John",
+            "The meeting is with John."
+          ],
+          "before": "The meeting is with Jon.",
+          "after": "The meeting is with Jon.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-person-second",
+          "input": "the participant is jon",
+          "accepted": [
+            "The participant is John",
+            "The participant is John."
+          ],
+          "before": "The participant is Jon.",
+          "after": "The participant is Jon.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-already-matching",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to Merry",
+            "Send this to Merry."
+          ],
+          "before": "Send this to merry.",
+          "after": "Send this to merry.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-already-matching",
+          "input": "the meeting is with jon",
+          "accepted": [
+            "The meeting is with Jon",
+            "The meeting is with Jon."
+          ],
+          "before": "The meeting is with Jon.",
+          "after": "The meeting is with Jon.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-soundalike",
+          "input": "send the note to reid",
+          "accepted": [
+            "Send the note to Reed",
+            "Send the note to Reed."
+          ],
+          "before": "Send the note to Reid.",
+          "after": "Send the note to Reid.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "stephen-soundalike",
+          "input": "ask steven to review the build",
+          "accepted": [
+            "Ask Stephen to review the build",
+            "Ask Stephen to review the build."
+          ],
+          "before": "Ask Steven to review the build.",
+          "after": "Ask Steven to review the build.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "brian-soundalike",
+          "input": "the meeting is with bryan",
+          "accepted": [
+            "The meeting is with Brian",
+            "The meeting is with Brian."
+          ],
+          "before": "The meeting is with Bryan.",
+          "after": "The meeting is with Bryan.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sean-soundalike",
+          "input": "send this to shawn",
+          "accepted": [
+            "Send this to Sean",
+            "Send this to Sean."
+          ],
+          "before": "Send this to Shawn.",
+          "after": "Send this to Shawn.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sarah-soundalike",
+          "input": "send this to sara",
+          "accepted": [
+            "Send this to Sarah",
+            "Send this to Sarah."
+          ],
+          "before": "Send this to Sara.",
+          "after": "Send this to Sara.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jeff-soundalike",
+          "input": "the meeting is with geoff",
+          "accepted": [
+            "The meeting is with Jeff",
+            "The meeting is with Jeff."
+          ],
+          "before": "The meeting is with Geoff.",
+          "after": "The meeting is with Geoff.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sam-not-sim",
+          "input": "send this to Sam",
+          "accepted": [
+            "Send this to Sam",
+            "Send this to Sam."
+          ],
+          "before": "Send this to Sam.",
+          "after": "Send this to Sam.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "morrow-not-mary",
+          "input": "the meeting is with Morrow",
+          "accepted": [
+            "The meeting is with Morrow",
+            "The meeting is with Morrow."
+          ],
+          "before": "The meeting is with Morrow.",
+          "after": "The meeting is with Morrow.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "read-purpose",
+          "input": "send this to read later",
+          "accepted": [
+            "Send this to read later",
+            "Send this to read later."
+          ],
+          "before": "Send this to read later.",
+          "after": "Send this to read later.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "read-ordinary",
+          "input": "please read the update",
+          "accepted": [
+            "Please read the update",
+            "Please read the update."
+          ],
+          "before": "Please read the update.",
+          "after": "Please read the update.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "hail-purpose",
+          "input": "send this to hail a cab",
+          "accepted": [
+            "Send this to hail a cab",
+            "Send this to hail a cab."
+          ],
+          "before": "Send this to Hail a Cab.",
+          "after": "Send this to Hail a Cab.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jon-explicit-surname",
+          "input": "the meeting is with Jon Doe",
+          "accepted": [
+            "The meeting is with Jon Doe",
+            "The meeting is with Jon Doe."
+          ],
+          "before": "The meeting is with Jon Doe.",
+          "after": "The meeting is with Jon Doe.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reid-explicit-surname",
+          "input": "send the note to Reid Thompson",
+          "accepted": [
+            "Send the note to Reid Thompson",
+            "Send the note to Reid Thompson."
+          ],
+          "before": "Send the note to Reid Thompson.",
+          "after": "Send the note to Reid Thompson.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "shon-unlisted-name",
+          "input": "the meeting is with Shon",
+          "accepted": [
+            "The meeting is with Shon",
+            "The meeting is with Shon."
+          ],
+          "before": "The meeting is with Shon.",
+          "after": "The meeting is with Shon.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "merry-listed-name",
+          "input": "send this to Merry",
+          "accepted": [
+            "Send this to Merry",
+            "Send this to Merry."
+          ],
+          "before": "Send this to Merry.",
+          "after": "Send this to Merry.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jon-listed-name",
+          "input": "the meeting is with Jon",
+          "accepted": [
+            "The meeting is with Jon",
+            "The meeting is with Jon."
+          ],
+          "before": "The meeting is with Jon.",
+          "after": "The meeting is with Jon.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "quoted-label",
+          "input": "send this to the label \"merry\"",
+          "accepted": [
+            "Send this to the label \"merry\"",
+            "Send this to the label \"merry\"."
+          ],
+          "before": "Send this to the label \"Merry.\"",
+          "after": "Send this to the label \"Merry.\"",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "literal-code",
+          "input": "send this to `merry`",
+          "accepted": [
+            "Send this to `merry`",
+            "Send this to `merry`."
+          ],
+          "before": "Send this to `merry`.",
+          "after": "Send this to `merry`.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "literal-address",
+          "input": "send this to jon@example.com",
+          "accepted": [
+            "Send this to jon@example.com",
+            "Send this to jon@example.com."
+          ],
+          "before": "Send this to jon@example.com.",
+          "after": "Send this to jon@example.com.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "literal-path",
+          "input": "send this to jon/reports",
+          "accepted": [
+            "Send this to jon/reports",
+            "Send this to jon/reports."
+          ],
+          "before": "Send this to jon/reports.",
+          "after": "Send this to jon/reports.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "nonpeople-field",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to merry",
+            "Send this to merry."
+          ],
+          "before": "Send this to merry.",
+          "after": "Send this to merry.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-adjective",
+          "input": "the team felt merry",
+          "accepted": [
+            "The team felt merry",
+            "The team felt merry."
+          ],
+          "before": "The team felt merry.",
+          "after": "The team felt merry.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        }
+      ]
+    },
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "level": "light",
+      "beforePassed": 31,
+      "afterPassed": 34,
+      "total": 40,
+      "literalBeforePassed": 0,
+      "literalAfterPassed": 3,
+      "cases": [
+        {
+          "id": "barry-person",
+          "input": "send the note to barry",
+          "accepted": [
+            "Send the note to Barry",
+            "Send the note to Barry."
+          ],
+          "before": "Send the note to Barry",
+          "after": "Send the note to Barry",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "barry-ordinary",
+          "input": "the berry fell off the bush",
+          "accepted": [
+            "The berry fell off the bush",
+            "The berry fell off the bush."
+          ],
+          "before": "The berry fell off the bush",
+          "after": "The berry fell off the bush",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-person",
+          "input": "the meeting is with reed",
+          "accepted": [
+            "The meeting is with Reed",
+            "The meeting is with Reed."
+          ],
+          "before": "The meeting is with Reed.",
+          "after": "The meeting is with Reed.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-ordinary",
+          "input": "the reed bent in the wind",
+          "accepted": [
+            "The reed bent in the wind",
+            "The reed bent in the wind."
+          ],
+          "before": "The Reed bent in the wind.",
+          "after": "The Reed bent in the wind.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "will-person",
+          "input": "tell will about the build",
+          "accepted": [
+            "Tell Will about the build",
+            "Tell Will about the build."
+          ],
+          "before": "Tell Will about the build",
+          "after": "Tell Will about the build",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "will-ordinary",
+          "input": "we will ship today",
+          "accepted": [
+            "We will ship today",
+            "We will ship today."
+          ],
+          "before": "We will ship today",
+          "after": "We will ship today",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "may-person",
+          "input": "ask may to review the build",
+          "accepted": [
+            "Ask May to review the build",
+            "Ask May to review the build."
+          ],
+          "before": "Ask May to review the build",
+          "after": "Ask May to review the build",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "may-ordinary",
+          "input": "we may ship today",
+          "accepted": [
+            "We may ship today",
+            "We may ship today."
+          ],
+          "before": "We may ship today",
+          "after": "We may ship today",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "rose-person",
+          "input": "send the update to rose",
+          "accepted": [
+            "Send the update to Rose",
+            "Send the update to Rose."
+          ],
+          "before": "Send the update to Rose",
+          "after": "Send the update to Rose",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "rose-ordinary",
+          "input": "the rose needs water",
+          "accepted": [
+            "The rose needs water",
+            "The rose needs water."
+          ],
+          "before": "The rose needs water.",
+          "after": "The rose needs water.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mark-person",
+          "input": "send it to mark",
+          "accepted": [
+            "Send it to Mark",
+            "Send it to Mark."
+          ],
+          "before": "Send it to Mark",
+          "after": "Send it to Mark",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mark-ordinary",
+          "input": "please mark the task done",
+          "accepted": [
+            "Please mark the task done",
+            "Please mark the task done."
+          ],
+          "before": "Please mark the task done.",
+          "after": "Please mark the task done.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-person",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to Mary",
+            "Send this to Mary."
+          ],
+          "before": "Send this to Mary",
+          "after": "Send this to Mary",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-ordinary",
+          "input": "everyone felt merry after the meeting",
+          "accepted": [
+            "Everyone felt merry after the meeting",
+            "Everyone felt merry after the meeting."
+          ],
+          "before": "Everyone felt merry after the meeting",
+          "after": "Everyone felt merry after the meeting",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-person",
+          "input": "the meeting is with jon",
+          "accepted": [
+            "The meeting is with John",
+            "The meeting is with John."
+          ],
+          "before": "The meeting is with John",
+          "after": "The meeting is with John",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-person-second",
+          "input": "the participant is jon",
+          "accepted": [
+            "The participant is John",
+            "The participant is John."
+          ],
+          "before": "The participant is John",
+          "after": "The participant is John",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-already-matching",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to Merry",
+            "Send this to Merry."
+          ],
+          "before": "Send this to merry",
+          "after": "Send this to merry",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "nearby spelling \"merry\" changed"
+        },
+        {
+          "id": "john-already-matching",
+          "input": "the meeting is with jon",
+          "accepted": [
+            "The meeting is with Jon",
+            "The meeting is with Jon."
+          ],
+          "before": "The meeting is with Jon.",
+          "after": "The meeting is with Jon.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-soundalike",
+          "input": "send the note to reid",
+          "accepted": [
+            "Send the note to Reed",
+            "Send the note to Reed."
+          ],
+          "before": "Send the note to Reed",
+          "after": "Send the note to Reed",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "stephen-soundalike",
+          "input": "ask steven to review the build",
+          "accepted": [
+            "Ask Stephen to review the build",
+            "Ask Stephen to review the build."
+          ],
+          "before": "Ask Stephen to review the build",
+          "after": "Ask Stephen to review the build",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "brian-soundalike",
+          "input": "the meeting is with bryan",
+          "accepted": [
+            "The meeting is with Brian",
+            "The meeting is with Brian."
+          ],
+          "before": "The meeting is with Brian",
+          "after": "The meeting is with Brian",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sean-soundalike",
+          "input": "send this to shawn",
+          "accepted": [
+            "Send this to Sean",
+            "Send this to Sean."
+          ],
+          "before": "Send this to Sean",
+          "after": "Send this to Sean",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sarah-soundalike",
+          "input": "send this to sara",
+          "accepted": [
+            "Send this to Sarah",
+            "Send this to Sarah."
+          ],
+          "before": "Send this to Sarah",
+          "after": "Send this to Sarah",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jeff-soundalike",
+          "input": "the meeting is with geoff",
+          "accepted": [
+            "The meeting is with Jeff",
+            "The meeting is with Jeff."
+          ],
+          "before": "The meeting is with Geoff Smith.",
+          "after": "The meeting is with Geoff Smith.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sam-not-sim",
+          "input": "send this to Sam",
+          "accepted": [
+            "Send this to Sam",
+            "Send this to Sam."
+          ],
+          "before": "Send this to Sam",
+          "after": "Send this to Sam",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "morrow-not-mary",
+          "input": "the meeting is with Morrow",
+          "accepted": [
+            "The meeting is with Morrow",
+            "The meeting is with Morrow."
+          ],
+          "before": "The meeting is with Morrow.",
+          "after": "The meeting is with Morrow.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "read-purpose",
+          "input": "send this to read later",
+          "accepted": [
+            "Send this to read later",
+            "Send this to read later."
+          ],
+          "before": "Send this to read later",
+          "after": "Send this to read later",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "read-ordinary",
+          "input": "please read the update",
+          "accepted": [
+            "Please read the update",
+            "Please read the update."
+          ],
+          "before": "Please read the update.",
+          "after": "Please read the update.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "hail-purpose",
+          "input": "send this to hail a cab",
+          "accepted": [
+            "Send this to hail a cab",
+            "Send this to hail a cab."
+          ],
+          "before": "Send this to Hale a cab",
+          "after": "Send this to Hale a cab",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jon-explicit-surname",
+          "input": "the meeting is with Jon Doe",
+          "accepted": [
+            "The meeting is with Jon Doe",
+            "The meeting is with Jon Doe."
+          ],
+          "before": "The meeting is with Jon Doe",
+          "after": "The meeting is with Jon Doe",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "name \"Jon\" missing"
+        },
+        {
+          "id": "reid-explicit-surname",
+          "input": "send the note to Reid Thompson",
+          "accepted": [
+            "Send the note to Reid Thompson",
+            "Send the note to Reid Thompson."
+          ],
+          "before": "Send the note to Reid Thompson",
+          "after": "Send the note to Reid Thompson",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "shon-unlisted-name",
+          "input": "the meeting is with Shon",
+          "accepted": [
+            "The meeting is with Shon",
+            "The meeting is with Shon."
+          ],
+          "before": "The meeting is with Shon",
+          "after": "The meeting is with Shon",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "name \"Shon\" missing"
+        },
+        {
+          "id": "merry-listed-name",
+          "input": "send this to Merry",
+          "accepted": [
+            "Send this to Merry",
+            "Send this to Merry."
+          ],
+          "before": "Send this to Merry",
+          "after": "Send this to Merry",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jon-listed-name",
+          "input": "the meeting is with Jon",
+          "accepted": [
+            "The meeting is with Jon",
+            "The meeting is with Jon."
+          ],
+          "before": "The meeting is with Jon",
+          "after": "The meeting is with Jon",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "quoted-label",
+          "input": "send this to the label \"merry\"",
+          "accepted": [
+            "Send this to the label \"merry\"",
+            "Send this to the label \"merry\"."
+          ],
+          "before": "Send this to the label \"Mary\"",
+          "after": "Send this to the label \"Mary\"",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "literal-code",
+          "input": "send this to `merry`",
+          "accepted": [
+            "Send this to `merry`",
+            "Send this to `merry`."
+          ],
+          "before": "Send this to Mary",
+          "after": "Send this to `merry`",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "literal \"`merry`\" changed"
+        },
+        {
+          "id": "literal-address",
+          "input": "send this to jon@example.com",
+          "accepted": [
+            "Send this to jon@example.com",
+            "Send this to jon@example.com."
+          ],
+          "before": "Send this to john@example.com",
+          "after": "Send this to jon@example.com",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "literal \"jon@example.com\" changed"
+        },
+        {
+          "id": "literal-path",
+          "input": "send this to jon/reports",
+          "accepted": [
+            "Send this to jon/reports",
+            "Send this to jon/reports."
+          ],
+          "before": "Send this to John/reports",
+          "after": "Send this to jon/reports",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "literal \"jon/reports\" changed"
+        },
+        {
+          "id": "nonpeople-field",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to merry",
+            "Send this to merry."
+          ],
+          "before": "Send this to Mary",
+          "after": "Send this to Mary",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-adjective",
+          "input": "the team felt merry",
+          "accepted": [
+            "The team felt merry",
+            "The team felt merry."
+          ],
+          "before": "The team felt merry",
+          "after": "The team felt merry",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        }
+      ]
+    },
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "level": "medium",
+      "beforePassed": 31,
+      "afterPassed": 34,
+      "total": 40,
+      "literalBeforePassed": 0,
+      "literalAfterPassed": 3,
+      "cases": [
+        {
+          "id": "barry-person",
+          "input": "send the note to barry",
+          "accepted": [
+            "Send the note to Barry",
+            "Send the note to Barry."
+          ],
+          "before": "Send the note to Barry",
+          "after": "Send the note to Barry",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "barry-ordinary",
+          "input": "the berry fell off the bush",
+          "accepted": [
+            "The berry fell off the bush",
+            "The berry fell off the bush."
+          ],
+          "before": "The berry fell off the bush",
+          "after": "The berry fell off the bush",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-person",
+          "input": "the meeting is with reed",
+          "accepted": [
+            "The meeting is with Reed",
+            "The meeting is with Reed."
+          ],
+          "before": "The meeting is with Reed.",
+          "after": "The meeting is with Reed.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-ordinary",
+          "input": "the reed bent in the wind",
+          "accepted": [
+            "The reed bent in the wind",
+            "The reed bent in the wind."
+          ],
+          "before": "The Reed bent in the wind.",
+          "after": "The Reed bent in the wind.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "will-person",
+          "input": "tell will about the build",
+          "accepted": [
+            "Tell Will about the build",
+            "Tell Will about the build."
+          ],
+          "before": "Tell Will about the build",
+          "after": "Tell Will about the build",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "will-ordinary",
+          "input": "we will ship today",
+          "accepted": [
+            "We will ship today",
+            "We will ship today."
+          ],
+          "before": "We will ship today",
+          "after": "We will ship today",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "may-person",
+          "input": "ask may to review the build",
+          "accepted": [
+            "Ask May to review the build",
+            "Ask May to review the build."
+          ],
+          "before": "Ask May to review the build",
+          "after": "Ask May to review the build",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "may-ordinary",
+          "input": "we may ship today",
+          "accepted": [
+            "We may ship today",
+            "We may ship today."
+          ],
+          "before": "We may ship today",
+          "after": "We may ship today",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "rose-person",
+          "input": "send the update to rose",
+          "accepted": [
+            "Send the update to Rose",
+            "Send the update to Rose."
+          ],
+          "before": "Send the update to Rose",
+          "after": "Send the update to Rose",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "rose-ordinary",
+          "input": "the rose needs water",
+          "accepted": [
+            "The rose needs water",
+            "The rose needs water."
+          ],
+          "before": "The rose needs water.",
+          "after": "The rose needs water.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mark-person",
+          "input": "send it to mark",
+          "accepted": [
+            "Send it to Mark",
+            "Send it to Mark."
+          ],
+          "before": "Send it to Mark",
+          "after": "Send it to Mark",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mark-ordinary",
+          "input": "please mark the task done",
+          "accepted": [
+            "Please mark the task done",
+            "Please mark the task done."
+          ],
+          "before": "Please mark the task done.",
+          "after": "Please mark the task done.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-person",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to Mary",
+            "Send this to Mary."
+          ],
+          "before": "Send this to Mary",
+          "after": "Send this to Mary",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-ordinary",
+          "input": "everyone felt merry after the meeting",
+          "accepted": [
+            "Everyone felt merry after the meeting",
+            "Everyone felt merry after the meeting."
+          ],
+          "before": "Everyone felt merry after the meeting",
+          "after": "Everyone felt merry after the meeting",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-person",
+          "input": "the meeting is with jon",
+          "accepted": [
+            "The meeting is with John",
+            "The meeting is with John."
+          ],
+          "before": "The meeting is with John",
+          "after": "The meeting is with John",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "john-person-second",
+          "input": "the participant is jon",
+          "accepted": [
+            "The participant is John",
+            "The participant is John."
+          ],
+          "before": "The participant is John",
+          "after": "The participant is John",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-already-matching",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to Merry",
+            "Send this to Merry."
+          ],
+          "before": "Send this to merry",
+          "after": "Send this to merry",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "nearby spelling \"merry\" changed"
+        },
+        {
+          "id": "john-already-matching",
+          "input": "the meeting is with jon",
+          "accepted": [
+            "The meeting is with Jon",
+            "The meeting is with Jon."
+          ],
+          "before": "The meeting is with Jon.",
+          "after": "The meeting is with Jon.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "reed-soundalike",
+          "input": "send the note to reid",
+          "accepted": [
+            "Send the note to Reed",
+            "Send the note to Reed."
+          ],
+          "before": "Send the note to Reed",
+          "after": "Send the note to Reed",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "stephen-soundalike",
+          "input": "ask steven to review the build",
+          "accepted": [
+            "Ask Stephen to review the build",
+            "Ask Stephen to review the build."
+          ],
+          "before": "Ask Stephen to review the build",
+          "after": "Ask Stephen to review the build",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "brian-soundalike",
+          "input": "the meeting is with bryan",
+          "accepted": [
+            "The meeting is with Brian",
+            "The meeting is with Brian."
+          ],
+          "before": "The meeting is with Brian",
+          "after": "The meeting is with Brian",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sean-soundalike",
+          "input": "send this to shawn",
+          "accepted": [
+            "Send this to Sean",
+            "Send this to Sean."
+          ],
+          "before": "Send this to Sean",
+          "after": "Send this to Sean",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sarah-soundalike",
+          "input": "send this to sara",
+          "accepted": [
+            "Send this to Sarah",
+            "Send this to Sarah."
+          ],
+          "before": "Send this to Sarah",
+          "after": "Send this to Sarah",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jeff-soundalike",
+          "input": "the meeting is with geoff",
+          "accepted": [
+            "The meeting is with Jeff",
+            "The meeting is with Jeff."
+          ],
+          "before": "The meeting is with Geoff Smith.",
+          "after": "The meeting is with Geoff Smith.",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "sam-not-sim",
+          "input": "send this to Sam",
+          "accepted": [
+            "Send this to Sam",
+            "Send this to Sam."
+          ],
+          "before": "Send this to Sam",
+          "after": "Send this to Sam",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "morrow-not-mary",
+          "input": "the meeting is with Morrow",
+          "accepted": [
+            "The meeting is with Morrow",
+            "The meeting is with Morrow."
+          ],
+          "before": "The meeting is with Morrow.",
+          "after": "The meeting is with Morrow.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "read-purpose",
+          "input": "send this to read later",
+          "accepted": [
+            "Send this to read later",
+            "Send this to read later."
+          ],
+          "before": "Send this to read later",
+          "after": "Send this to read later",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "read-ordinary",
+          "input": "please read the update",
+          "accepted": [
+            "Please read the update",
+            "Please read the update."
+          ],
+          "before": "Please read the update.",
+          "after": "Please read the update.",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "hail-purpose",
+          "input": "send this to hail a cab",
+          "accepted": [
+            "Send this to hail a cab",
+            "Send this to hail a cab."
+          ],
+          "before": "Send this to Hale a cab",
+          "after": "Send this to Hale a cab",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jon-explicit-surname",
+          "input": "the meeting is with Jon Doe",
+          "accepted": [
+            "The meeting is with Jon Doe",
+            "The meeting is with Jon Doe."
+          ],
+          "before": "The meeting is with Jon Doe",
+          "after": "The meeting is with Jon Doe",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "name \"Jon\" missing"
+        },
+        {
+          "id": "reid-explicit-surname",
+          "input": "send the note to Reid Thompson",
+          "accepted": [
+            "Send the note to Reid Thompson",
+            "Send the note to Reid Thompson."
+          ],
+          "before": "Send the note to Reid Thompson",
+          "after": "Send the note to Reid Thompson",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "shon-unlisted-name",
+          "input": "the meeting is with Shon",
+          "accepted": [
+            "The meeting is with Shon",
+            "The meeting is with Shon."
+          ],
+          "before": "The meeting is with Shon",
+          "after": "The meeting is with Shon",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "name \"Shon\" missing"
+        },
+        {
+          "id": "merry-listed-name",
+          "input": "send this to Merry",
+          "accepted": [
+            "Send this to Merry",
+            "Send this to Merry."
+          ],
+          "before": "Send this to Merry",
+          "after": "Send this to Merry",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "jon-listed-name",
+          "input": "the meeting is with Jon",
+          "accepted": [
+            "The meeting is with Jon",
+            "The meeting is with Jon."
+          ],
+          "before": "The meeting is with Jon",
+          "after": "The meeting is with Jon",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "quoted-label",
+          "input": "send this to the label \"merry\"",
+          "accepted": [
+            "Send this to the label \"merry\"",
+            "Send this to the label \"merry\"."
+          ],
+          "before": "Send this to the label \"Mary\"",
+          "after": "Send this to the label \"Mary\"",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "literal-code",
+          "input": "send this to `merry`",
+          "accepted": [
+            "Send this to `merry`",
+            "Send this to `merry`."
+          ],
+          "before": "Send this to Mary",
+          "after": "Send this to `merry`",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "literal \"`merry`\" changed"
+        },
+        {
+          "id": "literal-address",
+          "input": "send this to jon@example.com",
+          "accepted": [
+            "Send this to jon@example.com",
+            "Send this to jon@example.com."
+          ],
+          "before": "Send this to john@example.com",
+          "after": "Send this to jon@example.com",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "literal \"jon@example.com\" changed"
+        },
+        {
+          "id": "literal-path",
+          "input": "send this to jon/reports",
+          "accepted": [
+            "Send this to jon/reports",
+            "Send this to jon/reports."
+          ],
+          "before": "Send this to John/reports",
+          "after": "Send this to jon/reports",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": null,
+          "afterOutcome": "guard-rejected",
+          "afterRejection": "literal \"jon/reports\" changed"
+        },
+        {
+          "id": "nonpeople-field",
+          "input": "send this to merry",
+          "accepted": [
+            "Send this to merry",
+            "Send this to merry."
+          ],
+          "before": "Send this to Mary",
+          "after": "Send this to Mary",
+          "beforeFailure": "not one of the accepted outputs",
+          "afterFailure": "not one of the accepted outputs",
+          "afterOutcome": "ok",
+          "afterRejection": null
+        },
+        {
+          "id": "mary-adjective",
+          "input": "the team felt merry",
+          "accepted": [
+            "The team felt merry",
+            "The team felt merry."
+          ],
+          "before": "The team felt merry",
+          "after": "The team felt merry",
+          "beforeFailure": null,
+          "afterFailure": null,
+          "afterOutcome": "ok",
+          "afterRejection": null
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,442 @@
+[
+  {
+    "id": "barry-person",
+    "input": "send the note to barry",
+    "before": "Participants: Barry Mason\n",
+    "target": "Send the note to Barry",
+    "exact": [
+      "Send the note to Barry",
+      "Send the note to Barry."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "barry-ordinary",
+    "input": "the berry fell off the bush",
+    "before": "Participants: Barry Mason\n",
+    "target": "The berry fell off the bush",
+    "exact": [
+      "The berry fell off the bush",
+      "The berry fell off the bush."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "reed-person",
+    "input": "the meeting is with reed",
+    "before": "Participants: Reed Parker\n",
+    "target": "The meeting is with Reed",
+    "exact": [
+      "The meeting is with Reed",
+      "The meeting is with Reed."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "reed-ordinary",
+    "input": "the reed bent in the wind",
+    "before": "Participants: Reed Parker\n",
+    "target": "The reed bent in the wind",
+    "exact": [
+      "The reed bent in the wind",
+      "The reed bent in the wind."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "will-person",
+    "input": "tell will about the build",
+    "before": "Participants: Will Harris\n",
+    "target": "Tell Will about the build",
+    "exact": [
+      "Tell Will about the build",
+      "Tell Will about the build."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "will-ordinary",
+    "input": "we will ship today",
+    "before": "Participants: Will Harris\n",
+    "target": "We will ship today",
+    "exact": [
+      "We will ship today",
+      "We will ship today."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "may-person",
+    "input": "ask may to review the build",
+    "before": "Participants: May Huang\n",
+    "target": "Ask May to review the build",
+    "exact": [
+      "Ask May to review the build",
+      "Ask May to review the build."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "may-ordinary",
+    "input": "we may ship today",
+    "before": "Participants: May Huang\n",
+    "target": "We may ship today",
+    "exact": [
+      "We may ship today",
+      "We may ship today."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "rose-person",
+    "input": "send the update to rose",
+    "before": "Participants: Rose Foster\n",
+    "target": "Send the update to Rose",
+    "exact": [
+      "Send the update to Rose",
+      "Send the update to Rose."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "rose-ordinary",
+    "input": "the rose needs water",
+    "before": "Participants: Rose Foster\n",
+    "target": "The rose needs water",
+    "exact": [
+      "The rose needs water",
+      "The rose needs water."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "mark-person",
+    "input": "send it to mark",
+    "before": "Participants: Mark Lee\n",
+    "target": "Send it to Mark",
+    "exact": [
+      "Send it to Mark",
+      "Send it to Mark."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "mark-ordinary",
+    "input": "please mark the task done",
+    "before": "Participants: Mark Lee\n",
+    "target": "Please mark the task done",
+    "exact": [
+      "Please mark the task done",
+      "Please mark the task done."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "mary-person",
+    "input": "send this to merry",
+    "before": "Recipient: Mary Jensen\n",
+    "target": "Send this to Mary",
+    "exact": [
+      "Send this to Mary",
+      "Send this to Mary."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "mary-ordinary",
+    "input": "everyone felt merry after the meeting",
+    "before": "Recipient: Mary Jensen\n",
+    "target": "Everyone felt merry after the meeting",
+    "exact": [
+      "Everyone felt merry after the meeting",
+      "Everyone felt merry after the meeting."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "john-person",
+    "input": "the meeting is with jon",
+    "before": "Attendees: John Smith\n",
+    "target": "The meeting is with John",
+    "exact": [
+      "The meeting is with John",
+      "The meeting is with John."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "john-person-second",
+    "input": "the participant is jon",
+    "before": "Attendees: John Smith\n",
+    "target": "The participant is John",
+    "exact": [
+      "The participant is John",
+      "The participant is John."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "mary-already-matching",
+    "input": "send this to merry",
+    "before": "Participants: Mary, Merry\n",
+    "target": "Send this to Merry",
+    "exact": [
+      "Send this to Merry",
+      "Send this to Merry."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "john-already-matching",
+    "input": "the meeting is with jon",
+    "before": "Participants: John, Jon\n",
+    "target": "The meeting is with Jon",
+    "exact": [
+      "The meeting is with Jon",
+      "The meeting is with Jon."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "reed-soundalike",
+    "input": "send the note to reid",
+    "before": "Recipients: Reed Parker\n",
+    "target": "Send the note to Reed",
+    "exact": [
+      "Send the note to Reed",
+      "Send the note to Reed."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "stephen-soundalike",
+    "input": "ask steven to review the build",
+    "before": "Recipients: Stephen Brown\n",
+    "target": "Ask Stephen to review the build",
+    "exact": [
+      "Ask Stephen to review the build",
+      "Ask Stephen to review the build."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "brian-soundalike",
+    "input": "the meeting is with bryan",
+    "before": "Recipients: Brian White\n",
+    "target": "The meeting is with Brian",
+    "exact": [
+      "The meeting is with Brian",
+      "The meeting is with Brian."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "sean-soundalike",
+    "input": "send this to shawn",
+    "before": "Recipients: Sean Kelly\n",
+    "target": "Send this to Sean",
+    "exact": [
+      "Send this to Sean",
+      "Send this to Sean."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "sarah-soundalike",
+    "input": "send this to sara",
+    "before": "Recipients: Sarah Patel\n",
+    "target": "Send this to Sarah",
+    "exact": [
+      "Send this to Sarah",
+      "Send this to Sarah."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "jeff-soundalike",
+    "input": "the meeting is with geoff",
+    "before": "Recipients: Jeff Smith\n",
+    "target": "The meeting is with Jeff",
+    "exact": [
+      "The meeting is with Jeff",
+      "The meeting is with Jeff."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "sam-not-sim",
+    "input": "send this to Sam",
+    "before": "Recipients: Sim\n",
+    "target": "Send this to Sam",
+    "exact": [
+      "Send this to Sam",
+      "Send this to Sam."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "morrow-not-mary",
+    "input": "the meeting is with Morrow",
+    "before": "Attendees: Mary\n",
+    "target": "The meeting is with Morrow",
+    "exact": [
+      "The meeting is with Morrow",
+      "The meeting is with Morrow."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "read-purpose",
+    "input": "send this to read later",
+    "before": "Recipients: Reed Parker\n",
+    "target": "Send this to read later",
+    "exact": [
+      "Send this to read later",
+      "Send this to read later."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "read-ordinary",
+    "input": "please read the update",
+    "before": "Recipients: Reed Parker\n",
+    "target": "Please read the update",
+    "exact": [
+      "Please read the update",
+      "Please read the update."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "hail-purpose",
+    "input": "send this to hail a cab",
+    "before": "Recipients: Hale Smith\n",
+    "target": "Send this to hail a cab",
+    "exact": [
+      "Send this to hail a cab",
+      "Send this to hail a cab."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "jon-explicit-surname",
+    "input": "the meeting is with Jon Doe",
+    "before": "Attendees: John Smith\n",
+    "target": "The meeting is with Jon Doe",
+    "exact": [
+      "The meeting is with Jon Doe",
+      "The meeting is with Jon Doe."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "reid-explicit-surname",
+    "input": "send the note to Reid Thompson",
+    "before": "Recipients: Reed Parker\n",
+    "target": "Send the note to Reid Thompson",
+    "exact": [
+      "Send the note to Reid Thompson",
+      "Send the note to Reid Thompson."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "shon-unlisted-name",
+    "input": "the meeting is with Shon",
+    "before": "Attendees: Shawn, Sean\n",
+    "target": "The meeting is with Shon",
+    "exact": [
+      "The meeting is with Shon",
+      "The meeting is with Shon."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "merry-listed-name",
+    "input": "send this to Merry",
+    "before": "Recipients: Mary, Merry\n",
+    "target": "Send this to Merry",
+    "exact": [
+      "Send this to Merry",
+      "Send this to Merry."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "jon-listed-name",
+    "input": "the meeting is with Jon",
+    "before": "Attendees: John, Jon\n",
+    "target": "The meeting is with Jon",
+    "exact": [
+      "The meeting is with Jon",
+      "The meeting is with Jon."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "quoted-label",
+    "input": "send this to the label \"merry\"",
+    "before": "Recipients: Mary Jensen\n",
+    "target": "Send this to the label \"merry\"",
+    "exact": [
+      "Send this to the label \"merry\"",
+      "Send this to the label \"merry\"."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "literal-code",
+    "input": "send this to `merry`",
+    "before": "Recipients: Mary Jensen\n",
+    "target": "Send this to `merry`",
+    "exact": [
+      "Send this to `merry`",
+      "Send this to `merry`."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "literal-address",
+    "input": "send this to jon@example.com",
+    "before": "Recipients: John Smith\n",
+    "target": "Send this to jon@example.com",
+    "exact": [
+      "Send this to jon@example.com",
+      "Send this to jon@example.com."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "literal-path",
+    "input": "send this to jon/reports",
+    "before": "Recipients: John Smith\n",
+    "target": "Send this to jon/reports",
+    "exact": [
+      "Send this to jon/reports",
+      "Send this to jon/reports."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "nonpeople-field",
+    "input": "send this to merry",
+    "before": "Project: Mary\n",
+    "target": "Send this to merry",
+    "exact": [
+      "Send this to merry",
+      "Send this to merry."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "mary-adjective",
+    "input": "the team felt merry",
+    "before": "Recipients: Mary Jensen\n",
+    "target": "The team felt merry",
+    "exact": [
+      "The team felt merry",
+      "The team felt merry."
+    ],
+    "caseSensitive": true
+  }
+]
