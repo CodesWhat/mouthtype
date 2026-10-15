@@ -300,6 +300,20 @@ private struct Rig {
         #expect(rig.pasteboard.contents == copied)
     }
 
+    @Test func staleTerminalReadbackAfterAllPartsStaysUnknown() async {
+        let rig = Rig(chunks: true)
+        rig.focus.current.bundleID = "com.googlecode.iterm2"
+        rig.focus.current.element = element(100)
+        rig.focus.current.role = "AXTextArea"
+        rig.focus.readings = [FieldReading(value: "unchanged screen", length: 16, selection: NSRange(location: 16, length: 0))]
+        rig.poster.onPost = { Task { @MainActor in rig.pasteboard.read() } }
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver(String(repeating: "word ", count: 600), startFocus: nil)
+        await rig.inserter.waitForVerification()
+        #expect(seen.first?.verdict == .unknown)
+    }
+
     @Test func systemPosterSendsOneStampedCommandVPairToTheDestination() {
         var pids: [pid_t] = []
         var types: [CGEventType] = []

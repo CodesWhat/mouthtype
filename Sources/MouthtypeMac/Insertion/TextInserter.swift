@@ -175,7 +175,8 @@ public final class TextInserter {
             // What the field looked like before the chord, for the read-back to compare with.
             let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
                 ? now.element.map { focus.readField(of: $0) } : nil
-            if chunkedPaste(now.bundleID), spaced.utf8.count > PasteChunks.byteLimit {
+            let split = chunkedPaste(now.bundleID) && spaced.utf8.count > PasteChunks.byteLimit
+            if split {
                 guard let parts = PasteChunks.parts(spaced), inputGeneration() != nil else {
                     clipboard.copy(spaced)
                     return DeliveryResult(method: .clipboardOnly, outcome: .failed("Long paste cannot be split safely"),
@@ -204,7 +205,7 @@ public final class TextInserter {
             startVerification(
                 generation: generation, pasted: spaced, target: now,
                 baseline: fieldBefore.map { PasteVerifier.Baseline(reading: $0, input: afterInput,
-                    unchangedProvesFailure: reliableReadBack) }
+                    unchangedProvesFailure: reliableReadBack && !split) }
             )
             return DeliveryResult(
                 method: .paste, outcome: .unknown, focusMoved: moved, target: now, finalText: spaced,
