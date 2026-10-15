@@ -52,9 +52,15 @@ private final class FakePasteboard: PasteboardAccess {
 private final class FakePoster: PasteEventPosting {
     var posts = 0
     var keyCodes: [CGKeyCode] = []
+    var targetPIDs: [pid_t?] = []
     var succeeds = true
     /// What the clipboard held when the paste event went out.
     var onPost: (() -> Void)?
+
+    func postPaste(keyCode: CGKeyCode, targetPID: pid_t?) -> Bool {
+        targetPIDs.append(targetPID)
+        return postPaste(keyCode: keyCode)
+    }
 
     func postPaste(keyCode: CGKeyCode) -> Bool {
         posts += 1
@@ -169,6 +175,46 @@ private struct Rig {
 
 @MainActor
 @Suite struct TextInserterTests {
+    @Test func systemPosterSendsOneStampedCommandVPairToTheDestination() {
+        var pids: [pid_t] = []
+        var types: [CGEventType] = []
+        var flags: [CGEventFlags] = []
+        var stamps: [Int64] = []
+        let poster = SystemPasteEventPoster(stamp: 1234, post: { event, pid in
+            pids.append(pid); types.append(event.type); flags.append(event.flags)
+            stamps.append(event.getIntegerValueField(.eventSourceUserData))
+        })
+        #expect(poster.postPaste(keyCode: 9, targetPID: 321))
+        #expect(pids == [321, 321])
+        #expect(types == [.keyDown, .keyUp])
+        #expect(flags == [.maskCommand, .maskCommand])
+        #expect(stamps == [1234, 1234])
+    }
+
+    @Test func missingOrInvalidDestinationsNeverPostToAnAmbientApp() {
+        var posts = 0
+        let poster = SystemPasteEventPoster(stamp: 1, post: { _, _ in posts += 1 })
+        #expect(!poster.postPaste(keyCode: 9, targetPID: nil))
+        #expect(!poster.postPaste(keyCode: 9, targetPID: 0))
+        #expect(!poster.postPaste(keyCode: 9, targetPID: -1))
+        #expect(posts == 0)
+    }
+
+    @Test func diagnosticsRemainRestrictedToTheirOwnProcess() {
+        var pids: [pid_t] = []
+        let poster = SystemPasteEventPoster(stamp: 1, targetPID: 123, post: { _, pid in pids.append(pid) })
+        #expect(poster.postPaste(keyCode: 9, targetPID: 321))
+        #expect(pids == [123, 123])
+    }
+
+    @Test func pasteTargetsTheCapturedDestinationProcess() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 321, bundleID: "com.example.target", appName: "Target")
+        _ = await rig.inserter.deliver("one insertion", startFocus: nil)
+        #expect(rig.poster.targetPIDs == [321])
+        #expect(rig.poster.posts == 1)
+    }
+
     @Test(arguments: [Optional<pid_t>.none, 200])
     func aSelfTestCannotPasteOrCopyIntoAnotherProcess(pid: pid_t?) async {
         let rig = Rig(restrictedToPID: 100)

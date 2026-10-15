@@ -164,7 +164,7 @@ public final class TextInserter {
             // What the field looked like before the chord, for the read-back to compare with.
             let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
                 ? now.element.map { focus.readField(of: $0) } : nil
-            guard clipboard.paste(spaced, keyCode: keyCode) else {
+            guard clipboard.paste(spaced, keyCode: keyCode, targetPID: now.pid) else {
                 clipboard.copy(spaced)
                 Log.app.error("could not post the paste event; transcript left on the clipboard")
                 return DeliveryResult(
@@ -255,26 +255,26 @@ public final class TextInserter {
 @MainActor
 protocol PasteEventPosting: AnyObject {
     /// Posts Cmd plus `keyCode`. False when the events could not be created.
-    func postPaste(keyCode: CGKeyCode) -> Bool
+    func postPaste(keyCode: CGKeyCode, targetPID: pid_t?) -> Bool
 }
 
 @MainActor
 final class SystemPasteEventPoster: PasteEventPosting {
-    /// Where every synthesized event is posted. `.cgSessionEventTap` enters where hardware events enter the login
-    /// session, so the event reaches the focused app exactly as a key press would.
-    static let postLocation: CGEventTapLocation = .cgSessionEventTap
-
     private let stamp: Int64
     private let targetPID: pid_t?
+    private let post: @MainActor (CGEvent, pid_t) -> Void
 
-    init(stamp: Int64, targetPID: pid_t? = nil) {
+    init(stamp: Int64, targetPID: pid_t? = nil,
+         post: @escaping @MainActor (CGEvent, pid_t) -> Void = { event, pid in event.postToPid(pid) }) {
         self.stamp = stamp
         self.targetPID = targetPID
+        self.post = post
     }
 
     /// From a private source with its flags set explicitly. An event with a nil source inherits the modifiers the
     /// user is holding, so a held Control or Fn would turn the paste into a different shortcut.
-    func postPaste(keyCode: CGKeyCode) -> Bool {
+    func postPaste(keyCode: CGKeyCode, targetPID requestedPID: pid_t?) -> Bool {
+        guard let destination = targetPID ?? requestedPID, destination > 0 else { return false }
         let source = CGEventSource(stateID: .privateState)
         guard
             let down = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: true),
@@ -283,8 +283,7 @@ final class SystemPasteEventPoster: PasteEventPosting {
         for event in [down, up] {
             event.flags = .maskCommand
             event.setIntegerValueField(.eventSourceUserData, value: stamp)
-            if let targetPID { event.postToPid(targetPID) }
-            else { event.post(tap: Self.postLocation) }
+            post(event, destination)
         }
         return true
     }
@@ -419,7 +418,7 @@ final class PasteboardSession {
     func currentString() -> String? { pasteboard.currentString() }
 
     /// False when the paste event could not be posted; the clipboard then still holds `text` and no restore is scheduled.
-    func paste(_ text: String, keyCode: CGKeyCode) -> Bool {
+    func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?) -> Bool {
         if saved == nil {
             saved = pasteboard.snapshot()
         }
@@ -430,7 +429,7 @@ final class PasteboardSession {
         self.receipts = receipts
         pasteboard.writePromise(text, markers: Self.transientMarkers, onRead: Self.readHandler(receipts, session: self, generation: current))
         ourChangeCount = pasteboard.changeCount
-        guard poster.postPaste(keyCode: keyCode) else { return false }
+        guard poster.postPaste(keyCode: keyCode, targetPID: targetPID) else { return false }
         if receipts.arm() > 0 {
             Log.app.info("clipboard read before the paste chord; restoring on a fixed delay")
             schedule(Self.unobservedDelay) { [weak self] in
