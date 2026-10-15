@@ -314,6 +314,23 @@ private struct Rig {
         #expect(seen.first?.verdict == .unknown)
     }
 
+    @Test func longPasteKeepsTheSingleChordRouteUntilExplicitlyEnabled() async {
+        let rig = Rig()
+        let passage = String(repeating: "word ", count: 600)
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        #expect(result.outcome == .unknown && rig.poster.posts == 1)
+        #expect(rig.pasteboard.writes.map(\.text) == [passage])
+    }
+
+    @Test func unavailableInputMonitoringLeavesTheWholePassageForCopyWithoutPosting() async {
+        let rig = Rig(chunks: true)
+        rig.input.value = nil
+        let passage = String(repeating: "word ", count: 600)
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        #expect(result.method == .clipboardOnly && rig.poster.posts == 0)
+        #expect(rig.pasteboard.writes.map(\.text) == [passage])
+    }
+
     @Test func systemPosterSendsOneStampedCommandVPairToTheDestination() {
         var pids: [pid_t] = []
         var types: [CGEventType] = []
