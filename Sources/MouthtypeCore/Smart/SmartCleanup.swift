@@ -193,11 +193,8 @@ public actor SmartCleanup {
             return finish(.failed, rejection: String(describing: error), sha: sha)
         case let .success(draft):
             let model = SmartCleanupGuard.restoringTerminal(input: request.text, output: CleanupPrompt.sanitize(draft.text))
-            let referenceLines = [context.before, context.after].compactMap { $0 }.flatMap { $0.split(whereSeparator: \.isNewline) }
-            if referenceLines.contains(where: { line in
-                let text = line.trimmingCharacters(in: .whitespaces)
-                return text.count >= 8 && !request.text.contains(text) && model.contains(text)
-            }) {
+            if SmartCleanupGuard.copiesSurroundingText(input: request.text, output: model,
+                references: [context.before, context.after].compactMap { $0 }) {
                 return finish(.guardRejected, rejection: "surrounding text copied into output", sha: sha)
             }
             let restoredNames = NameJoining.candidates(in: model, spellings: approved.map(\.written))

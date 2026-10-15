@@ -33,6 +33,34 @@ public enum SmartCleanupGuard {
         return last
     }
 
+    static func copiesSurroundingText(input: String, output: String, references: [String]) -> Bool {
+        func phrase(_ words: [String]) -> String { " " + words.joined(separator: " ") + " " }
+        let inputWords = TextMetrics.normalizedWords(input)
+        let inputPhrase = phrase(inputWords)
+        let outputPhrase = phrase(TextMetrics.normalizedWords(output))
+        for line in references.flatMap({ $0.split(whereSeparator: \.isNewline) }) {
+            let text = line.trimmingCharacters(in: .whitespaces)
+            let words = TextMetrics.normalizedWords(text)
+            guard text.count >= 8, !words.isEmpty else { continue }
+            let reference = phrase(words)
+            if !inputPhrase.contains(reference), outputPhrase.contains(reference) { return true }
+        }
+
+        // When the take survives unchanged, inspect only the words added around it. A replacement
+        // within the take can legitimately share words with the draft, so it isn't evidence of copying.
+        guard !inputWords.isEmpty, let take = outputPhrase.range(of: inputPhrase) else { return false }
+        func windows(_ words: [String]) -> Set<String> {
+            guard words.count >= 4 else { return [] }
+            return Set((0...(words.count - 4)).map { words[$0..<($0 + 4)].joined(separator: " ") })
+        }
+        let referenceWindows = references.flatMap { $0.split(whereSeparator: \.isNewline) }.reduce(into: Set<String>()) {
+            $0.formUnion(windows(TextMetrics.normalizedWords(String($1))))
+        }.subtracting(windows(inputWords))
+        let prefix = TextMetrics.normalizedWords(String(outputPhrase[..<take.lowerBound]))
+        let suffix = TextMetrics.normalizedWords(String(outputPhrase[take.upperBound...]))
+        return !windows(prefix).isDisjoint(with: referenceWindows) || !windows(suffix).isDisjoint(with: referenceWindows)
+    }
+
     /// A reason to reject, or nil when the output is fine.
     public static func rejection(
         input: String, output: String, level: CleanupLevel, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
