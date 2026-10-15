@@ -36,6 +36,11 @@ import Testing
         #expect(out.edits.isEmpty)
     }
 
+    @Test(arguments: ["Run ./dusting --mode testing.", "Open ../notes.txt", "./dusting --mode testing."])
+    func relativePathsSurviveTheFullPipeline(text: String) {
+        #expect(run(text).text == text)
+    }
+
     @Test func trialPeriodLowercaseInputGetsOnlyACapital() {
         let out = run("the trial period ended")
         #expect(out.text == "The trial period ended")

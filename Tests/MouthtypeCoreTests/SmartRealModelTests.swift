@@ -25,6 +25,14 @@ private func cleanupBench(_ arguments: [String]) throws -> (status: Int32, outpu
 /// on disk.
 @Suite(.serialized, .enabled(if: ((try? CleanerCatalog.make(id: "superwhisper-s1-mini")) as? MLXCleaner)?.isDownloaded == true, "S1-mini is not on disk"))
 struct SmartRealModelTests {
+    @Test func relativePathsAndQuotedLabelsStayLiteral() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixtures = root.appendingPathComponent("Tests/Fixtures/literal-fidelity.json")
+        let result = try cleanupBench(["clean", "--smart", "light", "--cleaner", "superwhisper-s1-mini", "--file", fixtures.path, "--smart-timeout-ms", "10000"])
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("12/12 cases pass"), "\(result.output)")
+    }
+
     @Test(arguments: ["light", "medium"])
     func theAcceptanceCasesPass(level: String) throws {
         let result = try cleanupBench(["clean", "--smart", level, "--cleaner", "superwhisper-s1-mini", "--smart-timeout-ms", "10000"])
@@ -36,6 +44,14 @@ struct SmartRealModelTests {
 
 @Suite(.serialized, .enabled(if: CleanerCatalog.makeSmartCleanup().isDownloaded, "Quality cleanup model is not on disk"))
 struct QualityRealModelTests {
+    @Test func relativePathsAndQuotedLabelsStayLiteral() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixtures = root.appendingPathComponent("Tests/Fixtures/literal-fidelity.json")
+        let result = try cleanupBench(["clean", "--smart", "light", "--file", fixtures.path, "--smart-timeout-ms", "10000"])
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("12/12 cases pass"), "\(result.output)")
+    }
+
     @Test func longReadThroughKeepsMeaningAndRemovesRestarts() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let fixtures = root.appendingPathComponent("Tests/Fixtures/long-read-through.json")
