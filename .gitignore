@@ -10,6 +10,9 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 
+# Python design generators
+__pycache__/
+
 # macOS
 .DS_Store
 
