@@ -46,6 +46,7 @@ public enum SmartCleanupGuard {
         if outputWords > limit { return "output has \(outputWords) words, over the \(limit) limit" }
 
         if let reason = changedIntent(input: input, output: trimmed) { return reason }
+        if let literal = missingLiteral(input: input, output: trimmed) { return "literal \"\(literal)\" changed" }
         let comparableInput = writtenForm(input)
         let comparableOutput = writtenForm(trimmed)
         let outputSpellings = Set(comparableOutput.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
@@ -261,6 +262,30 @@ public enum SmartCleanupGuard {
     }
 
     // MARK: Names and spellings
+
+    private static func missingLiteral(input: String, output: String) -> String? {
+        guard let expression = try? NSRegularExpression(pattern: #"`[^`\r\n]+`|[^\s`]*[@/\\][^\s`]*"#) else { return nil }
+        let wrappers = CharacterSet(charactersIn: ".,;:!?()[]{}\"'“”‘’")
+        func matches(_ text: String) -> [(String, Range<String.Index>)] {
+            expression.matches(in: text, range: NSRange(text.startIndex..., in: text)).compactMap { match in
+                guard let range = Range(match.range, in: text) else { return nil }
+                let value = String(text[range]).trimmingCharacters(in: wrappers)
+                guard value.contains("`") || value.contains(where: \.isLetter) else { return nil }
+                return (value, range)
+            }
+        }
+        let kept = Set(matches(output).map { $0.0 })
+        let found = matches(input)
+        for (index, item) in found.enumerated() where !kept.contains(item.0) {
+            if index + 1 < found.count, kept.contains(found[index + 1].0) {
+                let gap = input[item.1.upperBound..<found[index + 1].1.lowerBound]
+                    .split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() }.filter { !$0.isEmpty }
+                if correctionCues.contains(gap) { continue }
+            }
+            return item.0
+        }
+        return nil
+    }
 
     static func missingTerm(input: String, output: String, dictionary: [DictionaryRule], snippets: [Snippet]) -> String? {
         let terms = dictionary.map(\.written) + snippets.map(\.expansion)
