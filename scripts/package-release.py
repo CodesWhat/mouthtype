@@ -92,8 +92,10 @@ def main():
     upload = output / 'notarization-upload.zip'
     run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(upload)], timeout=180)
     print('Submitting the signed app to Apple', flush=True)
-    submission = json.loads(run(['xcrun', 'notarytool', 'submit', str(upload), '--keychain-profile',
-                                 args.notary_profile, '--output-format', 'json'], timeout=300))
+    submitted = run(['xcrun', 'notarytool', 'submit', str(upload), '--keychain-profile',
+                     args.notary_profile, '--output-format', 'json'], timeout=300)
+    (output / 'notarization-submit-output.json').write_text(submitted)
+    submission = json.loads(submitted)
     (output / 'notarization-submission.json').write_text(json.dumps(submission, indent=2) + '\n')
     submission_id = submission['id']
     print(f'Apple submission {submission_id}; waiting up to ten minutes', flush=True)
