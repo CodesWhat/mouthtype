@@ -51,6 +51,11 @@ public struct SpokenNumberFormatter: NumberFormatting {
         mutating func run() {
             var i = 0
             while i < words.count {
+                if let (span, next) = resolution(at: i) {
+                    spans.append(span)
+                    i = next
+                    continue
+                }
                 if let (span, next) = dimension(at: i) {
                     spans.append(span)
                     i = next
@@ -99,6 +104,15 @@ public struct SpokenNumberFormatter: NumberFormatting {
             if i + 2 < words.count, gap(i + 1, i + 2),
                ["chord", "chords", "note", "notes", "battery", "batteries", "cell", "cells", "grade", "grades"].contains(words[i + 2].lower) { return nil }
             return (span(i, i + 1, "\(value)-D"), i + 2)
+        }
+
+        func resolution(at i: Int) -> (TextSpan, Int)? {
+            guard i + 2 < words.count, words[i + 1].lower == "k", gap(i, i + 1), gap(i + 1, i + 2),
+                  let value = NumberWords.units[words[i].lower] ?? NumberWords.teens[words[i].lower] ?? Int(words[i].lower),
+                  (1...32).contains(value),
+                  ["monitor", "camera", "display", "screen", "resolution", "video", "footage", "panel", "projector", "television"].contains(words[i + 2].lower)
+            else { return nil }
+            return (span(i, i + 1, "\(value)K"), i + 2)
         }
 
         // MARK: Cardinal runs

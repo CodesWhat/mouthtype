@@ -272,7 +272,7 @@ import Testing
 
     @Test func stageTimingsAreReported() {
         let out = run("hello world", dictionary: [DictionaryRule(heard: "a", written: "b")])
-        #expect(Set(out.stageMillis.keys) == ["filler", "spoken command", "self-correction", "number format", "dictionary", "blend", "whitespace"])
+        #expect(Set(out.stageMillis.keys) == ["filler", "spoken command", "self-correction", "notation", "number format", "dictionary", "blend", "whitespace"])
         #expect(out.stageMillis.values.allSatisfy { $0 >= 0 })
     }
 

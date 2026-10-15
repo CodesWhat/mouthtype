@@ -17,7 +17,7 @@ public struct DictionaryRule: Sendable, Equatable, Hashable, Codable {
 
     public var isJoinedSpelling: Bool {
         let parts = heard.split(whereSeparator: \.isWhitespace)
-        return parts.count > 1 && parts.allSatisfy { $0.allSatisfy(\.isLetter) }
+        return parts.count > 1 && parts.contains(where: { $0.count > 1 }) && parts.allSatisfy { $0.allSatisfy(\.isLetter) }
             && written.allSatisfy(\.isLetter) && parts.joined().caseInsensitiveCompare(written) == .orderedSame
     }
 }

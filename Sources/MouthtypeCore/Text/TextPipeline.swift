@@ -8,6 +8,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
     public var selfCorrection: Bool
     /// Lists the speaker counts ("first, second", "one, two") become numbered lists. Runs right after spoken commands.
     public var countedLists: Bool
+    public var notation: Bool
     public var numbers: Bool
     public var dictionary: Bool
     public var snippets: Bool
@@ -21,6 +22,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
         spokenCommands: Bool = true,
         selfCorrection: Bool = true,
         countedLists: Bool = true,
+        notation: Bool = true,
         numbers: Bool = true,
         dictionary: Bool = true,
         snippets: Bool = true,
@@ -32,6 +34,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
         self.spokenCommands = spokenCommands
         self.selfCorrection = selfCorrection
         self.countedLists = countedLists
+        self.notation = notation
         self.numbers = numbers
         self.dictionary = dictionary
         self.snippets = snippets
@@ -42,7 +45,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
 
     public static let all = TextPipelineOptions()
     public static let none = TextPipelineOptions(
-        fillers: false, spokenCommands: false, selfCorrection: false, countedLists: false, numbers: false, dictionary: false,
+        fillers: false, spokenCommands: false, selfCorrection: false, countedLists: false, notation: false, numbers: false, dictionary: false,
         snippets: false, blend: false, whitespace: false
     )
 
@@ -97,7 +100,7 @@ public struct TextPipelineResult: Sendable, Equatable {
 
 /// The deterministic cleanup pass: no model, a few milliseconds, every change logged.
 ///
-/// Stages run in this fixed order: fillers, spoken commands, self-corrections, counted lists, numbers, dictionary, snippets, blend, style, whitespace.
+/// Stages run in this fixed order: fillers, spoken commands, self-corrections, counted lists, notation, numbers, dictionary, snippets, blend, style, whitespace.
 /// Style edits are logged under the `blend` stage name, the store's vocabulary has no separate one.
 /// Each is its own small type and takes the previous stage's output; the edit `position` is a Character offset
 /// into the text as it entered that stage.
@@ -164,6 +167,12 @@ public struct TextPipeline: Sendable {
         }
         if options.countedLists {
             run(CountedLists.stageName) { CountedLists().apply($0) }
+        }
+        if options.notation {
+            let phrases = (options.dictionary ? input.dictionary.flatMap { [$0.heard, $0.written] } : [])
+                + (options.snippets ? input.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
+            let nearby = CleanupPrompt.nearbySpellings(CleanupContext(before: input.context?.before, after: input.context?.after))
+            run(TechnicalNotation.stageName) { TechnicalNotation(protectedPhrases: phrases + nearby).apply($0) }
         }
         if options.numbers {
             let formatter = numberFormatter
