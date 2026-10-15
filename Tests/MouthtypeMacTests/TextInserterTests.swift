@@ -53,11 +53,13 @@ private final class FakePoster: PasteEventPosting {
     var posts = 0
     var keyCodes: [CGKeyCode] = []
     var targetPIDs: [pid_t?] = []
+    var chords: [PasteChord] = []
     var succeeds = true
     /// What the clipboard held when the paste event went out.
     var onPost: (() -> Void)?
 
-    func postPaste(keyCode: CGKeyCode, targetPID: pid_t?) -> Bool {
+    func postPaste(keyCode: CGKeyCode, targetPID: pid_t?, chord: PasteChord) -> Bool {
+        chords.append(chord)
         targetPIDs.append(targetPID)
         return postPaste(keyCode: keyCode)
     }
@@ -125,6 +127,16 @@ private final class BatchPauses {
 }
 
 @MainActor
+private final class ChordChoice {
+    var chord = PasteChord.controlShiftV
+    var requestedBundles: [String?] = []
+    func select(_ bundleID: String?) -> PasteChord {
+        requestedBundles.append(bundleID)
+        return chord
+    }
+}
+
+@MainActor
 private struct Rig {
     let input = InputCounter()
     let clock = TestClock()
@@ -173,7 +185,8 @@ private struct Rig {
         }
     }
 
-    init(restrictedToPID: pid_t? = nil, chunks: Bool = false) {
+    init(restrictedToPID: pid_t? = nil, chunks: Bool = false, chord: PasteChord = .commandV,
+         selectChord: (@MainActor (String?) -> PasteChord)? = nil) {
         let pauses = pauses
         let pending = pending
         let clock = clock
@@ -181,7 +194,7 @@ private struct Rig {
         inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, keys: keys, schedule: { delay, work in
             pending.add(delay, work)
         }, sleep: { delay in if chunks { await pauses.pause(delay) } }, now: { clock.date }, inputGeneration: { input.value },
-                                restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks })
+                                restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, pasteChord: selectChord ?? { _ in chord })
     }
 }
 
@@ -329,6 +342,34 @@ private struct Rig {
         let result = await rig.inserter.deliver(passage, startFocus: nil)
         #expect(result.method == .clipboardOnly && rig.poster.posts == 0)
         #expect(rig.pasteboard.writes.map(\.text) == [passage])
+    }
+
+    @Test(arguments: PasteChord.allCases, [false, true])
+    func selectedShortcutReachesEveryPasteWithTheCurrentLayoutKey(chord: PasteChord, chunks: Bool) async {
+        let rig = Rig(chunks: chunks, chord: chord)
+        rig.keys.code = 42
+        rig.poster.onPost = { Task { @MainActor in rig.pasteboard.read() } }
+        let passage = chunks ? String(repeating: "word ", count: 600) : "a short take"
+        let result = await rig.inserter.deliver(passage, startFocus: nil)
+        #expect(result.outcome == .unknown)
+        #expect(!rig.poster.chords.isEmpty && rig.poster.chords.allSatisfy { $0 == chord })
+        #expect(rig.poster.keyCodes.allSatisfy { $0 == 42 })
+        #expect(rig.pasteboard.writes.map(\.text).joined() == passage)
+    }
+
+    @Test func shortcutIsCapturedOnceForTheActualDestinationEvenWhenSettingsChangeDuringABatch() async {
+        let choice = ChordChoice()
+        let rig = Rig(chunks: true, selectChord: choice.select)
+        rig.focus.current.bundleID = "com.example.actual"
+        rig.poster.onPost = {
+            choice.chord = .commandShiftV
+            Task { @MainActor in rig.pasteboard.read() }
+        }
+        let start = FocusSnapshot(pid: 999, bundleID: "com.example.previous")
+        let result = await rig.inserter.deliver(String(repeating: "word ", count: 600), startFocus: start)
+        #expect(result.outcome == .unknown)
+        #expect(choice.requestedBundles == ["com.example.actual"])
+        #expect(rig.poster.chords.count > 1 && rig.poster.chords.allSatisfy { $0 == .controlShiftV })
     }
 
     @Test func systemPosterSendsOneStampedCommandVPairToTheDestination() {

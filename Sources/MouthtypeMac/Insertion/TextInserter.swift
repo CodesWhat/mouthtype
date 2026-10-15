@@ -15,6 +15,7 @@ public final class TextInserter {
     /// How long after a paste its last character still stands in for an unreadable text-before-cursor.
     static let continuationWindow: TimeInterval = 5 * 60
 
+    private let pasteChord: @MainActor (String?) -> PasteChord
     private let chunkedPaste: @MainActor (String?) -> Bool
     private let focus: FocusReading
     private let clipboard: PasteboardSession
@@ -46,6 +47,7 @@ public final class TextInserter {
 
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
     public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
+        self.pasteChord = { PasteSettings.chord(for: $0) }
         self.chunkedPaste = { PasteSettings.chunksEnabled($0) }
         self.now = { Date() }
         self.inputGeneration = inputGeneration
@@ -63,8 +65,10 @@ public final class TextInserter {
         focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, keys: PasteKeyResolving,
         schedule: @escaping PasteboardSession.Schedule, sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
         now: @escaping @MainActor () -> Date = { Date() }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
-        restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false }
+        restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false },
+        pasteChord: @escaping @MainActor (String?) -> PasteChord = { _ in .commandV }
     ) {
+        self.pasteChord = pasteChord
         self.chunkedPaste = chunkedPaste
         self.now = now
         self.inputGeneration = inputGeneration
@@ -164,6 +168,7 @@ public final class TextInserter {
                 before = .character(preceding)
             }
             let spaced = Spacing.spaced(text, before: before)
+            let chord = pasteChord(now.bundleID)
             guard let keyCode = keys.pasteKeyCode() else {
                 clipboard.copy(spaced)
                 Log.app.error("no key types v in this keyboard layout; transcript left on the clipboard")
@@ -182,12 +187,12 @@ public final class TextInserter {
                     return DeliveryResult(method: .clipboardOnly, outcome: .failed("Long paste cannot be split safely"),
                                           focusMoved: moved, target: now, finalText: spaced)
                 }
-                guard await pasteInParts(parts, keyCode: keyCode, target: now) else {
+                guard await pasteInParts(parts, keyCode: keyCode, chord: chord, target: now) else {
                     lastPaste = nil
                     return DeliveryResult(method: .paste, outcome: .partialPaste,
                                           focusMoved: moved, target: now, finalText: spaced)
                 }
-            } else if !clipboard.paste(spaced, keyCode: keyCode, targetPID: now.pid) {
+            } else if !clipboard.paste(spaced, keyCode: keyCode, targetPID: now.pid, chord: chord) {
                 clipboard.copy(spaced)
                 Log.app.error("could not post the paste event; transcript left on the clipboard")
                 return DeliveryResult(
@@ -214,7 +219,7 @@ public final class TextInserter {
         }
     }
 
-    private func pasteInParts(_ parts: [String], keyCode: CGKeyCode, target: FocusSnapshot) async -> Bool {
+    private func pasteInParts(_ parts: [String], keyCode: CGKeyCode, chord: PasteChord, target: FocusSnapshot) async -> Bool {
         batchActive = true
         clipboard.beginBatch()
         defer {
@@ -233,7 +238,7 @@ public final class TextInserter {
                 && current.windowTitle == target.windowTitle && current.element == target.element
         }
         for part in parts {
-            guard mayContinue(), clipboard.paste(part, keyCode: keyCode, targetPID: target.pid) else { return false }
+            guard mayContinue(), clipboard.paste(part, keyCode: keyCode, targetPID: target.pid, chord: chord) else { return false }
             let lease = clipboard.pasteGeneration
             // A receipt only permits advancing the clipboard. It never proves the text was inserted.
             var read = false
@@ -319,8 +324,8 @@ public final class TextInserter {
 
 @MainActor
 protocol PasteEventPosting: AnyObject {
-    /// Posts Cmd plus `keyCode`. False when the events could not be created.
-    func postPaste(keyCode: CGKeyCode, targetPID: pid_t?) -> Bool
+    /// Posts the chosen modifiers plus the layout-resolved V key. False when events cannot be created.
+    func postPaste(keyCode: CGKeyCode, targetPID: pid_t?, chord: PasteChord) -> Bool
 }
 
 @MainActor
@@ -338,7 +343,7 @@ final class SystemPasteEventPoster: PasteEventPosting {
 
     /// From a private source with its flags set explicitly. An event with a nil source inherits the modifiers the
     /// user is holding, so a held Control or Fn would turn the paste into a different shortcut.
-    func postPaste(keyCode: CGKeyCode, targetPID requestedPID: pid_t?) -> Bool {
+    func postPaste(keyCode: CGKeyCode, targetPID requestedPID: pid_t?, chord: PasteChord = .commandV) -> Bool {
         guard let destination = targetPID ?? requestedPID, destination > 0 else { return false }
         let source = CGEventSource(stateID: .privateState)
         guard
@@ -346,7 +351,7 @@ final class SystemPasteEventPoster: PasteEventPosting {
             let up = CGEvent(keyboardEventSource: source, virtualKey: keyCode, keyDown: false)
         else { return false }
         for event in [down, up] {
-            event.flags = .maskCommand
+            event.flags = chord.flags
             event.setIntegerValueField(.eventSourceUserData, value: stamp)
             post(event, destination)
         }
@@ -505,7 +510,7 @@ final class PasteboardSession {
     func currentString() -> String? { pasteboard.currentString() }
 
     /// False when the paste event could not be posted; the clipboard then still holds `text` and no restore is scheduled.
-    func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?) -> Bool {
+    func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?, chord: PasteChord = .commandV) -> Bool {
         if saved == nil || pasteboard.changeCount != ourChangeCount {
             saved = pasteboard.snapshot()
         }
@@ -516,7 +521,7 @@ final class PasteboardSession {
         self.receipts = receipts
         pasteboard.writePromise(text, markers: Self.transientMarkers, onRead: Self.readHandler(receipts, session: self, generation: current))
         ourChangeCount = pasteboard.changeCount
-        guard poster.postPaste(keyCode: keyCode, targetPID: targetPID) else { return false }
+        guard poster.postPaste(keyCode: keyCode, targetPID: targetPID, chord: chord) else { return false }
         if receipts.arm() > 0 {
             Log.app.info("clipboard read before the paste chord; restoring on a fixed delay")
             schedule(Self.unobservedDelay) { [weak self] in

@@ -20,7 +20,10 @@ Replacements expand after cleanup, so their spelling, capitalization, spaces, an
 
 For a terminal that loses text from large pastes, focus its window and enable **Paste Options → Split Long Pastes in [app]**. This is off by default and saved separately for Terminal, iTerm2, Ghostty, kitty and WezTerm. It applies to all windows of the selected terminal app, including CLI editors such as Claude Code and Codex CLI; it does not detect the program running inside a terminal.
 
-Split pastes preserve the text exactly and never send Return. Each part waits for a clipboard read and a settling delay before the next part. Typing, focus changes, a new clipboard copy, cancellation, an unread part, or the eight-second overall limit stop the paste. A read permits advancing the clipboard; it does not prove insertion. The original clipboard is restored unless you copied something else. An interrupted paste offers the full transcript with Copy and warns that some text may already be there. Check the field before pasting the full copy, to avoid duplicates. Per-app paste chords and typed delivery remain planned.
+To change the paste shortcut for any app, focus that app and choose **Paste Options → Paste Shortcut for [app]**. Choose Command-V (the default), Command-Shift-V, or Control-Shift-V to match the destination’s paste binding. This setting is saved per app and affects text delivery, including every part of a split paste. It leaves Mouthtype’s dictation shortcuts unchanged. Every paste resolves the V key from the current keyboard layout and targets the captured destination process. Invalid saved settings fall back to Command-V.
+
+
+Split pastes preserve the text exactly and never send Return. Each part waits for a clipboard read and a settling delay before the next part. Typing, focus changes, a new clipboard copy, cancellation, an unread part, or the eight-second overall limit stop the paste. A read permits advancing the clipboard; it does not prove insertion. The original clipboard is restored unless you copied something else. An interrupted paste offers the full transcript with Copy and warns that some text may already be there. Check the field before pasting the full copy, to avoid duplicates. Opt-in typed delivery remains planned.
 
 
 
