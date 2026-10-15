@@ -95,11 +95,11 @@
   },
   {
     "id": "quoted-question",
-    "input": "She said \"Ready?\"",
-    "target": "She said \"Ready?\"",
+    "input": "She said, \"Ready?\"",
+    "target": "She said, \"Ready?\"",
     "exact": [
-      "She said \"Ready?\"",
-      "She said “Ready?”"
+      "She said, \"Ready?\"",
+      "She said, “Ready?”"
     ],
     "caseSensitive": true
   },

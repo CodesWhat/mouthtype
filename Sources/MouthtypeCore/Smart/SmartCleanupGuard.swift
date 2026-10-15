@@ -293,7 +293,7 @@ public enum SmartCleanupGuard {
 
     private static func missingLiteral(input: String, output: String) -> String? {
         guard let expression = try? NSRegularExpression(
-            pattern: #"`[^`\r\n]+`|(?<![\p{L}\p{N}])"[^"\r\n]+"(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])“[^”\r\n]+”(?![\p{L}\p{N}])|[^\s`]*[@/\\][^\s`]*"#
+            pattern: #"`[^`\r\n]+`|(?<![\p{L}\p{N}])"[^"\r\n]+"(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])“[^”\r\n]+”(?![\p{L}\p{N}])|[^\s`]*[@/\\][^\s`]*|(?<![\p{L}\p{N}_.])\.[\p{L}_][\p{L}\p{N}_.-]*"#
         ) else { return nil }
         let wrappers = Set(".,;:!?()[]{}\"'“”‘’")
         let leadingWrappers = wrappers.subtracting(["."])

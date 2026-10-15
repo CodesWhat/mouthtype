@@ -21,6 +21,7 @@ import Testing
         ("Run ./dusting --mode testing.", "Run /dusting --mode testing."),
         ("Open ../notes.txt", "Open ./notes.txt"),
         ("Open ../../notes.txt", "Open /notes.txt"),
+        ("Open .gitignore now.", "Open.gitignore now."),
         ("The label says \"dusting\".", "The label says \"dusting.\""),
         ("The label says “dusting”.", "The label says “dusting.”"),
         ("Use \"mark\" here.", "Use \"Mark\" here."),
@@ -42,6 +43,8 @@ import Testing
         ("I'm testing this", "I'm testing this."),
         ("Use a 6\" screw and a 4\" bolt.", "Use a 6-inch screw and a 4-inch bolt."),
         ("Open ./notes.txt", "Open ./notes.txt."),
+        ("Use .5 seconds.", "Use .5 seconds."),
+        ("Wait...now do this.", "Wait…now do this."),
     ])
     func unchangedLabelsQuoteStylingAndExplicitCorrectionsAreAllowed(item: (String, String)) async {
         let result = await SmartCleanup(cleaner: FakeCleaner(returning: item.1))
