@@ -4,12 +4,12 @@ Nearby names can help choose a spelling, but must not rewrite an address, path o
 
 Baseline: `67c0c5846d8ee042e96e844f4ec62893a8a86ed1`. Guard: `78f82199206c6f16f600176eabe430ecdedc4a72`. Both runs use the debug bench, cached local models and the same 40 synthetic cases. These are accuracy replays, not latency measurements or live paste tests. Every case requires exact casing. Light and Medium are reported separately.
 
-| Model | Level | Baseline | Guard | Literal cases before / after |
-| --- | --- | --- | --- | --- |
-| superwhisper-s1-mini | light | 26/40 | 26/40 | 3/3 → 3/3 |
-| superwhisper-s1-mini | medium | 26/40 | 26/40 | 3/3 → 3/3 |
-| gemma-4-e4b-it-4bit | light | 31/40 | 34/40 | 0/3 → 3/3 |
-| gemma-4-e4b-it-4bit | medium | 31/40 | 34/40 | 0/3 → 3/3 |
+| Mode | Model | Level | Baseline | Guard | Literal cases before / after |
+| --- | --- | --- | --- | --- | --- |
+| Fast | superwhisper-s1-mini | light | 26/40 | 26/40 | 3/3 → 3/3 |
+| Fast | superwhisper-s1-mini | medium | 26/40 | 26/40 | 3/3 → 3/3 |
+| Thorough | gemma-4-e4b-it-4bit | light | 31/40 | 34/40 | 0/3 → 3/3 |
+| Thorough | gemma-4-e4b-it-4bit | medium | 31/40 | 34/40 | 0/3 → 3/3 |
 
 The earlier private 18-case comparison omitted `caseSensitive`; its 15/18 and 18/18 scores did not establish correct casing. This fresh strict baseline passes 12/18 with Fast and 16/18 with Thorough on those original cases. The added cases cover more soundalikes, ordinary verbs, explicit surnames, multiple listed spellings and literal text.
 
