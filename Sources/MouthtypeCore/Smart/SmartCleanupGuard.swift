@@ -34,31 +34,135 @@ public enum SmartCleanupGuard {
     }
 
     static func copiesSurroundingText(input: String, output: String, references: [String]) -> Bool {
+        guard !references.isEmpty else { return false }
         func phrase(_ words: [String]) -> String { " " + words.joined(separator: " ") + " " }
         let inputWords = TextMetrics.normalizedWords(input)
         let inputPhrase = phrase(inputWords)
-        let outputPhrase = phrase(TextMetrics.normalizedWords(output))
-        for line in references.flatMap({ $0.split(whereSeparator: \.isNewline) }) {
+        let outputWords = TextMetrics.normalizedWords(output)
+        let outputPhrase = phrase(outputWords)
+        let additions: [[String]]
+        let retainedWords: [String]
+        let hasRetainedTake: Bool
+        if !inputWords.isEmpty, let take = outputPhrase.range(of: inputPhrase) {
+            additions = [TextMetrics.normalizedWords(String(outputPhrase[..<take.lowerBound])),
+                TextMetrics.normalizedWords(String(outputPhrase[take.upperBound...]))]
+            retainedWords = inputWords
+            hasRetainedTake = true
+        } else if inputWords.count <= SmartCleanup.maxWords,
+                  outputWords.count <= CleanupLimits.maxOutputTokens(for: input),
+                  let take = retainedTake(in: outputWords, matching: inputWords) {
+            additions = [Array(outputWords[..<take.lowerBound]), Array(outputWords[take.upperBound...])]
+            retainedWords = Array(outputWords[take])
+            hasRetainedTake = true
+        } else {
+            additions = [outputWords]
+            retainedWords = []
+            hasRetainedTake = false
+        }
+        let retainedPhrase = phrase(retainedWords)
+        func occurrences(of reference: String, in text: String) -> Int {
+            var count = 0
+            var start = text.startIndex
+            while let match = text.range(of: reference, range: start..<text.endIndex) {
+                count += 1
+                start = text.index(before: match.upperBound)
+            }
+            return count
+        }
+        let particles: Set<String> = ["de", "del", "da", "di", "do", "dos", "du", "van", "von", "der", "den", "la", "le", "of", "the", "and", "jr", "sr", "junior", "senior"]
+        let subjects: Set<String> = ["i", "we", "you", "he", "she", "it", "they"]
+        let lines = references.flatMap { $0.split(whereSeparator: \.isNewline) }.flatMap { line -> [(characters: Int, words: [String], isNameLabel: Bool)] in
             let text = line.trimmingCharacters(in: .whitespaces)
+            let parts = text.split(whereSeparator: \.isWhitespace).map(Self.stripped).filter { !$0.isEmpty }
             let words = TextMetrics.normalizedWords(text)
-            guard text.count >= 8, !words.isEmpty else { continue }
-            let reference = phrase(words)
-            if !inputPhrase.contains(reference), outputPhrase.contains(reference) { return true }
+            let subject = words.first?.split(separator: "'").first.map(String.init) ?? ""
+            let first = parts.first ?? ""
+            let isSubject = subjects.contains(subject) && (first == "I" || first.contains(where: \.isLowercase))
+            func labelPart(_ part: String) -> Bool {
+                !part.isEmpty && (particles.contains(part.lowercased()) || part.contains(where: \.isUppercase) || part.allSatisfy(\.isNumber))
+            }
+            let allLabelParts = parts.allSatisfy(labelPart)
+            let isNameLabel = !isSubject && allLabelParts && parts.contains { $0.contains(where: \.isUppercase) }
+            var result = [(characters: text.count, words: words, isNameLabel: isNameLabel)]
+            // Names embedded in a sentence keep the same protection as a standalone label.
+            // A fully title-cased subject sentence remains eligible for ordinary corrections.
+            if !allLabelParts {
+                var group: [String] = []
+                for part in parts + [""] {
+                    if labelPart(part) {
+                        group.append(part)
+                    } else {
+                        while group.first.map({ !$0.contains(where: \.isUppercase) }) == true { group.removeFirst() }
+                        while group.last.map({ !$0.contains(where: \.isUppercase) }) == true { group.removeLast() }
+                        if group.filter({ $0.contains(where: \.isUppercase) }).count >= 2 {
+                            let name = group.joined(separator: " ")
+                            result.append((characters: name.count, words: TextMetrics.normalizedWords(name), isNameLabel: true))
+                        }
+                        group.removeAll(keepingCapacity: true)
+                    }
+                }
+            }
+            return result
+        }
+        for line in lines where line.characters >= 8 && !line.words.isEmpty {
+            let reference = phrase(line.words)
+            // Only a complete corrected take may match a reference line. A shorter name/label
+            // inside it keeps the existing full-line protection against unspoken replacements.
+            let allowed = !line.isNameLabel && retainedPhrase == reference ? 1 : 0
+            if !inputPhrase.contains(reference),
+               occurrences(of: reference, in: outputPhrase) > allowed { return true }
         }
 
-        // When the take survives unchanged, inspect only the words added around it. A replacement
-        // within the take can legitimately share words with the draft, so it isn't evidence of copying.
-        guard !inputWords.isEmpty, let take = outputPhrase.range(of: inputPhrase) else { return false }
+        guard hasRetainedTake else { return false }
         func windows(_ words: [String]) -> Set<String> {
             guard words.count >= 4 else { return [] }
             return Set((0...(words.count - 4)).map { words[$0..<($0 + 4)].joined(separator: " ") })
         }
-        let referenceWindows = references.flatMap { $0.split(whereSeparator: \.isNewline) }.reduce(into: Set<String>()) {
-            $0.formUnion(windows(TextMetrics.normalizedWords(String($1))))
+        let referenceWindows = lines.reduce(into: Set<String>()) {
+            $0.formUnion(windows($1.words))
         }.subtracting(windows(inputWords))
-        let prefix = TextMetrics.normalizedWords(String(outputPhrase[..<take.lowerBound]))
-        let suffix = TextMetrics.normalizedWords(String(outputPhrase[take.upperBound...]))
-        return !windows(prefix).isDisjoint(with: referenceWindows) || !windows(suffix).isDisjoint(with: referenceWindows)
+        if additions.contains(where: { !windows($0).isDisjoint(with: referenceWindows) }) { return true }
+        // A copied sentence can be a closer match than the corrected take. Two separate plausible
+        // takes plus a new context phrase in the chosen span still indicate copying.
+        return outputWords.count >= inputWords.count + 4
+            && inputWords.count <= SmartCleanup.maxWords
+            && outputWords.count <= CleanupLimits.maxOutputTokens(for: input)
+            && !windows(retainedWords).isDisjoint(with: referenceWindows)
+            && additions.contains { retainedTake(in: $0, matching: inputWords) != nil }
+    }
+
+    // Substring edit distance: output before and after the retained take is free. Two rows bound
+    // memory; the caller bounds both word counts. Ties retain more text to avoid calling grammar additions copies.
+    private static func retainedTake(in output: [String], matching input: [String]) -> Range<Int>? {
+        guard !input.isEmpty, !output.isEmpty else { return nil }
+        typealias Step = (edits: Int, start: Int)
+        func better(_ a: Step, _ b: Step) -> Step {
+            if a.edits != b.edits { return a.edits < b.edits ? a : b }
+            return a.start <= b.start ? a : b
+        }
+        var previous: [Step] = (0...output.count).map { (0, $0) }
+        var current = previous
+        for (index, word) in input.enumerated() {
+            current[0] = (index + 1, 0)
+            for end in 1...output.count {
+                let substitution = (previous[end - 1].edits + (word == output[end - 1] ? 0 : 1), previous[end - 1].start)
+                let deletion = (previous[end].edits + 1, previous[end].start)
+                let insertion = (current[end - 1].edits + 1, current[end - 1].start)
+                current[end] = better(substitution, better(deletion, insertion))
+            }
+            swap(&previous, &current)
+        }
+        var best: (edits: Int, range: Range<Int>)?
+        // A span must need at most one edit per two input words to count as the retained take.
+        for end in 1...output.count where previous[end].edits <= input.count / 2 && previous[end].start < end {
+            let candidate = (edits: previous[end].edits, range: previous[end].start..<end)
+            if let existing = best,
+               existing.edits < candidate.edits || (existing.edits == candidate.edits && existing.range.count >= candidate.range.count) {
+                continue
+            }
+            best = candidate
+        }
+        return best?.range
     }
 
     /// A reason to reject, or nil when the output is fine.
