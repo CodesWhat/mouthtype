@@ -3,10 +3,12 @@ import PackageDescription
 
 let package = Package(
     name: "Mouthtype",
-    platforms: [.macOS(.v14)],
+    platforms: [.macOS(.v26)],
     products: [
         .library(name: "MouthtypeCore", targets: ["MouthtypeCore"]),
         .executable(name: "mouthtype-bench", targets: ["mouthtype-bench"]),
+        .executable(name: "Mouthtype", targets: ["Mouthtype"]),
+        .executable(name: "mouthtype-fn-guard", targets: ["mouthtype-fn-guard"]),
     ],
     dependencies: [
         .package(url: "https://github.com/FluidInference/FluidAudio", from: "0.17.7"),
@@ -15,6 +17,7 @@ let package = Package(
         .package(url: "https://github.com/ml-explore/mlx-swift-lm", from: "3.32.3", traits: []),
         .package(url: "https://github.com/huggingface/swift-huggingface", from: "1.0.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.5"),
+        .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0"),
     ],
     targets: [
         .target(
@@ -26,7 +29,19 @@ let package = Package(
                 .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
                 .product(name: "HuggingFace", package: "swift-huggingface"),
                 .product(name: "Tokenizers", package: "swift-transformers"),
+                .product(name: "GRDB", package: "GRDB.swift"),
             ]
+        ),
+        .target(name: "FnRemapKit"),
+        .executableTarget(name: "mouthtype-fn-guard", dependencies: ["FnRemapKit"]),
+        .target(
+            name: "MouthtypeMac",
+            dependencies: ["MouthtypeCore", "FnRemapKit"],
+            resources: [.copy("Resources/Pill"), .copy("Resources/MenuBar"), .copy("Resources/Fonts"), .copy("Resources/Sounds")]
+        ),
+        .executableTarget(
+            name: "Mouthtype",
+            dependencies: ["MouthtypeMac"]
         ),
         .executableTarget(
             name: "mouthtype-bench",
@@ -34,11 +49,19 @@ let package = Package(
                 "MouthtypeCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
-            resources: [.copy("Fixtures/cleanup-cases.json")]
+            resources: [.copy("Fixtures/cleanup-cases.json"), .copy("Fixtures/smart-cases.json")]
         ),
         .testTarget(
             name: "MouthtypeCoreTests",
             dependencies: ["MouthtypeCore", "mouthtype-bench"]
+        ),
+        .testTarget(
+            name: "FnRemapKitTests",
+            dependencies: ["FnRemapKit"]
+        ),
+        .testTarget(
+            name: "MouthtypeMacTests",
+            dependencies: ["MouthtypeMac"]
         ),
     ]
 )

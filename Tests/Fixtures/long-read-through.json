@@ -1,0 +1,23 @@
+[
+  {
+    "id": "long-repetition-read-through",
+    "input": "I think the main thing we need to do is make the first few seconds feel easier. You know, when I start talking, I don't always have the whole sentence planned out. Sometimes I know what I mean, but the wording takes a second to catch up. That's normal, I don't want every little hesitation preserved forever. I also don't want the cleanup to decide that half of what I said wasn't important. The main thing the main thing is keeping the meaning intact. We should probably we should probably check the simple cases before we get too excited about the complicated ones. I like the current direction and I think and I really like having fewer steps between thinking something and writing it down. When I say that something looks like another thing, the word like belongs there. When I say like maybe we should start over, some of those can probably go.",
+    "target": "I think the main thing we need to do is make the first few seconds feel easier. You know, when I start talking, I don't always have the whole sentence planned out. Sometimes I know what I mean, but the wording takes a second to catch up. That's normal, I don't want every little hesitation preserved forever. I also don't want the cleanup to decide that half of what I said wasn't important. The main thing is keeping the meaning intact. We should probably check the simple cases before we get too excited about the complicated ones. I like the current direction and I really like having fewer steps between thinking something and writing it down. When I say that something looks like another thing, the word like belongs there. When I say like maybe we should start over, some of those can probably go.",
+    "mustContain": [
+      "don't always have the whole sentence planned out",
+      "don't want every little hesitation preserved forever",
+      "don't want the cleanup to decide",
+      "keeping the meaning intact",
+      "check the simple cases",
+      "I like the current direction",
+      "I really like having fewer steps",
+      "looks like another thing",
+      "the word like belongs there"
+    ],
+    "mustNotContain": [
+      "the main thing the main thing",
+      "we should probably we should probably",
+      "I think and I really"
+    ]
+  }
+]

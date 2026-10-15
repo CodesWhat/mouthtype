@@ -10,8 +10,14 @@ DerivedData/
 xcuserdata/
 *.xcuserstate
 
+# Python design generators
+__pycache__/
+
 # macOS
 .DS_Store
 
 # benchmark audio and model caches
 bench-cache/
+
+# app bundle output
+build/

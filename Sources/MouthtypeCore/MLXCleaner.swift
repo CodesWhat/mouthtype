@@ -1,4 +1,5 @@
 import Foundation
+import MLX
 import MLXLLM
 import MLXLMCommon
 
@@ -18,12 +19,15 @@ public actor MLXCleaner: MeasuredCleaner {
         public let quantization: String
         public let promptFormat: PromptFormat
         public let license: String?
+        /// Size of the snapshot on disk, to show before a download.
+        public var downloadSizeMB: Int = 0
     }
 
     public nonisolated let id: String
     public nonisolated let displayName: String
     public nonisolated let modelDirectory: URL?
     public nonisolated let usesSharedPrompt: Bool
+    public nonisolated var usesNativeControls: Bool { spec.promptFormat == .s1Mini }
     public nonisolated let license: String?
     public nonisolated let spec: Spec
 
@@ -36,6 +40,36 @@ public actor MLXCleaner: MeasuredCleaner {
         license = spec.license
         usesSharedPrompt = spec.promptFormat == .shared
         modelDirectory = HubDownloader.cacheDirectory(for: spec.repo)
+    }
+
+    public nonisolated var isDownloaded: Bool { HubDownloader.isCached(id: spec.repo) }
+
+    /// The commit of the cached snapshot.
+    public nonisolated var revision: String? { HubDownloader.cachedRevision(id: spec.repo) }
+
+    public var isLoaded: Bool { container != nil }
+
+    /// Fetches the snapshot from Hugging Face. A partial download resumes where it stopped.
+    public func download(progress: @escaping @Sendable (Double) -> Void) async throws {
+        let configuration = LLMModelFactory.shared.configuration(id: spec.repo)
+        _ = try await resolve(
+            configuration: configuration, from: HubDownloader(), useLatest: false,
+            progressHandler: { progress($0.fractionCompleted) })
+    }
+
+    /// Loads a downloaded snapshot into memory without touching the network.
+    public func load() async throws {
+        if container != nil { return }
+        let downloader = HubDownloader(offline: true)
+        let configuration = LLMModelFactory.shared.configuration(id: spec.repo)
+        container = try await LLMModelFactory.shared.loadContainer(
+            from: downloader, using: TransformersTokenizerLoader(), configuration: configuration)
+    }
+
+    /// Drops the weights and returns MLX's buffer cache, so the memory goes back to the system.
+    public func unload() {
+        container = nil
+        Memory.clearCache()
     }
 
     public func prepareMeasured() async throws -> PrepareTimings {
@@ -69,9 +103,9 @@ public actor MLXCleaner: MeasuredCleaner {
         var additionalContext: [String: any Sendable]?
         switch spec.promptFormat {
         case .shared:
-            messages = [.system(CleanupPrompt.system(for: context)), .user(CleanupPrompt.user(transcript))]
+            messages = [.system(CleanupPrompt.system(for: context)), .user(CleanupPrompt.user(transcript, context: context))]
         case .s1Mini:
-            messages = [.system(S1MiniPrompt.system), .user(S1MiniPrompt.user(transcript))]
+            messages = [.system(S1MiniPrompt.system), .user(S1MiniPrompt.user(transcript, controls: context.s1Controls))]
             additionalContext = ["enable_thinking": false]
         }
         let parameters = GenerateParameters(maxTokens: CleanupLimits.maxOutputTokens(for: transcript), temperature: 0)
@@ -112,9 +146,9 @@ public enum S1MiniPrompt {
     /// Required verbatim by the model card.
     public static let system = "You are a text normalizer for speech-to-text transcripts. The input begins with a control line specifying the styling, structure, and context settings; clean the transcript to match those settings and output only the cleaned text."
 
-    public static let controlLine = "[Styling: semi-formal] [Structure: lists] [Context: general]"
+    public static let controlLine = S1MiniControls.benchmark.line
 
-    public static func user(_ transcript: String) -> String {
-        "\(controlLine)\n\(transcript)"
+    public static func user(_ transcript: String, controls: S1MiniControls = .benchmark) -> String {
+        "\(controls.line)\n\(transcript)"
     }
 }

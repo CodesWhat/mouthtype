@@ -1,0 +1,11 @@
+# Faithful cleanup, 2026-10-14
+
+Cleanup strength no longer grants permission to rephrase. Medium used to append a clarity instruction that contradicted the shared no-paraphrasing rule, allowed more content loss and ran a second formalizing pass with the native cleaner. Those differences are removed. Medium remains compatible with existing settings and now follows Light's wording-preservation rules. Formal, Casual and Very Casual still control capitalization and punctuation separately.
+
+The delivery guard also rejects changes to uncertainty or commitment expressed by “could,” “should,” “might,” “probably” and related markers. Repeated starts may collapse, and an explicit correction may replace an earlier marker. These checks supplement the existing quantity, negation, spelling and question checks; they do not establish semantic equivalence for every possible utterance.
+
+Four release cases cover the same tentative request addressed to Messages, Mail and Slack, plus a separate “could” and unsent-draft example. All four pass at Light and all four pass at Medium, with accepted model output rather than a guard fallback. The speaker's “I think,” “should probably,” “could” and “haven't sent it” survive. App context adds no greeting, sign-off or professional rewrite. Model/check times are 850–861 ms at Light and 851–870 ms at Medium on Apple M4 Pro / 48 GB, cached Gemma 4 E4B, production deadlines, one sample per case.
+
+The full source suite passes 1,052 tests: 561 Mac, 475 Core and 16 Fn. Red/green regressions cover the contradictory prompt, native formalizing pass, extra Medium content loss and changed commitment. The same full run also checks the English-decoder follow-up against the saved affected recording and eight speech/silence recordings. Private audio and paths are not published.
+
+Reproduce with `swift run -c release mouthtype-bench clean --smart light --file Tests/Fixtures/faithful-cleanup.json`, then repeat with `--smart medium`. The adjacent JSON contains inputs and proposed/delivered text. These are narrow text regressions, not an all-app accuracy or latency claim. No desktop focus was taken or live paste test repeated. The installed app has not been replaced.

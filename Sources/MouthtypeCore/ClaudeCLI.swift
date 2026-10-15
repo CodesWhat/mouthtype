@@ -105,7 +105,7 @@ public final class ClaudeCLICleaner: MeasuredCleaner {
         let clock = ContinuousClock()
         let start = clock.now
         let output = try await ClaudeCLI.run(
-            model: model, system: CleanupPrompt.system(for: context), prompt: CleanupPrompt.user(transcript))
+            model: model, system: CleanupPrompt.system(for: context), prompt: CleanupPrompt.user(transcript, context: context))
         let total = (clock.now - start).seconds
         return CleanupResult(text: CleanupPrompt.sanitize(output), firstOutputSeconds: total, totalSeconds: total)
     }

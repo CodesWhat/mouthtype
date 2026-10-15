@@ -1,0 +1,66 @@
+[
+  {
+    "id": "faithful-messages",
+    "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+    "appName": "Messages",
+    "target": "I think we should probably move the meeting. Don't send the update yet.",
+    "mustContain": [
+      "I think",
+      "should probably move the meeting",
+      "Don't send the update yet"
+    ],
+    "mustNotContain": [
+      "will move",
+      "must move",
+      "Dear",
+      "Best regards"
+    ]
+  },
+  {
+    "id": "faithful-mail",
+    "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+    "appName": "Mail",
+    "target": "I think we should probably move the meeting. Don't send the update yet.",
+    "mustContain": [
+      "I think",
+      "should probably move the meeting",
+      "Don't send the update yet"
+    ],
+    "mustNotContain": [
+      "will move",
+      "must move",
+      "Dear",
+      "Best regards"
+    ]
+  },
+  {
+    "id": "faithful-slack",
+    "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+    "appName": "Slack",
+    "target": "I think we should probably move the meeting. Don't send the update yet.",
+    "mustContain": [
+      "I think",
+      "should probably move the meeting",
+      "Don't send the update yet"
+    ],
+    "mustNotContain": [
+      "will move",
+      "must move",
+      "Dear",
+      "Best regards"
+    ]
+  },
+  {
+    "id": "uncertainty",
+    "input": "We could meet tomorrow. The draft is ready, but I haven't sent it.",
+    "target": "We could meet tomorrow. The draft is ready, but I haven't sent it.",
+    "mustContain": [
+      "could meet tomorrow",
+      "but I haven't sent it"
+    ],
+    "mustNotContain": [
+      "should meet",
+      "will meet"
+    ]
+  }
+]

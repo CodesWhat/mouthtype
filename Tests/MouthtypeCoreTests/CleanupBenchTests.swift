@@ -1,8 +1,17 @@
+import ArgumentParser
 import Foundation
 import Testing
+import MouthtypeCore
 @testable import mouthtype_bench
 
 @Suite struct CleanupCheckerTests {
+    @Test func nameChecksCanRequireExactCasing() throws {
+        let data = Data(#"{"id":"case","input":"we may ship","target":"We may ship","exact":["We may ship"],"caseSensitive":true}"#.utf8)
+        let testCase = try JSONDecoder().decode(SmartCase.self, from: data)
+        #expect(testCase.failure(for: "We may ship") == nil)
+        #expect(testCase.failure(for: "We May ship") != nil)
+    }
+
     private func makeCase(
         input: String = "um hello there", mustContain: [String] = [], mustNotContain: [String] = [],
         max: Double? = nil, min: Double? = nil
@@ -117,5 +126,59 @@ import Testing
         let two = JudgeItem(testCase: base, output: "two").cacheKey
         #expect(one != two)
         #expect(one == JudgeItem(testCase: base, output: "one").cacheKey)
+    }
+}
+
+@Suite struct NativeCleanupBenchmarkTests {
+    @Test func comparisonControlsReachTheModelWithoutReplacingDestination() async throws {
+        let base = FakeCleaner { text, _ in text }
+        let observed = ObservedCleaner(base, styling: .semiCasual, structure: .prose)
+        _ = try await observed.clean("hello there", context: CleanupContext(s1Controls:
+            S1MiniControls(destination: .email)))
+        #expect(base.contexts.first?.s1Controls == S1MiniControls(styling: .semiCasual, structure: .prose, destination: .email))
+    }
+
+    @Test func nativeControlsCanBeComparedWithoutChangingAppSettings() throws {
+        let command = try CleanTextCommand.parse([
+            "--smart", "light", "--cleaner", "superwhisper-s1-mini",
+            "--text", "the main thing the main thing is the build",
+            "--s1-style", "semi-casual", "--s1-structure", "prose",
+        ])
+        try command.validate()
+    }
+
+    @Test func nativeControlsRejectOtherModelsAndUnknownValues() throws {
+        for args in [
+            ["--smart", "light", "--cleaner", "gemma-4-e4b-it-4bit", "--text", "hello there", "--s1-style", "casual"],
+            ["--smart", "light", "--cleaner", "superwhisper-s1-mini", "--text", "hello there", "--s1-style", "invented"],
+            ["--text", "hello there", "--s1-structure", "lists"],
+        ] {
+            #expect(throws: (any Error).self) {
+                let command = try CleanTextCommand.parse(args)
+                try command.validate()
+            }
+        }
+    }
+}
+
+@Suite struct CleanupTimingRecordTests {
+    @Test func totalTimeIncludesAwaitedModelWork() async {
+        let cleaner = FakeCleaner { text, _ in
+            try await Task.sleep(for: .milliseconds(30))
+            return text
+        }
+        let run = await SmartRunner.run("the G P U needs a driver", level: .light, smart: SmartCleanup(cleaner: cleaner))
+        #expect(run.deterministic == "The GPU needs a driver")
+        #expect(run.totalCleanupMilliseconds >= 20)
+        #expect(run.totalCleanupMilliseconds >= run.deterministicMilliseconds)
+    }
+
+    @Test func recordsIncludeDeterministicAndTotalCleanupTime() throws {
+        let data = Data(#"{"id":"t","cleanerID":"s1","level":"light","input":"G P U","deterministic":"GPU","delivered":"GPU","outcome":"skipped","milliseconds":0,"deterministicMilliseconds":0.5,"totalCleanupMilliseconds":0.7}"#.utf8)
+        let record = try JSONDecoder().decode(SmartDeliveryRecord.self, from: data)
+        let encoded = try JSONEncoder().encode(record)
+        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(object["deterministicMilliseconds"] as? Double == 0.5)
+        #expect(object["totalCleanupMilliseconds"] as? Double == 0.7)
     }
 }

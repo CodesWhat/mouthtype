@@ -1,0 +1,95 @@
+[
+  {
+    "id": "sata",
+    "input": "check the S A T A disk",
+    "target": "Check the SATA disk",
+    "exact": [
+      "Check the SATA disk",
+      "Check the SATA disk."
+    ]
+  },
+  {
+    "id": "smtp",
+    "input": "restart the S M T P server",
+    "target": "Restart the SMTP server",
+    "exact": [
+      "Restart the SMTP server",
+      "Restart the SMTP server."
+    ]
+  },
+  {
+    "id": "lcd",
+    "input": "the L C D panel is ready",
+    "target": "The LCD panel is ready",
+    "exact": [
+      "The LCD panel is ready",
+      "The LCD panel is ready."
+    ]
+  },
+  {
+    "id": "qrz",
+    "input": "label Q R Z",
+    "target": "Label QRZ",
+    "exact": [
+      "Label QRZ",
+      "Label QRZ."
+    ]
+  },
+  {
+    "id": "usb-b",
+    "input": "use the U S B B cable",
+    "target": "Use the USB-B cable",
+    "exact": [
+      "Use the USB-B cable",
+      "Use the USB-B cable."
+    ]
+  },
+  {
+    "id": "five-k",
+    "input": "a five K display",
+    "target": "A 5K display",
+    "exact": [
+      "A 5K display",
+      "A 5K display."
+    ]
+  },
+  {
+    "id": "two-k",
+    "input": "the two K projector",
+    "target": "The 2K projector",
+    "exact": [
+      "The 2K projector",
+      "The 2K projector."
+    ]
+  },
+  {
+    "id": "battery",
+    "input": "a D battery is missing",
+    "target": "A D battery is missing",
+    "exact": [
+      "A D battery is missing",
+      "A D battery is missing."
+    ]
+  },
+  {
+    "id": "name",
+    "input": "J R Smith is coming",
+    "target": "J R Smith is coming",
+    "mustContain": [
+      "Smith",
+      "coming"
+    ],
+    "mustNotContain": [
+      "JRSmith"
+    ]
+  },
+  {
+    "id": "ordinary",
+    "input": "I actually enjoyed the movie",
+    "target": "I actually enjoyed the movie",
+    "exact": [
+      "I actually enjoyed the movie",
+      "I actually enjoyed the movie."
+    ]
+  }
+]

@@ -1,0 +1,94 @@
+{
+  "light": [
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "delivered": "I think we should probably move the meeting. Don't send the update yet.",
+      "deterministic": "I think we should probably move the meeting. Don't send the update yet.",
+      "id": "faithful-messages",
+      "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+      "level": "light",
+      "milliseconds": 851,
+      "outcome": "ok",
+      "proposed": "I think we should probably move the meeting. Don't send the update yet."
+    },
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "delivered": "I think we should probably move the meeting. Don't send the update yet.",
+      "deterministic": "I think we should probably move the meeting. Don't send the update yet.",
+      "id": "faithful-mail",
+      "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+      "level": "light",
+      "milliseconds": 850,
+      "outcome": "ok",
+      "proposed": "I think we should probably move the meeting. Don't send the update yet."
+    },
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "delivered": "I think we should probably move the meeting. Don't send the update yet.",
+      "deterministic": "I think we should probably move the meeting. Don't send the update yet.",
+      "id": "faithful-slack",
+      "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+      "level": "light",
+      "milliseconds": 850,
+      "outcome": "ok",
+      "proposed": "I think we should probably move the meeting. Don't send the update yet."
+    },
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "delivered": "We could meet tomorrow. The draft is ready, but I haven't sent it.",
+      "deterministic": "We could meet tomorrow. The draft is ready, but I haven't sent it.",
+      "id": "uncertainty",
+      "input": "We could meet tomorrow. The draft is ready, but I haven't sent it.",
+      "level": "light",
+      "milliseconds": 861,
+      "outcome": "ok",
+      "proposed": "We could meet tomorrow. The draft is ready, but I haven't sent it."
+    }
+  ],
+  "medium": [
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "delivered": "I think we should probably move the meeting. Don't send the update yet.",
+      "deterministic": "I think we should probably move the meeting. Don't send the update yet.",
+      "id": "faithful-messages",
+      "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+      "level": "medium",
+      "milliseconds": 854,
+      "outcome": "ok",
+      "proposed": "I think we should probably move the meeting. Don't send the update yet."
+    },
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "delivered": "I think we should probably move the meeting. Don't send the update yet.",
+      "deterministic": "I think we should probably move the meeting. Don't send the update yet.",
+      "id": "faithful-mail",
+      "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+      "level": "medium",
+      "milliseconds": 851,
+      "outcome": "ok",
+      "proposed": "I think we should probably move the meeting. Don't send the update yet."
+    },
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "delivered": "I think we should probably move the meeting. Don't send the update yet.",
+      "deterministic": "I think we should probably move the meeting. Don't send the update yet.",
+      "id": "faithful-slack",
+      "input": "Um, I think we should probably move the meeting. Don't send the update yet.",
+      "level": "medium",
+      "milliseconds": 853,
+      "outcome": "ok",
+      "proposed": "I think we should probably move the meeting. Don't send the update yet."
+    },
+    {
+      "cleanerID": "gemma-4-e4b-it-4bit",
+      "delivered": "We could meet tomorrow. The draft is ready, but I haven't sent it.",
+      "deterministic": "We could meet tomorrow. The draft is ready, but I haven't sent it.",
+      "id": "uncertainty",
+      "input": "We could meet tomorrow. The draft is ready, but I haven't sent it.",
+      "level": "medium",
+      "milliseconds": 870,
+      "outcome": "ok",
+      "proposed": "We could meet tomorrow. The draft is ready, but I haven't sent it."
+    }
+  ]
+}

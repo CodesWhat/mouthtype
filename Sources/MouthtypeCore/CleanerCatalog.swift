@@ -42,7 +42,8 @@ public enum CleanerCatalog {
             repo: "mlx-community/gemma-4-e2b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: nil),
         MLXCleaner.Spec(
             id: "gemma-4-e4b-it-4bit", displayName: "Gemma 4 E4B it (MLX 4-bit)",
-            repo: "mlx-community/gemma-4-e4b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: nil),
+            repo: "mlx-community/gemma-4-e4b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: "Gemma Terms of Use",
+            downloadSizeMB: 5150),
         MLXCleaner.Spec(
             id: "qwen3-4b-instruct-2507-4bit", displayName: "Qwen3 4B Instruct 2507 (MLX 4-bit)",
             repo: "mlx-community/Qwen3-4B-Instruct-2507-4bit", quantization: "4-bit", promptFormat: .shared, license: nil),
@@ -55,8 +56,22 @@ public enum CleanerCatalog {
         MLXCleaner.Spec(
             id: "superwhisper-s1-mini", displayName: "Superwhisper S1-mini (BF16, native prompt)",
             repo: "superwhisper/s1-mini", quantization: "bf16", promptFormat: .s1Mini,
-            license: "Apache 2.0 plus a naming clause (the model must keep the name \"S1-mini\" by \"Superwhisper\")"),
+            license: "Apache 2.0 plus a naming clause (the model must keep the name \"S1-mini\" by \"Superwhisper\")",
+            downloadSizeMB: 1447),
     ]
+
+    /// The Thorough model, also retained as the benchmark factory default.
+    public static let smartCleanupID = "gemma-4-e4b-it-4bit"
+    public static let smartCleanupName = "Gemma 4 E4B"
+
+    public static func smartCleanupID(for level: CleanupLevel) -> String {
+        level == .medium ? smartCleanupID : "superwhisper-s1-mini"
+    }
+
+    public static func makeSmartCleanup(level: CleanupLevel = .medium) -> MLXCleaner {
+        guard let spec = mlxSpec(id: smartCleanupID(for: level)) else { preconditionFailure("Smart cleanup model is missing from the catalog") }
+        return MLXCleaner(spec: spec)
+    }
 
     public static func mlxSpec(id: String) -> MLXCleaner.Spec? {
         mlxSpecs.first { $0.id == id }

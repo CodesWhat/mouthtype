@@ -61,10 +61,28 @@ public actor WhisperEngine: MeasuredTranscriber {
         )
     }
 
-    public func transcribe(samples: [Float]) async throws -> String {
+    public func transcribe(samples: [Float]) async throws -> Transcription {
         guard let kit else { throw EngineError.notPrepared(id: id) }
-        let options = DecodingOptions(verbose: false, task: .transcribe, language: "en", detectLanguage: false)
+        let options = DecodingOptions(
+            verbose: false, task: .transcribe, language: "en", detectLanguage: false, wordTimestamps: true
+        )
+        let clock = ContinuousClock()
+        let start = clock.now
         let results = try await kit.transcribe(audioArray: samples, decodeOptions: options)
-        return results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
+        let elapsed = (clock.now - start).seconds
+        let words = results.flatMap(\.segments).flatMap { $0.words ?? [] }.map {
+            WordTiming(
+                word: $0.word.trimmingCharacters(in: .whitespaces),
+                start: Double($0.start), end: Double($0.end), confidence: $0.probability
+            )
+        }
+        return Transcription(
+            text: results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines),
+            words: words,
+            confidence: nil,
+            processingSeconds: elapsed,
+            engineID: id,
+            modelRevision: "\(Self.modelRepo)/openai_whisper-\(variant)"
+        )
     }
 }

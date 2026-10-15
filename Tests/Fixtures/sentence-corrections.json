@@ -1,0 +1,39 @@
+[
+  {
+    "id": "read-corrections",
+    "input": "Let's meet Tuesday. No wait Wednesday. Make it two thirty actually three. We need five copies. Sorry. Six copies.",
+    "target": "Let's meet Wednesday. Make it 3. We need 6 copies.",
+    "exact": [
+      "Let's meet Wednesday. Make it 3. We need 6 copies.",
+      "Let's meet Wednesday. Make it 3. We need six copies.",
+      "Let's meet Wednesday. Make it 3:00. We need 6 copies.",
+      "Let's meet Wednesday. Make it 3:00. We need six copies.",
+      "Let's meet Wednesday. Make it three. We need 6 copies.",
+      "Let's meet Wednesday. Make it three. We need six copies.",
+      "Let's meet Wednesday at 3. We need 6 copies.",
+      "Let's meet Wednesday at 3. We need six copies.",
+      "Let's meet Wednesday at 3:00. We need 6 copies.",
+      "Let's meet Wednesday at 3:00. We need six copies.",
+      "Let's meet Wednesday at three. We need 6 copies.",
+      "Let's meet Wednesday at three. We need six copies."
+    ]
+  },
+  {
+    "id": "sentence-correction",
+    "input": "Order two tickets. Sorry. Three tickets.",
+    "target": "Order 3 tickets.",
+    "exact": [
+      "Order 3 tickets.",
+      "Order three tickets."
+    ]
+  },
+  {
+    "id": "ordinary-apology",
+    "input": "Sorry. I missed the bus and will be late.",
+    "target": "Sorry. I missed the bus and will be late.",
+    "exact": [
+      "Sorry. I missed the bus and will be late.",
+      "Sorry, I missed the bus and will be late."
+    ]
+  }
+]
