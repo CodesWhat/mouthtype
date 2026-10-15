@@ -221,6 +221,19 @@ private final class FakeLoginService: LoginItemService {
 
 @MainActor
 @Suite struct ActionsMenuTests {
+    @Test func aChosenDictationComboTakesPrecedenceOverPasteLast() {
+        let suite = "ActionsMenuTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+        ShortcutSettings.save(DictationShortcut(keyCode: 9, modifiers: CGEventFlags.maskCommand.rawValue | CGEventFlags.maskControl.rawValue, keyName: "V"), in: defaults)
+        let section = ActionsMenuSection(defaults: defaults, loginItem: LoginItem(service: FakeLoginService(status: .enabled)), onPasteLast: {}, onCopyLast: {})
+        #expect(section.items[0].keyEquivalent.isEmpty)
+        #expect(section.items[1].keyEquivalent == "c")
+        #expect(section.items[0].action != nil)
+        ShortcutSettings.save(nil, in: defaults)
+        section.refresh()
+        #expect(section.items[0].keyEquivalent == "v")
+    }
     @Test func itemsCarryTheShortcutsAndCheckboxes() {
         let suite = "ActionsMenuTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

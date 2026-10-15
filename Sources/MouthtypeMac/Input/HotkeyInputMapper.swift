@@ -4,6 +4,7 @@ import MouthtypeCore
 public enum HotkeySource: Equatable, Sendable {
     case fnFlag
     case remapped(keyCode: UInt16)
+    case shortcut(DictationShortcut)
 }
 
 extension Key {
@@ -24,6 +25,7 @@ struct HotkeyInputMapper {
     let source: HotkeySource
     private(set) var state = ModifierState()
     private var remapKeyHeld = false
+    private var shortcutMatcher = ShortcutMatcher()
     /// A locked recording is open with no key down. Only Esc, which cancels it, is worth passing on then.
     var lockedRecording = false
 
@@ -35,12 +37,35 @@ struct HotkeyInputMapper {
         switch source {
         case .fnFlag: state.fnHeld
         case .remapped: remapKeyHeld
+        case .shortcut: shortcutMatcher.held
         }
+    }
+
+    mutating func resetCapsLockHold() {
+        if case let .shortcut(shortcut) = source, shortcut.isCapsLock { shortcutMatcher = ShortcutMatcher() }
     }
 
     /// `otherKeysHeld` is asked only at the moment the hotkey goes down.
     mutating func map(_ sample: TapSample, otherKeysHeld: () -> Bool) -> MappedInput? {
         guard sample.userData != SyntheticEvents.stamp else { return nil }
+
+        if case let .shortcut(shortcut) = source {
+            guard !sample.isAutorepeat, sample.keyCode != Self.syntheticFnReleaseKeyCode else { return nil }
+            let wasHeld = shortcutMatcher.held
+            let held = shortcutMatcher.update(sample, shortcut: shortcut)
+            if held != wasHeld {
+                return MappedInput(keyEvent: KeyEvent(key: held && otherKeysHeld() ? .heldElsewhere : nil,
+                    modifiers: held ? [.fn] : []), timestampNanos: sample.timestamp)
+            }
+            guard held || lockedRecording else { return nil }
+            if held, sample.kind == .flagsChanged, sample.flags & DictationShortcut.modifierMask & ~shortcut.requiredFlags != 0 {
+                return MappedInput(keyEvent: KeyEvent(key: .heldElsewhere, modifiers: [.fn]), timestampNanos: sample.timestamp)
+            }
+            if sample.kind == .keyDown, sample.keyCode != shortcut.keyCode {
+                return MappedInput(keyEvent: KeyEvent(key: Key(code: sample.keyCode), modifiers: held ? [.fn] : []), timestampNanos: sample.timestamp)
+            }
+            return nil
+        }
 
         switch sample.kind {
         case .flagsChanged:
@@ -48,6 +73,7 @@ struct HotkeyInputMapper {
             switch source {
             case .fnFlag: state.apply(keyCode: sample.keyCode, flags: sample.flags)
             case .remapped: state.apply(keyCode: sample.keyCode, flags: sample.flags, tracksFn: false)
+            case .shortcut: return nil
             }
             return edge(wasHeld: wasHeld, sample, otherKeysHeld: otherKeysHeld)
 
