@@ -108,6 +108,11 @@ struct PhraseEditorView: View {
     private var form: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView { fields.padding(24) }
+            if let error = editor.error {
+                Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.red)
+                    .font(.callout).fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 24).padding(.bottom, 12)
+            }
             HStack {
                 if editor.original != nil {
                     Button("Delete", role: .destructive) { confirmDelete = true }
@@ -149,10 +154,6 @@ struct PhraseEditorView: View {
                 }.controlSize(.small)
                 Text("{date} uses today’s date. {clipboard} uses the clipboard text captured for this dictation, or nothing if it’s empty.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            if let error = editor.error {
-                Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.red)
-                    .font(.callout).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
