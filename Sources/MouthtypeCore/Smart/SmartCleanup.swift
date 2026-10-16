@@ -108,6 +108,7 @@ public actor SmartCleanup {
         var ordinary: [NameJoining.Candidate]
     }
     private var current: Task<Result<Draft, Error>, Never>?
+    private var modelPaused = false
     private let customBudget: Bool
 
     public init(cleaner: any TextCleaner, budget: (@Sendable (Int) -> Duration)? = nil) {
@@ -115,6 +116,22 @@ public actor SmartCleanup {
         self.budget = budget ?? (cleaner.usesNativeControls ? SmartCleanup.defaultBudget : SmartCleanup.qualityBudget)
         self.customBudget = budget != nil
     }
+
+    /// Settle a timed-out generation before unloading its model or exiting the process.
+    /// Dictation deadlines still return fallback immediately; only explicit teardown waits here.
+    public func waitForPendingWork() async {
+        while let busy = current {
+            _ = await busy.value
+            if current == busy { current = nil }
+        }
+    }
+
+    public func pauseForModelUnload() async {
+        modelPaused = true
+        await waitForPendingWork()
+    }
+
+    public func resumeAfterModelLoad() { modelPaused = false }
 
     public func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
         let start = clock.now
@@ -130,7 +147,7 @@ public actor SmartCleanup {
                 postEdits: post, promptSHA: sha
             )
         }
-        guard request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
+        guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
 
         let context = CleanupContext(vocabulary: request.dictionary.map(\.written), appName: request.appName,
             level: request.level, before: request.context?.before, after: request.context?.after)
@@ -149,6 +166,7 @@ public actor SmartCleanup {
             if current == busy { current = nil }
         }
 
+        guard !modelPaused else { return finish(.skipped) }
         let passes = cleaner.usesNativeControls
             ? Self.passes(level: request.level, style: request.style, destination: request.destination)
             : [S1MiniControls.benchmark]
@@ -161,10 +179,12 @@ public actor SmartCleanup {
                 let guardInput = NameJoining.applying(approved, to: request.text)
                 var output = CorrectionCommas.apply(guardInput)
                 if settleCorrections {
+                    try Task.checkCancellation()
                     output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: correctionContext))
                     if output.isEmpty { return .success(Draft(text: output, guardInput: guardInput, ordinary: ordinary)) }
                 }
                 for controls in passes {
+                    try Task.checkCancellation()
                     var passContext = context
                     passContext.s1Controls = controls
                     output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: passContext))

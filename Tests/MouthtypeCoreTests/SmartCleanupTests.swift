@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import MouthtypeCore
 
@@ -444,6 +445,38 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         cleaner.usesNativeControls = false
         let result = await SmartCleanup(cleaner: cleaner).run(request(text))
         #expect(result.outcome == .ok && result.modelText == text)
+    }
+
+    @Test func pausedModelKeepsRequestsOutUntilResumed() async {
+        let cleaner = FakeCleaner(returning: "We should leave earlier to beat the traffic.")
+        let service = smart(cleaner)
+        await service.pauseForModelUnload()
+        let fallback = await service.run(request(sentence))
+        #expect(fallback.outcome == .skipped && fallback.text == sentence && cleaner.calls == 0)
+        await service.resumeAfterModelLoad()
+        #expect(await service.run(request(sentence)).outcome == .ok)
+        #expect(cleaner.calls == 1)
+    }
+
+    @Test func explicitShutdownWaitsForATimedOutWorkerWithoutDelayingFallback() async {
+        let gate = Gate()
+        let finished = OSAllocatedUnfairLock(initialState: false)
+        let cleaner = FakeCleaner { text, _ in
+            await gate.wait()
+            finished.withLock { $0 = true }
+            return text
+        }
+        let service = smart(cleaner, budgetMs: 20)
+        let result = await service.run(request(sentence))
+        #expect(result.outcome == .timeout && result.text == sentence)
+        #expect(!finished.withLock { $0 })
+        let release = Task {
+            try? await Task.sleep(for: .milliseconds(200))
+            await gate.release()
+        }
+        await service.waitForPendingWork()
+        #expect(finished.withLock { $0 })
+        await release.value
     }
 
     @Test func aSlowModelTimesOutAndTheInputIsDelivered() async {
