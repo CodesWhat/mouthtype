@@ -1,0 +1,25 @@
+name: Linux engine proof
+
+on:
+  push:
+    branches: [main, dev/v0.1.0]
+    paths: ["tools/linux-engine-proof/**", ".github/workflows/linux-engine-proof.yml"]
+  pull_request:
+    paths: ["tools/linux-engine-proof/**", ".github/workflows/linux-engine-proof.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  orchestration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: No-model worker, cancellation and fixture checks
+        run: python3 -W error::ResourceWarning -m unittest discover -s tools/linux-engine-proof -p 'test_*.py'
