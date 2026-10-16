@@ -24,6 +24,10 @@ Turning overrides off hides the controls and keeps their saved choices. Changing
 
 The sidebar opens the existing **Saved spellings** and **Phrases** editors, preserving their save, cancel and draft protection behavior. Settings changes save immediately. Command-W closes the window.
 
+In **Saved spellings**, **Import CSV…** previews a selected UTF-8 CSV before changing the library. Use a `name` header for names alone, or `heard,written` headers for exact aliases (either column order works). For example, `shawn,Sean` replaces the exact heard name with Sean. A name-only row saves that name as both the heard and written form; it does not guess pronunciations. Quoted commas, doubled quotes and multiline fields are supported. Files can contain up to 5,000 data rows and 1 MiB, with the same 128-character field limits as manual editing.
+
+The preview shows new rows, already-saved aliases, repeated rows and errors. Identical aliases are skipped. A conflicting alias or invalid row blocks the whole import until the CSV is fixed. **Import** adds only the previewed new spellings and preserves existing entries, their order and metadata. **Cancel** changes nothing. Save or cancel a dirty spelling draft first. If another writer changes the library after preview, cancel and choose the CSV again to review the current state.
+
 ## First-run setup
 
 On the first ordinary launch with missing Microphone or Accessibility access, **Set Up Mouthtype** opens once. Permission requests follow the setup buttons. Closing it or choosing Set up later does not mark the app ready, and relaunching does not repeat the window or automatically ask for permissions. Existing users with both grants do not get an upgrade window. Reopen it from **Settings → General → Set Up Mouthtype**. A permission attention item in the menu also opens setup.

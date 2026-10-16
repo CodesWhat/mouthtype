@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor final class SpellingEditorWindow: NSWindowController, NSWindowDelegate {
     let editor: SpellingEditor
@@ -60,6 +61,9 @@ struct SpellingEditorView: View {
                 .font(.callout).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.vertical, 13)
         }
         .background(Color(nsColor: .windowBackgroundColor))
+        .sheet(isPresented: $editor.showingImport, onDismiss: editor.cancelImport) {
+            SpellingImportView(editor: editor).frame(minWidth: 620, idealWidth: 720, minHeight: 480, idealHeight: 560)
+        }
         .confirmationDialog("Delete this spelling?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete Spelling", role: .destructive) { editor.delete() }
         } message: { Text("Your other saved spellings will stay in the library.") }
@@ -74,6 +78,9 @@ struct SpellingEditorView: View {
             }
             Button { editor.newSpelling() } label: { Label("New Spelling", systemImage: "plus") }
                 .disabled(editor.isDirty || editor.loadFailed)
+            Button("Import CSV…", systemImage: "square.and.arrow.down") { chooseCSV() }
+                .disabled(editor.isDirty || editor.loadFailed)
+                .accessibilityIdentifier("spelling-import-csv")
             ScrollView {
                 VStack(alignment: .leading, spacing: 6) {
                     if editor.items.isEmpty {
@@ -99,6 +106,19 @@ struct SpellingEditorView: View {
         }.padding(18)
     }
 
+    private func chooseCSV() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.message = "Choose a UTF-8 CSV to preview. Nothing is imported until you confirm."
+        panel.prompt = "Preview"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            editor.previewImport(fileURL: url)
+        }
+    }
+
     private var form: some View {
         VStack(alignment: .leading, spacing: 0) {
             ScrollView {
@@ -122,6 +142,10 @@ struct SpellingEditorView: View {
                             .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                 }.padding(24)
+            }
+            if let message = editor.importMessage {
+                Label(message, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
+                    .padding(.horizontal, 24).padding(.bottom, 12)
             }
             if let error = editor.error ?? editor.validationMessage {
                 Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.red)
