@@ -52,6 +52,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     private(set) var loads = 0
     private(set) var unloads = 0
     private(set) var downloads = 0
+    private(set) var cleanCalls = 0
     var loadDelay: Duration = .zero
     var loadError: Error?
     var progressSteps: [Double] = [0.25, 0.5, 1]
@@ -70,6 +71,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     func prepare() async throws {}
 
     func clean(_ transcript: String, context: CleanupContext) async throws -> String {
+        lock.withLock { cleanCalls += 1 }
         await cleanGate?.wait()
         return transcript
     }
@@ -101,6 +103,27 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
 @MainActor
 @Suite struct CleanerHostTests {
+    @Test func newCleanupDuringUnloadFallsBackUntilTheModelIsReloaded() async {
+        let gate = DownloadGate()
+        let (host, model, level) = host(downloaded: true)
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        let before = model.cleanCalls
+        model.unloadGate = gate
+        level.value = .basic
+        host.levelChanged()
+        try? await Task.sleep(for: .milliseconds(40))
+        let request = SmartCleanupRequest(text: "keep this take", level: .light)
+        let during = await host.run(request)
+        #expect(during.text == request.text && during.outcome == .skipped)
+        #expect(model.cleanCalls == before)
+        await gate.release()
+        level.value = .light
+        host.levelChanged()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        #expect(await host.run(request).outcome == .ok)
+    }
+
     @Test func unloadWaitsForTheModelWorkAfterATimeout() async {
         let gate = DownloadGate()
         let model = FakeSmartModel(downloaded: true)

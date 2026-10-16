@@ -108,6 +108,7 @@ public actor SmartCleanup {
         var ordinary: [NameJoining.Candidate]
     }
     private var current: Task<Result<Draft, Error>, Never>?
+    private var modelPaused = false
     private let customBudget: Bool
 
     public init(cleaner: any TextCleaner, budget: (@Sendable (Int) -> Duration)? = nil) {
@@ -125,6 +126,13 @@ public actor SmartCleanup {
         }
     }
 
+    public func pauseForModelUnload() async {
+        modelPaused = true
+        await waitForPendingWork()
+    }
+
+    public func resumeAfterModelLoad() { modelPaused = false }
+
     public func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
         let start = clock.now
         let words = TextMetrics.wordCount(request.text)
@@ -139,7 +147,7 @@ public actor SmartCleanup {
                 postEdits: post, promptSHA: sha
             )
         }
-        guard request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
+        guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
 
         let context = CleanupContext(vocabulary: request.dictionary.map(\.written), appName: request.appName,
             level: request.level, before: request.context?.before, after: request.context?.after)
@@ -158,6 +166,7 @@ public actor SmartCleanup {
             if current == busy { current = nil }
         }
 
+        guard !modelPaused else { return finish(.skipped) }
         let passes = cleaner.usesNativeControls
             ? Self.passes(level: request.level, style: request.style, destination: request.destination)
             : [S1MiniControls.benchmark]

@@ -152,6 +152,7 @@ final class CleanerHost: CleanupModelManaging {
                 let warmStart = clock.now
                 _ = try? await model.clean("warm up the cleanup model", context: CleanupContext())
                 Log.cleaner.info("model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
+                await smart.resumeAfterModelLoad()
                 finishLoad(.ready(loadSeconds: loadSeconds))
             } catch {
                 Log.cleaner.error("model \(model.id, privacy: .public) failed to load: \(error.localizedDescription, privacy: .public)")
@@ -176,7 +177,7 @@ final class CleanerHost: CleanupModelManaging {
         guard case .ready = state else { return }
         state = .unloaded
         unloadTask = Task { [model, smart] in
-            await smart.waitForPendingWork()
+            await smart.pauseForModelUnload()
             await model.unload()
             unloadTask = nil
         }

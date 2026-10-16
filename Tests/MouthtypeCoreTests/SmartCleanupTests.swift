@@ -447,6 +447,17 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(result.outcome == .ok && result.modelText == text)
     }
 
+    @Test func pausedModelKeepsRequestsOutUntilResumed() async {
+        let cleaner = FakeCleaner(returning: "We should leave earlier to beat the traffic.")
+        let service = smart(cleaner)
+        await service.pauseForModelUnload()
+        let fallback = await service.run(request(sentence))
+        #expect(fallback.outcome == .skipped && fallback.text == sentence && cleaner.calls == 0)
+        await service.resumeAfterModelLoad()
+        #expect(await service.run(request(sentence)).outcome == .ok)
+        #expect(cleaner.calls == 1)
+    }
+
     @Test func explicitShutdownWaitsForATimedOutWorkerWithoutDelayingFallback() async {
         let gate = Gate()
         let finished = OSAllocatedUnfairLock(initialState: false)
