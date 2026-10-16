@@ -126,6 +126,9 @@ p {
   gap: 36px;
   font-size: 14px;
 }
+.masthead nav a {
+  white-space: nowrap;
+}
 .masthead nav a:not(.nav-alpha):hover {
   text-decoration: underline;
   text-underline-offset: 5px;
@@ -522,6 +525,12 @@ footer {
   text-decoration: underline;
   text-underline-offset: 4px;
 }
+.footer-top nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: flex-end;
+}
 .wordmark {
   display: flex;
   justify-content: space-between;
@@ -646,8 +655,11 @@ footer {
     padding: 0 20px;
   }
   .masthead {
-    height: 82px;
-    gap: 12px;
+    height: auto;
+    min-height: 110px;
+    flex-wrap: wrap;
+    padding: 18px 0;
+    gap: 14px;
   }
   .brand {
     font-size: 34px;
@@ -658,10 +670,16 @@ footer {
     height: 32px;
   }
   .masthead nav > a:not(.nav-alpha) {
-    display: none;
+    display: inline-block;
+  }
+  .masthead nav {
+    width: 100%;
+    gap: 10px;
+    font-size: 11px;
+    justify-content: space-between;
   }
   .nav-alpha {
-    padding: 9px 10px;
+    padding: 6px 9px;
     font-size: 11px;
   }
   .nav-alpha span {
