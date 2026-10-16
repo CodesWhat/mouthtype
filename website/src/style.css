@@ -219,6 +219,15 @@ h1 em {
 .primary:hover {
   background: var(--action-hover);
 }
+.download-source {
+  margin: 12px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+}
+.download-source a {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
 .availability {
   font: 9px/1.8 var(--mono);
   letter-spacing: 0.5px;
