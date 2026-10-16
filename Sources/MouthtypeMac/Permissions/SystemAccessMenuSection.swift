@@ -17,7 +17,7 @@ public final class SystemAccessMenuSection: NSObject, MenuSection {
     public func update(shortcut: DictationShortcut?) {
         self.shortcut = shortcut
         remapItem.isHidden = shortcut != nil
-        if shortcut != nil { globeItem.isHidden = true }
+        globeItem.isHidden = globeItem.title.isEmpty || shortcut != nil
         update(hotkeyHealth: health)
     }
 
