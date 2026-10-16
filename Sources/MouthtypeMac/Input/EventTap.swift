@@ -68,6 +68,7 @@ final class EventTap {
             options = .listenOnly
         case .keys:
             mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+                | (context.shortcut == nil ? 0 : 1 << CGEventType.flagsChanged.rawValue)
             options = .defaultTap
         }
         let retained = Unmanaged.passRetained(context)
@@ -152,16 +153,24 @@ private func tapCallback(
     let shared = context.shared
     if sample.userData == SyntheticEvents.stamp { shared.stampedSeen.wrappingAdd(1, ordering: .relaxed) }
     let pending = context.role == .keys && sample.kind != .flagsChanged ? shared.pending.withLock { $0[sample.keyCode] } : nil
+    let wasHeld = shared.hotkeyHeld.load(ordering: .relaxed)
+    let shortcutHeld: Bool
+    if context.role == .keys, let shortcut = context.shortcut {
+        shortcutHeld = shared.shortcutMatcher.withLock { $0.update(sample, shortcut: shortcut) }
+    } else { shortcutHeld = wasHeld }
     let decision = TapPolicy.decide(
         sample,
         role: context.role,
         recording: shared.recording.load(ordering: .relaxed),
         swallowedKey: context.swallowedKey,
-        hotkeyHeld: shared.hotkeyHeld.load(ordering: .relaxed),
+        hotkeyHeld: wasHeld,
         pending: pending,
-        idleKeysReported: context.idleKeysReported
+        idleKeysReported: context.idleKeysReported,
+        shortcut: context.shortcut, shortcutHeld: shortcutHeld
     )
-    if let held = TapPolicy.holdChange(sample, swallowedKey: context.swallowedKey, tracksFnFlag: context.tracksFnFlag) {
+    if context.role == .keys, context.shortcut != nil {
+        shared.hotkeyHeld.store(shortcutHeld, ordering: .relaxed)
+    } else if context.shortcut == nil, let held = TapPolicy.holdChange(sample, swallowedKey: context.swallowedKey, tracksFnFlag: context.tracksFnFlag) {
         shared.hotkeyHeld.store(held, ordering: .relaxed)
     }
     if let combo = decision.replacement, let emulator = context.emulator,
@@ -169,7 +178,7 @@ private func tapCallback(
         shared.emulated.wrappingAdd(1, ordering: .relaxed)
     }
     if context.role == .keys {
-        switch TapPolicy.pendingChange(for: sample, decision: decision) {
+        switch TapPolicy.pendingChange(for: sample, decision: decision, shortcutKey: context.shortcut?.keyCode) {
         case .none: break
         case let .set(value): shared.pending.withLock { $0[sample.keyCode] = value }
         case .clear: shared.pending.withLock { $0[sample.keyCode] = nil }

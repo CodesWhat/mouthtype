@@ -84,11 +84,17 @@ public final class HotkeyService {
     private var keyTapStaysOn: Bool {
         if options.observesKeys { return true }
         if case .remapped = options.source { return true }
+        if case .shortcut = options.source { return true }
         return false
     }
 
     private var swallowedKey: UInt16? {
         if case let .remapped(code) = options.source { return code }
+        return nil
+    }
+
+    private var shortcut: DictationShortcut? {
+        if case let .shortcut(value) = options.source { return value }
         return nil
     }
 
@@ -200,7 +206,7 @@ public final class HotkeyService {
         return TapContext(
             role: role, sink: messageSink, swallowedKey: swallowedKey, shared: shared,
             emulator: remapped ? emulator : nil, tracksFnFlag: swallowedKey == nil, idleKeysReported: options.observesKeys,
-            countsKeys: role == .flags && !keyTapStaysOn
+            countsKeys: role == .flags && !keyTapStaysOn, shortcut: shortcut
         )
     }
 
@@ -221,8 +227,20 @@ public final class HotkeyService {
         }
         var excluded: [UInt16] = []
         if let swallowedKey { excluded.append(swallowedKey) }
+        if let shortcut { excluded.append(shortcut.keyCode) }
         let probe = otherKeysHeldProbe
         guard let mapped = mapper.map(sample, otherKeysHeld: { probe(excluded) }) else { return }
+        if shortcut?.isCapsLock == true, sample.kind == .flagsChanged, sample.keyCode == 57 {
+            if engine.isLocked {
+                engine.endLock()
+                dispatch(.released, nanos: sample.timestamp)
+            } else if let gesture = engine.process(mapped.keyEvent, now: Self.date(nanos: mapped.timestampNanos)) {
+                dispatch(gesture, nanos: sample.timestamp)
+                if let lock = engine.lockFromChord() { dispatch(lock, nanos: sample.timestamp) }
+                _ = engine.process(KeyEvent(key: nil, modifiers: []), now: Self.date(nanos: sample.timestamp))
+            }
+            return
+        }
         guard let gesture = engine.process(mapped.keyEvent, now: Self.date(nanos: mapped.timestampNanos)) else { return }
         dispatch(gesture, nanos: mapped.timestampNanos)
     }
@@ -230,6 +248,7 @@ public final class HotkeyService {
     /// Space while the hotkey is held and a recording is in progress: the hands-free toggle.
     private func isLockChord(_ sample: TapSample) -> Bool {
         sample.kind == .keyDown && !sample.isAutorepeat && sample.keyCode == FnCombos.spaceKeyCode
+            && shortcut?.keyCode != FnCombos.spaceKeyCode
             && sample.userData != SyntheticEvents.stamp && mapper.hotkeyHeld && engine.isRecording && !engine.isLocked
     }
 
@@ -255,6 +274,12 @@ public final class HotkeyService {
     }
 
     private func setRecording(_ recording: Bool) {
+        if !recording, shortcut?.isCapsLock == true {
+            mapper.resetCapsLockHold()
+            engine = GestureEngine(configuration: options.configuration)
+            shared.hotkeyHeld.store(false, ordering: .relaxed)
+            shared.shortcutMatcher.withLock { $0 = ShortcutMatcher() }
+        }
         if recording {
             if slots[.keys]?.tap == nil, let keyTap = makeTap(.keys) {
                 slots[.keys] = Slot(tap: keyTap)
@@ -329,6 +354,7 @@ public final class HotkeyService {
         if case let .remapped(code) = options.source {
             destinationDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(code))
         }
+        if let shortcut { destinationDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(shortcut.keyCode)) }
         guard let sample = Self.resyncSample(
             source: options.source,
             hotkeyHeld: mapper.hotkeyHeld,
@@ -337,6 +363,7 @@ public final class HotkeyService {
             timestampNanos: HostClock.now()
         ) else { return }
         shared.hotkeyHeld.store(false, ordering: .relaxed)
+        if let shortcut { shared.shortcutMatcher.withLock { _ = $0.update(sample, shortcut: shortcut) } }
         Log.hotkey.info("resyncing a missed hotkey release")
         process(sample)
     }
@@ -350,6 +377,11 @@ public final class HotkeyService {
         case let .remapped(code):
             guard !destinationKeyDown else { return nil }
             return TapSample(kind: .keyUp, keyCode: code, flags: currentFlags, timestamp: timestampNanos)
+        case let .shortcut(shortcut):
+            guard !shortcut.isCapsLock else { return nil }
+            guard !destinationKeyDown || currentFlags & shortcut.requiredFlags != shortcut.requiredFlags else { return nil }
+            return TapSample(kind: shortcut.isModifier ? .flagsChanged : .keyUp, keyCode: shortcut.keyCode,
+                flags: currentFlags & ~DictationShortcut.modifierFlag(for: shortcut.keyCode), timestamp: timestampNanos)
         }
     }
 

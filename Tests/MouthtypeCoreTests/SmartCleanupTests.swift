@@ -122,6 +122,181 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(result.outcome == .guardRejected && result.text == "the dry dock project build passed")
     }
 
+    @Test(arguments: [false, true])
+    func surroundingTextCopyIsRejectedDespiteCaseAndPunctuationChanges(native: Bool) async {
+        let input = "the dry dock project build passed"
+        let cleaner = FakeCleaner(returning: "project — drydock. The Drydock project build passed.")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "Project: Drydock\nLatest update:\n")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test(arguments: [false, true])
+    func aCopiedSentenceWithinALongerReferenceFallsBackToTheCurrentTake(native: Bool) async {
+        let input = "I am pausing again for dusting."
+        let cleaner = FakeCleaner(returning: "I am pausing again for testing. I am pausing again for dusting.")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "I am testing the microphone. I am pausing again for testing. ")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test(arguments: [false, true])
+    func aCopiedFollowingPhraseCannotBeAppendedToTheTake(native: Bool) async {
+        let input = "And I stop there and I'm starting again for dusting."
+        let cleaner = FakeCleaner(returning: input + " and I just stopped there to start again, just for testing")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(after: "The next paragraph. And I just stopped there to start again, just for testing. ")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test func contextWordsActuallyDictatedAreStillAllowed() async {
+        let input = "the build passed"
+        let cleaner = FakeCleaner(returning: "The build passed.")
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "The build passed.\n")))
+        #expect(result.outcome == .ok && result.text == "The build passed.")
+    }
+
+    @Test func contextualWordCorrectionIsNotMistakenForAnAppendedReference() async {
+        let input = "I am pausing again for dusting."
+        let cleaner = FakeCleaner(returning: "I am pausing again for testing.")
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "I am testing the microphone. I am pausing again for testing. ")))
+        #expect(result.outcome == .ok && result.text == "I am pausing again for testing.")
+    }
+
+    @Test func separateContextOrOutputFragmentsDoNotBecomeACopiedPhrase() {
+        #expect(!SmartCleanupGuard.copiesSurroundingText(input: "the take", output: "one two the take three four",
+            references: ["Earlier one two three four later"]))
+        #expect(!SmartCleanupGuard.copiesSurroundingText(input: "the take", output: "the take one two three four",
+            references: ["Earlier one two", "three four later"]))
+        #expect(!SmartCleanupGuard.copiesSurroundingText(input: "the take", output: "the take one two three four",
+            references: ["Earlier one two\nthree four later"]))
+    }
+
+    @Test func repeatingWordsAlreadyInTheTakeIsNotSurroundingTextCopy() {
+        #expect(!SmartCleanupGuard.copiesSurroundingText(input: "I am pausing again for testing.",
+            output: "I am pausing again for testing. I am pausing again for testing.",
+            references: ["Before that. I am pausing again for testing. After that."]))
+    }
+
+    @Test(arguments: [false, true])
+    func copiedContextAfterACorrectedTakeIsRejected(native: Bool) async {
+        let input = "And I stop there and I'm starting again for dusting."
+        let cleaner = FakeCleaner(returning: "And I stopped there and I'm starting again for dusting. And I just stopped there to start again, just for testing.")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "Earlier in this draft. And I just stopped there to start again, just for testing. Keep going. ")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test(arguments: [false, true])
+    func copiedContextBeforeAContractedTakeIsRejected(native: Bool) async {
+        let input = "I am pausing again for dusting."
+        let cleaner = FakeCleaner(returning: "I am pausing again for testing. I'm pausing again for dusting.")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(after: "Check the microphone. I am pausing again for testing. Keep going. ")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test(arguments: [
+        ("I am pausing again for dusting.", "I am pausing again for testing."),
+        ("I am testing microphone again today.", "I am testing the microphone again today."),
+        ("We can meet Tuesday, actually Wednesday afternoon.", "We can meet Wednesday afternoon."),
+        ("Try dusting again.", "Try testing again."),
+        ("I'm pausing again for dusting.", "I'm Pausing Again For Testing."),
+        ("sam howard is ready.", "Sam Howard is ready."),
+        ("sam howard, actually sam spade is ready.", "Sam Spade is ready."),
+    ], [false, true])
+    func aCorrectedTakeMayMatchAnEntireContextLine(item: (String, String), native: Bool) async {
+        let cleaner = FakeCleaner(returning: item.1)
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: item.0, level: .light,
+            context: InsertionContext(before: item.1)))
+        #expect(result.outcome == .ok && result.text == item.1)
+    }
+
+    @Test func copiedContextIsRejectedAtTheTakeWordLimit() {
+        let words = (0..<SmartCleanup.maxWords).map { "piece\($0)" }
+        let input = words.joined(separator: " ")
+        let output = (["changed"] + words.dropFirst() + ["words", "from", "the", "earlier", "draft"]).joined(separator: " ")
+        #expect(SmartCleanupGuard.copiesSurroundingText(input: input, output: output,
+            references: ["Notes. Words from the earlier draft. Keep going."]))
+    }
+
+    @Test(arguments: [false, true])
+    func anUnspokenSurnameCrossingTheRetainedTakeBoundaryIsRejected(native: Bool) async {
+        let input = "Send this to Sam."
+        let cleaner = FakeCleaner(returning: "Send this to Sam Spade.")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: "Sam Spade")))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test(arguments: [
+        ("send this to sam howard.", "Send this to Sam Spade.", "Sam Spade"),
+        ("sam howard is ready.", "Sam Spade is ready.", "Sam Spade is ready."),
+        ("i sent it to sam howard.", "I sent it to Sam Spade.", "I sent it to Sam Spade."),
+        ("the iphone 15 pro is ready.", "The iPhone 15 Air is ready.", "The iPhone 15 Air is ready."),
+        ("sam howard junior", "Sam Spade Junior", "Sam Spade Junior"),
+        ("sam van howard", "Sam van Spade", "Sam van Spade"),
+        ("iphone macbook pro", "iPhone MacBook Air", "iPhone MacBook Air"),
+        ("iphone 15 pro", "iPhone 15 Air", "iPhone 15 Air"),
+        ("it systems inc", "IT Services Inc", "IT Services Inc"),
+    ], [false, true])
+    func aShortContextNameCannotReplaceAnExplicitLowercaseSurname(item: (String, String, String), native: Bool) async {
+        let input = item.0
+        let cleaner = FakeCleaner(returning: item.1)
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(SmartCleanupRequest(text: input, level: .light,
+            context: InsertionContext(before: item.2)))
+        #expect(result.outcome == .guardRejected && result.text == input)
+        #expect(result.rejection == "surrounding text copied into output")
+    }
+
+    @Test func correctedTakeCopyDetectionCoversEditPositions() {
+        let input = "I am pausing again for dusting."
+        let words = TextMetrics.normalizedWords(input)
+        let copied = "I am pausing again for testing."
+        let references = ["Notes from this draft. \(copied) Continue here."]
+        var variants: [[String]] = [["I'm"] + words.dropFirst(2)]
+        for index in words.indices {
+            var changed = words
+            changed[index] = "now"
+            variants.append(changed)
+            var removed = words
+            removed.remove(at: index)
+            variants.append(removed)
+            for second in (index + 1)..<words.count {
+                var pair = changed
+                pair[second] = "now"
+                variants.append(pair)
+            }
+        }
+        for index in 0...words.count {
+            var inserted = words
+            inserted.insert("now", at: index)
+            variants.append(inserted)
+        }
+        for words in variants {
+            let take = words.joined(separator: " ")
+            #expect(!SmartCleanupGuard.copiesSurroundingText(input: input, output: take, references: references), "\(take)")
+            #expect(SmartCleanupGuard.copiesSurroundingText(input: input, output: copied + " " + take, references: references), "\(take)")
+            #expect(SmartCleanupGuard.copiesSurroundingText(input: input, output: take + " " + copied, references: references), "\(take)")
+        }
+    }
+
     @Test func anExistingContextSpellingCannotBecomeAnotherName() async {
         let cleaner = FakeCleaner(returning: "Send this to Mary.")
         cleaner.usesNativeControls = false

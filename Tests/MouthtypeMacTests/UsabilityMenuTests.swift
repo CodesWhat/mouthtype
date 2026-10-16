@@ -35,6 +35,15 @@ import MouthtypeCore
         }
     }
 
+    @Test func helpUsesTheChosenKeyAndItsActualGestures() {
+        let combo = HelpMenuSection.instructions(for: DictationShortcut(keyCode: 40, modifiers: CGEventFlags.maskControl.rawValue, keyName: "K"))
+        #expect(combo.contains("hold ⌃K") && !combo.contains("hold Fn"))
+        let caps = HelpMenuSection.instructions(for: DictationShortcut(keyCode: 57, keyName: "Caps Lock"))
+        #expect(caps.contains("toggle") && !caps.contains("hold Caps Lock"))
+        let space = HelpMenuSection.instructions(for: DictationShortcut(keyCode: 49, keyName: "Space"))
+        #expect(!space.contains("Space+Space"))
+    }
+
     @Test func retryAppearsOnlyAfterEngineFailure() async {
         let host = EngineHost(engineID: "missing")
         let section = EngineRetryMenuSection(host: host)

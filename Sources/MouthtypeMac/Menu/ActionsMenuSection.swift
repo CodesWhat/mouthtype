@@ -37,6 +37,9 @@ final class ActionsMenuSection: NSObject, MenuSection {
     }
 
     func refresh() {
+        let shortcut = ShortcutSettings.load(defaults)
+        pasteItem.keyEquivalent = shortcut?.claimsLastAction(keyCode: 9) == true ? "" : "v"
+        copyItem.keyEquivalent = shortcut?.claimsLastAction(keyCode: 8) == true ? "" : "c"
         soundsItem.state = SoundPreference.isEnabled(defaults) ? .on : .off
         loginItemItem.state = loginItem.menuState
     }

@@ -4,7 +4,7 @@ import MouthtypeCore
 /// Which modifier keys are down, tracked by key code so left and right stay distinct
 /// (they share one flag bit). Only `flagsChanged` events feed it: arrow and function keys
 /// carry the fn flag even when fn isn't held, so a keyDown's flags say nothing about fn.
-struct ModifierState: Equatable {
+struct ModifierState: Equatable, Sendable {
     static let fnKeyCode: UInt16 = 63
     static let capsLockKeyCode: UInt16 = 57
 
