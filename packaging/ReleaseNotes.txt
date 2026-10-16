@@ -1,0 +1,11 @@
+Mouthtype 0.1.0-alpha.4
+
+New Settings window with General, Writing, Appearance and Diagnostics.
+Choose Hold to talk or Press to toggle for your dictation shortcut.
+Set a cleanup tone for individual apps while keeping the global default.
+A quieter menu keeps daily actions handy and moves diagnostics into Settings.
+Old interrupted recordings no longer automatically reappear after newer completed takes.
+Check for signed updates in the app and choose whether to enable automatic update checks.
+
+Requires Apple Silicon and macOS 26 or later. This is an alpha; review text before sending.
+Broader app delivery, fresh installs and physical update installation still need tester feedback.

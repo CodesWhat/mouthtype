@@ -32,6 +32,20 @@
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © CodesWhat. Licensed under GPL-3.0.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>Mouthtype records your voice while you hold the dictation key and transcribes it on this Mac.</string>
+	<string>Mouthtype records your voice when you use the dictation shortcut and transcribes it on this Mac.</string>
+	<key>SUFeedURL</key>
+	<string>https://mouthtype.app/updates/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>7zHrhtNsI4Wg/9m+gUNdYj6Iw+TsJsjbb/X/EiHFzTQ=</string>
+	<key>SUVerifyUpdateBeforeExtraction</key>
+	<true/>
+	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUAllowsAutomaticUpdates</key>
+	<false/>
+	<key>SUAutomaticallyUpdate</key>
+	<false/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
 </dict>
 </plist>

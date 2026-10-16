@@ -6,7 +6,7 @@ Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or p
 
 ## Private alpha
 
-The current private alpha is `0.1.0-alpha.3` for Apple Silicon Macs on macOS 26 or later. Download the notarized ZIP from this private repository’s Releases page and follow [the alpha install notes](docs/ALPHA.md). Repository access is required for the download. Known limitations and feedback details are listed there.
+The alpha is `0.1.0-alpha.4` for Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](docs/ALPHA.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
 
 For a larger Winamp-style pill, choose **Pill Style → Hi-Fi Size → Large (2×)**. The size is saved. Changes during recording take effect the next time the pill appears.
 
@@ -14,7 +14,7 @@ For a larger Winamp-style pill, choose **Pill Style → Hi-Fi Size → Large (2�
 
 Install Xcode with Swift 6.2, then run `bash scripts/run-app.sh`. The script builds and opens a signed app bundle. A Developer ID identity keeps permission grants stable between builds; without one, builds use ad-hoc signing.
 
-Source builds include a native **Settings…** window for General, Writing and Appearance, including per-app tone rules. See [settings](docs/SETTINGS.md). This window is not in the existing alpha.3 ZIP.
+Alpha.4 includes a native **Settings…** window for General, Writing and Appearance, including per-app tone rules. See [settings](docs/SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and install only when dictation is idle.
 
 In source builds, **Settings → General → Recording behavior** offers **Hold to talk** (the default) or **Press to toggle**. Toggle starts recording with one press and stops with the next; releasing the shortcut keeps recording. This preserves your chosen key or combination. Escape cancels, except when Escape itself is your dictation key; use the pill or menu to cancel then.
 
@@ -32,7 +32,7 @@ Replacements expand after cleanup, so their spelling, capitalization, spaces, an
 
 For a terminal that loses text from large pastes, focus its window and enable **Paste Options → Split Long Pastes in [app]**. This is off by default and saved separately for Terminal, iTerm2, Ghostty, kitty and WezTerm. It applies to all windows of the selected terminal app, including CLI editors such as Claude Code and Codex CLI; it does not detect the program running inside a terminal.
 
-Split pastes preserve the text exactly and never send Return. Each part waits for a clipboard read and a settling delay before the next part. Typing, focus changes, a new clipboard copy, cancellation, an unread part, or the eight-second overall limit stop the paste. A read permits advancing the clipboard; it does not prove insertion. The original clipboard is restored unless you copied something else. An interrupted paste offers the full transcript with Copy and warns that some text may already be there. Check the field before pasting the full copy, to avoid duplicates. Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanup styles are available in source builds under **Settings → Writing**. They aren't included in the existing alpha.3 ZIP.
+Split pastes preserve the text exactly and never send Return. Each part waits for a clipboard read and a settling delay before the next part. Typing, focus changes, a new clipboard copy, cancellation, an unread part, or the eight-second overall limit stop the paste. A read permits advancing the clipboard; it does not prove insertion. The original clipboard is restored unless you copied something else. An interrupted paste offers the full transcript with Copy and warns that some text may already be there. Check the field before pasting the full copy, to avoid duplicates. Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanup styles are available under **Settings → Writing**. Rules start empty and preserve the global fallback.
 
 
 
