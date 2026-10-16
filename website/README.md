@@ -20,6 +20,12 @@ Classic is the default. The hero switches between real Classic and Hi-Fi recordi
 
 The guide labels the distributed alpha.3 separately from newer source builds with Settings and per-app tone. No public download, price or Linux release is implied. Comparison details were checked October 16, 2026; recheck the linked official documentation when updating them.
 
+## Sharing
+
+The production domain is `https://mouthtype.app`. Every page includes a canonical URL, page-specific Open Graph and large-image Twitter card metadata in its static HTML. The seven committed PNG cards in `public/social/` are 1200×630 and use the existing fonts, icon and recording-pill asset. Sharing crawlers need no JavaScript or authenticated access.
+
+Regenerate the cards with `npm --prefix website run render:social` after installing Playwright Chromium. The existing `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` override also applies to this renderer. It runs headlessly, embeds local assets and fonts, and creates no desktop window. Card generation is optional during deployment because the PNGs are committed.
+
 ## Assets
 
 `public/assets/mouthtype-icon*.png` comes from `design/icon/AppIcon.iconset`. The pill PNGs are produced by the app's `ClassicPillView` and `HiFiPillView` using fixed example levels, a four-second clock, and a 4× offscreen render. On macOS, regenerate with `bash website/scripts/render-pill-assets.sh`. The script compiles the actual view sources into a temporary renderer, creates no window and cleans up the executable. It does not launch Mouthtype or change preferences. Generated PNGs are committed, so deployment and Linux CI do not need Swift or macOS.
