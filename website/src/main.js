@@ -22,15 +22,28 @@ document.querySelectorAll('input[name="skin"]').forEach((input) => {
 const headlines = [
   {
     tagline: "SOFTWARE FOR SAYING THINGS",
-    html: "Words, straight<br>from the <em>source.</em>",
+    first: "Words, straight",
+    second: "from the ",
+    emphasis: "source.",
   },
   {
     tagline: "FROM YOUR HEAD. THROUGH YOUR MOUTH.",
-    html: "Say it.<br>Keep <em>moving.</em>",
+    first: "Say it.",
+    second: "Keep ",
+    emphasis: "moving.",
   },
 ];
 const headline = headlines[Math.floor(Math.random() * headlines.length)];
-document.querySelector("#hero-title").innerHTML = headline.html;
+const emphasis = document.createElement("em");
+emphasis.textContent = headline.emphasis;
+document
+  .querySelector("#hero-title")
+  .replaceChildren(
+    headline.first,
+    document.createElement("br"),
+    headline.second,
+    emphasis,
+  );
 document.querySelector("#hero-tagline").textContent = headline.tagline;
 
 const examples = {
