@@ -147,6 +147,25 @@ private struct Rig {
         #expect(rig.cards.presented.last?.kind == .recovered)
     }
 
+    @Test func laterDeliveredDictationSuppressesStartupCardButSavedAudioCanStillBeOpened() async throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let stale = try rig.seed(ago: 18 * 3600)
+        let completed = try rig.seed(ago: 60, audio: false)
+        try rig.store.recordInsertion(completed, InsertionRecord(finalText: "This take already landed."))
+
+        let scan = await rig.recovery.offerIfNeeded()
+
+        #expect(scan?.newest == nil && rig.recovery.offered == nil)
+        #expect(rig.cards.presented.isEmpty && rig.engine.calls == 0)
+        let saved = try #require(try rig.recovery.savedRecordings().first { $0.id == stale })
+        rig.recovery.offerSaved(saved)
+        #expect(rig.recovery.offered?.id == stale)
+        #expect(rig.cards.presented.last?.kind == .recoverOffer)
+        #expect(rig.cards.actions[.recover] != nil && rig.cards.actions[.discard] != nil)
+        #expect(rig.engine.calls == 0)
+    }
+
     @Test func theNewestIsOfferedWithItsLengthAndAgeAndTheOlderOnesCounted() async throws {
         let rig = try Rig()
         defer { rig.cleanUp() }
