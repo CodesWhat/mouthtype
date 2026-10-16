@@ -198,10 +198,66 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         try write(Self.render(entries))
     }
 
+    func previewImport(_ data: Data) throws -> SpellingImportPreview {
+        let original = try libraryContents()
+        let entries = try managedEntries(contents: original)
+        let records: [SpellingCSV.Record]
+        do { records = try SpellingCSV.records(from: data) }
+        catch { return SpellingImportPreview(rows: [], problem: error.localizedDescription, originalContents: original) }
+        let header = records.first?.fields.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() } ?? []
+        let namesOnly = header == ["name"]
+        guard namesOnly || (header.count == 2 && Set(header) == ["heard", "written"]) else {
+            return SpellingImportPreview(rows: [], problem: "Use a name column, or heard,written columns with a header row.", originalContents: original)
+        }
+        let heardColumn = namesOnly ? 0 : header.firstIndex(of: "heard")!
+        let writtenColumn = namesOnly ? 0 : header.firstIndex(of: "written")!
+        let existing = Dictionary(uniqueKeysWithValues: entries.map { (Self.heardKey(Self.rule($0).heard), Self.rule($0).written) })
+        var seen: [String: String] = [:]
+        let rows = records.dropFirst().map { record -> SpellingImportPreview.Row in
+            guard record.fields.count == header.count else {
+                return .init(id: record.line, rule: DictionaryRule(heard: record.fields.first ?? "", written: ""),
+                    status: .invalid("Expected \(header.count) column\(header.count == 1 ? "" : "s")."))
+            }
+            let heard = record.fields[heardColumn].split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            let written = record.fields[writtenColumn].trimmingCharacters(in: .whitespacesAndNewlines)
+            let rule = DictionaryRule(heard: heard, written: written)
+            let key = Self.heardKey(heard)
+            let status: SpellingImportPreview.Row.Status
+            if let message = Self.validationMessage(heard: heard, written: written) { status = .invalid(message) }
+            else if let saved = existing[key] { status = saved == written ? .existing : .invalid("Conflicts with the saved spelling “\(saved)”.") }
+            else if let earlier = seen[key] { status = earlier == written ? .duplicate : .invalid("Conflicts with another CSV row.") }
+            else { status = .add }
+            seen[key] = written
+            return .init(id: record.line, rule: rule, status: status)
+        }
+        return SpellingImportPreview(rows: rows, problem: rows.isEmpty ? "The CSV has no spellings to import." : nil, originalContents: original)
+    }
+
+    func importSpellings(_ preview: SpellingImportPreview) throws {
+        guard preview.canImport else { throw WriteError.invalid("Fix the CSV errors before importing.") }
+        let contents = try libraryContents()
+        guard contents == preview.originalContents else { throw WriteError.changed }
+        var entries = try managedEntries(contents: contents)
+        for rule in preview.additions {
+            entries.append(["heard": rule.heard, "written": rule.written, "starred": false])
+        }
+        try write(Self.render(entries))
+    }
+
+    private func libraryContents() throws -> Data? {
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        do { return try Data(contentsOf: url) }
+        catch { throw WriteError.failed(error.localizedDescription) }
+    }
+
     private func managedEntries() throws -> [[String: Any]] {
-        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
-        let (text, entries) = try readEntries()
-        do { _ = try JSONDecoder().decode([Entry].self, from: Data(text.utf8)) }
+        try managedEntries(contents: libraryContents())
+    }
+
+    private func managedEntries(contents: Data?) throws -> [[String: Any]] {
+        guard let contents else { return [] }
+        let (_, entries) = try readEntries(contents: contents)
+        do { _ = try JSONDecoder().decode([Entry].self, from: contents) }
         catch { throw WriteError.malformed(Self.describe(error)) }
         var seen = Set<String>()
         for entry in entries {
@@ -220,9 +276,9 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         DictionaryRule(heard: string(entry["heard"]) ?? "", written: string(entry["written"]) ?? "", starred: entry["starred"] as? Bool ?? false)
     }
 
-    private func readEntries() throws -> (text: String, entries: [[String: Any]]) {
+    private func readEntries(contents: Data? = nil) throws -> (text: String, entries: [[String: Any]]) {
         let data: Data
-        do { data = try Data(contentsOf: url) } catch { throw WriteError.failed(error.localizedDescription) }
+        do { data = try contents ?? Data(contentsOf: url) } catch { throw WriteError.failed(error.localizedDescription) }
         let entries: [[String: Any]]
         do {
             guard let parsed = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else {

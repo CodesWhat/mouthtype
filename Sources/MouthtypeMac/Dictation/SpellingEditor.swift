@@ -10,6 +10,58 @@ import Observation
     var written = ""
     private(set) var error: String?
     private(set) var loadFailed = false
+    private(set) var importPreview: SpellingImportPreview?
+    private(set) var importFileName = ""
+    private(set) var importError: String?
+    private(set) var importMessage: String?
+    var showingImport = false
+    var canImport: Bool { !isDirty && !loadFailed && importError == nil && importPreview?.canImport == true }
+
+    func previewImport(data: Data, fileName: String) {
+        guard !isDirty, !loadFailed else { return }
+        cancelImport()
+        importMessage = nil
+        importFileName = fileName
+        showingImport = true
+        do { importPreview = try store.previewImport(data) }
+        catch { importError = error.localizedDescription }
+    }
+
+    func previewImport(fileURL: URL) {
+        guard !isDirty, !loadFailed else { return }
+        do {
+            let file = try FileHandle(forReadingFrom: fileURL)
+            defer { try? file.close() }
+            let data = try file.read(upToCount: SpellingCSV.maximumBytes + 1) ?? Data()
+            previewImport(data: data, fileName: fileURL.lastPathComponent)
+        } catch {
+            cancelImport()
+            importMessage = nil
+            importFileName = fileURL.lastPathComponent
+            importError = error.localizedDescription
+            showingImport = true
+        }
+    }
+
+    func cancelImport() {
+        showingImport = false
+        importPreview = nil
+        importError = nil
+        importFileName = ""
+    }
+
+    func confirmImport() {
+        guard canImport, let preview = importPreview else { return }
+        do {
+            try store.importSpellings(preview)
+            let count = preview.additions.count
+            cancelImport()
+            reload()
+            importMessage = "Imported \(count) spelling\(count == 1 ? "" : "s")."
+        } catch FileVocabulary.WriteError.changed {
+            importError = "The spelling library changed after this preview. Cancel and choose the CSV again."
+        } catch { importError = error.localizedDescription }
+    }
 
     var isDirty: Bool { heard != (original?.heard ?? "") || written != (original?.written ?? "") }
     var validationMessage: String? { isDirty ? FileVocabulary.validationMessage(heard: heard, written: written) : nil }
