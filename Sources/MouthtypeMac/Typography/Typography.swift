@@ -25,7 +25,7 @@ enum TextFontChoice: Equatable, Sendable {
 
     var title: String {
         switch self {
-        case .systema: "Systema Set"
+        case .systema: "Default"
         case .system: "System"
         case .rounded: "System Rounded"
         case .serif: "System Serif"
