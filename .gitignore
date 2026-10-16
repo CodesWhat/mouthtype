@@ -21,3 +21,11 @@ bench-cache/
 
 # app bundle output
 build/
+
+# website build and browser checks
+website/node_modules/
+website/dist/
+website/test-results/
+website/playwright-report/
+.vercel/
+.playwright-mcp/
