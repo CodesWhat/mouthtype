@@ -113,7 +113,15 @@ class GestureProofTests(unittest.TestCase):
                         break
                     time.sleep(.025)
                 else:
-                    self.fail("owned build descendant remained alive")
+                    details = {}
+                    for observed in (pid, 1):
+                        try:
+                            lines = Path(f"/proc/{observed}/status").read_text().splitlines()
+                            details[str(observed)] = {line.split(":", 1)[0]: line.split(":", 1)[1].strip()
+                                                      for line in lines if line.startswith(("Name:", "State:", "PPid:", "NSpid:"))}
+                        except OSError as error:
+                            details[str(observed)] = type(error).__name__
+                    self.fail("owned build descendant remained alive: " + json.dumps(details, sort_keys=True))
         finally:
             if process.poll() is None:
                 process.kill()
