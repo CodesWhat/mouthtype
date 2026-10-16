@@ -16,7 +16,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
     private lazy var settingsWindow = SettingsWindow(
         model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
-            onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) }),
+            onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
+            onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) }),
         actions: SettingsActions(changeShortcut: { [weak self] in self?.showShortcutEditor() },
             openSpellings: { [weak self] in self?.spellingWindow.present() },
             openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
@@ -378,7 +379,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
-        let service = HotkeyService(options: .init(source: source))
+        let service = HotkeyService(options: .init(source: source, configuration: .init(recordingMode: RecordingModePreference.current())))
         service.onHealthChange = { [weak self] health in
             Log.hotkey.info("health \(health.statusText, privacy: .public)")
             self?.systemSection.update(hotkeyHealth: health)
@@ -445,6 +446,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             service.stop()
             remapCoordinator.deactivate()
             return "The input listener could not start. Check Accessibility access, then try again. Your previous shortcut is still saved."
+        }
+    }
+
+    private func activateRecordingMode(_ mode: RecordingMode) -> String? {
+        guard shortcutWindow == nil else { return "Finish changing the shortcut before changing recording behavior." }
+        guard let service = hotkeyService else { return nil }
+        do {
+            try service.switchRecordingMode(mode)
+            try service.start()
+            return nil
+        } catch {
+            service.stop()
+            remapCoordinator.deactivate()
+            refreshGlobeCheck()
+            return "The input listener could not start. Check Accessibility access, then try again. Your previous recording behavior is still saved."
         }
     }
 

@@ -133,6 +133,17 @@ struct SettingsView: View {
                     Button("Change…", action: actions.changeShortcut).accessibilityIdentifier("settings-shortcut")
                 }
                 Divider()
+                settingRow("Recording behavior", "Changing this cancels an active recording.") {
+                    Picker("Recording behavior", selection: Binding(get: { model.recordingMode.rawValue }, set: { if let mode = RecordingMode(rawValue: $0) { model.setRecordingMode(mode) } })) {
+                        Text("Hold to talk").tag(RecordingMode.hold.rawValue)
+                        Text("Press to toggle").tag(RecordingMode.toggle.rawValue)
+                    }.labelsHidden().frame(width: 165).accessibilityIdentifier("settings-recording-mode")
+                }
+                if let error = model.recordingModeError {
+                    Text(error).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 17)
+                }
+                Divider()
                 settingRow("Cleanup", "Fast and Thorough run locally on your Mac.") {
                     Picker("Cleanup", selection: Binding(get: { model.cleanup.level.rawValue }, set: { if let level = CleanupLevel(rawValue: $0) { model.setLevel(level) } })) {
                         ForEach(CleanupLevel.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
@@ -157,7 +168,7 @@ struct SettingsView: View {
                     Text("Applies to that terminal app’s windows. Mouthtype can’t identify the program running inside it.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(.top, 12)
             }
-            callout("Hold your shortcut while you speak, then release to finish. Use How to Use Mouthtype in the menu for the gestures available with your chosen key.")
+            callout(model.recordingInstructions)
         }
     }
 

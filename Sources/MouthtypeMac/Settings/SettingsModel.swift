@@ -8,12 +8,17 @@ import UniformTypeIdentifiers
     private let loginItem: LoginItem
     private let onCleanupChanged: @MainActor () -> Void
     private let onSkinChanged: @MainActor (PillSkinKind) -> Void
+    private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
+    private var capsLockShortcut = false
+    private var escapeShortcut = false
     var page = SettingsPage.general
     private(set) var cleanup: CleanupSettings
     private(set) var sounds: Bool
     private(set) var skin: PillSkinKind
     private(set) var hiFiSize: HiFiPillSize
     private(set) var font: TextFontChoice
+    private(set) var recordingMode: RecordingMode
+    private(set) var recordingModeError: String?
     private(set) var loginState: NSControl.StateValue = .off
     private(set) var shortcut = "Fn"
     private(set) var learnCorrections = true
@@ -23,11 +28,14 @@ import UniformTypeIdentifiers
 
     init(defaults: UserDefaults = .standard, loginItem: LoginItem = LoginItem(),
          onCleanupChanged: @escaping @MainActor () -> Void = {},
-         onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in }) {
+         onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
+         onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil }) {
         self.defaults = defaults
         self.loginItem = loginItem
         self.onCleanupChanged = onCleanupChanged
         self.onSkinChanged = onSkinChanged
+        self.onRecordingModeChanged = onRecordingModeChanged
+        recordingMode = RecordingModePreference.current(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         skin = PillSkinPreference.current(defaults)
@@ -42,12 +50,37 @@ import UniformTypeIdentifiers
         skin = PillSkinPreference.current(defaults)
         hiFiSize = HiFiPillSizePreference.current(defaults)
         font = TextFontPreference.current(defaults)
-        shortcut = ShortcutSettings.load(defaults)?.displayName ?? "Fn"
+        recordingMode = RecordingModePreference.current(defaults)
+        let savedShortcut = ShortcutSettings.load(defaults)
+        shortcut = savedShortcut?.displayName ?? "Fn"
+        capsLockShortcut = savedShortcut?.isCapsLock == true
+        escapeShortcut = savedShortcut?.keyCode == 53
         loginState = loginItem.menuState
         learnCorrections = CorrectionSettings.isEnabled(defaults)
         chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
         do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil }
         catch { appStylesError = error.localizedDescription }
+    }
+
+    var recordingInstructions: String {
+        let cancel = escapeShortcut ? "Use Cancel Dictation in the menu to cancel." : "Escape cancels. You can also stop or cancel from the pill or menu."
+        if capsLockShortcut {
+            return "Press your shortcut once to start and again to finish. Caps Lock always uses a toggle; its system state may also change. " + cancel
+        }
+        if recordingMode == .toggle {
+            return "Press your shortcut once to start. Release it while you speak, then press it again to finish. " + cancel
+        }
+        return "Hold your shortcut while you speak, then release to finish. Use How to Use Mouthtype in the menu for the gestures available with your chosen key."
+    }
+
+    func setRecordingMode(_ value: RecordingMode) {
+        if let error = onRecordingModeChanged(value) {
+            recordingModeError = error
+            return
+        }
+        RecordingModePreference.set(value, in: defaults)
+        recordingMode = value
+        recordingModeError = nil
     }
 
     private func updateAppStyles(_ change: (inout AppCleanupStyles) throws -> Void) {

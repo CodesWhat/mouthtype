@@ -42,6 +42,7 @@ extension LockTrigger {
         switch self {
         case .doubleTap: .doubleTap
         case .fnSpace: .fnSpace
+        case .toggle: .toggle
         }
     }
 }

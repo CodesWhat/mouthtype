@@ -185,6 +185,17 @@ public final class HotkeyService {
         if wasRunning { try start() }
     }
 
+    public func switchRecordingMode(_ mode: RecordingMode) throws {
+        guard mode != options.configuration.recordingMode else { return }
+        let wasRunning = thread != nil
+        let interrupted = engine.isRecording
+        stop()
+        options.configuration.recordingMode = mode
+        engine = GestureEngine(configuration: options.configuration)
+        if interrupted { eventSink.yield(.cancelled(reason: .inputLost)) }
+        if wasRunning { try start() }
+    }
+
     /// Ends a locked recording that something other than the key stopped (the menu, the safety cap), so the next press starts fresh.
     public func releaseLock() {
         guard engine.isLocked else { return }
@@ -258,6 +269,7 @@ public final class HotkeyService {
         case .pressed:
             setRecording(true)
             eventSink.yield(.pressed(at: nanos))
+            if engine.isLocked { eventSink.yield(.locked(at: nanos, trigger: .toggle)) }
         case let .locked(trigger):
             eventSink.yield(.locked(at: nanos, trigger: trigger))
             refreshHealth()
