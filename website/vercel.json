@@ -4,79 +4,47 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "installCommand": "npm ci",
-  "headers": [
+  "routes": [
     {
-      "source": "/(.*)",
-      "headers": [
-        {
-          "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'"
-        },
-        {
-          "key": "Permissions-Policy",
-          "value": "camera=(), microphone=(), geolocation=()"
-        },
-        {
-          "key": "Referrer-Policy",
-          "value": "strict-origin-when-cross-origin"
-        },
-        {
-          "key": "X-Content-Type-Options",
-          "value": "nosniff"
-        },
-        {
-          "key": "X-Frame-Options",
-          "value": "DENY"
-        }
-      ]
+      "src": "/(.*)",
+      "headers": {
+        "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'none'",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Referrer-Policy": "strict-origin-when-cross-origin",
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY"
+      },
+      "continue": true
     },
     {
-      "source": "/download",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
+      "src": "/updates/appcast.xml",
+      "headers": {
+        "Cache-Control": "no-store"
+      },
+      "continue": true
     },
     {
-      "source": "/source",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
+      "src": "/releases/(.*)",
+      "headers": {
+        "Cache-Control": "public, max-age=31536000, immutable"
+      },
+      "continue": true
     },
     {
-      "source": "/updates/appcast.xml",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
+      "src": "/download",
+      "headers": {
+        "Location": "/releases/0.1.0-alpha.4/Mouthtype-0.1.0-alpha.4-macos-arm64.zip",
+        "Cache-Control": "no-store"
+      },
+      "status": 302
     },
     {
-      "source": "/releases/(.*)",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=31536000, immutable"
-        }
-      ]
-    }
-  ],
-  "redirects": [
-    {
-      "source": "/download",
-      "destination": "/releases/0.1.0-alpha.4/Mouthtype-0.1.0-alpha.4-macos-arm64.zip",
-      "statusCode": 302
-    },
-    {
-      "source": "/source",
-      "destination": "/releases/0.1.0-alpha.4/Mouthtype-0.1.0-alpha.4-source.tar.gz",
-      "statusCode": 302
+      "src": "/source",
+      "headers": {
+        "Location": "/releases/0.1.0-alpha.4/Mouthtype-0.1.0-alpha.4-source.tar.gz",
+        "Cache-Control": "no-store"
+      },
+      "status": 302
     }
   ]
 }
