@@ -67,21 +67,33 @@
           <div class="object-stage" data-skin="classic">
             <div
               class="product-preview"
-              role="img"
-              aria-label="Mouthtype's Classic recording pill over an example note"
+              role="group"
+              data-demo="ready"
+              aria-label="Speaking and typing illustration with the Classic Mouthtype pill"
             >
               <div class="preview-paper">
-                <span>A THOUGHT, IN PROGRESS</span>
-                <p>There’s a better way<br />to put this.</p>
-                <div class="paper-lines" aria-hidden="true">
-                  <i></i><i></i><i></i>
+                <div class="pace-lane voice-lane">
+                  <span class="pace-label">Speaking</span>
+                  <p id="voice-copy" aria-hidden="true">
+                    I'll send the first draft before lunch.
+                  </p>
                 </div>
+                <div class="pace-lane typing-lane">
+                  <span class="pace-label">Typing</span>
+                  <p id="typing-copy" aria-hidden="true">
+                    I'll send the first draft before lunch.
+                  </p>
+                </div>
+                <p class="sr-only">
+                  Prepared illustration of the same phrase arriving at speaking
+                  pace and typing pace: I'll send the first draft before lunch.
+                </p>
               </div>
               <img
                 class="pill-preview"
                 id="pill-preview"
                 src="/assets/classic-recording.png"
-                alt="Mouthtype Classic recording pill, rendered from the app"
+                alt="Mouthtype Classic recording pill"
                 width="416"
                 height="112"
               />
@@ -101,9 +113,6 @@
                 ></label
               >
             </fieldset>
-            <p class="asset-caption">
-              The real Mouthtype pills. Two ways to wear it.
-            </p>
           </div>
         </section>
         <section
@@ -112,21 +121,39 @@
           aria-label="Product principles"
         >
           <div>
-            <span class="principle-number">01</span>
+            <img
+              class="principle-icon"
+              src="/assets/benefit-local.svg"
+              width="24"
+              height="24"
+              alt=""
+            />
             <p>
               <strong>On your machine.</strong
               ><span>Speech recognition runs locally.</span>
             </p>
           </div>
           <div>
-            <span class="principle-number">02</span>
+            <img
+              class="principle-icon"
+              src="/assets/benefit-words.svg"
+              width="24"
+              height="24"
+              alt=""
+            />
             <p>
               <strong>In your own words.</strong
               ><span>Cleanup, with preservation at its core.</span>
             </p>
           </div>
           <div>
-            <span class="principle-number">03</span>
+            <img
+              class="principle-icon"
+              src="/assets/benefit-quiet.svg"
+              width="24"
+              height="24"
+              alt=""
+            />
             <p>
               <strong>Out of your way.</strong
               ><span>A small tool in your menu bar.</span>

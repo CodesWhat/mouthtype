@@ -53,6 +53,7 @@ for (const width of [1440, 768, 390, 320]) {
   test(`layout and local links fit at ${width}px`, async ({
     page,
   }, testInfo) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/");
     await page.evaluate(() => document.fonts.ready);
@@ -105,4 +106,81 @@ test("production response applies the deployment policy", async ({
   );
   expect(response.headers()["permissions-policy"]).toContain("microphone=()");
   expect(response.headers()["x-content-type-options"]).toBe("nosniff");
+});
+
+test("hero shows a finite speaking-versus-typing illustration", async ({
+  page,
+}, testInfo) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.clock.install();
+  await page.goto("/");
+  await page.locator(".product-preview").scrollIntoViewIfNeeded();
+  await expect(page.locator("#voice-copy")).toBeVisible();
+  await page.clock.runFor(2100);
+  await expect(page.locator("#voice-copy")).toHaveText(
+    "I'll send the first draft before lunch.",
+  );
+  expect((await page.locator("#typing-copy").innerText()).length).toBeLessThan(
+    38,
+  );
+  await page.screenshot({
+    path: testInfo.outputPath("pace-comparison.png"),
+    fullPage: false,
+  });
+  await page.clock.runFor(2500);
+  await expect(page.locator("#typing-copy")).toHaveText(
+    "I'll send the first draft before lunch.",
+  );
+  await expect(page.locator(".product-preview")).toHaveAttribute(
+    "data-demo",
+    "complete",
+  );
+  await page.clock.fastForward(60000);
+  await expect(page.locator(".product-preview")).toHaveAttribute(
+    "data-demo",
+    "complete",
+  );
+  await expect(page.locator(".asset-caption")).toHaveCount(0);
+});
+
+test("reduced motion shows the finished comparison without animation", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  await expect(page.locator(".product-preview")).toHaveAttribute(
+    "data-demo",
+    "complete",
+  );
+  await expect(page.locator("#voice-copy")).toHaveText(
+    "I'll send the first draft before lunch.",
+  );
+  await expect(page.locator("#typing-copy")).toHaveText(
+    "I'll send the first draft before lunch.",
+  );
+  const pill = await page.locator("#pill-preview").boundingBox();
+  const typed = await page.locator("#typing-copy").boundingBox();
+  expect(pill.y - typed.y - typed.height).toBeGreaterThanOrEqual(0);
+  const hint = await page.locator(".shortcut-hint").boundingBox();
+  expect(hint.y - pill.y - pill.height).toBeGreaterThanOrEqual(18);
+  const key = await page.locator(".shortcut-hint kbd").boundingBox();
+  const label = await page.locator(".shortcut-hint span").boundingBox();
+  expect(key.x + key.width).toBeLessThan(label.x);
+});
+
+test("a pending hero still starts after returning from page cache", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 200 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  await expect(page.locator("#voice-copy")).toHaveText("");
+  await page.evaluate(() => {
+    dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  });
+  await expect(page.locator("#voice-copy")).toHaveText("");
+  await page.evaluate(() => {
+    dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  });
+  await page.locator(".product-preview").scrollIntoViewIfNeeded();
+  await expect(page.locator(".product-preview")).toHaveAttribute("data-demo", "running");
+  await expect(page.locator(".product-preview")).toHaveAttribute("data-demo", "complete");
 });

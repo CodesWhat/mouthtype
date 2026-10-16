@@ -910,3 +910,188 @@ footer {
     scroll-behavior: auto;
   }
 }
+
+/* A finite pace illustration, with room between the real pill and its shortcut hint. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+.preview-paper {
+  inset: 5px 20px 102px;
+  padding: 20px 26px;
+}
+.pace-label {
+  font: 8px/1.4 var(--mono);
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  text-transform: uppercase;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.pace-lane[data-complete="true"] .pace-label::after {
+  content: "✓";
+  color: var(--action);
+  font-size: 10px;
+}
+.voice-lane p {
+  font: 28px/1.12 var(--serif);
+  margin: 9px 0 0;
+  min-height: 63px;
+}
+.typing-lane {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.typing-lane p {
+  font: 13px/1.5 var(--sans);
+  margin: 7px 0 0;
+  color: var(--muted);
+  min-height: 20px;
+}
+.product-preview[data-demo="running"]
+  .voice-lane:not([data-complete="true"])
+  p::after,
+.product-preview[data-demo="running"] .typing-lane p::after {
+  content: "";
+  display: inline-block;
+  vertical-align: -1px;
+  width: 1px;
+  height: 0.8em;
+  background: currentColor;
+  margin-left: 2px;
+}
+.pill-preview {
+  bottom: 72px;
+}
+.object-stage[data-skin="hifi"] .pill-preview {
+  bottom: 72px;
+  width: 292px;
+}
+.shortcut-hint {
+  gap: 14px;
+  bottom: 0;
+}
+.shortcut-hint kbd {
+  width: 45px;
+  height: 42px;
+  font-size: 19px;
+}
+.shortcut-hint > span {
+  font-size: 9px;
+  line-height: 1.6;
+  letter-spacing: 0.7px;
+  color: var(--ink);
+}
+.skin-controls {
+  margin-top: 25px;
+}
+.principles > div {
+  justify-content: center;
+  align-items: center;
+}
+.principle-icon {
+  display: block;
+  flex-shrink: 0;
+  image-rendering: pixelated;
+}
+@media (max-width: 850px) {
+  .principles > div {
+    gap: 10px;
+  }
+  .principle-icon {
+    width: 22px;
+    height: 22px;
+  }
+}
+@media (max-width: 600px) {
+  .product-preview {
+    height: 340px;
+  }
+  .object-stage {
+    height: 420px;
+  }
+  .preview-paper {
+    inset: 0 12px 106px;
+    padding: 22px 20px;
+  }
+  .voice-lane p {
+    font-size: 28px;
+    min-height: 63px;
+  }
+  .typing-lane p {
+    font-size: 12px;
+    min-height: 20px;
+  }
+  .pill-preview {
+    bottom: 72px;
+    width: 300px;
+  }
+  .object-stage[data-skin="hifi"] .pill-preview {
+    bottom: 72px;
+    width: 292px;
+    max-width: none;
+  }
+  .shortcut-hint kbd {
+    width: 43px;
+    height: 40px;
+    font-size: 18px;
+  }
+  .shortcut-hint > span {
+    font-size: 8px;
+  }
+  .principles > div {
+    justify-content: flex-start;
+    gap: 15px;
+  }
+  .principle-icon {
+    width: 24px;
+    height: 24px;
+  }
+}
+/* Keep the three pieces in normal flow so note text and shortcut remain clear at every scale. */
+.product-preview {
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex-shrink: 0;
+}
+.preview-paper {
+  position: relative;
+  inset: auto;
+  width: calc(100% - 40px);
+  height: 230px;
+  flex-shrink: 0;
+}
+.pill-preview,
+.object-stage[data-skin="hifi"] .pill-preview {
+  position: relative;
+  inset: auto;
+  transform: rotate(-3deg);
+  margin-top: -10px;
+  flex-shrink: 0;
+}
+.shortcut-hint {
+  position: static;
+  transform: none;
+  margin-top: 28px;
+}
+@media (max-width: 600px) {
+  .object-stage {
+    height: 430px;
+  }
+  .preview-paper {
+    inset: auto;
+    width: calc(100% - 24px);
+    height: 230px;
+  }
+}

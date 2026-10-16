@@ -1,3 +1,5 @@
+import "./hero-demo.js";
+
 const stage = document.querySelector(".object-stage");
 const preview = document.querySelector("#pill-preview");
 const description = document.querySelector(".product-preview");
@@ -11,10 +13,10 @@ document.querySelectorAll('input[name="skin"]').forEach((input) => {
       : "/assets/hifi-recording.png";
     preview.width = classic ? 416 : 584;
     preview.height = classic ? 112 : 128;
-    preview.alt = `Mouthtype ${name} recording pill, rendered from the app`;
+    preview.alt = `Mouthtype ${name} recording pill`;
     description.setAttribute(
       "aria-label",
-      `Mouthtype's ${name} recording pill over an example note`,
+      `Speaking and typing illustration with the ${name} Mouthtype pill`,
     );
   });
 });
