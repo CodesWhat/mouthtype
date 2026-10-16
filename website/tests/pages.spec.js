@@ -9,6 +9,41 @@ const pages = [
   ["/compare/wispr-flow/", "Mouthtype and Wispr Flow."],
 ];
 
+for (const width of [1440, 320]) {
+  test(`homepage navigation reaches the real pages at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    const nav = page.getByRole("navigation", { name: "Main" });
+    for (const [name, path] of [
+      ["Why Mouthtype", "/why-mouthtype/"],
+      ["Compare", "/compare/"],
+      ["Docs", "/docs/"],
+      ["Get started", "/start/"],
+    ]) {
+      const link = nav.getByRole("link", { name });
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute("href", path);
+      if (width === 320) {
+        const bounds = await link.boundingBox();
+        expect(bounds.height).toBeLessThan(name === "Get started" ? 36 : 24);
+      }
+    }
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await nav.getByRole("link", { name: "Docs" }).click();
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "The useful details.",
+    );
+    await page.getByRole("link", { name: "Mouthtype home" }).click();
+    await expect(page.locator("#hero-title")).toBeVisible();
+  });
+}
+
 for (const [path, heading] of pages) {
   test(`${path} is a real, directly loadable page`, async ({ page }) => {
     const errors = [];
@@ -19,6 +54,11 @@ for (const [path, heading] of pages) {
     await page.reload();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
     await expect(page.getByRole("navigation", { name: "Main" })).toBeVisible();
+    await expect(
+      page
+        .getByRole("navigation", { name: "Main" })
+        .getByRole("link", { name: "Docs" }),
+    ).toBeVisible();
     expect(errors).toEqual([]);
   });
 }

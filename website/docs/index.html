@@ -27,9 +27,10 @@
           />mouthtype</a
         >
         <nav aria-label="Main">
-          <a href="/why-mouthtype/">Why Mouthtype</a
-          ><a href="/compare/">Compare</a
-          ><a class="nav-alpha" href="/start/"
+          <a href="/why-mouthtype/">Why Mouthtype</a>
+          <a href="/compare/">Compare</a>
+          <a href="/docs/" aria-current="page">Docs</a>
+          <a class="nav-alpha" href="/start/"
             >Get started <span aria-hidden="true">↗</span></a
           >
         </nav>
@@ -203,7 +204,7 @@
                   Splitting is an explicit opt-in for a supported terminal
                   application. Alpha.3 offers it under Paste Options while that
                   terminal is selected; newer source builds use General →
-                  Advanced delivery with an application picker. It applies to
+                  Advanced delivery with terminal-app choices. It applies to
                   that terminal’s windows, not the command running inside it.
                 </p>
                 <p>
@@ -216,11 +217,12 @@
             <section id="local-data">
               <h2>What stays on your Mac.</h2>
               <p>
-                History, settings, saved words and retained audio live in
+                History, saved words and retained audio live in
                 <code>~/Library/Application Support/Mouthtype</code>. Text
-                history is kept indefinitely. Audio cleanup runs at launch:
-                files older than <strong>90 days</strong> are removed, then the
-                oldest remaining files until the archive fits within
+                history is kept indefinitely. App preferences are saved
+                separately by macOS. Audio cleanup runs at launch: files older
+                than <strong>90 days</strong> are removed, then the oldest
+                remaining files until the archive fits within
                 <strong>2 GB</strong>.
               </p>
               <p>
