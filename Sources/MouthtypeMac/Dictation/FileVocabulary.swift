@@ -2,7 +2,7 @@ import Foundation
 import MouthtypeCore
 import os
 
-/// The user's dictionary, read from a JSON file until the dictionary UI exists:
+/// The user's dictionary, shared by saved-spelling editing and learned corrections:
 /// `[{"heard": "mouth type", "written": "Mouthtype", "starred": false}]`.
 ///
 /// Loaded when the object is made and again whenever the file's modification date or size changes, checked on every
@@ -95,10 +95,20 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         return url
     }
 
-    enum WriteError: Error, Equatable {
+    enum WriteError: LocalizedError, Equatable {
         /// The file doesn't parse as a list of entries, so it is left exactly as it is.
         case malformed(String)
         case failed(String)
+        case invalid(String)
+        case changed
+
+        var errorDescription: String? {
+            switch self {
+            case let .malformed(message): "The spelling library could not be read: \(message). Fix dictionary.json and reload it."
+            case let .failed(message), let .invalid(message): message
+            case .changed: "This spelling changed outside the editor. Reload the library before saving or deleting it."
+            }
+        }
     }
 
     enum SaveResult: Equatable {
@@ -110,6 +120,10 @@ final class FileVocabulary: VocabularyProviding, Sendable {
     /// in the file's usual one-line-per-entry shape, keeping order and any extra keys. Creates the file when missing.
     @discardableResult
     func save(heard: String, written: String) throws -> SaveResult {
+        guard !heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              !written.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw WriteError.invalid("Enter both the heard phrase and the spelling to use.")
+        }
         guard FileManager.default.fileExists(atPath: url.path) else {
             try write("[\n  \(Self.line(heard: heard, written: written, starred: false, extra: [:]))\n]\n")
             return .added
@@ -135,6 +149,75 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         guard kept.count != entries.count else { return false }
         try write(Self.render(kept))
         return true
+    }
+
+    static func heardKey(_ text: String) -> String {
+        text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+    }
+
+    static func validationMessage(heard: String, written: String) -> String? {
+        if heardKey(heard).isEmpty { return "Enter the word or phrase Mouthtype gets wrong." }
+        if written.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Enter the spelling to use." }
+        let normalizedHeard = heard.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let normalizedWritten = written.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedHeard.count > 128 || normalizedWritten.count > 128 { return "Keep each phrase and spelling under 129 characters." }
+        return nil
+    }
+
+    func allRules() throws -> [DictionaryRule] {
+        try managedEntries().map(Self.rule)
+    }
+
+    func save(original: DictionaryRule?, rule: DictionaryRule) throws {
+        let rule = DictionaryRule(heard: rule.heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
+            written: rule.written.trimmingCharacters(in: .whitespacesAndNewlines), starred: rule.starred)
+        if let message = Self.validationMessage(heard: rule.heard, written: rule.written) { throw WriteError.invalid(message) }
+        var entries = try managedEntries()
+        let index: Int?
+        if let original {
+            guard let found = entries.firstIndex(where: { Self.rule($0) == original }) else { throw WriteError.changed }
+            index = found
+        } else { index = nil }
+        guard !entries.indices.contains(where: { $0 != index && Self.heardKey(Self.rule(entries[$0]).heard) == Self.heardKey(rule.heard) }) else {
+            throw WriteError.invalid("A spelling for this heard phrase already exists.")
+        }
+        if let index {
+            entries[index]["heard"] = rule.heard
+            entries[index]["written"] = rule.written
+            entries[index]["starred"] = rule.starred
+        } else {
+            entries.append(["heard": rule.heard, "written": rule.written, "starred": rule.starred])
+        }
+        try write(Self.render(entries))
+    }
+
+    func remove(_ rule: DictionaryRule) throws {
+        var entries = try managedEntries()
+        guard let index = entries.firstIndex(where: { Self.rule($0) == rule }) else { throw WriteError.changed }
+        entries.remove(at: index)
+        try write(Self.render(entries))
+    }
+
+    private func managedEntries() throws -> [[String: Any]] {
+        guard FileManager.default.fileExists(atPath: url.path) else { return [] }
+        let (text, entries) = try readEntries()
+        do { _ = try JSONDecoder().decode([Entry].self, from: Data(text.utf8)) }
+        catch { throw WriteError.malformed(Self.describe(error)) }
+        var seen = Set<String>()
+        for entry in entries {
+            let rule = Self.rule(entry)
+            guard !Self.heardKey(rule.heard).isEmpty, !rule.written.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw WriteError.malformed("a spelling has a blank heard or written field")
+            }
+            guard seen.insert(Self.heardKey(rule.heard)).inserted else {
+                throw WriteError.malformed("more than one spelling has the same heard phrase")
+            }
+        }
+        return entries
+    }
+
+    private static func rule(_ entry: [String: Any]) -> DictionaryRule {
+        DictionaryRule(heard: string(entry["heard"]) ?? "", written: string(entry["written"]) ?? "", starred: entry["starred"] as? Bool ?? false)
     }
 
     private func readEntries() throws -> (text: String, entries: [[String: Any]]) {

@@ -9,6 +9,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
     private let cleaner: (any CleanupModelManaging)?
     private let dictionary: FileVocabulary?
     private let confirmDownload: @MainActor (_ name: String, _ sizeMB: Int) -> Bool
+    private let manageSpellings: (@MainActor () -> Void)?
+    private let spellingsItem = NSMenuItem(title: "Saved Spellings…", action: nil, keyEquivalent: "")
     private let managePhrases: (@MainActor () -> Void)?
     private let phrasesItem = NSMenuItem(title: "Phrase Replacements…", action: nil, keyEquivalent: "")
     private let openFile: @MainActor (URL) -> Void
@@ -35,7 +37,7 @@ final class CleanupMenuSection: NSObject, MenuSection {
     init(
         defaults: UserDefaults = .standard, cleaner: (any CleanupModelManaging)? = nil, dictionary: FileVocabulary? = nil,
         confirmDownload: @escaping @MainActor (_ name: String, _ sizeMB: Int) -> Bool = CleanupMenuSection.askToDownload,
-        managePhrases: (@MainActor () -> Void)? = nil,
+        managePhrases: (@MainActor () -> Void)? = nil, manageSpellings: (@MainActor () -> Void)? = nil,
         openFile: @escaping @MainActor (URL) -> Void = { NSWorkspace.shared.open($0) }
     ) {
         self.defaults = defaults
@@ -44,9 +46,10 @@ final class CleanupMenuSection: NSObject, MenuSection {
         self.confirmDownload = confirmDownload
         self.openFile = openFile
         self.managePhrases = managePhrases
+        self.manageSpellings = manageSpellings
         super.init()
         for (item, action) in [
-            (phrasesItem, #selector(editPhrases(_:))),
+            (phrasesItem, #selector(editPhrases(_:))), (spellingsItem, #selector(editSpellings(_:))),
             (downloadItem, #selector(download(_:))), (cancelDownloadItem, #selector(cancelDownload(_:))),
             (editDictionaryItem, #selector(editDictionary(_:))), (learnItem, #selector(toggleLearn(_:))), (fillersItem, #selector(toggleFillers(_:))),
             (commandsItem, #selector(toggleCommands(_:))), (numbersItem, #selector(toggleNumbers(_:))),
@@ -93,6 +96,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
         submenu.addItem(.separator())
         submenu.addItem(learnItem)
         submenu.addItem(editDictionaryItem)
+        submenu.addItem(spellingsItem)
+        spellingsItem.isEnabled = manageSpellings != nil
         submenu.addItem(phrasesItem)
         phrasesItem.isEnabled = managePhrases != nil
         submenu.addItem(dictionaryErrorItem)
@@ -214,6 +219,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
     @objc private func cancelDownload(_ sender: NSMenuItem) {
         cleaner?.cancelDownload()
     }
+
+    @objc private func editSpellings(_ sender: NSMenuItem) { manageSpellings?() }
 
     @objc private func editPhrases(_ sender: NSMenuItem) { managePhrases?() }
 

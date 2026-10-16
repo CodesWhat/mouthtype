@@ -10,6 +10,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let dictionary = FileVocabulary()
     private let phrases = FilePhrases()
+    private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
     private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
     private let micCapture = MicCapture()
     private let microphoneSection = MicrophoneMenuSection()
@@ -147,7 +148,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: PillSkinMenuSection(onSelect: { [weak pill] kind in pill?.setSkin(kind) }))
         menuBar.add(section: TextFontMenuSection())
         menuBar.add(section: CleanupMenuSection(cleaner: cleanerHost, dictionary: dictionary,
-            managePhrases: { [weak self] in self?.phraseWindow.present() }))
+            managePhrases: { [weak self] in self?.phraseWindow.present() },
+            manageSpellings: { [weak self] in self?.spellingWindow.present() }))
         menuBar.add(section: PasteMenuSection())
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
