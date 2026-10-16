@@ -25,8 +25,9 @@ def main():
     if run(['git', 'status', '--porcelain'], cwd=ROOT).strip():
         raise RuntimeError('Publish from a clean reviewed checkout')
     source = run(['git', 'rev-parse', 'HEAD'], cwd=ROOT).strip()
-    redirects = {item['source']: item['destination'] for item in
-                 json.loads((ROOT / 'website/vercel.json').read_text()).get('redirects', [])}
+    redirects = {item['src']: item['headers']['Location'] for item in
+                 json.loads((ROOT / 'website/vercel.json').read_text()).get('routes', [])
+                 if item.get('status') == 302}
     manifests = list((assets / 'releases').glob('*/release-manifest.json'))
     if not manifests:
         raise RuntimeError('Retained public release artifacts are required')
