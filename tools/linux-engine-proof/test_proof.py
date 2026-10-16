@@ -123,6 +123,26 @@ class ProofTests(unittest.TestCase):
         self.assertEqual(cases[0]["expected"], "")
         self.assertEqual(cases[0]["mustNotContain"], ["um"])
 
+    def test_speech_fixture_identity_follows_audio_bytes_and_expectations_not_host_paths(self):
+        identities = []
+        for directory, audio, expected in (("first-host", b"same synthetic audio", ""),
+                                            ("second-host", b"same synthetic audio", ""),
+                                            ("changed-audio", b"different audio", ""),
+                                            ("changed-reference", b"same synthetic audio", "Changed")):
+            location = self.path / directory
+            location.mkdir()
+            (location / "speech.wav").write_bytes(audio)
+            fixture = location / "cases.json"
+            fixture.write_text(json.dumps([{"id": "speech", "wav": "speech.wav", "expected": expected}]))
+            result = proof.run_suite({"engines": {"speech": {"artifacts": {}}}},
+                {"speech": proof.load_cases(fixture, "speech")},
+                command_for=lambda task, config: [sys.executable, str(self.fake), "echo"],
+                startup_seconds=.3, request_seconds=.15)
+            identities.append(result["results"][0]["fixture_sha256"])
+        self.assertEqual(identities[0], identities[1])
+        self.assertNotEqual(identities[0], identities[2])
+        self.assertNotEqual(identities[0], identities[3])
+
     def test_duplicate_case_ids_and_invalid_cases_are_rejected(self):
         path = self.path / "cases.json"
         for cases in [[{"id": "a", "input": "a", "expected": "a"}] * 2,

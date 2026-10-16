@@ -216,7 +216,10 @@ def run_suite(config, suites, *, command_for=None, startup_seconds=120, request_
             unavailable = True
         try:
             for index, case in enumerate(cases):
-                identity = json.dumps(case, sort_keys=True, ensure_ascii=False).encode()
+                identity_case = dict(case)
+                if task == "speech":
+                    identity_case["wav"] = {"sha256": case["audio_sha256"]}
+                identity = json.dumps(identity_case, sort_keys=True, ensure_ascii=False).encode()
                 record = {"task": task, "id": case["id"], "expected": case["expected"],
                           "fixture_sha256": hashlib.sha256(identity).hexdigest(),
                           "worker_pid": worker.process.pid if worker else None, "resident_request": index + 1}
