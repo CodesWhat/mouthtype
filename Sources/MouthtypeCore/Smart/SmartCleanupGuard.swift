@@ -168,7 +168,7 @@ public enum SmartCleanupGuard {
     /// A reason to reject, or nil when the output is fine.
     public static func rejection(
         input: String, output: String, level: CleanupLevel, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
-        nearbySpellings: [String] = []
+        nearbySpellings: [String] = [], resolvedInput: String? = nil
     ) -> String? {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "empty output" }
@@ -188,6 +188,11 @@ public enum SmartCleanupGuard {
         }
 
         if let missing = missingNumber(input: comparableInput, output: comparableOutput) { return "number \(missing) missing or changed" }
+        for source in [input, resolvedInput].compactMap({ $0 }) {
+            if let added = DictionaryReplacer.introducedAlias(input: source, output: trimmed, rules: dictionary) {
+                return "dictionary spelling \"\(added)\" added without an exact match"
+            }
+        }
         if let missing = missingTerm(input: input, output: trimmed, dictionary: dictionary, snippets: snippets) {
             return "\"\(missing)\" missing"
         }

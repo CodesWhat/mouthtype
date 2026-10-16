@@ -106,6 +106,89 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(result.outcome == .guardRejected && result.text == input)
     }
 
+    @Test func exactAliasesDoNotBecomeBroadVocabularyHints() async {
+        let cleaner = FakeCleaner { text, _ in text }
+        cleaner.usesNativeControls = false
+        let rules = [DictionaryRule(heard: "geoff", written: "Jeff"),
+            DictionaryRule(heard: "shawn", written: "Sean"),
+            DictionaryRule(heard: "Sarah", written: "Sarah"),
+            DictionaryRule(heard: "dry dock", written: "Drydock")]
+        _ = await smart(cleaner).run(request("Geoffrey has the reports for Sean", rules: rules))
+        #expect(cleaner.contexts.first?.vocabulary == ["Sarah", "Drydock"])
+    }
+
+    @Test(arguments: [
+        ("Geoffrey has the reports", "Jeff has the reports"),
+        ("Geoffrey's report is ready", "Jeff's report is ready"),
+        ("geoffrey_2 has the reports", "Jeff has the reports"),
+        ("Geoffrey has Jeff's reports", "Jeff has Jeff's reports"),
+        ("everyone felt merry after the meeting", "Jeff felt merry after the meeting")
+    ], [false, true])
+    func modelCannotExtendExactAliases(pair: (String, String), native: Bool) async {
+        let cleaner = FakeCleaner(returning: pair.1)
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(request(pair.0, rules: [DictionaryRule(heard: "geoff", written: "Jeff")]))
+        #expect(result.outcome == .guardRejected)
+        #expect(result.text == pair.0)
+    }
+
+    @Test(arguments: [
+        ("geoff has the reports", "Jeff has the reports"),
+        ("Jeff has the reports", "Jeff has the reports"),
+        ("geoff and jeffrey have finished reviewing all the reports", "Jeff and Jeff have finished reviewing all the reports")
+    ])
+    func modelKeepsIntendedExactAliases(pair: (String, String)) async {
+        let cleaner = FakeCleaner(returning: pair.1)
+        let result = await smart(cleaner).run(request(pair.0, rules: [
+            DictionaryRule(heard: "geoff", written: "Jeff"), DictionaryRule(heard: "jeffrey", written: "Jeff")]))
+        #expect(result.outcome == .ok)
+        #expect(result.text == pair.1)
+    }
+
+    @Test func generatedAliasCannotBypassTheGuardThroughReapplication() async {
+        let cleaner = FakeCleaner(returning: "geoff has the reports")
+        let input = "Geoffrey has the reports"
+        let result = await smart(cleaner).run(request(input, rules: [DictionaryRule(heard: "geoff", written: "Jeff")]))
+        #expect(result.outcome == .guardRejected)
+        #expect(result.text == input)
+        #expect(result.rejection == "dictionary spelling \"Jeff\" added without an exact match")
+    }
+
+    @Test func exactPhraseAliasesKeepUnicodeAndWhitespaceMatching() async {
+        let cleaner = FakeCleaner(returning: "René Dupont has finished reviewing the reports")
+        let result = await smart(cleaner).run(request("rene\tdupont has finished reviewing the reports", rules: [
+            DictionaryRule(heard: "rene dupont", written: "René Dupont")]))
+        #expect(result.outcome == .ok)
+        #expect(result.text == "René Dupont has finished reviewing the reports")
+    }
+
+    @Test func abandonedAliasCannotAuthorizeASecondPassRewrite() async {
+        let cleaner = FakeCleaner { _, context in
+            context.correctionsOnly ? "geoffrey has the reports" : "Jeff has the reports"
+        }
+        cleaner.usesNativeControls = false
+        let input = "Jeff, actually geoffrey has the reports"
+        let result = await smart(cleaner).run(request(input, rules: [DictionaryRule(heard: "geoff", written: "Jeff")]))
+        #expect(result.outcome == .guardRejected)
+        #expect(result.text == input)
+    }
+
+    @Test func correctionDroppingADictionaryTargetStillFallsBackSafely() async {
+        let cleaner = FakeCleaner(returning: "geoffrey has the reports")
+        cleaner.usesNativeControls = false
+        let result = await smart(cleaner).run(request("Jeff, actually geoffrey has the reports", rules: [
+            DictionaryRule(heard: "geoff", written: "Jeff")]))
+        #expect(result.outcome == .guardRejected)
+        #expect(result.text == "Jeff, actually geoffrey has the reports")
+    }
+
+    @Test func vocabularyOnlyEntriesStillAllowSpellingHints() async {
+        let cleaner = FakeCleaner(returning: "Sean has the reports")
+        let result = await smart(cleaner).run(request("shawn has the reports", rules: [DictionaryRule(heard: "Sean", written: "Sean")]))
+        #expect(result.outcome == .ok)
+        #expect(result.text == "Sean has the reports")
+    }
+
     @Test func unresolvedCorrectionsAreSettledBeforeGeneralNormalization() async {
         let cleaner = FakeCleaner(returning: "Let's do coffee at 3.")
         cleaner.usesNativeControls = false
