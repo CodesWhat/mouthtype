@@ -83,6 +83,7 @@ public struct HotKeyProcessor: Sendable {
     
     /// The hotkey combination to detect (key + modifiers)
     public var hotkey: HotKey
+    public var recordingMode: RecordingMode
     
     /// If true, only double-tap activates recording (press-and-hold disabled)
     /// Only applies to key+modifier hotkeys; modifier-only always allows press-and-hold
@@ -103,6 +104,7 @@ public struct HotKeyProcessor: Sendable {
     
     /// Timestamp of the most recent hotkey release (for double-tap detection)
     private var lastTapAt: Date?
+    private var toggleChordHeld = false
     
     /// When true, all input is ignored until full keyboard release
     /// Prevents accidental re-triggering after cancellation or during complex key combos
@@ -130,12 +132,14 @@ public struct HotKeyProcessor: Sendable {
         hotkey: HotKey,
         useDoubleTapOnly: Bool = false,
         doubleTapLockEnabled: Bool = true,
-        minimumKeyTime: TimeInterval = GestureConstants.defaultMinimumKeyTime
+        minimumKeyTime: TimeInterval = GestureConstants.defaultMinimumKeyTime,
+        recordingMode: RecordingMode = .hold
     ) {
         self.hotkey = hotkey
         self.useDoubleTapOnly = useDoubleTapOnly
         self.doubleTapLockEnabled = doubleTapLockEnabled
         self.minimumKeyTime = minimumKeyTime
+        self.recordingMode = recordingMode
     }
 
     // MARK: - Public API
@@ -186,11 +190,14 @@ public struct HotKeyProcessor: Sendable {
     /// 4. Non-matching chord → handle as release or different key
     public mutating func process(keyEvent: KeyEvent, now: Date) -> Output? {
         // 1) ESC => immediate cancel
-        if keyEvent.key == .escape, state != .idle {
-            isDirty = true
+        let isToggleShortcut = recordingMode == .toggle && chordMatchesHotkey(keyEvent)
+        if keyEvent.key == .escape, state != .idle, !isToggleShortcut {
+            isDirty = recordingMode == .hold || toggleChordHeld
             resetToIdle()
             return .cancel
         }
+
+        if recordingMode == .toggle { return processToggle(keyEvent) }
 
         // 2) If dirty, ignore until full release (nil, [])
         if isDirty {
@@ -299,6 +306,27 @@ public extension HotKeyProcessor {
 // MARK: - Core Logic
 
 extension HotKeyProcessor {
+    private mutating func processToggle(_ event: KeyEvent) -> Output? {
+        if isReleaseForActiveHotkey(event) { toggleChordHeld = false }
+        if isDirty {
+            guard chordIsFullyReleased(event) else { return nil }
+            isDirty = false
+        }
+        guard chordMatchesHotkey(event) else {
+            if state == .idle, chordIsDirty(event) { isDirty = true }
+            return nil
+        }
+        guard !toggleChordHeld else { return nil }
+        toggleChordHeld = true
+        if state == .idle {
+            state = .doubleTapLock
+            lastTapAt = nil
+            return .startRecording
+        }
+        resetToIdle()
+        return .stopRecording
+    }
+
     private var isDoubleTapOnlyEnabledForCurrentHotkey: Bool {
         useDoubleTapOnly && doubleTapLockEnabled && hotkey.key != nil
     }

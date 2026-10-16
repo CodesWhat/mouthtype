@@ -57,7 +57,8 @@ import MouthtypeCore
         let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state)
         let controller = SettingsWindow(model: model, actions: actions)
         controller.window?.setContentSize(NSSize(width: 860, height: 590))
-        for page in [SettingsPage.writing, .appearance, .diagnostics] {
+        model.setRecordingMode(.toggle)
+        for page in [SettingsPage.general, .writing, .appearance, .diagnostics] {
             model.page = page
             controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model, actions: actions).frame(width: 860, height: 590))
             let view = try #require(controller.window?.contentView)
