@@ -462,6 +462,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             service.stop()
             inputStarted = false
+            // The stopped service can restore the saved behavior without installing taps.
+            try? service.switchRecordingMode(RecordingModePreference.current())
             remapCoordinator.deactivate()
             refreshGlobeCheck()
             return "The input listener could not start. Check Accessibility access, then try again. Your previous recording behavior is still saved."
