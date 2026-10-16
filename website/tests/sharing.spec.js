@@ -5,6 +5,7 @@ test.use({ javaScriptEnabled: false });
 for (const route of [
   "/",
   "/start/",
+  "/download/",
   "/docs/",
   "/why-mouthtype/",
   "/compare/",
