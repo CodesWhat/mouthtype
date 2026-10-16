@@ -16,6 +16,8 @@ import UniformTypeIdentifiers
     private(set) var sounds: Bool
     private(set) var skin: PillSkinKind
     private(set) var hiFiSize: HiFiPillSize
+    private(set) var fontOverrides: TextFontOverrides
+    private(set) var fontFamilies: [String] = []
     private(set) var font: TextFontChoice
     private(set) var recordingMode: RecordingMode
     private(set) var recordingModeError: String?
@@ -41,6 +43,7 @@ import UniformTypeIdentifiers
         skin = PillSkinPreference.current(defaults)
         hiFiSize = HiFiPillSizePreference.current(defaults)
         font = TextFontPreference.current(defaults)
+        fontOverrides = TextFontOverrides.load(defaults)
         refresh()
     }
 
@@ -51,6 +54,9 @@ import UniformTypeIdentifiers
         hiFiSize = HiFiPillSizePreference.current(defaults)
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
+        fontOverrides = TextFontOverrides.load(defaults)
+        FontRegistry.registerBundledFonts()
+        fontFamilies = Array(Set(NSFontManager.shared.availableFontFamilies)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
         let savedShortcut = ShortcutSettings.load(defaults)
         shortcut = savedShortcut?.displayName ?? "Fn"
         capsLockShortcut = savedShortcut?.isCapsLock == true
@@ -169,4 +175,18 @@ import UniformTypeIdentifiers
         TextFontPreference.set(value, in: defaults)
         font = value
     }
+    func setFontOverridesEnabled(_ value: Bool) {
+        TextFontOverrides.setEnabled(value, in: defaults)
+        fontOverrides = TextFontOverrides.load(defaults)
+    }
+    func setFontFamily(_ family: String?, for group: FontGroup) {
+        TextFontOverrides.setFamily(family, for: group, in: defaults)
+        fontOverrides = TextFontOverrides.load(defaults)
+    }
+    func resetFonts() {
+        TextFontOverrides.reset(in: defaults)
+        font = TextFontPreference.current(defaults)
+        fontOverrides = TextFontOverrides.load(defaults)
+    }
+
 }

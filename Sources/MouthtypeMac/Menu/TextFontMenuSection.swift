@@ -49,12 +49,13 @@ final class TextFontMenuSection: NSObject, MenuSection {
 
     @objc private func chooseFont(_ sender: NSMenuItem) { presentFontChooser() }
 
+    var chooserFont: NSFont { Typography(choice: TextFontPreference.current(defaults)).font(.body) }
+
     func presentFontChooser() {
         let manager = NSFontManager.shared
         manager.target = self
         manager.action = #selector(changeFont(_:))
-        let typography = Typography.current(defaults)
-        manager.setSelectedFont(typography.font(.body), isMultiple: false)
+        manager.setSelectedFont(chooserFont, isMultiple: false)
         NSApp.activate()
         manager.orderFrontFontPanel(self)
     }
@@ -62,7 +63,7 @@ final class TextFontMenuSection: NSObject, MenuSection {
     /// The font panel's pick. Only the family is kept; the roles pick the size and weight.
     @objc func changeFont(_ sender: NSFontManager?) {
         let manager = sender ?? NSFontManager.shared
-        let picked = manager.convert(Typography.current(defaults).font(.body))
+        let picked = manager.convert(chooserFont)
         guard let family = picked.familyName, !family.isEmpty else { return }
         TextFontPreference.set(.custom(family), in: defaults)
         refresh()

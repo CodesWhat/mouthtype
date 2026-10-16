@@ -72,16 +72,18 @@ struct Typography: Sendable {
     static let didChange = Notification.Name("MouthtypeTextFontDidChange")
 
     let choice: TextFontChoice
+    var overrides: TextFontOverrides
     /// Whether a family is present, injectable so a missing family is testable.
     var isInstalled: @Sendable (String) -> Bool = { NSFontManager.shared.availableFontFamilies.contains($0) }
 
-    init(choice: TextFontChoice, isInstalled: (@Sendable (String) -> Bool)? = nil) {
+    init(choice: TextFontChoice, overrides: TextFontOverrides = TextFontOverrides(), isInstalled: (@Sendable (String) -> Bool)? = nil) {
         self.choice = choice
+        self.overrides = overrides
         if let isInstalled { self.isInstalled = isInstalled }
     }
 
     static func current(_ defaults: UserDefaults = .standard) -> Typography {
-        Typography(choice: TextFontPreference.current(defaults))
+        Typography(choice: TextFontPreference.current(defaults), overrides: TextFontOverrides.load(defaults))
     }
 
     /// The choice actually in force: a custom family that isn't installed, or a Systema set whose files didn't
@@ -116,8 +118,12 @@ struct Typography: Sendable {
     }
 
     func font(_ role: TextRole) -> NSFont {
-        let effective = effectiveChoice
-        let spec = Self.spec(role, systema: effective == .systema)
+        let baseChoice = effectiveChoice
+        let effective: TextFontChoice
+        if overrides.enabled, let family = overrides.families[FontGroup(role: role)], isInstalled(family) {
+            effective = .custom(family)
+        } else { effective = baseChoice }
+        let spec = Self.spec(role, systema: baseChoice == .systema)
         let base: NSFont
         switch effective {
         case .systema: base = Self.systema(role, spec)
