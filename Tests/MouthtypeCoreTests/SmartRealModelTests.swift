@@ -104,3 +104,18 @@ struct QualityRealModelTests {
         #expect(!result.output.contains("outcome: timeout"), "\(result.output)")
     }
 }
+
+@Suite(.serialized)
+struct SavedSpellingRealModelTests {
+    @Test(arguments: ["superwhisper-s1-mini", "gemma-4-e4b-it-4bit"])
+    func exactAliasesPreserveUnconfiguredWords(model: String) throws {
+        let cleaner = try CleanerCatalog.make(id: model)
+        guard (cleaner as? MLXCleaner)?.isDownloaded == true else { return }
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = root.appendingPathComponent("Tests/Fixtures/saved-spelling-fidelity.json")
+        let result = try cleanupBench(["clean", "--smart", "medium", "--cleaner", model,
+            "--file", fixture.path, "--smart-timeout-ms", "10000"])
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("5/5 cases pass"), "\(result.output)")
+    }
+}
