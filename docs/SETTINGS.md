@@ -24,6 +24,8 @@ Turning overrides off hides the controls and keeps their saved choices. Changing
 
 The sidebar opens the existing **Saved spellings** and **Phrases** editors, preserving their save, cancel and draft protection behavior. Settings changes save immediately. Command-W closes the window.
 
+Development builds also write a `paste boundary` entry to the existing app unified log. It contains fixed categories for the boundary source, preceding-character kind, continuation-cache eligibility and separator added, plus frontmost and focused Accessibility owner process IDs. It contains no transcript, surrounding text, window title or audio. These entries support a future coordinated paste investigation; they do not prove delivery or change the destination, spacing policy or retry behavior.
+
 ## First-run setup
 
 On the first ordinary launch with missing Microphone or Accessibility access, **Set Up Mouthtype** opens once. Permission requests follow the setup buttons. Closing it or choosing Set up later does not mark the app ready, and relaunching does not repeat the window or automatically ask for permissions. Existing users with both grants do not get an upgrade window. Reopen it from **Settings → General → Set Up Mouthtype**. A permission attention item in the menu also opens setup.

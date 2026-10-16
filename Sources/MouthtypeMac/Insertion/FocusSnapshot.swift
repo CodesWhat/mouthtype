@@ -14,6 +14,7 @@ public struct FocusSnapshot: Sendable {
     public var windowTitle: String?
     public var role: String?
     public var subrole: String?
+    var focusedOwnerPID: pid_t?
     public var isSecure: Bool
     /// For static text only: whether its value or selection can be set. Nil for every other role, or when unread.
     var isTextSettable: Bool?
@@ -23,7 +24,7 @@ public struct FocusSnapshot: Sendable {
     init(
         pid: pid_t? = nil, bundleID: String? = nil, appName: String? = nil, windowTitle: String? = nil,
         role: String? = nil, subrole: String? = nil, isSecure: Bool = false, isTextSettable: Bool? = nil,
-        element: FocusedElement? = nil
+        element: FocusedElement? = nil, focusedOwnerPID: pid_t? = nil
     ) {
         self.pid = pid
         self.bundleID = bundleID
@@ -34,6 +35,7 @@ public struct FocusSnapshot: Sendable {
         self.isSecure = isSecure
         self.isTextSettable = isTextSettable
         self.element = element
+        self.focusedOwnerPID = focusedOwnerPID
     }
 
     public var target: DictationTarget {
@@ -108,12 +110,20 @@ final class AccessibilityFocusReader: FocusReading {
         }
         bounded(element)
         snapshot.element = FocusedElement(element)
+        snapshot.focusedOwnerPID = ownerPID(of: FocusedElement(element))
         snapshot.role = stringValue(element, kAXRoleAttribute)
         snapshot.subrole = stringValue(element, kAXSubroleAttribute)
         snapshot.isSecure = isSecure(element, subrole: snapshot.subrole)
         if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(element) }
         snapshot.windowTitle = elementValue(element, kAXWindowAttribute).flatMap(title(of:))
         return snapshot
+    }
+
+    /// Diagnostic ownership only. Event delivery still uses the frontmost application.
+    func ownerPID(of element: FocusedElement) -> pid_t? {
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(bounded(element.ref), &pid) == .success, pid > 0 else { return nil }
+        return pid
     }
 
     /// The character before the insertion point, for `Spacing`. Reads the selected range, then the text just before
