@@ -13,7 +13,7 @@ import MouthtypeCore
         FontRegistry.registerBundledFonts()
         let model = SettingsModel(defaults: defaults)
         let state = diagnostics()
-        let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state)
+        let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state, updater: AppUpdater(driver: PreviewUpdateDriver(), activity: { .idle }))
         let controller = SettingsWindow(model: model, actions: actions)
         #expect(controller.window?.isVisible == false)
         #expect(controller.window?.title == "Mouthtype Settings")
@@ -54,7 +54,7 @@ import MouthtypeCore
         state.engineStatus = "Speech model could not be loaded. Retry to continue."
         state.microphoneStatus = .denied
         state.globe = GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true)
-        let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state)
+        let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state, updater: AppUpdater(driver: PreviewUpdateDriver(), activity: { .idle }))
         let controller = SettingsWindow(model: model, actions: actions)
         controller.window?.setContentSize(NSSize(width: 860, height: 590))
         model.setRecordingMode(.toggle)
@@ -99,4 +99,13 @@ import MouthtypeCore
     nonisolated func recordingStarted() {}
     func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? { nil }
     func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult { fatalError("Rendering does not run cleanup") }
+}
+
+@MainActor private final class PreviewUpdateDriver: UpdateDriving {
+    weak var delegate: (any UpdateDriverDelegate)?
+    var onChange: (() -> Void)?
+    var canCheckForUpdates = true
+    var automaticallyChecksForUpdates = false
+    func start() throws {}
+    func checkForUpdates() {}
 }

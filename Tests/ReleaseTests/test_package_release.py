@@ -4,6 +4,7 @@ import plistlib
 import subprocess
 import tempfile
 import unittest
+import zipfile
 
 SCRIPT = pathlib.Path(__file__).resolve().parents[2] / 'scripts/package-release.py'
 spec = importlib.util.spec_from_file_location('package_release', SCRIPT)
@@ -12,6 +13,18 @@ spec.loader.exec_module(release)
 
 
 class ReleaseGuardsTests(unittest.TestCase):
+    def test_update_zip_places_only_the_app_at_the_archive_root(self):
+        app = self.root / 'Mouthtype.app'
+        (app / 'Contents').mkdir(parents=True)
+        (app / 'Contents/Info.plist').write_bytes(b'fixture app metadata')
+        archive = self.root / 'update.zip'
+        release.create_update_archive(app, archive)
+        with zipfile.ZipFile(archive) as zipped:
+            paths = [name for name in zipped.namelist() if not name.startswith('__MACOSX/')]
+            self.assertTrue(paths)
+            self.assertTrue(all(name.startswith('Mouthtype.app/') for name in paths), paths)
+            self.assertEqual(zipped.read('Mouthtype.app/Contents/Info.plist'), b'fixture app metadata')
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(prefix='mouthtype-release-test-')
         self.addCleanup(self.temp.cleanup)

@@ -58,6 +58,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var editDictionary: () -> Void = {}
     var editPhrasesFile: () -> Void = {}
     var chooseFont: () -> Void = {}
+    var updater: AppUpdater?
 }
 
 struct SettingsView: View {
@@ -157,6 +158,16 @@ struct SettingsView: View {
                 Divider()
                 settingRow("Launch at login", model.loginState == .mixed ? "Waiting for approval in System Settings." : "Keep Mouthtype ready in your menu bar.") {
                     Button(model.loginState == .mixed ? "Open Login Items…" : model.loginState == .on ? "Turn off" : "Turn on") { model.toggleLogin() }
+                }
+            }
+            if let updater = actions.updater {
+                VStack(alignment: .leading, spacing: 13) {
+                    Divider()
+                    settingRow("Updates", updater.statusText) {
+                        Button(updater.hasUpdate ? "Review Update…" : "Check for Updates…") { updater.checkForUpdates() }.disabled(!updater.canCheckForUpdates)
+                    }
+                    Toggle("Automatically check for updates", isOn: Binding(get: { updater.automaticallyChecksForUpdates }, set: updater.setAutomaticChecks))
+                        .disabled(!updater.isAvailable)
                 }
             }
             DisclosureGroup("Advanced delivery") {
