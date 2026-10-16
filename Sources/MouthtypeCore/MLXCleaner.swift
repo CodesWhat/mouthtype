@@ -112,24 +112,38 @@ public actor MLXCleaner: MeasuredCleaner {
 
         let clock = ContinuousClock()
         let start = clock.now
+        try Task.checkCancellation()
         let input = try await container.prepare(input: UserInput(chat: messages, additionalContext: additionalContext))
-        let stream = try await container.generate(input: input, parameters: parameters)
+        let (stream, generation) = try await container.perform(nonSendable: input) { model, prepared in
+            try Task.checkCancellation()
+            let iterator = try TokenIterator(input: prepared, model: model.model, parameters: parameters)
+            return generateTask(promptTokenCount: prepared.text.tokens.size,
+                modelConfiguration: model.configuration, tokenizer: model.tokenizer, iterator: iterator,
+                toolCallPolicy: parameters.toolCallPolicy)
+        }
 
         var text = ""
         var firstOutput: Double?
         var info: GenerateCompletionInfo?
-        for await event in stream {
-            switch event {
-            case let .chunk(chunk):
-                text += chunk
-                if firstOutput == nil, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    firstOutput = (clock.now - start).seconds
+        try await withTaskCancellationHandler {
+            for await event in stream {
+                switch event {
+                case let .chunk(chunk):
+                    text += chunk
+                    if firstOutput == nil, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        firstOutput = (clock.now - start).seconds
+                    }
+                case let .info(completion):
+                    info = completion
+                default:
+                    break
                 }
-            case let .info(completion):
-                info = completion
-            default:
-                break
             }
+            // Stream cancellation can finish the consumer before its producer settles GPU work.
+            await generation.value
+            try Task.checkCancellation()
+        } onCancel: {
+            generation.cancel()
         }
         let total = (clock.now - start).seconds
         return CleanupResult(

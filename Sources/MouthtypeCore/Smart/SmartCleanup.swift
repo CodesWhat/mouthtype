@@ -116,6 +116,15 @@ public actor SmartCleanup {
         self.customBudget = budget != nil
     }
 
+    /// Settle a timed-out generation before unloading its model or exiting the process.
+    /// Dictation deadlines still return fallback immediately; only explicit teardown waits here.
+    public func waitForPendingWork() async {
+        while let busy = current {
+            _ = await busy.value
+            if current == busy { current = nil }
+        }
+    }
+
     public func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
         let start = clock.now
         let words = TextMetrics.wordCount(request.text)
@@ -161,10 +170,12 @@ public actor SmartCleanup {
                 let guardInput = NameJoining.applying(approved, to: request.text)
                 var output = CorrectionCommas.apply(guardInput)
                 if settleCorrections {
+                    try Task.checkCancellation()
                     output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: correctionContext))
                     if output.isEmpty { return .success(Draft(text: output, guardInput: guardInput, ordinary: ordinary)) }
                 }
                 for controls in passes {
+                    try Task.checkCancellation()
                     var passContext = context
                     passContext.s1Controls = controls
                     output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: passContext))

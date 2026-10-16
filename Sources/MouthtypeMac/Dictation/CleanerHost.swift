@@ -175,7 +175,8 @@ final class CleanerHost: CleanupModelManaging {
     private func unload(reason: String) {
         guard case .ready = state else { return }
         state = .unloaded
-        unloadTask = Task { [model] in
+        unloadTask = Task { [model, smart] in
+            await smart.waitForPendingWork()
             await model.unload()
             unloadTask = nil
         }
