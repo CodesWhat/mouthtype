@@ -44,6 +44,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 }
 
 @MainActor struct SettingsActions {
+    var openSetup: () -> Void = {}
     var changeShortcut: () -> Void = {}
     var openSpellings: () -> Void = {}
     var openPhrases: () -> Void = {}
@@ -127,6 +128,7 @@ struct SettingsView: View {
     private var general: some View {
         VStack(alignment: .leading, spacing: 25) {
             heading("General", "A little less typing.", "Set your shortcut, choose your cleanup, and carry on.")
+            Button("Set Up Mouthtype…", action: actions.openSetup).accessibilityIdentifier("settings-setup")
             VStack(spacing: 0) {
                 settingRow("Dictation shortcut", "A key or combination that feels natural.") {
                     Text(model.shortcut).font(.system(.body, design: .monospaced)).padding(8)
