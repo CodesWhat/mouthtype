@@ -250,6 +250,13 @@ public actor SmartCleanup {
     /// Whether `task` finished before `deadline`. The watcher on the task is not a child of this call, so a task
     /// that ignores cancellation can't hold the caller past the deadline.
     private static func finished(_ task: Task<Result<Draft, Error>, Never>, by deadline: ContinuousClock.Instant, clock: ContinuousClock) async -> Bool {
+        await waitForCompletion(task, sleep: { try await clock.sleep(until: deadline) })
+    }
+
+    static func waitForCompletion<Value: Sendable>(
+        _ task: Task<Value, Never>, sleep: @escaping @Sendable () async throws -> Void,
+        cancelTimer: @escaping @Sendable (Task<Void, Never>) -> Void = { $0.cancel() }
+    ) async -> Bool {
         let once = OSAllocatedUnfairLock(initialState: false)
         return await withCheckedContinuation { continuation in
             @Sendable func settle(_ value: Bool) {
@@ -260,13 +267,13 @@ public actor SmartCleanup {
                 if first { continuation.resume(returning: value) }
             }
             let sleeper = Task {
-                try? await clock.sleep(until: deadline)
+                do { try await sleep() } catch { return }
                 settle(false)
             }
             Task {
                 _ = await task.value
-                sleeper.cancel()
                 settle(true)
+                cancelTimer(sleeper)
             }
         }
     }
