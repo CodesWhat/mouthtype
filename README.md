@@ -6,7 +6,9 @@ Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or p
 
 ## Private alpha
 
-The current private alpha is `0.1.0-alpha.2` for Apple Silicon Macs on macOS 26 or later. Download the notarized ZIP from this private repository’s Releases page and follow [the alpha install notes](docs/ALPHA.md). Repository access is required for the download. Known limitations and feedback details are listed there.
+The current private alpha is `0.1.0-alpha.3` for Apple Silicon Macs on macOS 26 or later. Download the notarized ZIP from this private repository’s Releases page and follow [the alpha install notes](docs/ALPHA.md). Repository access is required for the download. Known limitations and feedback details are listed there.
+
+For a larger Winamp-style pill, choose **Pill Style → Hi-Fi Size → Large (2×)**. The size is saved. Changes during recording take effect the next time the pill appears.
 
 ## Run from source
 

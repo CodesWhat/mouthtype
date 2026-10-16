@@ -6,16 +6,15 @@ import QuartzCore
 /// integer art scale so every art pixel stays a crisp block. The view never takes events, the host view over it does.
 @MainActor
 final class HiFiPillView: NSView, PillSkinView {
-    /// Points per art pixel. 1 or 2; a setting later.
-    static let artScale: CGFloat = 1
+    let artScale: CGFloat
     static let artSize = CGSize(width: 146, height: 32)
-    static let pillSize = CGSize(width: artSize.width * artScale, height: artSize.height * artScale)
+    var pillSize: CGSize { CGSize(width: Self.artSize.width * artScale, height: Self.artSize.height * artScale) }
 
     private enum Mode { case meter, message }
 
     static let fadeIn: TimeInterval = 0.12
     static let fadeOut: TimeInterval = 0.16
-    private static let travel: CGFloat = 6 * artScale
+    private var travel: CGFloat { 6 * artScale }
 
     /// Holds the pill and is what the show and hide animations fade and move.
     let container = CALayer()
@@ -45,7 +44,8 @@ final class HiFiPillView: NSView, PillSkinView {
     /// How far the current message has to scroll, 0 when it sits centred.
     private(set) var messageScrollDistance = 0
 
-    init(frame: NSRect, assets: PillAssets) {
+    init(frame: NSRect, assets: PillAssets, size: HiFiPillSize = .standard) {
+        artScale = size.scale
         self.assets = assets
         layout = assets.layout
         super.init(frame: frame)
@@ -58,8 +58,8 @@ final class HiFiPillView: NSView, PillSkinView {
         layer?.addSublayer(container)
 
         pill.frame = CGRect(
-            x: ((bounds.width - Self.pillSize.width) / 2).rounded(.down), y: PillGeometry.verticalMargin,
-            width: Self.pillSize.width, height: Self.pillSize.height
+            x: ((bounds.width - pillSize.width) / 2).rounded(.down), y: PillGeometry.verticalMargin,
+            width: pillSize.width, height: pillSize.height
         )
         container.addSublayer(pill)
         add(pill, image: assets.chassis, rect: PillLayout.Rect(x: 0, y: 0, w: layout.size.w, h: layout.size.h))
@@ -121,7 +121,7 @@ final class HiFiPillView: NSView, PillSkinView {
 
     /// A layout rect (top-left origin, art pixels) as a frame in the pill layer.
     private func layerFrame(of rect: PillLayout.Rect) -> CGRect {
-        let s = Self.artScale
+        let s = artScale
         return CGRect(
             x: CGFloat(rect.x) * s, y: CGFloat(layout.size.h - rect.y - rect.h) * s,
             width: CGFloat(rect.w) * s, height: CGFloat(rect.h) * s
@@ -262,7 +262,7 @@ final class HiFiPillView: NSView, PillSkinView {
                 setSprite(layer, isLocked && !down ? name + "_lit" : name)
                 guard let spec = layout.sprites[name] else { continue }
                 var frame = layerFrame(of: spec.rect)
-                if down { frame.origin.y -= Self.artScale }
+                if down { frame.origin.y -= artScale }
                 layer.frame = frame
             }
         }
@@ -321,7 +321,7 @@ final class HiFiPillView: NSView, PillSkinView {
     func appear(reduceMotion: Bool) {
         withoutActions {
             container.opacity = 0
-            container.transform = reduceMotion ? CATransform3DIdentity : CATransform3DMakeTranslation(0, -Self.travel, 0)
+            container.transform = reduceMotion ? CATransform3DIdentity : CATransform3DMakeTranslation(0, -travel, 0)
         }
         CATransaction.begin()
         CATransaction.setAnimationDuration(Self.fadeIn)
@@ -337,7 +337,7 @@ final class HiFiPillView: NSView, PillSkinView {
         CATransaction.setAnimationTimingFunction(CAMediaTimingFunction(name: .easeIn))
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
         container.opacity = 0
-        if !reduceMotion { container.transform = CATransform3DMakeTranslation(0, Self.travel / 2, 0) }
+        if !reduceMotion { container.transform = CATransform3DMakeTranslation(0, travel / 2, 0) }
         CATransaction.commit()
     }
 
@@ -373,8 +373,8 @@ final class HiFiPillView: NSView, PillSkinView {
 
     private func placeMessage(at offset: Int) {
         messageText.frame = CGRect(
-            x: CGFloat(offset) * Self.artScale, y: 0,
-            width: CGFloat(messageWidth) * Self.artScale, height: messageClip.bounds.height
+            x: CGFloat(offset) * artScale, y: 0,
+            width: CGFloat(messageWidth) * artScale, height: messageClip.bounds.height
         )
     }
 }

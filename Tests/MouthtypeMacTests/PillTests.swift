@@ -303,10 +303,11 @@ func makePillController(skin: PillSkinKind? = nil, level: @escaping @MainActor (
     @Test func pillIsTheDrawnSizeAndTheSkinAgrees() throws {
         let assets = try PillAssets.loadHiFi()
         #expect(HiFiPillView.artSize == CGSize(width: assets.layout.size.w, height: assets.layout.size.h))
-        #expect(HiFiPillView.pillSize == CGSize(width: 146 * HiFiPillView.artScale, height: 32 * HiFiPillView.artScale))
-        #expect(PillController.panelSize.width >= HiFiPillView.pillSize.width)
-        #expect(PillController.panelSize.height >= HiFiPillView.pillSize.height + 2 * PillController.pillPadding)
-        #expect(HiFiPillView.artScale.rounded() == HiFiPillView.artScale)
+        let view = HiFiPillView(frame: NSRect(origin: .zero, size: PillController.panelSize), assets: assets)
+        #expect(view.pillSize == CGSize(width: 146 * view.artScale, height: 32 * view.artScale))
+        #expect(PillController.panelSize.width >= view.pillSize.width)
+        #expect(PillController.panelSize.height >= view.pillSize.height + 2 * PillController.pillPadding)
+        #expect(view.artScale.rounded() == view.artScale)
         #expect(assets.layout.meter.columns == BarModel.barCount)
         #expect(assets.layout.meter.segmentsPerColumn == BarModel.segmentRows)
     }

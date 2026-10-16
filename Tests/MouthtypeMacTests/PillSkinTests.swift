@@ -48,13 +48,13 @@ import Testing
         let section = PillSkinMenuSection(defaults: defaults, onSelect: { picked.append($0) })
         let submenu = section.items[0].submenu
         #expect(section.items[0].title == "Pill Style")
-        #expect(submenu?.items.map(\.title) == ["Classic", "Hi-Fi"])
-        #expect(submenu?.items.map(\.state) == [.on, .off])
+        #expect(submenu?.items.prefix(2).map(\.title) == ["Classic", "Hi-Fi"])
+        #expect(submenu?.items.prefix(2).map(\.state) == [.on, .off])
         let hifi = submenu!.items[1]
         _ = hifi.target?.perform(hifi.action, with: hifi)
         #expect(picked == [.hifi])
         #expect(PillSkinPreference.current(defaults) == .hifi)
-        #expect(submenu?.items.map(\.state) == [.off, .on])
+        #expect(submenu?.items.prefix(2).map(\.state) == [.off, .on])
     }
 }
 
