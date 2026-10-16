@@ -1,6 +1,6 @@
 # Settings
 
-Source builds include **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active. The current alpha.3 ZIP predates this window.
+Alpha.4 includes **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active.
 
 The daily menu contains Settings, Paste Last, Copy Last, Saved Recordings, a collapsed Recent Dictations submenu, Help, About and Quit. Stop and Cancel appear during hands-free recording. Healthy model and permission lines stay out of the menu; an attention message opens Diagnostics when something needs repair. Recent items copy their full text and exclude secure fields. Stats live inside Recent.
 

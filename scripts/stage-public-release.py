@@ -10,6 +10,7 @@ import plistlib
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location('package_release', ROOT / 'scripts/package-release.py')
@@ -50,6 +51,13 @@ def retain_public_assets(staged, retained):
     temporary = retained / 'updates/appcast.xml.new'
     temporary.write_bytes(feed)
     os.replace(temporary, retained / 'updates/appcast.xml')
+
+
+def validate_feed_build(feed, build):
+    namespace = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+    versions = [int(item.text) for item in ET.parse(feed).iter(namespace + 'version')]
+    if not versions or int(build) != max(versions):
+        raise RuntimeError('The advertised download must be the newest build in the signed feed')
 
 
 def main():

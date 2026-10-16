@@ -12,6 +12,13 @@ spec.loader.exec_module(public)
 
 
 class PublicReleaseTests(unittest.TestCase):
+    def test_download_must_select_the_newest_feed_build_not_an_older_item(self):
+        path = self.directory / 'appcast.xml'
+        path.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><item><sparkle:version>4</sparkle:version></item><item><sparkle:version>5</sparkle:version></item></channel></rss>')
+        with self.assertRaisesRegex(RuntimeError, 'newest'):
+            public.validate_feed_build(path, '4')
+        public.validate_feed_build(path, '5')
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory(prefix='mouthtype-public-release-')
         self.addCleanup(self.temporary.cleanup)

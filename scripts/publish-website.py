@@ -8,7 +8,6 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
-import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent.parent
 spec = importlib.util.spec_from_file_location('public_release', ROOT / 'scripts/stage-public-release.py')
@@ -45,10 +44,7 @@ def main():
     if selected is None:
         raise RuntimeError('The advertised download is not among the checked artifacts')
     feed = assets / 'updates/appcast.xml'
-    namespace = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
-    versions = {item.text for item in ET.parse(feed).iter(namespace + 'version')}
-    if selected['build'] not in versions:
-        raise RuntimeError('The signed feed must contain the advertised build')
+    public.validate_feed_build(feed, selected['build'])
     tools = ROOT / '.build/artifacts/sparkle/Sparkle/bin'
     run([str(tools / 'sign_update'), '--account', 'com.codeswhat.mouthtype', '--verify', str(feed)])
     if not args.production:
