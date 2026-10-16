@@ -51,3 +51,7 @@ Click is the default sound set: a bright key-down thunk to start, a duller key-u
 History, settings, dictionary and audio stay on this Mac. The default store is `~/Library/Application Support/Mouthtype/mouthtype.sqlite`; recordings are in its sibling `audio` directory. Text history is retained indefinitely. Audio cleanup runs at launch: files older than 90 days are removed, then the oldest remaining files until the archive fits within 2 GB. Model downloads require network access.
 
 Run `swift test` to check the core, macOS integration logic and Fn guardian. The bundled app also has isolated paste and recovery self-tests, which take desktop focus and should be run only when the desktop is free. Those tests restrict keyboard events to their own process and refuse delivery when another app has focus. Live microphone quality and behavior in individual third-party apps still need their own checks.
+
+## Website
+
+The Vercel-ready product site lives in [website/](website/README.md), with its own static build and browser checks. It builds independently of the native app.
