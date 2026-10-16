@@ -158,7 +158,9 @@ final class FileVocabulary: VocabularyProviding, Sendable {
     static func validationMessage(heard: String, written: String) -> String? {
         if heardKey(heard).isEmpty { return "Enter the word or phrase Mouthtype gets wrong." }
         if written.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return "Enter the spelling to use." }
-        if heard.count > 128 || written.count > 128 { return "Keep each phrase and spelling under 129 characters." }
+        let normalizedHeard = heard.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        let normalizedWritten = written.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalizedHeard.count > 128 || normalizedWritten.count > 128 { return "Keep each phrase and spelling under 129 characters." }
         return nil
     }
 

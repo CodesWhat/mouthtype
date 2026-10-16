@@ -125,4 +125,15 @@ import MouthtypeCore
         }
     }
 
+    @Test func lengthValidationUsesTheSpellingThatWillActuallyBeSaved() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let editor = SpellingEditor(store: store)
+        editor.heard = "  " + String(repeating: "x", count: 128) + "  "
+        editor.written = "  " + String(repeating: "Y", count: 128) + "  "
+        #expect(editor.canSave && editor.validationMessage == nil)
+        editor.save()
+        #expect(editor.items.first?.heard.count == 128 && editor.items.first?.written.count == 128)
+    }
+
 }
