@@ -31,7 +31,14 @@
       "continue": true
     },
     {
-      "src": "/download",
+      "src": "/download/?",
+      "dest": "/download/index.html",
+      "headers": {
+        "Cache-Control": "no-store"
+      }
+    },
+    {
+      "src": "/download/file",
       "headers": {
         "Location": "/releases/0.1.0-alpha.4/Mouthtype-0.1.0-alpha.4-macos-arm64.zip",
         "Cache-Control": "no-store"

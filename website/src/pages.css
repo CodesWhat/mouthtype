@@ -495,3 +495,10 @@
     gap: 20px;
   }
 }
+
+.download-status {
+  min-height: 3.4em;
+  max-width: 570px;
+  margin: 22px 0 0;
+  font-size: 18px;
+}

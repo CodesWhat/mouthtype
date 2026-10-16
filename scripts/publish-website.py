@@ -38,7 +38,7 @@ def main():
         if source_file.name != manifest['sourceArchive'] or hashlib.sha256(source_file.read_bytes()).hexdigest() != manifest['sourceSHA256']:
             raise RuntimeError('Corresponding source archive checksum must match')
         prefix = f"/releases/{manifest['version']}/"
-        if redirects.get('/download') == prefix + manifest['archive']:
+        if redirects.get('/download/file') == prefix + manifest['archive']:
             if redirects.get('/source') != prefix + source_file.name:
                 raise RuntimeError('Download and source routes must describe the same release')
             selected = manifest
