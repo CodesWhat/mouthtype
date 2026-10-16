@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       name="description"
-      content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with clear alpha and source build guidance."
+      content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac alpha guidance."
     />
     <meta name="theme-color" content="#ffffff" />
     <title>Documentation · Mouthtype</title>
@@ -13,7 +13,7 @@
     <meta property="og:site_name" content="Mouthtype" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Documentation · Mouthtype" />
-    <meta property="og:description" content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with clear alpha and source build guidance." />
+    <meta property="og:description" content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac alpha guidance." />
     <meta property="og:url" content="https://mouthtype.app/docs/" />
     <meta property="og:image" content="https://mouthtype.app/social/docs.png" />
     <meta property="og:image:type" content="image/png" />
@@ -22,7 +22,7 @@
     <meta property="og:image:alt" content="Mouthtype documentation: The useful details, with the Mouthtype recording pill." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Documentation · Mouthtype" />
-    <meta name="twitter:description" content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with clear alpha and source build guidance." />
+    <meta name="twitter:description" content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac alpha guidance." />
     <meta name="twitter:image" content="https://mouthtype.app/social/docs.png" />
     <meta name="twitter:image:alt" content="Mouthtype documentation: The useful details, with the Mouthtype recording pill." />
     <link rel="icon" type="image/png" href="/assets/mouthtype-icon.png" />
@@ -70,6 +70,7 @@
             ><a href="#cleanup">Cleanup and tone</a
             ><a href="#spellings-phrases">Spellings and phrases</a
             ><a href="#recovery">Paste and recovery</a
+            ><a href="#updates">Downloads and updates</a
             ><a href="#local-data">Local data</a
             ><a href="#permissions">Permissions and help</a>
           </nav>
@@ -77,21 +78,16 @@
             <section id="builds">
               <h2>Find your build.</h2>
               <p>
-                <strong>Distributed alpha.3:</strong> the current private ZIP is
-                0.1.0-alpha.3. Its controls live in the menu. It needs macOS 26
-                or later and Apple Silicon.
+                The Mac download is <strong>0.1.0-alpha.4 (build 4)</strong>, for
+                macOS 26 or later and Apple Silicon. Settings groups controls
+                into General, Writing, Appearance and Diagnostics, with Saved
+                spellings and Phrases in the sidebar. The menu keeps recording,
+                recent text and recovery actions available.
               </p>
               <p>
-                <strong>Newer source builds:</strong> Settings groups controls
-                into General, Writing, Appearance and Diagnostics. Per-app tone
-                and the native Saved spellings editor are newer source features.
-                The existing alpha.3 ZIP predates this window and these
-                additions.
-              </p>
-              <p>
-                The sections below call out the differences. Source screenshots
-                or instructions aren’t a promise that your alpha ZIP already
-                contains them.
+                This reference describes alpha.4. If you’re still using
+                alpha.1–3, <a href="#updates">download the new app manually</a>
+                once to get the current Settings window and built-in updater.
               </p>
             </section>
             <section id="shortcuts">
@@ -103,18 +99,23 @@
                 five-second Undo offer.
               </p>
               <p>
-                <strong>Alpha.3:</strong> choose Change Dictation Shortcut… in
-                the menu. <strong>Newer source:</strong> open Settings → General
-                and change the shortcut there. Click the recorder, press your
-                new key or combination, release all keys, then Save. Cancel
+                Open Settings → General and change the dictation shortcut. Click
+                the recorder, press your new key or combination, release all keys, then Save. Cancel
                 keeps the previous choice.
+              </p>
+              <p>
+                In General, Recording behavior defaults to
+                <strong>Hold to talk</strong>. Choose <strong>Press to toggle</strong> to start with one press
+                and stop with the next. Releasing the key keeps recording in
+                toggle mode. Escape cancels in either mode. Changing the mode
+                cancels an active recording.
               </p>
               <details>
                 <summary>Before choosing another key</summary>
                 <p>
                   A chosen key is reserved for Mouthtype while it runs,
-                  including a bare letter. Other keys support hold/release and
-                  double-tap; Caps Lock uses press-to-start/press-to-stop. If
+                  including a bare letter. In Hold to talk mode, other keys support
+                  hold/release and double-tap; Caps Lock uses press-to-start/press-to-stop. If
                   Escape is your recording shortcut, use Cancel Dictation in the
                   menu to cancel hands-free recording. Some system-reserved or
                   media keys may be handled by macOS first.
@@ -147,10 +148,8 @@
                 authorize paraphrasing.
               </p>
               <p>
-                <strong>Alpha.3:</strong> use the Cleanup menu for Level and
-                Tone. <strong>Newer source:</strong> General contains Level;
-                Writing contains Tone and per-app rules. Those rules start
-                empty. The application where recording starts determines the
+                Settings → General contains Level; Writing contains Tone and
+                per-app rules. Those rules start empty. The application where recording starts determines the
                 tone for that take; other apps use the default. A browser rule
                 applies to the browser, not individual websites.
               </p>
@@ -164,7 +163,7 @@
             <section id="spellings-phrases">
               <h2>Keep the things you repeat.</h2>
               <p>
-                <strong>Saved spellings, newer source builds:</strong> open
+                <strong>Saved spellings:</strong> open
                 Saved spellings from the Settings sidebar. “Heard as” is the
                 word or phrase that comes back wrong; “Write as” is the spelling
                 you want. Use specific phrases for ambiguous common words. These
@@ -174,9 +173,8 @@
               <p>
                 <strong>Phrase replacements:</strong> save a spoken trigger and
                 the exact text it should insert. For example, “my work email”
-                can expand to an address you choose. In alpha.3, open Cleanup →
-                Phrase Replacements…; in newer source builds, use Phrases in the
-                Settings sidebar.
+                can expand to an address you choose. Use Phrases in the Settings
+                sidebar.
               </p>
               <p>
                 The phrase library starts empty. Matching ignores capitalization
@@ -218,10 +216,8 @@
                 <summary>Long terminal pastes</summary>
                 <p>
                   Splitting is an explicit opt-in for a supported terminal
-                  application. Alpha.3 offers it under Paste Options while that
-                  terminal is selected; newer source builds use General →
-                  Advanced delivery with terminal-app choices. It applies to
-                  that terminal’s windows, not the command running inside it.
+                  application. Use Settings → General → Advanced delivery with
+                  terminal-app choices. It applies to that terminal’s windows, not the command running inside it.
                 </p>
                 <p>
                   No Return is sent. If splitting stops partway, some text may
@@ -229,6 +225,37 @@
                   recovery copy.
                 </p>
               </details>
+            </section>
+            <section id="updates">
+              <h2>Downloads and updates.</h2>
+              <p>
+                Alpha.4 includes the Sparkle updater. Choose
+                <strong>Check for Updates…</strong> in the menu or Settings →
+                General. If a newer release is available, the updater offers
+                the download and installation. You choose whether to install.
+              </p>
+              <p>
+                Automatic checking is optional. You can accept the updater’s
+                permission prompt or change <strong>Automatically check for
+                updates</strong> in General. This controls checking; it does not
+                authorize an automatic installation.
+              </p>
+              <p>
+                <strong>Alpha.1–3 need one manual upgrade.</strong> Those builds
+                do not include the updater. <a href="/download">Download the Mac
+                alpha ZIP</a>, quit Mouthtype, expand the ZIP and replace
+                Mouthtype.app in Applications manually. Open the new copy from
+                Applications. Replacing the app does not erase the separate
+                history and recordings described below.
+              </p>
+              <p>
+                The ZIP contains the app, for macOS 26 or later and Apple
+                Silicon. License and readme files are included inside its
+                Resources. The <a href="/source">corresponding source code
+                (GPL-3.0)</a> is available alongside the app download. No GitHub
+                account is needed for these links. For first-time installation,
+                <a href="/start/">read the installation guide</a>.
+              </p>
             </section>
             <section id="local-data">
               <h2>What stays on your Mac.</h2>
@@ -245,8 +272,13 @@
                 Removing the app does not remove this data. Quit Mouthtype
                 before removing the application. Delete the data folder only
                 when you intend to erase the history and recordings inside it.
-                Model downloads need a network connection; dictation doesn’t
-                need a Mouthtype account.
+                Dictation doesn’t need a Mouthtype account.
+              </p>
+              <p>
+                Recognition and cleanup run locally. Network access is used for
+                model downloads, HTTPS update checks and update archive
+                downloads. Update checks do not upload transcripts or audio.
+                Anonymous system profiling is not enabled by default.
               </p>
             </section>
             <section id="permissions">
@@ -258,11 +290,8 @@
                 Mouthtype.
               </p>
               <p>
-                <strong>Alpha.3:</strong> the menu shows permission and model
-                status and provides repair links.
-                <strong>Newer source:</strong> open Settings → Diagnostics for
-                status, model retry, shortcut health and the same repair
-                actions. An attention message in the menu opens Diagnostics.
+                Open Settings → Diagnostics for status, model retry, shortcut
+                health and permission repair actions. An attention message in the menu opens Diagnostics.
               </p>
               <p>
                 If nothing appears, confirm a text field is selected and the
@@ -273,8 +302,9 @@
               </p>
               <p>
                 Browser, terminal and Electron compatibility still need wider
-                testing. A fresh install on another Mac and physical device
-                changes remain part of alpha testing. Linux support is planned,
+                testing. A fresh install on another Mac, physical custom-key
+                dictation, device changes and actual in-app update installation
+                remain part of alpha testing. Linux support is planned,
                 with no released build yet.
               </p>
             </section>

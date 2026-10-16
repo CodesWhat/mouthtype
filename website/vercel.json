@@ -20,9 +20,63 @@
           "key": "Referrer-Policy",
           "value": "strict-origin-when-cross-origin"
         },
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        }
       ]
+    },
+    {
+      "source": "/download",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/source",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/updates/appcast.xml",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/releases/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    {
+      "source": "/download",
+      "destination": "/releases/0.1.0-alpha.4/Mouthtype-0.1.0-alpha.4-macos-arm64.zip",
+      "statusCode": 302
+    },
+    {
+      "source": "/source",
+      "destination": "/releases/0.1.0-alpha.4/Mouthtype-0.1.0-alpha.4-source.tar.gz",
+      "statusCode": 302
     }
   ]
 }

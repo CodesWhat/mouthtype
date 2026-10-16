@@ -63,16 +63,14 @@ for (const [path, heading] of pages) {
   });
 }
 
-test("start distinguishes the shipped alpha from source settings", async ({
-  page,
-}) => {
+test("start describes the alpha.4 Settings window", async ({ page }) => {
   await page.goto("/start/");
-  await expect(page.locator("main")).toContainText("0.1.0-alpha.3");
-  await expect(page.locator("#install")).toContainText("private");
+  await expect(page.locator("main")).toContainText("0.1.0-alpha.4");
+  await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
   await expect(page.locator("#first-take")).toContainText("release");
-  await expect(page.locator("#your-build")).toContainText("predates");
+  await expect(page.locator("#your-build")).toContainText("Settings");
   await page.getByRole("link", { name: "If something gets stuck" }).click();
   await expect(page.locator("#help")).toBeInViewport();
   await expect(page.locator("#help")).toContainText("already appeared");
@@ -95,8 +93,8 @@ test("reference help covers everyday tasks with explicit build labels", async ({
   ]) {
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
-  await expect(page.locator("#builds")).toContainText("alpha.3");
-  await expect(page.locator("#builds")).toContainText("source");
+  await expect(page.locator("#builds")).toContainText("alpha.4");
+  await expect(page.locator("#builds")).toContainText("Settings");
   await expect(page.locator("#cleanup")).toContainText("per-app");
   await expect(page.locator("#local-data")).toContainText("90 days");
   await page.getByRole("link", { name: "Start with your first take" }).click();
@@ -115,7 +113,7 @@ test("comparison pages cite official sources and keep the tradeoffs visible", as
   await page.goto("/compare/wispr-flow/");
   await expect(page.locator("main")).toContainText("cloud");
   await expect(page.locator("main")).toContainText("Windows");
-  await expect(page.locator("main")).toContainText("private alpha");
+  await expect(page.locator("main")).toContainText("alpha");
   await expect(
     page.locator('main a[href^="https://docs.wisprflow.ai/"]'),
   ).not.toHaveCount(0);
@@ -160,7 +158,9 @@ for (const width of [1440, 320]) {
       const links = await page
         .locator('a[href^="/"]')
         .evaluateAll((items) => items.map((item) => item.getAttribute("href")));
-      links.forEach((href) => internal.add(href));
+      links
+        .filter((href) => !["/download", "/source"].includes(href))
+        .forEach((href) => internal.add(href));
       const broken = await page
         .locator('a[href^="#"]')
         .evaluateAll((items) =>
