@@ -266,13 +266,6 @@ struct SettingsView: View {
                     if case .custom = model.font { Text(model.font.title).tag(model.font.title) }
                 }.labelsHidden().frame(width: 170)
             }
-            if model.font == .systema {
-                VStack(alignment: .leading, spacing: 5) {
-                    Text("Instrument Serif · headings and pill messages")
-                    Text("Instrument Sans · body text and buttons")
-                    Text("JetBrains Mono · readouts")
-                }.font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            }
             Text("Ready when you are.").font(Font(Typography(choice: model.font).font(.pillMessage)))
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(nsColor: .controlBackgroundColor)).accessibilityLabel("Selected font sample: Ready when you are.")
