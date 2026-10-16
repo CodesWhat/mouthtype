@@ -203,6 +203,10 @@ public enum SmartCleanupGuard {
             }
         }
 
+        if let added = insertedNearbyName(input: comparableInput, output: comparableOutput, names: nearbyNames) {
+            return "nearby spelling \"\(added)\" added"
+        }
+
         let inputWords = contentWords(comparableInput)
         let outputContent = contentWords(comparableOutput)
         if !inputWords.isEmpty {
@@ -394,6 +398,49 @@ public enum SmartCleanupGuard {
     }
 
     // MARK: Names and spellings
+
+    // Reject nearby names that every minimum-edit alignment has to insert, while allowing
+    // one-for-one spelling corrections. Two rows bound memory; word limits bound the work.
+    private static func insertedNearbyName(input: String, output: String, names: Set<String>) -> String? {
+        guard !names.isEmpty else { return nil }
+        let before = input.split(whereSeparator: \.isWhitespace).map(stripped).filter {
+            !$0.isEmpty && (!FillerRemover.fillerWords.contains($0.lowercased()) || $0 == $0.uppercased())
+        }.map { $0.lowercased() }
+        let after = output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() }.filter { !$0.isEmpty }
+        guard before.count <= SmartCleanup.maxWords,
+              after.count <= CleanupLimits.maxOutputTokens(for: input),
+              after.contains(where: names.contains) else { return nil }
+        struct Step {
+            var edits: Int
+            var addedNames: Int
+            var firstName: String?
+
+            func inserting(_ word: String, isName: Bool) -> Step {
+                Step(edits: edits + 1, addedNames: addedNames + (isName ? 1 : 0),
+                    firstName: firstName ?? (isName ? word : nil))
+            }
+        }
+        func better(_ left: Step, _ right: Step) -> Step {
+            if left.edits != right.edits { return left.edits < right.edits ? left : right }
+            return left.addedNames <= right.addedNames ? left : right
+        }
+        var previous = [Step(edits: 0, addedNames: 0)]
+        for word in after { previous.append(previous.last!.inserting(word, isName: names.contains(word))) }
+        var current = previous
+        for (index, word) in before.enumerated() {
+            current[0] = Step(edits: index + 1, addedNames: 0)
+            for end in after.indices {
+                var substitution = previous[end]
+                substitution.edits += word == after[end] ? 0 : 1
+                var deletion = previous[end + 1]
+                deletion.edits += 1
+                let insertion = current[end].inserting(after[end], isName: names.contains(after[end]))
+                current[end + 1] = better(substitution, better(deletion, insertion))
+            }
+            swap(&previous, &current)
+        }
+        return previous.last?.firstName
+    }
 
     private static func missingLiteral(input: String, output: String) -> String? {
         guard let expression = try? NSRegularExpression(
