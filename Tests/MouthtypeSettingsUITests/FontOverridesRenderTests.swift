@@ -20,7 +20,7 @@ import Testing
         model.setFontFamily("A saved font family that is unavailable on this Mac", for: .heading)
         try render(model, name: "font-unavailable-minimum", size: NSSize(width: 430, height: 550))
         model.setFontOverridesEnabled(false)
-        try render(model, name: "font-disabled", size: NSSize(width: 430, height: 180))
+        try render(model, name: "font-disabled", size: NSSize(width: 430, height: 230))
         #expect(TextFontPreference.current(defaults) == .systema)
         #expect(model.fontOverrides.families[.heading] == "A saved font family that is unavailable on this Mac")
         #expect(NSFontPanel.sharedFontPanelExists == false)

@@ -41,6 +41,7 @@ import MouthtypeCore
         defer { defaults.removePersistentDomain(forName: name) }
         TextFontPreference.set(.custom("Menlo"), in: defaults)
         let model = SettingsModel(defaults: defaults)
+        #expect(model.canResetFonts)
         model.setFontFamily("Avenir Next", for: .heading)
         model.setFontOverridesEnabled(true)
         #expect(model.fontOverrides.enabled)
@@ -51,13 +52,17 @@ import MouthtypeCore
         model.setFontOverridesEnabled(false)
         model.refresh()
         #expect(!model.fontOverrides.enabled)
+        #expect(model.canResetFonts)
         #expect(model.fontOverrides.families[.heading] == "Avenir Next")
         #expect(model.font == .custom("Menlo"))
+        model.setFont(.systema)
+        #expect(model.canResetFonts)
         #expect(!model.fontFamilies.isEmpty)
         #expect(FontRegistry.families.allSatisfy { model.fontFamilies.contains($0) })
         model.setSounds(false)
         model.resetFonts()
         #expect(model.font == .systema && model.fontOverrides == TextFontOverrides())
+        #expect(!model.canResetFonts)
         #expect(!model.sounds)
     }
 

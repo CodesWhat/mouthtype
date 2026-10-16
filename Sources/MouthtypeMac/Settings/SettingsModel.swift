@@ -175,6 +175,8 @@ import UniformTypeIdentifiers
         TextFontPreference.set(value, in: defaults)
         font = value
     }
+    var canResetFonts: Bool { font != .systema || fontOverrides.enabled || !fontOverrides.families.isEmpty }
+
     func setFontOverridesEnabled(_ value: Bool) {
         TextFontOverrides.setEnabled(value, in: defaults)
         fontOverrides = TextFontOverrides.load(defaults)

@@ -18,6 +18,8 @@ struct FontOverridesSection: View {
                 }
                 Text("Switching overrides off keeps your choices. Hi-Fi’s bitmap readouts keep their own artwork.")
                     .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if model.canResetFonts {
                 Button("Reset fonts to defaults", action: model.resetFonts).accessibilityIdentifier("settings-font-reset")
             }
             VStack(alignment: .leading, spacing: 10) {
