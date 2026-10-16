@@ -34,6 +34,8 @@ public final class PillController {
     /// A click on the cancel or stop control of a locked pill.
     var onControl: (@MainActor (PillControl) -> Void)?
 
+    private let defaults: UserDefaults
+    private var hiFiSize: HiFiPillSize
     private var pendingSkin: PillSkinKind?
     private var bars = BarModel()
     private var link: CADisplayLink?
@@ -47,9 +49,11 @@ public final class PillController {
     private var pressedControl: PillControl?
 
     public init(level: @escaping @MainActor () -> LevelReading, defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         levelSource = level
         skinKind = PillSkinPreference.current(defaults)
-        skin = Self.makeSkin(skinKind)
+        hiFiSize = HiFiPillSizePreference.current(defaults)
+        skin = Self.makeSkin(skinKind, size: hiFiSize)
         host = PillHostView(frame: NSRect(origin: .zero, size: Self.panelSize))
         panel = PillPanel(
             contentRect: NSRect(origin: .zero, size: Self.panelSize),
@@ -80,14 +84,14 @@ public final class PillController {
     }
 
 
-    private static func makeSkin(_ kind: PillSkinKind) -> any PillSkinView {
+    private static func makeSkin(_ kind: PillSkinKind, size: HiFiPillSize) -> any PillSkinView {
         let frame = NSRect(origin: .zero, size: PillGeometry.panelSize)
         switch kind {
         case .classic:
             return ClassicPillView(frame: frame)
         case .hifi:
             do {
-                return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi())
+                return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: size)
             } catch {
                 fatalError("pill resources missing from the bundle: \(error)")
             }
@@ -112,7 +116,8 @@ public final class PillController {
     /// Switches skins at once when the pill is down, else at the next time it shows, so a recording is never
     /// redrawn under the user.
     func setSkin(_ kind: PillSkinKind) {
-        pendingSkin = kind == skinKind ? nil : kind
+        let sizeChanged = kind == .hifi && HiFiPillSizePreference.current(defaults) != hiFiSize
+        pendingSkin = kind == skinKind && !sizeChanged ? nil : kind
         if state == .hidden { applyPendingSkin() }
     }
 
@@ -120,7 +125,8 @@ public final class PillController {
         guard let kind = pendingSkin else { return }
         pendingSkin = nil
         skinKind = kind
-        install(Self.makeSkin(kind))
+        hiFiSize = HiFiPillSizePreference.current(defaults)
+        install(Self.makeSkin(kind, size: hiFiSize))
     }
 
     public func showRecording() {
@@ -244,7 +250,8 @@ public final class PillController {
         let screen = screens.first { $0.frame.contains(pointer) } ?? screens.first
         return .init(
             midX: origin.x.rounded(.down) + Self.panelSize.width / 2,
-            top: origin.y.rounded(.down) + Self.pillPadding + ClassicPillLayout.height,
+            top: origin.y.rounded(.down) + Self.pillPadding
+                + (skinKind == .hifi ? HiFiPillView.artSize.height * hiFiSize.scale : ClassicPillLayout.height),
             visible: screen?.visibleFrame ?? .zero
         )
     }

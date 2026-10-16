@@ -30,6 +30,25 @@ enum PillSkinPreference {
     }
 }
 
+enum HiFiPillSize: Int, CaseIterable, Sendable {
+    case standard = 1, large = 2
+
+    var scale: CGFloat { CGFloat(rawValue) }
+    var title: String { self == .standard ? "Standard" : "Large (2×)" }
+}
+
+enum HiFiPillSizePreference {
+    static let key = "hiFiPillSize"
+
+    static func current(_ defaults: UserDefaults = .standard) -> HiFiPillSize {
+        HiFiPillSize(rawValue: defaults.integer(forKey: key)) ?? .standard
+    }
+
+    static func set(_ size: HiFiPillSize, in defaults: UserDefaults = .standard) {
+        defaults.set(size.rawValue, forKey: key)
+    }
+}
+
 /// Where the pill sits in its panel. Both skins draw inside the same fixed panel, anchored on its bottom margin, so
 /// switching skins never moves or resizes the window.
 enum PillGeometry {
