@@ -21,6 +21,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var historySection: HistoryMenuSection?
     private var hotkeyService: HotkeyService?
+    private var shortcutWindow: ShortcutRecorderWindow?
     private var hotkeyLogTask: Task<Void, Never>?
     private var pill: PillController?
     private var cardController: DeliveryCardController?
@@ -33,6 +34,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let launchedAt = Date()
     private var inputStarted = false
     private var preparingCapture = false
+    private var isTerminating = false
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.info("launch \(AppInfo.version, privacy: .public)")
@@ -173,9 +175,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         systemSection.onToggleRemap = { [weak self] in self?.toggleRemap() }
+        systemSection.onChangeShortcut = { [weak self] in self?.showShortcutEditor() }
+        systemSection.update(shortcut: ShortcutSettings.load())
         systemSection.update(remapChecked: remapCoordinator.menuChecked)
-        shortcuts.register(.pasteLast) { [weak self] in self?.pasteLast() }
-        shortcuts.register(.copyLast) { [weak self] in self?.copyLast() }
+        registerGlobalShortcuts()
         trackStatus()
 
         refreshGlobeCheck()
@@ -199,6 +202,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        isTerminating = true
         guard menuBar != nil else { return }
         shortcuts.unregisterAll()
         hotkeyService?.stop()
@@ -247,6 +251,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         // With the remap on the system never sees the Globe key, so its action can't conflict.
         systemSection.update(globe: remapCoordinator.isActive ? nil : check)
         systemSection.update(remapChecked: remapCoordinator.menuChecked)
+        systemSection.update(shortcut: ShortcutSettings.load())
         Log.permissions.info("globe key action \(String(describing: check.action), privacy: .public), fn key present \(check.fnKeyPresent, privacy: .public), conflict \(check.hasConflict, privacy: .public)")
     }
 
@@ -304,14 +309,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startInput() {
-        guard !inputStarted else { return }
+        guard !inputStarted, shortcutWindow == nil else { return }
         inputStarted = true
         if let mode = InputProbe.mode(in: CommandLine.arguments) {
             Task { await InputProbe.run(mode, remap: fnRemap) }
             return
         }
 
-        let service = HotkeyService(options: .init(source: remapCoordinator.initialSource()))
+        let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
+        let service = HotkeyService(options: .init(source: source))
         service.onHealthChange = { [weak self] health in
             Log.hotkey.info("health \(health.statusText, privacy: .public)")
             self?.systemSection.update(hotkeyHealth: health)
@@ -335,6 +341,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func toggleRemap() {
+        guard ShortcutSettings.load() == nil else { return }
         let enable = !remapCoordinator.menuChecked
         let source = remapCoordinator.setEnabled(enable)
         if let service = hotkeyService {
@@ -347,6 +354,69 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let state = remapCoordinator.isActive ? "on" : "off"
         Log.hotkey.info("fn remap \(state, privacy: .public)")
         refreshGlobeCheck()
+    }
+
+    private func registerGlobalShortcuts() {
+        shortcuts.unregisterAll()
+        let shortcut = ShortcutSettings.load()
+        if shortcut?.claimsLastAction(keyCode: GlobalShortcuts.Shortcut.pasteLast.keyCode) != true {
+            shortcuts.register(.pasteLast) { [weak self] in self?.pasteLast() }
+        }
+        if shortcut?.claimsLastAction(keyCode: GlobalShortcuts.Shortcut.copyLast.keyCode) != true {
+            shortcuts.register(.copyLast) { [weak self] in self?.copyLast() }
+        }
+    }
+
+    private func activateShortcut(_ shortcut: DictationShortcut?) -> String? {
+        guard let service = hotkeyService else { return nil }
+        let source: HotkeySource
+        if let shortcut {
+            guard remapCoordinator.deactivate() else { return "Fn could not be restored. Try again." }
+            source = .shortcut(shortcut)
+        } else { source = remapCoordinator.initialSource() }
+        do {
+            try service.switchSource(source)
+            try service.start()
+            return nil
+        } catch {
+            service.stop()
+            remapCoordinator.deactivate()
+            return "The input listener could not start. Check Accessibility access, then try again. Your previous shortcut is still saved."
+        }
+    }
+
+    private func showShortcutEditor() {
+        if let shortcutWindow { shortcutWindow.present(); return }
+        guard dictation?.phase == .idle else {
+            pill?.showMessage("Finish or cancel this dictation before changing its shortcut")
+            return
+        }
+        guard remapCoordinator.deactivate() else {
+            pill?.showMessage("Fn could not be restored. Try changing the shortcut again.")
+            return
+        }
+        hotkeyService?.stop()
+        shortcuts.unregisterAll()
+        let window = ShortcutRecorderWindow(saved: ShortcutSettings.load(), apply: { [weak self] shortcut in
+            guard let self else { return "Mouthtype is closing." }
+            return ShortcutSettings.apply(shortcut, activate: self.activateShortcut)
+        }, onClose: { [weak self] in
+            guard let self else { return }
+            self.shortcutWindow = nil
+            guard !self.isTerminating else { return }
+            if let error = self.activateShortcut(ShortcutSettings.load()) {
+                self.pill?.showMessage(error)
+                self.hotkeyLogTask?.cancel()
+                self.hotkeyLogTask = nil
+                self.hotkeyService = nil
+                self.inputStarted = false
+            }
+            if self.accessibility.isGranted { self.startInput() }
+            self.registerGlobalShortcuts()
+            self.refreshGlobeCheck()
+        })
+        shortcutWindow = window
+        window.present()
     }
 
     private func prepareCapture() async -> Bool {

@@ -59,7 +59,7 @@ private final class GrantBox {
         section.update(accessibilityGranted: false)
         section.update(hotkeyHealth: .recovering)
         section.update(globe: GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true))
-        #expect(section.items.map(\.title) == ["Accessibility: needed", "Hotkey: recovering", "Globe key opens Emoji & Symbols", "Remap Fn key (hides the emoji picker)"])
+        #expect(section.items.map(\.title) == ["Accessibility: needed", "Dictation input: recovering · Fn / Globe", "Globe key opens Emoji & Symbols", "Remap Fn key (hides the emoji picker)", "Change Dictation Shortcut…"])
         #expect(section.items[0].action != nil)
         #expect(!section.items[2].isHidden)
         section.update(accessibilityGranted: true)
@@ -75,6 +75,22 @@ private final class GrantBox {
         section.onToggleRemap = { toggled += 1 }
         _ = section.items[3].target?.perform(section.items[3].action)
         #expect(toggled == 1)
+    }
+
+    @Test func shortcutActionIsClickableAndCustomKeysHideTheFnSettings() throws {
+        let section = SystemAccessMenuSection()
+        var opened = false
+        section.onChangeShortcut = { opened = true }
+        section.update(shortcut: DictationShortcut(keyCode: 61, keyName: "Right Option"))
+        section.update(hotkeyHealth: .listening)
+        try #require(section.items.count == 5)
+        #expect(section.items[1].title == "Dictation input: active · Right Option")
+        #expect(section.items[3].isHidden)
+        #expect(section.items[4].isEnabled && section.items[4].action != nil)
+        _ = section.items[4].target?.perform(section.items[4].action)
+        #expect(opened)
+        section.update(shortcut: nil)
+        #expect(!section.items[3].isHidden)
     }
 }
 

@@ -52,6 +52,7 @@ enum FnCombos {
 enum TapPending: Equatable, Sendable {
     case emulated(FnCombo)
     case swallowed
+    case shortcut
 }
 
 struct TapDecision: Equatable {
@@ -77,16 +78,28 @@ enum TapPolicy {
     /// `swallowedKey` non-nil means Fn remap mode, which is also what turns on the Fn combo emulation.
     static func decide(
         _ sample: TapSample, role: TapRole, recording: Bool, swallowedKey: UInt16?,
-        hotkeyHeld: Bool = false, pending: TapPending? = nil, idleKeysReported: Bool = true
+        hotkeyHeld: Bool = false, pending: TapPending? = nil, idleKeysReported: Bool = true,
+        shortcut: DictationShortcut? = nil, shortcutHeld: Bool = false
     ) -> TapDecision {
         // Our own posted events (the paste, the emulated combos) are none of the hotkey's business.
         guard sample.userData != SyntheticEvents.stamp else { return .passThrough }
-        guard role == .keys else { return .observe }
+        guard role == .keys else { return shortcut == nil ? .observe : .passThrough }
         guard sample.keyCode != HotkeyInputMapper.syntheticFnReleaseKeyCode else { return .passThrough }
         // The up and the repeats of a key whose down was consumed follow it, whether or not Fn is still down.
         if let pending, sample.kind == .keyUp || sample.isAutorepeat {
             if case let .emulated(combo) = pending { return TapDecision(swallow: true, deliver: false, replacement: combo) }
+            if pending == .shortcut { return TapDecision(swallow: true, deliver: !sample.isAutorepeat) }
             return TapDecision(swallow: true, deliver: false)
+        }
+        if let shortcut {
+            if sample.keyCode == shortcut.keyCode, hotkeyHeld || shortcutHeld {
+                return TapDecision(swallow: true, deliver: true)
+            }
+            if sample.keyCode == escapeKeyCode, recording { return TapDecision(swallow: true, deliver: true) }
+            if sample.kind == .keyDown, sample.keyCode == FnCombos.spaceKeyCode, hotkeyHeld, recording {
+                return TapDecision(swallow: true, deliver: true)
+            }
+            return .observe
         }
         if sample.keyCode == escapeKeyCode, recording { return TapDecision(swallow: true, deliver: true) }
         if let swallowedKey, sample.keyCode == swallowedKey { return TapDecision(swallow: true, deliver: true) }
@@ -130,12 +143,13 @@ enum TapPolicy {
         case none, set(TapPending), clear
     }
 
-    static func pendingChange(for sample: TapSample, decision: TapDecision) -> PendingChange {
+    static func pendingChange(for sample: TapSample, decision: TapDecision, shortcutKey: UInt16? = nil) -> PendingChange {
         switch sample.kind {
         case .flagsChanged: return .none
         case .keyUp: return .clear
         case .keyDown:
             guard !sample.isAutorepeat, decision.swallow, sample.userData != SyntheticEvents.stamp else { return .none }
+            if sample.keyCode == shortcutKey { return .set(.shortcut) }
             if let replacement = decision.replacement { return .set(.emulated(replacement)) }
             return sample.keyCode == FnCombos.spaceKeyCode ? .set(.swallowed) : .none
         }
@@ -148,6 +162,7 @@ final class TapShared: Sendable {
     /// The hotkey is physically down, as the tap thread saw it.
     let hotkeyHeld = Atomic<Bool>(false)
     let pending = Mutex<[UInt16: TapPending]>([:])
+    let shortcutMatcher = Mutex(ShortcutMatcher())
     // Counters for the self-test.
     let swallowed = Atomic<Int>(0)
     let emulated = Atomic<Int>(0)
@@ -166,6 +181,7 @@ final class TapShared: Sendable {
         recording.store(false, ordering: .relaxed)
         hotkeyHeld.store(false, ordering: .relaxed)
         pending.withLock { $0.removeAll() }
+        shortcutMatcher.withLock { $0 = ShortcutMatcher() }
     }
 }
 
@@ -183,6 +199,7 @@ final class TapContext: Sendable {
     let idleKeysReported: Bool
     /// The tap counts keystrokes itself (no other tap does), forwarding nothing. Flag tap only.
     let countsKeys: Bool
+    let shortcut: DictationShortcut?
 
     func countPassiveKey(_ sample: TapSample) {
         if TapPolicy.countsAsUserInput(sample, decision: .passThrough, swallowedKey: swallowedKey) {
@@ -192,7 +209,8 @@ final class TapContext: Sendable {
 
     init(
         role: TapRole, sink: AsyncStream<TapMessage>.Continuation, swallowedKey: UInt16?, shared: TapShared,
-        emulator: KeyEmulator? = nil, tracksFnFlag: Bool = false, idleKeysReported: Bool = false, countsKeys: Bool = false
+        emulator: KeyEmulator? = nil, tracksFnFlag: Bool = false, idleKeysReported: Bool = false, countsKeys: Bool = false,
+        shortcut: DictationShortcut? = nil
     ) {
         self.role = role
         self.sink = sink
@@ -202,6 +220,7 @@ final class TapContext: Sendable {
         self.tracksFnFlag = tracksFnFlag
         self.idleKeysReported = idleKeysReported
         self.countsKeys = countsKeys
+        self.shortcut = shortcut
     }
 }
 

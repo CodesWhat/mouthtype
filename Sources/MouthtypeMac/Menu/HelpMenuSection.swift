@@ -24,10 +24,26 @@ final class HelpMenuSection: NSObject, MenuSection {
 
     @objc private func show() { onShow() }
 
+    static func instructions(for shortcut: DictationShortcut?) -> String {
+        guard let shortcut else { return instructions }
+        let key = shortcut.displayName
+        var text = instructions.replacingOccurrences(of: "Fn", with: key)
+        if shortcut.isCapsLock {
+            text = text.replacingOccurrences(of: "hold \(key) and speak, then release to paste", with: "press \(key) to start, speak, then press it again to stop and paste")
+            if let paragraph = text.components(separatedBy: "\n\n").first(where: { $0.hasPrefix("For hands-free") }) {
+                text = text.replacingOccurrences(of: paragraph,
+                    with: "Caps Lock uses a toggle, not a hold. Its system Caps Lock state may also change. Press Esc to cancel; Undo stays available for 5 seconds.")
+            }
+        }
+        if shortcut.keyCode == 49 { text = text.replacingOccurrences(of: " or press \(key)+Space", with: "") }
+        if shortcut.keyCode == 53 { text = text.replacingOccurrences(of: "Press Esc to cancel", with: "Use Cancel Dictation in the menu to cancel hands-free recording") }
+        return text
+    }
+
     static func showGuide() {
         let alert = NSAlert()
         alert.messageText = "How to Use Mouthtype"
-        alert.informativeText = instructions
+        alert.informativeText = instructions(for: ShortcutSettings.load())
         alert.addButton(withTitle: "Done")
         alert.addButton(withTitle: "Microphone Settings")
         alert.addButton(withTitle: "Accessibility Settings")
