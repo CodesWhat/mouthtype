@@ -1,11 +1,8 @@
 import AppKit
-import Observation
 
-/// Owns the status item. Later slices add sections through `MenuSection`s without touching this class.
 @MainActor
 public protocol MenuSection {
     var items: [NSMenuItem] { get }
-    /// Re-reads whatever the items show. Called when the menu opens and after each dictation.
     func refresh()
 }
 
@@ -13,101 +10,88 @@ extension MenuSection {
     public func refresh() {}
 }
 
-@MainActor
-public final class MenuBarController: NSObject, NSMenuDelegate {
-    private let statusItem: NSStatusItem
-    private let engineHost: EngineHost
-    private let engineStatusItem = NSMenuItem()
-    private let menu = NSMenu()
-    private var sections: [any MenuSection] = []
+@MainActor final class DailyMenu: NSObject, NSMenuDelegate {
+    let menu = NSMenu()
+    private var sections: [(section: any MenuSection, startsGroup: Bool, isFooter: Bool)] = []
     private let stopItem = NSMenuItem(title: "Stop Dictation", action: nil, keyEquivalent: "")
     private let cancelItem = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
+    private let aboutItem = NSMenuItem(title: "About Mouthtype", action: nil, keyEquivalent: "")
     private var handsFree = false
-
-    /// The menu's stand-ins for the key tap and Esc while a recording is locked and the pill can't be clicked.
     var onStopDictation: (@MainActor () -> Void)?
     var onCancelDictation: (@MainActor () -> Void)?
+    var onRefresh: (@MainActor () -> Void)?
+    var dictationControlItems: [NSMenuItem] { [stopItem, cancelItem] }
 
-    public init(engineHost: EngineHost, version: String = AppInfo.version) {
-        self.engineHost = engineHost
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    override init() {
         super.init()
-        setIcon(.idle)
         menu.delegate = self
-        for (item, action) in [(stopItem, #selector(stopDictation)), (cancelItem, #selector(cancelDictation))] {
+        menu.autoenablesItems = false
+        for (item, action) in [(stopItem, #selector(stop)), (cancelItem, #selector(cancel)), (aboutItem, #selector(about))] {
             item.target = self
             item.action = action
         }
-        statusItem.menu = menu
-        rebuildMenu(version: version)
-        observeEngineState()
+        rebuild()
     }
 
-    func setIcon(_ icon: StatusIcon) {
-        statusItem.button?.image = icon.image
+    func add(section: any MenuSection, startsGroup: Bool = true, isFooter: Bool = false) {
+        sections.append((section, startsGroup, isFooter))
+        rebuild()
     }
 
-    /// Puts Stop Dictation and Cancel Dictation at the top of the menu while a recording is locked.
-    func setHandsFree(_ active: Bool) {
-        handsFree = active
-        rebuildMenu(version: AppInfo.version)
+    func setHandsFree(_ active: Bool) { handsFree = active; rebuild() }
+    func refresh() {
+        onRefresh?()
+        sections.forEach { $0.section.refresh() }
+        rebuild()
     }
+    func menuNeedsUpdate(_ menu: NSMenu) { refresh() }
 
-    var dictationControlItems: [NSMenuItem] { [stopItem, cancelItem] }
-
-    @objc private func stopDictation() { onStopDictation?() }
-    @objc private func cancelDictation() { onCancelDictation?() }
-
-    @objc private func showAbout() {
-        NSApp.activate()
-        NSApp.orderFrontStandardAboutPanel(nil)
-    }
-
-    /// Re-reads every section and rebuilds the menu. Call after each finished dictation.
-    public func refresh() {
-        sections.forEach { $0.refresh() }
-        rebuildMenu(version: AppInfo.version)
-    }
-
-    public func menuNeedsUpdate(_ menu: NSMenu) {
-        refresh()
-    }
-
-    public func add(section: any MenuSection) {
-        sections.append(section)
-        rebuildMenu(version: AppInfo.version)
-    }
-
-    private func rebuildMenu(version: String) {
-        // Items are reused across rebuilds and an NSMenuItem can only be in one menu.
+    private func rebuild() {
         menu.removeAllItems()
-        if handsFree {
-            menu.addItem(stopItem)
-            menu.addItem(cancelItem)
-            menu.addItem(.separator())
+        var groups: [[NSMenuItem]] = []
+        if handsFree { groups.append([stopItem, cancelItem]) }
+        for entry in sections where !entry.isFooter {
+            let visible = entry.section.items.filter { !$0.isHidden && !$0.isSeparatorItem }
+            guard !visible.isEmpty else { continue }
+            if entry.startsGroup || groups.isEmpty { groups.append(visible) }
+            else { groups[groups.count - 1].append(contentsOf: visible) }
         }
-        let title = NSMenuItem(title: "Mouthtype \(version)", action: nil, keyEquivalent: "")
-        title.isEnabled = false
-        menu.addItem(title)
-        engineStatusItem.isEnabled = false
-        engineStatusItem.title = engineHost.statusText
-        menu.addItem(engineStatusItem)
-        for section in sections {
-            menu.addItem(.separator())
-            section.items.forEach(menu.addItem)
+        let footer = sections.filter(\.isFooter).flatMap { $0.section.items.filter { !$0.isHidden && !$0.isSeparatorItem } } + [aboutItem, NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")]
+        groups.append(footer)
+        for (index, group) in groups.enumerated() {
+            if index > 0 { menu.addItem(.separator()) }
+            group.forEach(menu.addItem)
         }
-        menu.addItem(.separator())
-        let about = NSMenuItem(title: "About Mouthtype", action: #selector(showAbout), keyEquivalent: "")
-        about.target = self
-        menu.addItem(about)
-        menu.addItem(NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 
-    private func observeEngineState() {
-        withObservationTracking {
-            engineStatusItem.title = engineHost.statusText
-        } onChange: { [weak self] in
-            Task { @MainActor in self?.observeEngineState() }
-        }
+    @objc private func stop() { onStopDictation?() }
+    @objc private func cancel() { onCancelDictation?() }
+    @objc private func about() { NSApp.activate(); NSApp.orderFrontStandardAboutPanel(nil) }
+}
+
+@MainActor public final class MenuBarController: NSObject {
+    private let statusItem: NSStatusItem
+    private let daily = DailyMenu()
+    var onStopDictation: (@MainActor () -> Void)? {
+        get { daily.onStopDictation } set { daily.onStopDictation = newValue }
     }
+    var onCancelDictation: (@MainActor () -> Void)? {
+        get { daily.onCancelDictation } set { daily.onCancelDictation = newValue }
+    }
+    var onRefresh: (@MainActor () -> Void)? {
+        get { daily.onRefresh } set { daily.onRefresh = newValue }
+    }
+    var dictationControlItems: [NSMenuItem] { daily.dictationControlItems }
+
+    public override init() {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        super.init()
+        setIcon(.idle)
+        statusItem.menu = daily.menu
+    }
+
+    func setIcon(_ icon: StatusIcon) { statusItem.button?.image = icon.image }
+    func setHandsFree(_ active: Bool) { daily.setHandsFree(active) }
+    public func refresh() { daily.refresh() }
+    public func add(section: any MenuSection, startsGroup: Bool = true, isFooter: Bool = false) { daily.add(section: section, startsGroup: startsGroup, isFooter: isFooter) }
 }

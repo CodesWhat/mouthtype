@@ -16,6 +16,8 @@ import UniformTypeIdentifiers
     private(set) var font: TextFontChoice
     private(set) var loginState: NSControl.StateValue = .off
     private(set) var shortcut = "Fn"
+    private(set) var learnCorrections = true
+    private(set) var chunkedTerminals: Set<String> = []
     private(set) var appStyles = AppCleanupStyles()
     private(set) var appStylesError: String?
 
@@ -42,6 +44,8 @@ import UniformTypeIdentifiers
         font = TextFontPreference.current(defaults)
         shortcut = ShortcutSettings.load(defaults)?.displayName ?? "Fn"
         loginState = loginItem.menuState
+        learnCorrections = CorrectionSettings.isEnabled(defaults)
+        chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
         do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil }
         catch { appStylesError = error.localizedDescription }
     }
@@ -98,6 +102,17 @@ import UniformTypeIdentifiers
         current.save(to: defaults)
         cleanup = current
         onCleanupChanged()
+    }
+
+    func setLearnCorrections(_ enabled: Bool) {
+        CorrectionSettings.set(enabled, in: defaults)
+        learnCorrections = enabled
+    }
+    func setLowercaseStarts(_ enabled: Bool) { update { $0.style.capitalisation = enabled ? .lowercase : .sentence } }
+    func setDropFinalStop(_ enabled: Bool) { update { $0.style.endingPunctuation = enabled ? .dropFinalFullStop : .keep } }
+    func setChunks(_ enabled: Bool, bundleID: String) {
+        PasteSettings.setChunks(enabled, bundleID: bundleID, defaults: defaults)
+        chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
     }
 
     func setLevel(_ level: CleanupLevel) { update { $0.level = level } }

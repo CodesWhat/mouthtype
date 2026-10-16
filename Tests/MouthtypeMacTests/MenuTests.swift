@@ -193,7 +193,9 @@ private final class FakeLoginService: LoginItemService {
         try store.recordInsertion(secure, InsertionRecord(finalText: ""))
 
         let section = HistoryMenuSection(store: store, now: { base })
-        let items = section.items
+        let parent = try #require(section.items.first)
+        #expect(parent.title == "Recent Dictations")
+        let items = try #require(parent.submenu?.items)
         #expect(items.count == 1 + HistoryMenuSection.recentCount)
         #expect(items[0].isEnabled == false && items[0].title.contains("words today"))
         #expect(items[1].title.hasPrefix("dictation number 6"))
@@ -208,14 +210,14 @@ private final class FakeLoginService: LoginItemService {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         let section = HistoryMenuSection(store: store)
-        #expect(section.items.count == 1)
-        #expect(section.items[0].title == "No dictations yet")
+        #expect(section.items.isEmpty)
     }
 
-    @Test func withoutAStoreTheMenuSaysSo() {
-        let section = HistoryMenuSection(store: nil)
-        #expect(section.items.map(\.title) == ["History unavailable"])
-        #expect(section.items[0].isEnabled == false)
+    @Test func unavailableHistoryIsHiddenAndReportsDiagnostics() {
+        var error: String?
+        let section = HistoryMenuSection(store: nil, onError: { error = $0 })
+        #expect(section.items.isEmpty)
+        #expect(error != nil)
     }
 }
 
@@ -226,7 +228,7 @@ private final class FakeLoginService: LoginItemService {
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
         ShortcutSettings.save(DictationShortcut(keyCode: 9, modifiers: CGEventFlags.maskCommand.rawValue | CGEventFlags.maskControl.rawValue, keyName: "V"), in: defaults)
-        let section = ActionsMenuSection(defaults: defaults, loginItem: LoginItem(service: FakeLoginService(status: .enabled)), onPasteLast: {}, onCopyLast: {})
+        let section = ActionsMenuSection(defaults: defaults, onPasteLast: {}, onCopyLast: {})
         #expect(section.items[0].keyEquivalent.isEmpty)
         #expect(section.items[1].keyEquivalent == "c")
         #expect(section.items[0].action != nil)
@@ -234,18 +236,16 @@ private final class FakeLoginService: LoginItemService {
         section.refresh()
         #expect(section.items[0].keyEquivalent == "v")
     }
-    @Test func itemsCarryTheShortcutsAndCheckboxes() {
+    @Test func dailyActionsKeepShortcutsAndSoundPreference() {
         let suite = "ActionsMenuTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let service = FakeLoginService(status: .enabled)
-        let section = ActionsMenuSection(defaults: defaults, loginItem: LoginItem(service: service), onPasteLast: {}, onCopyLast: {})
+        let section = ActionsMenuSection(defaults: defaults, onPasteLast: {}, onCopyLast: {})
         let titles = section.items.map(\.title)
-        #expect(titles == ["Paste Last", "Copy Last", "Sounds", "Launch at Login"])
+        #expect(titles == ["Paste Last", "Copy Last"])
         #expect(section.items[0].keyEquivalent == "v" && section.items[0].keyEquivalentModifierMask == [.command, .control])
         #expect(section.items[1].keyEquivalent == "c" && section.items[1].keyEquivalentModifierMask == [.command, .control])
-        #expect(section.items[2].state == .on)
-        #expect(section.items[3].state == .on)
+        #expect(SoundPreference.isEnabled(defaults))
     }
 
     @Test func globalShortcutsUseCommandControlVAndC() {

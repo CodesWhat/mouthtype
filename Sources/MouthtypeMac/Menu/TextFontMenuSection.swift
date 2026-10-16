@@ -47,7 +47,9 @@ final class TextFontMenuSection: NSObject, MenuSection {
         refresh()
     }
 
-    @objc private func chooseFont(_ sender: NSMenuItem) {
+    @objc private func chooseFont(_ sender: NSMenuItem) { presentFontChooser() }
+
+    func presentFontChooser() {
         let manager = NSFontManager.shared
         manager.target = self
         manager.action = #selector(changeFont(_:))

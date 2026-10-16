@@ -4,9 +4,11 @@ import MouthtypeCore
 
 @MainActor final class SettingsWindow: NSWindowController, NSWindowDelegate {
     let model: SettingsModel
+    private let refreshDiagnostics: () -> Void
 
     init(model: SettingsModel, actions: SettingsActions = SettingsActions()) {
         self.model = model
+        refreshDiagnostics = actions.refreshDiagnostics
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1000, height: 690),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Mouthtype Settings"
@@ -20,22 +22,24 @@ import MouthtypeCore
 
     required init?(coder: NSCoder) { nil }
 
-    func present() {
+    func present(page: SettingsPage? = nil) {
+        if let page { model.page = page }
+        refreshDiagnostics()
         model.refresh()
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
 
-    func windowDidBecomeKey(_ notification: Notification) { model.refresh() }
+    func windowDidBecomeKey(_ notification: Notification) { refreshDiagnostics(); model.refresh() }
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, writing, appearance
+    case general, writing, appearance, diagnostics
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
     var icon: String {
-        switch self { case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette" }
+        switch self { case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
     }
 }
 
@@ -44,6 +48,16 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var openSpellings: () -> Void = {}
     var openPhrases: () -> Void = {}
     var cleaner: (any CleanupModelManaging)?
+    var diagnostics: SettingsDiagnostics?
+    var retrySpeech: () -> Void = {}
+    var refreshDiagnostics: () -> Void = {}
+    var toggleRemap: () -> Void = {}
+    var openMicSettings: () -> Void = {}
+    var openAccessibilitySettings: () -> Void = {}
+    var openKeyboardSettings: () -> Void = {}
+    var editDictionary: () -> Void = {}
+    var editPhrasesFile: () -> Void = {}
+    var chooseFont: () -> Void = {}
 }
 
 struct SettingsView: View {
@@ -60,6 +74,9 @@ struct SettingsView: View {
                     case .general: general
                     case .writing: writing
                     case .appearance: appearance
+                    case .diagnostics:
+                        if let diagnostics = actions.diagnostics { SettingsDiagnosticsView(state: diagnostics, model: model, actions: actions) }
+                        else { Text("Diagnostic status is unavailable.") }
                     }
                     Spacer(minLength: 8)
                 }.padding(34).frame(maxWidth: .infinity, alignment: .topLeading)
@@ -76,7 +93,7 @@ struct SettingsView: View {
             HStack(spacing: 8) {
                 if let url = Bundle.module.url(forResource: "mouthtype", withExtension: "png", subdirectory: "Settings"),
                    let mark = NSImage(contentsOf: url) {
-                    Image(nsImage: mark).resizable().interpolation(.none).frame(width: 25, height: 25).accessibilityHidden(true)
+                    Image(nsImage: mark).resizable().interpolation(.none).frame(width: 32, height: 32).accessibilityHidden(true)
                 }
                 Text("mouthtype").font(.custom("InstrumentSerif-Regular", size: 27))
             }.padding(.horizontal, 18).padding(.top, 23).padding(.bottom, 31)
@@ -93,7 +110,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settings-phrases")
             }.buttonStyle(.plain).padding(20)
             Spacer()
-            Text("ON YOUR MAC\nMouthtype \(AppInfo.version)")
+            Text("ON YOUR MAC")
                 .font(.custom("JetBrainsMono-Medium", size: 9)).lineSpacing(7).foregroundStyle(.secondary).padding(20)
         }.background(Color(nsColor: .windowBackgroundColor))
     }
@@ -130,6 +147,15 @@ struct SettingsView: View {
                 settingRow("Launch at login", model.loginState == .mixed ? "Waiting for approval in System Settings." : "Keep Mouthtype ready in your menu bar.") {
                     Button(model.loginState == .mixed ? "Open Login Items…" : model.loginState == .on ? "Turn off" : "Turn on") { model.toggleLogin() }
                 }
+            }
+            DisclosureGroup("Advanced delivery") {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Split long pastes only in the terminal apps you choose. Off by default.").font(.callout).foregroundStyle(.secondary)
+                    ForEach(PasteSettings.supportedTerminals, id: \.bundleID) { terminal in
+                        Toggle(terminal.name, isOn: Binding(get: { model.chunkedTerminals.contains(terminal.bundleID) }, set: { model.setChunks($0, bundleID: terminal.bundleID) }))
+                    }
+                    Text("Applies to that terminal app’s windows. Mouthtype can’t identify the program running inside it.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }.padding(.top, 12)
             }
             callout("Hold your shortcut while you speak, then release to finish. Use How to Use Mouthtype in the menu for the gestures available with your chosen key.")
         }
@@ -192,6 +218,16 @@ struct SettingsView: View {
                 Toggle("Spoken commands and lists", isOn: Binding(get: { model.cleanup.spokenCommands }, set: model.setSpokenCommands))
                 Toggle("Format numbers", isOn: Binding(get: { model.cleanup.numbers }, set: model.setNumbers))
             }.disabled(!model.cleanup.enabled)
+            DisclosureGroup("Advanced writing") {
+                VStack(alignment: .leading, spacing: 15) {
+                    Toggle("Learn from my corrections", isOn: Binding(get: { model.learnCorrections }, set: model.setLearnCorrections))
+                    Toggle("Lowercase sentence starts", isOn: Binding(get: { model.cleanup.style.capitalisation == .lowercase }, set: model.setLowercaseStarts)).disabled(!model.cleanup.enabled)
+                    Toggle("Drop final full stop", isOn: Binding(get: { model.cleanup.style.endingPunctuation == .dropFinalFullStop }, set: model.setDropFinalStop)).disabled(!model.cleanup.enabled)
+                    Text("These tone details may show Custom as your default tone.").font(.callout).foregroundStyle(.secondary)
+                    Button("Edit dictionary file…", action: actions.editDictionary)
+                    if let error = actions.diagnostics?.dictionaryError { Text(error).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+                }.padding(.top, 12)
+            }
             callout(model.cleanup.enabled ? "More formal doesn’t mean different words. Your saved spellings and phrases are available from the sidebar." : "Cleanup is Off. Your dictation keeps its original wording and style; these options apply when cleanup is enabled.")
         }
     }
@@ -266,6 +302,7 @@ struct SettingsView: View {
                     if case .custom = model.font { Text(model.font.title).tag(model.font.title) }
                 }.labelsHidden().frame(width: 170)
             }
+            Button("Choose Font…", action: actions.chooseFont)
             Text("Ready when you are.").font(Font(Typography(choice: model.font).font(.pillMessage)))
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                 .background(Color(nsColor: .controlBackgroundColor)).accessibilityLabel("Selected font sample: Ready when you are.")
