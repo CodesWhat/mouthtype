@@ -57,12 +57,13 @@ private struct Rig {
     let recovery: CrashRecovery
     let now = FakeClock.wall
 
-    init() throws {
+    init(appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }) throws {
         store = try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite"))
         archive = AudioArchive(supportDirectory: dir)
         let clock = FakeClock(start: 1)
         var pipeline = DictationPipeline(store: TranscriptStoreWriter(store: store), archive: archive, engine: engine, clock: clock)
         pipeline.settings = { CleanupSettings() }
+        pipeline.appStyles = appStyles
         recovery = CrashRecovery(
             store: store, archive: archive, pipeline: pipeline, cards: cards, pill: pill, clock: clock, launchedAt: FakeClock.wall
         )
@@ -89,6 +90,18 @@ private struct Rig {
 
 @MainActor
 @Suite struct CrashRecoveryTests {
+    @Test func recoveryWithoutCapturedAppUsesGlobalTone() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: StylePreset.veryCasual.options)
+        let configured = styles
+        let rig = try Rig(appStyles: { configured })
+        defer { rig.cleanUp() }
+        try rig.seed(ago: 90)
+        await rig.recovery.offerIfNeeded()
+        await rig.recovery.recover()
+        #expect(rig.cards.presented.last?.transcript == "Hello from the crash.")
+    }
+
     @Test func recoveryDoesNotRunOverAnActiveDictation() async throws {
         let rig = try Rig()
         defer { rig.cleanUp() }

@@ -7,6 +7,7 @@ struct DictationSession: Sendable {
     var startedAt: Date
     var keyDownAt: UInt64 // host nanoseconds (`HostClock`)
     var startFocus: FocusSnapshot?
+    var cleanupStyle: StyleOptions?
     /// False when the store is missing or `begin` failed; later writes are then skipped.
     var rowOpen = false
 }
@@ -55,6 +56,7 @@ struct DictationPipeline: Sendable {
     var retention: TimeInterval = AudioArchive.defaultRetention
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
+    var appStyles: @Sendable () -> AppCleanupStyles = { (try? AppCleanupStyles.load()) ?? AppCleanupStyles() }
     var textPipeline = TextPipeline()
     /// The local model pass for light and medium. Nil runs everything as basic.
     var smart: (any SmartCleaning)?
@@ -183,8 +185,14 @@ struct DictationPipeline: Sendable {
         )
     }
 
-    func cleanupInputs() -> CleanupInputs {
-        CleanupInputs(settings: settings(), dictionary: vocabulary.dictionary(), snippets: vocabulary.snippets(), now: clock.now())
+    func cleanupStyle(forBundleID bundleID: String?) -> StyleOptions {
+        appStyles().resolve(bundleID: bundleID, fallback: settings().style)
+    }
+
+    func cleanupInputs(style: StyleOptions? = nil) -> CleanupInputs {
+        var chosen = settings()
+        if let style { chosen.style = style }
+        return CleanupInputs(settings: chosen, dictionary: vocabulary.dictionary(), snippets: vocabulary.snippets(), now: clock.now())
     }
 
     /// The cleanup. The deterministic pass cannot lose a dictation: past the time budget, or when it leaves nothing
