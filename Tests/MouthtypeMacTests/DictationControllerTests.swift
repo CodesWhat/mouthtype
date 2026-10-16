@@ -29,6 +29,7 @@ private final class FakeCapture: DictationCapturing {
     var audios: [CapturedAudio] = []
     var keyDownAtNanos: UInt64?
     var onInterrupted: (@MainActor () -> Void)?
+    var duringStart: (@MainActor () async -> Void)?
     /// How many samples of the recording in progress `partialSamples` can hand over.
     var available = 0
 
@@ -48,6 +49,7 @@ private final class FakeCapture: DictationCapturing {
     func start(keyDownAtNanos: UInt64) async throws {
         log.add("capture.start")
         self.keyDownAtNanos = keyDownAtNanos
+        await duringStart?()
         if let startError { throw startError }
     }
 
@@ -109,6 +111,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     let log: CallLog
     private let lock = NSLock()
     var failing: Set<String> = []
+    var duringBegin: (@MainActor @Sendable () async -> Void)?
     private(set) var start: DictationStart?
     private(set) var capture: CaptureRecord?
     private(set) var transcription: TranscriptionRecord?
@@ -129,7 +132,10 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
         lock.withLock { body() }
     }
 
-    func begin(_ start: DictationStart) async throws { try run("begin") { self.start = start } }
+    func begin(_ start: DictationStart) async throws {
+        try run("begin") { self.start = start }
+        await duringBegin?()
+    }
     func recordCapture(_ id: String, _ record: CaptureRecord) async throws { try run("recordCapture") { capture = record } }
     func recordTranscription(_ id: String, _ record: TranscriptionRecord) async throws {
         try run("recordTranscription") { transcription = record }
@@ -1508,6 +1514,58 @@ private final class SlowCapture: DictationCapturing {
     }
 
     // MARK: Microphone lost
+
+    @Test(arguments: [true, false])
+    func aMicrophoneLostDuringStartupStillOffersTheSavedTake(duringCaptureStart: Bool) async {
+        let rig = Rig()
+        let interrupt: @MainActor @Sendable () async -> Void = {
+            rig.capture.interrupt()
+            rig.capture.interrupt()
+            await rig.settle()
+        }
+        if duringCaptureStart { rig.capture.duringStart = interrupt }
+        else { rig.store.duringBegin = interrupt }
+
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.settle()
+
+        #expect(rig.cards.presented == [.micDisconnected(seconds: 2)])
+        #expect(rig.controller.phase == .idle)
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+        #expect(rig.log.contains("store.recordCapture"))
+        #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
+        #expect(rig.finishedAttempts.count == 1)
+        #expect(rig.clock.sleeperCount == 0)
+
+        await rig.controller.handle(.released(at: keyUp))
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+        rig.capture.duringStart = nil
+        rig.store.duringBegin = nil
+        rig.cards.click(.insert)
+        await rig.until { !rig.inserter.delivered.isEmpty }
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["Hello world.", "Hello world."])
+    }
+
+    @Test func aFailedStartDoesNotLeaveADisconnectForTheNextTake() async {
+        let rig = Rig()
+        rig.capture.duringStart = {
+            rig.capture.interrupt()
+            await rig.settle()
+        }
+        rig.capture.startError = CaptureError.noInputDevice
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(rig.controller.phase == .idle)
+        #expect(rig.cards.presented.isEmpty && !rig.log.contains("capture.stop"))
+        #expect(rig.store.finishes.map(\.0) == [.failed])
+        rig.capture.duringStart = nil
+        rig.capture.startError = nil
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.cards.presented.isEmpty)
+    }
 
     @Test(arguments: [true, false], [true, false])
     func aLostMicrophoneRecoversTheSavedPartialWhenFinalizationFails(throwsOnStop: Bool, insert: Bool) async throws {
