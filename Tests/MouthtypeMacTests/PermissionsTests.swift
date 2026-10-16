@@ -79,6 +79,7 @@ private final class GrantBox {
 
     @Test func shortcutActionIsClickableAndCustomKeysHideTheFnSettings() throws {
         let section = SystemAccessMenuSection()
+        section.update(globe: GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true))
         var opened = false
         section.onChangeShortcut = { opened = true }
         section.update(shortcut: DictationShortcut(keyCode: 61, keyName: "Right Option"))
@@ -86,11 +87,13 @@ private final class GrantBox {
         try #require(section.items.count == 5)
         #expect(section.items[1].title == "Dictation input: active · Right Option")
         #expect(section.items[3].isHidden)
+        #expect(section.items[2].isHidden)
         #expect(section.items[4].isEnabled && section.items[4].action != nil)
         _ = section.items[4].target?.perform(section.items[4].action)
         #expect(opened)
         section.update(shortcut: nil)
         #expect(!section.items[3].isHidden)
+        #expect(!section.items[2].isHidden)
     }
 }
 
