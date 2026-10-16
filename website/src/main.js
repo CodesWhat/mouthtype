@@ -1,5 +1,11 @@
 import "./hero-demo.js";
 
+const principles = document.querySelector(".principles-group");
+const repeatedPrinciples = principles.cloneNode(true);
+repeatedPrinciples.setAttribute("aria-hidden", "true");
+repeatedPrinciples.inert = true;
+principles.parentElement.append(repeatedPrinciples);
+
 const stage = document.querySelector(".object-stage");
 const preview = document.querySelector("#pill-preview");
 const description = document.querySelector(".product-preview");

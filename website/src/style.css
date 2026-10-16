@@ -353,35 +353,10 @@ h1 em {
   color: var(--muted);
   margin: 15px 0 0;
 }
-.principles {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  border-top: 1px solid var(--ink);
-  border-bottom: 1px solid var(--ink);
-  padding: 26px 0;
-  gap: 28px;
-}
-.principles > div {
-  display: flex;
-  gap: 15px;
-}
 .principle-number {
   font: 9px var(--mono);
   padding-top: 4px;
   color: var(--muted);
-}
-.principles p {
-  margin: 0;
-  line-height: 1.6;
-  font-size: 13px;
-}
-.principles strong {
-  display: block;
-  font-weight: 600;
-}
-.principles p span {
-  color: var(--muted);
-  font-size: 12px;
 }
 .story {
   display: grid;
@@ -456,7 +431,7 @@ h1 em {
   margin: 0;
 }
 .example-text mark {
-  background: #e3eaf2;
+  background: var(--lime);
   color: var(--ink);
   padding: 0 2px;
 }
@@ -597,16 +572,7 @@ footer {
   .compare-switch button {
     padding: 7px 9px;
   }
-  .principles {
-    gap: 16px;
   }
-  .principles > div {
-    gap: 10px;
-  }
-  .principles p span {
-    font-size: 11px;
-  }
-}
 @media (max-width: 850px) {
   .site-shell {
     padding: 0 26px;
@@ -647,21 +613,6 @@ footer {
     width: 100%;
     margin: 25px auto 0;
     height: 440px;
-  }
-  .principles {
-    padding: 22px 0;
-    gap: 25px;
-  }
-  .principles > div {
-    gap: 9px;
-  }
-  .principles p {
-    font-size: 12px;
-  }
-  .principles p span {
-    font-size: 10px;
-    line-height: 1.5;
-    display: block;
   }
   .story {
     grid-template-columns: minmax(0, 1fr);
@@ -785,29 +736,6 @@ footer {
   }
   .object-stage::before {
     background-size: 18px 18px;
-  }
-  .principles {
-    grid-template-columns: 1fr;
-    padding: 7px 0;
-    gap: 0;
-  }
-  .principles > div {
-    padding: 13px 0;
-    border-bottom: 1px solid var(--line);
-    gap: 18px;
-  }
-  .principles > div:last-child {
-    border: none;
-  }
-  .principles p {
-    display: flex;
-    gap: 10px;
-    align-items: baseline;
-    flex-wrap: wrap;
-    font-size: 12px;
-  }
-  .principles p span {
-    font-size: 11px;
   }
   .principle-number {
     padding-top: 3px;
@@ -994,19 +922,12 @@ footer {
 .skin-controls {
   margin-top: 25px;
 }
-.principles > div {
-  justify-content: center;
-  align-items: center;
-}
 .principle-icon {
   display: block;
   flex-shrink: 0;
   image-rendering: pixelated;
 }
 @media (max-width: 850px) {
-  .principles > div {
-    gap: 10px;
-  }
   .principle-icon {
     width: 22px;
     height: 22px;
@@ -1047,10 +968,6 @@ footer {
   }
   .shortcut-hint > span {
     font-size: 8px;
-  }
-  .principles > div {
-    justify-content: flex-start;
-    gap: 15px;
   }
   .principle-icon {
     width: 24px;
@@ -1094,4 +1011,66 @@ footer {
     width: calc(100% - 24px);
     height: 230px;
   }
+}
+
+.principles {
+  overflow: hidden;
+  border-block: 1px solid var(--ink);
+  padding-block: 26px;
+}
+.principles-track {
+  display: flex;
+  width: max-content;
+  min-width: 200%;
+  animation: principles-drift 36s linear infinite;
+}
+.principles-group {
+  display: flex;
+  flex-shrink: 0;
+  min-width: 50%;
+  justify-content: space-around;
+}
+.principle {
+  display: flex;
+  flex-shrink: 0;
+  gap: 15px;
+  align-items: center;
+  padding-inline: 32px;
+}
+.principles p { margin: 0; font-size: 13px; line-height: 1.6; white-space: nowrap; }
+.principles strong { display: block; font-weight: 600; }
+.principles p span { color: var(--muted); font-size: 12px; }
+@keyframes principles-drift {
+  from { transform: translateX(-50%); }
+  to { transform: translateX(0); }
+}
+.object-stage { height: auto; min-height: 500px; }
+.preview-paper { height: 264px; }
+.voice-lane p { height: 3.36em; min-height: 0; }
+.typing-lane p { height: 3em; min-height: 0; }
+.pace-label::after { content: "✓"; color: var(--action); font-size: 10px; opacity: 0; }
+.pace-lane[data-complete="true"] .pace-label::after { opacity: 1; }
+.pill-slot {
+  width: 100%;
+  height: 112px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: -10px;
+  z-index: 1;
+}
+.pill-slot .pill-preview,
+.object-stage[data-skin="hifi"] .pill-slot .pill-preview {
+  position: static;
+  margin: 0;
+  max-width: 95%;
+}
+.skin-controls { width: 100%; justify-content: center; text-align: center; }
+.skin-controls legend { width: 100%; padding: 0; text-align: center; }
+@media (prefers-reduced-motion: reduce) {
+  .principles-track { animation: none; width: 100%; min-width: 0; }
+  .principles-group { width: 100%; min-width: 0; flex-wrap: wrap; gap: 22px; }
+  .principles-group[aria-hidden="true"] { display: none; }
+  .principle { padding-inline: 10px; }
 }
