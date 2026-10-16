@@ -14,6 +14,8 @@ For a larger Winamp-style pill, choose **Pill Style → Hi-Fi Size → Large (2�
 
 Install Xcode with Swift 6.2, then run `bash scripts/run-app.sh`. The script builds and opens a signed app bundle. A Developer ID identity keeps permission grants stable between builds; without one, builds use ad-hoc signing.
 
+Source builds include a native **Settings…** window for General, Writing and Appearance, including per-app tone rules. See [settings](docs/SETTINGS.md). This window is not in the existing alpha.3 ZIP.
+
 Allow Microphone and Accessibility access when macOS asks. The menu has links to those settings and **How to Use Mouthtype**. Fn remapping is enabled by default while Mouthtype runs; it hides the emoji picker and preserves Fn navigation combinations.
 
 The speech model and a small speech detector download on first launch. The detector keeps empty recordings from becoming invented words. Download and loading status appear in the menu; **Retry Speech Model** appears if preparation fails. Transcription runs locally. Parakeet v3 decoding uses an English language hint to prevent accidental Cyrillic output; Whisper also requests English. Smart cleanup is a separate optional model download, with basic cleanup available without it.

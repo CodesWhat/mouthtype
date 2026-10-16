@@ -1,0 +1,13 @@
+# Settings
+
+Source builds include **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active. The current alpha.3 ZIP predates this window.
+
+**General** contains the existing dictation shortcut, cleanup level, recording sounds and launch-at-login controls. Changing the shortcut opens the native recorder. Fast and Thorough show their actual download/loading state; dictations use Basic while the selected cleanup model is unavailable. Launch at login reports when macOS approval is still needed.
+
+**Writing** contains the default tone, app styles and the existing filler, spoken-command and number switches. Tone changes capitalization and ending punctuation. Formal does not authorize paraphrasing. Cleanup Off bypasses these settings.
+
+App styles start empty. Choose **Add application…**, select an application, then choose its tone. The app where recording starts determines the rule for that take. Apps without a rule use the default tone. Choose **Use default** or remove a row to clear its override. Selecting an application that already has a rule keeps its saved tone. Browser rules apply to the browser application, not individual websites. Rules change tone, not the dictation or paste shortcut. Unreadable saved rules are kept intact and cannot be overwritten from the editor; Reload retries after repair.
+
+**Appearance** contains Classic and Hi-Fi pill styles, Hi-Fi size and text fonts. A preview uses the app's actual pill drawing. Hi-Fi size changes apply the next time the live pill appears. The text-font sample shows the selected font; Hi-Fi's bitmap readouts keep their own artwork.
+
+The sidebar opens the existing **Saved spellings** and **Phrases** editors, preserving their save, cancel and draft protection behavior. Settings changes save immediately. Command-W closes the window.
