@@ -403,8 +403,10 @@ public enum SmartCleanupGuard {
     // one-for-one spelling corrections. Two rows bound memory; word limits bound the work.
     private static func insertedNearbyName(input: String, output: String, names: Set<String>) -> String? {
         guard !names.isEmpty else { return nil }
-        let before = input.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() }
-        let after = output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() }
+        let before = input.split(whereSeparator: \.isWhitespace).map(stripped).filter {
+            !$0.isEmpty && (!FillerRemover.fillerWords.contains($0.lowercased()) || $0 == $0.uppercased())
+        }.map { $0.lowercased() }
+        let after = output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() }.filter { !$0.isEmpty }
         guard before.count <= SmartCleanup.maxWords,
               after.count <= CleanupLimits.maxOutputTokens(for: input),
               after.contains(where: names.contains) else { return nil }

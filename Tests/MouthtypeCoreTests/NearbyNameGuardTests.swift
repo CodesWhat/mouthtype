@@ -47,4 +47,13 @@ import Testing
             nearbySpellings: ["Jeff", "Smith"]) == "nearby spelling \"smith\" added")
     }
 
+
+    @Test(arguments: ["um", "uh", "hmm", ",", "..."])
+    func fillerCannotStandInForAnUnspokenSurname(filler: String) {
+        #expect(SmartCleanupGuard.rejection(input: "I met Geoff \(filler)", output: "I met Geoff Smith.",
+            level: .light, nearbySpellings: ["Jeff", "Smith"]) == "nearby spelling \"smith\" added")
+        #expect(SmartCleanupGuard.rejection(input: "I met Geoff ER", output: "I met Geoff ER.",
+            level: .light, nearbySpellings: ["Jeff", "ER"]) == nil)
+    }
+
 }
