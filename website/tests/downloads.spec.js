@@ -19,10 +19,10 @@ for (const width of [1440, 320]) {
     await expect(page.locator("main")).not.toContainText("private alpha");
 
     for (const [path, filename, link] of [
-      ["/download", "Mouthtype-0.1.0-alpha.3-macos-arm64.zip", download],
+      ["/download", "Mouthtype-0.1.0-alpha.4-macos-arm64.zip", download],
       [
         "/source",
-        "Mouthtype-0.1.0-alpha.3-source.tar.gz",
+        "Mouthtype-0.1.0-alpha.4-source.tar.gz",
         page.getByRole("link", { name: "Source code (GPL-3.0)", exact: false }),
       ],
     ]) {
@@ -50,7 +50,7 @@ for (const width of [1440, 320]) {
   });
 }
 
-test("installation and update help point to downloads without inventing a newer release", async ({
+test("installation and update help cover alpha.4 and the manual first upgrade", async ({
   page,
 }) => {
   await page.goto("/start/");
@@ -63,12 +63,23 @@ test("installation and update help point to downloads without inventing a newer 
   await expect(page.locator("#install")).not.toContainText(
     "person who invited you",
   );
-  await expect(page.locator("#install")).toContainText("0.1.0-alpha.3");
-  await expect(page.locator("#your-build")).toContainText("predates");
+  await expect(page.locator("#install")).toContainText("0.1.0-alpha.4");
+  await expect(page.locator("#your-build")).toContainText(
+    "General, Writing, Appearance and Diagnostics",
+  );
   await page.goto("/docs/#updates");
   await expect(page.locator("#updates")).toContainText("manually");
-  await expect(page.locator("#updates")).toContainText("alpha.3");
+  await expect(page.locator("#updates")).toContainText("Alpha.1–3");
+  await expect(page.locator("#updates")).toContainText("Check for Updates…");
+  await expect(page.locator("#updates")).toContainText(
+    "Automatically check for updates",
+  );
   await expect(page.locator('#updates a[href="/download"]')).toBeVisible();
   await expect(page.locator('#updates a[href="/source"]')).toBeVisible();
-  await expect(page.locator("main")).not.toContainText("alpha.4");
+  await expect(page.locator("#local-data")).toContainText(
+    "do not upload transcripts or audio",
+  );
+  await expect(page.locator("#permissions")).toContainText(
+    "in-app update installation",
+  );
 });
