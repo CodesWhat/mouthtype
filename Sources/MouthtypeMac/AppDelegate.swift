@@ -314,7 +314,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func editPhrasesFile() {
-        guard FileManager.default.fileExists(atPath: phrases.url.path) else { return }
+        guard FileManager.default.fileExists(atPath: phrases.url.path) else {
+            diagnostics.phrasesError = "The phrase file no longer exists. Open Phrases to save a new file."
+            return
+        }
         if !NSWorkspace.shared.open(phrases.url) { diagnostics.phrasesError = "The phrase file could not be opened." }
     }
 
