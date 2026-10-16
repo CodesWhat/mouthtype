@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Testing
 import SwiftUI
 import MouthtypeCore
@@ -11,12 +12,14 @@ import MouthtypeCore
         defer { defaults.removePersistentDomain(forName: name) }
         FontRegistry.registerBundledFonts()
         let model = SettingsModel(defaults: defaults)
-        let controller = SettingsWindow(model: model)
+        let state = diagnostics()
+        let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state)
+        let controller = SettingsWindow(model: model, actions: actions)
         #expect(controller.window?.isVisible == false)
         #expect(controller.window?.title == "Mouthtype Settings")
         for page in SettingsPage.allCases {
             model.page = page
-            controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model).frame(width: 1000, height: 690))
+            controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model, actions: actions).frame(width: 1000, height: 690))
             let view = try #require(controller.window?.contentView)
             view.setFrameSize(NSSize(width: 1000, height: 690))
             view.layoutSubtreeIfNeeded()
@@ -46,11 +49,17 @@ import MouthtypeCore
         HiFiPillSizePreference.set(.large, in: defaults)
         FontRegistry.registerBundledFonts()
         let model = SettingsModel(defaults: defaults)
-        let controller = SettingsWindow(model: model)
+        let state = diagnostics()
+        state.engineFailed = true
+        state.engineStatus = "Speech model could not be loaded. Retry to continue."
+        state.microphoneStatus = .denied
+        state.globe = GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true)
+        let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state)
+        let controller = SettingsWindow(model: model, actions: actions)
         controller.window?.setContentSize(NSSize(width: 860, height: 590))
-        for page in [SettingsPage.writing, .appearance] {
+        for page in [SettingsPage.writing, .appearance, .diagnostics] {
             model.page = page
-            controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model).frame(width: 860, height: 590))
+            controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model, actions: actions).frame(width: 860, height: 590))
             let view = try #require(controller.window?.contentView)
             view.setFrameSize(NSSize(width: 860, height: 590))
             view.layoutSubtreeIfNeeded()
@@ -68,4 +77,25 @@ import MouthtypeCore
         #expect(model.appStyles.entries.count == 2 && model.hiFiSize == .large)
     }
 
+    private func diagnostics() -> SettingsDiagnostics {
+        let state = SettingsDiagnostics()
+        state.engineStatus = "Parakeet TDT v3 ready"
+        state.microphoneStatus = .authorized
+        state.accessibilityGranted = true
+        state.hotkeyHealth = .listening
+        return state
+    }
+}
+
+@MainActor private final class PreviewCleaner: CleanupModelManaging {
+    let state = CleanerState.absent
+    let modelName = "Fast cleanup"
+    let downloadSizeMB = 600
+    func start() {}
+    func levelChanged() {}
+    func startDownload() {}
+    func cancelDownload() {}
+    nonisolated func recordingStarted() {}
+    func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? { nil }
+    func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult { fatalError("Rendering does not run cleanup") }
 }

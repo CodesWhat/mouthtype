@@ -2,10 +2,18 @@ import Foundation
 
 enum PasteSettings {
     private static let key = "chunkedPasteApps"
-    private static let terminals: Set<String> = [
-        "com.apple.Terminal", "com.googlecode.iterm2", "com.mitchellh.ghostty",
-        "net.kovidgoyal.kitty", "com.github.wez.wezterm",
+    struct Terminal: Sendable {
+        let bundleID: String
+        let name: String
+    }
+    static let supportedTerminals = [
+        Terminal(bundleID: "com.apple.Terminal", name: "Terminal"),
+        Terminal(bundleID: "com.googlecode.iterm2", name: "iTerm2"),
+        Terminal(bundleID: "com.mitchellh.ghostty", name: "Ghostty"),
+        Terminal(bundleID: "net.kovidgoyal.kitty", name: "kitty"),
+        Terminal(bundleID: "com.github.wez.wezterm", name: "WezTerm"),
     ]
+    private static let terminals = Set(supportedTerminals.map(\.bundleID))
 
     static func supportsChunking(_ bundleID: String?) -> Bool {
         bundleID.map { terminals.contains($0) } ?? false

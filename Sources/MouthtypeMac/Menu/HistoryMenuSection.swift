@@ -10,45 +10,55 @@ final class HistoryMenuSection: NSObject, MenuSection {
     private let store: TranscriptStore?
     private let now: @MainActor () -> Date
     private let statsItem = NSMenuItem()
-    private let unavailableItem = NSMenuItem(title: "History unavailable", action: nil, keyEquivalent: "")
+    private let parent = NSMenuItem(title: "Recent Dictations", action: nil, keyEquivalent: "")
+    private let onError: @MainActor (String?) -> Void
+    private let copy: @MainActor (String) -> Void
     private var recentItems: [NSMenuItem] = []
 
-    var items: [NSMenuItem] {
-        guard store != nil else { return [unavailableItem] }
-        return [statsItem] + recentItems
-    }
+    var items: [NSMenuItem] { recentItems.isEmpty ? [] : [parent] }
 
-    init(store: TranscriptStore?, now: @escaping @MainActor () -> Date = { Date() }) {
+    init(store: TranscriptStore?, now: @escaping @MainActor () -> Date = { Date() },
+         onError: @escaping @MainActor (String?) -> Void = { _ in },
+         copy: @escaping @MainActor (String) -> Void = { text in
+             NSPasteboard.general.clearContents()
+             NSPasteboard.general.setString(text, forType: .string)
+         }) {
         self.store = store
         self.now = now
+        self.onError = onError
+        self.copy = copy
         super.init()
         statsItem.isEnabled = false
-        unavailableItem.isEnabled = false
         refresh()
     }
 
     func refresh() {
-        guard let store else { return }
-        statsItem.title = Self.statsLine((try? store.stats(now: now())) ?? nil)
-        // Rows with no text left (a secure discard) have nothing to copy.
-        let records = ((try? store.recent(limit: Self.recentCount * 4)) ?? [])
-            .filter { !($0.finalText ?? "").isEmpty }
-            .prefix(Self.recentCount)
-        recentItems = records.compactMap { record in
-            guard let text = record.finalText else { return nil }
-            let item = NSMenuItem(title: Self.shortened(text), action: #selector(copyRecent(_:)), keyEquivalent: "")
-            item.target = self
-            item.representedObject = text
-            item.toolTip = text
-            return item
-        }
+        guard let store else { onError("Recent dictations are unavailable."); return }
+        do {
+            statsItem.title = Self.statsLine(try store.stats(now: now()))
+            let records = try store.recent(limit: Self.recentCount * 4)
+                .filter { $0.isSecure != true && !($0.finalText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                .prefix(Self.recentCount)
+            recentItems = records.compactMap { record in
+                guard let text = record.finalText else { return nil }
+                let item = NSMenuItem(title: Self.shortened(text), action: #selector(copyRecent(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = text
+                item.toolTip = text
+                return item
+            }
+            onError(nil)
+        } catch { recentItems = []; onError(error.localizedDescription) }
+        parent.submenu?.removeAllItems()
+        let submenu = NSMenu(title: "Recent Dictations")
+        submenu.addItem(statsItem)
+        recentItems.forEach(submenu.addItem)
+        parent.submenu = submenu
     }
 
     @objc private func copyRecent(_ sender: NSMenuItem) {
         guard let text = sender.representedObject as? String else { return }
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        copy(text)
     }
 
     static func statsLine(_ stats: StatsSummary?) -> String {
