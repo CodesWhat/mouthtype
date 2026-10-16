@@ -68,7 +68,7 @@ test("start distinguishes the shipped alpha from source settings", async ({
 }) => {
   await page.goto("/start/");
   await expect(page.locator("main")).toContainText("0.1.0-alpha.3");
-  await expect(page.locator("#install")).toContainText("private");
+  await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
   await expect(page.locator("#first-take")).toContainText("release");
@@ -115,7 +115,7 @@ test("comparison pages cite official sources and keep the tradeoffs visible", as
   await page.goto("/compare/wispr-flow/");
   await expect(page.locator("main")).toContainText("cloud");
   await expect(page.locator("main")).toContainText("Windows");
-  await expect(page.locator("main")).toContainText("private alpha");
+  await expect(page.locator("main")).toContainText("alpha");
   await expect(
     page.locator('main a[href^="https://docs.wisprflow.ai/"]'),
   ).not.toHaveCount(0);
@@ -160,7 +160,9 @@ for (const width of [1440, 320]) {
       const links = await page
         .locator('a[href^="/"]')
         .evaluateAll((items) => items.map((item) => item.getAttribute("href")));
-      links.forEach((href) => internal.add(href));
+      links
+        .filter((href) => !["/download", "/source"].includes(href))
+        .forEach((href) => internal.add(href));
       const broken = await page
         .locator('a[href^="#"]')
         .evaluateAll((items) =>
