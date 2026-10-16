@@ -79,6 +79,26 @@ private struct Rules: VocabularyProviding {
         return await pipeline.clean(transcribed, inputs: pipeline.cleanupInputs(), context: context, clipboard: clipboard, appName: appName)
     }
 
+    @Test(arguments: [CleanupLevel.basic, .light, .medium])
+    func appToneChangesOnlyPresentationAndPreservesCleanupSelection(level: CleanupLevel) async throws {
+        var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: level)
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "org.example.chat", appName: "Chat", style: StylePreset.casual.options)
+        let configured = styles
+        pipeline.appStyles = { configured }
+        let style = pipeline.cleanupStyle(forBundleID: "org.example.chat")
+        let inputs = pipeline.cleanupInputs(style: style)
+        #expect(inputs.settings.level == level)
+        #expect(inputs.settings.fillers && inputs.settings.numbers && inputs.settings.spokenCommands)
+        let result = await pipeline.clean(
+            TranscribedDictation(text: "See Maya Friday.", rawText: "See Maya Friday.", asrDoneMs: 0, words: []),
+            inputs: inputs, context: nil, clipboard: nil
+        )
+        #expect(result.text == "See Maya Friday")
+        #expect(result.cleanup.style == "casual")
+        #expect(pipeline.cleanupInputs().settings.style == .formal)
+    }
+
     @Test(arguments: [CleanupLevel.basic, .light, .medium], StylePreset.allCases)
     func savedReplacementTextSurvivesEveryCleanupLevelAndTone(level: CleanupLevel, style: StylePreset) async {
         let expansion = "  Best regards,\n\tScott  "

@@ -180,10 +180,12 @@ final class DictationController {
         corrections?.dictationStarted()
 
         let startFocus = inserter.snapshotFocus()
+        let cleanupStyle = pipeline.cleanupStyle(forBundleID: startFocus.bundleID)
         // The last release's capture stop finishes first; the audio unit takes one recording at a time.
         _ = try? await stopping?.value
         var current = DictationSession(
-            id: UUID().uuidString, startedAt: clock.date(atNanos: nanos), keyDownAt: nanos, startFocus: startFocus
+            id: UUID().uuidString, startedAt: clock.date(atNanos: nanos), keyDownAt: nanos, startFocus: startFocus,
+            cleanupStyle: cleanupStyle
         )
         phase = .recording
 
@@ -364,7 +366,7 @@ final class DictationController {
             return
         }
 
-        let inputs = pipeline.cleanupInputs()
+        let inputs = pipeline.cleanupInputs(style: session.cleanupStyle)
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
