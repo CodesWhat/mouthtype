@@ -108,7 +108,7 @@ test("production response applies the deployment policy", async ({
   expect(response.headers()["x-content-type-options"]).toBe("nosniff");
 });
 
-test("hero shows a finite speaking-versus-typing illustration", async ({
+test("hero cycles examples at labelled paces without moving its layout", async ({
   page,
 }, testInfo) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -116,7 +116,11 @@ test("hero shows a finite speaking-versus-typing illustration", async ({
   await page.goto("/");
   await page.locator(".product-preview").scrollIntoViewIfNeeded();
   await expect(page.locator("#voice-copy")).toBeVisible();
-  await page.clock.runFor(2100);
+  await expect(page.locator(".voice-lane .pace-label")).toContainText("180 WPM");
+  await expect(page.locator(".typing-lane .pace-label")).toContainText("45 WPM");
+  const regions = [".preview-paper", ".voice-lane", ".typing-lane", ".pill-slot", ".shortcut-hint", ".skin-controls"];
+  const bounds = await Promise.all(regions.map((selector) => page.locator(selector).boundingBox()));
+  await page.clock.runFor(3000);
   await expect(page.locator("#voice-copy")).toHaveText(
     "I'll send the first draft before lunch.",
   );
@@ -127,20 +131,75 @@ test("hero shows a finite speaking-versus-typing illustration", async ({
     path: testInfo.outputPath("pace-comparison.png"),
     fullPage: false,
   });
-  await page.clock.runFor(2500);
+  await page.clock.runFor(8000);
   await expect(page.locator("#typing-copy")).toHaveText(
     "I'll send the first draft before lunch.",
   );
+  await page.clock.runFor(5000);
+  await expect(page.locator("#voice-copy")).not.toHaveText("I'll send the first draft before lunch.");
+  await page.clock.runFor(20000);
   await expect(page.locator(".product-preview")).toHaveAttribute(
     "data-demo",
-    "complete",
+    "running",
   );
-  await page.clock.fastForward(60000);
-  await expect(page.locator(".product-preview")).toHaveAttribute(
-    "data-demo",
-    "complete",
-  );
+  expect(await Promise.all(regions.map((selector) => page.locator(selector).boundingBox()))).toEqual(bounds);
+  await page.getByLabel("Hi-Fi", { exact: true }).check();
+  expect(await Promise.all(regions.map((selector) => page.locator(selector).boundingBox()))).toEqual(bounds);
+  const legend = await page.locator(".skin-controls legend").boundingBox();
+  const controls = await page.locator(".skin-controls").boundingBox();
+  expect(Math.abs(legend.x + legend.width / 2 - controls.x - controls.width / 2)).toBeLessThan(1);
   await expect(page.locator(".asset-caption")).toHaveCount(0);
+});
+
+test("principles move right continuously and stop for reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  const track = page.locator(".principles-track");
+  await expect(track).toHaveCount(1);
+  const positions = await track.evaluate(async (element) => {
+    const animation = element.getAnimations()[0];
+    animation.pause();
+    animation.currentTime = 0;
+    await new Promise(requestAnimationFrame);
+    const before = element.getBoundingClientRect().x;
+    animation.currentTime = 2000;
+    await new Promise(requestAnimationFrame);
+    return [before, element.getBoundingClientRect().x];
+  });
+  expect(positions[1]).toBeGreaterThan(positions[0] + 10);
+  await expect(page.locator('.principles-group[aria-hidden="true"]')).toHaveCount(1);
+  const groups = await page.locator(".principles-group").evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().width));
+  expect(groups[0]).toBeCloseTo(groups[1], 3);
+  expect((await track.boundingBox()).width).toBeCloseTo(groups[0] * 2, 2);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(track).toHaveCSS("animation-name", "none");
+  await page.locator(".principles").scrollIntoViewIfNeeded();
+  for (const title of ["On your machine.", "In your own words.", "Out of your way."]) {
+    await expect(page.getByText(title, { exact: true }).first()).toBeInViewport();
+  }
+});
+
+test("mobile example cycles and both skins keep their reserved space", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 950 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.clock.install();
+  await page.goto("/");
+  await page.evaluate(() => document.fonts.ready);
+  await page.locator(".product-preview").scrollIntoViewIfNeeded();
+  const paper = await page.locator(".preview-paper").boundingBox();
+  const controls = await page.locator(".skin-controls").boundingBox();
+  const initialScroll = await page.evaluate(() => scrollY);
+  for (const step of [3000, 12500, 12500]) {
+    await page.clock.runFor(step);
+    const fits = await page.locator(".pace-lane p").evaluateAll((elements) =>
+      elements.every((element) => element.scrollHeight <= element.clientHeight && element.scrollWidth <= element.clientWidth));
+    expect(fits).toBe(true);
+    expect(await page.locator(".preview-paper").boundingBox()).toEqual(paper);
+  }
+  await page.getByLabel("Hi-Fi", { exact: true }).check();
+  const after = await page.locator(".skin-controls").boundingBox();
+  expect(after.y + await page.evaluate(() => scrollY)).toEqual(controls.y + initialScroll);
+  expect({ ...after, y: controls.y }).toEqual(controls);
 });
 
 test("reduced motion shows the finished comparison without animation", async ({
@@ -182,5 +241,5 @@ test("a pending hero still starts after returning from page cache", async ({ pag
   });
   await page.locator(".product-preview").scrollIntoViewIfNeeded();
   await expect(page.locator(".product-preview")).toHaveAttribute("data-demo", "running");
-  await expect(page.locator(".product-preview")).toHaveAttribute("data-demo", "complete");
+  await expect(page.locator("#voice-copy")).not.toHaveText("");
 });
