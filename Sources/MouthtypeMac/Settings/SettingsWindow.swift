@@ -320,16 +320,14 @@ struct SettingsView: View {
                     }.labelsHidden().frame(width: 150)
                 }
             }
-            settingRow("Text font", "Used by the Classic pill and delivery cards.") {
+            settingRow(model.fontOverrides.enabled ? "Base text font" : "Text font", "Used by the Classic pill and delivery cards.") {
                 Picker("Text font", selection: Binding(get: { model.font.title }, set: { name in if let font = TextFontChoice.standard.first(where: { $0.title == name }) { model.setFont(font) } })) {
                     ForEach(TextFontChoice.standard, id: \.title) { Text($0.title).tag($0.title) }
                     if case .custom = model.font { Text(model.font.title).tag(model.font.title) }
                 }.labelsHidden().frame(width: 170)
             }
             Button("Choose Font…", action: actions.chooseFont)
-            Text("Ready when you are.").font(Font(Typography(choice: model.font).font(.pillMessage)))
-                .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(nsColor: .controlBackgroundColor)).accessibilityLabel("Selected font sample: Ready when you are.")
+            FontOverridesSection(model: model)
         }
     }
 

@@ -35,6 +35,37 @@ import MouthtypeCore
         #expect(!SoundPreference.isEnabled(defaults))
     }
 
+    @Test func fontOverridesRefreshPersistAndResetWithoutChangingOtherSettings() {
+        let name = "SettingsFontTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        TextFontPreference.set(.custom("Menlo"), in: defaults)
+        let model = SettingsModel(defaults: defaults)
+        #expect(model.canResetFonts)
+        model.setFontFamily("Avenir Next", for: .heading)
+        model.setFontOverridesEnabled(true)
+        #expect(model.fontOverrides.enabled)
+        #expect(model.fontOverrides.families[.heading] == "Avenir Next")
+        TextFontOverrides.setFamily("Menlo", for: .readout, in: defaults)
+        model.setFontFamily("Avenir Next", for: .body)
+        #expect(model.fontOverrides.families[.readout] == "Menlo")
+        model.setFontOverridesEnabled(false)
+        model.refresh()
+        #expect(!model.fontOverrides.enabled)
+        #expect(model.canResetFonts)
+        #expect(model.fontOverrides.families[.heading] == "Avenir Next")
+        #expect(model.font == .custom("Menlo"))
+        model.setFont(.systema)
+        #expect(model.canResetFonts)
+        #expect(!model.fontFamilies.isEmpty)
+        #expect(FontRegistry.families.allSatisfy { model.fontFamilies.contains($0) })
+        model.setSounds(false)
+        model.resetFonts()
+        #expect(model.font == .systema && model.fontOverrides == TextFontOverrides())
+        #expect(!model.canResetFonts)
+        #expect(!model.sounds)
+    }
+
     @Test func refreshReflectsChangesMadeThroughTheMenu() {
         let name = "SettingsTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
