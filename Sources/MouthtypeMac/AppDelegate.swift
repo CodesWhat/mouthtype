@@ -12,6 +12,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let phrases = FilePhrases()
     private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
     private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
+    private lazy var settingsWindow = SettingsWindow(
+        model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged() },
+            onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) }),
+        actions: SettingsActions(changeShortcut: { [weak self] in self?.showShortcutEditor() },
+            openSpellings: { [weak self] in self?.spellingWindow.present() },
+            openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost))
     private let micCapture = MicCapture()
     private let microphoneSection = MicrophoneMenuSection()
     private let systemSection = SystemAccessMenuSection()
@@ -131,6 +137,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menuBar = MenuBarController(engineHost: engineHost)
         let history = HistoryMenuSection(store: store)
+        let settingsSection = SettingsMenuSection { [weak self] in self?.settingsWindow.present() }
+        menuBar.add(section: settingsSection)
+        NSApp.mainMenu = settingsSection.applicationMenu()
         menuBar.add(section: microphoneSection)
         menuBar.add(section: systemSection)
         menuBar.add(section: EngineRetryMenuSection(host: engineHost))
