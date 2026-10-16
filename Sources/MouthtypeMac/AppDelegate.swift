@@ -12,6 +12,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let phrases = FilePhrases()
     private let diagnostics = SettingsDiagnostics()
     private let fontChooser = TextFontMenuSection()
+    private lazy var appUpdater = AppUpdater(
+        driver: UpdateLaunchPolicy.allows(arguments: CommandLine.arguments, bundleURL: Bundle.main.bundleURL,
+            info: Bundle.main.infoDictionary ?? [:]) ? SparkleDriver() : nil,
+        activity: { [weak self] in .resolve(phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true) })
     private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
     private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
     private lazy var settingsWindow = SettingsWindow(
@@ -29,7 +33,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             openKeyboardSettings: { NSWorkspace.shared.open(GlobeKeyCheck.settingsURL) },
             editDictionary: { [weak self] in self?.editDictionary() },
             editPhrasesFile: { [weak self] in self?.editPhrasesFile() },
-            chooseFont: { [weak self] in self?.fontChooser.presentFontChooser() }))
+            chooseFont: { [weak self] in self?.fontChooser.presentFontChooser() }, updater: appUpdater))
     private let micCapture = MicCapture()
     private let microphoneSection = MicrophoneMenuSection()
     private let systemSection = SystemAccessMenuSection()
@@ -157,16 +161,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
         if let recovery {
-            recovery.canRecover = { [weak dictation, weak engineHost] in
+            recovery.canRecover = { [weak self, weak dictation, weak engineHost] in
                 guard dictation?.phase == .idle, let engineHost else { return false }
+                guard self?.appUpdater.blocksNewWork != true else { return false }
                 if case .ready = engineHost.state { return true }
                 return false
             }
             menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
             recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
-            dictation.canStartRecording = { [weak recovery] in recovery?.isRecovering != true }
         }
+        dictation.canStartRecording = { [weak self] in self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true }
         menuBar.add(section: history, startsGroup: false)
+        menuBar.add(section: UpdateMenuSection(updater: appUpdater), isFooter: true)
         menuBar.add(section: HelpMenuSection(), isFooter: true)
         self.menuBar = menuBar
         menuBar.onRefresh = { [weak self] in self?.refreshDiagnostics() }
@@ -206,6 +212,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         accessibility.onChange = { [weak self] granted in self?.accessibilityChanged(granted) }
         accessibility.start()
+        appUpdater.start()
     }
 
     public func applicationDidBecomeActive(_ notification: Notification) {
@@ -216,6 +223,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             refreshMicrophone()
             _ = await prepareCapture()
         }
+    }
+
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        appUpdater.allowsTermination ? .terminateNow : .terminateCancel
     }
 
     public func applicationWillTerminate(_ notification: Notification) {

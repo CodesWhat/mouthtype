@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import MouthtypeCore
 
 /// At launch, offers the newest dictation a crash or quit cut off, if its audio is still on disk. Recover runs the
@@ -6,6 +7,7 @@ import MouthtypeCore
 /// the focus at launch isn't where the dictation was meant to go. Every row found is ended as failed ("interrupted")
 /// before anything is offered, so no later launch offers it again.
 @MainActor
+@Observable
 final class CrashRecovery {
     private let store: TranscriptStore
     private let archive: AudioArchive

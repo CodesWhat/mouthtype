@@ -807,6 +807,19 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.controller.phase == .idle)
     }
 
+    @Test func updaterGatePreservesUndoAudioUntilWorkCanResume() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        let gate = Rig.Counter()
+        rig.controller.canStartRecording = { gate.count == 1 }
+        await rig.controller.undoCancel()
+        #expect(!rig.log.contains("engine.transcribe") && rig.inserter.delivered.isEmpty)
+        gate.count = 1
+        await rig.controller.undoCancel()
+        #expect(rig.inserter.delivered == ["Hello world."])
+    }
+
     @Test func undoWithinTheWindowTranscribesDeliversAndFixesTheRow() async throws {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
@@ -1478,6 +1491,20 @@ private final class SlowCapture: DictationCapturing {
         await rig.controller.handle(.cancelled(reason: .escape))
         #expect(rig.log.contains("archive.discardPartial"))
         #expect(rig.store.finishes.map(\.0) == [.cancelled])
+    }
+
+    @Test func updaterGatePreservesInterruptedAudioUntilWorkCanResume() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        rig.capture.interrupt()
+        await rig.until { rig.controller.phase == .idle }
+        let gate = Rig.Counter()
+        rig.controller.canStartRecording = { gate.count == 1 }
+        await rig.controller.insertInterrupted()
+        #expect(!rig.log.contains("engine.transcribe") && rig.inserter.delivered.isEmpty)
+        gate.count = 1
+        await rig.controller.insertInterrupted()
+        #expect(rig.inserter.delivered == ["Hello world."])
     }
 
     // MARK: Microphone lost
