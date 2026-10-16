@@ -167,3 +167,20 @@ test("reduced motion shows the finished comparison without animation", async ({
   const label = await page.locator(".shortcut-hint span").boundingBox();
   expect(key.x + key.width).toBeLessThan(label.x);
 });
+
+test("a pending hero still starts after returning from page cache", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 200 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  await expect(page.locator("#voice-copy")).toHaveText("");
+  await page.evaluate(() => {
+    dispatchEvent(new PageTransitionEvent("pagehide", { persisted: true }));
+  });
+  await expect(page.locator("#voice-copy")).toHaveText("");
+  await page.evaluate(() => {
+    dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+  });
+  await page.locator(".product-preview").scrollIntoViewIfNeeded();
+  await expect(page.locator(".product-preview")).toHaveAttribute("data-demo", "running");
+  await expect(page.locator(".product-preview")).toHaveAttribute("data-demo", "complete");
+});

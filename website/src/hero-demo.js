@@ -6,6 +6,7 @@ const words = phrase.split(" ");
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 let frame;
 let started = false;
+let observer;
 
 function finish() {
   cancelAnimationFrame(frame);
@@ -49,7 +50,7 @@ if (reducedMotion.matches) {
 } else {
   voice.textContent = "";
   typing.textContent = "";
-  const observer = new IntersectionObserver(
+  observer = new IntersectionObserver(
     (entries) => {
       if (entries.some((entry) => entry.isIntersecting)) {
         observer.disconnect();
@@ -59,13 +60,14 @@ if (reducedMotion.matches) {
     { threshold: 0.4 },
   );
   observer.observe(preview);
-  window.addEventListener("pagehide", () => observer.disconnect(), {
-    once: true,
-  });
 }
 reducedMotion.addEventListener("change", () => {
   if (reducedMotion.matches) finish();
 });
-window.addEventListener("pagehide", finish, {
-  once: true,
+window.addEventListener("pagehide", () => {
+  observer?.disconnect();
+  if (started) finish();
+});
+window.addEventListener("pageshow", () => {
+  if (!started) observer?.observe(preview);
 });
