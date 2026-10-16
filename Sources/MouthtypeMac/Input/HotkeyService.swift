@@ -185,15 +185,27 @@ public final class HotkeyService {
         if wasRunning { try start() }
     }
 
-    public func switchRecordingMode(_ mode: RecordingMode) throws {
-        guard mode != options.configuration.recordingMode else { return }
+    public func switchRecordingMode(_ mode: RecordingMode, source: HotkeySource? = nil) throws {
+        let nextSource = source ?? options.source
+        guard mode != options.configuration.recordingMode || nextSource != options.source else { return }
+        let previous = options
         let wasRunning = thread != nil
         let interrupted = engine.isRecording
         stop()
+        options.source = nextSource
         options.configuration.recordingMode = mode
         engine = GestureEngine(configuration: options.configuration)
+        mapper = HotkeyInputMapper(source: nextSource)
         if interrupted { eventSink.yield(.cancelled(reason: .inputLost)) }
-        if wasRunning { try start() }
+        do {
+            if wasRunning { try start() }
+        } catch {
+            stop()
+            options = previous
+            engine = GestureEngine(configuration: previous.configuration)
+            mapper = HotkeyInputMapper(source: previous.source)
+            throw error
+        }
     }
 
     /// Ends a locked recording that something other than the key stopped (the menu, the safety cap), so the next press starts fresh.

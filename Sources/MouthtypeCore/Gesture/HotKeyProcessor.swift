@@ -190,8 +190,9 @@ public struct HotKeyProcessor: Sendable {
     /// 4. Non-matching chord → handle as release or different key
     public mutating func process(keyEvent: KeyEvent, now: Date) -> Output? {
         // 1) ESC => immediate cancel
-        if keyEvent.key == .escape, state != .idle {
-            isDirty = true
+        let isToggleShortcut = recordingMode == .toggle && chordMatchesHotkey(keyEvent)
+        if keyEvent.key == .escape, state != .idle, !isToggleShortcut {
+            isDirty = recordingMode == .hold || toggleChordHeld
             resetToIdle()
             return .cancel
         }

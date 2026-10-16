@@ -43,6 +43,14 @@ import Testing
         #expect(engine.process(down, now: at(0.4)) == .pressed)
     }
 
+    @Test func escapeAfterReleaseAllowsTheVeryNextPressToStart() {
+        var engine = GestureEngine(configuration: .init(recordingMode: .toggle))
+        _ = engine.process(down, now: at(0))
+        _ = engine.process(up, now: at(0.1))
+        #expect(engine.process(KeyEvent(key: .escape, modifiers: []), now: at(0.2)) == .cancelled(.escape))
+        #expect(engine.process(down, now: at(0.3)) == .pressed)
+    }
+
     @Test func unrelatedChordCannotBackslideIntoStartingRecording() {
         var engine = GestureEngine(configuration: .init(recordingMode: .toggle))
         #expect(engine.process(KeyEvent(key: .a, modifiers: [.fn]), now: at(0)) == nil)
@@ -75,5 +83,13 @@ import Testing
         #expect(engine.process(chord, now: at(0)) == .pressed)
         #expect(engine.process(KeyEvent(key: nil, modifiers: [.control]), now: at(0.1)) == nil)
         #expect(engine.process(chord, now: at(0.2)) == .released)
+    }
+
+    @Test func escapeItselfCanBeTheConfiguredToggleKey() {
+        let escape = KeyEvent(key: .escape, modifiers: [])
+        var engine = GestureEngine(configuration: .init(hotkey: HotKey(key: .escape, modifiers: []), recordingMode: .toggle))
+        #expect(engine.process(escape, now: at(0)) == .pressed)
+        #expect(engine.process(up, now: at(0.1)) == nil)
+        #expect(engine.process(escape, now: at(0.2)) == .released)
     }
 }

@@ -65,6 +65,17 @@ import Testing
         #expect(await events(service, count: 3) == [.pressed(at: 0), .locked(at: 0, trigger: .toggle), .released(at: 1_000_000_000)])
     }
 
+    @Test(.timeLimit(.minutes(1))) func escapeAfterReleasingTheKeyDoesNotSwallowTheNextStart() async {
+        let service = HotkeyService(options: .init(source: .remapped(keyCode: 80), configuration: .init(recordingMode: .toggle)), otherKeysHeld: { _ in false })
+        defer { service.stop() }
+        service.process(.init(kind: .keyDown, keyCode: 80, flags: 0, timestamp: 0))
+        service.process(.init(kind: .keyUp, keyCode: 80, flags: 0, timestamp: 100))
+        service.process(.init(kind: .keyDown, keyCode: 53, flags: 0, timestamp: 200))
+        service.process(.init(kind: .keyUp, keyCode: 53, flags: 0, timestamp: 300))
+        service.process(.init(kind: .keyDown, keyCode: 80, flags: 0, timestamp: 400))
+        #expect(await events(service, count: 5) == [.pressed(at: 0), .locked(at: 0, trigger: .toggle), .cancelled(reason: .escape), .pressed(at: 400), .locked(at: 400, trigger: .toggle)])
+    }
+
     @Test(.timeLimit(.minutes(1))) func changingModeCancelsTheActiveTakeAndLeavesTheNextPressFresh() async throws {
         let service = HotkeyService(options: .init(source: .remapped(keyCode: 80), configuration: .init(recordingMode: .toggle)), otherKeysHeld: { _ in false })
         defer { service.stop() }
@@ -73,5 +84,15 @@ import Testing
         service.process(.init(kind: .keyDown, keyCode: 80, flags: 0, timestamp: 1_000_000_000))
         service.process(.init(kind: .keyUp, keyCode: 80, flags: 0, timestamp: 2_000_000_000))
         #expect(await events(service, count: 5) == [.pressed(at: 0), .locked(at: 0, trigger: .toggle), .cancelled(reason: .inputLost), .pressed(at: 1_000_000_000), .released(at: 2_000_000_000)])
+    }
+
+    @Test(.timeLimit(.minutes(1))) func modeRetryUsesActualSourceEvenWhenTheModeIsAlreadySelected() async throws {
+        let service = HotkeyService(options: .init(source: .remapped(keyCode: 80), configuration: .init(recordingMode: .toggle)), otherKeysHeld: { _ in false })
+        defer { service.stop() }
+        try service.switchRecordingMode(.toggle, source: .fnFlag)
+        #expect(service.source == .fnFlag)
+        service.process(.init(kind: .keyDown, keyCode: 80, flags: 0, timestamp: 0))
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: CGEventFlags.maskSecondaryFn.rawValue, timestamp: 100))
+        #expect(await events(service, count: 2) == [.pressed(at: 100), .locked(at: 100, trigger: .toggle)])
     }
 }

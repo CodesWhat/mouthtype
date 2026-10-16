@@ -379,13 +379,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
-        let service = HotkeyService(options: .init(source: source, configuration: .init(recordingMode: RecordingModePreference.current())))
+        let service = hotkeyService ?? HotkeyService(options: .init(source: source, configuration: .init(recordingMode: RecordingModePreference.current())))
         service.onHealthChange = { [weak self] health in
             Log.hotkey.info("health \(health.statusText, privacy: .public)")
             self?.systemSection.update(hotkeyHealth: health)
             self?.diagnostics.hotkeyHealth = health
         }
         do {
+            try service.switchSource(source)
             try service.start()
         } catch {
             Log.hotkey.error("hotkey not started: \(String(describing: error), privacy: .public)")
@@ -400,7 +401,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeyService = service
         systemSection.update(hotkeyHealth: service.health)
         diagnostics.hotkeyHealth = service.health
-        guard let dictation else { return }
+        guard hotkeyLogTask == nil, let dictation else { return }
         hotkeyLogTask = Task { await dictation.consume(service.events) }
     }
 
@@ -452,12 +453,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func activateRecordingMode(_ mode: RecordingMode) -> String? {
         guard shortcutWindow == nil else { return "Finish changing the shortcut before changing recording behavior." }
         guard let service = hotkeyService else { return nil }
+        let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
         do {
-            try service.switchRecordingMode(mode)
+            try service.switchRecordingMode(mode, source: source)
             try service.start()
+            inputStarted = true
             return nil
         } catch {
             service.stop()
+            inputStarted = false
             remapCoordinator.deactivate()
             refreshGlobeCheck()
             return "The input listener could not start. Check Accessibility access, then try again. Your previous recording behavior is still saved."
