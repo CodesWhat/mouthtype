@@ -23,6 +23,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     container:
+      options: --init
       image: swift:6.2.4-noble@sha256:eccc7a97f9b9881d9659e2e788081fd7675f86d39793b51200bfb178398b3784
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
