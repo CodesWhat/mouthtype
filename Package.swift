@@ -63,5 +63,9 @@ let package = Package(
             name: "MouthtypeMacTests",
             dependencies: ["MouthtypeMac"]
         ),
+        .testTarget(
+            name: "MouthtypeSettingsUITests",
+            dependencies: ["MouthtypeMac"]
+        ),
     ]
 )
