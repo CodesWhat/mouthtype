@@ -7,7 +7,6 @@ import os
 from pathlib import Path
 import plistlib
 import re
-import shutil
 import subprocess
 import tempfile
 
@@ -57,6 +56,10 @@ def verify_app(app, output, label):
     run(['codesign', '--verify', '--deep', '--strict', str(app)])
     run(['xcrun', 'stapler', 'validate', str(app)], log=output / f'{label}-staple.log')
     run(['spctl', '--assess', '--type', 'execute', '--verbose=2', str(app)], log=output / f'{label}-gatekeeper.log')
+
+
+def create_update_archive(app, archive):
+    run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(archive)], timeout=180)
 
 
 def main():
@@ -116,16 +119,11 @@ def main():
     print('Apple accepted the app; building and checking the final ZIP', flush=True)
     filename = f'Mouthtype-{version}-macos-arm64.zip'
     archive = output / filename
+    create_update_archive(app, archive)
     with tempfile.TemporaryDirectory(prefix='mouthtype-package-') as temporary:
-        staging = Path(temporary) / f'Mouthtype-{version}'
-        staging.mkdir()
-        run(['ditto', str(app), str(staging / 'Mouthtype.app')], timeout=180)
-        shutil.copy2(root / 'docs/ALPHA.md', staging / 'Read Me.txt')
-        shutil.copy2(root / 'LICENSE', staging / 'LICENSE')
-        run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(staging), str(archive)], timeout=180)
         extracted = Path(temporary) / 'extracted'
         run(['ditto', '-x', '-k', str(archive), str(extracted)], timeout=180)
-        verify_app(extracted / staging.name / 'Mouthtype.app', output, 'extracted')
+        verify_app(extracted / 'Mouthtype.app', output, 'extracted')
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     (output / f'{filename}.sha256').write_text(f'{digest}  {filename}\n')
     manifest = {'version': version, 'build': metadata['CFBundleVersion'], 'tag': f'v{version}',

@@ -10,7 +10,30 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     )
     private let dictionary = FileVocabulary()
     private let phrases = FilePhrases()
+    private let diagnostics = SettingsDiagnostics()
+    private let fontChooser = TextFontMenuSection()
+    private lazy var appUpdater = AppUpdater(
+        driver: UpdateLaunchPolicy.allows(arguments: CommandLine.arguments, bundleURL: Bundle.main.bundleURL,
+            info: Bundle.main.infoDictionary ?? [:]) ? SparkleDriver() : nil,
+        activity: { [weak self] in .resolve(phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true) })
+    private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
     private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
+    private lazy var settingsWindow = SettingsWindow(
+        model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
+            onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
+            onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) }),
+        actions: SettingsActions(changeShortcut: { [weak self] in self?.showShortcutEditor() },
+            openSpellings: { [weak self] in self?.spellingWindow.present() },
+            openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
+            diagnostics: diagnostics, retrySpeech: { [weak self] in self?.engineHost.start() },
+            refreshDiagnostics: { [weak self] in self?.refreshDiagnostics() },
+            toggleRemap: { [weak self] in self?.toggleRemap() },
+            openMicSettings: { NSWorkspace.shared.open(MicrophoneAccess.settingsURL) },
+            openAccessibilitySettings: { NSWorkspace.shared.open(AccessibilityAccess.settingsURL) },
+            openKeyboardSettings: { NSWorkspace.shared.open(GlobeKeyCheck.settingsURL) },
+            editDictionary: { [weak self] in self?.editDictionary() },
+            editPhrasesFile: { [weak self] in self?.editPhrasesFile() },
+            chooseFont: { [weak self] in self?.fontChooser.presentFontChooser() }, updater: appUpdater))
     private let micCapture = MicCapture()
     private let microphoneSection = MicrophoneMenuSection()
     private let systemSection = SystemAccessMenuSection()
@@ -128,32 +151,31 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictation.corrections = watcher
         correctionWatcher = watcher
 
-        let menuBar = MenuBarController(engineHost: engineHost)
-        let history = HistoryMenuSection(store: store)
-        menuBar.add(section: microphoneSection)
-        menuBar.add(section: systemSection)
-        menuBar.add(section: EngineRetryMenuSection(host: engineHost))
-        menuBar.add(section: history)
-        if let recovery {
-            recovery.canRecover = { [weak dictation, weak engineHost] in
-                guard dictation?.phase == .idle, let engineHost else { return false }
-                if case .ready = engineHost.state { return true }
-                return false
-            }
-            menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover))
-            recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
-            dictation.canStartRecording = { [weak recovery] in recovery?.isRecovering != true }
-        }
-        menuBar.add(section: PillSkinMenuSection(onSelect: { [weak pill] kind in pill?.setSkin(kind) }))
-        menuBar.add(section: TextFontMenuSection())
-        menuBar.add(section: CleanupMenuSection(cleaner: cleanerHost, dictionary: dictionary,
-            managePhrases: { [weak self] in self?.phraseWindow.present() }))
-        menuBar.add(section: PasteMenuSection())
+        let menuBar = MenuBarController()
+        let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
+        let settingsSection = SettingsMenuSection { [weak self] in self?.settingsWindow.present() }
+        menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in self?.settingsWindow.present(page: .diagnostics) }))
+        menuBar.add(section: settingsSection, startsGroup: false)
+        NSApp.mainMenu = settingsSection.applicationMenu()
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
-        menuBar.add(section: HelpMenuSection())
+        if let recovery {
+            recovery.canRecover = { [weak self, weak dictation, weak engineHost] in
+                guard dictation?.phase == .idle, let engineHost else { return false }
+                guard self?.appUpdater.blocksNewWork != true else { return false }
+                if case .ready = engineHost.state { return true }
+                return false
+            }
+            menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
+            recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
+        }
+        dictation.canStartRecording = { [weak self] in self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true }
+        menuBar.add(section: history, startsGroup: false)
+        menuBar.add(section: UpdateMenuSection(updater: appUpdater), isFooter: true)
+        menuBar.add(section: HelpMenuSection(), isFooter: true)
         self.menuBar = menuBar
+        menuBar.onRefresh = { [weak self] in self?.refreshDiagnostics() }
         microphoneSection.onStatusChanged = { [weak self] status in
             guard let self, status == .authorized, !self.micCapture.isPrepared, !self.preparingCapture else { return }
             Task { _ = await self.prepareCapture() }
@@ -181,7 +203,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         registerGlobalShortcuts()
         trackStatus()
 
-        refreshGlobeCheck()
+        refreshDiagnostics()
+        observeDiagnosticModels()
         engineHost.start()
         cleanerHost.start()
         offerRecoveryWhenReady()
@@ -189,16 +212,21 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         accessibility.onChange = { [weak self] granted in self?.accessibilityChanged(granted) }
         accessibility.start()
+        appUpdater.start()
     }
 
     public func applicationDidBecomeActive(_ notification: Notification) {
         guard menuBar != nil else { return }
-        refreshGlobeCheck()
+        refreshDiagnostics()
         guard !micCapture.isPrepared, !preparingCapture else { return }
         Task {
             refreshMicrophone()
             _ = await prepareCapture()
         }
+    }
+
+    public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        appUpdater.allowsTermination ? .terminateNow : .terminateCancel
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
@@ -252,13 +280,57 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         systemSection.update(globe: remapCoordinator.isActive ? nil : check)
         systemSection.update(remapChecked: remapCoordinator.menuChecked)
         systemSection.update(shortcut: ShortcutSettings.load())
+        diagnostics.globe = remapCoordinator.isActive ? nil : check
+        diagnostics.remapChecked = remapCoordinator.menuChecked
+        diagnostics.shortcut = ShortcutSettings.load()
         Log.permissions.info("globe key action \(String(describing: check.action), privacy: .public), fn key present \(check.fnKeyPresent, privacy: .public), conflict \(check.hasConflict, privacy: .public)")
     }
 
     private func refreshMicrophone() {
         microphoneSection.refresh()
+        diagnostics.microphoneStatus = MicrophoneAccess.status
         Log.permissions.info("microphone status \(MicrophoneAccess.statusText(for: MicrophoneAccess.status), privacy: .public)")
         refreshStatusIcon()
+    }
+
+    private func refreshDiagnostics() {
+        refreshDiagnosticModels()
+        refreshMicrophone()
+        refreshGlobeCheck()
+        diagnostics.accessibilityGranted = accessibility.isGranted
+        diagnostics.hotkeyHealth = hotkeyService?.health ?? .off
+        dictionary.reloadIfChanged()
+        if case .error(let message) = dictionary.status { diagnostics.dictionaryError = message }
+        else { diagnostics.dictionaryError = nil }
+        do { _ = try phrases.all(); diagnostics.phrasesError = nil }
+        catch { diagnostics.phrasesError = error.localizedDescription }
+    }
+
+    private func refreshDiagnosticModels() {
+        diagnostics.refreshModels(speech: engineHost.statusText,
+            failed: { if case .failed = engineHost.state { true } else { false } }(),
+            cleaner: cleanerHost, level: CleanupSettings.load().level)
+    }
+
+    private func observeDiagnosticModels() {
+        withObservationTracking {
+            refreshDiagnosticModels()
+        } onChange: { [weak self] in Task { @MainActor in self?.observeDiagnosticModels() } }
+    }
+
+    private func editDictionary() {
+        do {
+            let url = try dictionary.createIfMissing()
+            if !NSWorkspace.shared.open(url) { diagnostics.dictionaryError = "The dictionary file could not be opened." }
+        } catch { diagnostics.dictionaryError = error.localizedDescription }
+    }
+
+    private func editPhrasesFile() {
+        guard FileManager.default.fileExists(atPath: phrases.url.path) else {
+            diagnostics.phrasesError = "The phrase file no longer exists. Open Phrases to save a new file."
+            return
+        }
+        if !NSWorkspace.shared.open(phrases.url) { diagnostics.phrasesError = "The phrase file could not be opened." }
     }
 
     private func refreshStatusIcon() {
@@ -304,6 +376,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func accessibilityChanged(_ granted: Bool) {
         Log.permissions.info("accessibility \(granted ? "allowed" : "needed", privacy: .public)")
         systemSection.update(accessibilityGranted: granted)
+        diagnostics.accessibilityGranted = granted
         refreshStatusIcon()
         if granted { startInput() }
     }
@@ -317,12 +390,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
-        let service = HotkeyService(options: .init(source: source))
+        let service = hotkeyService ?? HotkeyService(options: .init(source: source, configuration: .init(recordingMode: RecordingModePreference.current())))
         service.onHealthChange = { [weak self] health in
             Log.hotkey.info("health \(health.statusText, privacy: .public)")
             self?.systemSection.update(hotkeyHealth: health)
+            self?.diagnostics.hotkeyHealth = health
         }
         do {
+            try service.switchSource(source)
             try service.start()
         } catch {
             Log.hotkey.error("hotkey not started: \(String(describing: error), privacy: .public)")
@@ -336,7 +411,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         refreshGlobeCheck()
         hotkeyService = service
         systemSection.update(hotkeyHealth: service.health)
-        guard let dictation else { return }
+        diagnostics.hotkeyHealth = service.health
+        guard hotkeyLogTask == nil, let dictation else { return }
         hotkeyLogTask = Task { await dictation.consume(service.events) }
     }
 
@@ -382,6 +458,26 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             service.stop()
             remapCoordinator.deactivate()
             return "The input listener could not start. Check Accessibility access, then try again. Your previous shortcut is still saved."
+        }
+    }
+
+    private func activateRecordingMode(_ mode: RecordingMode) -> String? {
+        guard shortcutWindow == nil else { return "Finish changing the shortcut before changing recording behavior." }
+        guard let service = hotkeyService else { return nil }
+        let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
+        do {
+            try service.switchRecordingMode(mode, source: source)
+            try service.start()
+            inputStarted = true
+            return nil
+        } catch {
+            service.stop()
+            inputStarted = false
+            // The stopped service can restore the saved behavior without installing taps.
+            try? service.switchRecordingMode(RecordingModePreference.current())
+            remapCoordinator.deactivate()
+            refreshGlobeCheck()
+            return "The input listener could not start. Check Accessibility access, then try again. Your previous recording behavior is still saved."
         }
     }
 

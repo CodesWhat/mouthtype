@@ -18,6 +18,7 @@ public enum LockTrigger: Equatable, Sendable {
     case doubleTap
     /// Space pressed while the hotkey was held.
     case fnSpace
+    case toggle
 }
 
 public enum GestureEvent: Equatable, Sendable {
@@ -81,6 +82,7 @@ public struct GestureEngine: Sendable {
         switch output {
         case .startRecording:
             recordingStart = now
+            locked = processor.isLocked
             return .pressed
         case .stopRecording:
             defer {

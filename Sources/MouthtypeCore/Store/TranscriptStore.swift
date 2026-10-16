@@ -284,6 +284,19 @@ public final class TranscriptStore: Sendable {
         }
     }
 
+    /// The newest ended attempt's start, including activity after launch. Uses the existing chronological index.
+    public func latestTerminalStartedAt() throws -> Date? {
+        try pool.read { db in
+            try Double.fetchOne(db, sql: """
+                SELECT started_at FROM dictation INDEXED BY dictation_started_at
+                WHERE status IN (?, ?, ?, ?, ?) ORDER BY started_at DESC LIMIT 1
+                """, arguments: [
+                    DictationStatus.inserted, DictationStatus.cancelled, DictationStatus.tooShort,
+                    DictationStatus.empty, DictationStatus.failed,
+                ]).map { Date(timeIntervalSince1970: $0) }
+        }
+    }
+
     /// Rows that never reached an end state (started, recorded or transcribed) and began in `[start, end)`, newest first.
     public func unfinished(from start: Date, before end: Date) throws -> [DictationRecord] {
         try pool.read { db in

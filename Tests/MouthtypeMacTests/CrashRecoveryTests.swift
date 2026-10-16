@@ -57,12 +57,13 @@ private struct Rig {
     let recovery: CrashRecovery
     let now = FakeClock.wall
 
-    init() throws {
+    init(appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }) throws {
         store = try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite"))
         archive = AudioArchive(supportDirectory: dir)
         let clock = FakeClock(start: 1)
         var pipeline = DictationPipeline(store: TranscriptStoreWriter(store: store), archive: archive, engine: engine, clock: clock)
         pipeline.settings = { CleanupSettings() }
+        pipeline.appStyles = appStyles
         recovery = CrashRecovery(
             store: store, archive: archive, pipeline: pipeline, cards: cards, pill: pill, clock: clock, launchedAt: FakeClock.wall
         )
@@ -89,6 +90,18 @@ private struct Rig {
 
 @MainActor
 @Suite struct CrashRecoveryTests {
+    @Test func recoveryWithoutCapturedAppUsesGlobalTone() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: StylePreset.veryCasual.options)
+        let configured = styles
+        let rig = try Rig(appStyles: { configured })
+        defer { rig.cleanUp() }
+        try rig.seed(ago: 90)
+        await rig.recovery.offerIfNeeded()
+        await rig.recovery.recover()
+        #expect(rig.cards.presented.last?.transcript == "Hello from the crash.")
+    }
+
     @Test func recoveryDoesNotRunOverAnActiveDictation() async throws {
         let rig = try Rig()
         defer { rig.cleanUp() }
@@ -132,6 +145,25 @@ private struct Rig {
         await rig.recovery.recover()
         #expect(rig.engine.calls == 2)
         #expect(rig.cards.presented.last?.kind == .recovered)
+    }
+
+    @Test func laterDeliveredDictationSuppressesStartupCardButSavedAudioCanStillBeOpened() async throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let stale = try rig.seed(ago: 18 * 3600)
+        let completed = try rig.seed(ago: 60, audio: false)
+        try rig.store.recordInsertion(completed, InsertionRecord(finalText: "This take already landed."))
+
+        let scan = await rig.recovery.offerIfNeeded()
+
+        #expect(scan?.newest == nil && rig.recovery.offered == nil)
+        #expect(rig.cards.presented.isEmpty && rig.engine.calls == 0)
+        let saved = try #require(try rig.recovery.savedRecordings().first { $0.id == stale })
+        rig.recovery.offerSaved(saved)
+        #expect(rig.recovery.offered?.id == stale)
+        #expect(rig.cards.presented.last?.kind == .recoverOffer)
+        #expect(rig.cards.actions[.recover] != nil && rig.cards.actions[.discard] != nil)
+        #expect(rig.engine.calls == 0)
     }
 
     @Test func theNewestIsOfferedWithItsLengthAndAgeAndTheOlderOnesCounted() async throws {

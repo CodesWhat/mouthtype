@@ -105,9 +105,11 @@ public actor SmartCleanup {
     private struct Draft: Sendable {
         var text: String
         var guardInput: String
+        var resolvedInput: String?
         var ordinary: [NameJoining.Candidate]
     }
     private var current: Task<Result<Draft, Error>, Never>?
+    private var modelPaused = false
     private let customBudget: Bool
 
     public init(cleaner: any TextCleaner, budget: (@Sendable (Int) -> Duration)? = nil) {
@@ -115,6 +117,22 @@ public actor SmartCleanup {
         self.budget = budget ?? (cleaner.usesNativeControls ? SmartCleanup.defaultBudget : SmartCleanup.qualityBudget)
         self.customBudget = budget != nil
     }
+
+    /// Settle a timed-out generation before unloading its model or exiting the process.
+    /// Dictation deadlines still return fallback immediately; only explicit teardown waits here.
+    public func waitForPendingWork() async {
+        while let busy = current {
+            _ = await busy.value
+            if current == busy { current = nil }
+        }
+    }
+
+    public func pauseForModelUnload() async {
+        modelPaused = true
+        await waitForPendingWork()
+    }
+
+    public func resumeAfterModelLoad() { modelPaused = false }
 
     public func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
         let start = clock.now
@@ -130,9 +148,9 @@ public actor SmartCleanup {
                 postEdits: post, promptSHA: sha
             )
         }
-        guard request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
+        guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
 
-        let context = CleanupContext(vocabulary: request.dictionary.map(\.written), appName: request.appName,
+        let context = CleanupContext(vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
             level: request.level, before: request.context?.before, after: request.context?.after)
         let joining = NameJoining.candidates(in: request.text,
             spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
@@ -149,6 +167,7 @@ public actor SmartCleanup {
             if current == busy { current = nil }
         }
 
+        guard !modelPaused else { return finish(.skipped) }
         let passes = cleaner.usesNativeControls
             ? Self.passes(level: request.level, style: request.style, destination: request.destination)
             : [S1MiniControls.benchmark]
@@ -160,17 +179,21 @@ public actor SmartCleanup {
                 let ordinary = joining.filter { !approved.contains($0) }
                 let guardInput = NameJoining.applying(approved, to: request.text)
                 var output = CorrectionCommas.apply(guardInput)
+                var resolvedInput: String?
                 if settleCorrections {
+                    try Task.checkCancellation()
                     output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: correctionContext))
-                    if output.isEmpty { return .success(Draft(text: output, guardInput: guardInput, ordinary: ordinary)) }
+                    resolvedInput = output
+                    if output.isEmpty { return .success(Draft(text: output, guardInput: guardInput, resolvedInput: resolvedInput, ordinary: ordinary)) }
                 }
                 for controls in passes {
+                    try Task.checkCancellation()
                     var passContext = context
                     passContext.s1Controls = controls
                     output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: passContext))
                     if output.isEmpty { break }
                 }
-                return .success(Draft(text: output, guardInput: guardInput, ordinary: ordinary))
+                return .success(Draft(text: output, guardInput: guardInput, resolvedInput: resolvedInput, ordinary: ordinary))
             } catch {
                 return .failure(error)
             }
@@ -206,7 +229,7 @@ public actor SmartCleanup {
             }
             if let reason = SmartCleanupGuard.rejection(
                 input: draft.guardInput, output: post.text, level: request.level, dictionary: request.dictionary,
-                snippets: request.snippets, nearbySpellings: CleanupPrompt.nearbySpellings(context)
+                snippets: request.snippets, nearbySpellings: CleanupPrompt.nearbySpellings(context), resolvedInput: draft.resolvedInput
             ) {
                 return finish(.guardRejected, rejection: reason, sha: sha)
             }
@@ -227,6 +250,13 @@ public actor SmartCleanup {
     /// Whether `task` finished before `deadline`. The watcher on the task is not a child of this call, so a task
     /// that ignores cancellation can't hold the caller past the deadline.
     private static func finished(_ task: Task<Result<Draft, Error>, Never>, by deadline: ContinuousClock.Instant, clock: ContinuousClock) async -> Bool {
+        await waitForCompletion(task, sleep: { try await clock.sleep(until: deadline) })
+    }
+
+    static func waitForCompletion<Value: Sendable>(
+        _ task: Task<Value, Never>, sleep: @escaping @Sendable () async throws -> Void,
+        cancelTimer: @escaping @Sendable (Task<Void, Never>) -> Void = { $0.cancel() }
+    ) async -> Bool {
         let once = OSAllocatedUnfairLock(initialState: false)
         return await withCheckedContinuation { continuation in
             @Sendable func settle(_ value: Bool) {
@@ -237,13 +267,13 @@ public actor SmartCleanup {
                 if first { continuation.resume(returning: value) }
             }
             let sleeper = Task {
-                try? await clock.sleep(until: deadline)
+                do { try await sleep() } catch { return }
                 settle(false)
             }
             Task {
                 _ = await task.value
-                sleeper.cancel()
                 settle(true)
+                cancelTimer(sleeper)
             }
         }
     }

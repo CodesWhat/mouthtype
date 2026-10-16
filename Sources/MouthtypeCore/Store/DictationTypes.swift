@@ -17,7 +17,7 @@ public enum DictationTrigger: String, Codable, Sendable {
     case fn
     case fnSpace = "fn_space"
     case doubleTap = "double_tap"
-    case pill, mouse
+    case pill, mouse, toggle
 }
 
 /// Where the text was headed. Surrounding field text is deliberately not part of this.

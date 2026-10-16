@@ -158,6 +158,7 @@ struct CleanTextCommand: AsyncParsableCommand {
                 totalCleanupMilliseconds: run.totalCleanupMilliseconds, rejection: run.result.rejection,
                 failure: item.failure(for: run.result.text), proposed: await observed.proposed))
         }
+        await smart.waitForPendingWork()
         if let result {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

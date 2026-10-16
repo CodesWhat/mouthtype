@@ -88,6 +88,7 @@ import Testing
         for choice in TextFontChoice.standard + [.custom("Menlo")] {
             TextFontPreference.set(choice, in: defaults)
             #expect(TextFontPreference.current(defaults) == choice)
+            if choice == .systema { #expect(defaults.string(forKey: TextFontPreference.key) == "systema") }
         }
         defaults.set("custom", forKey: TextFontPreference.key)
         defaults.set("", forKey: TextFontPreference.familyKey)
@@ -103,7 +104,7 @@ import Testing
         let section = TextFontMenuSection(defaults: defaults)
         let submenu = try #require(section.items.first?.submenu)
         #expect(submenu.items.filter { !$0.isSeparatorItem }.map(\.title) == [
-            "Systema Set", "System", "System Rounded", "System Serif", "System Mono", "Choose Font\u{2026}",
+            "Default", "System", "System Rounded", "System Serif", "System Mono", "Choose Font\u{2026}",
         ])
         #expect(submenu.items.map(\.state).prefix(5) == [.on, .off, .off, .off, .off])
         let serif = try #require(submenu.items.first { $0.title == "System Serif" })

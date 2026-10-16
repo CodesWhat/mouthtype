@@ -19,6 +19,57 @@ import Testing
         #expect(try DictationRecovery.saved(store: rig.store, archive: rig.archive, now: now, launchedAt: now).map(\.id) == [older, failed])
     }
 
+    @Test(arguments: [DictationStatus.inserted, .cancelled, .tooShort, .empty, .failed])
+    func newerEndedActivityKeepsStaleAudioSavedWithoutAnAutomaticOffer(status: DictationStatus) throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let stale = try rig.row(.recorded, ago: 18 * 3600, now: now, audioSeconds: 2)
+        let lost = try rig.row(.started, ago: 17 * 3600, now: now)
+        let ended = try rig.row(status, ago: 60, now: now)
+
+        let scan = try DictationRecovery.scan(store: rig.store, archive: rig.archive, now: now, launchedAt: now)
+
+        #expect(scan.newest == nil && scan.olderCount == 1 && scan.lostCount == 1)
+        #expect(try DictationRecovery.saved(store: rig.store, archive: rig.archive, now: now, launchedAt: now).map(\.id) == [stale])
+        for id in [stale, lost] {
+            let row = try #require(try rig.store.dictation(id: id))
+            #expect(row.status == .failed && row.errorMessage == DictationRecovery.interruptedMessage)
+        }
+        #expect(try rig.store.dictation(id: ended)?.status == status)
+        #expect(FileManager.default.fileExists(atPath: rig.archive.url(for: stale).path))
+    }
+
+    @Test(arguments: [18 * 3600.0, 60.0])
+    func theLatestCrashIsStillOfferedWhenOnlyOlderAttemptsEnded(ago: TimeInterval) throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        try rig.row(.inserted, ago: ago + 60, now: now)
+        let crash = try rig.row(.recorded, ago: ago, now: now, audioSeconds: 2)
+
+        let scan = try DictationRecovery.scan(store: rig.store, archive: rig.archive, now: now, launchedAt: now)
+
+        #expect(scan.newest?.id == crash && scan.olderCount == 0 && scan.lostCount == 0)
+        #expect(abs((scan.newest?.seconds ?? 0) - 2) < 0.01)
+    }
+
+    @Test func activityCompletedAfterLaunchSuppressesTheOldOfferAndLeavesTheLiveTakeUntouched() throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let launch = now.addingTimeInterval(-120)
+        let stale = try rig.row(.recorded, ago: 300, now: now, audioSeconds: 2)
+        try rig.row(.inserted, ago: 60, now: now)
+        let live = try rig.row(.started, ago: 30, now: now, partialSeconds: 2)
+        let liveAudio = try Data(contentsOf: rig.archive.partialURL(for: live))
+
+        let scan = try DictationRecovery.scan(store: rig.store, archive: rig.archive, now: now, launchedAt: launch)
+
+        #expect(scan.newest == nil && scan.olderCount == 1 && scan.lostCount == 0)
+        #expect(try rig.store.dictation(id: live)?.status == .started)
+        #expect(try rig.store.dictation(id: live)?.errorMessage == nil)
+        #expect(try Data(contentsOf: rig.archive.partialURL(for: live)) == liveAudio)
+        #expect(try DictationRecovery.saved(store: rig.store, archive: rig.archive, now: now, launchedAt: launch).map(\.id) == [stale])
+    }
+
     private let now = Date(timeIntervalSince1970: 1_791_806_400)
 
     private struct Rig {

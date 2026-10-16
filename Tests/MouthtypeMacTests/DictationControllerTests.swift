@@ -167,6 +167,7 @@ private final class FakeInserter: DictationInserting {
     var result = DeliveryResult(method: .paste, outcome: .unknown, focusMoved: false, target: nil, finalText: "Hello world.")
     var delivered: [String] = []
     var startFocusSeen: FocusSnapshot?
+    var focus = FocusSnapshot(pid: 7, bundleID: "com.apple.Notes", appName: "Notes", role: "AXTextArea")
     var context: InsertionContext?
     var clipboard: String?
     private(set) var contextReads = 0
@@ -180,7 +181,7 @@ private final class FakeInserter: DictationInserting {
 
     func snapshotFocus() -> FocusSnapshot {
         log.add("inserter.snapshot")
-        return FocusSnapshot(pid: 7, bundleID: "com.apple.Notes", appName: "Notes", role: "AXTextArea")
+        return focus
     }
 
     func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult {
@@ -397,7 +398,8 @@ private struct Rig {
     init(
         audio: CapturedAudio = capturedTone(), withStore: Bool = true, settings: CleanupSettings = CleanupSettings(),
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
-        limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil
+        limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
+        appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -412,6 +414,7 @@ private struct Rig {
             store: withStore ? store : nil, archive: archive ?? FakeArchive(log: log, writesPartials: partials), engine: engine, clock: clock
         )
         pipeline.settings = { settings }
+        pipeline.appStyles = appStyles
         pipeline.vocabulary = vocabulary
         pipeline.textPipeline = textPipeline
         controller = DictationController(
@@ -459,6 +462,48 @@ private struct Rig {
 @Suite struct DictationCleanupTests {
     private let messy = "um so the build is uh green new line ship it"
     private let cleaned = "So the build is green\nShip it"
+
+    @Test func appToneUsesRecordingStartAppAndSurvivesPreferenceChanges() async throws {
+        final class Styles: @unchecked Sendable {
+            let lock = NSLock()
+            private var value = AppCleanupStyles()
+            func get() -> AppCleanupStyles { lock.withLock { value } }
+            func set(_ style: StyleOptions) throws {
+                try lock.withLock { try value.set(bundleID: "com.apple.Notes", appName: "Notes", style: style) }
+            }
+        }
+        let styles = Styles()
+        try styles.set(StylePreset.casual.options)
+        let rig = Rig(appStyles: { styles.get() })
+        rig.engine.result.text = "See Maya Friday."
+        await rig.controller.handle(.pressed(at: keyDown))
+        rig.inserter.focus = FocusSnapshot(pid: 9, bundleID: "org.example.other", appName: "Other")
+        try styles.set(.formal)
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["See Maya Friday"])
+        #expect(rig.store.insertion?.cleanup?.style == "casual")
+        #expect(rig.inserter.startFocusSeen?.bundleID == "com.apple.Notes")
+    }
+
+    @Test func unknownAppUsesGlobalToneAndOffStillBypassesTone() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: StylePreset.veryCasual.options)
+        let configured = styles
+        let unknown = Rig(appStyles: { configured })
+        unknown.inserter.focus = FocusSnapshot()
+        unknown.engine.result.text = "See Maya Friday."
+        await unknown.dictate()
+        #expect(unknown.inserter.delivered == ["See Maya Friday."])
+        #expect(unknown.store.insertion?.cleanup?.style == "formal")
+        var settings = CleanupSettings()
+        settings.level = .off
+        let off = Rig(settings: settings, appStyles: { configured })
+        off.engine.result.text = "See Maya Friday."
+        await off.dictate()
+        #expect(off.inserter.delivered == ["See Maya Friday."])
+        #expect(off.store.insertion?.cleanup?.outcome == "skipped")
+    }
 
     @Test func theCleanedTextIsDeliveredAndStored() async throws {
         let rig = Rig()
@@ -760,6 +805,19 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.pill.messages.isEmpty && rig.log.contains("pill.hide"))
         #expect(!rig.log.contains("engine.transcribe") && !rig.log.contains("archive.write"))
         #expect(rig.controller.phase == .idle)
+    }
+
+    @Test func updaterGatePreservesUndoAudioUntilWorkCanResume() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        let gate = Rig.Counter()
+        rig.controller.canStartRecording = { gate.count == 1 }
+        await rig.controller.undoCancel()
+        #expect(!rig.log.contains("engine.transcribe") && rig.inserter.delivered.isEmpty)
+        gate.count = 1
+        await rig.controller.undoCancel()
+        #expect(rig.inserter.delivered == ["Hello world."])
     }
 
     @Test func undoWithinTheWindowTranscribesDeliversAndFixesTheRow() async throws {
@@ -1433,6 +1491,20 @@ private final class SlowCapture: DictationCapturing {
         await rig.controller.handle(.cancelled(reason: .escape))
         #expect(rig.log.contains("archive.discardPartial"))
         #expect(rig.store.finishes.map(\.0) == [.cancelled])
+    }
+
+    @Test func updaterGatePreservesInterruptedAudioUntilWorkCanResume() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        rig.capture.interrupt()
+        await rig.until { rig.controller.phase == .idle }
+        let gate = Rig.Counter()
+        rig.controller.canStartRecording = { gate.count == 1 }
+        await rig.controller.insertInterrupted()
+        #expect(!rig.log.contains("engine.transcribe") && rig.inserter.delivered.isEmpty)
+        gate.count = 1
+        await rig.controller.insertInterrupted()
+        #expect(rig.inserter.delivered == ["Hello world."])
     }
 
     // MARK: Microphone lost

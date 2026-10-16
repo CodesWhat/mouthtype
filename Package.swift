@@ -18,6 +18,7 @@ let package = Package(
         .package(url: "https://github.com/huggingface/swift-huggingface", from: "1.0.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.5"),
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
     ],
     targets: [
         .target(
@@ -36,12 +37,13 @@ let package = Package(
         .executableTarget(name: "mouthtype-fn-guard", dependencies: ["FnRemapKit"]),
         .target(
             name: "MouthtypeMac",
-            dependencies: ["MouthtypeCore", "FnRemapKit"],
-            resources: [.copy("Resources/Pill"), .copy("Resources/MenuBar"), .copy("Resources/Fonts"), .copy("Resources/Sounds")]
+            dependencies: ["MouthtypeCore", "FnRemapKit", .product(name: "Sparkle", package: "Sparkle")],
+            resources: [.copy("Resources/Pill"), .copy("Resources/MenuBar"), .copy("Resources/Fonts"), .copy("Resources/Sounds"), .copy("Resources/Settings")]
         ),
         .executableTarget(
             name: "Mouthtype",
-            dependencies: ["MouthtypeMac"]
+            dependencies: ["MouthtypeMac"],
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         .executableTarget(
             name: "mouthtype-bench",
@@ -61,6 +63,10 @@ let package = Package(
         ),
         .testTarget(
             name: "MouthtypeMacTests",
+            dependencies: ["MouthtypeMac"]
+        ),
+        .testTarget(
+            name: "MouthtypeSettingsUITests",
             dependencies: ["MouthtypeMac"]
         ),
     ]

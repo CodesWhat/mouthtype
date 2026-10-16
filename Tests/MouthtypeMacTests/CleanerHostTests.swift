@@ -52,10 +52,12 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     private(set) var loads = 0
     private(set) var unloads = 0
     private(set) var downloads = 0
+    private(set) var cleanCalls = 0
     var loadDelay: Duration = .zero
     var loadError: Error?
     var progressSteps: [Double] = [0.25, 0.5, 1]
     var downloadGate: DownloadGate?
+    var cleanGate: DownloadGate?
     var unloadGate: DownloadGate?
 
     init(downloaded: Bool, id: String = "fake-model", name: String = "Fake") {
@@ -68,7 +70,11 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
     func prepare() async throws {}
 
-    func clean(_ transcript: String, context: CleanupContext) async throws -> String { transcript }
+    func clean(_ transcript: String, context: CleanupContext) async throws -> String {
+        lock.withLock { cleanCalls += 1 }
+        await cleanGate?.wait()
+        return transcript
+    }
 
     func download(progress: @escaping @Sendable (Double) -> Void) async throws {
         lock.withLock { downloads += 1 }
@@ -97,6 +103,46 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
 @MainActor
 @Suite struct CleanerHostTests {
+    @Test func newCleanupDuringUnloadFallsBackUntilTheModelIsReloaded() async {
+        let gate = DownloadGate()
+        let (host, model, level) = host(downloaded: true)
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        let before = model.cleanCalls
+        model.unloadGate = gate
+        level.value = .basic
+        host.levelChanged()
+        try? await Task.sleep(for: .milliseconds(40))
+        let request = SmartCleanupRequest(text: "keep this take", level: .light)
+        let during = await host.run(request)
+        #expect(during.text == request.text && during.outcome == .skipped)
+        #expect(model.cleanCalls == before)
+        await gate.release()
+        level.value = .light
+        host.levelChanged()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        #expect(await host.run(request).outcome == .ok)
+    }
+
+    @Test func unloadWaitsForTheModelWorkAfterATimeout() async {
+        let gate = DownloadGate()
+        let model = FakeSmartModel(downloaded: true)
+        let level = Level()
+        let host = CleanerHost(model: model, level: { level.value }, budget: { _ in .milliseconds(20) })
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        model.cleanGate = gate
+        let result = await host.run(SmartCleanupRequest(text: "keep this take", level: .light))
+        #expect(result.outcome == .timeout)
+        level.value = .basic
+        host.levelChanged()
+        try? await Task.sleep(for: .milliseconds(40))
+        #expect(model.unloads == 0 && model.isLoaded)
+        await gate.release()
+        for _ in 0..<100 where model.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.unloads == 1 && !model.isLoaded)
+    }
+
     @Test func switchingBackToLightWaitsForTheEarlierUnload() async {
         let gate = DownloadGate()
         let (host, model, level) = host(downloaded: true) { $0.unloadGate = gate }

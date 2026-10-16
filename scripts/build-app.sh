@@ -44,8 +44,8 @@ IDENTITY="${MOUTHTYPE_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 
     | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"
 
 echo "→ building Mouthtype $VERSION (release, arm64)"
-swift build -c release --arch arm64 --product Mouthtype
-swift build -c release --arch arm64 --product mouthtype-fn-guard
+swift build -c release --arch arm64 --jobs 4 --product Mouthtype
+swift build -c release --arch arm64 --jobs 4 --product mouthtype-fn-guard
 BIN_DIR="$(swift build -c release --arch arm64 --show-bin-path)"
 
 echo "→ assembling $APP"
@@ -57,6 +57,8 @@ cp "$BIN_DIR/mouthtype-fn-guard" "$APP/Contents/MacOS/mouthtype-fn-guard"
 strip -x "$APP/Contents/MacOS/mouthtype-fn-guard"
 cp packaging/Info.plist "$APP/Contents/Info.plist"
 cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp LICENSE "$APP/Contents/Resources/LICENSE"
+cp docs/ALPHA.md "$APP/Contents/Resources/Read Me.txt"
 plutil -replace CFBundleShortVersionString -string "$SHORT_VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$BUILD_VERSION" "$APP/Contents/Info.plist"
 plutil -insert MouthtypeDisplayVersion -string "$VERSION" "$APP/Contents/Info.plist"
@@ -83,6 +85,19 @@ else
     SIGN_AS="-"
     TIMESTAMP="--timestamp=none"
 fi
+
+# SwiftPM links this dynamic framework but does not assemble a standalone app.
+SPARKLE=".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+test -d "$SPARKLE"
+mkdir -p "$APP/Contents/Frameworks"
+ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework"
+for nested in "$FRAMEWORK/Versions/B/XPCServices/Downloader.xpc" \
+    "$FRAMEWORK/Versions/B/XPCServices/Installer.xpc" \
+    "$FRAMEWORK/Versions/B/Autoupdate" "$FRAMEWORK/Versions/B/Updater.app"; do
+    codesign --force --options runtime $TIMESTAMP --preserve-metadata=entitlements --sign "$SIGN_AS" "$nested"
+done
+codesign --force --options runtime $TIMESTAMP --sign "$SIGN_AS" "$FRAMEWORK"
 
 # Inside-out: each nested bundle before the one that contains it.
 for nested in "${BUNDLES[@]}"; do

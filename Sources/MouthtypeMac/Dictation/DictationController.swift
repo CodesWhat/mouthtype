@@ -141,7 +141,7 @@ final class DictationController {
 
     private func pressed(at nanos: UInt64) async {
         guard canStartRecording() else {
-            pill.showMessage(PillMessage("Recovering a recording", detail: "Try again in a moment"), duration: 2.5)
+            pill.showMessage(PillMessage("Mouthtype is busy", detail: "Try again in a moment"), duration: 2.5)
             return
         }
         switch phase {
@@ -180,10 +180,12 @@ final class DictationController {
         corrections?.dictationStarted()
 
         let startFocus = inserter.snapshotFocus()
+        let cleanupStyle = pipeline.cleanupStyle(forBundleID: startFocus.bundleID)
         // The last release's capture stop finishes first; the audio unit takes one recording at a time.
         _ = try? await stopping?.value
         var current = DictationSession(
-            id: UUID().uuidString, startedAt: clock.date(atNanos: nanos), keyDownAt: nanos, startFocus: startFocus
+            id: UUID().uuidString, startedAt: clock.date(atNanos: nanos), keyDownAt: nanos, startFocus: startFocus,
+            cleanupStyle: cleanupStyle
         )
         phase = .recording
 
@@ -364,7 +366,7 @@ final class DictationController {
             return
         }
 
-        let inputs = pipeline.cleanupInputs()
+        let inputs = pipeline.cleanupInputs(style: session.cleanupStyle)
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
@@ -481,7 +483,7 @@ final class DictationController {
 
     /// The card's Undo: runs the normal pipeline on the kept audio and delivers wherever focus is now.
     func undoCancel() async {
-        guard phase == .idle, let pending = undo else { return }
+        guard phase == .idle, canStartRecording(), let pending = undo else { return }
         pending.timer.cancel()
         undo = nil
         enqueue { [self] _ in
@@ -539,7 +541,7 @@ final class DictationController {
 
     /// The card's Insert: runs the saved recording like any other and delivers wherever focus is now.
     func insertInterrupted() async {
-        guard let pending = interrupted else { return }
+        guard canStartRecording(), let pending = interrupted else { return }
         interrupted = nil
         enqueue { [self] previous in
             await previous?.value

@@ -52,6 +52,21 @@ struct QualityRealModelTests {
         #expect(result.output.contains("12/12 cases pass"), "\(result.output)")
     }
 
+    @Test(arguments: [50, 250])
+    func timedOutGenerationExitsWithoutCrashing(budgetMs: Int) throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = root.appendingPathComponent("Tests/Fixtures/long-read-through.json")
+        let resultFile = FileManager.default.temporaryDirectory.appendingPathComponent("cleanup-lifetime-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: resultFile) }
+        let result = try cleanupBench(["clean", "--smart", "light", "--file", fixture.path,
+            "--smart-timeout-ms", String(budgetMs), "--result", resultFile.path])
+        #expect(result.status == 1, "Expected an ordinary failed-fixture exit, got \(result.status): \(result.output)")
+        let records = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: resultFile)) as? [[String: Any]])
+        let record = try #require(records.first)
+        #expect(record["outcome"] as? String == "timeout")
+        #expect(record["delivered"] as? String == record["deterministic"] as? String)
+    }
+
     @Test func longReadThroughKeepsMeaningAndRemovesRestarts() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let fixtures = root.appendingPathComponent("Tests/Fixtures/long-read-through.json")
@@ -87,5 +102,20 @@ struct QualityRealModelTests {
         #expect(result.status == 0, "\(result.output)")
         #expect(result.output.contains("4/4 cases pass the automatic checks at \(level)"), "\(result.output)")
         #expect(!result.output.contains("outcome: timeout"), "\(result.output)")
+    }
+}
+
+@Suite(.serialized)
+struct SavedSpellingRealModelTests {
+    @Test(arguments: ["superwhisper-s1-mini", "gemma-4-e4b-it-4bit"])
+    func exactAliasesPreserveUnconfiguredWords(model: String) throws {
+        let cleaner = try CleanerCatalog.make(id: model)
+        guard (cleaner as? MLXCleaner)?.isDownloaded == true else { return }
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixture = root.appendingPathComponent("Tests/Fixtures/saved-spelling-fidelity.json")
+        let result = try cleanupBench(["clean", "--smart", "medium", "--cleaner", model,
+            "--file", fixture.path, "--smart-timeout-ms", "10000"])
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("5/5 cases pass"), "\(result.output)")
     }
 }

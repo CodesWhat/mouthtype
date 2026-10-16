@@ -1,0 +1,85 @@
+[
+  {
+    "id": "configured-jeff",
+    "input": "the meeting is with geoff",
+    "target": "The meeting is with Jeff",
+    "dictionary": [
+      {
+        "heard": "geoff",
+        "written": "Jeff"
+      }
+    ],
+    "exact": [
+      "The meeting is with Jeff",
+      "The meeting is with Jeff."
+    ],
+    "caseSensitive": true,
+    "before": "Recipients: Jeff Smith\n"
+  },
+  {
+    "id": "configured-sean",
+    "input": "send this to shawn",
+    "target": "Send this to Sean",
+    "dictionary": [
+      {
+        "heard": "shawn",
+        "written": "Sean"
+      }
+    ],
+    "exact": [
+      "Send this to Sean",
+      "Send this to Sean."
+    ],
+    "caseSensitive": true,
+    "before": "Recipients: Sean Kelly\n"
+  },
+  {
+    "id": "configured-sarah",
+    "input": "send this to sara",
+    "target": "Send this to Sarah",
+    "dictionary": [
+      {
+        "heard": "sara",
+        "written": "Sarah"
+      }
+    ],
+    "exact": [
+      "Send this to Sarah",
+      "Send this to Sarah."
+    ],
+    "caseSensitive": true,
+    "before": "Recipients: Sarah Patel\n"
+  },
+  {
+    "id": "longer-word",
+    "input": "geoffrey has the reports",
+    "target": "Geoffrey has the reports",
+    "dictionary": [
+      {
+        "heard": "geoff",
+        "written": "Jeff"
+      }
+    ],
+    "exact": [
+      "Geoffrey has the reports",
+      "Geoffrey has the reports."
+    ],
+    "caseSensitive": true
+  },
+  {
+    "id": "unrelated-word",
+    "input": "everyone felt merry after the meeting",
+    "target": "Everyone felt merry after the meeting",
+    "dictionary": [
+      {
+        "heard": "geoff",
+        "written": "Jeff"
+      }
+    ],
+    "exact": [
+      "Everyone felt merry after the meeting",
+      "Everyone felt merry after the meeting."
+    ],
+    "caseSensitive": true
+  }
+]
