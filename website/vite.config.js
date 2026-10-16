@@ -22,8 +22,6 @@ export default defineConfig({
     },
   },
   preview: {
-    headers: Object.fromEntries(
-      deployment.headers[0].headers.map(({ key, value }) => [key, value]),
-    ),
+    headers: deployment.routes[0].headers,
   },
 });
