@@ -32,10 +32,9 @@ jobs:
       - name: Build pinned CPU runtime and evaluate unchanged exact synthetic fixtures
         env:
           GITHUB_ACTIONS: "true"
-          RUNNER_TEMP: /home/mouthtype-ci/runtime
           PYTHONDONTWRITEBYTECODE: "1"
-          MOUTHTYPE_SMOKE_EVIDENCE: ${{ github.workspace }}/linux-runtime-evidence
-        run: runuser -u mouthtype-ci -- bash tools/linux-runtime-smoke/run.sh
+        run: |
+          runuser -u mouthtype-ci -- env RUNNER_TEMP=/home/mouthtype-ci/runtime MOUTHTYPE_SMOKE_EVIDENCE="$GITHUB_WORKSPACE/linux-runtime-evidence" bash tools/linux-runtime-smoke/run.sh
       - name: Verify and clean remaining owned engine processes
         if: always()
         run: |
