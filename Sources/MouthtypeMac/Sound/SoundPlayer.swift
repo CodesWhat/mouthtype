@@ -3,10 +3,17 @@ import AVFAudio
 
 @MainActor
 protocol SoundPlayer: AnyObject {
+    var startCueDuration: TimeInterval { get }
+    var isStartCuePlaying: Bool { get }
     func playStart()
     func playStop()
     func playLock()
     func playError()
+}
+
+extension SoundPlayer {
+    var startCueDuration: TimeInterval { 0 }
+    var isStartCuePlaying: Bool { false }
 }
 
 enum SoundPreference {
@@ -58,6 +65,9 @@ final class ClickSoundPlayer: SoundPlayer {
     }
 
     var loadedAll: Bool { start != nil && stop != nil && lock != nil && error != nil }
+
+    var startCueDuration: TimeInterval { SoundPreference.isEnabled(defaults) ? (start?.duration ?? 0) : 0 }
+    var isStartCuePlaying: Bool { start?.isPlaying == true }
 
     static func cueURL(_ name: String) -> URL? {
         Bundle.module.url(forResource: name, withExtension: "wav", subdirectory: "Sounds/Click")

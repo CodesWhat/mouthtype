@@ -11,6 +11,8 @@ enum CaptureError: Error, CustomStringConvertible {
     case microphonePending
     /// Core Audio reports no default input device.
     case noInputDevice
+    case selectedMicrophoneUnavailable
+    case microphonePreferenceUnreadable
     /// The input reports a format that cannot be recorded (0 Hz or 0 channels).
     case invalidInputFormat(sampleRate: Double, channels: UInt32)
     /// The audio unit failed to build or start.
@@ -29,6 +31,10 @@ enum CaptureError: Error, CustomStringConvertible {
             return "microphone access not granted yet: answer the macOS prompt, then try again"
         case .noInputDevice, .invalidInputFormat:
             return "no microphone available: choose an input in System Settings → Sound"
+        case .selectedMicrophoneUnavailable:
+            return "chosen microphone unavailable: choose an input in Mouthtype Settings"
+        case .microphonePreferenceUnreadable:
+            return "saved microphone choice is unreadable: choose an input in Mouthtype Settings"
         case .engineStartFailed:
             return "microphone failed to start: try again, or check System Settings → Sound"
         case .routeChanged:

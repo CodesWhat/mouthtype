@@ -67,6 +67,7 @@ final class HALInput: @unchecked Sendable {
     private var watcher: DeviceWatcher?
     /// The input changed while idle; rebuild before the next start.
     private var stale = false
+    private var followsDefault = true
 
     init(keepsPrepared: Bool) {
         self.keepsPrepared = keepsPrepared
@@ -84,11 +85,20 @@ final class HALInput: @unchecked Sendable {
     /// has to start the unit. Never starts the device.
     func prepare() throws {
         let device = try InputDevice.current()
-        try control.sync { try prepare(device: device) }
+        try prepare(device: device, followsDefault: true)
     }
 
-    func start(device: InputDevice, sink: InputSink) throws -> InputDevice {
+    func prepare(device: InputDevice, followsDefault: Bool) throws {
         try control.sync {
+            guard context?.isRecording != true else { return }
+            self.followsDefault = followsDefault
+            try prepare(device: device)
+        }
+    }
+
+    func start(device: InputDevice, followsDefault: Bool = true, sink: InputSink) throws -> InputDevice {
+        try control.sync {
+            self.followsDefault = followsDefault
             try prepare(device: device)
             guard let unit, let context, let delivering else { throw CaptureError.noInputDevice }
 
@@ -170,7 +180,7 @@ final class HALInput: @unchecked Sendable {
     private func inputChanged() {
         guard let built else { return }
         let recording = context?.isRecording == true
-        switch Self.classify(built: built, current: DeviceWatcher.snapshot(of: built.id)) {
+        switch Self.classify(built: built, current: DeviceWatcher.snapshot(of: built.id), followsDefault: followsDefault) {
         case .none:
             return
         case .route:
@@ -268,8 +278,8 @@ final class HALInput: @unchecked Sendable {
 
     /// What `current`, a fresh read of the input, means for a unit built for
     /// `built`.
-    static func classify(built: InputDevice, current: DeviceWatcher.Snapshot) -> Change {
-        guard current.defaultInput == built.id, current.isAlive else { return .route }
+    static func classify(built: InputDevice, current: DeviceWatcher.Snapshot, followsDefault: Bool = true) -> Change {
+        guard (!followsDefault || current.defaultInput == built.id), current.isAlive else { return .route }
         if sameInput(built, current.device) { return .none }
         guard (try? InputDevice.validate(sampleRate: current.device.sampleRate, channels: current.device.channels)) != nil else {
             return .route
@@ -411,6 +421,7 @@ final class DeviceWatcher {
         let block: AudioObjectPropertyListenerBlock = { _, _ in changed() }
         let system = AudioObjectID(kAudioObjectSystemObject)
         add(system, kAudioHardwarePropertyDefaultInputDevice, kAudioObjectPropertyScopeGlobal, block)
+        add(system, kAudioHardwarePropertyDevices, kAudioObjectPropertyScopeGlobal, block)
         add(device, kAudioDevicePropertyNominalSampleRate, kAudioObjectPropertyScopeGlobal, block)
         add(device, kAudioDevicePropertyStreamConfiguration, kAudioDevicePropertyScopeInput, block)
         add(device, kAudioDevicePropertyDeviceIsAlive, kAudioObjectPropertyScopeGlobal, block)
