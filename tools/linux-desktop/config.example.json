@@ -1,0 +1,9 @@
+{
+  "engine_config": "engines.json",
+  "python": "/absolute/path/to/mouthtype-venv/bin/python",
+  "maximum_recording_seconds": 60,
+  "request_seconds": 30,
+  "delivery": {
+    "mode": "recover"
+  }
+}
