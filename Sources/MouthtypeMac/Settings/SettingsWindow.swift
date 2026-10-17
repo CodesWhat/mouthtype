@@ -129,6 +129,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 25) {
             heading("General", "A little less typing.", "Set your shortcut, choose your cleanup, and carry on.")
             Button("Set Up Mouthtype…", action: actions.openSetup).accessibilityIdentifier("settings-setup")
+            MicrophoneSettingsSection(model: model.microphone)
             VStack(spacing: 0) {
                 settingRow("Dictation shortcut", "A key or combination that feels natural.") {
                     Text(model.shortcut).font(.system(.body, design: .monospaced)).padding(8)

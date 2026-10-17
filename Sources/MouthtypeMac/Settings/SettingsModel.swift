@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private var capsLockShortcut = false
     private var escapeShortcut = false
+    let microphone: MicrophoneSettingsModel
     var page = SettingsPage.general
     private(set) var cleanup: CleanupSettings
     private(set) var sounds: Bool
@@ -34,8 +35,10 @@ import UniformTypeIdentifiers
          onCleanupChanged: @escaping @MainActor () -> Void = {},
          onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
          onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
+         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
          onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in }) {
         self.defaults = defaults
+        self.microphone = microphone ?? MicrophoneSettingsModel(defaults: defaults, onChanged: onMicrophoneChanged)
         self.loginItem = loginItem
         self.onCleanupChanged = onCleanupChanged
         self.onSkinChanged = onSkinChanged
@@ -53,6 +56,7 @@ import UniformTypeIdentifiers
     }
 
     func refresh() {
+        microphone.refresh()
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
