@@ -11,14 +11,15 @@ import MouthtypeCore
         return url
     }
 
-    private func tone(_ url: URL, compressed: Bool = false, seconds: Double = 0.25) throws {
+    private func tone(_ url: URL, compressed: Bool = false, seconds: Double = 0.25, activeChannel: Int? = nil) throws {
         let rate = 44_100.0
         let format = try #require(AVAudioFormat(standardFormatWithSampleRate: rate, channels: 2))
         let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(rate * seconds)))
         buffer.frameLength = buffer.frameCapacity
         for channel in 0..<2 {
             let data = try #require(buffer.floatChannelData?[channel])
-            for frame in 0..<Int(buffer.frameLength) { data[frame] = Float(sin(2 * Double.pi * 440 * Double(frame) / rate)) * 0.5 }
+            for frame in 0..<Int(buffer.frameLength) { data[frame] = activeChannel == nil || activeChannel == channel
+                    ? Float(sin(2 * Double.pi * 440 * Double(frame) / rate)) * 0.5 : 0 }
         }
         let settings: [String: Any] = compressed
             ? [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 128_000]
@@ -42,6 +43,21 @@ import MouthtypeCore
         let allFinite = result.samples.allSatisfy { $0.isFinite }
         #expect(allFinite)
         #expect((result.samples.map { abs($0) }.max() ?? 0) > 0.2)
+        #expect(try Data(contentsOf: source) == before)
+    }
+
+    @Test(arguments: ["wav", "aiff", "m4a"])
+    func retainsRightChannelAudioWhenLeftIsSilent(ext: String) async throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("right-only.\(ext)")
+        try tone(source, compressed: ext == "m4a", activeChannel: 1)
+        let before = try Data(contentsOf: source)
+        let result = try await MacAudioFileDecoder().decode(source, limits: .standard)
+        let peak = result.samples.map { abs($0) }.max() ?? 0
+        let crossings = zip(result.samples, result.samples.dropFirst()).filter { $0 < 0 && $1 >= 0 }.count
+        #expect(peak > 0.15)
+        #expect((95...120).contains(crossings))
         #expect(try Data(contentsOf: source) == before)
     }
 

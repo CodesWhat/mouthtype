@@ -27,6 +27,7 @@ struct MacAudioFileDecoder: AudioFileDecoding {
                   let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: Self.chunkFrames) else {
                 throw AudioFileError.unsupportedFormat
             }
+            converter.downmix = true
             var samples: [Float] = []
             samples.reserveCapacity(min(limits.maximumSamples, Int(ceil(duration * 16_000)) + 1_024))
             var ended = false
