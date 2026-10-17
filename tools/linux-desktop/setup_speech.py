@@ -34,7 +34,8 @@ def bounded_run(command, seconds):
 def download_archive(source, destination):
     bounded_run(['curl', '--fail', '--location', '--silent', '--show-error',
                  '--proto', '=https', '--proto-redir', '=https', '--connect-timeout', '20',
-                 '--max-time', '600', '--output', str(destination), source], 610)
+                 '--speed-limit', '1024', '--speed-time', '60',
+                 '--max-time', '3600', '--output', str(destination), source], 3610)
 
 
 def setup(destination, *, pins=None, download=None, run=None):

@@ -73,6 +73,19 @@ class SetupTests(unittest.TestCase):
                                 capture_output=True, timeout=5)
         self.assertNotEqual(result.returncode, 0)
 
+    def test_model_download_allows_slow_progress_but_bounds_stalls_and_total_time(self):
+        with patch('setup_speech.bounded_run') as run:
+            setup_speech.download_archive('https://example.invalid/pinned-model', self.root / 'archive.bz2')
+        command, deadline = run.call_args.args
+        self.assertEqual(command[command.index('--speed-limit') + 1], '1024')
+        self.assertEqual(command[command.index('--speed-time') + 1], '60')
+        self.assertEqual(command[command.index('--max-time') + 1], '3600')
+        self.assertEqual(deadline, 3610)
+        self.assertEqual(command[command.index('--proto') + 1], '=https')
+        self.assertEqual(command[command.index('--proto-redir') + 1], '=https')
+        self.assertEqual(command[command.index('--output') + 1], str(self.root / 'archive.bz2'))
+        self.assertEqual(command[-1], 'https://example.invalid/pinned-model')
+
     def test_existing_destination_is_preserved_before_any_download_or_child(self):
         self.destination.mkdir()
         owned = self.destination / 'existing.txt'
