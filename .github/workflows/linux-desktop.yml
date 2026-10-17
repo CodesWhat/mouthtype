@@ -135,10 +135,16 @@ jobs:
           timeout --kill-after=5s 30s runuser -u mouthtype-ci -- python -W error::ResourceWarning -m unittest discover -s /usr/lib/mouthtype-linux/tools/linux-desktop -p test_spellings.py > linux-desktop-evidence/arch-package/installed-payload-tests.log 2>&1
           pacman -Qkk mouthtype-linux > linux-desktop-evidence/arch-package/installed-file-check.txt
           python - <<'PY'
-          import hashlib, json
+          import hashlib, json, plistlib, subprocess
           from pathlib import Path
           evidence = Path('linux-desktop-evidence/arch-package')
           source = json.loads((evidence / 'BUILD-SOURCE.json').read_text())
+          base = plistlib.loads(Path('packaging/Version.plist').read_bytes())['CFBundleShortVersionString']
+          old_style = source['version'].replace('test.r', '.test.r', 1)
+          old_order = subprocess.check_output(['vercmp', old_style, base], text=True, timeout=5).strip()
+          order = subprocess.check_output(['vercmp', source['version'], base], text=True, timeout=5).strip()
+          (evidence / 'version-order.json').write_text(json.dumps({'stable': base, 'old_dotted_label': old_style, 'old_comparison': old_order, 'test_version': source['version'], 'comparison': order}, indent=2) + '\n')
+          assert old_order == '1' and order == '-1', (old_style, source['version'], base, old_order, order)
           for name, expected in source['payload_sha256'].items():
               assert hashlib.sha256((Path('/usr/lib/mouthtype-linux') / name).read_bytes()).hexdigest() == expected, name
           for name in (evidence / 'package-contents.txt').read_text().splitlines():

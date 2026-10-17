@@ -45,6 +45,8 @@ def install(source, prefix, *, destdir=None):
             destination = staging / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source / name, destination)
+        if destdir is not None:
+            staging.chmod(0o755)
         os.rename(staging, payload)
         placed = True
         content = ('#!/usr/bin/env python3\nimport runpy\n'

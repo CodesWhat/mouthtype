@@ -1,11 +1,13 @@
 import hashlib
 import importlib.util
 import json
+import plistlib
 from pathlib import Path
 import subprocess
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location('arch_bundle', ROOT / 'scripts/prepare-linux-arch.py')
@@ -14,6 +16,16 @@ spec.loader.exec_module(bundle)
 
 
 class ArchBundleTests(unittest.TestCase):
+    def test_cli_selects_prerelease_version_before_matching_stable(self):
+        base = plistlib.loads((ROOT / 'packaging/Version.plist').read_bytes())['CFBundleShortVersionString']
+        def git(argv, **_):
+            return '' if 'status' in argv else ('a' * 40 if 'rev-parse' in argv else '1700000000')
+        with patch.object(bundle.sys, 'argv', ['prepare-linux-arch', '--destination', '/unused']), \
+                patch.object(bundle.subprocess, 'check_output', side_effect=git), \
+                patch.object(bundle, 'prepare', return_value=Path('/unused')) as prepare, patch('builtins.print'):
+            self.assertEqual(bundle.main(), 0)
+        self.assertEqual(prepare.call_args.kwargs['version'], base + 'test.r1700000000.' + 'a' * 12)
+
     def test_local_bundle_has_literal_source_integrity_and_private_source_exclusions(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / 'bundle'

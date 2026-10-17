@@ -4,6 +4,8 @@ This bundle builds an x86_64 development candidate with normal makepkg. It is
 not an AUR package or an official Arch/Omarchy release. It contains a local
 source archive, resolved PKGBUILD, integrity manifest and source receipt.
 No GitHub credentials or public source endpoint are required to build it.
+Its `0.1.0test.r<commit-time>.<revision>` version sorts below the matching
+stable version, so normal future upgrades need no forced downgrade or epoch.
 
 In this bundle directory, verify with `sha256sum -c SHA256SUMS.txt`, then run
 `makepkg --cleanbuild --check` as your ordinary user. Arch's normal base-devel
@@ -31,6 +33,8 @@ when ready. No services, autostart, shortcuts or compositor configuration are
 installed. Recovery-only delivery remains the default. Optional Hyprland,
 wtype and libnotify packages enable the existing adapter/feedback features;
 this package does not grant permissions or change security policy.
+GTK3 and python-gobject are optional only for the separately invoked synthetic
+Wayland acceptance target bundled with the development sources.
 
 Runtime instructions and acceptance boundaries are in
 `/usr/lib/mouthtype-linux/tools/linux-desktop/README.md`. Physical microphone,

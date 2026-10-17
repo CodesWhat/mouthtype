@@ -57,7 +57,7 @@ def main():
             base = plistlib.load(source)['CFBundleShortVersionString']
         if not re.fullmatch(r'[0-9]+(?:\.[0-9]+)*', base) or not stamp.isdigit():
             raise ValueError('Invalid base version')
-        version = base + '.test.r' + stamp + '.' + revision[:12]
+        version = base + 'test.r' + stamp + '.' + revision[:12]
         print(prepare(ROOT, args.destination, version=version, revision=revision))
         return 0
     except (OSError, ValueError, KeyError, subprocess.SubprocessError) as error:

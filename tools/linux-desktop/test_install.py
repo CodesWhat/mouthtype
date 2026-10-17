@@ -21,6 +21,7 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(launcher, staged_prefix / 'bin/mouthtype-linux')
             self.assertFalse(runtime.exists(), 'Packaging must not write into the final prefix')
             self.assertTrue((staged_prefix / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py').is_file())
+            self.assertEqual((staged_prefix / 'lib/mouthtype-linux').stat().st_mode & 0o777, 0o755)
             text = launcher.read_text()
             self.assertIn(str(runtime / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py'), text)
             self.assertNotIn(str(staging), text)
@@ -48,6 +49,7 @@ class InstallTests(unittest.TestCase):
             installer.install(ROOT, prefix)
             launcher = prefix / 'bin/mouthtype-linux'
             self.assertTrue(launcher.is_file())
+            self.assertEqual((prefix / 'lib/mouthtype-linux').stat().st_mode & 0o777, 0o700)
             result = subprocess.run([str(launcher), '--help'], capture_output=True, text=True,
                                     check=True, timeout=5)
             self.assertIn('toggle', result.stdout)
