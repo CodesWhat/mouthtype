@@ -44,6 +44,8 @@ For Hyprland **0.55 and newer**, adapt the current Lua examples in `hyprland.lua
 
 ## Live state for frontends
 
+The Omarchy bar widget and floating pill that use these interfaces live in `../omarchy-plugin`.
+
 `mouthtype-linux watch` connects once and prints one JSON line per state change until the service exits; `--retry` keeps reconnecting and prints `{"event": "disconnected"}` once per outage. Each line carries the session state, coarse error, delivery outcome, recovery ID, elapsed recording seconds, the file-import state and, while recording, a `level` in dBFS computed from the newest 100 ms of the growing take; no transcript, window title or audio ever appears. The service serves at most eight watchers, drops one that stops reading, and polls at 20 Hz while recording so a meter can follow speech. The Omarchy plugin's floating pill is built on this stream.
 
 ## Recovery and deliberate delivery

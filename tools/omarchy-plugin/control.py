@@ -1,0 +1,718 @@
+#!/usr/bin/env python3
+"""Small JSON bridge between the Omarchy panel and Mouthtype's local CLI."""
+
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+
+HOME = Path.home()
+LAUNCHER = HOME / ".local/bin/mouthtype-linux"
+CONFIG = HOME / ".local/share/mouthtype/speech-candidate/linux.json"
+RECOVERY = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/recovery"
+LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/omarchy-control.log"
+PREFS = HOME / ".config/mouthtype/omarchy-plugin.json"
+UNIT = HOME / ".config/systemd/user/mouthtype-linux.service"
+BINDINGS = HOME / ".config/hypr/bindings.lua"
+BIND_BEGIN = "-- Mouthtype Omarchy plugin shortcut: begin"
+BIND_END = "-- Mouthtype Omarchy plugin shortcut: end"
+DESKTOP = HOME / ".local/lib/mouthtype-linux/tools/linux-desktop"
+ASSETS = Path(__file__).resolve().parent / "assets"
+SAVE_DIALOG = Path(__file__).resolve().parent / "save_dialog.py"
+CLEANUP_DIR = HOME / ".local/share/mouthtype/cleanup-candidate"
+CLEANUP_LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/cleanup-setup.log"
+CLEANUP_SIZES = {"fast": "about 480 MB", "thorough": "about 2.5 GB"}
+
+IMPORT_MESSAGES = {
+    "busy": "Finish or cancel the current file transcription first.",
+    "session_active": "Finish dictation or recovery before transcribing a file.",
+    "file_import_active": "Wait for the file transcription to finish or cancel it.",
+    "empty": "The file contains no audio.",
+    "unsupported_format": "Choose a WAV, AIFF or M4A audio file.",
+    "too_long": "Choose an audio file no longer than 10 minutes.",
+    "too_large": "Choose an audio file no larger than 512 MB.",
+    "invalid_audio": "The audio file could not be read. Your original is unchanged.",
+    "decoder_unavailable": "Install ffmpeg to transcribe audio files.",
+    "decoder_timeout": "Decoding took too long. Your original is unchanged.",
+    "transcription_failed": "Transcription failed. Your original file is unchanged.",
+    "cannot_replace_source": "Choose a different name. The original audio file is preserved.",
+    "destination_exists": "That file already exists.",
+    "invalid_destination": "Choose a regular file location for the text.",
+    "no_result": "No file transcript is available.",
+}
+
+
+def cli(*args, timeout=35):
+    return subprocess.run(
+        [str(LAUNCHER), "--config", str(CONFIG), *args],
+        text=True, capture_output=True, timeout=timeout, check=False,
+    )
+
+
+def cli_error(result):
+    try:
+        return json.loads(result.stderr).get("error")
+    except (json.JSONDecodeError, AttributeError):
+        return None
+
+
+def capabilities():
+    if not LAUNCHER.is_file():
+        return {}
+    try:
+        result = cli("capabilities", timeout=10)
+        report = json.loads(result.stdout) if result.returncode == 0 else {}
+    except (OSError, json.JSONDecodeError, subprocess.SubprocessError):
+        report = {}
+    return report if isinstance(report, dict) else {}
+
+
+def atomic_json(path, value):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix=".mouthtype-", dir=path.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            json.dump(value, output, indent=2)
+            output.write("\n")
+        os.replace(temporary, path)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+
+
+FONT_PRESETS = ("default", "sans", "serif", "mono", "custom")
+FONT_ROLES = ("menu", "transcript", "pill")
+
+
+def preferences():
+    value = {}
+    if PREFS.is_file():
+        try:
+            value = json.loads(PREFS.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            value = {}
+    if not isinstance(value, dict):
+        value = {}
+    pill = value.get("pill") if isinstance(value.get("pill"), dict) else {}
+    font = value.get("font") if isinstance(value.get("font"), dict) else {}
+    overrides = font.get("overrides") if isinstance(font.get("overrides"), dict) else {}
+    return {
+        "sounds": value.get("sounds") is True,
+        "pill": {"enabled": pill.get("enabled") is not False,
+                 "skin": "hifi" if pill.get("skin") == "hifi" else "classic",
+                 "size": 2 if pill.get("size") == 2 else 1},
+        "font": {"preset": font.get("preset") if font.get("preset") in FONT_PRESETS else "default",
+                 "family": font.get("family") if isinstance(font.get("family"), str) else "",
+                 "overrides": {role: overrides.get(role) if isinstance(overrides.get(role), str) else ""
+                               for role in FONT_ROLES}},
+    }
+
+
+def valid_family(value):
+    value = (value or "").strip()
+    if len(value) > 80 or any(ord(c) < 32 for c in value):
+        raise RuntimeError("Enter a font family name")
+    return value
+
+
+def set_pill(field, value):
+    prefs = preferences()
+    if field == "enabled" and value in {"on", "off"}:
+        prefs["pill"]["enabled"] = value == "on"
+    elif field == "skin" and value in {"classic", "hifi"}:
+        prefs["pill"]["skin"] = value
+    elif field == "size" and value in {"1", "2"}:
+        prefs["pill"]["size"] = int(value)
+    else:
+        raise RuntimeError("Unsupported pill setting")
+    atomic_json(PREFS, prefs)
+    output = state()
+    output["page"] = "pill"
+    return output
+
+
+def set_font(field, value, extra=None):
+    prefs = preferences()
+    if field == "preset" and value in FONT_PRESETS:
+        prefs["font"]["preset"] = value
+    elif field == "family":
+        prefs["font"]["family"] = valid_family(value)
+        prefs["font"]["preset"] = "custom" if prefs["font"]["family"] else "default"
+    elif field == "override" and value in FONT_ROLES:
+        prefs["font"]["overrides"][value] = "" if extra in (None, "-", "") else valid_family(extra)
+    else:
+        raise RuntimeError("Unsupported font setting")
+    atomic_json(PREFS, prefs)
+    output = state()
+    output["page"] = "fonts"
+    return output
+
+
+def cleanup_models():
+    """Which model levels are prepared on disk, plus any running setup progress. Nothing is loaded."""
+    engines = {}
+    path = CLEANUP_DIR / "cleanup.json"
+    if path.is_file():
+        try:
+            engines = json.loads(path.read_text(encoding="utf-8")).get("engines", {})
+        except (OSError, json.JSONDecodeError):
+            engines = {}
+    models = {}
+    for level in ("fast", "thorough"):
+        entry = engines.get(level) if isinstance(engines, dict) else None
+        prepared = isinstance(entry, dict) and all(
+            Path(item.get("path", "")).is_file() for item in (entry.get("artifacts") or {}).values())
+        models[level] = "prepared" if prepared else "absent"
+    progress = None
+    progress_path = CLEANUP_DIR / "cleanup-setup.json"
+    if progress_path.is_file():
+        try:
+            progress = json.loads(progress_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            progress = None
+    if isinstance(progress, dict) and progress.get("state") in ("preparing", "building", "downloading"):
+        if time.time() - float(progress.get("updated", 0)) > 3 * 3600 or not setup_running():
+            progress = {"state": "failed", "error": "interrupted", "levels": progress.get("levels", [])}
+    return {"models": models, "setup": progress, "path": str(path)}
+
+
+def setup_running():
+    try:
+        result = subprocess.run(["pgrep", "-f", "setup_cleanup.py --destination"], capture_output=True, text=True, timeout=5)
+        return result.returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def config_summary():
+    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    delivery = config.get("delivery", {"mode": "recover"})
+    return {
+        "cleanup": config.get("cleanup", "off"),
+        "notifications": config.get("notifications", True),
+        "maximum_recording_seconds": config.get("maximum_recording_seconds", 60),
+        "delivery_mode": delivery.get("mode", "recover"),
+        "allowed_classes": delivery.get("allowed_classes", []),
+    }
+
+
+def shortcut_mode():
+    if not BINDINGS.is_file():
+        return "off"
+    contents = BINDINGS.read_text(encoding="utf-8")
+    if BIND_BEGIN not in contents:
+        return "off"
+    block = contents.split(BIND_BEGIN, 1)[1].split(BIND_END, 1)[0]
+    return "hold" if '"F10"' in block else "toggle"
+
+
+def words_today(entries=None):
+    today = time.localtime().tm_yday
+    year = time.localtime().tm_year
+    total = 0
+    for entry in entries if entries is not None else recent_dictations(limit=None):
+        if not entry["transcript"]:
+            continue
+        stamp = time.localtime(entry["mtime"])
+        if stamp.tm_yday == today and stamp.tm_year == year:
+            transcript = RECOVERY / entry["id"] / "transcript.txt"
+            total += len(transcript.read_text(encoding="utf-8").split())
+    return total
+
+
+def recent_dictations(limit=5):
+    if not RECOVERY.is_dir():
+        return []
+    takes = [p for p in RECOVERY.iterdir()
+             if p.is_dir() and not p.is_symlink() and len(p.name) == 32
+             and all(c in "0123456789abcdef" for c in p.name)]
+    recent = []
+    for path in sorted(takes, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
+        transcript = path / "transcript.txt"
+        preview = ""
+        if transcript.is_file():
+            preview = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
+        recent.append({"id": path.name, "transcript": transcript.is_file(),
+                       "audio": (path / "recording.wav").is_file(),
+                       "preview": preview, "mtime": path.stat().st_mtime})
+    return recent
+
+
+def state():
+    if not LAUNCHER.is_file() or not CONFIG.is_file():
+        return {"running": False, "state": "unavailable", "error": "Mouthtype installation is missing"}
+    result = cli("status", timeout=5)
+    try:
+        status = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        status = {}
+    running = result.returncode == 0 and status.get("error") != "unavailable"
+    entries = recent_dictations(limit=None)
+    transcripts = [entry for entry in entries if entry["transcript"]]
+    report = capabilities()
+    file_import = status.get("file_import") if running else None
+    if not isinstance(file_import, dict):
+        file_import = {"state": "off", "error": None, "duration_seconds": None}
+    file_import["message"] = IMPORT_MESSAGES.get(file_import.get("error") or "", "")
+    return {"running": running, "state": status.get("state", "off") if running else "off",
+            "error": status.get("error") if running else None,
+            "recent": transcripts[:5], "has_transcript": bool(transcripts),
+            "saved": [entry for entry in entries if entry["audio"] and not entry["transcript"]],
+            "words_today": words_today(entries),
+            "config": config_summary(), "sounds": preferences()["sounds"],
+            "pill": preferences()["pill"], "font": preferences()["font"],
+            "cleanup": {**cleanup_models(), "service": status.get("cleanup") if running else None},
+            "autostart": (UNIT.parent / "default.target.wants/mouthtype-linux.service").is_symlink(),
+            "shortcut": shortcut_mode(),
+            "interface": report.get("interface"), "capabilities": report.get("features", {}),
+            "file_import": file_import}
+
+
+def start_service():
+    current = state()
+    if current["running"]:
+        return current
+    LOG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        with os.fdopen(fd, "w") as log:
+            subprocess.Popen(
+                [str(LAUNCHER), "--config", str(CONFIG), "serve"],
+                stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                start_new_session=True, close_fds=True,
+            )
+    except OSError:
+        raise RuntimeError("Could not start Mouthtype. Check the local control log.")
+    for _ in range(15):
+        time.sleep(0.2)
+        current = state()
+        if current["running"]:
+            return current
+    raise RuntimeError("Mouthtype did not become ready. Check the local control log.")
+
+
+def cue(name):
+    if not preferences()["sounds"] or shutil.which("pw-play") is None:
+        return
+    sound = ASSETS / f"{name}.wav"
+    if sound.is_file():
+        try:
+            subprocess.Popen(["pw-play", str(sound)], stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True, close_fds=True)
+        except OSError:
+            pass
+
+
+def act(command, identity=None):
+    if identity is not None and (len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity)):
+        raise RuntimeError("Invalid recording ID")
+    if command in {"start", "toggle", "transcribe"} and not state()["running"]:
+        start_service()
+    result = cli(command, *([identity] if identity else []))
+    if result.returncode:
+        raise RuntimeError("Mouthtype command failed")
+    try:
+        response = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        response = {}
+    if response.get("error") == "unavailable":
+        raise RuntimeError("Mouthtype is not running")
+    if response.get("error") == "file_import_active":
+        raise import_error("file_import_active", "A file transcription is running")
+    if command in {"start", "toggle"} and response.get("state") == "recording":
+        cue("start")
+    elif command in {"stop", "cancel", "toggle"} and response.get("state") != "recording":
+        cue("stop")
+    return state()
+
+
+def set_config(field, value, extra=None):
+    current = state()
+    if current["running"] and current["state"] != "idle":
+        raise RuntimeError("Finish the current dictation before changing settings")
+    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    if field == "cleanup" and value in {"off", "basic"}:
+        config["cleanup"] = value
+        config.pop("cleanup_engine", None)
+    elif field == "cleanup" and value in {"fast", "thorough"}:
+        if cleanup_models()["models"][value] != "prepared":
+            raise RuntimeError("Prepare the " + ("Fast" if value == "fast" else "Thorough") + " cleanup model first")
+        config["cleanup"] = value
+        config["cleanup_engine"] = str(CLEANUP_DIR / "cleanup.json")
+    elif field == "notifications" and value in {"on", "off"}:
+        config["notifications"] = value == "on"
+    elif field == "maximum_recording_seconds" and value in {"30", "60", "120"}:
+        config["maximum_recording_seconds"] = int(value)
+    elif field == "delivery" and value == "recover":
+        config["delivery"] = {"mode": "recover"}
+    elif field == "delivery" and value == "paste":
+        if not all(shutil.which(name) for name in ("wl-copy", "wl-paste", "wtype", "hyprctl")):
+            raise RuntimeError("Pasting needs wl-clipboard and wtype installed")
+        config["delivery"] = {"mode": "paste", "any_window": True, "allow_unknown_secure_field": True,
+                              "restore_clipboard": True}
+    elif field == "delivery" and value == "type":
+        window_class = (extra or "").strip()
+        if not window_class or len(window_class) > 128 or "*" in window_class or any(ord(c) < 33 for c in window_class):
+            raise RuntimeError("Enter one exact window class without spaces or wildcards")
+        config["delivery"] = {"mode": "type", "allowed_classes": [window_class],
+                              "allow_unknown_secure_field": True}
+    else:
+        raise RuntimeError("Unsupported setting")
+    sys.path.insert(0, str(DESKTOP))
+    from desktop import validate_config
+    validate_config(config)
+    if config == json.loads(CONFIG.read_text(encoding="utf-8")):
+        return state()
+    backup = CONFIG.with_name(f"linux.json.bak.{int(time.time())}")
+    shutil.copy2(CONFIG, backup)
+    atomic_json(CONFIG, config)
+    if current["running"]:
+        act("shutdown")
+        start_service()
+    return state()
+
+
+def cleanup_setup(level):
+    if level not in {"fast", "thorough"}:
+        raise RuntimeError("Unsupported cleanup level")
+    if setup_running():
+        raise RuntimeError("Cleanup preparation is already running")
+    script = DESKTOP / "setup_cleanup.py"
+    if not script.is_file():
+        raise RuntimeError("The installed Mouthtype client cannot prepare cleanup models")
+    for tool in ("curl", "git", "cmake", "c++"):
+        if shutil.which(tool) is None:
+            raise RuntimeError("Preparing cleanup needs " + tool + " installed")
+    CLEANUP_LOG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(CLEANUP_LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    command = ["/usr/bin/python3", str(script), "--destination", str(CLEANUP_DIR), "--level", level]
+    existing = CLEANUP_DIR / "cleanup.json"
+    if existing.is_file():
+        try:
+            engines = json.loads(existing.read_text(encoding="utf-8")).get("engines", {})
+            server = next((e.get("server") for e in engines.values() if isinstance(e, dict) and Path(e.get("server", "")).is_file()), None)
+            if server:
+                command += ["--server", server]
+        except (OSError, json.JSONDecodeError):
+            pass
+    with os.fdopen(fd, "w") as log:
+        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+    time.sleep(0.5)
+    output = state()
+    output["page"] = "cleanup"
+    output["message"] = "Preparing " + ("Fast" if level == "fast" else "Thorough") + " cleanup (" + CLEANUP_SIZES[level] + " download)"
+    return output
+
+
+def set_sounds(value):
+    if value not in {"on", "off"}:
+        raise RuntimeError("Unsupported sound setting")
+    prefs = preferences()
+    prefs["sounds"] = value == "on"
+    atomic_json(PREFS, prefs)
+    return state()
+
+
+def set_autostart(value):
+    if value not in {"on", "off"}:
+        raise RuntimeError("Unsupported login setting")
+    if value == "on":
+        marker = "# Managed by the Mouthtype Omarchy plugin"
+        if UNIT.exists() and marker not in UNIT.read_text(encoding="utf-8"):
+            raise RuntimeError("An existing Mouthtype user service was not changed")
+        UNIT.parent.mkdir(parents=True, exist_ok=True)
+        unit = ("[Unit]\nDescription=Mouthtype Linux dictation service\n"
+                "After=graphical-session.target pipewire.service\n\n"
+                "[Service]\nType=simple\n" + marker + "\n"
+                f"ExecStart={LAUNCHER} --config {CONFIG} serve --lifetime-seconds 86400\n"
+                "Restart=always\nRestartSec=2\n\n"
+                "[Install]\nWantedBy=default.target\n")
+        UNIT.write_text(unit, encoding="utf-8")
+        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True, timeout=10)
+        subprocess.run(["systemctl", "--user", "enable", UNIT.name], check=True, timeout=10,
+                       stdout=subprocess.DEVNULL)
+    else:
+        if UNIT.exists():
+            subprocess.run(["systemctl", "--user", "disable", UNIT.name], check=True, timeout=10,
+                           stdout=subprocess.DEVNULL)
+    return state()
+
+
+def set_shortcut(value):
+    if value not in {"off", "toggle", "hold"}:
+        raise RuntimeError("Unsupported shortcut")
+    if not BINDINGS.is_file():
+        raise RuntimeError("Hyprland bindings file is missing")
+    original = BINDINGS.read_text(encoding="utf-8")
+    before, separator, after = original.partition(BIND_BEGIN)
+    if separator:
+        if BIND_END not in after:
+            raise RuntimeError("Existing Mouthtype shortcut block is incomplete")
+        after = after.split(BIND_END, 1)[1]
+        base = before.rstrip() + after
+    else:
+        base = original.rstrip() + "\n"
+    if value != "off":
+        key = "M" if value == "toggle" else "F10"
+        mask = 72 if value == "toggle" else 0
+        result = subprocess.run(["hyprctl", "-j", "binds"], text=True, capture_output=True,
+                                check=True, timeout=5)
+        for binding in json.loads(result.stdout):
+            if str(binding.get("key", "")).upper() == key and binding.get("modmask") == mask:
+                if shortcut_mode() != value:
+                    raise RuntimeError("That shortcut is already in use")
+        command = Path(__file__).resolve()
+        if value == "toggle":
+            block = f'o.bind("SUPER + ALT + M", "Toggle Mouthtype dictation", "{command} toggle")'
+        else:
+            block = (f'hl.bind("F10", hl.dsp.exec_cmd("{command} start"))\n'
+                     f'hl.bind("F10", hl.dsp.exec_cmd("{command} stop"), {{ release = true }})')
+        updated = base.rstrip() + "\n\n" + BIND_BEGIN + "\n" + block + "\n" + BIND_END + "\n"
+    else:
+        updated = base.rstrip() + "\n"
+    if updated == original:
+        return state()
+    backup = BINDINGS.with_name(f"bindings.lua.bak.mouthtype.{int(time.time())}")
+    shutil.copy2(BINDINGS, backup)
+    BINDINGS.write_text(updated, encoding="utf-8")
+    try:
+        subprocess.run(["hyprctl", "reload"], check=True, timeout=10, capture_output=True)
+        errors = subprocess.run(["hyprctl", "configerrors"], check=True, timeout=10,
+                                text=True, capture_output=True).stdout.strip()
+        if errors and errors.lower() not in {"no errors", "ok"}:
+            raise RuntimeError("Hyprland reported configuration errors")
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        shutil.copy2(backup, BINDINGS)
+        subprocess.run(["hyprctl", "reload"], timeout=10, capture_output=True)
+        raise RuntimeError("Shortcut change was reverted because Hyprland rejected it")
+    return state()
+
+
+def recover(identity):
+    if len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity):
+        raise RuntimeError("Invalid recording ID")
+    result = cli("recover", identity)
+    if result.returncode:
+        raise RuntimeError("Could not read the saved transcript")
+    return {"id": identity, "text": result.stdout}
+
+
+def latest_transcript(identity=None):
+    if identity is None:
+        identity = next((entry["id"] for entry in recent_dictations(limit=None)
+                         if entry["transcript"]), None)
+    if identity is None:
+        raise RuntimeError("No saved dictation is available")
+    return recover(identity)["text"]
+
+
+def copy_transcript(identity=None):
+    if shutil.which("wl-copy") is None:
+        raise RuntimeError("wl-copy is not installed")
+    text = latest_transcript(identity)
+    subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"),
+                   check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    result = state()
+    result["message"] = "Copied to clipboard"
+    return result
+
+
+def paste_last():
+    config = json.loads(CONFIG.read_text(encoding="utf-8"))
+    delivery = config.get("delivery", {"mode": "recover"})
+    if delivery.get("mode") not in ("type", "paste"):
+        raise RuntimeError("Enable pasting or guarded typing in Paste Options first")
+    text = latest_transcript()
+    sys.path.insert(0, str(DESKTOP))
+    from desktop import HyprlandDelivery
+    target = HyprlandDelivery(delivery)
+    snapshot = target.snapshot()
+    if snapshot is None:
+        raise RuntimeError("No eligible unlocked target window")
+    outcome = target.submit(text, snapshot)
+    if outcome == "recover_only":
+        raise RuntimeError("That app is not allowed for typing")
+    if outcome == "unsupported_text":
+        raise RuntimeError("This transcript contains line breaks or control characters")
+    if outcome == "target_changed":
+        raise RuntimeError("The target window changed; nothing was typed")
+    if getattr(target, "restore_thread", None) is not None:
+        # This process is short-lived; let the clipboard restore finish before exiting.
+        target.restore_thread.join(3)
+    result = state()
+    result["message"] = ("Paste requested; check the target before retrying" if delivery.get("mode") == "paste"
+                         else "Typing requested; check the target before retrying")
+    return result
+
+
+def import_error(code, fallback):
+    return RuntimeError(IMPORT_MESSAGES.get(code or "", fallback))
+
+
+def import_start(path):
+    if not path or not Path(path).is_file():
+        raise import_error("invalid_audio", "The chosen file could not be read.")
+    if not state()["capabilities"].get("file_transcription"):
+        raise RuntimeError("The installed Mouthtype client cannot transcribe files")
+    if not state()["running"]:
+        start_service()
+    result = cli("import", path, timeout=35)
+    if result.returncode:
+        raise import_error(cli_error(result), "Mouthtype could not start the file transcription")
+    try:
+        response = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        response = {}
+    if response.get("error") == "unavailable":
+        raise RuntimeError("Mouthtype is not running")
+    if response.get("accepted") is not True:
+        raise import_error(response.get("error"), "Mouthtype refused the file")
+    output = state()
+    output["page"] = "import"
+    return output
+
+
+def import_pick():
+    chooser = shutil.which("omarchy-file-select")
+    if chooser is None:
+        raise RuntimeError("The Omarchy file chooser is unavailable")
+    extensions = state()["capabilities"].get("file_transcription", {}).get("extensions") or ["wav", "aiff", "aif", "m4a"]
+    picked = subprocess.run([chooser, "--title", "Transcribe Audio File", "--extensions", " ".join(extensions)],
+                            text=True, capture_output=True, timeout=620, check=False, stdin=subprocess.DEVNULL)
+    if picked.returncode == 1:
+        output = state()
+        output["message"] = "No file was chosen"
+        return output
+    if picked.returncode:
+        raise RuntimeError("The file chooser could not be opened")
+    return import_start(picked.stdout.splitlines()[0].strip() if picked.stdout.strip() else "")
+
+
+def import_control(action):
+    result = cli(action, timeout=10)
+    if result.returncode:
+        raise import_error(cli_error(result), "Mouthtype is not running")
+    output = state()
+    if action == "import-forget":
+        output["page"] = "menu"
+    return output
+
+
+def import_result():
+    result = cli("import-result", timeout=10)
+    if result.returncode:
+        raise import_error(cli_error(result), "Could not read the file transcript")
+    return {"text": result.stdout}
+
+
+def import_copy():
+    if shutil.which("wl-copy") is None:
+        raise RuntimeError("wl-copy is not installed")
+    text = import_result()["text"]
+    subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"),
+                   check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    output = state()
+    output["message"] = "Copied to clipboard"
+    output["page"] = "import"
+    return output
+
+
+def import_save():
+    import_result()
+    picked = subprocess.run(["/usr/bin/python3", str(SAVE_DIALOG), "--title", "Save Transcript", "--name", "Transcript.txt"],
+                            text=True, capture_output=True, timeout=620, check=False, stdin=subprocess.DEVNULL)
+    output = state()
+    output["page"] = "import"
+    if picked.returncode == 1:
+        output["message"] = "Nothing was saved"
+        return output
+    if picked.returncode or not picked.stdout.strip():
+        raise RuntimeError("The save dialog could not be opened")
+    destination = picked.stdout.splitlines()[0].strip()
+    # The portal dialog has already confirmed replacing an existing text file.
+    saved = cli("import-save", destination, "--overwrite", timeout=10)
+    if saved.returncode:
+        raise import_error(cli_error(saved), "The transcript could not be saved")
+    output["message"] = "Saved " + Path(destination).name
+    return output
+
+
+def main():
+    valid = {
+        "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
+        "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
+        "set-autostart", "set-shortcut", "import-pick", "import-start", "import-cancel",
+        "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
+    }
+    if len(sys.argv) < 2 or sys.argv[1] not in valid or (
+        sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "set-shortcut", "import-start", "cleanup-setup"}
+        and len(sys.argv) != 3
+    ) or (sys.argv[1] == "copy" and len(sys.argv) not in {2, 3}) or (
+        sys.argv[1] in {"set-config", "set-font"} and len(sys.argv) not in {4, 5}
+    ) or (
+        sys.argv[1] == "set-pill" and len(sys.argv) != 4
+    ) or (sys.argv[1] in {"state", "start-service", "shutdown", "start", "stop", "cancel", "toggle", "paste-last",
+                          "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save"}
+          and len(sys.argv) != 2):
+        print(json.dumps({"error": "Unknown control action"}))
+        return 2
+    try:
+        action = sys.argv[1]
+        if action == "state":
+            output = state()
+        elif action == "import-pick":
+            output = import_pick()
+        elif action == "import-start":
+            output = import_start(sys.argv[2])
+        elif action in {"import-cancel", "import-forget"}:
+            output = import_control(action)
+        elif action == "import-result":
+            output = import_result()
+        elif action == "import-copy":
+            output = import_copy()
+        elif action == "import-save":
+            output = import_save()
+        elif action == "start-service":
+            output = start_service()
+        elif action == "recover":
+            output = recover(sys.argv[2])
+        elif action == "transcribe":
+            output = act("transcribe", sys.argv[2])
+        elif action == "copy":
+            output = copy_transcript(sys.argv[2] if len(sys.argv) == 3 else None)
+        elif action == "paste-last":
+            output = paste_last()
+        elif action == "set-config" and len(sys.argv) in {4, 5}:
+            output = set_config(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) == 5 else None)
+        elif action == "cleanup-setup":
+            output = cleanup_setup(sys.argv[2])
+        elif action == "set-pill":
+            output = set_pill(sys.argv[2], sys.argv[3])
+        elif action == "set-font":
+            output = set_font(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) == 5 else None)
+        elif action == "set-sounds" and len(sys.argv) == 3:
+            output = set_sounds(sys.argv[2])
+        elif action == "set-autostart" and len(sys.argv) == 3:
+            output = set_autostart(sys.argv[2])
+        elif action == "set-shortcut" and len(sys.argv) == 3:
+            output = set_shortcut(sys.argv[2])
+        elif len(sys.argv) == 2:
+            output = act(action)
+        else:
+            raise RuntimeError("Invalid control arguments")
+        print(json.dumps(output))
+        return 0
+    except (OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError) as error:
+        print(json.dumps({"error": str(error)}))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
