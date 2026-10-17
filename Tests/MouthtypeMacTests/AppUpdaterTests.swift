@@ -37,7 +37,7 @@ import Testing
         let updater = AppUpdater(driver: driver, activity: { activity.value })
         updater.start()
         #expect(driver.starts == 0 && !updater.canCheckForUpdates)
-        for work in [UpdateActivity.recording, .processing, .recovering] {
+        for work in [UpdateActivity.recording, .processing, .recovering, .fileTranscription] {
             activity.value = work
             updater.refreshActivity()
             updater.checkForUpdates()
@@ -94,7 +94,7 @@ import Testing
         var installed = 0
         #expect(updater.postponeInstallation { installed += 1 })
         #expect(installed == 0 && !updater.blocksNewWork)
-        for work in [UpdateActivity.processing, .recovering] {
+        for work in [UpdateActivity.processing, .recovering, .fileTranscription] {
             activity.value = work
             updater.refreshActivity()
             #expect(installed == 0 && !updater.blocksNewWork)
@@ -153,6 +153,7 @@ import Testing
 
     @Test func activityIncludesRecoveryAndMissingControllerIsNotIdle() {
         #expect(UpdateActivity.resolve(phase: nil, recovering: false) == .starting)
+        #expect(UpdateActivity.resolve(phase: .idle, recovering: false, transcribingFile: true) == .fileTranscription)
         #expect(UpdateActivity.resolve(phase: .idle, recovering: true) == .recovering)
         #expect(UpdateActivity.resolve(phase: .recording, recovering: false) == .recording)
         #expect(UpdateActivity.resolve(phase: .processing, recovering: false) == .processing)

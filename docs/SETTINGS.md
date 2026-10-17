@@ -4,6 +4,8 @@ Alpha.5 includes **Settings…** in the Mouthtype menu. Command-comma opens the 
 
 The daily menu contains Settings, Paste Last, Copy Last, Saved Recordings, a collapsed Recent Dictations submenu, Help, About and Quit. Stop and Cancel appear during hands-free recording. Healthy model and permission lines stay out of the menu; an attention message opens Diagnostics when something needs repair. Recent items copy their full text and exclude secure fields. Stats live inside Recent.
 
+Development builds also add **Transcribe Audio File…** to the menu. Choose one WAV, AIFF or M4A file, then explicitly Copy or Save Text. See [file transcription](FILE-TRANSCRIPTION.md) for limits and cancellation behavior.
+
 **General** contains the existing dictation shortcut, cleanup level, recording sounds and launch-at-login controls. Changing the shortcut opens the native recorder. Fast and Thorough show their actual download/loading state; dictations use Basic while the selected cleanup model is unavailable. Launch at login reports when macOS approval is still needed. Advanced delivery lets you explicitly enable split long pastes for supported terminal applications. It starts off, applies to the chosen terminal’s windows and does not identify the command-line program inside them.
 
 Development builds add **Microphone** in General. Choose **System Default** to follow macOS, or select a microphone for Mouthtype only. The explicit choice is remembered by its persistent device identity, so reconnecting it under a new runtime ID keeps the choice. This does not change the Mac's system input. Use Refresh inputs after connecting a device.

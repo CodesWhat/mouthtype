@@ -21,10 +21,28 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }, retrySpeech: { [weak self] in self?.engineHost.start() },
         inputSettings: { [weak self] in self?.settingsWindow.present(page: .diagnostics) }))
     private let fontChooser = TextFontMenuSection()
-    private lazy var appUpdater = AppUpdater(
+    private lazy var appUpdater: AppUpdater = AppUpdater(
         driver: UpdateLaunchPolicy.allows(arguments: CommandLine.arguments, bundleURL: Bundle.main.bundleURL,
             info: Bundle.main.infoDictionary ?? [:]) ? SparkleDriver() : nil,
-        activity: { [weak self] in .resolve(phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true) })
+        activity: { [weak self] in .resolve(phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true,
+            transcribingFile: self?.fileTranscriptionModel.isBusy == true) })
+    private lazy var fileTranscriptionModel: FileTranscriptionModel = FileTranscriptionModel(
+        makeJob: { [weak self] in
+            guard let self, case .ready = self.engineHost.state, let engine = self.engineHost.engine else {
+                throw CocoaError(.featureUnsupported)
+            }
+            return AudioFileTranscription(decoder: MacAudioFileDecoder(), engine: engine)
+        }, canBegin: { [weak self] in
+            guard let self else { return false }
+            return self.dictation?.phase == .idle && self.recovery?.isRecovering != true && !self.appUpdater.blocksNewWork
+        }, activityChanged: { [weak self] in
+            self?.appUpdater.refreshActivity()
+            self?.menuBar?.refresh()
+        }, copy: { text in
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(text, forType: .string)
+        })
+    private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
     private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
     private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
     private lazy var settingsWindow = SettingsWindow(
@@ -177,17 +195,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
+        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.fileTranscriptionWindow.present() }, startsGroup: false)
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost] in
                 guard dictation?.phase == .idle, let engineHost else { return false }
-                guard self?.appUpdater.blocksNewWork != true else { return false }
+                guard self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true else { return false }
                 if case .ready = engineHost.state { return true }
                 return false
             }
             menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
             recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
         }
-        dictation.canStartRecording = { [weak self] in self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true }
+        dictation.canStartRecording = { [weak self] in self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
         menuBar.add(section: history, startsGroup: false)
         menuBar.add(section: UpdateMenuSection(updater: appUpdater), isFooter: true)
         menuBar.add(section: HelpMenuSection(), isFooter: true)
@@ -253,6 +272,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
         audioQuiet.end()
+        fileTranscriptionModel.cancel()
         guard menuBar != nil else { return }
         shortcuts.unregisterAll()
         hotkeyService?.stop()
