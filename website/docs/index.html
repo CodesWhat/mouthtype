@@ -67,25 +67,28 @@
           <nav class="docs-nav" aria-label="On this page">
             <a href="#builds">Find your build</a
             ><a href="#shortcuts">Shortcuts</a
+            ><a href="#recording-options">Microphone and live words</a
+            ><a href="#file-transcription">Audio files</a
             ><a href="#cleanup">Cleanup and tone</a
             ><a href="#spellings-phrases">Spellings and phrases</a
             ><a href="#recovery">Paste and recovery</a
             ><a href="#updates">Downloads and updates</a
             ><a href="#local-data">Local data</a
-            ><a href="#permissions">Permissions and help</a>
+            ><a href="#permissions">Permissions and help</a
+            ><a href="#linux">Experimental Linux</a>
           </nav>
           <div class="docs-content">
             <section id="builds">
               <h2>Find your build.</h2>
               <p>
-                The Mac download is <strong>0.1.0-alpha.6 (build 6)</strong>, for
+                The Mac download is <strong>0.1.0-alpha.7 (build 7)</strong>, for
                 macOS 26 or later and Apple Silicon. Settings groups controls
                 into General, Writing, Appearance and Diagnostics, with Saved
                 spellings and Phrases in the sidebar. The menu keeps recording,
                 recent text and recovery actions available.
               </p>
               <p>
-                This reference describes alpha.5. If you’re still using
+                This reference describes alpha.7. If you’re still using
                 alpha.1–3, <a href="#updates">download the new app manually</a>
                 once to get the current Settings window and built-in updater.
               </p>
@@ -127,6 +130,56 @@
                   takes precedence.
                 </p>
               </details>
+            </section>
+            <section id="recording-options">
+              <h2>Choose what listens.</h2>
+              <p>
+                Settings → General → <strong>Microphone</strong> follows
+                <strong>System Default</strong> or remembers a named input for
+                Mouthtype. It does not change the Mac’s system input. A missing
+                chosen microphone stays selected and is reported as unavailable.
+                Reconnect it or explicitly choose another input. Changes apply to
+                the next take; use <strong>Refresh inputs</strong> after connecting a device.
+              </p>
+              <p>
+                <strong>Quiet other audio</strong> is off by default. On supported
+                output devices it mutes the current output during capture, then
+                restores only the state Mouthtype still owns. It does not pause
+                media or prevent other apps from hearing the microphone. Physical
+                device behavior still needs tester feedback.
+              </p>
+              <p>
+                <strong>Live words</strong> is off by default and applies to the
+                next recording. It shows provisional words above the pill; they
+                may change or omit earlier words. Only the normal full-take result
+                is cleaned up and inserted once after stopping. Cancelling discards
+                the preview. It uses up to eight seconds of recent audio, not an
+                eight-second processing deadline. Final recognition waits for any
+                already-running preview model work to settle.
+              </p>
+            </section>
+            <section id="file-transcription">
+              <h2>Turn an audio file into text.</h2>
+              <p>
+                Choose <strong>Transcribe Audio File…</strong> in the menu, then
+                select one WAV, AIFF or M4A up to <strong>10 minutes</strong> and
+                <strong>512 MB</strong>. Recognition uses the speech model already
+                loaded on your Mac. The original audio stays unchanged.
+              </p>
+              <p>
+                Preparing and Transcribing show the current stage. Choose Cancel
+                or close the window to cancel; it may wait for the current
+                recognition operation to return. The full raw result is selectable.
+                Explicitly use <strong>Copy</strong> or <strong>Save Text…</strong>
+                to export UTF-8 text. Saving over the original audio is refused.
+              </p>
+              <p>
+                Nothing is pasted automatically. Imports do not apply cleanup,
+                saved spellings or phrases, or change dictation history and
+                statistics. Finish any dictation or recovery before importing.
+                New recording, recovery and update installation wait while an
+                import or its cancellation settles.
+              </p>
             </section>
             <section id="cleanup">
               <h2>Cleanup and tone do different jobs.</h2>
@@ -312,8 +365,34 @@
                 Browser, terminal and Electron compatibility still need wider
                 testing. A fresh install on another Mac, physical custom-key
                 dictation, device changes and actual in-app update installation
-                remain part of alpha testing. Linux support is planned,
-                with no released build yet.
+                remain part of alpha testing. Real file-recognition quality also
+                needs tester feedback. Linux source testing is described below.
+              </p>
+            </section>
+            <section id="linux">
+              <h2>Linux source testing.</h2>
+              <p>
+                The <a href="/source">source archive</a> includes an
+                <strong>experimental, source-only</strong> daemon/CLI targeting
+                Linux x86_64, <strong>Arch/Omarchy</strong>, Hyprland and PipeWire.
+                There is no Linux GUI or packaged desktop release. Mac cleanup
+                and file-import features are not implemented Linux parity.
+              </p>
+              <p>
+                Read <code>tools/linux-desktop/README.md</code> in the source for
+                prerequisites, launcher installation and explicit speech setup.
+                The <code>setup_speech.py</code> helper downloads and verifies a
+                pinned model archive and installs pinned binary packages in a
+                dedicated environment outside the checkout. It does not record,
+                start a service, set shortcuts or edit compositor configuration.
+                Start the foreground service explicitly afterward.
+              </p>
+              <p>
+                Recovery-only delivery is the default, with no clipboard or key
+                changes. Automatic typing is an explicit opt-in with compositor
+                and field limitations documented in that README. Synthetic audio,
+                headless Wayland and remote speech-runtime checks do not certify
+                a physical Arch/Omarchy desktop. That acceptance remains open.
               </p>
             </section>
           </div>

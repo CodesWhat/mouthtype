@@ -2,10 +2,11 @@ import Foundation
 import Observation
 
 @MainActor enum UpdateActivity: Equatable {
-    case starting, idle, recording, processing, recovering
+    case starting, idle, recording, processing, recovering, fileTranscription
 
-    static func resolve(phase: DictationController.Phase?, recovering: Bool) -> Self {
+    static func resolve(phase: DictationController.Phase?, recovering: Bool, transcribingFile: Bool = false) -> Self {
         if recovering { return .recovering }
+        if transcribingFile { return .fileTranscription }
         switch phase {
         case .recording: return .recording
         case .processing: return .processing
@@ -73,8 +74,8 @@ enum UpdateLaunchPolicy {
     var statusText: String {
         guard isAvailable else { return "Updates are available in installed Mouthtype releases." }
         if blocksNewWork { return "Installing the update. Mouthtype will reopen when it is ready." }
-        if pendingInstall != nil { return "Waiting for dictation and recovery to finish before installing." }
-        if currentActivity != .idle { return "Updates wait until dictation and recovery are finished." }
+        if pendingInstall != nil { return "Waiting for dictation, recovery and file transcription to finish before installing." }
+        if currentActivity != .idle { return "Updates wait until dictation, recovery and file transcription are finished." }
         if hasUpdate { return "An update is available. Review it when you are ready." }
         if let errorMessage { return errorMessage }
         if started, !driverCanCheck { return "An update check is already in progress." }
@@ -142,7 +143,7 @@ enum UpdateLaunchPolicy {
     func mayCheckForUpdates() throws {
         guard activity() == .idle, !blocksNewWork, pendingInstall == nil else {
             throw NSError(domain: "MouthtypeUpdates", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Finish dictating or recovering a recording before checking for updates."])
+                userInfo: [NSLocalizedDescriptionKey: "Finish dictation, recovery or file transcription before checking for updates."])
         }
     }
 
