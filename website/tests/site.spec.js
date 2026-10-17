@@ -243,3 +243,17 @@ test("a pending hero still starts after returning from page cache", async ({ pag
   await expect(page.locator(".product-preview")).toHaveAttribute("data-demo", "running");
   await expect(page.locator("#voice-copy")).not.toHaveText("");
 });
+
+for (const width of [320, 390, 600]) {
+  test(`alpha note stays compact and square at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await page.evaluate(() => document.fonts.ready);
+    const note = await page.locator('.alpha-stamp').boundingBox();
+    expect(note.width).toBeLessThan(180);
+    expect(note.height / note.width).toBeGreaterThan(0.95);
+    expect(note.height / note.width).toBeLessThan(1.05);
+    expect(Math.abs(note.x + note.width / 2 - width / 2)).toBeLessThan(2);
+    await page.locator('.alpha-section').screenshot({ path: testInfo.outputPath('alpha-note.png') });
+  });
+}
