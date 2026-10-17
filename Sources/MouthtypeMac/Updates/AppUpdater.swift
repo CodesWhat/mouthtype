@@ -2,10 +2,11 @@ import Foundation
 import Observation
 
 @MainActor enum UpdateActivity: Equatable {
-    case starting, idle, recording, processing, recovering, fileTranscription
+    case starting, idle, recording, processing, recovering, fileTranscription, selectionCleanup
 
-    static func resolve(phase: DictationController.Phase?, recovering: Bool, transcribingFile: Bool = false) -> Self {
+    static func resolve(phase: DictationController.Phase?, recovering: Bool, transcribingFile: Bool = false, editingSelection: Bool = false) -> Self {
         if recovering { return .recovering }
+        if editingSelection { return .selectionCleanup }
         if transcribingFile { return .fileTranscription }
         switch phase {
         case .recording: return .recording
@@ -143,7 +144,7 @@ enum UpdateLaunchPolicy {
     func mayCheckForUpdates() throws {
         guard activity() == .idle, !blocksNewWork, pendingInstall == nil else {
             throw NSError(domain: "MouthtypeUpdates", code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "Finish dictation, recovery or file transcription before checking for updates."])
+                userInfo: [NSLocalizedDescriptionKey: "Finish dictation, recovery, file transcription or selected-text editing before checking for updates."])
         }
     }
 
