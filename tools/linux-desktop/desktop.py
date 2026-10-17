@@ -89,6 +89,16 @@ class Session:
                     self.capture.start(self.take / 'recording.wav')
                 except (OSError, ValueError, subprocess.SubprocessError):
                     self.capture.cancel()
+                    try:
+                        audio = self.take / 'recording.wav'
+                        if audio.exists() and audio.stat().st_size == 0:
+                            audio.unlink()
+                        self.take.rmdir()
+                    except OSError:
+                        pass
+                    else:
+                        self.take = None
+                        self.discard_on_cancel = False
                     self.error = 'capture_unavailable'
                     self._notify('error')
                     return self.status()

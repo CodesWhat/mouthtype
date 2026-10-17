@@ -71,6 +71,32 @@ class SessionTests(unittest.TestCase):
     def finish(self):
         self.session.command('stop')
         self.session.wait()
+    def test_repeated_capture_start_failure_does_not_fill_recovery_store(self):
+        root = Path(self.temp.name)
+        existing = root / ('a' * 32)
+        existing.mkdir()
+        (existing / 'recording.wav').write_bytes(b'previous saved audio')
+        def unavailable(path):
+            path.touch()
+            raise FileNotFoundError('pw-record missing')
+        self.capture.start = unavailable
+        for _ in range(55):
+            status = self.session.command('start')
+            self.assertEqual(status['error'], 'capture_unavailable')
+            self.assertIsNone(status['recovery'])
+        self.assertEqual(list(root.iterdir()), [existing])
+        self.assertEqual((existing / 'recording.wav').read_bytes(), b'previous saved audio')
+
+    def test_failed_start_preserves_any_nonempty_new_recording(self):
+        def interrupted(path):
+            path.write_bytes(b'partial audio')
+            raise OSError('capture interrupted')
+        self.capture.start = interrupted
+        status = self.session.command('start')
+        self.assertEqual(status['error'], 'capture_unavailable')
+        self.assertIsNotNone(status['recovery'])
+        self.assertEqual((self.session.take / 'recording.wav').read_bytes(), b'partial audio')
+
     def test_hold_release_transcribes_and_submits_once(self):
         self.session.command('start')
         self.assertEqual(self.session.state, 'recording')
