@@ -139,7 +139,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         pipeline.smart = cleanerHost
         let dictation = DictationController(
             capture: micCapture, engine: engine, pipeline: pipeline,
-            inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock(), cards: presenter
+            inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock(), cards: presenter,
+            previewEnabled: { LivePreviewPreference.isEnabled() }
         )
         self.pill = pill
         self.inserter = inserter

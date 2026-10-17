@@ -13,12 +13,14 @@ protocol DictationCapturing: AnyObject {
     func stopSalvaging() async throws -> CapturedAudio
     /// What the recording in progress has captured from sample `offset` on.
     func partialSamples(from offset: Int) async -> [Float]
+    func previewSnapshot(maxSamples: Int) async -> PreviewAudio
     func cancel() async
     /// Fired on the main actor when the input is lost mid-recording.
     var onInterrupted: (@MainActor () -> Void)? { get set }
 }
 
 extension DictationCapturing {
+    func previewSnapshot(maxSamples: Int) async -> PreviewAudio { PreviewAudio(samples: [], capturedSampleCount: 0) }
     func stopSalvaging() async throws -> CapturedAudio { try await stop() }
     func partialSamples(from offset: Int) async -> [Float] { [] }
     var onInterrupted: (@MainActor () -> Void)? {
@@ -35,6 +37,11 @@ enum EngineReadiness: Equatable {
 protocol DictationEngine: AnyObject, Sendable {
     var readiness: EngineReadiness { get }
     func transcribe(samples: [Float]) async throws -> Transcription
+    func preview(samples: [Float]) async throws -> String?
+}
+
+extension DictationEngine {
+    func preview(samples: [Float]) async throws -> String? { nil }
 }
 
 /// Every write is async so a real store keeps its blocking database calls off the main actor.
@@ -97,12 +104,14 @@ protocol DictationPill: AnyObject {
     func showHandsFree()
     /// A line over a locked recording that gives way to the hands-free pill again.
     func showHandsFreeNotice(_ text: String, duration: TimeInterval)
+    func showPreview(_ text: String)
     func showProcessing()
     func showMessage(_ message: PillMessage, duration: TimeInterval)
     func hide()
 }
 
 extension DictationPill {
+    func showPreview(_ text: String) {}
     func showMessage(_ text: String, duration: TimeInterval) {
         showMessage(PillMessage(text), duration: duration)
     }
@@ -140,6 +149,7 @@ final class MicCapture: DictationCapturing {
     func stop() async throws -> CapturedAudio { try await capture.stop() }
     func stopSalvaging() async throws -> CapturedAudio { try await capture.stop(salvaging: true) }
     func partialSamples(from offset: Int) async -> [Float] { await capture.partialSamples(from: offset) }
+    func previewSnapshot(maxSamples: Int) async -> PreviewAudio { await capture.previewSnapshot(maxSamples: maxSamples) }
     func cancel() async { await capture.cancel() }
 
     var onInterrupted: (@MainActor () -> Void)? {
@@ -171,6 +181,11 @@ final class HostEngine: DictationEngine {
     func transcribe(samples: [Float]) async throws -> Transcription {
         guard let engine = host.engine else { throw EngineError.notPrepared(id: EngineHost.defaultEngineID) }
         return try await engine.transcribe(samples: samples)
+    }
+
+    func preview(samples: [Float]) async throws -> String? {
+        guard let preview = host.engine as? any SpeechPreview else { return nil }
+        return try await preview.preview(samples: samples)
     }
 }
 

@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
     private var escapeShortcut = false
     var page = SettingsPage.general
     private(set) var cleanup: CleanupSettings
+    private(set) var livePreview = false
     private(set) var sounds: Bool
     private(set) var skin: PillSkinKind
     private(set) var hiFiSize: HiFiPillSize
@@ -47,7 +48,13 @@ import UniformTypeIdentifiers
         refresh()
     }
 
+    func setLivePreview(_ enabled: Bool) {
+        LivePreviewPreference.set(enabled, in: defaults)
+        livePreview = enabled
+    }
+
     func refresh() {
+        livePreview = LivePreviewPreference.isEnabled(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         skin = PillSkinPreference.current(defaults)

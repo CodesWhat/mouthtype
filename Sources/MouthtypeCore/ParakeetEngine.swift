@@ -1,7 +1,7 @@
 import FluidAudio
 import Foundation
 
-public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
+public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPreview {
     static let v3ID = "parakeet-tdt-v3"
     static let v3DisplayName = "Parakeet TDT 0.6B v3 (multilingual)"
     static let v2ID = "parakeet-tdt-v2"
@@ -14,6 +14,10 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
     private let version: AsrModelVersion
     private let language: Language?
     private var manager: AsrManager?
+    private var loadedModels: AsrModels?
+    private var previewManager: AsrManager?
+    private var previewInFlight = false
+    private var finalInFlight = 0
     private var speechDetector: VadManager?
 
     init(version: AsrModelVersion, language: Language? = nil) {
@@ -69,6 +73,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
         let loadTime = try await clock.measure {
             let models = try await AsrModels.load(from: directory, version: version)
             try await newManager.loadModels(models)
+            loadedModels = models
             newDetector = try await VadManager(config: VadConfig(defaultThreshold: 0.5), progressHandler: { progress in
                 guard let report else { return }
                 let stage: EnginePreparation
@@ -91,8 +96,33 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
         )
     }
 
+    public func preview(samples: [Float]) async throws -> String? {
+        guard samples.count >= 32_000 else { return nil }
+        guard let loadedModels, let speechDetector else { throw EngineError.notPrepared(id: id) }
+        guard !previewInFlight, finalInFlight == 0 else { return nil }
+        previewInFlight = true
+        defer { previewInFlight = false }
+        try Task.checkCancellation()
+        let window = Array(samples.suffix(128_000))
+        let speech = try await speechDetector.process(window)
+        try Task.checkCancellation()
+        guard speech.contains(where: { $0.isVoiceActive }) else { return "" }
+        if previewManager == nil {
+            let preview = AsrManager(config: .default)
+            try await preview.loadModels(loadedModels)
+            previewManager = preview
+        }
+        guard let previewManager else { return nil }
+        var state = TdtDecoderState.make(decoderLayers: await previewManager.decoderLayerCount)
+        let result = try await previewManager.transcribe(window, decoderState: &state, language: version == .v3 ? language : nil)
+        try Task.checkCancellation()
+        return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public func transcribe(samples: [Float]) async throws -> Transcription {
         guard let manager, let speechDetector else { throw EngineError.notPrepared(id: id) }
+        finalInFlight += 1
+        defer { finalInFlight -= 1 }
         let clock = ContinuousClock()
         let start = clock.now
         let speech = try await speechDetector.process(samples)

@@ -154,6 +154,8 @@ struct SettingsView: View {
                 }
                 cleanerStatus
                 Divider()
+                LivePreviewSettingsRow(model: model)
+                Divider()
                 settingRow("Recording sounds", "A small cue when you start and finish.") {
                     Toggle("Recording sounds", isOn: Binding(get: { model.sounds }, set: model.setSounds)).labelsHidden().toggleStyle(.switch)
                 }
