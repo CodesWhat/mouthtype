@@ -186,7 +186,7 @@ final class DictationController {
         corrections?.dictationStarted()
 
         let startFocus = inserter.snapshotFocus()
-        let cleanupStyle = pipeline.cleanupStyle(forBundleID: startFocus.bundleID)
+        let cleanupStyle = pipeline.cleanupStyle(forBundleID: startFocus.bundleID, websiteHost: pipeline.usesWebsiteStyles ? inserter.websiteHost(for: startFocus) : nil)
         // The last release's capture stop finishes first; the audio unit takes one recording at a time.
         _ = try? await stopping?.value
         var current = DictationSession(

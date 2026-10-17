@@ -122,6 +122,11 @@ import UniformTypeIdentifiers
         updateAppStyles { try $0.set(bundleID: bundleID, appName: appName, style: tone.options) }
     }
 
+    func setWebsiteStyle(domain: String, tone: StylePreset) {
+        updateAppStyles { try $0.setWebsite(domain: domain, style: tone.options) }
+    }
+    func removeWebsiteStyle(domain: String) { updateAppStyles { $0.removeWebsite(domain: domain) } }
+
     func removeAppStyle(bundleID: String) { updateAppStyles { $0.remove(bundleID: bundleID) } }
 
     func chooseApplication() {

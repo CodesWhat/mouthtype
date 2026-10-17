@@ -244,6 +244,7 @@ struct SettingsView: View {
                 Text("Tone adjusts capitalization and ending punctuation. It keeps your wording.").font(.callout).foregroundStyle(.secondary)
             }
             appStyles
+            websiteStyles
             Divider()
             VStack(alignment: .leading, spacing: 17) {
                 Text("Cleanup details").font(.headline)
@@ -263,6 +264,41 @@ struct SettingsView: View {
             }
             callout(model.cleanup.enabled ? "More formal doesn’t mean different words. Your saved spellings and phrases are available from the sidebar." : "Cleanup is Off. Your dictation keeps its original wording and style; these options apply when cleanup is enabled.")
         }
+    }
+
+    @State private var websiteDomain = ""
+    @State private var websiteTone = StylePreset.formal
+
+    private var websiteStyles: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Website tone").font(.headline)
+            Text("Website rules override app tone, including subdomains. Safari, Chrome, Edge and Brave use the focused window’s document URL when available. Otherwise app tone applies. URLs aren’t saved.")
+                .font(.callout).foregroundStyle(.secondary)
+            HStack {
+                TextField("Domain, e.g. slack.com", text: $websiteDomain).accessibilityIdentifier("settings-website-domain")
+                Picker("Website tone", selection: $websiteTone) {
+                    ForEach(StylePreset.allCases, id: \.rawValue) { Text($0.title).tag($0) }
+                }.labelsHidden().frame(width: 140)
+                Button("Add") {
+                    model.setWebsiteStyle(domain: websiteDomain, tone: websiteTone)
+                    if model.appStylesError == nil { websiteDomain = "" }
+                }.disabled(websiteDomain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            ForEach(model.appStyles.websites, id: \.domain) { entry in
+                HStack {
+                    Text(entry.domain)
+                    Spacer()
+                    Picker("Tone for \(entry.domain)", selection: Binding(get: { entry.style.preset?.rawValue ?? "custom" }, set: { value in
+                        if let tone = StylePreset(rawValue: value) { model.setWebsiteStyle(domain: entry.domain, tone: tone) }
+                    })) {
+                        ForEach(StylePreset.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                        if entry.style.preset == nil { Text("Custom").tag("custom") }
+                    }.labelsHidden().frame(width: 140)
+                    Button { model.removeWebsiteStyle(domain: entry.domain) } label: { Image(systemName: "minus.circle") }
+                        .accessibilityLabel("Remove website tone for \(entry.domain)")
+                }
+            }
+        }.disabled(!model.cleanup.enabled || model.appStylesError != nil)
     }
 
     private var appStyles: some View {

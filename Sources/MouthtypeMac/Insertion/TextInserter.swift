@@ -106,6 +106,8 @@ public final class TextInserter {
         lastText = try store.lastTranscript()
     }
 
+    func websiteHost(for snapshot: FocusSnapshot) -> String? { focus.websiteHost(for: snapshot) }
+
     public func snapshotFocus() -> FocusSnapshot {
         focus.snapshot()
     }
