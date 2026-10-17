@@ -65,7 +65,7 @@ for (const [path, heading] of pages) {
 
 test("start describes the current alpha features", async ({ page }) => {
   await page.goto("/start/");
-  await expect(page.locator("main")).toContainText("0.1.0-alpha.7");
+  await expect(page.locator("main")).toContainText("0.1.0-alpha.8");
   await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
@@ -99,7 +99,7 @@ test("reference help covers everyday tasks with explicit build labels", async ({
   ]) {
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
-  await expect(page.locator("#builds")).toContainText("alpha.7");
+  await expect(page.locator("#builds")).toContainText("alpha.8");
   await expect(page.locator("#builds")).toContainText("Settings");
   await expect(page.locator("#builds")).not.toContainText("reference describes alpha.5");
   await expect(page.locator("#recording-options")).toContainText("Live words");
@@ -114,6 +114,12 @@ test("reference help covers everyday tasks with explicit build labels", async ({
   await expect(page.locator("#linux")).toContainText("Arch/Omarchy");
   await expect(page.locator("#cleanup")).toContainText("per-app");
   await expect(page.locator("#local-data")).toContainText("90 days");
+  await expect(page.locator("#local-data")).toContainText("Saved audio");
+  await expect(page.locator("#local-data")).toContainText("14, 30 or 90 days");
+  await expect(page.locator("#local-data")).toContainText("10 GB");
+  await expect(page.locator("#local-data")).toContainText("Unfinished recordings");
+  await expect(page.locator("#linux")).toContainText("saved spellings and phrase replacements");
+  await expect(page.locator("#linux")).toContainText("multiline");
   await page.getByRole("link", { name: "Start with your first take" }).click();
   await expect(page).toHaveURL(/\/start\/$/);
 });

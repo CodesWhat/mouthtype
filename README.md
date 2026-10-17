@@ -6,7 +6,7 @@ Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or p
 
 ## Mac alpha
 
-The alpha is `0.1.0-alpha.7` for Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](docs/ALPHA.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
+The alpha is `0.1.0-alpha.8` for Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](docs/ALPHA.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
 
 For a larger Winamp-style pill, choose **Settings → Appearance → Hi-Fi size → Large (2×)**. The size is saved. Changes during recording take effect the next time the pill appears.
 
@@ -52,7 +52,7 @@ Choose **Transcribe Audio File…** from the menu to import one WAV, AIFF or M4A
 
 ## Experimental Linux source
 
-The source includes a daemon/CLI targeting Linux x86_64, Arch/Omarchy, Hyprland and PipeWire. Its explicit speech-preparation helper verifies pinned model files and creates a dedicated runtime environment. It defaults to recovery-only delivery, with no clipboard or key changes. There is no Linux GUI or packaged desktop release; physical Arch/Omarchy acceptance remains open. Follow [the Linux setup and testing guide](tools/linux-desktop/README.md). Mac cleanup and file import are not implemented Linux parity.
+The source includes a daemon/CLI targeting Linux x86_64, Arch/Omarchy, Hyprland and PipeWire. Its explicit speech-preparation helper verifies pinned model files and creates a dedicated runtime environment. It defaults to recovery-only delivery, with no clipboard or key changes. There is no Linux GUI or supported desktop release; physical Arch/Omarchy acceptance remains open. Follow [the Linux setup and testing guide](tools/linux-desktop/README.md). The client supports optional saved spellings, phrase replacements and deterministic basic cleanup. Cleanup defaults off and preserves raw results for recovery. Automatic typing refuses multiline/control-bearing results rather than sending Return or Tab. There is a local Arch test-package builder, with no supported desktop release; Mac AI cleanup and file import are not Linux parity promises.
 
 ## Recovery and sound
 
@@ -64,7 +64,7 @@ Click is the default sound set: a bright key-down thunk to start, a duller key-u
 
 ## Data
 
-History, settings, dictionary and audio stay on this Mac. The default store is `~/Library/Application Support/Mouthtype/mouthtype.sqlite`; recordings are in its sibling `audio` directory. Text history is retained indefinitely. Audio cleanup runs at launch: files older than 90 days are removed, then the oldest remaining files until the archive fits within 2 GB. Model downloads require network access.
+History, settings, dictionary and audio stay on this Mac. The default store is `~/Library/Application Support/Mouthtype/mouthtype.sqlite`; recordings are in its sibling `audio` directory. Text history is retained indefinitely. **Settings → General → Saved audio** offers 14, 30 or 90 days, or No age limit, and a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. The next launch prunes only completed Mouthtype recordings; unfinished and recovery audio are protected, and text and timings stay. See [saved audio](docs/AUDIO-RETENTION.md). Model downloads require network access.
 
 Run `swift test` to check the core, macOS integration logic and Fn guardian. The bundled app also has isolated paste and recovery self-tests, which take desktop focus and should be run only when the desktop is free. Those tests restrict keyboard events to their own process and refuse delivery when another app has focus. Live microphone quality and behavior in individual third-party apps still need their own checks.
 

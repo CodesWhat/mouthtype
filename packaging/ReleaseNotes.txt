@@ -1,10 +1,11 @@
-Mouthtype 0.1.0-alpha.7
+Mouthtype 0.1.0-alpha.8
 
-Transcribe one WAV, AIFF or M4A file from the menu. Files can be up to 10 minutes and 512 MB. Review the full raw result, then explicitly Copy or Save Text. Cancel waits for the current recognition operation to settle. Your original audio stays unchanged; nothing is pasted automatically or added to dictation statistics.
+Choose how long to keep completed recordings in Settings → General → Saved audio: 14, 30 or 90 days, or No age limit, with a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch, to completed Mouthtype audio only. Text and timings stay; unfinished recordings and recovery audio are protected. Previously removed recordings cannot be restored.
 
-Includes the alpha.6 microphone selector, optional Quiet other audio and optional Live words. Mouthtype remembers a chosen microphone and reports a missing device instead of silently switching. Quieting and provisional words are off by default. Preview words may change; the completed take is still transcribed and inserted once.
+Microphone readiness now follows the actual capture result, so setup reflects successful starts and input errors. A missing chosen device still requires reconnecting it or explicitly choosing another input; there is no automatic fallback.
 
-The source archive includes experimental Linux speech preparation and a daemon/CLI candidate targeting Arch/Omarchy, Hyprland and PipeWire. This is source-only, without a Linux GUI or packaged desktop release. Model preparation is explicit; recovery-only delivery is the default. Physical Arch/Omarchy acceptance remains open.
+Includes single-file WAV/AIFF/M4A transcription, remembered microphone selection, optional Quiet other audio and optional Live words. Quieting and provisional words remain off by default; the completed take is inserted once. Imported audio is preserved and its raw result is exported only by explicit Copy or Save Text.
 
-Requires Apple Silicon and macOS 26 or later. This is an alpha; review text before sending.
-Microphone switching, supported output hardware, provisional display and real file-recognition acceptance still need coordinated testing. Fresh installation and physical update installation remain unverified.
+The corresponding source includes an experimental Linux daemon/CLI and local Arch test-package builder, with saved spellings, phrase replacements and optional deterministic basic cleanup. Cleanup is off by default and does not add a model. Recovery-only delivery remains the default; automatic typing refuses multiline/control-bearing results and keeps the full transcript recoverable. There is no Linux GUI or supported Linux desktop release. Physical Arch/Omarchy, Hyprland and microphone acceptance remains open.
+
+Requires Apple Silicon and macOS 26 or later. This is an alpha; review text before sending. Microphone changes, supported output hardware, provisional display, real file-recognition quality, fresh installation and actual update installation/relaunch still need coordinated testing.
