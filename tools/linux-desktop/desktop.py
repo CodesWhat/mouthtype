@@ -29,8 +29,9 @@ def private_write(path, data):
 
 
 class Session:
-    def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None):
+    def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None):
         self.capture, self.engine, self.delivery = capture, engine, delivery
+        self.feedback = feedback
         self.recovery = Path(recovery)
         self.recovery.mkdir(mode=0o700, parents=True, exist_ok=True)
         info = self.recovery.stat()
@@ -49,7 +50,15 @@ class Session:
         return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
                 'recovery': self.take.name if self.take else None,
                 'context': 'unsupported', 'secure_field_detection': 'unsupported',
-                'delivery_verified': False}
+                'delivery_verified': False,
+                'feedback': getattr(self.feedback, 'status', 'unavailable') if self.feedback else 'disabled'}
+
+    def _notify(self, state):
+        if self.feedback:
+            try:
+                self.feedback.notify(state)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
+                pass
 
     def command(self, action, *, admit_before=None):
         with self.lock:
@@ -81,21 +90,26 @@ class Session:
                 except (OSError, ValueError, subprocess.SubprocessError):
                     self.capture.cancel()
                     self.error = 'capture_unavailable'
+                    self._notify('error')
                     return self.status()
                 self.started, self.state = self.clock(), 'recording'
+                self._notify('recording')
             elif action == 'stop' and self.state == 'recording':
                 try:
                     self.capture.stop()
                 except (OSError, ValueError, subprocess.SubprocessError):
                     self.capture.cancel()
                     self.state, self.error = 'idle', 'capture_interrupted'
+                    self._notify('error')
                     return self.status()
                 self.state = 'transcribing'
+                self._notify('transcribing')
                 self.thread = threading.Thread(target=self._finish, args=(self.take, self.cancelled, self.target))
                 self.thread.start()
             elif action == 'cancel':
                 if self.state != 'idle':
                     self._cancel(discard=True)
+                    self._notify('cancelled')
             elif action not in ('start', 'stop'):
                 raise ValueError('Unknown action')
             return self.status()
@@ -128,10 +142,12 @@ class Session:
                     self.outcome = self.delivery.submit(text, target)
                 # Audio remains available after delivery uncertainty; success is never inferred.
                 self.state = 'idle'
+                self._notify('saved' if text else 'empty')
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             with self.lock:
                 if not cancelled.is_set() and not self.closed:
                     self.error, self.state = 'transcription_failed', 'idle'
+                    self._notify('error')
         finally:
             with self.lock:
                 if cancelled.is_set() and self.cancelled is cancelled and self.state == 'cancelling':
@@ -150,6 +166,7 @@ class Session:
             self.discard_on_cancel = False
             self.cancelled = threading.Event()
             self.error, self.outcome, self.state = None, 'not_attempted', 'transcribing'
+            self._notify('transcribing')
             self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, False))
             self.thread.start()
             return self.status()
@@ -161,9 +178,11 @@ class Session:
             if self.clock() - self.started >= self.maximum_seconds:
                 self._cancel(discard=False)
                 self.error = 'recording_limit'
+                self._notify('error')
             elif not self.capture.running():
                 self._cancel(discard=False)
                 self.error = 'capture_interrupted'
+                self._notify('error')
 
     def wait(self, seconds=2):
         if self.thread:
@@ -173,8 +192,11 @@ class Session:
 
     def close(self):
         with self.lock:
+            active = self.state != 'idle'
             self.closed = True
             self._cancel(discard=False)
+            if active:
+                self._notify('cancelled')
         self.wait(3)
         self.engine.close()
 
@@ -335,7 +357,9 @@ def validate_config(value):
     if not isinstance(value, dict) or not isinstance(value.get('engine_config'), str):
         raise ValueError('engine_config is required')
     result = {'maximum_recording_seconds': 60, 'request_seconds': 30,
-              'delivery': {'mode': 'recover'}, **value}
+              'delivery': {'mode': 'recover'}, 'notifications': True, **value}
+    if type(result['notifications']) is not bool:
+        raise ValueError('notifications must be true or false')
     for field, minimum, maximum in (('maximum_recording_seconds', 1, 120), ('request_seconds', 1, 120)):
         number = result[field]
         if type(number) not in (int, float) or not math.isfinite(number) or not minimum <= number <= maximum:
@@ -508,7 +532,9 @@ def main():
                               request_seconds=config['request_seconds'])
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
                           HyprlandDelivery(config['delivery']), args.recovery,
-                          maximum_seconds=config['maximum_recording_seconds'])
+                          maximum_seconds=config['maximum_recording_seconds'],
+                          feedback=Notifications(config['notifications']))
+        session._notify('ready')
         stopped = threading.Event()
         for event in (signal.SIGINT, signal.SIGTERM):
             signal.signal(event, lambda *_: stopped.set())
@@ -521,6 +547,62 @@ def main():
         # Config paths, model errors and transcripts never go into routine diagnostics.
         print(json.dumps({'error': 'unavailable', 'error_class': type(error).__name__}), file=sys.stderr)
         return 2
+
+
+
+class Notifications:
+    MESSAGES = {
+        'ready': ('Mouthtype is ready', 'Use your configured hold or toggle shortcut.'),
+        'recording': ('Mouthtype is recording', 'Release your hold key or press toggle to finish.'),
+        'transcribing': ('Mouthtype is transcribing', 'Processing your recording locally.'),
+        'saved': ('Mouthtype finished', 'Transcript saved. Check the target before sending.'),
+        'empty': ('Mouthtype finished', 'No text was returned.'),
+        'cancelled': ('Mouthtype cancelled', 'The active take will not be delivered.'),
+        'error': ('Mouthtype needs attention', 'Check status and saved recordings.'),
+    }
+
+    def __init__(self, enabled=True, *, command=None):
+        self.enabled = enabled
+        self.command = command or ['notify-send']
+        self.status = 'unavailable' if enabled else 'disabled'
+        self.identity = None
+
+    def notify(self, state):
+        if not self.enabled or state not in self.MESSAGES:
+            return False
+        title, body = self.MESSAGES[state]
+        # Recording cues expire even if a later notification cannot be submitted.
+        expiry = 125000 if state in ('recording', 'transcribing') else 5000
+        arguments = [*self.command, '--print-id', '--app-name=Mouthtype', '--expire-time=' + str(expiry)]
+        if self.identity:
+            arguments.append('--replace-id=' + str(self.identity))
+        process = None
+        try:
+            process = subprocess.Popen(arguments + [title, body], stdout=subprocess.PIPE,
+                                       stderr=subprocess.DEVNULL, start_new_session=True)
+            output, _ = process.communicate(timeout=.2)
+            if process.returncode != 0:
+                raise ValueError('Notification unavailable')
+            raw = output.strip()
+            if len(raw) <= 10 and raw.isdigit() and 0 < int(raw) <= 4294967295:
+                self.identity = int(raw)
+            self.status = 'submitted_unknown'
+            return True
+        except (OSError, ValueError, subprocess.SubprocessError):
+            self.status = 'unavailable'
+            return False
+        finally:
+            if process:
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                try:
+                    process.wait(timeout=.2)
+                except subprocess.TimeoutExpired:
+                    pass
+                if process.stdout and not process.stdout.closed:
+                    process.stdout.close()
 
 
 if __name__ == '__main__':

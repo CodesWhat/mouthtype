@@ -5,5 +5,6 @@
   "request_seconds": 30,
   "delivery": {
     "mode": "recover"
-  }
+  },
+  "notifications": true
 }

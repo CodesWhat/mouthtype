@@ -262,7 +262,7 @@ for line in sys.stdin:
         from desktop import validate_config
         for change in ({'maximum_recording_seconds': float('nan')},
                        {'maximum_recording_seconds': 121},
-                       {'request_seconds': 0}, {'delivery': {'mode': 'clipboard'}},
+                       {'request_seconds': 0}, {'notifications': 'yes'}, {'delivery': {'mode': 'clipboard'}},
                        {'delivery': {'mode': 'type', 'allowed_classes': ['*']}},
                        {'delivery': {'mode': 'type', 'allowed_classes': []}}):
             with self.subTest(change=change), self.assertRaises(ValueError):
@@ -579,6 +579,78 @@ while True:time.sleep(.01)
         self.check_helper(False)
     def test_natural_exit_one_is_capture_interruption_even_with_valid_pcm(self):
         self.check_helper(True)
+
+class FeedbackTests(unittest.TestCase):
+    def test_hotkey_state_transitions_have_coarse_feedback_without_transcript(self):
+        class Feedback:
+            status = 'submitted_unknown'
+            def __init__(self): self.events = []
+            def notify(self, state): self.events.append(state)
+        with tempfile.TemporaryDirectory() as temp:
+            feedback = Feedback()
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), feedback=feedback)
+            try:
+                session.command('start')
+                session.command('start')
+                session.command('stop')
+                session.wait()
+                self.assertEqual(feedback.events, ['recording', 'transcribing', 'saved'])
+                self.assertNotIn(session.engine.text, json.dumps(feedback.events))
+                self.assertEqual(session.command('status')['feedback'], 'submitted_unknown')
+            finally:
+                session.close()
+    def test_notification_failure_does_not_break_recording_or_delivery(self):
+        class Feedback:
+            status = 'unavailable'
+            def notify(self, state): raise OSError('helper unavailable')
+        with tempfile.TemporaryDirectory() as temp:
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), feedback=Feedback())
+            try:
+                session.command('start')
+                self.assertEqual(session.state, 'recording')
+                session.command('stop')
+                session.wait()
+                self.assertEqual(len(session.delivery.calls), 1)
+            finally:
+                session.close()
+    def test_fake_notification_helper_replaces_id_and_uses_only_static_state(self):
+        import sys
+        from desktop import Notifications
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'notify.py'
+            record = root / 'arguments.jsonl'
+            script.write_text('import json,sys\nfrom pathlib import Path\nwith Path(sys.argv[1]).open("a") as f:f.write(json.dumps(sys.argv[2:])+"\\n")\nprint(17)\n')
+            helper = Notifications(command=[sys.executable, str(script), str(record)])
+            self.assertTrue(helper.notify('recording'))
+            self.assertTrue(helper.notify('saved'))
+            lines = [json.loads(line) for line in record.read_text().splitlines()]
+            self.assertNotIn('--replace-id=17', lines[0])
+            self.assertIn('--replace-id=17', lines[1])
+            self.assertIn('Mouthtype is recording', lines[0])
+            self.assertEqual(helper.status, 'submitted_unknown')
+    def test_missing_or_hung_notification_helper_is_bounded_and_nonfatal(self):
+        import sys
+        from desktop import Notifications
+        for command in (['/missing/notify-send'], [sys.executable, '-c', 'import time;time.sleep(5)']):
+            helper = Notifications(command=command)
+            started = time.monotonic()
+            self.assertFalse(helper.notify('recording'))
+            self.assertLess(time.monotonic()-started, 1)
+            self.assertEqual(helper.status, 'unavailable')
+
+class ShutdownFeedbackTests(unittest.TestCase):
+    def test_shutdown_replaces_active_recording_cue_with_cancelled_state(self):
+        class Feedback:
+            status = 'submitted_unknown'
+            def __init__(self):self.events=[]
+            def notify(self,state):self.events.append(state)
+        with tempfile.TemporaryDirectory() as temp:
+            feedback=Feedback()
+            session=Session(Capture(),Engine(),Delivery(),Path(temp),feedback=feedback)
+            session.command('start')
+            session.close()
+            self.assertEqual(feedback.events,['recording','cancelled'])
 
 if __name__ == '__main__':
     unittest.main()
