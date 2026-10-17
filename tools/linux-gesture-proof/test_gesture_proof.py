@@ -72,6 +72,17 @@ class GestureProofTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inventory"):
             gesture_proof.inspect_sources(self.root, self.manifest)
 
+    def test_no_public_types_keeps_filename_fallback_without_selecting_unrelated_tests(self):
+        self.source.write_text("import Foundation\nfunc gestureProbe() {}\n")
+        self.test.write_text("import Testing\n@Test func filenameMatched() {}\n")
+        unrelated = self.test.with_name("UnrelatedTests.swift")
+        unrelated.write_text("import Testing\n@Test func unrelatedCheck() {}\n")
+        try:
+            content = gesture_proof.inspect_sources(self.root, self.manifest)
+        except ValueError as error:
+            self.fail("An empty symbol set selected unrelated tests: " + str(error))
+        self.assertEqual(set(content), set(self.manifest["sources"] + self.manifest["tests"]))
+
     def test_apple_dependency_is_rejected_before_swift_is_started(self):
         self.source.write_text("import AppKit\npublic struct Gesture {}\n")
         with self.assertRaisesRegex(ValueError, "import"):

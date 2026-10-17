@@ -33,9 +33,9 @@ def inspect_sources(root, manifest):
     symbols = set()
     for raw in content.values():
         symbols.update(re.findall(r"^public (?:struct|enum|class) (\w+)", raw.decode(), re.MULTILINE))
-    pattern = re.compile(r"\b(?:" + "|".join(re.escape(symbol) for symbol in symbols) + r")\b")
+    pattern = re.compile(r"\b(?:" + "|".join(re.escape(symbol) for symbol in symbols) + r")\b") if symbols else None
     tests = sorted(str(path.relative_to(root)) for path in (root / "Tests/MouthtypeCoreTests").rglob("*.swift")
-                   if re.search(r"Gesture|HotKey|RecordingToggle", path.name) or pattern.search(path.read_text()))
+                   if re.search(r"Gesture|HotKey|RecordingToggle", path.name) or (pattern is not None and pattern.search(path.read_text())))
     if tests != sorted(manifest["tests"]):
         raise ValueError("Gesture test inventory changed; review the canonical manifest")
     content.update({path: (root / path).read_bytes() for path in tests})
