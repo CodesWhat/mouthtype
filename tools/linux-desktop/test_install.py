@@ -100,6 +100,10 @@ class InstallTests(unittest.TestCase):
                                      '-p', 'test_spellings.py'], cwd=temp, capture_output=True,
                                     text=True, timeout=5)
             self.assertEqual(checks.returncode, 0, checks.stderr)
+            phrases = subprocess.run(['python3', '-W', 'error::ResourceWarning', '-m', 'unittest',
+                                      'discover', '-s', str(payload), '-p', 'test_phrase*.py'],
+                                     cwd=temp, capture_output=True, text=True, timeout=5)
+            self.assertEqual(phrases.returncode, 0, phrases.stderr)
             self.assertEqual(config.read_text(), 'user content')
             with self.assertRaises(FileExistsError):
                 installer.install(ROOT, prefix)

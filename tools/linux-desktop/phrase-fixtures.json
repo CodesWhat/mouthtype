@@ -1,0 +1,190 @@
+[
+  {
+    "name": "whole words and case",
+    "rules": [
+      {
+        "trigger": "my address",
+        "expansion": "First Street"
+      }
+    ],
+    "input": "MY ADDRESS. my addresses",
+    "expected": "First Street. my addresses",
+    "clipboard": null
+  },
+  {
+    "name": "longest trigger",
+    "rules": [
+      {
+        "trigger": "my",
+        "expansion": "short"
+      },
+      {
+        "trigger": "my address",
+        "expansion": "long"
+      }
+    ],
+    "input": "my address, my",
+    "expected": "long, short",
+    "clipboard": null
+  },
+  {
+    "name": "whitespace",
+    "rules": [
+      {
+        "trigger": "my address",
+        "expansion": "First Street"
+      }
+    ],
+    "input": "my\t\naddress.",
+    "expected": "First Street.",
+    "clipboard": null
+  },
+  {
+    "name": "canonical equivalence",
+    "rules": [
+      {
+        "trigger": "café",
+        "expansion": "résumé"
+      }
+    ],
+    "input": "café, café",
+    "expected": "résumé, résumé",
+    "clipboard": null
+  },
+  {
+    "name": "no chaining",
+    "rules": [
+      {
+        "trigger": "first",
+        "expansion": "second"
+      },
+      {
+        "trigger": "second",
+        "expansion": "third"
+      }
+    ],
+    "input": "first second",
+    "expected": "second third",
+    "clipboard": null
+  },
+  {
+    "name": "literal formatting",
+    "rules": [
+      {
+        "trigger": "address",
+        "expansion": "  First Street\nSecond line  "
+      }
+    ],
+    "input": "address.",
+    "expected": "  First Street\nSecond line  .",
+    "clipboard": null
+  },
+  {
+    "name": "date variable",
+    "rules": [
+      {
+        "trigger": "today",
+        "expansion": "{DATE}"
+      }
+    ],
+    "input": "today.",
+    "expected": "October 17, 2026.",
+    "clipboard": null
+  },
+  {
+    "name": "clipboard variable",
+    "rules": [
+      {
+        "trigger": "insert clip",
+        "expansion": "{CLIPBOARD}"
+      }
+    ],
+    "input": "insert clip.",
+    "expected": "copied café\r\n.",
+    "clipboard": "copied café\r\n"
+  },
+  {
+    "name": "empty clipboard",
+    "rules": [
+      {
+        "trigger": "insert clip",
+        "expansion": "{clipboard}"
+      }
+    ],
+    "input": "insert clip",
+    "expected": "",
+    "clipboard": null
+  },
+  {
+    "name": "substituted text not rescanned",
+    "rules": [
+      {
+        "trigger": "insert clip",
+        "expansion": "{clipboard} {date}"
+      }
+    ],
+    "input": "insert clip",
+    "expected": "{date} October 17, 2026",
+    "clipboard": "{date}"
+  },
+  {
+    "name": "unknown variables",
+    "rules": [
+      {
+        "trigger": "name",
+        "expansion": "{user} {DATE} {unknownlongvariable}"
+      }
+    ],
+    "input": "name",
+    "expected": "{user} October 17, 2026 {unknownlongvariable}",
+    "clipboard": null
+  },
+  {
+    "name": "nested braces",
+    "rules": [
+      {
+        "trigger": "today",
+        "expansion": "{{date}}"
+      }
+    ],
+    "input": "today",
+    "expected": "{October 17, 2026}",
+    "clipboard": null
+  },
+  {
+    "name": "unicode keyword is not ascii keyword",
+    "rules": [
+      {
+        "trigger": "name",
+        "expansion": "{CLİPBOARD}"
+      }
+    ],
+    "input": "name",
+    "expected": "{CLİPBOARD}",
+    "clipboard": null
+  },
+  {
+    "name": "grapheme trigger",
+    "rules": [
+      {
+        "trigger": "👩‍💻 note",
+        "expansion": "done"
+      }
+    ],
+    "input": "👩‍💻 note!",
+    "expected": "done!",
+    "clipboard": null
+  },
+  {
+    "name": "word boundaries",
+    "rules": [
+      {
+        "trigger": "api",
+        "expansion": "API"
+      }
+    ],
+    "input": "xapi api2 api_api api",
+    "expected": "xapi api2 api_api API",
+    "clipboard": null
+  }
+]
