@@ -110,6 +110,19 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(len(self.calls), 1)
         self.assertFalse((self.destination / 'linux.json').exists())
 
+    def test_failed_helper_stderr_remains_visible_to_operator(self):
+        import sys
+        helper = 'import sys;sys.stderr.write("synthetic wheel unavailable\\n");sys.exit(1)'
+        script = ('import sys,subprocess\n'
+                  'sys.path.insert(0,' + repr(str(Path(__file__).resolve().parent)) + ')\n'
+                  'from setup_speech import bounded_run\n'
+                  'try:\n'
+                  ' bounded_run([sys.executable,"-c",' + repr(helper) + '],2)\n'
+                  'except subprocess.CalledProcessError:\n sys.exit(2)\n')
+        result = subprocess.run([sys.executable, '-c', script], capture_output=True, timeout=5)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn(b'synthetic wheel unavailable', result.stderr)
+
     def test_timed_out_helper_is_stopped_and_reaped(self):
         import os
         import sys

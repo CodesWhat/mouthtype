@@ -18,7 +18,7 @@ from proof import digest
 
 def bounded_run(command, seconds):
     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                               stderr=subprocess.DEVNULL, start_new_session=True)
+                               stderr=None, start_new_session=True)
     try:
         output, _ = process.communicate(timeout=seconds)
         if process.returncode:
