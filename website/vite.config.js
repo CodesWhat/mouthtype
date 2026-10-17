@@ -10,6 +10,7 @@ export default defineConfig({
           "index",
           "start/index",
           "download/index",
+          "linux/index",
           "docs/index",
           "why-mouthtype/index",
           "compare/index",

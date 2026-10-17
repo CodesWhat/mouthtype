@@ -1,5 +1,13 @@
 import { test, expect } from "@playwright/test";
 
+test.beforeEach(async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "platform", { value: "MacIntel" });
+    Object.defineProperty(navigator, "userAgentData", { value: undefined });
+    Object.defineProperty(navigator, "maxTouchPoints", { value: 0 });
+  });
+});
+
 for (const width of [1440, 320]) {
   test(`the Mac alpha and matching source can be downloaded at ${width}px`, async ({
     page,
