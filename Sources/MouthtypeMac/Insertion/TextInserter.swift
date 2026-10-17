@@ -23,6 +23,7 @@ public final class TextInserter {
     private let now: @MainActor () -> Date
     /// How many real key presses and clicks have happened, or nil when that isn't known.
     private let inputGeneration: @MainActor () -> UInt64?
+    private let observeBoundary: @MainActor (PasteBoundaryDiagnostic) -> Void
     private let restrictedToPID: pid_t?
     private var batchActive = false
     private var batchGeneration = 0
@@ -46,6 +47,7 @@ public final class TextInserter {
 
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
     public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
+        self.observeBoundary = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
         self.chunkedPaste = { PasteSettings.chunksEnabled($0) }
         self.now = { Date() }
         self.inputGeneration = inputGeneration
@@ -63,8 +65,10 @@ public final class TextInserter {
         focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, keys: PasteKeyResolving,
         schedule: @escaping PasteboardSession.Schedule, sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
         now: @escaping @MainActor () -> Date = { Date() }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
-        restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false }
+        restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false },
+        observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
     ) {
+        self.observeBoundary = observeBoundary
         self.chunkedPaste = chunkedPaste
         self.now = now
         self.inputGeneration = inputGeneration
@@ -160,10 +164,15 @@ public final class TextInserter {
             }
             let reliableReadBack = PasteTargetPolicy.unchangedProvesFailure(bundleID: now.bundleID)
             var before = now.element.map { focus.textBeforeCursor(of: $0) } ?? .unknown
-            if !reliableReadBack || before == .unknown, let preceding = continuationCharacter(for: now) {
-                before = .character(preceding)
+            var continuation = PasteBoundaryDiagnostic.Continuation.notNeeded
+            if !reliableReadBack || before == .unknown {
+                continuation = continuationCheck(for: now)
+                if let preceding = continuation.character { before = .character(preceding) }
             }
             let spaced = Spacing.spaced(text, before: before)
+            observeBoundary(PasteBoundaryDiagnostic(
+                before: before, continuation: continuation, original: text, spaced: spaced, target: now
+            ))
             guard let keyCode = keys.pasteKeyCode() else {
                 clipboard.copy(spaced)
                 Log.app.error("no key types v in this keyboard layout; transcript left on the clipboard")
@@ -292,13 +301,15 @@ public final class TextInserter {
     /// The last character we pasted, when the text before the cursor can't be read (Electron terminals expose no
     /// Accessibility text), the last paste went to the same app recently, and no key or click has happened since.
     /// When the input count is unknown the answer is no: a missing space is cheaper than a stray one.
-    private func continuationCharacter(for target: FocusSnapshot) -> Character? {
-        guard let last = lastPaste, let pid = target.pid, last.pid == pid, last.bundleID == target.bundleID else { return nil }
-        if let element = last.element, let other = target.element, element != other { return nil }
+    private func continuationCheck(for target: FocusSnapshot) -> PasteBoundaryDiagnostic.Continuation {
+        guard let last = lastPaste else { return .noPreviousPaste }
+        guard let pid = target.pid, last.pid == pid, last.bundleID == target.bundleID else { return .targetChanged }
+        if let element = last.element, let other = target.element, element != other { return .elementChanged }
         let age = now().timeIntervalSince(last.date)
-        guard age >= 0, age <= Self.continuationWindow else { return nil }
-        guard let recorded = last.inputGeneration, inputGeneration() == recorded else { return nil }
-        return last.finalCharacter
+        guard age >= 0, age <= Self.continuationWindow else { return .outsideWindow }
+        guard let recorded = last.inputGeneration, let current = inputGeneration() else { return .inputUnavailable }
+        guard current == recorded else { return .inputChanged }
+        return .available(last.finalCharacter)
     }
 
     /// Pastes the last delivered transcript again, at the current focus. Nil when nothing was delivered yet.
@@ -669,5 +680,52 @@ final class SystemPasteboard: PasteboardAccess {
         }
         item.setDataProvider(provider, forTypes: [.string])
         pasteboard.writeObjects([item])
+    }
+}
+
+/// Only fixed categories and process IDs survive construction. No field or transcript text is retained.
+struct PasteBoundaryDiagnostic: Equatable {
+    enum Continuation {
+        case notNeeded, noPreviousPaste, targetChanged, elementChanged, outsideWindow, inputUnavailable, inputChanged
+        case available(Character)
+
+        var character: Character? {
+            if case let .available(character) = self { return character }
+            return nil
+        }
+
+        var reason: String {
+            switch self {
+            case .notNeeded: "not-needed"
+            case .noPreviousPaste: "no-previous-paste"
+            case .targetChanged: "target-changed"
+            case .elementChanged: "element-changed"
+            case .outsideWindow: "outside-window"
+            case .inputUnavailable: "input-unavailable"
+            case .inputChanged: "input-changed"
+            case .available: "available"
+            }
+        }
+    }
+
+    private let source: String
+    private let preceding: String
+    private let continuation: String
+    private let separator: String
+    private let frontmostPID: pid_t?
+    private let focusedOwnerPID: pid_t?
+
+    init(before: TextBeforeCursor, continuation: Continuation, original: String, spaced: String, target: FocusSnapshot) {
+        source = continuation.character != nil ? "continuation" : (before == .unknown ? "unknown" : "accessibility")
+        preceding = before.kind
+        self.continuation = continuation.reason
+        separator = spaced == original ? "none" : (spaced.hasPrefix("\n") ? "newline" : "space")
+        frontmostPID = target.pid
+        focusedOwnerPID = target.focusedOwnerPID
+    }
+
+    var metadata: String {
+        "source=\(source) preceding=\(preceding) continuation=\(continuation) separator=\(separator) "
+            + "frontmostPID=\(frontmostPID.map(String.init) ?? "unknown") focusedOwnerPID=\(focusedOwnerPID.map(String.init) ?? "unknown")"
     }
 }

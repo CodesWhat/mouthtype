@@ -28,6 +28,8 @@ In **Saved spellings**, **Import CSV…** previews a selected UTF-8 CSV before c
 
 The preview shows new rows, already-saved aliases, repeated rows and errors. Identical aliases are skipped. A conflicting alias or invalid row blocks the whole import until the CSV is fixed. **Import** adds only the previewed new spellings and preserves existing entries, their order and metadata. **Cancel** changes nothing. Save or cancel a dirty spelling draft first. If another writer changes the library after preview, cancel and choose the CSV again to review the current state.
 
+Development builds also write a `paste boundary` entry to the existing app unified log. It contains fixed categories for the boundary source, preceding-character kind, continuation-cache eligibility and separator added, plus frontmost and focused Accessibility owner process IDs. It contains no transcript, surrounding text, window title or audio. These entries support a future coordinated paste investigation; they do not prove delivery or change the destination, spacing policy or retry behavior.
+
 ## First-run setup
 
 On the first ordinary launch with missing Microphone or Accessibility access, **Set Up Mouthtype** opens once. Permission requests follow the setup buttons. Closing it or choosing Set up later does not mark the app ready, and relaunching does not repeat the window or automatically ask for permissions. Existing users with both grants do not get an upgrade window. Reopen it from **Settings → General → Set Up Mouthtype**. A permission attention item in the menu also opens setup.

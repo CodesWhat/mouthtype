@@ -173,7 +173,7 @@ private struct Rig {
         }
     }
 
-    init(restrictedToPID: pid_t? = nil, chunks: Bool = false) {
+    init(restrictedToPID: pid_t? = nil, chunks: Bool = false, observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { _ in }) {
         let pauses = pauses
         let pending = pending
         let clock = clock
@@ -181,7 +181,7 @@ private struct Rig {
         inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, keys: keys, schedule: { delay, work in
             pending.add(delay, work)
         }, sleep: { delay in if chunks { await pauses.pause(delay) } }, now: { clock.date }, inputGeneration: { input.value },
-                                restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks })
+                                restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, observeBoundary: observeBoundary)
     }
 }
 
@@ -581,6 +581,91 @@ private struct Rig {
         let result = await rig.inserter.deliver("world", startFocus: nil)
         #expect(rig.focus.beforeReads == 0)
         #expect(result.finalText == "world")
+    }
+
+    @Test func boundaryDiagnosticsClassifyContinuationWithoutLeakingTextOrChangingTheDestination() async {
+        var diagnostics: [String] = []
+        let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", windowTitle: "Private window title",
+                                          role: "AXTextField", element: element(100), focusedOwnerPID: 101)
+        rig.focus.before = .start
+        _ = await rig.inserter.deliver("Private first sentence.", startFocus: nil)
+        let result = await rig.inserter.deliver("Private next sentence.", startFocus: nil)
+        #expect(result.finalText == " Private next sentence.")
+        #expect(rig.poster.targetPIDs == [100, 100])
+        #expect(diagnostics == [
+            "source=accessibility preceding=start continuation=no-previous-paste separator=none frontmostPID=100 focusedOwnerPID=101",
+            "source=continuation preceding=punctuation continuation=available separator=space frontmostPID=100 focusedOwnerPID=101",
+        ])
+        #expect(!diagnostics.joined().contains("Private"))
+    }
+
+    @Test func boundaryDiagnosticsDistinguishUnavailableAndChangedInput() async {
+        var diagnostics: [String] = []
+        let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        rig.input.value = nil
+        _ = await rig.inserter.deliver("second", startFocus: nil)
+        rig.input.value = 2
+        _ = await rig.inserter.deliver("third", startFocus: nil)
+        rig.input.value = 3
+        _ = await rig.inserter.deliver("fourth", startFocus: nil)
+        #expect(diagnostics.count == 4)
+        #expect(diagnostics.dropFirst().map { $0.contains("continuation=input-unavailable") } == [true, true, false])
+        #expect(diagnostics.last?.contains("continuation=input-changed") == true)
+        #expect(diagnostics.last?.contains("focusedOwnerPID=unknown") == true)
+    }
+
+    @Test func boundaryDiagnosticsClassifyReadableContextAndNewline() async {
+        var diagnostics: [String] = []
+        let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.before = .character("秘密".last!)
+        _ = await rig.inserter.deliver("confidential", startFocus: nil)
+        rig.focus.before = .character("x")
+        _ = await rig.inserter.deliver("- confidential item", startFocus: nil)
+        #expect(diagnostics == [
+            "source=accessibility preceding=letter continuation=not-needed separator=none frontmostPID=100 focusedOwnerPID=unknown",
+            "source=accessibility preceding=letter continuation=not-needed separator=newline frontmostPID=100 focusedOwnerPID=unknown",
+        ])
+        #expect(!diagnostics.joined().contains("秘密"))
+        #expect(!diagnostics.joined().contains("confidential"))
+    }
+
+    @Test(arguments: ["target-changed", "element-changed", "outside-window", "future-paste"])
+    func boundaryDiagnosticsExplainRejectedContinuation(reason: String) async {
+        var diagnostics: [String] = []
+        let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        _ = await rig.inserter.deliver("private first", startFocus: nil)
+        switch reason {
+        case "target-changed": rig.focus.current.pid = 200
+        case "element-changed": rig.focus.current.element = element(101)
+        case "outside-window": rig.clock.advance(TextInserter.continuationWindow + 1)
+        case "future-paste": rig.clock.advance(-1)
+        default: Issue.record("Unexpected fixture")
+        }
+        let result = await rig.inserter.deliver("private second", startFocus: nil)
+        #expect(result.finalText == "private second")
+        let expected = reason == "future-paste" ? "outside-window" : reason
+        #expect(diagnostics.last?.contains("continuation=\(expected)") == true)
+        #expect(diagnostics.last?.contains("source=unknown preceding=unknown") == true)
+    }
+
+    @Test func focusedOwnerDiagnosticReadsOnlyTheAXHandlePID() {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let focused = FocusedElement(AXUIElementCreateApplication(pid))
+        #expect(AccessibilityFocusReader().ownerPID(of: focused) == pid)
+    }
+
+    @Test func boundaryDiagnosticsDoNotRunForSecureOrRefusedTargets() async {
+        var diagnostics: [String] = []
+        let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
+        rig.focus.current = FocusSnapshot(pid: 100, isSecure: true)
+        _ = await rig.inserter.deliver("secret", startFocus: nil)
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXButton")
+        _ = await rig.inserter.deliver("secret", startFocus: nil)
+        #expect(diagnostics.isEmpty)
     }
 
     // MARK: - Continuing after our own last paste when the text before the cursor can't be read
