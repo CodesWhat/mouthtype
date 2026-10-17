@@ -29,6 +29,9 @@ Panel {
   property bool soundsEnabled: false
   property bool autostartEnabled: false
   property string shortcutMode: "off"
+  property string shortcutKeys: ""
+  property string shortcutDraft: ""
+  property bool capturing: false
   property string page: "menu"
   property string classDraft: ""
   property string transcript: ""
@@ -51,6 +54,40 @@ Panel {
   readonly property bool canImportFiles: !!(capabilities && capabilities.file_transcription)
   readonly property bool importActive: fileImport.state === "preparing" || fileImport.state === "transcribing" || fileImport.state === "cancelling"
   readonly property bool importHasResult: fileImport.state === "finished" || fileImport.state === "empty"
+
+  function hyprlandKeyName(event) {
+    var k = event.key
+    if (k >= Qt.Key_A && k <= Qt.Key_Z) return String.fromCharCode(65 + (k - Qt.Key_A))
+    if (k >= Qt.Key_0 && k <= Qt.Key_9) return String.fromCharCode(48 + (k - Qt.Key_0))
+    if (k >= Qt.Key_F1 && k <= Qt.Key_F24) return "F" + (1 + (k - Qt.Key_F1))
+    var named = {}
+    named[Qt.Key_Space] = "space"; named[Qt.Key_Return] = "Return"; named[Qt.Key_Enter] = "Return"; named[Qt.Key_Tab] = "Tab"
+    named[Qt.Key_Backspace] = "BackSpace"; named[Qt.Key_Delete] = "Delete"; named[Qt.Key_Insert] = "Insert"; named[Qt.Key_Home] = "Home"
+    named[Qt.Key_End] = "End"; named[Qt.Key_PageUp] = "Page_Up"; named[Qt.Key_PageDown] = "Page_Down"; named[Qt.Key_Print] = "Print"
+    named[Qt.Key_Pause] = "Pause"; named[Qt.Key_ScrollLock] = "Scroll_Lock"; named[Qt.Key_Menu] = "Menu"; named[Qt.Key_Up] = "Up"
+    named[Qt.Key_Down] = "Down"; named[Qt.Key_Left] = "Left"; named[Qt.Key_Right] = "Right"; named[Qt.Key_QuoteLeft] = "grave"
+    named[Qt.Key_Minus] = "minus"; named[Qt.Key_Equal] = "equal"; named[Qt.Key_BracketLeft] = "bracketleft"; named[Qt.Key_BracketRight] = "bracketright"
+    named[Qt.Key_Semicolon] = "semicolon"; named[Qt.Key_Apostrophe] = "apostrophe"; named[Qt.Key_Comma] = "comma"; named[Qt.Key_Period] = "period"
+    named[Qt.Key_Slash] = "slash"; named[Qt.Key_Backslash] = "backslash"
+    return named[k] || ""
+  }
+
+  function captureShortcut(event) {
+    if (event.key === Qt.Key_Escape) { capturing = false; event.accepted = true; return }
+    var modifierKeys = [Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_AltGr, Qt.Key_CapsLock]
+    if (modifierKeys.indexOf(event.key) !== -1) { event.accepted = true; return }
+    var name = hyprlandKeyName(event)
+    if (name === "") { event.accepted = true; return }
+    var parts = []
+    if (event.modifiers & Qt.MetaModifier) parts.push("SUPER")
+    if (event.modifiers & Qt.AltModifier) parts.push("ALT")
+    if (event.modifiers & Qt.ControlModifier) parts.push("CTRL")
+    if (event.modifiers & Qt.ShiftModifier) parts.push("SHIFT")
+    parts.push(name)
+    shortcutDraft = parts.join(" + ")
+    capturing = false
+    event.accepted = true
+  }
 
   function clock(seconds) {
     if (seconds === null || seconds === undefined || isNaN(Number(seconds))) return ""
@@ -89,6 +126,7 @@ Panel {
     if (result.sounds !== undefined) soundsEnabled = result.sounds === true
     if (result.autostart !== undefined) autostartEnabled = result.autostart === true
     if (result.shortcut !== undefined) shortcutMode = String(result.shortcut || "off")
+    if (result.shortcut_keys !== undefined) shortcutKeys = String(result.shortcut_keys || "")
     if (result.capabilities !== undefined) capabilities = result.capabilities || ({})
     if (result.pill !== undefined) pillPrefs = result.pill || ({ enabled: true, skin: "classic", size: 1 })
     if (result.cleanup !== undefined) cleanupInfo = result.cleanup || ({ models: {}, setup: null, service: null })
@@ -134,6 +172,7 @@ Panel {
     page = name
     if (name === "delivery")
       classDraft = config.allowed_classes && config.allowed_classes.length ? config.allowed_classes[0] : ""
+    if (name === "shortcut") { shortcutDraft = shortcutKeys; capturing = false }
     if (name === "fonts") { familyDraft = String(fontPrefs.family || ""); overrideDraft = String((fontPrefs.overrides || {})[overrideRole] || "") }
   }
 
@@ -263,7 +302,7 @@ Panel {
   PanelKeyCatcher {
       id: keyCatcher
       anchors.fill: parent
-      blocked: classField.activeFocus || importField.activeFocus || familyField.activeFocus || overrideField.activeFocus
+      blocked: classField.activeFocus || importField.activeFocus || familyField.activeFocus || overrideField.activeFocus || shortcutField.activeFocus || root.capturing
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
 
@@ -583,16 +622,44 @@ Panel {
           Column {
             visible: root.page === "shortcut"
             width: parent.width
+            onVisibleChanged: if (!visible) root.capturing = false
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "‹  Dictation Shortcut"; onActivated: root.openPage("menu") }
             MenuDivider { width: parent.width }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Off"; checked: root.shortcutMode === "off"; onActivated: root.run(["set-shortcut", "off"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Press to toggle · Super+Alt+M"; checked: root.shortcutMode === "toggle"; onActivated: root.run(["set-shortcut", "toggle"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Hold to talk · F10"; checked: root.shortcutMode === "hold"; onActivated: root.run(["set-shortcut", "hold"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Press to toggle"; detail: root.shortcutMode === "toggle" ? root.shortcutKeys : ""; checked: root.shortcutMode === "toggle"; onActivated: root.run(["set-shortcut", "toggle", root.shortcutDraft.trim() || (root.shortcutMode === "toggle" ? root.shortcutKeys : "SUPER + ALT + M")]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Hold to talk"; detail: root.shortcutMode === "hold" ? root.shortcutKeys : ""; checked: root.shortcutMode === "hold"; onActivated: root.run(["set-shortcut", "hold", root.shortcutDraft.trim() || (root.shortcutMode === "hold" ? root.shortcutKeys : "F10")]) }
+            MenuDivider { width: parent.width }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; enabled: false; label: "Key" }
+            Item {
+              id: shortcutCapture
+              width: 1; height: 1
+              focus: root.capturing
+              Keys.onPressed: function(event) { root.captureShortcut(event) }
+              onFocusChanged: if (root.capturing && !activeFocus) forceActiveFocus()
+            }
+            MenuRow {
+              fontFamily: root.menuFont; width: parent.width
+              label: root.capturing ? "Press the keys now… (Esc cancels)" : "Press a new key combination…"
+              onActivated: { root.capturing = !root.capturing; if (root.capturing) shortcutCapture.forceActiveFocus() }
+            }
+            TextField {
+              id: shortcutField
+              x: Style.space(30); width: parent.width - Style.space(60)
+              height: Style.space(30)
+              text: root.shortcutDraft
+              onTextEdited: root.shortcutDraft = text
+              placeholderText: "e.g. SUPER + SHIFT + D, F8, Insert"
+              color: "#252525"
+              font.family: root.menuFont; font.pixelSize: Style.font.body
+              background: Rectangle { color: "#F7F7F5"; radius: 4; border.color: root.capturing ? "#4F78C3" : "#A8A8A6"; border.width: root.capturing ? 2 : 1 }
+            }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Use for press-to-toggle"; enabled: root.shortcutDraft.trim() !== ""; onActivated: root.run(["set-shortcut", "toggle", root.shortcutDraft.trim()]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Use for hold-to-talk"; enabled: root.shortcutDraft.trim() !== ""; onActivated: root.run(["set-shortcut", "hold", root.shortcutDraft.trim()]) }
             Text {
               x: Style.space(30); width: parent.width - Style.space(50)
-              text: "Existing shortcuts stay in place. A choice is refused if that key is already bound."
+              text: "Letters, digits, F-keys and named keys such as Insert or Page_Down, with optional SUPER, ALT, CTRL or SHIFT. A key Hyprland already binds is refused, and a combination that Hyprland grabs globally cannot be captured here, so type it instead. Hold-to-talk works best on a key without modifiers."
               color: "#6F6F6D"; wrapMode: Text.Wrap
-              font.family: Style.font.family; font.pixelSize: Style.font.bodySmall
+              font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
             }
             Item { height: Style.space(14) }
           }

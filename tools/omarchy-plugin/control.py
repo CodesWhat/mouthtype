@@ -3,6 +3,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -202,14 +203,66 @@ def config_summary():
     }
 
 
-def shortcut_mode():
+MODIFIER_MASKS = {"SHIFT": 1, "CTRL": 4, "ALT": 8, "SUPER": 64}
+MODIFIER_ALIASES = {"CONTROL": "CTRL", "META": "SUPER", "WIN": "SUPER", "MOD4": "SUPER", "OPTION": "ALT", "MOD1": "ALT"}
+NAMED_KEYS = {
+    "space", "Return", "Tab", "BackSpace", "Delete", "Insert", "Home", "End", "Page_Up", "Page_Down", "Print", "Pause",
+    "Scroll_Lock", "Menu", "Up", "Down", "Left", "Right", "grave", "minus", "equal", "bracketleft", "bracketright",
+    "semicolon", "apostrophe", "comma", "period", "slash", "backslash", "Caps_Lock", "Escape",
+}
+NAMED_LOOKUP = {name.lower(): name for name in NAMED_KEYS}
+DEFAULT_SHORTCUTS = {"toggle": "SUPER + ALT + M", "hold": "F10"}
+
+
+def parse_shortcut(spec):
+    """Normalize a Hyprland key spec such as 'super+shift+d' to 'SUPER + SHIFT + D' plus its modifier mask and key."""
+    parts = [part.strip() for part in str(spec or "").replace("-", "+").split("+")]
+    parts = [part for part in parts if part]
+    if not parts or len(parts) > 5:
+        raise RuntimeError("Enter a key with optional SUPER, ALT, CTRL or SHIFT modifiers")
+    modifiers, key = [], parts[-1]
+    for part in parts[:-1]:
+        name = MODIFIER_ALIASES.get(part.upper(), part.upper())
+        if name not in MODIFIER_MASKS or name in modifiers:
+            raise RuntimeError("Modifiers must be SUPER, ALT, CTRL or SHIFT, each once")
+        modifiers.append(name)
+    if re.fullmatch(r"[A-Za-z0-9]", key):
+        key = key.upper()
+    elif re.fullmatch(r"[Ff]([1-9]|1[0-9]|2[0-4])", key):
+        key = key.upper()
+    elif key.lower() in NAMED_LOOKUP:
+        key = NAMED_LOOKUP[key.lower()]
+    elif re.fullmatch(r"code:[0-9]{1,3}", key.lower()):
+        key = key.lower()
+    elif re.fullmatch(r"XF86[A-Za-z0-9]{1,40}", key):
+        pass
+    else:
+        raise RuntimeError("Unsupported key; use a letter, digit, F-key or a named key such as Insert")
+    order = [name for name in ("SUPER", "ALT", "CTRL", "SHIFT") if name in modifiers]
+    mask = sum(MODIFIER_MASKS[name] for name in order)
+    return " + ".join(order + [key]), mask, key
+
+
+def shortcut_block():
     if not BINDINGS.is_file():
-        return "off"
+        return None
     contents = BINDINGS.read_text(encoding="utf-8")
-    if BIND_BEGIN not in contents:
-        return "off"
-    block = contents.split(BIND_BEGIN, 1)[1].split(BIND_END, 1)[0]
-    return "hold" if '"F10"' in block else "toggle"
+    if BIND_BEGIN not in contents or BIND_END not in contents:
+        return None
+    return contents.split(BIND_BEGIN, 1)[1].split(BIND_END, 1)[0]
+
+
+def shortcut_info():
+    block = shortcut_block()
+    if block is None:
+        return {"mode": "off", "keys": ""}
+    match = re.search(r'bind\("([^"]+)"', block)
+    keys = match.group(1) if match else ""
+    return {"mode": "hold" if "release = true" in block else "toggle", "keys": keys}
+
+
+def shortcut_mode():
+    return shortcut_info()["mode"]
 
 
 def words_today(entries=None):
@@ -269,7 +322,7 @@ def state():
             "pill": preferences()["pill"], "font": preferences()["font"],
             "cleanup": {**cleanup_models(), "service": status.get("cleanup") if running else None},
             "autostart": (UNIT.parent / "default.target.wants/mouthtype-linux.service").is_symlink(),
-            "shortcut": shortcut_mode(),
+            "shortcut": shortcut_mode(), "shortcut_keys": shortcut_info()["keys"],
             "interface": report.get("interface"), "capabilities": report.get("features", {}),
             "file_import": file_import}
 
@@ -445,11 +498,13 @@ def set_autostart(value):
     return state()
 
 
-def set_shortcut(value):
+def set_shortcut(value, keys=None):
     if value not in {"off", "toggle", "hold"}:
         raise RuntimeError("Unsupported shortcut")
     if not BINDINGS.is_file():
         raise RuntimeError("Hyprland bindings file is missing")
+    spec, mask, key = parse_shortcut(keys or DEFAULT_SHORTCUTS.get(value, "F10")) if value != "off" else ("", 0, "")
+    current = shortcut_info()
     original = BINDINGS.read_text(encoding="utf-8")
     before, separator, after = original.partition(BIND_BEGIN)
     if separator:
@@ -460,20 +515,20 @@ def set_shortcut(value):
     else:
         base = original.rstrip() + "\n"
     if value != "off":
-        key = "M" if value == "toggle" else "F10"
-        mask = 72 if value == "toggle" else 0
+        ours = current["mode"] != "off" and parse_shortcut(current["keys"])[0] == spec if current["keys"] else False
         result = subprocess.run(["hyprctl", "-j", "binds"], text=True, capture_output=True,
                                 check=True, timeout=5)
         for binding in json.loads(result.stdout):
-            if str(binding.get("key", "")).upper() == key and binding.get("modmask") == mask:
-                if shortcut_mode() != value:
-                    raise RuntimeError("That shortcut is already in use")
+            bound = str(binding.get("key", ""))
+            same_key = bound.upper() == key.upper() or (key.startswith("code:") and str(binding.get("keycode")) == key[5:])
+            if same_key and binding.get("modmask") == mask and not ours:
+                raise RuntimeError(spec + " is already bound in Hyprland; choose another key")
         command = Path(__file__).resolve()
         if value == "toggle":
-            block = f'o.bind("SUPER + ALT + M", "Toggle Mouthtype dictation", "{command} toggle")'
+            block = f'o.bind("{spec}", "Toggle Mouthtype dictation", "{command} toggle")'
         else:
-            block = (f'hl.bind("F10", hl.dsp.exec_cmd("{command} start"))\n'
-                     f'hl.bind("F10", hl.dsp.exec_cmd("{command} stop"), {{ release = true }})')
+            block = (f'hl.bind("{spec}", hl.dsp.exec_cmd("{command} start"))\n'
+                     f'hl.bind("{spec}", hl.dsp.exec_cmd("{command} stop"), {{ release = true }})')
         updated = base.rstrip() + "\n\n" + BIND_BEGIN + "\n" + block + "\n" + BIND_END + "\n"
     else:
         updated = base.rstrip() + "\n"
@@ -492,7 +547,9 @@ def set_shortcut(value):
         shutil.copy2(backup, BINDINGS)
         subprocess.run(["hyprctl", "reload"], timeout=10, capture_output=True)
         raise RuntimeError("Shortcut change was reverted because Hyprland rejected it")
-    return state()
+    output = state()
+    output["page"] = "shortcut"
+    return output
 
 
 def recover(identity):
@@ -652,8 +709,9 @@ def main():
         "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
     }
     if len(sys.argv) < 2 or sys.argv[1] not in valid or (
-        sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "set-shortcut", "import-start", "cleanup-setup"}
+        sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "import-start", "cleanup-setup"}
         and len(sys.argv) != 3
+    ) or (sys.argv[1] == "set-shortcut" and len(sys.argv) not in {3, 4}
     ) or (sys.argv[1] == "copy" and len(sys.argv) not in {2, 3}) or (
         sys.argv[1] in {"set-config", "set-font"} and len(sys.argv) not in {4, 5}
     ) or (
@@ -701,8 +759,8 @@ def main():
             output = set_sounds(sys.argv[2])
         elif action == "set-autostart" and len(sys.argv) == 3:
             output = set_autostart(sys.argv[2])
-        elif action == "set-shortcut" and len(sys.argv) == 3:
-            output = set_shortcut(sys.argv[2])
+        elif action == "set-shortcut":
+            output = set_shortcut(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
         elif len(sys.argv) == 2:
             output = act(action)
         else:
