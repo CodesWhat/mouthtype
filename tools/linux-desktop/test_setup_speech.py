@@ -135,6 +135,54 @@ class SetupTests(unittest.TestCase):
         with self.assertRaises(ProcessLookupError):
             os.kill(int(pidfile.read_text()), 0)
 
+    def test_sigterm_cli_unwinds_and_reaps_its_running_helper(self):
+        import os
+        import signal
+        import sys
+        import time
+        pidfile = self.root / 'helper.pid'
+        helper = 'import os,sys,time;from pathlib import Path;Path(sys.argv[1]).write_text(str(os.getpid()));time.sleep(15)'
+        script = ('import sys\n'
+                  'sys.path.insert(0,' + repr(str(Path(__file__).resolve().parent)) + ')\n'
+                  'import setup_speech as module\n'
+                  'module.platform.system=lambda:"Linux"\n'
+                  'module.platform.machine=lambda:"x86_64"\n'
+                  'module.shutil.which=lambda name:"/synthetic/"+name\n'
+                  'module.setup=lambda path:module.bounded_run([sys.executable,"-c",' + repr(helper) + ',' + repr(str(pidfile)) + '],20)\n'
+                  'sys.exit(module.main(["--destination",' + repr(str(self.destination)) + ']))\n')
+        parent = subprocess.Popen([sys.executable, '-c', script], start_new_session=True,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        child = None
+        try:
+            end = time.monotonic() + 2
+            while not pidfile.exists() and time.monotonic() < end:
+                time.sleep(.01)
+            self.assertTrue(pidfile.exists())
+            child = int(pidfile.read_text())
+            parent.send_signal(signal.SIGTERM)
+            self.assertEqual(parent.wait(timeout=5), 143)
+            with self.assertRaises(ProcessLookupError):
+                os.kill(child, 0)
+        finally:
+            if parent.poll() is None:
+                os.killpg(parent.pid, signal.SIGKILL)
+                parent.wait(timeout=2)
+            if child:
+                try:
+                    os.killpg(child, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    def test_cli_restores_previous_sigterm_handler_after_return(self):
+        import signal
+        previous = signal.getsignal(signal.SIGTERM)
+        with patch('setup_speech.platform.system', return_value='Linux'), \
+             patch('setup_speech.platform.machine', return_value='x86_64'), \
+             patch('setup_speech.shutil.which', return_value='/synthetic/helper'), \
+             patch('setup_speech.setup', return_value=self.destination / 'linux.json'):
+            self.assertEqual(setup_speech.main(['--destination', str(self.destination)]), 0)
+        self.assertEqual(signal.getsignal(signal.SIGTERM), previous)
+
     def test_cli_refuses_non_linux_without_creating_destination(self):
         with patch('setup_speech.platform.system', return_value='Darwin'):
             self.assertEqual(setup_speech.main(['--destination', str(self.destination)]), 2)

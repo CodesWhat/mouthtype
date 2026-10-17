@@ -7,6 +7,7 @@ from pathlib import Path
 import platform
 import shutil
 import shlex
+import signal
 import subprocess
 import sys
 import tarfile
@@ -93,6 +94,9 @@ def main(argv=None):
         print('Missing prerequisites: ' + ', '.join(missing) +
               '. Arch packages: python, python-pip, curl, pipewire-audio; optional libnotify and wtype.', file=sys.stderr)
         return 2
+    def terminate(_event, _frame):
+        raise SystemExit(143)
+    previous = signal.signal(signal.SIGTERM, terminate)
     try:
         print('Preparing pinned speech model and dedicated Python environment. No recording or service starts.')
         config = setup(args.destination)
@@ -103,6 +107,8 @@ def main(argv=None):
         print('Speech preparation failed: ' + type(error).__name__ +
               '. Existing directories were preserved; incomplete new setup files remain for inspection.', file=sys.stderr)
         return 2
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 if __name__ == '__main__':
