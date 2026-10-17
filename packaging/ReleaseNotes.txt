@@ -1,12 +1,9 @@
-Mouthtype 0.1.0-alpha.5
+Mouthtype 0.1.0-alpha.6
 
-First-run setup now guides one task at a time and advances when each prerequisite is ready.
-Import saved spellings from CSV with a preview, duplicate/conflict checks and explicit confirmation.
-Keep Default typography or override Heading, Body and Readout fonts individually.
-Microphone interruptions during recording startup retain audio for recovery instead of losing the notification.
-If initial microphone preparation failed, a new dictation attempt can retry the current input and report the actual error.
-Add text-free paste diagnostics to investigate intermittent delivery and spacing reports.
+Choose and remember a microphone in Settings. A missing chosen microphone is reported instead of silently switching inputs.
+Optionally quiet supported output audio while recording, then restore the state Mouthtype owns. This is off by default.
+Optionally show provisional words above the recording pill. The completed take is still transcribed and inserted once. This is off by default.
 
 Requires Apple Silicon and macOS 26 or later. This is an alpha; review text before sending.
-Intermittent Orca paste/spacing remains under investigation, not fixed by this release.
-Fresh installation, physical update installation and broader device/app delivery still need tester feedback.
+Microphone switching, supported output hardware and provisional display still need coordinated physical acceptance. Fresh installation and physical update installation remain unverified.
+The Linux source candidate is experimental and separately tested. Arch userland or headless Sway component checks do not certify a physical Arch/Omarchy desktop.
