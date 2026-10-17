@@ -11,9 +11,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dictionary = FileVocabulary()
     private let phrases = FilePhrases()
     private let diagnostics = SettingsDiagnostics()
-    private lazy var setupModel = SetupModel(diagnostics: diagnostics, engine: engineHost)
+    private lazy var setupModel = SetupModel(diagnostics: diagnostics, engine: engineHost, microphone: micCapture.preparation)
     private lazy var setupWindow = SetupWindow(model: setupModel, actions: SetupActions(
-        refresh: { [weak self] in self?.refreshDiagnostics() },
+        refresh: { [weak self] in
+            self?.refreshDiagnostics()
+            Task { _ = await self?.prepareCapture() }
+        },
         microphone: { [weak self] in self?.requestSetupMicrophone() },
         accessibility: { [weak self] in
             self?.accessibility.start()
@@ -86,7 +89,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recoveryChecked = false
     private let launchedAt = Date()
     private var inputStarted = false
-    private var preparingCapture = false
     private var isTerminating = false
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
@@ -213,7 +215,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         self.menuBar = menuBar
         menuBar.onRefresh = { [weak self] in self?.refreshDiagnostics() }
         microphoneSection.onStatusChanged = { [weak self] status in
-            guard let self, status == .authorized, !self.micCapture.isPrepared, !self.preparingCapture else { return }
+            guard let self, status == .authorized, !self.micCapture.isPrepared, !self.micCapture.preparation.isPreparing else { return }
             Task { _ = await self.prepareCapture() }
         }
         historySection = history
@@ -258,7 +260,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationDidBecomeActive(_ notification: Notification) {
         guard menuBar != nil else { return }
         refreshDiagnostics()
-        guard !micCapture.isPrepared, !preparingCapture else { return }
+        guard !micCapture.preparation.isPreparing else { return }
         Task {
             refreshMicrophone()
             _ = await prepareCapture()
@@ -583,28 +585,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func microphoneSelectionChanged() {
         micCapture.invalidatePreparation()
-        setupModel.captureReady = false
         guard dictation?.phase == .idle, !isTerminating else { return }
         Task { _ = await prepareCapture() }
     }
 
     private func prepareCapture() async -> Bool {
-        guard MicrophoneAccess.status == .authorized else { return false }
-        guard !preparingCapture else { return false }
+        guard MicrophoneAccess.status == .authorized else {
+            micCapture.invalidatePreparation()
+            return false
+        }
+        guard !micCapture.preparation.isPreparing, !isTerminating else { return false }
         guard dictation?.phase != .recording else { return false }
-        preparingCapture = true
-        setupModel.capturePreparing = true
-        setupModel.captureError = nil
-        defer { preparingCapture = false; setupModel.capturePreparing = false }
         do {
             let ready = try await micCapture.prepare()
-            setupModel.captureReady = ready
-            setupModel.captureError = ready ? nil : "Microphone choice changed. Prepare your input again."
             Log.capture.info("microphone prepared: \(ready, privacy: .public)")
             return ready
         } catch {
-            setupModel.captureReady = false
-            setupModel.captureError = error.localizedDescription
             Log.capture.error("capture not prepared: \(String(describing: error), privacy: .public)")
             return false
         }
