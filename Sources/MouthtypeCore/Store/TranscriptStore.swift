@@ -267,6 +267,15 @@ public final class TranscriptStore: Sendable {
         }
     }
 
+    /// Unfinished and failed takes remain available for recovery outside the completed-audio limits.
+    public func audioRetentionProtectedIDs() throws -> Set<String> {
+        try pool.read { db in
+            Set(try String.fetchAll(db, sql: "SELECT id FROM dictation WHERE status IN (?, ?, ?, ?)", arguments: [
+                DictationStatus.started, DictationStatus.recorded, DictationStatus.transcribed, DictationStatus.failed,
+            ]))
+        }
+    }
+
     // MARK: Reads
 
     public func dictation(id: String) throws -> DictationRecord? {

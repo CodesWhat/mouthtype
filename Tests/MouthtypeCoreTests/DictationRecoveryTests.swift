@@ -3,6 +3,13 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct DictationRecoveryTests {
+    @Test func preservedFailedAudioOlderThanBalancedDefaultRemainsReachable() throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let old = try rig.row(.failed, ago: 120 * 86_400, now: now, audioSeconds: 1)
+        #expect(try DictationRecovery.saved(store: rig.store, archive: rig.archive, now: now, launchedAt: now).map(\.id) == [old])
+    }
+
     @Test func savedRecordingsRemainReachableAfterTheLaunchScanAndFailedAttempts() throws {
         let rig = try Rig()
         defer { rig.cleanUp() }
