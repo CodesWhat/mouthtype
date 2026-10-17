@@ -138,6 +138,41 @@ class SpellingSessionTests(unittest.TestCase):
         self.assertFalse(take.exists())
         self.assertEqual(self.delivery.calls, [])
 
+    def test_cancel_during_matching_prevents_late_files_or_delivery(self):
+        class PausedMatch:
+            def __init__(self):
+                self.entered, self.release = threading.Event(), threading.Event()
+            def apply(self, text):
+                self.entered.set()
+                if not self.release.wait(3):
+                    raise RuntimeError('Matcher fixture deadline')
+                return 'API café'
+        matcher = PausedMatch()
+        completed = threading.Event()
+        def cancel():
+            self.session.command('cancel')
+            completed.set()
+        self.session.command('start')
+        take = self.session.take
+        self.session.spellings = matcher
+        self.session.command('stop')
+        self.assertTrue(matcher.entered.wait(1))
+        thread = threading.Thread(target=cancel)
+        thread.start()
+        try:
+            self.assertTrue(completed.wait(1), 'Cancellation must not wait for matching')
+            self.assertEqual(self.session.state, 'cancelling')
+            self.assertFalse(take.exists())
+            self.assertEqual(self.delivery.calls, [])
+        finally:
+            matcher.release.set()
+            thread.join(2)
+            self.session.wait()
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(self.session.state, 'idle')
+        self.assertFalse(take.exists())
+        self.assertEqual(self.delivery.calls, [])
+
     def test_recovery_cancel_preserves_old_audio_and_raw(self):
         take = self.session.recovery / ('a' * 32)
         take.mkdir()

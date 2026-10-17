@@ -161,12 +161,12 @@ class Session:
             raw = raw_path.read_bytes().decode('utf-8') if raw_path.exists() else self.engine.transcribe(take / 'recording.wav', cancelled)
             if not isinstance(raw, str):
                 raise ValueError('Invalid transcript')
+            text = spellings.apply(raw)
             with self.lock:
                 if cancelled.is_set() or self.closed:
                     return
                 if not raw_path.exists():
                     private_write(raw_path, raw)
-                text = spellings.apply(raw)
                 private_write(take / 'transcript.txt', text)
                 self.outcome = 'empty' if not text else 'recover_only' if not allow_delivery else 'target_changed'
                 if allow_delivery and text and target == self.delivery.snapshot():
