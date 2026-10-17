@@ -48,7 +48,7 @@ To save the actual-view PNGs, run `MOUTHTYPE_SETTINGS_PREVIEWS=/tmp/mouthtype-se
 
 ## Quiet other audio
 
-**General → Quiet other audio** is off by default. On supported outputs it mutes the default output selected when a recording starts, then restores that device after capture ends, including Stop, Escape, a discarded tap, microphone interruption and capture failure. Transcription and delivery do not keep other audio muted. Turning the option off or normally quitting Mouthtype also ends its mute.
+**General → Quiet other audio** is off by default. Capture starts immediately. With recording sounds enabled, Mouthtype lets the start cue finish before muting the current default output. It waits for the decoded cue duration and checks playback for at most one additional second; a cue that remains active skips quieting for that take. Ending the recording cancels any pending mute. With sounds disabled there is no cue delay. On supported outputs it restores the same device after capture ends, including Stop, Escape, a discarded tap, microphone interruption and capture failure. Transcription and delivery do not keep other audio muted. Turning the option off or normally quitting Mouthtype also ends its mute.
 
 A device that was already muted is left alone. Mouthtype never changes volume. An observed later mute or volume change gives control back to the user, so Mouthtype does not unmute that device. It checks the device UID again before restoring, rather than writing to an unrelated device that reused its numeric ID. Switching output during a recording can make the new output audible; Mouthtype only owns the original output. Outputs without a settable master mute are left unchanged and dictation continues.
 

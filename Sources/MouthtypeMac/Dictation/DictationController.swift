@@ -57,6 +57,7 @@ final class DictationController {
     /// The capture's stop for the last release. The next press waits for it before the capture starts again.
     @ObservationIgnored private var stopping: Task<CapturedAudio, Error>?
     @ObservationIgnored private var capTimer: Task<Void, Never>?
+    @ObservationIgnored private var pendingQuietStart: Task<Void, Never>?
     @ObservationIgnored private var flusher: Task<Void, Never>?
     @ObservationIgnored private var limitCardUp = false
     @ObservationIgnored private var interrupted: PendingInterruption?
@@ -199,8 +200,8 @@ final class DictationController {
             startError = error
         }
         if startError == nil {
-            audioQuiet?.begin()
             sounds.playStart()
+            beginQuietAfterStartCue()
             pill.showRecording()
             pipeline.smart?.recordingStarted()
         }
@@ -217,6 +218,30 @@ final class DictationController {
             await captureInterrupted()
         } else {
             startTimers(for: current)
+        }
+    }
+
+    private func beginQuietAfterStartCue() {
+        pendingQuietStart?.cancel()
+        pendingQuietStart = nil
+        guard let audioQuiet else { return }
+        let duration = sounds.startCueDuration
+        guard duration > 0 else { audioQuiet.begin(); return }
+        let clock = clock
+        let sounds = sounds
+        pendingQuietStart = Task { [weak self] in
+            do {
+                try await clock.sleep(forSeconds: duration)
+                // Allow a bounded playback lag beyond the decoded duration. A stuck cue skips quieting this take.
+                for _ in 0..<20 {
+                    guard !Task.isCancelled, self?.phase == .recording, self?.interruptedDuringStart == false else { return }
+                    if !sounds.isStartCuePlaying {
+                        audioQuiet.begin()
+                        return
+                    }
+                    try await clock.sleep(forSeconds: 0.05)
+                }
+            } catch { return }
         }
     }
 
@@ -292,6 +317,8 @@ final class DictationController {
 
     /// Stops the timers and returns the save in progress, which finishes before anything else writes the audio.
     private func endTimers() -> Task<Void, Never>? {
+        pendingQuietStart?.cancel()
+        pendingQuietStart = nil
         capTimer?.cancel()
         capTimer = nil
         if limitCardUp {

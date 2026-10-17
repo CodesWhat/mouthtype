@@ -139,6 +139,19 @@ private final class FakeLoginService: LoginItemService {
         #expect(ClickSoundPlayer(defaults: UserDefaults(suiteName: suite)!).loadedAll)
     }
 
+    @Test func quietDelayUsesDecodedStartCueAndRespectsDisabledSounds() throws {
+        let suite = "SoundQuietTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let cue = try AVAudioPlayer(contentsOf: #require(ClickSoundPlayer.cueURL(ClickSoundPlayer.startName)))
+        let player = ClickSoundPlayer(defaults: defaults)
+        #expect(player.startCueDuration == cue.duration)
+        #expect(player.startCueDuration > 0)
+        #expect(!player.isStartCuePlaying)
+        SoundPreference.set(false, in: defaults)
+        #expect(player.startCueDuration == 0)
+    }
+
     @Test func soundsDefaultToOnAndFollowTheSwitch() {
         let suite = "SoundPrefTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

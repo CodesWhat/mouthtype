@@ -284,6 +284,8 @@ private final class FakeCards: DictationCards {
 @MainActor
 private final class FakeSounds: SoundPlayer {
     let log: CallLog
+    var startCueDuration: TimeInterval = 0
+    var isStartCuePlaying = false
 
     init(log: CallLog) {
         self.log = log
@@ -1784,6 +1786,82 @@ private final class SlowCapture: DictationCapturing {
 }
 
 @MainActor @Suite struct QuietRecordingLifecycleTests {
+    @Test func startCueFinishesBeforeMuteWithoutDelayingCapture() async throws {
+        let rig = Rig(quietAudio: true)
+        rig.sounds.startCueDuration = 0.2
+        rig.sounds.isStartCuePlaying = true
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(rig.log.contains("capture.start"))
+        #expect(rig.log.contains("sound.start"))
+        #expect(!rig.log.contains("audio.quiet"))
+        await rig.settle()
+        rig.clock.advance(by: 0.2)
+        await rig.settle()
+        #expect(!rig.log.contains("audio.quiet"))
+        rig.sounds.isStartCuePlaying = false
+        rig.clock.advance(by: 0.05)
+        await rig.until { rig.log.contains("audio.quiet") }
+        #expect(rig.log.all.filter { $0 == "audio.quiet" }.count == 1)
+        let sound = try #require(rig.log.index(of: "sound.start"))
+        let mute = try #require(rig.log.index(of: "audio.quiet"))
+        #expect(sound < mute)
+        await rig.controller.handle(.discarded(reason: .tooShort))
+    }
+
+    @Test(arguments: [HotkeyEvent.released(at: keyUp), .cancelled(reason: .escape), .discarded(reason: .tooShort)])
+    func endingBeforeCueCompletionNeverMutesLater(_ event: HotkeyEvent) async {
+        let rig = Rig(quietAudio: true)
+        rig.sounds.startCueDuration = 0.2
+        rig.sounds.isStartCuePlaying = true
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.settle()
+        await rig.controller.handle(event)
+        await rig.controller.waitForProcessing()
+        rig.sounds.isStartCuePlaying = false
+        rig.clock.advance(by: 1)
+        await rig.settle()
+        #expect(!rig.log.contains("audio.quiet"))
+    }
+
+    @Test func olderCueDelayCannotMuteANewerTake() async {
+        let rig = Rig(quietAudio: true)
+        rig.sounds.startCueDuration = 0.2
+        rig.sounds.isStartCuePlaying = true
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.settle()
+        await rig.controller.handle(.discarded(reason: .tooShort))
+        rig.sounds.startCueDuration = 0.5
+        await rig.controller.handle(.pressed(at: keyUp + 1_000_000_000))
+        await rig.settle()
+        rig.clock.advance(by: 0.2)
+        await rig.settle()
+        #expect(!rig.log.contains("audio.quiet"))
+        rig.sounds.isStartCuePlaying = false
+        rig.clock.advance(by: 0.3)
+        await rig.until { rig.log.contains("audio.quiet") }
+        #expect(rig.log.all.filter { $0 == "audio.quiet" }.count == 1)
+        await rig.controller.handle(.discarded(reason: .tooShort))
+    }
+
+    @Test func cueThatDoesNotFinishSkipsMuteAfterBoundedWait() async {
+        let rig = Rig(quietAudio: true)
+        rig.sounds.startCueDuration = 0.2
+        rig.sounds.isStartCuePlaying = true
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.settle()
+        rig.clock.advance(by: 0.2)
+        await rig.settle()
+        for _ in 0..<20 {
+            rig.clock.advance(by: 0.05)
+            await rig.settle()
+        }
+        rig.sounds.isStartCuePlaying = false
+        rig.clock.advance(by: 5)
+        await rig.settle()
+        #expect(!rig.log.contains("audio.quiet"))
+        await rig.controller.handle(.discarded(reason: .tooShort))
+    }
+
     @Test(arguments: [HotkeyEvent.released(at: keyUp), .cancelled(reason: .escape), .discarded(reason: .tooShort)])
     func restoresAtCaptureEndBeforeProcessing(_ event: HotkeyEvent) async throws {
         let rig = Rig(quietAudio: true)
