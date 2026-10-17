@@ -125,16 +125,18 @@ protocol DictationClock: Sendable {
 @MainActor
 final class MicCapture: DictationCapturing {
     let capture: AudioCapture
-    private(set) var isPrepared = false
+    private let preparation = MicrophonePreparation()
+    var isPrepared: Bool { preparation.isPrepared }
 
     init(capture: AudioCapture = AudioCapture()) {
         self.capture = capture
     }
 
-    func prepare() async throws {
-        try await capture.prepare()
-        isPrepared = true
+    @discardableResult func prepare() async throws -> Bool {
+        try await preparation.prepare { try await self.capture.prepare() }
     }
+
+    func invalidatePreparation() { preparation.invalidate() }
 
     func start(keyDownAtNanos: UInt64) async throws { try await capture.start(keyDownAtNanos: keyDownAtNanos) }
     func stop() async throws -> CapturedAudio { try await capture.stop() }

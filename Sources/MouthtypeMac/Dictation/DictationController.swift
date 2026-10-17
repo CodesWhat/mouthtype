@@ -611,6 +611,10 @@ final class DictationController {
         case .microphoneDenied, .microphonePending: return microphoneAccessMessage
         case .noInputDevice, .invalidInputFormat:
             return PillMessage("No microphone found", detail: "Connect one and try again", isError: true)
+        case .selectedMicrophoneUnavailable:
+            return PillMessage("Chosen microphone unavailable", detail: "Choose an input in Mouthtype Settings", isError: true)
+        case .microphonePreferenceUnreadable:
+            return PillMessage("Check microphone choice", detail: "Choose an input in Mouthtype Settings", isError: true)
         case .routeChanged: return PillMessage("Microphone changed", detail: "Try again", isError: true)
         case .engineStartFailed, .notRecording: return PillMessage("Couldn't record", detail: "Try again", isError: true)
         }

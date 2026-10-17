@@ -30,7 +30,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var settingsWindow = SettingsWindow(
         model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
             onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
-            onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) }),
+            onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
+            onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() }),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
             openSpellings: { [weak self] in self?.spellingWindow.present() },
             openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
@@ -555,19 +556,27 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func microphoneSelectionChanged() {
+        micCapture.invalidatePreparation()
+        setupModel.captureReady = false
+        guard dictation?.phase == .idle, !isTerminating else { return }
+        Task { _ = await prepareCapture() }
+    }
+
     private func prepareCapture() async -> Bool {
         guard MicrophoneAccess.status == .authorized else { return false }
         guard !preparingCapture else { return false }
-        if micCapture.isPrepared { return true }
+        guard dictation?.phase != .recording else { return false }
         preparingCapture = true
         setupModel.capturePreparing = true
         setupModel.captureError = nil
         defer { preparingCapture = false; setupModel.capturePreparing = false }
         do {
-            try await micCapture.prepare()
-            setupModel.captureReady = true
-            Log.capture.info("microphone ready")
-            return true
+            let ready = try await micCapture.prepare()
+            setupModel.captureReady = ready
+            setupModel.captureError = ready ? nil : "Microphone choice changed. Prepare your input again."
+            Log.capture.info("microphone prepared: \(ready, privacy: .public)")
+            return ready
         } catch {
             setupModel.captureReady = false
             setupModel.captureError = error.localizedDescription

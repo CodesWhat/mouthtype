@@ -20,6 +20,40 @@ struct InputDevice: Equatable, Sendable {
         return device
     }
 
+    static func availableMicrophones() throws -> [MicrophoneDevice] {
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        var size: UInt32 = 0
+        let status = AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size)
+        guard status == noErr else { throw CaptureError.engineStartFailed(NSError(domain: NSOSStatusErrorDomain, code: Int(status))) }
+        guard size > 0 else { return [] }
+        let stride = MemoryLayout<AudioDeviceID>.stride
+        guard Int(size) % stride == 0 else { throw CaptureError.noInputDevice }
+        var ids = [AudioDeviceID](repeating: 0, count: Int(size) / stride)
+        let capacity = size
+        let result = ids.withUnsafeMutableBytes { raw in
+            AudioObjectGetPropertyData(system, &address, 0, nil, &size, raw.baseAddress!)
+        }
+        guard result == noErr, size <= capacity, Int(size) % stride == 0 else {
+            throw CaptureError.engineStartFailed(NSError(domain: NSOSStatusErrorDomain, code: Int(result)))
+        }
+        return ids.prefix(Int(size) / stride).compactMap { id in
+            let input = InputDevice(sampleRate: nominalSampleRate(id), channels: inputChannels(id), id: id)
+            guard isAlive(id), (try? validate(sampleRate: input.sampleRate, channels: input.channels)) != nil,
+                  let uid = uid(of: id), !uid.isEmpty else { return nil }
+            return MicrophoneDevice(uid: uid, name: name(of: id) ?? "Microphone", input: input)
+        }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    static func isAlive(_ id: AudioDeviceID) -> Bool {
+        var alive: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceIsAlive,
+            mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        return AudioObjectGetPropertyData(id, &address, 0, nil, &size, &alive) == noErr && alive != 0
+    }
+
     /// The device's name as the Sound settings show it, or nil.
     static func name(of id: AudioDeviceID) -> String? {
         stringProperty(id, kAudioObjectPropertyName)

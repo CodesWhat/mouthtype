@@ -24,7 +24,10 @@ public actor AudioCapture {
     public nonisolated var reading: LevelReading { meter.reading }
 
     private let meter = LevelMeter()
-    private let input = HALInput(keepsPrepared: true)
+    private let input: any CaptureInputDriving
+    private let resolveInput: @Sendable () throws -> CaptureInputSelection
+    private let authorization: @Sendable () -> AVAuthorizationStatus
+    private let requestPermission: @Sendable () -> Void
     private let converters = ConverterCache(targetFormat: AudioCapture.targetFormat)
     private let buffer = CaptureBuffer()
     private var recording = false
@@ -36,7 +39,20 @@ public actor AudioCapture {
     /// Failed input buffers in one recording before the input counts as lost.
     static let inputFailureLimit = 20
 
-    public init() {}
+    public init() {
+        input = HALInput(keepsPrepared: true)
+        resolveInput = { try CaptureInputSelection.current() }
+        authorization = { MicrophoneAccess.status }
+        requestPermission = { Task { await MicrophoneAccess.requestIfUndetermined() } }
+    }
+
+    init(input: any CaptureInputDriving, resolveInput: @escaping @Sendable () throws -> CaptureInputSelection,
+         authorization: @escaping @Sendable () -> AVAuthorizationStatus = { .authorized }) {
+        self.input = input
+        self.resolveInput = resolveInput
+        self.authorization = authorization
+        requestPermission = {}
+    }
 
     /// Called once from the input's own thread when a recording's input is lost: the device went away, the default
     /// input moved, or the input stopped delivering. Build the handler with `CaptureInterruption.hop`.
@@ -45,11 +61,14 @@ public actor AudioCapture {
     }
 
     /// Builds the audio unit without starting it. Call at launch once microphone access is granted.
-    public func prepare() throws {
-        if let error = MicrophoneAccess.captureError(for: MicrophoneAccess.status) { throw error }
-        let device = try InputDevice.current()
-        try input.prepare()
+    @discardableResult public func prepare() throws -> Bool {
+        guard !recording else { return false }
+        if let error = MicrophoneAccess.captureError(for: authorization()) { throw error }
+        let selected = try resolveInput()
+        let device = selected.device
+        try input.prepare(device: device, followsDefault: selected.followsDefault)
         Log.capture.info("prepared \(InputDevice.name(of: device.id) ?? "unknown input", privacy: .public) \(device.sampleRate, format: .fixed(precision: 0), privacy: .public) Hz x \(device.channels, privacy: .public), not started")
+        return true
     }
 
     /// `keyDownAtNanos` is host nanoseconds (`HostClock.now()` units, which is what `CGEvent.timestamp` reports).
@@ -58,13 +77,14 @@ public actor AudioCapture {
         guard !recording else { return }
         let startedAt = keyDownAtNanos
 
-        if let error = MicrophoneAccess.captureError(for: MicrophoneAccess.status) {
+        if let error = MicrophoneAccess.captureError(for: authorization()) {
             // A press is the one moment the user is looking; ask again if the system never has.
-            Task { await MicrophoneAccess.requestIfUndetermined() }
+            requestPermission()
             throw error
         }
 
-        let device = try InputDevice.current()
+        let selected = try resolveInput()
+        let device = selected.device
         converters.resetAll()
         buffer.reset(startedAt: startedAt)
         meter.reset()
@@ -78,7 +98,7 @@ public actor AudioCapture {
             inputFailed: { if buffer.recordInputFailure() == failureLimit { interrupted?() } }
         )
         do {
-            delivered = try input.start(device: device, sink: sink)
+            delivered = try input.start(device: device, followsDefault: selected.followsDefault, sink: sink)
         } catch {
             _ = try? buffer.finish()
             throw error
