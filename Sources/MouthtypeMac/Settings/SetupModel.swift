@@ -6,15 +6,17 @@ import Observation
 @MainActor @Observable final class SetupModel {
     let diagnostics: SettingsDiagnostics
     let engine: EngineHost
-    var captureReady = false
-    var capturePreparing = false
-    var captureError: String?
+    let microphone: MicrophonePreparation
+    var captureReady: Bool { microphone.isPrepared }
+    var capturePreparing: Bool { microphone.isPreparing }
+    var captureError: String? { microphone.error }
     private let defaults: UserDefaults
     private(set) var instructions = ""
 
-    init(diagnostics: SettingsDiagnostics, engine: EngineHost, defaults: UserDefaults = .standard) {
+    init(diagnostics: SettingsDiagnostics, engine: EngineHost, microphone: MicrophonePreparation = MicrophonePreparation(), defaults: UserDefaults = .standard) {
         self.diagnostics = diagnostics
         self.engine = engine
+        self.microphone = microphone
         self.defaults = defaults
         refreshInstructions()
     }

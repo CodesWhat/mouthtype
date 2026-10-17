@@ -73,7 +73,7 @@ import MouthtypeCore
         #expect(state.step == .ready)
     }
 
-    @Test func setupReflectsPermissionChangesAndSavedShortcutBehavior() {
+    @Test func setupReflectsPermissionChangesAndSavedShortcutBehavior() async throws {
         let name = "SetupStateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
@@ -86,7 +86,7 @@ import MouthtypeCore
         diagnostics.microphoneStatus = .authorized
         diagnostics.accessibilityGranted = true
         diagnostics.hotkeyHealth = .listening
-        model.captureReady = true
+        _ = try await model.microphone.prepare { true }
         #expect(!model.readiness.isReady) // Speech still loading.
         diagnostics.globe = GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true)
         #expect(model.readiness.globeConflict)
