@@ -6,7 +6,7 @@ Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or p
 
 ## Private alpha
 
-The alpha is `0.1.0-alpha.4` for Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](docs/ALPHA.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
+The alpha is `0.1.0-alpha.5` for Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](docs/ALPHA.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
 
 For a larger Winamp-style pill, choose **Pill Style → Hi-Fi Size → Large (2×)**. The size is saved. Changes during recording take effect the next time the pill appears.
 
@@ -14,7 +14,7 @@ For a larger Winamp-style pill, choose **Pill Style → Hi-Fi Size → Large (2�
 
 Install Xcode with Swift 6.2, then run `bash scripts/run-app.sh`. The script builds and opens a signed app bundle. A Developer ID identity keeps permission grants stable between builds; without one, builds use ad-hoc signing.
 
-Alpha.4 includes a native **Settings…** window for General, Writing and Appearance, including per-app tone rules. See [settings](docs/SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and install only when dictation is idle.
+Alpha.5 includes a native **Settings…** window for General, Writing and Appearance, including per-app tone rules. See [settings](docs/SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and install only when dictation is idle.
 
 In source builds, **Settings → General → Recording behavior** offers **Hold to talk** (the default) or **Press to toggle**. Toggle starts recording with one press and stops with the next; releasing the shortcut keeps recording. This preserves your chosen key or combination. Escape cancels, except when Escape itself is your dictation key; use the pill or menu to cancel then.
 
