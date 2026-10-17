@@ -1,6 +1,6 @@
 # Disposable Arch speech setup smoke
 
-Verification-only PR for the actual explicit `tools/linux-desktop/setup_speech.py` helper from product commit c3872b7. Close after collecting evidence rather than merging this model-download workflow by default. No recurring schedule, model cache, weights upload, private audio, desktop service or live microphone is involved.
+Verification-only PR for the actual explicit `tools/linux-desktop/setup_speech.py` helper from product commit 3c2cd16. Close after collecting evidence rather than merging this model-download workflow by default. No recurring schedule, model cache, weights upload, private audio, desktop service or live microphone is involved.
 
 A pinned official Arch image receives normal signed prerequisites, then a dedicated ordinary user invokes the real helper into a fresh private directory. This tests the helper's actual pinned download/hash/selected extraction, dedicated venv, binary requirements, native import/version check and recover-only configs. It then uses the resulting environment/config to run the existing resident speech worker on the unchanged synthetic speech-one, speech-two and silence fixtures. All three exact expectations must match. The validator rejects missing/duplicate cases, altered expected text, unavailable/fake/unpinned runtime reports and surviving owned workers.
 
