@@ -6,5 +6,6 @@
   "delivery": {
     "mode": "recover"
   },
-  "notifications": true
+  "notifications": true,
+  "cleanup": "off"
 }

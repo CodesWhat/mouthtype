@@ -189,6 +189,7 @@ struct SettingsView: View {
                     Text("Applies to that terminal app’s windows. Mouthtype can’t identify the program running inside it.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }.padding(.top, 12)
             }
+            AudioRetentionSection(model: model)
             callout(model.recordingInstructions)
         }
     }

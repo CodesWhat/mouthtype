@@ -1,0 +1,48 @@
+{
+  "project": "https://github.com/timendum/grapheme",
+  "version": "0.7.2",
+  "commit": "56f7f2d16d54576290634b7484eeece52c538bcb",
+  "unicode": "16.0.0",
+  "files": {
+    "__init__.py": {
+      "upstream_sha256": "349001859636f90b40cca958894b916f461d57e80d5ca3d80c45a60f022ff73b",
+      "sha256": "349001859636f90b40cca958894b916f461d57e80d5ca3d80c45a60f022ff73b"
+    },
+    "api.py": {
+      "upstream_sha256": "1e56e4ae68feb061032904d908036eb2270290d3cdfe208a9ea602bbab2b52fd",
+      "sha256": "99059a3ff5b6da8393cac11d7dff11d76ebc151a507e9df396fa883eff140113"
+    },
+    "finder.py": {
+      "upstream_sha256": "aaeea11dd435821b8331e6a25b999faad189a0c4290a941cf112163f8594060f",
+      "sha256": "80562823ba02d93d5abaaac6e12f0ce54e9de9332b998bc54ff6447a5e9b12f1"
+    },
+    "grapheme_property_group.py": {
+      "upstream_sha256": "b2ca18228e96bb8df24f97f26c6dc7e59cd358d7c662e82a1ca8cf4faf08d3b6",
+      "sha256": "b2ca18228e96bb8df24f97f26c6dc7e59cd358d7c662e82a1ca8cf4faf08d3b6"
+    },
+    "incb_property_group.py": {
+      "upstream_sha256": "53b2d782466a501541526c91ab9015926743c1173e5dfb71cb5150f05a45cfd0",
+      "sha256": "e11cb2ef41c2f9bcaa9b364d96cac99c4f9c2d14490f10ae8908766e94ab7017"
+    },
+    "data/derived_core_property.json": {
+      "upstream_sha256": "000c08666b44cb92195297ec43235abd268e3b14b69d58b38c33ae034755afcb",
+      "sha256": "000c08666b44cb92195297ec43235abd268e3b14b69d58b38c33ae034755afcb"
+    },
+    "data/grapheme_break_property.json": {
+      "upstream_sha256": "a277d288b50a595f05477e1b230392464460856349ec3dbe508ed4d996e5c3d7",
+      "sha256": "a277d288b50a595f05477e1b230392464460856349ec3dbe508ed4d996e5c3d7"
+    },
+    "LICENSE": {
+      "url": "https://raw.githubusercontent.com/timendum/grapheme/56f7f2d16d54576290634b7484eeece52c538bcb/LICENSE",
+      "sha256": "a78497a5bc47312ee0ffab2bf910be3fb08696f55d155452a91213876cb1245c"
+    },
+    "UNICODE-LICENSE": {
+      "url": "https://www.unicode.org/license.txt",
+      "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
+    },
+    "GraphemeBreakTest.txt": {
+      "url": "https://raw.githubusercontent.com/timendum/grapheme/56f7f2d16d54576290634b7484eeece52c538bcb/unicode-data/GraphemeBreakTest.txt",
+      "sha256": "ee2b9354d270ac061b29f09662cafea06341d77e704b8cc6bd72aaeeda363cb5"
+    }
+  }
+}

@@ -90,6 +90,7 @@ private final class FakeEngine: DictationEngine {
     /// How many of the next transcriptions wait for `releaseHeld` before they return.
     var holds = 0
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var heldObservers: [CheckedContinuation<Void, Never>] = []
 
     init(log: CallLog) {
         self.log = log
@@ -100,7 +101,12 @@ private final class FakeEngine: DictationEngine {
         samplesSeen.append(samples.count)
         if holds > 0 {
             holds -= 1
-            await withCheckedContinuation { waiters.append($0) }
+            await withCheckedContinuation { continuation in
+                waiters.append(continuation)
+                let observers = heldObservers
+                heldObservers = []
+                observers.forEach { $0.resume() }
+            }
         }
         if let error { throw error }
         guard !texts.isEmpty else { return result }
@@ -113,6 +119,11 @@ private final class FakeEngine: DictationEngine {
         let held = waiters
         waiters = []
         held.forEach { $0.resume() }
+    }
+
+    func waitForHeld() async {
+        if !waiters.isEmpty { return }
+        await withCheckedContinuation { heldObservers.append($0) }
     }
 }
 
@@ -427,7 +438,8 @@ private struct Rig {
         audio: CapturedAudio = capturedTone(), withStore: Bool = true, settings: CleanupSettings = CleanupSettings(),
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
-        quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false
+        quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false,
+        audioRetention: AudioRetentionPolicy = AudioRetentionPolicy()
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -446,6 +458,7 @@ private struct Rig {
         pipeline.appStyles = appStyles
         pipeline.vocabulary = vocabulary
         pipeline.textPipeline = textPipeline
+        pipeline.audioRetention = { audioRetention }
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
             cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil,
@@ -823,6 +836,18 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.store.finishes.isEmpty)
     }
 
+    @Test(arguments: [AudioRetentionAge.days14, .noAgeLimit])
+    func selectedAudioRetentionChangesOnlyNewAudioExpiration(age: AudioRetentionAge) async throws {
+        let policy = AudioRetentionPolicy(age: age)
+        let rig = Rig(audioRetention: policy)
+        await rig.dictate()
+        let capture = try #require(rig.store.capture)
+        #expect(capture.audioExpiresAt == policy.expiration(from: FakeClock.wall))
+        #expect(capture.audioPath != nil)
+        #expect(rig.store.transcription?.rawText == "Hello world.")
+        #expect(rig.inserter.delivered == ["Hello world."])
+    }
+
     @Test func wordTimingsAreShiftedByTheHeadTrim() async throws {
         let rig = Rig()
         await rig.dictate()
@@ -1053,13 +1078,39 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.inserter.delivered == (cancel ? [] : ["Hello world."]))
     }
 
+    @Test func releaseRequestedBeforeInferenceWaitsForHeldEntry() async throws {
+        let rig = Rig()
+        rig.engine.holds = 1
+        var released = false
+        var releaseTask: Task<Void, Never>?
+        await withCheckedContinuation { started in
+            releaseTask = Task { @MainActor in
+                started.resume()
+                await rig.engine.waitForHeld()
+                rig.engine.releaseHeld()
+                released = true
+            }
+        }
+        try #require(!released)
+
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await releaseTask?.value
+        await rig.controller.waitForProcessing()
+        #expect(released)
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.controller.phase == .idle)
+        #expect(rig.finishedAttempts.count == 1)
+        #expect(rig.log.all.filter { $0 == "engine.transcribe" }.count == 1)
+    }
+
     @Test func pressWhileProcessingStartsRecordingAndWaitsItsTurn() async {
         let rig = Rig()
         rig.engine.holds = 1
         rig.engine.texts = ["First one.", "Second one."]
         await rig.controller.handle(.pressed(at: keyDown))
         await rig.controller.handle(.released(at: keyUp))
-        await rig.settle()
+        await rig.engine.waitForHeld()
         #expect(rig.controller.phase == .processing)
         #expect(rig.log.contains("engine.transcribe") && rig.inserter.delivered.isEmpty)
 
@@ -1071,7 +1122,7 @@ private final class FakeCorrections: CorrectionObserving {
 
         // The first finishes while the second is still being spoken: the pill and phase stay with the recording.
         rig.engine.releaseHeld()
-        await rig.settle()
+        await rig.controller.waitForProcessing()
         #expect(rig.inserter.delivered == ["First one."])
         #expect(rig.controller.phase == .recording)
         #expect(rig.log.all.last(where: { $0.hasPrefix("pill.") }) == "pill.recording")

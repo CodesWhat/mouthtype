@@ -134,7 +134,7 @@ protocol DictationClock: Sendable {
 @MainActor
 final class MicCapture: DictationCapturing {
     let capture: AudioCapture
-    private let preparation = MicrophonePreparation()
+    let preparation = MicrophonePreparation()
     var isPrepared: Bool { preparation.isPrepared }
 
     init(capture: AudioCapture = AudioCapture()) {
@@ -147,20 +147,22 @@ final class MicCapture: DictationCapturing {
 
     func invalidatePreparation() { preparation.invalidate() }
 
-    func start(keyDownAtNanos: UInt64) async throws { try await capture.start(keyDownAtNanos: keyDownAtNanos) }
+    func start(keyDownAtNanos: UInt64) async throws {
+        try await preparation.start {
+            await capture.setInterruptionHandler(CaptureInterruption.hop { [weak self] in
+                self?.preparation.invalidate()
+                self?.onInterrupted?()
+            })
+            try await capture.start(keyDownAtNanos: keyDownAtNanos)
+        }
+    }
     func stop() async throws -> CapturedAudio { try await capture.stop() }
     func stopSalvaging() async throws -> CapturedAudio { try await capture.stop(salvaging: true) }
     func partialSamples(from offset: Int) async -> [Float] { await capture.partialSamples(from: offset) }
     func previewSnapshot(maxSamples: Int) async -> PreviewAudio { await capture.previewSnapshot(maxSamples: maxSamples) }
     func cancel() async { await capture.cancel() }
 
-    var onInterrupted: (@MainActor () -> Void)? {
-        didSet {
-            let handler = onInterrupted.map(CaptureInterruption.hop)
-            let capture = capture
-            Task { await capture.setInterruptionHandler(handler) }
-        }
-    }
+    var onInterrupted: (@MainActor () -> Void)?
 }
 
 /// The engine `EngineHost` loads. Transcription itself runs on the engine's own executor, not the main actor.

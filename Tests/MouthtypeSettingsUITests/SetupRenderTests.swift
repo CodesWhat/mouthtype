@@ -25,12 +25,21 @@ import Testing
         diagnostics.microphoneStatus = .denied
         try render(model: model, actions: actions, name: "setup-denied-minimum", size: NSSize(width: 560, height: 540))
         diagnostics.microphoneStatus = .authorized
-        model.capturePreparing = true
+        var finishPreparation: CheckedContinuation<Bool, any Error>?
+        var preparation: Task<Bool, any Error>!
+        await withCheckedContinuation { started in
+            preparation = Task { try await model.microphone.prepare {
+                try await withCheckedThrowingContinuation {
+                    finishPreparation = $0
+                    started.resume()
+                }
+            } }
+        }
         try render(model: model, actions: actions, name: "setup-microphone-preparing", size: NSSize(width: 650, height: 590))
-        model.capturePreparing = false
-        model.captureError = "The selected microphone is unavailable. Connect an input device and try again."
+        finishPreparation?.resume(throwing: CaptureError.selectedMicrophoneUnavailable)
+        _ = try? await preparation.value
         try render(model: model, actions: actions, name: "setup-microphone-failed-minimum", size: NSSize(width: 560, height: 540))
-        model.captureReady = true
+        _ = try await model.microphone.prepare { true }
         #expect(model.readiness.step == .accessibility)
         try render(model: model, actions: actions, name: "setup-accessibility", size: NSSize(width: 650, height: 590))
         diagnostics.accessibilityGranted = true
@@ -47,7 +56,7 @@ import Testing
         let failure = EngineHost(makeEngine: { _ in SetupRenderEngine(fails: true) })
         await failure.load()
         let failedModel = SetupModel(diagnostics: diagnostics, engine: failure, defaults: defaults)
-        failedModel.captureReady = true
+        _ = try await failedModel.microphone.prepare { true }
         #expect(failedModel.readiness.step == .speech)
         try render(model: failedModel, actions: actions, name: "setup-failed-minimum", size: NSSize(width: 560, height: 540))
         #expect(!failedModel.readiness.isReady)

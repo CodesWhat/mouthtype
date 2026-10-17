@@ -86,4 +86,39 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         #expect(try AudioArchive(supportDirectory: dir).purge(olderThan: Date()) == [])
     }
+
+    @Test func completedAudioPurgePreservesCrashRecoveryPartials() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let archive = AudioArchive(supportDirectory: dir)
+        try archive.write(samples: samples(160), id: "completed")
+        try archive.appendPartial(samples: samples(160), id: "interrupted")
+        let partial = archive.partialURL(for: "interrupted")
+        let original = try Data(contentsOf: partial)
+        let removed = try archive.purge(olderThan: Date.distantFuture, maxTotalBytes: 0)
+        #expect(removed == ["completed"])
+        #expect(FileManager.default.fileExists(atPath: partial.path))
+        if FileManager.default.fileExists(atPath: partial.path) {
+            #expect(try Data(contentsOf: partial) == original)
+        }
+    }
+
+    @Test func retentionOnlyCountsSelectedCompletedTakesAgainstTheLimit() throws {
+        let dir = try tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        for (id, age) in [("unfinished", 120.0), ("completed", 30.0)] {
+            try archive.write(samples: samples(160), id: id)
+            try setAge(archive, id: id, daysAgo: age, now: now)
+        }
+        let original = try Data(contentsOf: archive.url(for: "unfinished"))
+        let removed = try archive.purge(olderThan: now.addingTimeInterval(-90 * 86_400), maxTotalBytes: 364, eligibleIDs: ["completed"])
+        #expect(removed.isEmpty)
+        #expect(try Data(contentsOf: archive.url(for: "unfinished")) == original)
+        #expect(FileManager.default.fileExists(atPath: archive.url(for: "completed").path))
+        let purged = try archive.purge(olderThan: now.addingTimeInterval(-14 * 86_400), maxTotalBytes: 0, eligibleIDs: ["completed"])
+        #expect(purged == ["completed"])
+        #expect(try Data(contentsOf: archive.url(for: "unfinished")) == original)
+    }
 }

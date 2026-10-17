@@ -1,4 +1,4 @@
-# Mouthtype 0.1.0-alpha.7
+# Mouthtype 0.1.0-alpha.8
 
 Alpha for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
 
@@ -60,15 +60,17 @@ Earlier physical native checks covered microphone dictation, consecutive-take sp
 
 ## Linux source testing
 
-The source archive at https://mouthtype.app/source includes `tools/linux-desktop/README.md`, an experimental daemon/CLI and an explicit speech-preparation helper. The initial target is Linux x86_64, Arch/Omarchy, Hyprland and PipeWire. There is no Linux GUI or packaged desktop release, and Mac cleanup/file-import features are not Linux parity promises.
+The source archive at https://mouthtype.app/source includes `tools/linux-desktop/README.md`, an experimental daemon/CLI and an explicit speech-preparation helper. The initial target is Linux x86_64, Arch/Omarchy, Hyprland and PipeWire. There is no Linux GUI or supported desktop release. The source includes a local Arch test-package builder, optional saved spellings, phrase replacements and basic cleanup. These do not imply Mac AI cleanup or file-import parity.
 
 Follow that README to install the launcher into a chosen prefix and run `tools/linux-desktop/setup_speech.py` with a new destination outside the checkout. Preparation downloads the pinned speech archive, verifies its hashes and installs pinned binary packages into a dedicated environment. It does not record, load models, register shortcuts, modify compositor configuration or start a service. Start the foreground service explicitly afterward. Recovery-only delivery is the default and makes no clipboard or key changes; automatic typing is an explicit opt-in with documented compositor/field limitations.
+
+Cleanup is off by default; it runs before literal saved-spelling/phrase expansion and keeps raw recognition recoverable. Automatic typing refuses multiline/control-bearing text rather than sending Return or Tab. Follow the source guide for phrase dates, explicit clipboard-context opt-in and formatting limitations.
 
 Synthetic audio, process/IPC, real headless Wayland components and remote speech-runtime checks are evidence for those components, not certification of a physical Arch/Omarchy desktop. Follow the source README for prerequisites and acceptance steps.
 
 ## Local data and removal
 
-History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely; audio defaults to 90 days or 2 GB. The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it. Quit Mouthtype before removing the app. Delete the data folder only if you intend to erase it.
+History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely. In **Settings → General → Saved audio**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch to completed Mouthtype recordings only; unfinished recordings and recovery audio are exempt. Text and timings stay. No age limit still has a size limit. Removed audio cannot be restored. See [saved audio](AUDIO-RETENTION.md). The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it. Quit Mouthtype before removing the app. Delete the data folder only if you intend to erase it.
 
 ## Report a problem
 

@@ -5,12 +5,16 @@ on:
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"
+      - "scripts/prepare-linux-arch.py"
+      - "packaging/arch/**"
       - ".github/workflows/linux-desktop.yml"
   push:
     branches: [main, dev/v0.1.0]
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"
+      - "scripts/prepare-linux-arch.py"
+      - "packaging/arch/**"
       - ".github/workflows/linux-desktop.yml"
   workflow_dispatch:
 
@@ -77,7 +81,7 @@ jobs:
     steps:
       - name: Install signed Arch component prerequisites
         run: |
-          pacman -Syu --noconfirm --needed git python pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols
+          pacman -Syu --noconfirm --needed git python python-pip curl pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols namcap
           useradd --create-home --shell /bin/bash mouthtype-ci
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -101,6 +105,73 @@ jobs:
           MOUTHTYPE_SWAY_BINARY: /home/mouthtype-ci/sway-component/build/sway/sway
           MOUTHTYPE_SWAY_REVISION: 88869399f421d9180dd8b6ed0b5a1f4a3585d252
         run: runuser -u mouthtype-ci -- bash tools/linux-desktop/run-ci.sh "$GITHUB_WORKSPACE/linux-desktop-evidence"
+      - name: Build local-source test package as ordinary user
+        run: |
+          cp -a "$GITHUB_WORKSPACE" /home/mouthtype-ci/package-source
+          chown -R mouthtype-ci:mouthtype-ci /home/mouthtype-ci/package-source
+          mkdir linux-desktop-evidence/arch-package
+          timeout --kill-after=5s 30s runuser -u mouthtype-ci -- python /home/mouthtype-ci/package-source/scripts/prepare-linux-arch.py --destination /home/mouthtype-ci/arch-bundle
+          for name in PKGBUILD README.md BUILD-SOURCE.json SHA256SUMS.txt mouthtype-linux-source.tar.gz; do
+            cp "/home/mouthtype-ci/arch-bundle/$name" linux-desktop-evidence/arch-package/
+          done
+          timeout --kill-after=5s 180s runuser -u mouthtype-ci -- bash -c 'cd /home/mouthtype-ci/arch-bundle && makepkg --cleanbuild --check' > linux-desktop-evidence/arch-package/build.log 2>&1
+      - name: Install and check the actual test package without policy changes
+        run: |
+          set -- /home/mouthtype-ci/arch-bundle/mouthtype-linux-*.pkg.tar.zst
+          test "$#" -eq 1
+          test -f "$1"
+          package=$1
+          cp "$package" linux-desktop-evidence/arch-package/
+          sha256sum "$package" > linux-desktop-evidence/arch-package/package-sha256.txt
+          pacman -Qip "$package" > linux-desktop-evidence/arch-package/package-info.txt
+          bsdtar -tf "$package" > linux-desktop-evidence/arch-package/package-contents.txt
+          namcap "$package" > linux-desktop-evidence/arch-package/namcap.log 2>&1
+          sha256sum /etc/pacman.conf > linux-desktop-evidence/arch-package/pacman-conf-before.txt
+          pacman-conf SigLevel > linux-desktop-evidence/arch-package/signature-policy.txt
+          pacman-conf LocalFileSigLevel >> linux-desktop-evidence/arch-package/signature-policy.txt
+          timeout --kill-after=5s 60s pacman -U --noconfirm "$package" > linux-desktop-evidence/arch-package/install.log 2>&1
+          runuser -u mouthtype-ci -- /usr/bin/mouthtype-linux --help > linux-desktop-evidence/arch-package/installed-help.txt
+          runuser -u mouthtype-ci -- /usr/bin/mouthtype-linux recover --help > linux-desktop-evidence/arch-package/installed-recovery-help.txt
+          timeout --kill-after=5s 30s runuser -u mouthtype-ci -- python -W error::ResourceWarning -m unittest discover -s /usr/lib/mouthtype-linux/tools/linux-desktop -p test_spellings.py > linux-desktop-evidence/arch-package/installed-payload-tests.log 2>&1
+          timeout --kill-after=5s 30s runuser -u mouthtype-ci -- python -W error::ResourceWarning -m unittest discover -s /usr/lib/mouthtype-linux/tools/linux-desktop -p 'test_phrase*.py' > linux-desktop-evidence/arch-package/installed-phrase-tests.log 2>&1
+          timeout --kill-after=5s 30s runuser -u mouthtype-ci -- python -W error::ResourceWarning -m unittest discover -s /usr/lib/mouthtype-linux/tools/linux-desktop -p 'test_cleanup*.py' > linux-desktop-evidence/arch-package/installed-cleanup-tests.log 2>&1
+          pacman -Qkk mouthtype-linux > linux-desktop-evidence/arch-package/installed-file-check.txt
+          python - <<'PY'
+          import hashlib, json, plistlib, subprocess
+          from pathlib import Path
+          evidence = Path('linux-desktop-evidence/arch-package')
+          source = json.loads((evidence / 'BUILD-SOURCE.json').read_text())
+          base = plistlib.loads(Path('packaging/Version.plist').read_bytes())['CFBundleShortVersionString']
+          old_style = source['version'].replace('test.r', '.test.r', 1)
+          old_order = subprocess.check_output(['vercmp', old_style, base], text=True, timeout=5).strip()
+          order = subprocess.check_output(['vercmp', source['version'], base], text=True, timeout=5).strip()
+          (evidence / 'version-order.json').write_text(json.dumps({'stable': base, 'old_dotted_label': old_style, 'old_comparison': old_order, 'test_version': source['version'], 'comparison': order}, indent=2) + '\n')
+          assert old_order == '1' and order == '-1', (old_style, source['version'], base, old_order, order)
+          for name, expected in source['payload_sha256'].items():
+              assert hashlib.sha256((Path('/usr/lib/mouthtype-linux') / name).read_bytes()).hexdigest() == expected, name
+          for name in (evidence / 'package-contents.txt').read_text().splitlines():
+              name = name.removeprefix('./')
+              assert not name.startswith('/') and '..' not in Path(name).parts
+              assert name in ('.PKGINFO', '.BUILDINFO', '.MTREE') or name.startswith('usr/'), name
+              assert name != '.INSTALL'
+          assert '/usr/lib/mouthtype-linux/tools/linux-desktop/desktop.py' in Path('/usr/bin/mouthtype-linux').read_text()
+          assert '/home/mouthtype-ci' not in Path('/usr/bin/mouthtype-linux').read_text()
+          for relative in ('.config/mouthtype/acceptance.txt', '.local/share/mouthtype/speech-candidate/acceptance.txt', '.local/state/mouthtype/recovery/acceptance.txt'):
+              path = Path('/home/mouthtype-ci') / relative
+              path.parent.mkdir(parents=True, exist_ok=True)
+              path.write_text('synthetic marker; no model or recording')
+          (evidence / 'installed-result.json').write_text(json.dumps({'passed': True, 'payload_files': len(source['payload_sha256']), 'runtime_prefix': '/usr', 'models_started': False, 'physical_desktop_tested': False}, indent=2) + '\n')
+          PY
+          timeout --kill-after=5s 60s pacman -R --noconfirm mouthtype-linux > linux-desktop-evidence/arch-package/remove.log 2>&1
+          test ! -e /usr/bin/mouthtype-linux
+          test ! -e /usr/lib/mouthtype-linux
+          python - <<'PY'
+          from pathlib import Path
+          for relative in ('.config/mouthtype/acceptance.txt', '.local/share/mouthtype/speech-candidate/acceptance.txt', '.local/state/mouthtype/recovery/acceptance.txt'):
+              assert (Path('/home/mouthtype-ci') / relative).read_text() == 'synthetic marker; no model or recording'
+          PY
+          sha256sum /etc/pacman.conf > linux-desktop-evidence/arch-package/pacman-conf-after.txt
+          cmp linux-desktop-evidence/arch-package/pacman-conf-before.txt linux-desktop-evidence/arch-package/pacman-conf-after.txt
       - name: Verify and clean remaining owned test processes
         if: always()
         run: |
