@@ -155,6 +155,11 @@ struct SettingsView: View {
                 }
                 cleanerStatus
                 Divider()
+                settingRow("Quiet other audio", "Mute the current output while recording, on supported devices.") {
+                    Toggle("Quiet other audio", isOn: Binding(get: { model.quietOtherAudio }, set: model.setQuietOtherAudio))
+                        .labelsHidden().toggleStyle(.switch).accessibilityIdentifier("settings-quiet-audio")
+                }
+                Divider()
                 settingRow("Recording sounds", "A small cue when you start and finish.") {
                     Toggle("Recording sounds", isOn: Binding(get: { model.sounds }, set: model.setSounds)).labelsHidden().toggleStyle(.switch)
                 }

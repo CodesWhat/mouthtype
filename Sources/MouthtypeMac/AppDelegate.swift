@@ -31,7 +31,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
             onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
             onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
-            onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() }),
+            onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
+            onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } }),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
             openSpellings: { [weak self] in self?.spellingWindow.present() },
             openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
@@ -45,6 +46,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             editPhrasesFile: { [weak self] in self?.editPhrasesFile() },
             chooseFont: { [weak self] in self?.fontChooser.presentFontChooser() }, updater: appUpdater))
     private let micCapture = MicCapture()
+    private let audioQuiet = RecordingAudioQuiet(output: CoreAudioQuietOutput(), enabled: { QuietAudioPreference.isEnabled() })
     private let microphoneSection = MicrophoneMenuSection()
     private let systemSection = SystemAccessMenuSection()
     private let accessibility = AccessibilityAccess()
@@ -140,7 +142,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         pipeline.smart = cleanerHost
         let dictation = DictationController(
             capture: micCapture, engine: engine, pipeline: pipeline,
-            inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock(), cards: presenter
+            inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock(), cards: presenter, audioQuiet: audioQuiet
         )
         self.pill = pill
         self.inserter = inserter
@@ -249,6 +251,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationWillTerminate(_ notification: Notification) {
         isTerminating = true
+        audioQuiet.end()
         guard menuBar != nil else { return }
         shortcuts.unregisterAll()
         hotkeyService?.stop()

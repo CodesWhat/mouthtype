@@ -9,12 +9,14 @@ import UniformTypeIdentifiers
     private let onCleanupChanged: @MainActor () -> Void
     private let onSkinChanged: @MainActor (PillSkinKind) -> Void
     private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
+    private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private var capsLockShortcut = false
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
     var page = SettingsPage.general
     private(set) var cleanup: CleanupSettings
     private(set) var sounds: Bool
+    private(set) var quietOtherAudio = false
     private(set) var skin: PillSkinKind
     private(set) var hiFiSize: HiFiPillSize
     private(set) var fontOverrides: TextFontOverrides
@@ -33,16 +35,19 @@ import UniformTypeIdentifiers
          onCleanupChanged: @escaping @MainActor () -> Void = {},
          onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
          onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
-         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {}) {
+         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
+         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in }) {
         self.defaults = defaults
         self.microphone = microphone ?? MicrophoneSettingsModel(defaults: defaults, onChanged: onMicrophoneChanged)
         self.loginItem = loginItem
         self.onCleanupChanged = onCleanupChanged
         self.onSkinChanged = onSkinChanged
         self.onRecordingModeChanged = onRecordingModeChanged
+        self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
         recordingMode = RecordingModePreference.current(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
+        quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
         skin = PillSkinPreference.current(defaults)
         hiFiSize = HiFiPillSizePreference.current(defaults)
         font = TextFontPreference.current(defaults)
@@ -54,6 +59,7 @@ import UniformTypeIdentifiers
         microphone.refresh()
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
+        quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
         skin = PillSkinPreference.current(defaults)
         hiFiSize = HiFiPillSizePreference.current(defaults)
         font = TextFontPreference.current(defaults)
@@ -163,6 +169,11 @@ import UniformTypeIdentifiers
     func setFillers(_ value: Bool) { update { $0.fillers = value } }
     func setSpokenCommands(_ value: Bool) { update { $0.spokenCommands = value } }
     func setNumbers(_ value: Bool) { update { $0.numbers = value } }
+    func setQuietOtherAudio(_ value: Bool) {
+        QuietAudioPreference.set(value, in: defaults)
+        quietOtherAudio = value
+        onQuietOtherAudioChanged(value)
+    }
     func setSounds(_ value: Bool) { SoundPreference.set(value, in: defaults); sounds = value }
     func toggleLogin() { loginItem.toggle(); loginState = loginItem.menuState }
     func setSkin(_ value: PillSkinKind) {
