@@ -20,6 +20,7 @@ import Testing
         let controller = SetupWindow(model: model, actions: actions)
         #expect(controller.window?.title == "Set Up Mouthtype")
         try render(model: model, actions: actions, name: "setup-pending", size: NSSize(width: 650, height: 590))
+        try render(model: model, actions: actions, name: "setup-pending-light", size: NSSize(width: 650, height: 590), appearance: .aqua)
         #expect(model.readiness.step == .microphone)
         diagnostics.microphoneStatus = .denied
         try render(model: model, actions: actions, name: "setup-denied-minimum", size: NSSize(width: 560, height: 540))
@@ -42,6 +43,7 @@ import Testing
         diagnostics.hotkeyHealth = .listening
         #expect(model.readiness.isReady)
         try render(model: model, actions: actions, name: "setup-ready", size: NSSize(width: 650, height: 590))
+        try render(model: model, actions: actions, name: "setup-ready-light-minimum", size: NSSize(width: 560, height: 540), appearance: .aqua)
         let failure = EngineHost(makeEngine: { _ in SetupRenderEngine(fails: true) })
         await failure.load()
         let failedModel = SetupModel(diagnostics: diagnostics, engine: failure, defaults: defaults)
@@ -54,8 +56,9 @@ import Testing
         #expect(defaults.object(forKey: SetupLaunchPolicy.presentedKey) == nil)
     }
 
-    private func render(model: SetupModel, actions: SetupActions, name: String, size: NSSize) throws {
+    private func render(model: SetupModel, actions: SetupActions, name: String, size: NSSize, appearance: NSAppearance.Name? = nil) throws {
         let controller = SetupWindow(model: model, actions: actions)
+        if let appearance { controller.window?.appearance = NSAppearance(named: appearance) }
         controller.window?.setContentSize(size)
         let view = try #require(controller.window?.contentView)
         view.setFrameSize(size)

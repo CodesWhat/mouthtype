@@ -111,7 +111,7 @@ struct SetupView: View {
         case .microphone: "Let’s hear you."
         case .accessibility: "Put your words to work."
         case .speech: "Keep recognition on your Mac."
-        case .shortcut: "Your shortcut, ready."
+        case .shortcut: "Check your shortcut."
         case .ready: "You’re ready to talk."
         }
     }
