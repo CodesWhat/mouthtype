@@ -37,5 +37,14 @@ class SourceTests(unittest.TestCase):
                 unpack_source(data, Path(temp) / 'escape', pin)
             self.assertFalse((Path(temp) / 'outside').exists())
 
+class PatchTests(unittest.TestCase):
+    def test_exact_upstream_patch_digest_is_required(self):
+        from build_sway import verify_patch
+        data=b'verified upstream patch'
+        pin={'sha256':hashlib.sha256(data).hexdigest()}
+        self.assertEqual(verify_patch(data,pin),data)
+        with self.assertRaises(ValueError):
+            verify_patch(data+b'changed',pin)
+
 if __name__ == '__main__':
     unittest.main()

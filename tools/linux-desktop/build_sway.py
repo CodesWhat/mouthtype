@@ -31,6 +31,12 @@ def unpack_source(data, destination, pin):
     return destination / prefix
 
 
+def verify_patch(data, pin):
+    if hashlib.sha256(data).hexdigest() != pin['sha256']:
+        raise ValueError('Sway upstream patch digest mismatch')
+    return data
+
+
 def build_command(command, log, seconds):
     process = subprocess.Popen(command, stdout=log, stderr=log, start_new_session=True)
     try:
@@ -56,6 +62,13 @@ def main():
         source = unpack_source(data, args.work, PIN)
         build = args.work / 'build'
         with args.receipt.with_suffix('.log').open('x') as log:
+            for index, patch in enumerate(PIN.get('patches', [])):
+                with urllib.request.urlopen(patch['url'], timeout=15) as response:
+                    patch_data = verify_patch(response.read(1024 * 1024), patch)
+                patch_path = args.work / ('upstream-' + str(index) + '.patch')
+                patch_path.write_bytes(patch_data)
+                build_command(['patch', '--batch', '--forward', '--fuzz=0', '-p1',
+                               '-d', str(source), '-i', str(patch_path)], log, 10)
             build_command(['meson', 'setup', str(build), str(source), '--wrap-mode=nodownload',
                            '-Dman-pages=disabled', '-Dswaybar=false', '-Dswaynag=false',
                            '-Dtray=disabled', '-Dgdk-pixbuf=disabled', '-Ddefault-wallpaper=false'], log, 60)

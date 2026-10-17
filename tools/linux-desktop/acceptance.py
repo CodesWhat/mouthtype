@@ -34,7 +34,8 @@ def tone_metrics(path):
     rms = math.sqrt(sum((value / 32768) ** 2 for value in samples) / count)
     frequency = sum(a <= 0 < b for a, b in zip(samples, samples[1:])) / (count / 16000)
     if rms < .01 or abs(frequency - 440) > 8:
-        raise ValueError('Expected synthetic 440 Hz source was not captured')
+        raise ValueError('Expected synthetic 440 Hz source was not captured: ' +
+                         json.dumps({'frames': count, 'rms': rms, 'frequency_hz': frequency}))
     return {'frames': count, 'rate': 16000, 'channels': 1, 'rms': rms, 'frequency_hz': frequency}
 
 
@@ -189,6 +190,12 @@ def focused_node(tree):
     return None
 
 
+def compositor_tree(root, env):
+    tree = json.loads(run(['swaymsg', '-t', 'get_tree'], env).stdout)
+    (root / 'tree.json').write_text(json.dumps(tree))
+    return tree
+
+
 def sway_component(root, env, processes):
     if os.getuid() == 0:
         raise ValueError('Run compositor acceptance as an ordinary user')
@@ -208,9 +215,9 @@ def sway_component(root, env, processes):
     target = processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(text_path)])
     wait_for(lambda: text_path.exists())
     mapped = wait_for(lambda: mapped_target(
-        json.loads(run(['swaymsg', '-t', 'get_tree'], env).stdout), 'app.mouthtype.Acceptance'))
+        compositor_tree(root, env), 'app.mouthtype.Acceptance'))
     run(['swaymsg', '[con_id=' + str(mapped['id']) + '] focus'], env)
-    before = wait_for(lambda: focused_node(json.loads(run(['swaymsg', '-t', 'get_tree'], env).stdout)))
+    before = wait_for(lambda: focused_node(compositor_tree(root, env)))
     if before['app_id'] != 'app.mouthtype.Acceptance':
         raise ValueError('Native acceptance target does not have focus')
     clipboard = processes.start(['wl-copy', '--foreground', '--type', 'text/plain;charset=utf-8'], stdin=subprocess.PIPE)
@@ -227,7 +234,7 @@ def sway_component(root, env, processes):
             return None
         return value if value.get('text') == expected else None
     actual = wait_for(contents)
-    after = focused_node(json.loads(run(['swaymsg', '-t', 'get_tree'], env).stdout))
+    after = focused_node(compositor_tree(root, env))
     if before != after or run(['wl-paste', '--no-newline'], env).stdout != sentinel:
         raise ValueError('Focus or clipboard changed')
     if compositor.poll() is not None or target.poll() is not None:
@@ -278,6 +285,14 @@ def main():
                 result = check(root, env, processes)
             except BaseException:
                 traceback.print_exc(file=sys.stderr)
+                evidence = os.environ.get('MOUTHTYPE_ACCEPTANCE_EVIDENCE')
+                if evidence:
+                    for name in ('synthetic.wav', 'tree.json', 'target.json'):
+                        fixture = root / name
+                        if fixture.is_file() and fixture.stat().st_size <= 4 * 1024 * 1024:
+                            destination = Path(evidence) / (args.component + '-' + name)
+                            with fixture.open('rb') as source, destination.open('xb') as saved:
+                                shutil.copyfileobj(source, saved)
                 for _process, log in processes.items:
                     log.flush()
                     data = Path(log.name).read_bytes()[-16384:]

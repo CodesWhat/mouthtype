@@ -8,6 +8,7 @@ fi
 
 evidence=${1:?Provide the new CI evidence directory}
 ci_status=0
+export MOUTHTYPE_ACCEPTANCE_EVIDENCE="$evidence"
 python3 tools/linux-desktop/acceptance.py capabilities > "$evidence/capabilities.json"
 if ! timeout --kill-after=5s 60s python3 -W error::ResourceWarning -m unittest discover -s tools/linux-desktop -p 'test_*.py' > "$evidence/desktop-tests.log" 2>&1; then
   ci_status=1
