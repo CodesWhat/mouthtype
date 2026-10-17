@@ -19,25 +19,35 @@ import Testing
         let actions = SetupActions(refresh: count, microphone: count, accessibility: count, retrySpeech: count, inputSettings: count, done: count)
         let controller = SetupWindow(model: model, actions: actions)
         #expect(controller.window?.title == "Set Up Mouthtype")
-        try render(model: model, actions: actions, name: "setup-pending", size: NSSize(width: 720, height: 730))
-        #expect(!model.readiness.isReady)
-        await host.load()
-        diagnostics.microphoneStatus = .authorized
-        diagnostics.accessibilityGranted = true
-        diagnostics.hotkeyHealth = .listening
-        model.captureReady = true
-        #expect(model.readiness.isReady)
-        try render(model: model, actions: actions, name: "setup-ready", size: NSSize(width: 720, height: 730))
+        try render(model: model, actions: actions, name: "setup-pending", size: NSSize(width: 650, height: 590))
+        #expect(model.readiness.step == .microphone)
         diagnostics.microphoneStatus = .denied
+        try render(model: model, actions: actions, name: "setup-denied-minimum", size: NSSize(width: 560, height: 540))
+        diagnostics.microphoneStatus = .authorized
+        model.capturePreparing = true
+        try render(model: model, actions: actions, name: "setup-microphone-preparing", size: NSSize(width: 650, height: 590))
+        model.capturePreparing = false
+        model.captureError = "The selected microphone is unavailable. Connect an input device and try again."
+        try render(model: model, actions: actions, name: "setup-microphone-failed-minimum", size: NSSize(width: 560, height: 540))
+        model.captureReady = true
+        #expect(model.readiness.step == .accessibility)
+        try render(model: model, actions: actions, name: "setup-accessibility", size: NSSize(width: 650, height: 590))
+        diagnostics.accessibilityGranted = true
+        #expect(model.readiness.step == .speech)
+        try render(model: model, actions: actions, name: "setup-model-loading", size: NSSize(width: 650, height: 590))
+        await host.load()
         diagnostics.hotkeyHealth = .secureInputOn
-        #expect(!model.readiness.isReady)
-        try render(model: model, actions: actions, name: "setup-denied-minimum", size: NSSize(width: 620, height: 660))
+        #expect(model.readiness.step == .shortcut)
+        try render(model: model, actions: actions, name: "setup-input-minimum", size: NSSize(width: 560, height: 540))
+        diagnostics.hotkeyHealth = .listening
+        #expect(model.readiness.isReady)
+        try render(model: model, actions: actions, name: "setup-ready", size: NSSize(width: 650, height: 590))
         let failure = EngineHost(makeEngine: { _ in SetupRenderEngine(fails: true) })
         await failure.load()
         let failedModel = SetupModel(diagnostics: diagnostics, engine: failure, defaults: defaults)
-        diagnostics.microphoneStatus = .authorized
-        failedModel.captureError = "The selected microphone is unavailable. Connect an input device and try again."
-        try render(model: failedModel, actions: actions, name: "setup-failed-minimum", size: NSSize(width: 620, height: 660))
+        failedModel.captureReady = true
+        #expect(failedModel.readiness.step == .speech)
+        try render(model: failedModel, actions: actions, name: "setup-failed-minimum", size: NSSize(width: 560, height: 540))
         #expect(!failedModel.readiness.isReady)
         #expect(actionsInvoked == 0)
         #expect(controller.window?.isVisible == false)

@@ -18,10 +18,10 @@ import SwiftUI
     init(model: SetupModel, actions: SetupActions) {
         self.model = model
         refresh = actions.refresh
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 730),
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 590),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Set Up Mouthtype"
-        window.minSize = NSSize(width: 620, height: 660)
+        window.minSize = NSSize(width: 560, height: 540)
         window.isReleasedWhenClosed = false
         super.init(window: window)
         var actions = actions
@@ -48,108 +48,139 @@ struct SetupView: View {
     @Bindable var model: SetupModel
     var actions: SetupActions
 
+    private var step: SetupStep { model.readiness.step }
+
     var body: some View {
         VStack(spacing: 0) {
+            HStack {
+                Text("MOUTHTYPE / GET STARTED")
+                Spacer()
+                Text(step == .ready ? "READY" : "STEP \(step.rawValue) OF 4")
+                    .accessibilityIdentifier("setup-progress")
+            }
+            .font(.custom("JetBrainsMono-Medium", size: 10)).foregroundStyle(.secondary)
+            .padding(.horizontal, 32).padding(.top, 28)
             ScrollView {
-                VStack(alignment: .leading, spacing: 24) {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("MOUTHTYPE / GET STARTED").font(.custom("JetBrainsMono-Medium", size: 10)).foregroundStyle(.secondary)
-                        Text("A little less typing.").font(.custom("InstrumentSerif-Regular", size: 42))
-                        Text("Two permissions and a local speech model. Then you’re ready to talk.")
-                            .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
-                    VStack(spacing: 0) {
-                        row("Microphone", icon: "mic", complete: model.diagnostics.microphoneStatus == .authorized && model.captureReady,
-                            detail: microphoneDetail) { microphoneControls }
-                        row("Accessibility", icon: "hand.raised", complete: model.diagnostics.accessibilityGranted,
-                            detail: model.diagnostics.accessibilityGranted ? "Allowed. Your shortcut and text delivery can work across apps." : "Lets your shortcut work and puts text into your chosen app.") {
-                            if !model.diagnostics.accessibilityGranted {
-                                Button("Open System Settings…", action: actions.accessibility).accessibilityIdentifier("setup-accessibility")
-                            }
-                        }
-                        row("Speech model", icon: "waveform", complete: speechReady,
-                            detail: model.engine.statusText + "\nDownloaded once. Recognition runs on your Mac.") {
-                            if model.engine.state == .loading { ProgressView().controlSize(.small) }
-                            if case .failed = model.engine.state {
-                                Button("Retry model", action: actions.retrySpeech).accessibilityIdentifier("setup-retry-model")
-                            }
-                        }.accessibilityIdentifier("setup-model-status")
-                        row("Dictation shortcut", icon: "keyboard", complete: model.diagnostics.accessibilityGranted && model.diagnostics.hotkeyHealth == .listening && !model.readiness.globeConflict,
-                            detail: model.inputDetail) {
-                            Button("Input settings…", action: actions.inputSettings).accessibilityIdentifier("setup-input-settings")
-                        }
-                    }
-                    VStack(alignment: .leading, spacing: 9) {
-                        Label(model.readiness.isReady ? "Ready to dictate" : "Finish setup to start dictating.",
-                            systemImage: model.readiness.isReady ? "checkmark.circle.fill" : "info.circle")
-                            .font(.headline).foregroundStyle(model.readiness.isReady ? Color(red: 0.19, green: 0.36, blue: 0.34) : .primary)
-                            .accessibilityIdentifier("setup-readiness")
-                        Text(model.instructions).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                VStack(spacing: 20) {
+                    Image(systemName: symbol).font(.system(size: 28))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 68, height: 68)
+                        .background(Color(red: 0.19, green: 0.36, blue: 0.34).opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
+                        .accessibilityHidden(true)
+                    Text(title).font(.custom("InstrumentSerif-Regular", size: 42))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .accessibilityAddTraits(.isHeader)
+                    Text(detail).foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    controls
+                    if step == .ready {
                         Text("Change your shortcut or recording behavior in Settings. Fast and Thorough use Basic until their cleanup model is ready.")
-                            .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                            .font(.callout).foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                }.padding(32).frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 480, minHeight: 360)
+                .padding(32).frame(maxWidth: .infinity)
+                .accessibilityIdentifier("setup-card")
+                .id(step)
             }.defaultScrollAnchor(.top)
             VStack(spacing: 14) {
                 Divider()
                 HStack {
                     Button("Refresh status", action: actions.refresh).accessibilityIdentifier("setup-refresh")
                     Spacer()
-                    Button(model.readiness.isReady ? "Done" : "Set up later", action: actions.done)
-                        .keyboardShortcut(.defaultAction).accessibilityIdentifier("setup-done")
+                    if step == .ready {
+                        Button("Done", action: actions.done)
+                            .keyboardShortcut(.defaultAction).accessibilityIdentifier("setup-done")
+                    } else {
+                        Button("Set up later", action: actions.done).accessibilityIdentifier("setup-done")
+                    }
                 }
                 Text("Reopen setup from Settings → General.").font(.callout).foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }.padding(.horizontal, 32).padding(.bottom, 22)
         }
-        .font(.custom("InstrumentSans-Regular", size: 13))
+        .font(.custom("InstrumentSans-Regular", size: 14))
         .tint(Color(red: 0.19, green: 0.36, blue: 0.34))
         .background(Color(nsColor: .textBackgroundColor))
     }
 
-    private var speechReady: Bool { if case .ready = model.engine.state { true } else { false } }
-
-    private var microphoneDetail: String {
-        switch model.diagnostics.microphoneStatus {
-        case .notDetermined: "Lets Mouthtype hear you while you dictate."
-        case .denied, .restricted: "Microphone access is not allowed. Enable Mouthtype in System Settings."
-        case .authorized:
-            if model.capturePreparing { "Preparing microphone…" }
-            else if model.captureReady { "Allowed. Microphone prepared for dictation." }
-            else { model.captureError ?? "Access allowed. Prepare your microphone to continue." }
-        @unknown default: "Check Microphone access in System Settings."
+    private var title: String {
+        switch step {
+        case .microphone: "Let’s hear you."
+        case .accessibility: "Put your words to work."
+        case .speech: "Keep recognition on your Mac."
+        case .shortcut: "Your shortcut, ready."
+        case .ready: "You’re ready to talk."
         }
     }
 
-    @ViewBuilder private var microphoneControls: some View {
-        switch model.diagnostics.microphoneStatus {
-        case .notDetermined:
-            Button("Allow microphone…", action: actions.microphone).accessibilityIdentifier("setup-microphone")
-        case .denied, .restricted:
-            Button("Microphone Settings…", action: actions.microphone).accessibilityIdentifier("setup-microphone")
-        case .authorized:
-            if model.capturePreparing { ProgressView().controlSize(.small) }
-            else if !model.captureReady {
-                Button("Prepare microphone", action: actions.microphone).accessibilityIdentifier("setup-microphone")
+    private var symbol: String {
+        switch step {
+        case .microphone: "mic"
+        case .accessibility: "hand.raised"
+        case .speech: "waveform"
+        case .shortcut: "keyboard"
+        case .ready: "checkmark"
+        }
+    }
+
+    private var detail: String {
+        switch step {
+        case .microphone:
+            switch model.diagnostics.microphoneStatus {
+            case .notDetermined: "Allow microphone access so Mouthtype can hear you while you dictate."
+            case .denied, .restricted: "Microphone access is not allowed. Enable Mouthtype in System Settings, then return here."
+            case .authorized:
+                if model.capturePreparing { "Preparing your microphone…" }
+                else { model.captureError ?? "Access allowed. Prepare your microphone to continue." }
+            @unknown default: "Check Microphone access in System Settings."
             }
-        @unknown default:
-            Button("Microphone Settings…", action: actions.microphone)
+        case .accessibility:
+            "Accessibility lets your shortcut work and puts text into your chosen app. Enable Mouthtype in System Settings, then return here."
+        case .speech:
+            model.engine.statusText + "\nDownloaded once. Recognition runs on your Mac."
+        case .shortcut:
+            model.inputDetail + "\nCheck your shortcut in Input settings to continue."
+        case .ready:
+            model.instructions
         }
     }
 
-    private func row<Controls: View>(_ title: String, icon: String, complete: Bool, detail: String,
-        @ViewBuilder controls: () -> Controls) -> some View {
-        VStack(spacing: 0) {
-            Divider()
-            HStack(alignment: .center, spacing: 16) {
-                Image(systemName: complete ? "checkmark.circle" : icon).font(.title3).foregroundStyle(.secondary)
-                    .frame(width: 28).accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(title).font(.headline)
-                    Text(detail).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                }.frame(maxWidth: .infinity, alignment: .leading)
-                controls().fixedSize()
-            }.padding(.vertical, 20).frame(maxWidth: .infinity, alignment: .leading)
+    @ViewBuilder private var controls: some View {
+        switch step {
+        case .microphone:
+            if model.capturePreparing {
+                ProgressView().controlSize(.small)
+            } else {
+                action(microphoneAction, identifier: "setup-microphone", perform: actions.microphone)
+            }
+        case .accessibility:
+            action("Open System Settings…", identifier: "setup-accessibility", perform: actions.accessibility)
+        case .speech:
+            if case .failed = model.engine.state {
+                action("Retry model", identifier: "setup-retry-model", perform: actions.retrySpeech)
+            } else {
+                ProgressView().controlSize(.small).accessibilityLabel("Preparing speech model")
+            }
+        case .shortcut:
+            action("Input settings…", identifier: "setup-input-settings", perform: actions.inputSettings)
+        case .ready:
+            EmptyView()
         }
+    }
+
+    private var microphoneAction: String {
+        switch model.diagnostics.microphoneStatus {
+        case .notDetermined: "Allow microphone…"
+        case .authorized: "Prepare microphone"
+        default: "Microphone Settings…"
+        }
+    }
+
+    private func action(_ title: String, identifier: String, perform: @escaping () -> Void) -> some View {
+        Button(title, action: perform).buttonStyle(.borderedProminent).controlSize(.large)
+            .keyboardShortcut(.defaultAction).accessibilityIdentifier(identifier)
     }
 }

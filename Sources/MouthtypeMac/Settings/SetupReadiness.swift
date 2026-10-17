@@ -1,6 +1,10 @@
 import AVFoundation
 import Foundation
 
+enum SetupStep: Int {
+    case microphone = 1, accessibility, speech, shortcut, ready
+}
+
 struct SetupReadiness {
     var microphone: AVAuthorizationStatus
     var accessibility: Bool
@@ -8,6 +12,14 @@ struct SetupReadiness {
     var speech: EngineState
     var captureReady: Bool
     var globeConflict: Bool = false
+
+    var step: SetupStep {
+        guard microphone == .authorized, captureReady else { return .microphone }
+        guard accessibility else { return .accessibility }
+        guard case .ready = speech else { return .speech }
+        guard input == .listening, !globeConflict else { return .shortcut }
+        return .ready
+    }
 
     var isReady: Bool {
         guard microphone == .authorized, accessibility, input == .listening, captureReady, !globeConflict else { return false }
