@@ -6,10 +6,11 @@ import sys
 
 import gi
 gi.require_version('Gtk', '3.0')
-from gi.repository import Gtk
+from gi.repository import Gtk, GLib
 
 
 def activate(app):
+    GLib.set_prgname('app.mouthtype.Acceptance')
     window = Gtk.ApplicationWindow(application=app)
     window.set_default_size(800, 400)
     editor = Gtk.TextView()

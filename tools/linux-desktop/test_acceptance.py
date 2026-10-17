@@ -46,5 +46,35 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(mapped_target(tree, 'app.mouthtype.Acceptance'),
                          {'id': 17, 'app_id': 'app.mouthtype.Acceptance'})
 
+class NativeTargetTests(unittest.TestCase):
+    def test_existing_gtk_program_name_is_replaced_before_creating_surface(self):
+        import runpy
+        import sys
+        import types
+        from unittest.mock import patch
+        name = ['wayland_target.py']
+        observed = []
+        class SurfaceCreated(Exception):
+            pass
+        class Application:
+            def __init__(self, **kwargs):
+                pass
+            def connect(self, event, callback):
+                self.activate = callback
+            def run(self, args):
+                self.activate(self)
+        def window(**kwargs):
+            observed.append(name[0])
+            raise SurfaceCreated()
+        gi = types.ModuleType('gi')
+        gi.require_version = lambda *args: None
+        repository = types.ModuleType('gi.repository')
+        repository.Gtk = types.SimpleNamespace(Application=Application, ApplicationWindow=window)
+        repository.GLib = types.SimpleNamespace(set_prgname=lambda value: name.__setitem__(0, value))
+        with patch.dict(sys.modules, {'gi': gi, 'gi.repository': repository}):
+            with self.assertRaises(SurfaceCreated):
+                runpy.run_path(str(Path(__file__).with_name('wayland_target.py')))
+        self.assertEqual(observed, ['app.mouthtype.Acceptance'])
+
 if __name__ == '__main__':
     unittest.main()
