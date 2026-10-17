@@ -928,12 +928,73 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.log.all.count == 1)
     }
 
-    @Test func pressWithoutMicrophoneAccessOnlyShowsAMessage() async {
+    @Test(arguments: [CaptureError.microphoneDenied, .microphonePending])
+    func unpreparedCaptureReportsItsActualPermissionFailure(error: CaptureError) async {
         let rig = Rig()
         rig.capture.isPrepared = false
+        rig.capture.startError = error
         await rig.controller.handle(.pressed(at: keyDown))
-        #expect(rig.log.all == ["pill.message:Microphone access needed"])
+
+        #expect(rig.log.contains("capture.start") && rig.log.contains("capture.cancel"))
+        #expect(rig.pill.messages == [PillMessage("Microphone access needed", detail: "Allow it in System Settings", isError: true)])
+        #expect(!rig.log.contains("pill.recording") && !rig.log.contains("engine.transcribe"))
+        #expect(rig.inserter.delivered.isEmpty && rig.cards.presented.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.failed])
+        #expect(rig.controller.phase == .idle && rig.finishedAttempts.count == 1)
+    }
+
+    @Test(arguments: [CaptureError.noInputDevice, .invalidInputFormat(sampleRate: 0, channels: 0)])
+    func unpreparedCaptureRetriesTheDeviceOnEachExplicitPress(error: CaptureError) async {
+        let rig = Rig()
+        rig.capture.isPrepared = false
+        rig.capture.startError = error
+        await rig.controller.handle(.pressed(at: keyDown))
+
+        #expect(rig.pill.messages == [PillMessage("No microphone found", detail: "Connect one and try again", isError: true)])
+        #expect(rig.store.finishes.map(\.0) == [.failed])
+        #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
         #expect(rig.controller.phase == .idle)
+
+        rig.capture.startError = nil
+        await rig.settle()
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
+        #expect(rig.inserter.delivered.isEmpty)
+        await rig.dictate()
+
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == 2)
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.store.finishes.map(\.0) == [.failed])
+        #expect(rig.controller.phase == .idle)
+    }
+
+    @Test(arguments: [true, false])
+    func unpreparedCapturePreservesQueuedReleaseOrCancel(cancel: Bool) async {
+        let rig = Rig()
+        rig.capture.isPrepared = false
+        let starts = Rig.Counter()
+        rig.capture.duringStart = {
+            starts.count += 1
+            await rig.settle()
+            #expect(!rig.log.contains("capture.stop") && !rig.log.contains("capture.cancel"))
+        }
+        let (events, sink) = AsyncStream.makeStream(of: HotkeyEvent.self)
+        sink.yield(.pressed(at: keyDown))
+        sink.yield(cancel ? .cancelled(reason: .escape) : .released(at: keyUp))
+        sink.finish()
+        await rig.controller.consume(events)
+        await rig.controller.waitForProcessing()
+        await rig.settle()
+
+        #expect(starts.count == 1)
+        #expect(rig.store.finishes.map(\.0) == (cancel ? [.cancelled] : []))
+        #expect(rig.inserter.delivered == (cancel ? [] : ["Hello world."]))
+        #expect(rig.log.contains("engine.transcribe") == !cancel)
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+        #expect(rig.controller.phase == .idle && rig.finishedAttempts.count == 1)
+        rig.clock.advance(by: 10)
+        await rig.settle()
+        #expect(rig.clock.sleeperCount == 0)
+        #expect(rig.inserter.delivered == (cancel ? [] : ["Hello world."]))
     }
 
     @Test func pressWhileProcessingStartsRecordingAndWaitsItsTurn() async {
@@ -1515,9 +1576,10 @@ private final class SlowCapture: DictationCapturing {
 
     // MARK: Microphone lost
 
-    @Test(arguments: [true, false])
-    func aMicrophoneLostDuringStartupStillOffersTheSavedTake(duringCaptureStart: Bool) async {
+    @Test(arguments: [true, false], [true, false])
+    func aMicrophoneLostDuringStartupStillOffersTheSavedTake(duringCaptureStart: Bool, prepared: Bool) async {
         let rig = Rig()
+        rig.capture.isPrepared = prepared
         let interrupt: @MainActor @Sendable () async -> Void = {
             rig.capture.interrupt()
             rig.capture.interrupt()
