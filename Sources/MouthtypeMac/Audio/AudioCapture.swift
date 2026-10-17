@@ -142,6 +142,10 @@ public actor AudioCapture {
         recording ? buffer.samples(from: offset) : []
     }
 
+    func previewSnapshot(maxSamples: Int) -> PreviewAudio {
+        recording ? buffer.previewSnapshot(maxSamples: min(maxSamples, 128_000)) : PreviewAudio(samples: [], capturedSampleCount: 0)
+    }
+
     /// Discards a recording in progress. Safe when idle.
     public func cancel() {
         if recording {

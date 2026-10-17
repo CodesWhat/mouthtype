@@ -43,6 +43,10 @@ private final class FakeCapture: DictationCapturing {
         return [Float](repeating: 0.1, count: available - offset)
     }
 
+    func previewSnapshot(maxSamples: Int) async -> PreviewAudio {
+        PreviewAudio(samples: Array(repeating: 0.1, count: min(available, maxSamples)), capturedSampleCount: available)
+    }
+
     /// The input goes away.
     func interrupt() { onInterrupted?() }
 
@@ -75,6 +79,11 @@ private final class FakeEngine: DictationEngine {
         ],
         processingSeconds: 0.2, engineID: "fake"
     )
+    var previewCalls = 0
+    func preview(samples: [Float]) async throws -> String? {
+        previewCalls += 1
+        return "Provisional words that must not be inserted."
+    }
     var samplesSeen: [Int] = []
     /// The text of the next transcriptions, in order, before `result`.
     var texts: [String] = []
@@ -233,6 +242,8 @@ private final class FakePill: DictationPill {
     let log: CallLog
     var messages: [PillMessage] = []
     var notices: [String] = []
+    var previews: [String] = []
+    func showPreview(_ text: String) { previews.append(text) }
 
     init(log: CallLog) {
         self.log = log
@@ -416,7 +427,7 @@ private struct Rig {
         audio: CapturedAudio = capturedTone(), withStore: Bool = true, settings: CleanupSettings = CleanupSettings(),
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
-        quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }
+        quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -437,7 +448,8 @@ private struct Rig {
         pipeline.textPipeline = textPipeline
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
-            cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil
+            cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil,
+            preview: LivePreviewSession(pause: { try await clock.sleep(forSeconds: 2) }), previewEnabled: { previewEnabled }
         )
         let counter = Counter()
         finishedAttempts = counter
@@ -687,6 +699,38 @@ private final class FakeCorrections: CorrectionObserving {
 
 @MainActor
 @Suite struct DictationControllerTests {
+    @Test @MainActor func provisionalWordsNeverInsertAndFinalDeliversOnce() async {
+        let rig = Rig(previewEnabled: true)
+        rig.capture.available = 48_000
+        await rig.controller.handle(.pressed(at: keyDown))
+        for _ in 0..<200 where rig.clock.sleeperCount < 2 { await Task.yield() }
+        rig.clock.advance(by: 2)
+        for _ in 0..<200 where rig.engine.previewCalls == 0 { await Task.yield() }
+        await rig.settle()
+        #expect(rig.pill.previews.contains("Provisional words that must not be inserted."))
+        #expect(rig.inserter.delivered.isEmpty)
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.pill.previews.last == "")
+    }
+
+    @Test @MainActor func canceledPreviewNeverDeliversAndDefaultOffDoesNoInference() async {
+        for enabled in [false, true] {
+            let rig = Rig(previewEnabled: enabled)
+            rig.capture.available = 48_000
+            await rig.controller.handle(.pressed(at: keyDown))
+            for _ in 0..<100 { await Task.yield() }
+            rig.clock.advance(by: 2)
+            for _ in 0..<100 { await Task.yield() }
+            #expect(rig.engine.previewCalls == (enabled ? 1 : 0))
+            await rig.controller.handle(.cancelled(reason: .escape))
+            await rig.settle()
+            #expect(rig.inserter.delivered.isEmpty)
+            #expect(rig.pill.previews.last == "")
+        }
+    }
+
     @Test func recordingWaitsWhileSavedAudioIsBeingRecovered() async {
         let rig = Rig()
         rig.controller.canStartRecording = { false }

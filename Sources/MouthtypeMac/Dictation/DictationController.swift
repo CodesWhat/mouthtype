@@ -36,6 +36,8 @@ final class DictationController {
     /// Fired when a lock ends or is refused, so the hotkey side can drop its own lock state.
     @ObservationIgnored var onLockEnded: (@MainActor () -> Void)?
 
+    @ObservationIgnored private let preview: LivePreviewSession
+    @ObservationIgnored private let previewEnabled: @MainActor () -> Bool
     @ObservationIgnored private let capture: any DictationCapturing
     @ObservationIgnored private let engine: any DictationEngine
     @ObservationIgnored private let pipeline: DictationPipeline
@@ -92,8 +94,11 @@ final class DictationController {
     init(
         capture: any DictationCapturing, engine: any DictationEngine, pipeline: DictationPipeline,
         inserter: any DictationInserting, pill: any DictationPill, sounds: any SoundPlayer, clock: any DictationClock,
-        cards: any DictationCards, limits: Limits = .standard, audioQuiet: (any RecordingAudioQuieting)? = nil
+        cards: any DictationCards, limits: Limits = .standard, audioQuiet: (any RecordingAudioQuieting)? = nil,
+        preview: LivePreviewSession = LivePreviewSession(), previewEnabled: @escaping @MainActor () -> Bool = { false }
     ) {
+        self.preview = preview
+        self.previewEnabled = previewEnabled
         self.limits = limits
         self.capture = capture
         self.engine = engine
@@ -275,6 +280,14 @@ final class DictationController {
 
     /// The length limit and the in-progress save, both running from the moment the recording starts.
     private func startTimers(for session: DictationSession) {
+        if previewEnabled() {
+            let capture = capture
+            let engine = engine
+            preview.start(source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0) }, update: { [weak self] text in
+                guard let self, self.phase == .recording, self.session?.id == session.id else { return }
+                self.pill.showPreview(text)
+            })
+        }
         capTimer?.cancel()
         let warning = limits.warningAfter
         let remaining = max(0, limits.stopAfter - warning)
@@ -319,6 +332,8 @@ final class DictationController {
     private func endTimers() -> Task<Void, Never>? {
         pendingQuietStart?.cancel()
         pendingQuietStart = nil
+        preview.stop()
+        pill.showPreview("")
         capTimer?.cancel()
         capTimer = nil
         if limitCardUp {
