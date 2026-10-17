@@ -1,0 +1,56 @@
+name: Disposable Arch runtime smoke
+
+on:
+  pull_request:
+    paths: ["tools/linux-runtime-smoke/**", ".github/workflows/linux-runtime-smoke.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  arch-cpu-engines:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      image: archlinux:base-20261011.0.609700@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+      options: --init
+    steps:
+      - name: Install signed Arch prerequisites on this disposable runner
+        run: |
+          timeout --signal=TERM --kill-after=10s 180s pacman -Syu --noconfirm --needed cmake ninja gcc git curl python python-pip espeak-ng sox procps-ng
+          useradd --create-home --shell /bin/bash mouthtype-ci
+          mkdir /home/mouthtype-ci/runtime
+          chown mouthtype-ci:mouthtype-ci /home/mouthtype-ci/runtime
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prepare synthetic evidence directory
+        run: |
+          mkdir linux-runtime-evidence
+          chown mouthtype-ci:mouthtype-ci linux-runtime-evidence
+      - name: Build pinned CPU runtime and evaluate unchanged exact synthetic fixtures
+        env:
+          GITHUB_ACTIONS: "true"
+          RUNNER_TEMP: /home/mouthtype-ci/runtime
+          PYTHONDONTWRITEBYTECODE: "1"
+          MOUTHTYPE_SMOKE_EVIDENCE: ${{ github.workspace }}/linux-runtime-evidence
+        run: runuser -u mouthtype-ci -- bash tools/linux-runtime-smoke/run.sh
+      - name: Verify and clean remaining owned engine processes
+        if: always()
+        run: |
+          if id mouthtype-ci >/dev/null 2>&1; then
+            if pgrep -a -u mouthtype-ci; then
+              pkill -TERM -u mouthtype-ci || true
+              sleep 1
+              pkill -KILL -u mouthtype-ci || true
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: linux-arch-runtime-evidence
+          path: linux-runtime-evidence/
+          retention-days: 14
+          if-no-files-found: warn
