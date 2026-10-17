@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 
 const pages = [
   ["/start/", "Your first words."],
+  ["/linux/", "Mouthtype for Linux."],
   ["/docs/", "The useful details."],
   ["/why-mouthtype/", "A little less between you and your words."],
   ["/compare/", "Find your fit."],
