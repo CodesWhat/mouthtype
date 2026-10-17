@@ -129,6 +129,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 25) {
             heading("General", "A little less typing.", "Set your shortcut, choose your cleanup, and carry on.")
             Button("Set Up Mouthtype…", action: actions.openSetup).accessibilityIdentifier("settings-setup")
+            MicrophoneSettingsSection(model: model.microphone)
             VStack(spacing: 0) {
                 settingRow("Dictation shortcut", "A key or combination that feels natural.") {
                     Text(model.shortcut).font(.system(.body, design: .monospaced)).padding(8)
@@ -153,6 +154,13 @@ struct SettingsView: View {
                     }.labelsHidden().frame(width: 135)
                 }
                 cleanerStatus
+                Divider()
+                settingRow("Quiet other audio", "Mute the current output while recording, on supported devices.") {
+                    Toggle("Quiet other audio", isOn: Binding(get: { model.quietOtherAudio }, set: model.setQuietOtherAudio))
+                        .labelsHidden().toggleStyle(.switch).accessibilityIdentifier("settings-quiet-audio")
+                }
+                Divider()
+                LivePreviewSettingsRow(model: model)
                 Divider()
                 settingRow("Recording sounds", "A small cue when you start and finish.") {
                     Toggle("Recording sounds", isOn: Binding(get: { model.sounds }, set: model.setSounds)).labelsHidden().toggleStyle(.switch)

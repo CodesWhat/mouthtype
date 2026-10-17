@@ -4,6 +4,26 @@ import MouthtypeCore
 @testable import MouthtypeMac
 
 @MainActor @Suite struct SettingsWindowTests {
+    @Test func quietOtherAudioPersistsAndRefreshesWithoutChangingSounds() {
+        let name = "SettingsQuietTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        var changes: [Bool] = []
+        let model = SettingsModel(defaults: defaults, onQuietOtherAudioChanged: { changes.append($0) })
+        let sounds = model.sounds
+        #expect(!model.quietOtherAudio)
+        model.setQuietOtherAudio(true)
+        #expect(model.quietOtherAudio)
+        #expect(QuietAudioPreference.isEnabled(defaults))
+        model.setQuietOtherAudio(false)
+        #expect(!QuietAudioPreference.isEnabled(defaults))
+        QuietAudioPreference.set(true, in: defaults)
+        model.refresh()
+        #expect(model.quietOtherAudio)
+        #expect(model.sounds == sounds)
+        #expect(changes == [true, false])
+    }
+
     @Test func cleanupEditsPersistWithoutChangingOtherPreferences() {
         let name = "SettingsTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

@@ -36,12 +36,15 @@ final class DictationController {
     /// Fired when a lock ends or is refused, so the hotkey side can drop its own lock state.
     @ObservationIgnored var onLockEnded: (@MainActor () -> Void)?
 
+    @ObservationIgnored private let preview: LivePreviewSession
+    @ObservationIgnored private let previewEnabled: @MainActor () -> Bool
     @ObservationIgnored private let capture: any DictationCapturing
     @ObservationIgnored private let engine: any DictationEngine
     @ObservationIgnored private let pipeline: DictationPipeline
     @ObservationIgnored private let inserter: any DictationInserting
     @ObservationIgnored private let pill: any DictationPill
     @ObservationIgnored private let sounds: any SoundPlayer
+    @ObservationIgnored private let audioQuiet: (any RecordingAudioQuieting)?
     @ObservationIgnored private let clock: any DictationClock
     @ObservationIgnored private let cards: any DictationCards
     /// Told when a paste lands and when the next dictation starts, so edits to the pasted text can be learned from.
@@ -56,6 +59,7 @@ final class DictationController {
     /// The capture's stop for the last release. The next press waits for it before the capture starts again.
     @ObservationIgnored private var stopping: Task<CapturedAudio, Error>?
     @ObservationIgnored private var capTimer: Task<Void, Never>?
+    @ObservationIgnored private var pendingQuietStart: Task<Void, Never>?
     @ObservationIgnored private var flusher: Task<Void, Never>?
     @ObservationIgnored private var limitCardUp = false
     @ObservationIgnored private var interrupted: PendingInterruption?
@@ -90,8 +94,11 @@ final class DictationController {
     init(
         capture: any DictationCapturing, engine: any DictationEngine, pipeline: DictationPipeline,
         inserter: any DictationInserting, pill: any DictationPill, sounds: any SoundPlayer, clock: any DictationClock,
-        cards: any DictationCards, limits: Limits = .standard
+        cards: any DictationCards, limits: Limits = .standard, audioQuiet: (any RecordingAudioQuieting)? = nil,
+        preview: LivePreviewSession = LivePreviewSession(), previewEnabled: @escaping @MainActor () -> Bool = { false }
     ) {
+        self.preview = preview
+        self.previewEnabled = previewEnabled
         self.limits = limits
         self.capture = capture
         self.engine = engine
@@ -99,6 +106,7 @@ final class DictationController {
         self.inserter = inserter
         self.pill = pill
         self.sounds = sounds
+        self.audioQuiet = audioQuiet
         self.clock = clock
         self.cards = cards
         cards.onUndo = { [weak self] in
@@ -198,6 +206,7 @@ final class DictationController {
         }
         if startError == nil {
             sounds.playStart()
+            beginQuietAfterStartCue()
             pill.showRecording()
             pipeline.smart?.recordingStarted()
         }
@@ -214,6 +223,30 @@ final class DictationController {
             await captureInterrupted()
         } else {
             startTimers(for: current)
+        }
+    }
+
+    private func beginQuietAfterStartCue() {
+        pendingQuietStart?.cancel()
+        pendingQuietStart = nil
+        guard let audioQuiet else { return }
+        let duration = sounds.startCueDuration
+        guard duration > 0 else { audioQuiet.begin(); return }
+        let clock = clock
+        let sounds = sounds
+        pendingQuietStart = Task { [weak self] in
+            do {
+                try await clock.sleep(forSeconds: duration)
+                // Allow a bounded playback lag beyond the decoded duration. A stuck cue skips quieting this take.
+                for _ in 0..<20 {
+                    guard !Task.isCancelled, self?.phase == .recording, self?.interruptedDuringStart == false else { return }
+                    if !sounds.isStartCuePlaying {
+                        audioQuiet.begin()
+                        return
+                    }
+                    try await clock.sleep(forSeconds: 0.05)
+                }
+            } catch { return }
         }
     }
 
@@ -247,6 +280,14 @@ final class DictationController {
 
     /// The length limit and the in-progress save, both running from the moment the recording starts.
     private func startTimers(for session: DictationSession) {
+        if previewEnabled() {
+            let capture = capture
+            let engine = engine
+            preview.start(source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0) }, update: { [weak self] text in
+                guard let self, self.phase == .recording, self.session?.id == session.id else { return }
+                self.pill.showPreview(text)
+            })
+        }
         capTimer?.cancel()
         let warning = limits.warningAfter
         let remaining = max(0, limits.stopAfter - warning)
@@ -289,6 +330,10 @@ final class DictationController {
 
     /// Stops the timers and returns the save in progress, which finishes before anything else writes the audio.
     private func endTimers() -> Task<Void, Never>? {
+        pendingQuietStart?.cancel()
+        pendingQuietStart = nil
+        preview.stop()
+        pill.showPreview("")
         capTimer?.cancel()
         capTimer = nil
         if limitCardUp {
@@ -316,7 +361,10 @@ final class DictationController {
         let saving = endTimers()
         endHandsFree()
         // The stop starts now so the next press can follow it; the rest waits its turn behind earlier dictations.
-        let stopped = Task { try await capture.stopSalvaging() }
+        let stopped = Task {
+            defer { audioQuiet?.end() }
+            return try await capture.stopSalvaging()
+        }
         stopping = stopped
         phase = .processing
         showProcessing()
@@ -427,6 +475,7 @@ final class DictationController {
         session = nil
         let saving = endTimers()
         await capture.cancel()
+        audioQuiet?.end()
         await saving?.value
         pipeline.discardPartial(current)
         await pipeline.finish(current, .tooShort)
@@ -446,6 +495,7 @@ final class DictationController {
         } catch {
             await capture.cancel()
         }
+        audioQuiet?.end()
         await saving?.value
         pipeline.discardPartial(current)
         let cancelledAt = clock.nowNanos()
@@ -529,6 +579,7 @@ final class DictationController {
             Log.app.error("could not keep the interrupted capture: \(String(describing: error), privacy: .public)")
             await capture.cancel()
         }
+        audioQuiet?.end()
         await saving?.value
         if salvaged?.samples.isEmpty != false {
             salvaged = await pipeline.recoverPartial(current)
@@ -611,6 +662,10 @@ final class DictationController {
         case .microphoneDenied, .microphonePending: return microphoneAccessMessage
         case .noInputDevice, .invalidInputFormat:
             return PillMessage("No microphone found", detail: "Connect one and try again", isError: true)
+        case .selectedMicrophoneUnavailable:
+            return PillMessage("Chosen microphone unavailable", detail: "Choose an input in Mouthtype Settings", isError: true)
+        case .microphonePreferenceUnreadable:
+            return PillMessage("Check microphone choice", detail: "Choose an input in Mouthtype Settings", isError: true)
         case .routeChanged: return PillMessage("Microphone changed", detail: "Try again", isError: true)
         case .engineStartFailed, .notRecording: return PillMessage("Couldn't record", detail: "Try again", isError: true)
         }

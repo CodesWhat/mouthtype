@@ -25,6 +25,7 @@ public final class PillController {
 
     private(set) var state: State = .hidden
     let panel: PillPanel
+    let previewView: PillPreviewView
     let host: PillHostView
     private(set) var skinKind: PillSkinKind
     private(set) var skin: any PillSkinView
@@ -55,6 +56,7 @@ public final class PillController {
         hiFiSize = HiFiPillSizePreference.current(defaults)
         skin = Self.makeSkin(skinKind, size: hiFiSize)
         host = PillHostView(frame: NSRect(origin: .zero, size: Self.panelSize))
+        previewView = PillPreviewView(frame: NSRect(x: Self.horizontalPadding, y: 94, width: ClassicPillLayout.messageCap, height: 100))
         panel = PillPanel(
             contentRect: NSRect(origin: .zero, size: Self.panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
@@ -76,10 +78,14 @@ public final class PillController {
         host.onPress = { [weak self] control in self?.press(control) }
         host.onActivate = { [weak self] control in self?.onControl?(control) }
         install(skin)
+        host.addSubview(previewView)
         _ = NotificationCenter.default.addObserver(
             forName: Typography.didChange, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.skin.applyTypography(Typography.current()) }
+            MainActor.assumeIsolated {
+                self?.skin.applyTypography(Typography.current())
+                self?.previewView.applyTypography(Typography.current())
+            }
         }
     }
 
@@ -109,7 +115,7 @@ public final class PillController {
         new.frame = host.bounds
         new.autoresizingMask = [.width, .height]
         new.applyTypography(Typography.current())
-        host.addSubview(new)
+        host.addSubview(new, positioned: .below, relativeTo: previewView.superview == host ? previewView : nil)
         host.skinReplaced()
     }
 
@@ -152,6 +158,11 @@ public final class PillController {
         presentMessage(message, overRecording: true, duration: duration) { [weak self] in self?.showHandsFree() }
     }
 
+    func showPreview(_ text: String) {
+        guard state == .recording || state == .handsFree else { return }
+        previewView.update(text)
+    }
+
     public func showProcessing() {
         enter(.processing)
         recordingStart = nil
@@ -171,6 +182,7 @@ public final class PillController {
     }
 
     public func hide() {
+        previewView.update("")
         guard state != .hidden else { return }
         generation += 1
         state = .hidden
@@ -223,6 +235,7 @@ public final class PillController {
         generation += 1
         let wasShown = isShown
         state = next
+        if next != .recording && next != .handsFree { previewView.update("") }
         if next != .handsFree { endInteraction() }
         guard !wasShown else { return }
         applyPendingSkin()

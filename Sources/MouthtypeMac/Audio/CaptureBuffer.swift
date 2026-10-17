@@ -80,6 +80,14 @@ final class CaptureBuffer: @unchecked Sendable {
         return Array(samples[max(0, offset)...])
     }
 
+    /// Copies only the newest bounded window under the same lock as the render callback.
+    func previewSnapshot(maxSamples: Int) -> PreviewAudio {
+        lock.lock()
+        defer { lock.unlock() }
+        guard isOpen, maxSamples > 0 else { return PreviewAudio(samples: [], capturedSampleCount: 0) }
+        return PreviewAudio(samples: Array(samples.suffix(maxSamples)), capturedSampleCount: samples.count)
+    }
+
     /// Appends converted 16 kHz samples from one tap callback.
     func append(_ chunk: UnsafeBufferPointer<Float>, inputFrames: Int, at now: UInt64) {
         lock.lock()
