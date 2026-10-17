@@ -112,6 +112,14 @@ class DoctorTests(unittest.TestCase):
                 self.config.write_text(json.dumps(config | {field: 'missing.json', 'phrase_clipboard': True}))
                 self.assertEqual(self.check(self.diagnose(), field)['status'], 'error')
 
+    def test_clipboard_phrases_require_helper_without_reading_it(self):
+        library = self.root / 'phrases.json'
+        library.write_text('[{"trigger":"paste it","expansion":"{clipboard}"}]')
+        self.config.write_text(json.dumps({'engine_config': 'engines.json', 'phrases': str(library), 'phrase_clipboard': True}))
+        report = self.diagnose(which=lambda command: None if command == 'wl-paste' else '/bin/' + command)
+        self.assertFalse(report['ready'])
+        self.assertEqual(self.check(report, 'phrase_clipboard')['status'], 'error')
+
     def test_cli_missing_config_json_and_human_output(self):
         self.config.unlink()
         command = [sys.executable, desktop.__file__, '--config', str(self.config),

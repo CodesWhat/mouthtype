@@ -78,6 +78,10 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
                     add(field, 'ok', 'Configured library is valid. Clipboard was not read.')
                 except (OSError, ValueError):
                     add(field, 'error', 'Configured library is missing or invalid.', 'Repair the configured ' + field + ' JSON file.')
+        if 'phrases' in config and config.get('phrase_clipboard', False):
+            clipboard = which('wl-paste') is not None
+            add('phrase_clipboard', 'ok' if clipboard else 'error', 'Clipboard helper availability checked; clipboard was not read.',
+                '' if clipboard else 'Install wl-clipboard using normal package policy, or disable phrase_clipboard.')
         delivery = config['delivery']['mode']
         available = delivery == 'recover' or (config['delivery'].get('allow_unknown_secure_field') is True
                                               and all(which(name) for name in ('hyprctl', 'wtype')))
