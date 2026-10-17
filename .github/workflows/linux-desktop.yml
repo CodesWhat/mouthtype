@@ -134,6 +134,7 @@ jobs:
           runuser -u mouthtype-ci -- /usr/bin/mouthtype-linux recover --help > linux-desktop-evidence/arch-package/installed-recovery-help.txt
           timeout --kill-after=5s 30s runuser -u mouthtype-ci -- python -W error::ResourceWarning -m unittest discover -s /usr/lib/mouthtype-linux/tools/linux-desktop -p test_spellings.py > linux-desktop-evidence/arch-package/installed-payload-tests.log 2>&1
           timeout --kill-after=5s 30s runuser -u mouthtype-ci -- python -W error::ResourceWarning -m unittest discover -s /usr/lib/mouthtype-linux/tools/linux-desktop -p 'test_phrase*.py' > linux-desktop-evidence/arch-package/installed-phrase-tests.log 2>&1
+          timeout --kill-after=5s 30s runuser -u mouthtype-ci -- python -W error::ResourceWarning -m unittest discover -s /usr/lib/mouthtype-linux/tools/linux-desktop -p 'test_cleanup*.py' > linux-desktop-evidence/arch-package/installed-cleanup-tests.log 2>&1
           pacman -Qkk mouthtype-linux > linux-desktop-evidence/arch-package/installed-file-check.txt
           python - <<'PY'
           import hashlib, json, plistlib, subprocess

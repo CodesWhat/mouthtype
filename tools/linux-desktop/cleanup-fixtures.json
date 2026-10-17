@@ -1,0 +1,1031 @@
+[
+  {
+    "name": "SpokenCommandsTests-1",
+    "input": "bring the deck new line thanks",
+    "expected": "bring the deck\nThanks",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-2",
+    "input": "bring the deck newline thanks",
+    "expected": "bring the deck\nThanks",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-3",
+    "input": "first part new paragraph second part",
+    "expected": "first part\n\nSecond part",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-4",
+    "input": "PM. New line. Bring the deck",
+    "expected": "PM.\nBring the deck",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-5",
+    "input": "Hello new line",
+    "expected": "Hello\n",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-6",
+    "input": "I'm done period",
+    "expected": "I'm done.",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-7",
+    "input": "I'm done period Next one",
+    "expected": "I'm done. Next one",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-8",
+    "input": "are you sure question mark",
+    "expected": "are you sure?",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-9",
+    "input": "are you sure question mark yes",
+    "expected": "are you sure? Yes",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-10",
+    "input": "wow exclamation point",
+    "expected": "wow!",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-11",
+    "input": "wow exclamation mark that's great",
+    "expected": "wow! That's great",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-12",
+    "input": "the list comma Then more",
+    "expected": "the list, Then more",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-13",
+    "input": "dear Sam comma",
+    "expected": "dear Sam,",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-14",
+    "input": "dear Sam comma I hope",
+    "expected": "dear Sam, I hope",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-15",
+    "input": "note colon Buy milk",
+    "expected": "note: Buy milk",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-16",
+    "input": "Hello comma world period How are you question mark",
+    "expected": "Hello, world. How are you?",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-17",
+    "input": "eggs comma milk comma and coffee",
+    "expected": "eggs, milk, and coffee",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-18",
+    "input": "note colon call the bank",
+    "expected": "note: call the bank",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-19",
+    "input": "one thing semicolon then another",
+    "expected": "one thing; then another",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-20",
+    "input": "one thing semi colon then another",
+    "expected": "one thing; then another",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-21",
+    "input": "the build is green, new line. Ship it",
+    "expected": "the build is green\nShip it",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-22",
+    "input": "the build is green; new paragraph ship it",
+    "expected": "the build is green\n\nShip it",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-23",
+    "input": "the build is green: newline ship it",
+    "expected": "the build is green\nShip it",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-24",
+    "input": "the build is green comma new line ship it",
+    "expected": "the build is green\nShip it",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-25",
+    "input": "is it green? new line ship it",
+    "expected": "is it green?\nShip it",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-26",
+    "input": "it is green. New line ship it",
+    "expected": "it is green.\nShip it",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-27",
+    "input": "it is green! new paragraph ship it",
+    "expected": "it is green!\n\nShip it",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-28",
+    "input": "this one semicolon that one",
+    "expected": "this one; that one",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-29",
+    "input": "he stopped full stop",
+    "expected": "he stopped.",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-30",
+    "input": "wait ellipsis what",
+    "expected": "wait… what",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-31",
+    "input": "wait dot dot dot what",
+    "expected": "wait… what",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-32",
+    "input": "hello comma, world",
+    "expected": "hello, world",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-33",
+    "input": "Hello, comma, world",
+    "expected": "Hello, world",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-34",
+    "input": "It is done period.",
+    "expected": "It is done.",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-35",
+    "input": "Is it done question mark?",
+    "expected": "Is it done?",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-36",
+    "input": "It is done. Period.",
+    "expected": "It is done.",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-37",
+    "input": "hello comma. World",
+    "expected": "hello, World",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-38",
+    "input": "see the notes open paren page two close paren for more",
+    "expected": "see the notes (page two) for more",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-39",
+    "input": "he said open quote hello there close quote and left",
+    "expected": "he said \"hello there\" and left",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-40",
+    "input": "she said open quote hi end quote",
+    "expected": "she said \"hi\"",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-41",
+    "input": "a well hyphen known fact",
+    "expected": "a well-known fact",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-42",
+    "input": "wait dash what",
+    "expected": "wait - what",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-43",
+    "input": "john at sign example",
+    "expected": "john@example",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-44",
+    "input": "Tom ampersand Jerry",
+    "expected": "Tom & Jerry",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-45",
+    "input": "it ends question mark and then",
+    "expected": "it ends? And then",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-46",
+    "input": "one period Two period Three",
+    "expected": "one. Two. Three",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-1",
+    "input": "bullet milk bullet eggs",
+    "expected": "- Milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-2",
+    "input": "bullet point milk bullet point eggs",
+    "expected": "- Milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-3",
+    "input": "new bullet milk new bullet eggs",
+    "expected": "- Milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-4",
+    "input": "shopping list colon bullet milk bullet eggs bullet coffee",
+    "expected": "shopping list:\n- Milk\n- Eggs\n- Coffee",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-5",
+    "input": "groceries bullet milk, bullet eggs",
+    "expected": "groceries\n- Milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-6",
+    "input": "groceries bullet milk. bullet eggs.",
+    "expected": "groceries\n- Milk.\n- Eggs.",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-7",
+    "input": "Groceries. Bullet milk. Bullet eggs.",
+    "expected": "Groceries.\n- Milk.\n- Eggs.",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-8",
+    "input": "bullet milk next item eggs",
+    "expected": "- Milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-9",
+    "input": "bullet milk new item eggs",
+    "expected": "- Milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-10",
+    "input": "bullet milk next eggs",
+    "expected": "- Milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-11",
+    "input": "numbered list restart the server next item clear the cache",
+    "expected": "1. Restart the server\n2. Clear the cache",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-12",
+    "input": "steps numbered list one next item two new item three",
+    "expected": "steps\n1. One\n2. Two\n3. Three",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-13",
+    "input": "numbered list apples next item pears numbered list kiwis next item plums",
+    "expected": "1. Apples\n2. Pears\n1. Kiwis\n2. Plums",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-14",
+    "input": "bullet milk end list thanks all",
+    "expected": "- Milk\nThanks all",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-15",
+    "input": "bullet milk end of list thanks all",
+    "expected": "- Milk\nThanks all",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-16",
+    "input": "bullet milk end list",
+    "expected": "- Milk",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-17",
+    "input": "bullet milk new paragraph thanks",
+    "expected": "- Milk\n\nThanks",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-18",
+    "input": "bullet milk new paragraph next week we ship",
+    "expected": "- Milk\n\nNext week we ship",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-19",
+    "input": "bullet milk bullet eggs end list then call Sam",
+    "expected": "- Milk\n- Eggs\nThen call Sam",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-20",
+    "input": "numbered list first milk bullet eggs",
+    "expected": "1. First milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "SpokenListCommandsTests-21",
+    "input": "bullet milk new line bullet eggs",
+    "expected": "- Milk\n- Eggs",
+    "stage": "commandsWhitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-1",
+    "input": "hello   world",
+    "expected": "hello world",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-2",
+    "input": "  hello world  ",
+    "expected": "hello world",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-3",
+    "input": "hello , world",
+    "expected": "hello, world",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-4",
+    "input": "hello ; world : yes",
+    "expected": "hello; world: yes",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-5",
+    "input": "really ? yes ! ok .",
+    "expected": "really? yes! ok.",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-6",
+    "input": "see ( the notes ) now",
+    "expected": "see (the notes) now",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-7",
+    "input": "wait …",
+    "expected": "wait…",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-8",
+    "input": "a\tb",
+    "expected": "a b",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-9",
+    "input": "a b",
+    "expected": "a b",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-10",
+    "input": "line one \nline two",
+    "expected": "line one\nline two",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-11",
+    "input": "line one\n   line two",
+    "expected": "line one\nline two",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-12",
+    "input": "para\n\nnext",
+    "expected": "para\n\nnext",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-13",
+    "input": "trailing\n",
+    "expected": "trailing\n",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-14",
+    "input": "a  \n  \n  b",
+    "expected": "a\n\nb",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-15",
+    "input": "Hi\r\nthere",
+    "expected": "Hi\r\nthere",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-16",
+    "input": "",
+    "expected": "",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-17",
+    "input": "   ",
+    "expected": "",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-18",
+    "input": "...",
+    "expected": "...",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-19",
+    "input": "12 : 30",
+    "expected": "12: 30",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-20",
+    "input": "open .gitignore now",
+    "expected": "open .gitignore now",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-21",
+    "input": "Run ./dusting --mode testing.",
+    "expected": "Run ./dusting --mode testing.",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-22",
+    "input": "Open ../notes.txt",
+    "expected": "Open ../notes.txt",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-23",
+    "input": "Run  ../../bin/check",
+    "expected": "Run ../../bin/check",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-24",
+    "input": "Open\t./資料/notes.txt",
+    "expected": "Open ./資料/notes.txt",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-25",
+    "input": "Next:\n  ../notes.txt",
+    "expected": "Next:\n../notes.txt",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-26",
+    "input": "see ( ./notes.txt ) now",
+    "expected": "see (./notes.txt) now",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-27",
+    "input": "wait ... now",
+    "expected": "wait... now",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-28",
+    "input": "done . / next",
+    "expected": "done. / next",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-29",
+    "input": "it is .5 more",
+    "expected": "it is .5 more",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-30",
+    "input": "smile :) ok",
+    "expected": "smile :) ok",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-31",
+    "input": "wink ;) ok",
+    "expected": "wink ;) ok",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-32",
+    "input": "你好  世界 ,好",
+    "expected": "你好 世界,好",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-33",
+    "input": "😀  party  😀",
+    "expected": "😀 party 😀",
+    "stage": "whitespace"
+  },
+  {
+    "name": "WhitespaceNormalizerTests-34",
+    "input": "é  cole",
+    "expected": "é cole",
+    "stage": "whitespace"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-1",
+    "input": "the trial period ended",
+    "expected": "the trial period ended",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-2",
+    "input": "I'm done period next one",
+    "expected": "I'm done period next one",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-3",
+    "input": "one period two period three",
+    "expected": "one period two period three",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-4",
+    "input": "during the grace period we waited",
+    "expected": "during the grace period we waited",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-5",
+    "input": "a period of time",
+    "expected": "a period of time",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-6",
+    "input": "the period",
+    "expected": "the period",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-7",
+    "input": "I put a comma in the wrong place",
+    "expected": "I put a comma in the wrong place",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-8",
+    "input": "this comma splice is wrong",
+    "expected": "this comma splice is wrong",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-9",
+    "input": "I'm in a coma... comma splice",
+    "expected": "I'm in a coma... comma splice",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-10",
+    "input": "the colon cancer screening",
+    "expected": "the colon cancer screening",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-11",
+    "input": "my colon hurts",
+    "expected": "my colon hurts",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-12",
+    "input": "the Oxford comma",
+    "expected": "the Oxford comma",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-13",
+    "input": "add a comma here",
+    "expected": "add a comma here",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-14",
+    "input": "add comma after the name",
+    "expected": "add comma after the name",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-15",
+    "input": "you need comma after that",
+    "expected": "you need comma after that",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-16",
+    "input": "a missing semicolon broke the build",
+    "expected": "a missing semicolon broke the build",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-17",
+    "input": "this colon is sore",
+    "expected": "this colon is sore",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-18",
+    "input": "the trailing comma is fine",
+    "expected": "the trailing comma is fine",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-19",
+    "input": "a comma separated list",
+    "expected": "a comma separated list",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-20",
+    "input": "comma delimited files",
+    "expected": "comma delimited files",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-21",
+    "input": "colon cleanse diet",
+    "expected": "colon cleanse diet",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-22",
+    "input": "an exclamation point is loud",
+    "expected": "an exclamation point is loud",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-23",
+    "input": "she added a question mark to the title",
+    "expected": "she added a question mark to the title",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-24",
+    "input": "the semicolon key is stuck",
+    "expected": "the semicolon key is stuck",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-25",
+    "input": "a quick dash to the store",
+    "expected": "a quick dash to the store",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-26",
+    "input": "the hyphen key",
+    "expected": "the hyphen key",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-27",
+    "input": "he came to a full stop at the light",
+    "expected": "he came to a full stop at the light",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-28",
+    "input": "the first period was short",
+    "expected": "the first period was short",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-29",
+    "input": "periodic table",
+    "expected": "periodic table",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-30",
+    "input": "commas and periods",
+    "expected": "commas and periods",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-31",
+    "input": "That is the end",
+    "expected": "That is the end",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-32",
+    "input": "",
+    "expected": "",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-33",
+    "input": "你好,世界。",
+    "expected": "你好,世界。",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenCommandsTests-prose-34",
+    "input": "😀 period of joy",
+    "expected": "😀 period of joy",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-1",
+    "input": "the bullet hit the wall",
+    "expected": "the bullet hit the wall",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-2",
+    "input": "a bullet point on the slide",
+    "expected": "a bullet point on the slide",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-3",
+    "input": "what's next on the agenda",
+    "expected": "what's next on the agenda",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-4",
+    "input": "the next item on the list is milk",
+    "expected": "the next item on the list is milk",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-5",
+    "input": "he fired a bullet",
+    "expected": "he fired a bullet",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-6",
+    "input": "that was the last bullet",
+    "expected": "that was the last bullet",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-7",
+    "input": "this is a numbered list of rules",
+    "expected": "this is a numbered list of rules",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-8",
+    "input": "next item please",
+    "expected": "next item please",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-9",
+    "input": "we meet next week",
+    "expected": "we meet next week",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-10",
+    "input": "bullet points are useful",
+    "expected": "bullet points are useful",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-11",
+    "input": "take the bullet train",
+    "expected": "take the bullet train",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-12",
+    "input": "check the end list",
+    "expected": "check the end list",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-13",
+    "input": "the end of list processing",
+    "expected": "the end of list processing",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-14",
+    "input": "I will bullet",
+    "expected": "I will bullet",
+    "stage": "commands"
+  },
+  {
+    "name": "SpokenListCommandsTests-prose-15",
+    "input": "make it a bullet",
+    "expected": "make it a bullet",
+    "stage": "commands"
+  },
+  {
+    "name": "basic-1",
+    "input": "hello comma world new paragraph see ./dusting",
+    "expected": "Hello, world\n\nSee ./dusting",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-2",
+    "input": "numbered list restart the server next item clear the cache",
+    "expected": "1. Restart the server\n2. Clear the cache",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-3",
+    "input": "éclair question mark iPhone is ready",
+    "expected": "Éclair? iPhone is ready",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-4",
+    "input": "a new line of products",
+    "expected": "A new line of products",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-5",
+    "input": "the Oxford comma",
+    "expected": "The Oxford comma",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-6",
+    "input": "hello   world , again",
+    "expected": "Hello world, again",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-7",
+    "input": "straße new line éclair",
+    "expected": "Straße\nÉclair",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-8",
+    "input": "你好 new line 世界",
+    "expected": "你好\n世界",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-9",
+    "input": "I think three retries are fine.",
+    "expected": "I think three retries are fine.",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-10",
+    "input": "iPhone is out",
+    "expected": "iPhone is out",
+    "stage": "basic"
+  },
+  {
+    "name": "basic-11",
+    "input": "line one\r\nline two",
+    "expected": "Line one\r\nline two",
+    "stage": "basic"
+  },
+  {
+    "name": "literal-policy-1",
+    "input": "src/Main.swift",
+    "expected": "src/Main.swift",
+    "stage": "basic",
+    "coreExpected": "Src/Main.swift"
+  },
+  {
+    "name": "literal-policy-2",
+    "input": "https://Example.com/Path",
+    "expected": "https://Example.com/Path",
+    "stage": "basic",
+    "coreExpected": "Https://Example.com/Path"
+  },
+  {
+    "name": "literal-policy-3",
+    "input": "scott@example.com",
+    "expected": "scott@example.com",
+    "stage": "basic",
+    "coreExpected": "Scott@example.com"
+  },
+  {
+    "name": "literal-policy-4",
+    "input": "period.py",
+    "expected": "period.py",
+    "stage": "basic",
+    "coreExpected": ". Py"
+  },
+  {
+    "name": "literal-policy-5",
+    "input": "`period new line`",
+    "expected": "`period new line`",
+    "stage": "basic",
+    "coreExpected": "`.\n`"
+  },
+  {
+    "name": "literal-policy-6",
+    "input": "“keep  comma new line”",
+    "expected": "“keep  comma new line”",
+    "stage": "basic",
+    "coreExpected": "“keep\n”"
+  },
+  {
+    "name": "literal-policy-7",
+    "input": "```python\n    period\n```",
+    "expected": "```python\n    period\n```",
+    "stage": "basic",
+    "coreExpected": "```python\n.\n```"
+  },
+  {
+    "name": "literal-policy-8",
+    "input": "my_namespace::do_thing()",
+    "expected": "my_namespace::do_thing()",
+    "stage": "basic",
+    "coreExpected": "My_namespace::do_thing()"
+  },
+  {
+    "name": "literal-policy-9",
+    "input": "done new line src/Main.swift",
+    "expected": "Done\nsrc/Main.swift",
+    "stage": "basic",
+    "coreExpected": "Done\nSrc/Main.swift"
+  }
+]

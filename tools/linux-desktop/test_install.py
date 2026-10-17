@@ -104,6 +104,10 @@ class InstallTests(unittest.TestCase):
                                       'discover', '-s', str(payload), '-p', 'test_phrase*.py'],
                                      cwd=temp, capture_output=True, text=True, timeout=5)
             self.assertEqual(phrases.returncode, 0, phrases.stderr)
+            cleanup = subprocess.run(['python3', '-W', 'error::ResourceWarning', '-m', 'unittest',
+                                      'discover', '-s', str(payload), '-p', 'test_cleanup*.py'],
+                                     cwd=temp, capture_output=True, text=True, timeout=5)
+            self.assertEqual(cleanup.returncode, 0, cleanup.stderr)
             self.assertEqual(config.read_text(), 'user content')
             with self.assertRaises(FileExistsError):
                 installer.install(ROOT, prefix)

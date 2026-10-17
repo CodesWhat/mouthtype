@@ -1,0 +1,575 @@
+{
+  "commands": [
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": null,
+      "output": "\n\n",
+      "style": "layout",
+      "words": [
+        "new",
+        "paragraph"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": null,
+      "output": "\n",
+      "style": "layout",
+      "words": [
+        "new",
+        "line"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": null,
+      "output": "\n",
+      "style": "layout",
+      "words": [
+        "newline"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "bullet",
+      "output": "- ",
+      "style": "list",
+      "words": [
+        "bullet",
+        "point"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "bullet",
+      "output": "- ",
+      "style": "list",
+      "words": [
+        "bullet"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "newBullet",
+      "output": "- ",
+      "style": "list",
+      "words": [
+        "new",
+        "bullet"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "numbered",
+      "output": "1. ",
+      "style": "list",
+      "words": [
+        "numbered",
+        "list"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "nextItem",
+      "output": "- ",
+      "style": "list",
+      "words": [
+        "next",
+        "item"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "nextItem",
+      "output": "- ",
+      "style": "list",
+      "words": [
+        "new",
+        "item"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "next",
+      "output": "- ",
+      "style": "list",
+      "words": [
+        "next"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "end",
+      "output": "\n",
+      "style": "list",
+      "words": [
+        "end",
+        "list"
+      ]
+    },
+    {
+      "attach": "newline",
+      "endsSentence": true,
+      "list": "end",
+      "output": "\n",
+      "style": "list",
+      "words": [
+        "end",
+        "of",
+        "list"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": true,
+      "list": null,
+      "output": ".",
+      "style": "clauseEnd",
+      "words": [
+        "period"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": true,
+      "list": null,
+      "output": ".",
+      "style": "clauseEnd",
+      "words": [
+        "full",
+        "stop"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": ",",
+      "style": "punctuation",
+      "words": [
+        "comma"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": ":",
+      "style": "punctuation",
+      "words": [
+        "colon"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": ";",
+      "style": "punctuation",
+      "words": [
+        "semicolon"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": ";",
+      "style": "punctuation",
+      "words": [
+        "semi",
+        "colon"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": true,
+      "list": null,
+      "output": "?",
+      "style": "unlessNoun",
+      "words": [
+        "question",
+        "mark"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": true,
+      "list": null,
+      "output": "!",
+      "style": "unlessNoun",
+      "words": [
+        "exclamation",
+        "point"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": true,
+      "list": null,
+      "output": "!",
+      "style": "unlessNoun",
+      "words": [
+        "exclamation",
+        "mark"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": "…",
+      "style": "unlessNoun",
+      "words": [
+        "ellipsis"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": "…",
+      "style": "unlessNoun",
+      "words": [
+        "dot",
+        "dot",
+        "dot"
+      ]
+    },
+    {
+      "attach": "spaced",
+      "endsSentence": false,
+      "list": null,
+      "output": " - ",
+      "style": "unlessNoun",
+      "words": [
+        "dash"
+      ]
+    },
+    {
+      "attach": "both",
+      "endsSentence": false,
+      "list": null,
+      "output": "-",
+      "style": "unlessNoun",
+      "words": [
+        "hyphen"
+      ]
+    },
+    {
+      "attach": "both",
+      "endsSentence": false,
+      "list": null,
+      "output": "@",
+      "style": "unlessNoun",
+      "words": [
+        "at",
+        "sign"
+      ]
+    },
+    {
+      "attach": "spaced",
+      "endsSentence": false,
+      "list": null,
+      "output": " & ",
+      "style": "unlessNoun",
+      "words": [
+        "ampersand"
+      ]
+    },
+    {
+      "attach": "next",
+      "endsSentence": false,
+      "list": null,
+      "output": "(",
+      "style": "unlessNoun",
+      "words": [
+        "open",
+        "paren"
+      ]
+    },
+    {
+      "attach": "next",
+      "endsSentence": false,
+      "list": null,
+      "output": "(",
+      "style": "unlessNoun",
+      "words": [
+        "open",
+        "parenthesis"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": ")",
+      "style": "unlessNoun",
+      "words": [
+        "close",
+        "paren"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": ")",
+      "style": "unlessNoun",
+      "words": [
+        "close",
+        "parenthesis"
+      ]
+    },
+    {
+      "attach": "next",
+      "endsSentence": false,
+      "list": null,
+      "output": "\"",
+      "style": "unlessNoun",
+      "words": [
+        "open",
+        "quote"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": "\"",
+      "style": "unlessNoun",
+      "words": [
+        "close",
+        "quote"
+      ]
+    },
+    {
+      "attach": "previous",
+      "endsSentence": false,
+      "list": null,
+      "output": "\"",
+      "style": "unlessNoun",
+      "words": [
+        "end",
+        "quote"
+      ]
+    }
+  ],
+  "guards": {
+    "bulletFollowers": [
+      "casing",
+      "casings",
+      "hole",
+      "holes",
+      "journal",
+      "list",
+      "lists",
+      "point",
+      "points",
+      "proof",
+      "time",
+      "train",
+      "wound",
+      "wounds"
+    ],
+    "layoutNounSignals": [
+      "a",
+      "an",
+      "another",
+      "any",
+      "each",
+      "every",
+      "her",
+      "his",
+      "its",
+      "my",
+      "no",
+      "our",
+      "some",
+      "that",
+      "the",
+      "their",
+      "these",
+      "this",
+      "those",
+      "your"
+    ],
+    "nextFollowers": [
+      "day",
+      "door",
+      "evening",
+      "fall",
+      "few",
+      "friday",
+      "in",
+      "monday",
+      "month",
+      "morning",
+      "on",
+      "one",
+      "quarter",
+      "release",
+      "round",
+      "saturday",
+      "spring",
+      "step",
+      "steps",
+      "summer",
+      "sunday",
+      "thursday",
+      "time",
+      "to",
+      "tuesday",
+      "up",
+      "version",
+      "wednesday",
+      "week",
+      "weekend",
+      "winter",
+      "year"
+    ],
+    "nextPrepositions": [
+      "about",
+      "are",
+      "at",
+      "be",
+      "by",
+      "came",
+      "comes",
+      "for",
+      "from",
+      "here's",
+      "in",
+      "is",
+      "of",
+      "on",
+      "see",
+      "till",
+      "to",
+      "until",
+      "up",
+      "was",
+      "what's",
+      "whats",
+      "with"
+    ],
+    "nounSignals": [
+      "a",
+      "an",
+      "another",
+      "any",
+      "big",
+      "dangling",
+      "double",
+      "each",
+      "every",
+      "extra",
+      "final",
+      "first",
+      "grace",
+      "her",
+      "his",
+      "inverted",
+      "its",
+      "last",
+      "leading",
+      "little",
+      "long",
+      "mad",
+      "missing",
+      "my",
+      "next",
+      "no",
+      "our",
+      "oxford",
+      "per",
+      "previous",
+      "probation",
+      "probationary",
+      "quick",
+      "same",
+      "second",
+      "serial",
+      "short",
+      "some",
+      "stray",
+      "such",
+      "that",
+      "the",
+      "their",
+      "these",
+      "third",
+      "this",
+      "those",
+      "trailing",
+      "trial",
+      "what",
+      "which",
+      "whole",
+      "yard",
+      "your"
+    ],
+    "punctuationFollowers": [
+      "cancer",
+      "cleanse",
+      "cleansing",
+      "delimited",
+      "key",
+      "operator",
+      "placement",
+      "polyp",
+      "polyps",
+      "separated",
+      "splice",
+      "splices",
+      "surgery"
+    ],
+    "punctuationVerbs": [
+      "add",
+      "adding",
+      "adds",
+      "delete",
+      "deletes",
+      "deleting",
+      "drop",
+      "dropping",
+      "insert",
+      "inserting",
+      "inserts",
+      "missing",
+      "need",
+      "needs",
+      "put",
+      "puts",
+      "putting",
+      "remove",
+      "removes",
+      "removing",
+      "replace",
+      "replacing",
+      "use",
+      "uses",
+      "using"
+    ]
+  },
+  "sourcesSHA256": {
+    "Text/BlendStage.swift": "faf7328328f8755c5eef3d2da73763d0c9b523e78eca29632e00603182aa0874",
+    "Text/SpokenCommandTable.swift": "51cb69c3f389c8ebcdad365d96e6ec397550c66c9543fee8a43929a6fd7143bb",
+    "Text/SpokenCommands.swift": "e9e51a5ed927fef52738429bea16af42ccc64d2faf140e36f7c0db1b9a754dd9",
+    "Text/TextScan.swift": "5d34d06e884c1134a90da71f8e549ba8b5e6514f2026d17cf2d1b96dc39c24ee",
+    "Text/TextSpan.swift": "316a48ec6ab84035148aaf46274cd38a81d76f7173d8237e4eeaf5bad58210fa",
+    "Text/WhitespaceNormalizer.swift": "e4f49333a7f3a84ee1082acc797186cb368bcac6eff1d392ee44c740371b6c98",
+    "TextMetrics.swift": "b9ad469abdda5b526b350683cc99a332c79194ca861a80be0f62063ffad155a9"
+  }
+}
