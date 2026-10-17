@@ -23,3 +23,26 @@ jobs:
           python-version: "3.12"
       - name: No-model worker, cancellation and fixture checks
         run: python3 -W error::ResourceWarning -m unittest discover -s tools/linux-engine-proof -p 'test_*.py'
+
+  arch-orchestration:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container:
+      image: archlinux:base-20261011.0.609700@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+      options: --init
+    steps:
+      - name: Install signed Arch test prerequisites in the ephemeral container
+        run: pacman -Syu --noconfirm --needed git python
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Record actual Arch userland and runtime versions
+        run: |
+          cat /etc/os-release
+          uname -srm
+          python --version
+          getconf GNU_LIBC_VERSION
+          pacman -Q git python glibc pacman archlinux-keyring
+          pacman-conf SigLevel
+      - name: Arch no-model worker, cancellation and fixture checks
+        run: python -W error::ResourceWarning -m unittest discover -s tools/linux-engine-proof -p 'test_*.py'

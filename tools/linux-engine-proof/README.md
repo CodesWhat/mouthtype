@@ -8,7 +8,7 @@ The runtime adapters use Parakeet TDT 0.6B v3 INT8 through sherpa-onnx CPU and *
 
 From the repository root, run `python3 -W error::ResourceWarning -m unittest discover -s tools/linux-engine-proof -p 'test_*.py'`.
 
-These tests use temporary synthetic WAVs and fake engine processes, including a real local HTTP round trip. They check resident reuse, Unicode and empty results, mismatches, model digests, runtime version checks, exact S1 prompt/control settings, process crashes, blocked writes, deadlines, cancellation, and process/server cleanup. They do not install inference libraries or fetch weights. The narrowly scoped Ubuntu workflow runs the same checks with Python 3.12 and read-only repository access. A green job establishes Linux orchestration behavior, not model accuracy, inference performance, desktop support, or Arch compatibility.
+These tests use temporary synthetic WAVs and fake engine processes, including a real local HTTP round trip. They check resident reuse, Unicode and empty results, mismatches, model digests, runtime version checks, exact S1 prompt/control settings, process crashes, blocked writes, deadlines, cancellation, and process/server cleanup. They do not install inference libraries or fetch weights. The narrowly scoped workflow runs the same checks on Ubuntu with Python 3.12 and an Arch container with its current signed Python package. Both jobs have read-only repository access. A green job establishes headless orchestration behavior in that recorded userland, not model accuracy, inference performance, desktop support, or general Arch compatibility.
 
 ## Runtime and artifact preparation
 
@@ -44,7 +44,15 @@ On Linux, worker peak RSS comes from `getrusage`; server peak RSS comes from `/p
 
 Real model loading, output quality, silence suppression, cold/warm performance, cancellation during native inference, cleanup after a real runtime failure, and memory use need actual Linux runs. The sherpa adapter does not add FluidAudio VAD or its English hinting, and it does not invent word confidence/timing data. The S1 adapter preserves the publisher system prompt, the Mac benchmark's semi-formal/lists/general controls, disabled thinking through the chat template, and greedy decoding. GGUF Q4_K_M output is not numerically identical to the Mac BF16 model. Full SmartCleanup guards, saved spelling, contextual corrections, and app delivery remain outside this proof.
 
-Ubuntu headless results cannot establish Arch support, global shortcut behavior, Wayland delivery, clipboard ownership, audio routing, or a desktop frontend. Those acceptance rows remain separate.
+Ubuntu or Arch headless results cannot establish general Arch support, global shortcut behavior, Wayland delivery, clipboard ownership, audio routing, or a desktop frontend. Those acceptance rows remain separate.
+
+## Arch headless CI scope and provenance
+
+The additional job uses the [official Arch Linux base image](https://hub.docker.com/_/archlinux), dated tag `base-20261011.0.609700`, pinned to registry index digest `sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0`. Its Linux amd64 manifest is `sha256:363129b67b2bc6c5a634f8fb4961a7e2eba213a2ec075d159127b1260290a722`. The [official image listing](https://github.com/docker-library/official-images/blob/master/library/archlinux) identifies Arch's `archlinux-docker` source revision `1e7d9a2d495ffe76934a775b6bd68ac892a14c1b`, tag `v20261011.0.609700`, `Dockerfile.base`. Registry metadata and official provenance were inspected on2026-10-16 without pulling or starting any local container.
+
+Docker `--init` handles orphan reaping while the existing tests still require owned descendants to disappear. The remote, ephemeral job performs a normal full `pacman -Syu` upgrade with only Git and Python requested, following the official image's rolling-update guidance. Pacman's normal signature verification remains in force; no signature setting, privilege, repository source, or key trust is weakened. It records `/etc/os-release`, kernel/architecture, Python/glibc versions, exact Git/Python/glibc/pacman/keyring package versions, and the effective signature policy before running the unchanged no-model tests. The dated image pins the starting filesystem; the rolling signed package transaction is identified by those actual versions rather than presented as an immutable package snapshot.
+
+The job runs an Arch userland on a hosted Ubuntu x86_64 kernel, has `contents: read`, persists no Git credentials, uses no secrets/models, and has a ten-minute deadline. No Swift toolchain or inference package is installed. Only a completed, fetched green log establishes an actual Arch-userland orchestration result. It does not prove Arch kernel integration, audio, shortcuts, desktop paste, model inference, packaging, or a Linux release.
 
 ## Primary sources
 
