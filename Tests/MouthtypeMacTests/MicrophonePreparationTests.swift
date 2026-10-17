@@ -48,6 +48,7 @@ import Testing
         #expect(try await !task.value)
         #expect(!state.isPrepared)
         #expect(gate.calls == 2)
+        #expect(state.error?.contains("choice changed") == true)
     }
 
     @Test func skippedActivePreparationAndDuplicateRequestsDoNotClaimReadiness() async throws {
@@ -70,6 +71,14 @@ import Testing
         #expect(state.isPrepared)
         #expect(state.error == nil)
         #expect(gate.calls == 1)
+    }
+
+    @Test func unsuccessfulPreflightDoesNotClaimTheChoiceChanged() async throws {
+        let state = MicrophonePreparation()
+        #expect(try await !state.prepare { false })
+        #expect(!state.isPrepared)
+        #expect(state.error != nil)
+        #expect(state.error?.contains("choice changed") == false)
     }
 
     @Test func failedStartSupersedesAnOlderPreflightSuccess() async throws {

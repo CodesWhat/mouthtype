@@ -42,7 +42,7 @@ import Observation
                 guard starts == started else { return isPrepared }
                 if revision == current {
                     isPrepared = prepared
-                    error = prepared ? nil : "Microphone choice changed. Prepare your input again."
+                    error = prepared ? nil : "Microphone preparation did not finish. Try preparing your input again."
                     return prepared
                 }
             } catch {
