@@ -1,0 +1,440 @@
+[
+  {
+    "name": "whole words",
+    "rules": [
+      {
+        "heard": "api",
+        "written": "API"
+      }
+    ],
+    "input": "the api is rapid; rapid apis capital my_api api2 api",
+    "expected": "the API is rapid; rapid apis capital my_api api2 API"
+  },
+  {
+    "name": "punctuation",
+    "rules": [
+      {
+        "heard": "post hog",
+        "written": "PostHog"
+      }
+    ],
+    "input": "Open post hog. Then (post hog), \"post hog\"! post-hog",
+    "expected": "Open PostHog. Then (PostHog), \"PostHog\"! post-hog"
+  },
+  {
+    "name": "unicode word boundaries",
+    "rules": [
+      {
+        "heard": "api",
+        "written": "API"
+      }
+    ],
+    "input": "apié éapi api中 api 🎉api🎉",
+    "expected": "apié éapi api中 API 🎉API🎉"
+  },
+  {
+    "name": "composed accents",
+    "rules": [
+      {
+        "heard": "café",
+        "written": "Café Rouge"
+      }
+    ],
+    "input": "un café crème, cafés",
+    "expected": "un Café Rouge crème, cafés"
+  },
+  {
+    "name": "combining prefix is not a character",
+    "rules": [
+      {
+        "heard": "cafe",
+        "written": "X"
+      }
+    ],
+    "input": "café cafe",
+    "expected": "café X"
+  },
+  {
+    "name": "canonical equivalence",
+    "rules": [
+      {
+        "heard": "café",
+        "written": "Café Rouge"
+      }
+    ],
+    "input": "un café crème",
+    "expected": "un Café Rouge crème"
+  },
+  {
+    "name": "canonical duplicate first wins",
+    "rules": [
+      {
+        "heard": "café",
+        "written": "first"
+      },
+      {
+        "heard": "café",
+        "written": "second"
+      }
+    ],
+    "input": "café CAFÉ",
+    "expected": "first first"
+  },
+  {
+    "name": "cyrillic",
+    "rules": [
+      {
+        "heard": "Яндекс",
+        "written": "Яндекс"
+      }
+    ],
+    "input": "я работаю в яндекс, не в яндексе",
+    "expected": "я работаю в Яндекс, не в яндексе"
+  },
+  {
+    "name": "greek",
+    "rules": [
+      {
+        "heard": "Αθήνα",
+        "written": "Αθήνα"
+      }
+    ],
+    "input": "ΑΘΉΝΑ και αθήνα",
+    "expected": "Αθήνα και Αθήνα"
+  },
+  {
+    "name": "no broad casefold",
+    "rules": [
+      {
+        "heard": "ss",
+        "written": "DOUBLE"
+      },
+      {
+        "heard": "σ",
+        "written": "SIGMA"
+      }
+    ],
+    "input": "ß SS Σ σ ς",
+    "expected": "ß DOUBLE SIGMA SIGMA ς"
+  },
+  {
+    "name": "per character lowercase",
+    "rules": [
+      {
+        "heard": "οσ",
+        "written": "X"
+      }
+    ],
+    "input": "ΟΣ οσ ος",
+    "expected": "X X ος"
+  },
+  {
+    "name": "dotted I",
+    "rules": [
+      {
+        "heard": "İ",
+        "written": "X"
+      }
+    ],
+    "input": "İ i̇ i I",
+    "expected": "X X i I"
+  },
+  {
+    "name": "japanese",
+    "rules": [
+      {
+        "heard": "東京",
+        "written": "Tokyo"
+      }
+    ],
+    "input": "東京 と 東京都",
+    "expected": "Tokyo と 東京都"
+  },
+  {
+    "name": "longest first",
+    "rules": [
+      {
+        "heard": "post",
+        "written": "POST"
+      },
+      {
+        "heard": "post hog",
+        "written": "PostHog"
+      }
+    ],
+    "input": "post hog and post office",
+    "expected": "PostHog and POST office"
+  },
+  {
+    "name": "longest regardless of order",
+    "rules": [
+      {
+        "heard": "post hog",
+        "written": "PostHog"
+      },
+      {
+        "heard": "post",
+        "written": "POST"
+      }
+    ],
+    "input": "post hog and post office",
+    "expected": "PostHog and POST office"
+  },
+  {
+    "name": "longer invalid fallback",
+    "rules": [
+      {
+        "heard": "post ho",
+        "written": "X"
+      },
+      {
+        "heard": "post",
+        "written": "POST"
+      }
+    ],
+    "input": "post hog",
+    "expected": "POST hog"
+  },
+  {
+    "name": "nonchaining",
+    "rules": [
+      {
+        "heard": "alpha",
+        "written": "beta"
+      },
+      {
+        "heard": "beta",
+        "written": "gamma"
+      }
+    ],
+    "input": "alpha beta",
+    "expected": "beta gamma"
+  },
+  {
+    "name": "no rescanning inserted text",
+    "rules": [
+      {
+        "heard": "js",
+        "written": "JavaScript"
+      },
+      {
+        "heard": "javascript",
+        "written": "JS"
+      }
+    ],
+    "input": "js javascript",
+    "expected": "JavaScript JS"
+  },
+  {
+    "name": "duplicate first wins",
+    "rules": [
+      {
+        "heard": "posthog",
+        "written": "PostHog"
+      },
+      {
+        "heard": "POSTHOG",
+        "written": "Other"
+      }
+    ],
+    "input": "posthog POSTHOG",
+    "expected": "PostHog PostHog"
+  },
+  {
+    "name": "literal replacement",
+    "rules": [
+      {
+        "heard": "home",
+        "written": "$0 \\1 $1 \\"
+      }
+    ],
+    "input": "home",
+    "expected": "$0 \\1 $1 \\"
+  },
+  {
+    "name": "literal pattern",
+    "rules": [
+      {
+        "heard": "c++",
+        "written": "C++"
+      },
+      {
+        "heard": "a.b",
+        "written": "A.B"
+      }
+    ],
+    "input": "c++ cxx a.b axb",
+    "expected": "C++ cxx A.B axb"
+  },
+  {
+    "name": "written spacing exact",
+    "rules": [
+      {
+        "heard": "a",
+        "written": " a@b.c "
+      }
+    ],
+    "input": "(a)",
+    "expected": "( a@b.c )"
+  },
+  {
+    "name": "whitespace collapse",
+    "rules": [
+      {
+        "heard": "  post   hog ",
+        "written": "PostHog"
+      }
+    ],
+    "input": "post  hog post\nhog post\t\thog",
+    "expected": "PostHog PostHog PostHog"
+  },
+  {
+    "name": "empty ignored",
+    "rules": [
+      {
+        "heard": "",
+        "written": "X"
+      },
+      {
+        "heard": "  ",
+        "written": "Y"
+      },
+      {
+        "heard": "api",
+        "written": ""
+      },
+      {
+        "heard": "api",
+        "written": "API"
+      }
+    ],
+    "input": "api",
+    "expected": "API"
+  },
+  {
+    "name": "unrelated bytes preserved",
+    "rules": [
+      {
+        "heard": "api",
+        "written": "API"
+      }
+    ],
+    "input": "\tcafé  api 👋\n",
+    "expected": "\tcafé  API 👋\n"
+  },
+  {
+    "name": "joined emoji complete",
+    "rules": [
+      {
+        "heard": "👩",
+        "written": "person"
+      },
+      {
+        "heard": "👩‍💻",
+        "written": "coder"
+      }
+    ],
+    "input": "👩‍💻 👩",
+    "expected": "coder person"
+  },
+  {
+    "name": "emoji modifier complete",
+    "rules": [
+      {
+        "heard": "👍",
+        "written": "thumb"
+      },
+      {
+        "heard": "👍🏽",
+        "written": "medium"
+      },
+      {
+        "heard": "api",
+        "written": "API"
+      }
+    ],
+    "input": "👍🏽api 👍🏽 👍 api",
+    "expected": "👍🏽API medium thumb API"
+  },
+  {
+    "name": "indic cluster complete",
+    "rules": [
+      {
+        "heard": "क",
+        "written": "K"
+      },
+      {
+        "heard": "क्ष",
+        "written": "KS"
+      }
+    ],
+    "input": "क्ष क",
+    "expected": "KS K"
+  },
+  {
+    "name": "hangul canonical",
+    "rules": [
+      {
+        "heard": "한",
+        "written": "Korean"
+      }
+    ],
+    "input": "한 한 한국",
+    "expected": "Korean Korean 한국"
+  },
+  {
+    "name": "CRLF whitespace",
+    "rules": [
+      {
+        "heard": "post hog",
+        "written": "PostHog"
+      }
+    ],
+    "input": "post\r\nhog",
+    "expected": "PostHog"
+  },
+  {
+    "name": "alphabetic combining boundary",
+    "rules": [
+      {
+        "heard": "api",
+        "written": "API"
+      }
+    ],
+    "input": "ͅapi apiͅ api",
+    "expected": "ͅapi apiͅ API"
+  },
+  {
+    "name": "decorated underscore is not bare underscore",
+    "rules": [
+      {
+        "heard": "api",
+        "written": "API"
+      }
+    ],
+    "input": "_́api _api",
+    "expected": "_́API _api"
+  },
+  {
+    "name": "unicode whitespace uses first scalar",
+    "rules": [
+      {
+        "heard": "post hog",
+        "written": "PostHog"
+      }
+    ],
+    "input": "post ́hog post\u001chog",
+    "expected": "PostHog post\u001chog"
+  },
+  {
+    "name": "number boundary",
+    "rules": [
+      {
+        "heard": "api",
+        "written": "API"
+      }
+    ],
+    "input": "Ⅷapi api⅔ api",
+    "expected": "Ⅷapi api⅔ API"
+  }
+]

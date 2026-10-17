@@ -14,6 +14,7 @@ Files adapted from Parrot:
 - `Sources/MouthtypeCore/SilenceTrimmer.swift` and `Tests/MouthtypeCoreTests/SilenceTrimmerTests.swift`
 - `Sources/MouthtypeCore/Text/PhraseMatcher.swift`
 - `Sources/MouthtypeCore/Text/DictionaryReplacer.swift` and `Tests/MouthtypeCoreTests/DictionaryReplacerTests.swift`
+- `tools/linux-desktop/spellings.py`, `spelling-fixtures.json` and `test_spellings.py` (matching behavior and fixtures ported from Core)
 - `Sources/MouthtypeMac/Audio/AudioCapture.swift`
 - `Sources/MouthtypeMac/Audio/CaptureBuffer.swift`
 - `Sources/MouthtypeMac/Audio/CaptureError.swift`
@@ -62,6 +63,23 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Linux Unicode matching
+
+`tools/linux-desktop/vendor/grapheme` contains the portable MIT `grapheme`
+v0.7.2 runtime, Unicode 16.0 property data and conformance fixtures from
+https://github.com/timendum/grapheme, commit
+`56f7f2d16d54576290634b7484eeece52c538bcb`. Only its Python import paths are
+changed to use the private package namespace. The exact upstream and shipped
+file digests are in `provenance.json`. The full MIT notice, including the
+PyPA, Mapbox, Alvin Lindstam and Timendum copyrights, is preserved in that
+directory's `LICENSE` and included in Linux source/install payloads.
+
+`tools/linux-desktop/spelling-unicode.json` contains Unicode 16.0 Alphabetic
+and Numeric_Type ranges, with source URLs and SHA-256 provenance. Those data
+and the vendored Unicode tables/tests are covered by the Unicode License v3,
+preserved in `tools/linux-desktop/vendor/grapheme/UNICODE-LICENSE` and included
+in Linux source/install payloads. Copyright © Unicode, Inc.
 
 ## Hex
 
