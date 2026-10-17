@@ -26,6 +26,53 @@ import MouthtypeCore
         state = ready; state.globeConflict = true; #expect(!state.isReady)
     }
 
+    @Test func cardsAdvanceOnlyWhenTheirPrerequisiteActuallyPasses() {
+        var state = ready
+        state.microphone = .notDetermined
+        state.captureReady = false
+        state.accessibility = false
+        state.speech = .loading
+        state.input = .off
+        #expect(state.step == .microphone)
+        state.microphone = .authorized
+        #expect(state.step == .microphone)
+        state.captureReady = true
+        #expect(state.step == .accessibility)
+        state.accessibility = true
+        #expect(state.step == .speech)
+        state.speech = .failed(message: "Offline")
+        #expect(state.step == .speech)
+        state.speech = .ready(engineID: "parakeet-tdt-v3", loadSeconds: 1)
+        #expect(state.step == .shortcut)
+        state.input = .listening
+        #expect(state.step == .ready)
+    }
+
+    @Test func cardsSkipReadyComponentsAndReturnToLostPrerequisites() {
+        var state = ready
+        #expect(state.step == .ready)
+        state.accessibility = false
+        #expect(state.step == .accessibility)
+        state.microphone = .denied
+        #expect(state.step == .microphone)
+        state.microphone = .restricted
+        #expect(state.step == .microphone)
+        state.microphone = .authorized
+        state.accessibility = true
+        state.captureReady = false
+        #expect(state.step == .microphone)
+        state.captureReady = true
+        state.input = .recovering
+        #expect(state.step == .shortcut)
+        state.input = .secureInputOn
+        #expect(state.step == .shortcut)
+        state.input = .listening
+        state.globeConflict = true
+        #expect(state.step == .shortcut)
+        state.globeConflict = false
+        #expect(state.step == .ready)
+    }
+
     @Test func setupReflectsPermissionChangesAndSavedShortcutBehavior() {
         let name = "SetupStateTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
