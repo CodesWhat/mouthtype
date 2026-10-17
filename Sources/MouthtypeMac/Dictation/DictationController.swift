@@ -163,10 +163,6 @@ final class DictationController {
             )
             return
         }
-        guard capture.isPrepared else {
-            pill.showMessage(Self.microphoneAccessMessage, duration: 3)
-            return
-        }
 
         // A new dictation ends the last one's card and the Undo it offered, and the last paste's read-back. With
         // earlier dictations still queued their deliveries haven't happened yet, so there is no read-back to end. A

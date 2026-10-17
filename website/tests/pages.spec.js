@@ -63,9 +63,9 @@ for (const [path, heading] of pages) {
   });
 }
 
-test("start describes the alpha.4 Settings window", async ({ page }) => {
+test("start describes the alpha.5 Settings window", async ({ page }) => {
   await page.goto("/start/");
-  await expect(page.locator("main")).toContainText("0.1.0-alpha.4");
+  await expect(page.locator("main")).toContainText("0.1.0-alpha.5");
   await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
@@ -93,7 +93,7 @@ test("reference help covers everyday tasks with explicit build labels", async ({
   ]) {
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
-  await expect(page.locator("#builds")).toContainText("alpha.4");
+  await expect(page.locator("#builds")).toContainText("alpha.5");
   await expect(page.locator("#builds")).toContainText("Settings");
   await expect(page.locator("#cleanup")).toContainText("per-app");
   await expect(page.locator("#local-data")).toContainText("90 days");
