@@ -48,7 +48,7 @@ timeout --signal=TERM --kill-after=10s 120s git -C "$work_dir/llama" fetch --dep
 git -C "$work_dir/llama" checkout --detach FETCH_HEAD
 [[ "$(git -C "$work_dir/llama" rev-parse HEAD)" == "$llama_revision" ]]
 timeout --signal=TERM --kill-after=10s 60s cmake -S "$work_dir/llama" -B "$work_dir/llama/build" -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DGGML_CUDA=OFF -DGGML_VULKAN=OFF -DLLAMA_OPENSSL=OFF -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_APP=OFF -DLLAMA_BUILD_UI=OFF -DLLAMA_USE_PREBUILT_UI=OFF
-timeout --signal=TERM --kill-after=10s 480s cmake --build "$work_dir/llama/build" --target llama-server --parallel 2
+timeout --signal=TERM --kill-after=10s 900s cmake --build "$work_dir/llama/build" --target llama-server --parallel 2
 "$work_dir/llama/build/bin/llama-server" --version
 curl --fail --location --silent --show-error --proto '=https' --proto-redir '=https' --connect-timeout 20 --max-time 300 --output "$work_dir/parakeet.tar.bz2" "$(read_pin parakeet source)"
 printf '%s  %s\n' "$(read_pin parakeet sha256)" "$work_dir/parakeet.tar.bz2" | sha256sum --check -

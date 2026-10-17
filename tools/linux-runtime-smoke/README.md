@@ -15,3 +15,5 @@ The engine/model provenance is already recorded in `tools/linux-engine-proof/pin
 CPU inference here does not certify cancellation during every native path, desktop capture/shortcuts/delivery, a Linux app, or distribution packaging.
 
 The workflow runs on its narrow PR paths or by explicit manual dispatch. It creates no recurring schedule, installed desktop service or release artifact. Headless PipeWire/Sway component evidence is separate; neither this container nor the hosted Ubuntu kernel is an Omarchy/Hyprland desktop acceptance test.
+
+The first current Arch native compile reached150/223 objects but exceeded the480-second Ubuntu-derived build budget, before any model inference. The Arch rerun allows900 seconds for compilation with the same two jobs and30-minute total job limit. Model download, startup, request, inference and exact quality checks are unchanged. This timeout is build evidence, not an engine completion or accuracy result.
