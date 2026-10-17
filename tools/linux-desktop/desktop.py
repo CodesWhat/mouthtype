@@ -280,6 +280,13 @@ class PipeWireCapture:
 
 class SpeechEngine:
     def __init__(self, settings, *, python=sys.executable, worker=None, request_seconds=30, startup_seconds=120):
+        if not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict):
+            raise ValueError('Invalid speech artifact configuration')
+        for item in settings['artifacts'].values():
+            if (not isinstance(item, dict) or not isinstance(item.get('path'), str) or
+                    not isinstance(item.get('sha256'), str) or
+                    not re.fullmatch('[0-9a-f]{64}', item['sha256'])):
+                raise ValueError('Invalid speech artifact entry')
         self.settings, self.python = settings, python
         self.script = worker or PROOF / 'worker.py'
         self.request_seconds, self.startup_seconds = request_seconds, startup_seconds

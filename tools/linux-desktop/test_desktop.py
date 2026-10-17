@@ -449,5 +449,13 @@ class PrivacyTests(unittest.TestCase):
             finally:
                 session.close()
 
+class EngineConfigTests(unittest.TestCase):
+    def test_malformed_artifact_config_fails_before_recording(self):
+        from desktop import SpeechEngine
+        for settings in ([], {'artifacts': []}, {'artifacts': {'model': 'wrong'}},
+                         {'artifacts': {'model': {'path': '/local/model', 'sha256': 'wrong'}}}):
+            with self.subTest(settings=settings), self.assertRaises(ValueError):
+                SpeechEngine(settings)
+
 if __name__ == '__main__':
     unittest.main()
