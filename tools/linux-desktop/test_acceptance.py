@@ -1,0 +1,96 @@
+import math
+from pathlib import Path
+import struct
+import tempfile
+import unittest
+import wave
+
+from acceptance import tone_metrics
+
+
+class ToneTests(unittest.TestCase):
+    def test_real_capture_comparison_requires_signal_not_just_a_wav_header(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'tone.wav'
+            frames = [round(math.sin(2 * math.pi * 440 * n / 16000) * 3276) for n in range(8000)]
+            with wave.open(str(path), 'wb') as output:
+                output.setparams((1, 2, 16000, 0, 'NONE', ''))
+                output.writeframes(struct.pack('<' + 'h' * len(frames), *frames))
+            self.assertEqual(tone_metrics(path).get('frames'), 8000)
+            self.assertAlmostEqual(tone_metrics(path)['frequency_hz'], 440, delta=3)
+            self.assertGreater(tone_metrics(path)['rms'], .05)
+            with wave.open(str(path), 'wb') as output:
+                output.setparams((1, 2, 16000, 0, 'NONE', ''))
+                output.writeframes(b'\0\0' * 8000)
+            with self.assertRaises(ValueError):
+                tone_metrics(path)
+
+class DiagnosticTests(unittest.TestCase):
+    def test_synthetic_failed_command_keeps_bounded_stderr_for_investigation(self):
+        import contextlib
+        import io
+        import os
+        import subprocess
+        import sys
+        from acceptance import run
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output), self.assertRaises(subprocess.CalledProcessError):
+            run([sys.executable, '-c', 'import sys;sys.stderr.write("synthetic helper failure");sys.exit(3)'], dict(os.environ))
+        self.assertIn('synthetic helper failure', output.getvalue())
+
+class MappingTests(unittest.TestCase):
+    def test_target_file_readiness_does_not_substitute_for_a_mapped_native_node(self):
+        from acceptance import mapped_target
+        self.assertIsNone(mapped_target({'nodes': []}, 'app.mouthtype.Acceptance'))
+        tree = {'nodes': [{'nodes': [{'id': 17, 'app_id': 'app.mouthtype.Acceptance'}]}]}
+        self.assertEqual(mapped_target(tree, 'app.mouthtype.Acceptance'),
+                         {'id': 17, 'app_id': 'app.mouthtype.Acceptance'})
+
+class ClipboardTests(unittest.TestCase):
+    def test_empty_selection_is_pending_without_relaxing_exact_clipboard_check(self):
+        import subprocess
+        from unittest.mock import patch
+        from acceptance import clipboard_ready
+        empty = subprocess.CalledProcessError(1, ['wl-paste'], stderr=b'Nothing is copied')
+        with patch('acceptance.run', side_effect=empty):
+            self.assertFalse(clipboard_ready({}, b'original'))
+        with patch('acceptance.run', return_value=subprocess.CompletedProcess([], 0, stdout=b'original')):
+            self.assertTrue(clipboard_ready({}, b'original'))
+        with patch('acceptance.run', return_value=subprocess.CompletedProcess([], 0, stdout=b'changed')):
+            self.assertFalse(clipboard_ready({}, b'original'))
+        with patch('acceptance.run', side_effect=subprocess.CalledProcessError(2, ['wl-paste'])):
+            with self.assertRaises(subprocess.CalledProcessError):
+                clipboard_ready({}, b'original')
+
+class NativeTargetTests(unittest.TestCase):
+    def test_existing_gtk_program_name_is_replaced_before_creating_surface(self):
+        import runpy
+        import sys
+        import types
+        from unittest.mock import patch
+        name = ['wayland_target.py']
+        observed = []
+        class SurfaceCreated(Exception):
+            pass
+        class Application:
+            def __init__(self, **kwargs):
+                pass
+            def connect(self, event, callback):
+                self.activate = callback
+            def run(self, args):
+                self.activate(self)
+        def window(**kwargs):
+            observed.append(name[0])
+            raise SurfaceCreated()
+        gi = types.ModuleType('gi')
+        gi.require_version = lambda *args: None
+        repository = types.ModuleType('gi.repository')
+        repository.Gtk = types.SimpleNamespace(Application=Application, ApplicationWindow=window)
+        repository.GLib = types.SimpleNamespace(set_prgname=lambda value: name.__setitem__(0, value))
+        with patch.dict(sys.modules, {'gi': gi, 'gi.repository': repository}):
+            with self.assertRaises(SurfaceCreated):
+                runpy.run_path(str(Path(__file__).with_name('wayland_target.py')))
+        self.assertEqual(observed, ['app.mouthtype.Acceptance'])
+
+if __name__ == '__main__':
+    unittest.main()

@@ -1,7 +1,7 @@
 import FluidAudio
 import Foundation
 
-public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
+public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPreview {
     static let v3ID = "parakeet-tdt-v3"
     static let v3DisplayName = "Parakeet TDT 0.6B v3 (multilingual)"
     static let v2ID = "parakeet-tdt-v2"
@@ -14,6 +14,9 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
     private let version: AsrModelVersion
     private let language: Language?
     private var manager: AsrManager?
+    private var loadedModels: AsrModels?
+    private var previewManager: AsrManager?
+    private let inference = ParakeetInferenceGate()
     private var speechDetector: VadManager?
 
     init(version: AsrModelVersion, language: Language? = nil) {
@@ -69,6 +72,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
         let loadTime = try await clock.measure {
             let models = try await AsrModels.load(from: directory, version: version)
             try await newManager.loadModels(models)
+            loadedModels = models
             newDetector = try await VadManager(config: VadConfig(defaultThreshold: 0.5), progressHandler: { progress in
                 guard let report else { return }
                 let stage: EnginePreparation
@@ -91,11 +95,59 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting {
         )
     }
 
+    public func preview(samples: [Float]) async throws -> String? {
+        guard samples.count >= 32_000 else { return nil }
+        guard let loadedModels, let speechDetector else { throw EngineError.notPrepared(id: id) }
+        return try await inference.withPreview(prepare: {
+            try await self.preparePreview(samples: samples, models: loadedModels, detector: speechDetector)
+        }, predict: { input in
+            try await self.predictPreview(input)
+        })
+    }
+
+    private struct PreparedPreview: Sendable {
+        var manager: AsrManager
+        var state: TdtDecoderState
+        var samples: [Float]
+    }
+
+    private func preparePreview(samples: [Float], models: AsrModels, detector: VadManager) async throws -> PreparedPreview? {
+        try Task.checkCancellation()
+        let window = Array(samples.suffix(128_000))
+        let speech = try await detector.process(window)
+        try Task.checkCancellation()
+        guard speech.contains(where: { $0.isVoiceActive }) else { return nil }
+        if previewManager == nil {
+            let preview = AsrManager(config: .default)
+            try await preview.loadModels(models)
+            previewManager = preview
+        }
+        guard let previewManager else { return nil }
+        let state = TdtDecoderState.make(decoderLayers: await previewManager.decoderLayerCount)
+        return PreparedPreview(manager: previewManager, state: state, samples: window)
+    }
+
+    private func predictPreview(_ input: PreparedPreview?) async throws -> String? {
+        try Task.checkCancellation()
+        guard var input else { return "" }
+        let result = try await input.manager.transcribe(input.samples, decoderState: &input.state, language: version == .v3 ? language : nil)
+        try Task.checkCancellation()
+        return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public func transcribe(samples: [Float]) async throws -> Transcription {
         guard let manager, let speechDetector else { throw EngineError.notPrepared(id: id) }
+        let startedAt = ContinuousClock.now
+        return try await inference.withFinal {
+            try await self.transcribeWithAccess(samples: samples, manager: manager, detector: speechDetector, startedAt: startedAt)
+        }
+    }
+
+    private func transcribeWithAccess(samples: [Float], manager: AsrManager, detector: VadManager,
+                                     startedAt: ContinuousClock.Instant) async throws -> Transcription {
         let clock = ContinuousClock()
-        let start = clock.now
-        let speech = try await speechDetector.process(samples)
+        let start = startedAt
+        let speech = try await detector.process(samples)
         guard speech.contains(where: { $0.isVoiceActive }) else {
             return Transcription(
                 text: "",

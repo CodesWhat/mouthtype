@@ -15,6 +15,7 @@ import UniformTypeIdentifiers
     let microphone: MicrophoneSettingsModel
     var page = SettingsPage.general
     private(set) var cleanup: CleanupSettings
+    private(set) var livePreview = false
     private(set) var sounds: Bool
     private(set) var quietOtherAudio = false
     private(set) var skin: PillSkinKind
@@ -55,8 +56,14 @@ import UniformTypeIdentifiers
         refresh()
     }
 
+    func setLivePreview(_ enabled: Bool) {
+        LivePreviewPreference.set(enabled, in: defaults)
+        livePreview = enabled
+    }
+
     func refresh() {
         microphone.refresh()
+        livePreview = LivePreviewPreference.isEnabled(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
