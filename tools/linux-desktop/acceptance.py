@@ -16,7 +16,8 @@ import traceback
 import time
 import wave
 
-from desktop import PipeWireCapture, stop_process
+from desktop import PipeWireCapture, stop_process, read_phrase_clipboard
+from phrases import load_phrases
 
 
 def tone_metrics(path):
@@ -234,8 +235,15 @@ def sway_component(root, env, processes):
     clipboard.stdin.write(sentinel)
     clipboard.stdin.close()
     wait_for(lambda: clipboard_ready(env, sentinel))
-    expected = 'Hello, 世界. Émilie 👋'
-    run(['wtype', '-'], env, input=expected.encode())
+    phrase_path = root / 'phrases.json'
+    phrase_path.write_text(json.dumps([{'trigger': 'example phrase',
+                                       'expansion': 'Hello, 世界. Émilie 👋 {clipboard}'}]))
+    phrases = load_phrases(phrase_path, clipboard=lambda: read_phrase_clipboard(env=env))
+    expected = 'Hello, 世界. Émilie 👋 Mouthtype existing clipboard'
+    expanded = phrases.apply('example phrase')
+    if expanded != expected:
+        raise ValueError('Phrase clipboard snapshot differs from the synthetic fixture')
+    run(['wtype', '-'], env, input=expanded.encode())
     def contents():
         try:
             value = json.loads(text_path.read_text())
@@ -255,6 +263,7 @@ def sway_component(root, env, processes):
             'compositor_file': file_capability(sway if '/' in sway else shutil.which(sway)),
             'native_target': 'GTK3 Wayland', 'unicode_exact': actual['text'] == expected,
             'helper_submissions': 1, 'focus_preserved': True, 'clipboard_preserved': True,
+            'phrase_snapshot_exact': True, 'phrase_clipboard_snapshot': True,
             'hyprland_adapter_tested': False, 'hyprland_acceptance': False, 'omarchy_acceptance': False}
 
 

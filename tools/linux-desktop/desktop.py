@@ -6,6 +6,7 @@ import json
 import math
 import os
 import re
+import selectors
 from pathlib import Path
 import signal
 import socket
@@ -22,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(PROOF))
 from proof import Stopped, Worker, verify_artifacts
 from spellings import load_spellings
+from phrases import load_phrases, PhraseContextUnavailable
 
 
 def private_write(path, data):
@@ -37,10 +39,13 @@ def private_write(path, data):
 
 class Session:
     def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
-                 dictionary=None):
+                 dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None):
         self.capture, self.engine, self.delivery = capture, engine, delivery
         self.feedback = feedback
         self.dictionary = dictionary
+        self.phrases = phrases
+        self.phrase_clipboard = phrase_clipboard
+        self.clipboard = clipboard or read_phrase_clipboard
         self.recovery = Path(recovery)
         self.recovery.mkdir(mode=0o700, parents=True, exist_ok=True)
         info = self.recovery.stat()
@@ -87,6 +92,16 @@ class Session:
                     self.error = 'dictionary_unavailable'
                     self._notify('error')
                     return self.status()
+                try:
+                    phrases = load_phrases(self.phrases, clipboard=self.clipboard if self.phrase_clipboard else None)
+                except PhraseContextUnavailable:
+                    self.error = 'phrase_context_unavailable'
+                    self._notify('error')
+                    return self.status()
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    self.error = 'phrases_unavailable'
+                    self._notify('error')
+                    return self.status()
                 target = self.delivery.snapshot()
                 if admit_before is not None and time.monotonic() >= admit_before:
                     self.error = 'command_expired'
@@ -99,6 +114,7 @@ class Session:
                 self.discard_on_cancel = True
                 self.target = target
                 self.spellings = spellings
+                self.phrase_rules = phrases
                 self.cancelled = threading.Event()
                 self.error, self.outcome = None, 'not_attempted'
                 try:
@@ -131,7 +147,7 @@ class Session:
                 self.state = 'transcribing'
                 self._notify('transcribing')
                 self.thread = threading.Thread(target=self._finish,
-                                               args=(self.take, self.cancelled, self.target, self.spellings))
+                                               args=(self.take, self.cancelled, self.target, self.spellings, self.phrase_rules))
                 self.thread.start()
             elif action == 'cancel':
                 if self.state != 'idle':
@@ -150,23 +166,28 @@ class Session:
         if discard and self.discard_on_cancel and self.take:
             # Only the current recording is disposable. A completed transcript remains recoverable.
             (self.take / 'recording.wav').unlink(missing_ok=True)
+            if not (self.take / 'transcript.txt').exists():
+                (self.take / 'raw-recognition.txt').unlink(missing_ok=True)
             try:
                 self.take.rmdir()
             except OSError:
                 pass
 
-    def _finish(self, take, cancelled, target, spellings, allow_delivery=True):
+    def _finish(self, take, cancelled, target, spellings, phrases, allow_delivery=True):
         try:
             raw_path = take / 'raw-recognition.txt'
             raw = raw_path.read_bytes().decode('utf-8') if raw_path.exists() else self.engine.transcribe(take / 'recording.wav', cancelled)
             if not isinstance(raw, str):
                 raise ValueError('Invalid transcript')
-            text = spellings.apply(raw)
             with self.lock:
                 if cancelled.is_set() or self.closed:
                     return
                 if not raw_path.exists():
                     private_write(raw_path, raw)
+            text = phrases.apply(spellings.apply(raw))
+            with self.lock:
+                if cancelled.is_set() or self.closed:
+                    return
                 private_write(take / 'transcript.txt', text)
                 self.outcome = 'empty' if not text else 'recover_only' if not allow_delivery else 'target_changed'
                 if allow_delivery and text and target == self.delivery.snapshot():
@@ -199,12 +220,22 @@ class Session:
                 self.error = 'dictionary_unavailable'
                 self._notify('error')
                 return self.status()
+            try:
+                phrases = load_phrases(self.phrases, clipboard=self.clipboard if self.phrase_clipboard else None)
+            except PhraseContextUnavailable:
+                self.error = 'phrase_context_unavailable'
+                self._notify('error')
+                return self.status()
+            except (OSError, ValueError, subprocess.SubprocessError):
+                self.error = 'phrases_unavailable'
+                self._notify('error')
+                return self.status()
             self.take = take
             self.discard_on_cancel = False
             self.cancelled = threading.Event()
             self.error, self.outcome, self.state = None, 'not_attempted', 'transcribing'
             self._notify('transcribing')
-            self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, spellings, False))
+            self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, spellings, phrases, False))
             self.thread.start()
             return self.status()
 
@@ -298,6 +329,34 @@ def stop_process(process, first=signal.SIGTERM):
             break
         # Stop any descendants even if the group leader exits first.
     process.wait(timeout=.5)
+
+
+def read_phrase_clipboard(command=None, *, seconds=1, maximum=1024 * 1024, env=None):
+    process = subprocess.Popen(command or ['wl-paste', '--no-newline', '--type', 'text'],
+                               stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, start_new_session=True, env=env)
+    try:
+        end = time.monotonic() + seconds
+        output = bytearray()
+        os.set_blocking(process.stdout.fileno(), False)
+        with selectors.DefaultSelector() as reader:
+            reader.register(process.stdout, selectors.EVENT_READ)
+            while True:
+                remaining = end - time.monotonic()
+                if remaining <= 0 or not reader.select(remaining):
+                    raise PhraseContextUnavailable('Clipboard phrase context timed out')
+                data = os.read(process.stdout.fileno(), min(65536, maximum + 1 - len(output)))
+                if not data:
+                    break
+                output.extend(data)
+                if len(output) > maximum:
+                    raise PhraseContextUnavailable('Clipboard phrase context exceeds its limit')
+        if process.wait(timeout=max(0, end - time.monotonic())) != 0:
+            raise PhraseContextUnavailable('Clipboard phrase context is unavailable')
+        return output.decode('utf-8')
+    finally:
+        process.stdout.close()
+        stop_process(process)
 
 
 class PipeWireCapture:
@@ -409,9 +468,11 @@ def validate_config(value):
         if (not isinstance(classes, list) or not classes or
                 any(not isinstance(item, str) or not item or '*' in item for item in classes)):
             raise ValueError('Type delivery requires exact allowed_classes')
-    for name in ('python', 'capture_target', 'dictionary'):
+    for name in ('python', 'capture_target', 'dictionary', 'phrases'):
         if name in result and (not isinstance(result[name], str) or not result[name] or '\0' in result[name]):
             raise ValueError('Invalid ' + name)
+    if type(result.get('phrase_clipboard', False)) is not bool:
+        raise ValueError('phrase_clipboard must be true or false')
     return result
 
 
@@ -567,6 +628,9 @@ def main():
         dictionary = Path(config['dictionary']).expanduser() if 'dictionary' in config else None
         if dictionary is not None and not dictionary.is_absolute():
             dictionary = args.config.resolve().parent / dictionary
+        phrases = Path(config['phrases']).expanduser() if 'phrases' in config else None
+        if phrases is not None and not phrases.is_absolute():
+            phrases = args.config.resolve().parent / phrases
         args.runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
         info = args.runtime.stat()
         if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
@@ -576,7 +640,8 @@ def main():
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
                           HyprlandDelivery(config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
-                          feedback=Notifications(config['notifications']), dictionary=dictionary)
+                          feedback=Notifications(config['notifications']), dictionary=dictionary, phrases=phrases,
+                          phrase_clipboard=config.get('phrase_clipboard', False))
         session._notify('ready')
         stopped = threading.Event()
         for event in (signal.SIGINT, signal.SIGTERM):

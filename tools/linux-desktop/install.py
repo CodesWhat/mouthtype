@@ -11,6 +11,7 @@ import tempfile
 
 DESKTOP = ('desktop.py', 'install.py', 'README.md', 'config.example.json',
            'spellings.py', 'test_spellings.py', 'test_spelling_session.py',
+           'phrases.py', 'test_phrases.py', 'test_phrase_session.py', 'test_phrase_context.py', 'phrase-fixtures.json',
            'spelling-fixtures.json', 'spelling-unicode.json',
            'hyprland.lua', 'hyprland-legacy.conf', 'test_desktop.py',
            'setup_speech.py', 'test_setup_speech.py',

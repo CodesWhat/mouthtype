@@ -58,11 +58,12 @@ def _collapse(text):
 
 
 class Spellings:
-    def __init__(self, rules):
+    def __init__(self, rules, *, allow_empty=False, maximum_output_bytes=None):
+        self.maximum_output_bytes = maximum_output_bytes
         self.buckets = {}
         seen = set()
         for index, rule in enumerate(rules):
-            if not rule['written']:
+            if not allow_empty and not rule['written']:
                 continue
             chars = tuple(_lower(char) for char in _collapse(rule['heard']))
             if not chars or chars in seen:
@@ -78,6 +79,14 @@ class Spellings:
         chars = list(graphemes(text))
         lower = [_lower(char) for char in chars]
         output, cursor, i = [], 0, 0
+        output_bytes = 0
+        def append(value):
+            nonlocal output_bytes
+            if self.maximum_output_bytes is not None:
+                output_bytes += len(value.encode('utf-8'))
+                if output_bytes > self.maximum_output_bytes:
+                    raise ValueError('Expanded text exceeds its output limit')
+            output.append(value)
         while i < len(chars):
             if i and _word(chars[i - 1]):
                 i += 1
@@ -97,12 +106,13 @@ class Spellings:
                 else:
                     if end < len(chars) and _word(chars[end]):
                         continue
-                    output.extend((''.join(chars[cursor:i]), written))
+                    append(''.join(chars[cursor:i]))
+                    append(written)
                     cursor, i = end, end
                     break
             else:
                 i += 1
-        output.append(''.join(chars[cursor:]))
+        append(''.join(chars[cursor:]))
         return ''.join(output)
 
 

@@ -8,6 +8,7 @@ license=('GPL-3.0-only' 'MIT' 'Unicode-3.0')
 depends=('python' 'python-pip' 'curl' 'pipewire-audio')
 optdepends=('hyprland: optional target-aware typing adapter'
             'wtype: optional Unicode typing delivery'
+            'wl-clipboard: optional clipboard phrase context'
             'libnotify: optional recording notifications'
             'gtk3: optional synthetic native Wayland acceptance target'
             'python-gobject: optional synthetic native Wayland acceptance target')
