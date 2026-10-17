@@ -3,6 +3,40 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct AudioRetentionMaintenanceTests {
+    @Test func completedSnapshotExcludesNewTakesAndUnknownWavsAfterClockRollback() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-race-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        let policy = AudioRetentionPolicy()
+        for index in 0..<64 {
+            let id = "completed-\(index)"
+            try store.begin(DictationStart(id: id))
+            let entry = try archive.write(samples: [0.1, 0.2], id: id)
+            let handle = try FileHandle(forWritingTo: entry.url)
+            try handle.truncate(atOffset: UInt64(policy.maximumBytes / 64))
+            try handle.close()
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(86_400)], ofItemAtPath: entry.url.path)
+            try store.recordCapture(id, CaptureRecord(audioPath: entry.url.path))
+            try store.recordInsertion(id, InsertionRecord(finalText: "Completed."))
+        }
+        let completed = try store.audioRetentionCandidateIDs()
+        #expect(completed.count == 64)
+        try store.begin(DictationStart(id: "new-take"))
+        let active = try archive.write(samples: [0.1, 0.2], id: "new-take")
+        try store.recordCapture("new-take", CaptureRecord(audioPath: active.url.path))
+        let unknown = try archive.write(samples: [0.1, 0.2], id: "unknown")
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-365 * 86_400)], ofItemAtPath: unknown.url.path)
+        let removed = try archive.purge(olderThan: policy.cutoff(at: now), maxTotalBytes: policy.maximumBytes, eligibleIDs: completed)
+        #expect(removed.isEmpty)
+        #expect(FileManager.default.fileExists(atPath: active.url.path))
+        #expect(FileManager.default.fileExists(atPath: unknown.url.path))
+        #expect(try store.dictation(id: "new-take")?.status == .recorded)
+        #expect(try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: policy, now: now).isEmpty)
+        #expect(try store.dictation(id: "new-take")?.audioPath == active.url.path)
+    }
+
     @Test func pruningCompletedAudioClearsOnlyDeletedPointersAndKeepsTextAndTimings() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }

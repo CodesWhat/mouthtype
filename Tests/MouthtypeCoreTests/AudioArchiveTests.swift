@@ -103,7 +103,7 @@ import Testing
         }
     }
 
-    @Test func retentionPreservesProtectedArchivedTakesWithoutCountingThemAgainstCompletedLimit() throws {
+    @Test func retentionOnlyCountsSelectedCompletedTakesAgainstTheLimit() throws {
         let dir = try tempDir()
         defer { try? FileManager.default.removeItem(at: dir) }
         let archive = AudioArchive(supportDirectory: dir)
@@ -113,11 +113,11 @@ import Testing
             try setAge(archive, id: id, daysAgo: age, now: now)
         }
         let original = try Data(contentsOf: archive.url(for: "unfinished"))
-        let removed = try archive.purge(olderThan: now.addingTimeInterval(-90 * 86_400), maxTotalBytes: 364, protecting: ["unfinished"])
+        let removed = try archive.purge(olderThan: now.addingTimeInterval(-90 * 86_400), maxTotalBytes: 364, eligibleIDs: ["completed"])
         #expect(removed.isEmpty)
         #expect(try Data(contentsOf: archive.url(for: "unfinished")) == original)
         #expect(FileManager.default.fileExists(atPath: archive.url(for: "completed").path))
-        let purged = try archive.purge(olderThan: now.addingTimeInterval(-14 * 86_400), maxTotalBytes: 0, protecting: ["unfinished"])
+        let purged = try archive.purge(olderThan: now.addingTimeInterval(-14 * 86_400), maxTotalBytes: 0, eligibleIDs: ["completed"])
         #expect(purged == ["completed"])
         #expect(try Data(contentsOf: archive.url(for: "unfinished")) == original)
     }
