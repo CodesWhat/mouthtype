@@ -194,7 +194,8 @@ def main():
         return 0
     def deadline(*_):
         raise TimeoutError('Acceptance lifetime limit')
-    signal.signal(signal.SIGALRM, deadline)
+    for event in (signal.SIGALRM, signal.SIGTERM, signal.SIGINT):
+        signal.signal(event, deadline)
     signal.alarm(45)
     try:
         with tempfile.TemporaryDirectory(prefix='mouthtype-acceptance-') as temp:

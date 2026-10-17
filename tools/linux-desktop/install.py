@@ -11,7 +11,7 @@ import tempfile
 
 DESKTOP = ('desktop.py', 'install.py', 'README.md', 'config.example.json',
            'hyprland.lua', 'hyprland-legacy.conf', 'test_desktop.py',
-           'test_install.py', 'test_acceptance.py', 'acceptance.py', 'wayland_target.py')
+           'test_install.py', 'test_acceptance.py', 'acceptance.py', 'wayland_target.py', 'run-ci.sh')
 ENGINE = ('proof.py', 'worker.py', 'prepare.py', 'pins.json', 'requirements.txt', 'README.md')
 FILES = (['LICENSE', 'THIRD_PARTY_NOTICES.md'] +
          ['tools/linux-desktop/' + name for name in DESKTOP] +

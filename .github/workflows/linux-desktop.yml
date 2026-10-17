@@ -1,0 +1,116 @@
+name: Linux desktop components
+
+on:
+  pull_request:
+    paths:
+      - "tools/linux-desktop/**"
+      - "tools/linux-engine-proof/**"
+      - ".github/workflows/linux-desktop.yml"
+  push:
+    branches: [main, dev/v0.1.0]
+    paths:
+      - "tools/linux-desktop/**"
+      - "tools/linux-engine-proof/**"
+      - ".github/workflows/linux-desktop.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu-components:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      # Official Ubuntu 26.04 index, resolved 2026-10-16. Hosted kernel remains Ubuntu 24.04.
+      image: ubuntu:26.04@sha256:2e27ff302056b2b96df4a524ce48e72c595abfe3fd7a3d923adf8e782e16896f
+      options: --init
+    steps:
+      - name: Install signed Ubuntu component prerequisites
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus dbus-x11 procps sway wtype wl-clipboard
+          useradd --create-home --shell /bin/bash mouthtype-ci
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Record actual Ubuntu package and host versions
+        run: |
+          mkdir linux-desktop-evidence
+          chown mouthtype-ci:mouthtype-ci linux-desktop-evidence
+          {
+            cat /etc/os-release
+            uname -srm
+            python3 --version
+            getconf GNU_LIBC_VERSION
+            dpkg-query -W python3 python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus sway wtype wl-clipboard
+          } > linux-desktop-evidence/environment.txt
+      - name: Run ordinary-user synthetic components and no-model checks
+        run: runuser -u mouthtype-ci -- bash tools/linux-desktop/run-ci.sh "$GITHUB_WORKSPACE/linux-desktop-evidence"
+      - name: Verify and clean remaining owned test processes
+        if: always()
+        run: |
+          if id mouthtype-ci >/dev/null 2>&1; then
+            if pgrep -a -u mouthtype-ci; then
+              pkill -TERM -u mouthtype-ci || true
+              sleep 1
+              pkill -KILL -u mouthtype-ci || true
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: linux-desktop-ubuntu-components
+          path: linux-desktop-evidence/
+          retention-days: 14
+          if-no-files-found: warn
+
+  arch-components:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: archlinux:base-20261011.0.609700@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+      options: --init
+    steps:
+      - name: Install signed Arch component prerequisites
+        run: |
+          pacman -Syu --noconfirm --needed git python pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject
+          useradd --create-home --shell /bin/bash mouthtype-ci
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Record actual Arch package and host versions
+        run: |
+          mkdir linux-desktop-evidence
+          chown mouthtype-ci:mouthtype-ci linux-desktop-evidence
+          {
+            cat /etc/os-release
+            uname -srm
+            python --version
+            getconf GNU_LIBC_VERSION
+            pacman -Q python pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject glibc pacman archlinux-keyring
+            pacman-conf SigLevel
+          } > linux-desktop-evidence/environment.txt
+      - name: Run ordinary-user synthetic components and no-model checks
+        run: runuser -u mouthtype-ci -- bash tools/linux-desktop/run-ci.sh "$GITHUB_WORKSPACE/linux-desktop-evidence"
+      - name: Verify and clean remaining owned test processes
+        if: always()
+        run: |
+          if id mouthtype-ci >/dev/null 2>&1; then
+            if pgrep -a -u mouthtype-ci; then
+              pkill -TERM -u mouthtype-ci || true
+              sleep 1
+              pkill -KILL -u mouthtype-ci || true
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: linux-desktop-arch-components
+          path: linux-desktop-evidence/
+          retention-days: 14
+          if-no-files-found: warn
