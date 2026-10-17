@@ -63,8 +63,9 @@ def setup(destination, *, pins=None, download=None, run=None):
     run([python, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-input',
          '--only-binary=:all:', '--index-url', 'https://pypi.org/simple',
          '--timeout', '30', '--retries', '1', '-r', str(requirements)], 240)
-    run([python, '-c', 'import importlib.metadata; import sherpa_onnx; assert importlib.metadata.version("sherpa-onnx") == ' +
-         repr(pins['sherpa']['version'])], 20)
+    run([python, '-c', 'import importlib.metadata, sherpa_onnx\n'
+         'if importlib.metadata.version("sherpa-onnx") != ' + repr(pins['sherpa']['version']) +
+         ':\n raise RuntimeError("Pinned speech runtime version mismatch")'], 20)
     installed = run([python, '-m', 'pip', 'freeze', '--disable-pip-version-check'], 20)
     engines = destination / 'engines.json'
     private_write(engines, json.dumps(settings, indent=2) + '\n')

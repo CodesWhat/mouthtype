@@ -62,6 +62,17 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(receipt['model_sha256'], self.pins['parakeet']['sha256'])
         self.assertFalse(receipt['model_inference_tested'])
 
+    def test_runtime_version_check_still_rejects_wrong_version_with_optimization(self):
+        import sys
+        self.setup()
+        command = next(call for call in self.calls if isinstance(call, list) and call[1] == '-c')
+        prefix = ('import sys,types,importlib.metadata\n'
+                  'sys.modules["sherpa_onnx"]=types.ModuleType("sherpa_onnx")\n'
+                  'importlib.metadata.version=lambda name:"wrong"\n')
+        result = subprocess.run([sys.executable, '-O', '-c', prefix + command[2]],
+                                capture_output=True, timeout=5)
+        self.assertNotEqual(result.returncode, 0)
+
     def test_existing_destination_is_preserved_before_any_download_or_child(self):
         self.destination.mkdir()
         owned = self.destination / 'existing.txt'
