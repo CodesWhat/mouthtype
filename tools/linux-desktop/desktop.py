@@ -24,6 +24,7 @@ sys.path.insert(0, str(PROOF))
 from proof import Stopped, Worker, verify_artifacts
 from spellings import load_spellings
 from phrases import load_phrases, PhraseContextUnavailable
+from cleanup import BasicCleanup
 
 
 def private_write(path, data):
@@ -39,11 +40,12 @@ def private_write(path, data):
 
 class Session:
     def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
-                 dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None):
+                 dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None, cleanup='off'):
         self.capture, self.engine, self.delivery = capture, engine, delivery
         self.feedback = feedback
         self.dictionary = dictionary
         self.phrases = phrases
+        self.cleanup = cleanup
         self.phrase_clipboard = phrase_clipboard
         self.clipboard = clipboard or read_phrase_clipboard
         self.recovery = Path(recovery)
@@ -102,6 +104,12 @@ class Session:
                     self.error = 'phrases_unavailable'
                     self._notify('error')
                     return self.status()
+                try:
+                    cleanup = BasicCleanup(self.cleanup)
+                except ValueError:
+                    self.error = 'cleanup_unavailable'
+                    self._notify('error')
+                    return self.status()
                 target = self.delivery.snapshot()
                 if admit_before is not None and time.monotonic() >= admit_before:
                     self.error = 'command_expired'
@@ -115,6 +123,7 @@ class Session:
                 self.target = target
                 self.spellings = spellings
                 self.phrase_rules = phrases
+                self.cleanup_rules = cleanup
                 self.cancelled = threading.Event()
                 self.error, self.outcome = None, 'not_attempted'
                 try:
@@ -147,7 +156,7 @@ class Session:
                 self.state = 'transcribing'
                 self._notify('transcribing')
                 self.thread = threading.Thread(target=self._finish,
-                                               args=(self.take, self.cancelled, self.target, self.spellings, self.phrase_rules))
+                                               args=(self.take, self.cancelled, self.target, self.spellings, self.phrase_rules, self.cleanup_rules))
                 self.thread.start()
             elif action == 'cancel':
                 if self.state != 'idle':
@@ -173,7 +182,7 @@ class Session:
             except OSError:
                 pass
 
-    def _finish(self, take, cancelled, target, spellings, phrases, allow_delivery=True):
+    def _finish(self, take, cancelled, target, spellings, phrases, cleanup, allow_delivery=True):
         try:
             raw_path = take / 'raw-recognition.txt'
             raw = raw_path.read_bytes().decode('utf-8') if raw_path.exists() else self.engine.transcribe(take / 'recording.wav', cancelled)
@@ -184,7 +193,7 @@ class Session:
                     return
                 if not raw_path.exists():
                     private_write(raw_path, raw)
-            text = phrases.apply(spellings.apply(raw))
+            text = phrases.apply(spellings.apply(cleanup.apply(raw)))
             with self.lock:
                 if cancelled.is_set() or self.closed:
                     return
@@ -230,12 +239,18 @@ class Session:
                 self.error = 'phrases_unavailable'
                 self._notify('error')
                 return self.status()
+            try:
+                cleanup = BasicCleanup(self.cleanup)
+            except ValueError:
+                self.error = 'cleanup_unavailable'
+                self._notify('error')
+                return self.status()
             self.take = take
             self.discard_on_cancel = False
             self.cancelled = threading.Event()
             self.error, self.outcome, self.state = None, 'not_attempted', 'transcribing'
             self._notify('transcribing')
-            self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, spellings, phrases, False))
+            self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, spellings, phrases, cleanup, False))
             self.thread.start()
             return self.status()
 
@@ -453,7 +468,7 @@ def validate_config(value):
     if not isinstance(value, dict) or not isinstance(value.get('engine_config'), str):
         raise ValueError('engine_config is required')
     result = {'maximum_recording_seconds': 60, 'request_seconds': 30,
-              'delivery': {'mode': 'recover'}, 'notifications': True, **value}
+              'delivery': {'mode': 'recover'}, 'notifications': True, 'cleanup': 'off', **value}
     if type(result['notifications']) is not bool:
         raise ValueError('notifications must be true or false')
     for field, minimum, maximum in (('maximum_recording_seconds', 1, 120), ('request_seconds', 1, 120)):
@@ -471,6 +486,8 @@ def validate_config(value):
     for name in ('python', 'capture_target', 'dictionary', 'phrases'):
         if name in result and (not isinstance(result[name], str) or not result[name] or '\0' in result[name]):
             raise ValueError('Invalid ' + name)
+    if not isinstance(result['cleanup'], str) or result['cleanup'] not in ('off', 'basic'):
+        raise ValueError('cleanup must be off or basic')
     if type(result.get('phrase_clipboard', False)) is not bool:
         raise ValueError('phrase_clipboard must be true or false')
     return result
@@ -641,7 +658,7 @@ def main():
                           HyprlandDelivery(config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
                           feedback=Notifications(config['notifications']), dictionary=dictionary, phrases=phrases,
-                          phrase_clipboard=config.get('phrase_clipboard', False))
+                          phrase_clipboard=config.get('phrase_clipboard', False), cleanup=config['cleanup'])
         session._notify('ready')
         stopped = threading.Event()
         for event in (signal.SIGINT, signal.SIGTERM):
