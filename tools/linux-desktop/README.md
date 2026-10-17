@@ -4,6 +4,12 @@ A functional command-line session service for **Arch/Omarchy with Hyprland and P
 
 The automated tests use synthetic WAVs, fake capture/engine processes, and Unix sockets. They establish application behavior, including real child-process cleanup. They do not establish microphone, model, Hyprland, native Wayland delivery, or Omarchy compatibility. Those require a recorded Linux session test. The earlier Ubuntu model checkpoint belongs to `../linux-engine-proof/README.md`; its 5/6 exact result is not desktop acceptance.
 
+## Check an existing setup
+
+Run `mouthtype-linux --config /absolute/path/linux.json doctor` for a read-only report, or add `--json` after `doctor` for structured output. Exit status is 0 when required setup checks pass and 2 when something needs attention. It checks the target platform, configuration, configured Python's pinned speech distribution metadata, four model-file hashes, configured spelling/phrase libraries, required helpers and an existing service's status. It does not import the speech runtime, load weights, open a microphone, read the clipboard, install packages, download files or change the desktop. Optional notification feedback and a stopped service are warnings, with next steps.
+
+Passing means the inspected setup is consistent. It does not prove that the audio server is connected, the speech runtime can load its native libraries, the model recognizes speech, a notification appeared, or Hyprland can deliver into a particular field. Physical acceptance remains separate. Type mode requires its existing explicit unknown-secure-field opt-in; recover-only remains the default.
+
 ## Install and prepare
 
 The initial runtime target is Linux x86_64 with native Python in a dedicated environment, PipeWire's `pw-record`, and optionally `hyprctl` plus `wtype` for automatic typing. Arch's `pipewire-audio`, `hyprland`, and `wtype` packages provide those commands; use the distro's normal signed package management. No root input daemon or input-device group is needed. This script does not install packages, weights, permissions, bindings, autostart, or services.

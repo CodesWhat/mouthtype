@@ -602,6 +602,8 @@ def main():
     parser.add_argument('--runtime', type=Path, default=runtime_base / 'mouthtype')
     parser.add_argument('--recovery', type=Path, default=state_base / 'mouthtype/recovery')
     commands = parser.add_subparsers(dest='action', required=True)
+    doctor = commands.add_parser('doctor', help='Read-only setup checks; no recording or downloads')
+    doctor.add_argument('--json', action='store_true', help='Machine-readable setup report')
     service = commands.add_parser('serve')
     service.add_argument('--lifetime-seconds', type=float, default=43200)
     for action in ('start', 'stop', 'toggle', 'cancel', 'status', 'shutdown', 'list'):
@@ -614,6 +616,11 @@ def main():
     args = parser.parse_args()
     path = args.runtime / 'session.sock'
     try:
+        if args.action == 'doctor':
+            from doctor import diagnose, render
+            report = diagnose(args.config, args.runtime)
+            print(json.dumps(report) if args.json else render(report))
+            return 0 if report['ready'] else 2
         if args.action == 'list':
             print(json.dumps(recovery_list(args.recovery)))
             return 0
