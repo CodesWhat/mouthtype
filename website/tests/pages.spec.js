@@ -63,14 +63,17 @@ for (const [path, heading] of pages) {
   });
 }
 
-test("start describes the alpha.5 Settings window", async ({ page }) => {
+test("start describes the current alpha features", async ({ page }) => {
   await page.goto("/start/");
-  await expect(page.locator("main")).toContainText("0.1.0-alpha.6");
+  await expect(page.locator("main")).toContainText("0.1.0-alpha.7");
   await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
   await expect(page.locator("#first-take")).toContainText("release");
   await expect(page.locator("#your-build")).toContainText("Settings");
+  await expect(page.locator("#your-build")).toContainText("Transcribe Audio File…");
+  await expect(page.locator("#your-build")).toContainText("Live words");
+  await expect(page.locator('#your-build a[href="/docs/#file-transcription"]')).toBeVisible();
   await page.getByRole("link", { name: "If something gets stuck" }).click();
   await expect(page.locator("#help")).toBeInViewport();
   await expect(page.locator("#help")).toContainText("already appeared");
@@ -86,6 +89,9 @@ test("reference help covers everyday tasks with explicit build labels", async ({
   for (const id of [
     "shortcuts",
     "cleanup",
+    "recording-options",
+    "file-transcription",
+    "linux",
     "spellings-phrases",
     "recovery",
     "local-data",
@@ -93,8 +99,19 @@ test("reference help covers everyday tasks with explicit build labels", async ({
   ]) {
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
-  await expect(page.locator("#builds")).toContainText("alpha.5");
+  await expect(page.locator("#builds")).toContainText("alpha.7");
   await expect(page.locator("#builds")).toContainText("Settings");
+  await expect(page.locator("#builds")).not.toContainText("reference describes alpha.5");
+  await expect(page.locator("#recording-options")).toContainText("Live words");
+  await expect(page.locator("#recording-options")).toContainText("off by default");
+  await expect(page.locator("#file-transcription")).toContainText("Transcribe Audio File…");
+  await expect(page.locator("#file-transcription")).toContainText("10 minutes");
+  await expect(page.locator("#file-transcription")).toContainText("512 MB");
+  await expect(page.locator("#file-transcription")).toContainText("Copy");
+  await expect(page.locator("#file-transcription")).toContainText("Save Text…");
+  await expect(page.locator("#linux")).toContainText("experimental");
+  await expect(page.locator("#linux")).toContainText("source-only");
+  await expect(page.locator("#linux")).toContainText("Arch/Omarchy");
   await expect(page.locator("#cleanup")).toContainText("per-app");
   await expect(page.locator("#local-data")).toContainText("90 days");
   await page.getByRole("link", { name: "Start with your first take" }).click();
