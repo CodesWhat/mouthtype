@@ -112,7 +112,7 @@ def cleanup_engine(config):
     server = subprocess.Popen(server_command(config, port, alias), stdout=subprocess.DEVNULL,
                               stderr=subprocess.DEVNULL)
     try:
-        end = time.monotonic() + 120
+        end = time.monotonic() + config.get("startup_seconds", 120)
         while True:
             if server.poll() is not None:
                 raise ValueError("Local llama-server exited during startup")

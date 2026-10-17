@@ -15,9 +15,9 @@ import proof
 FAKE = r'''
 import json,os,subprocess,sys,time
 mode=sys.argv[1]
-json.loads(sys.stdin.readline())
+configuration=json.loads(sys.stdin.readline())
 if mode=="startup": time.sleep(10)
-print(json.dumps({"event":"ready","runtime":"fake","load_ms":3}),flush=True)
+print(json.dumps({"event":"ready","runtime":"fake","load_ms":3,"startup_seconds":configuration["configuration"].get("startup_seconds")}),flush=True)
 if mode=="backpressure": time.sleep(30)
 for line in sys.stdin:
  case=json.loads(line)
@@ -58,6 +58,11 @@ class ProofTests(unittest.TestCase):
         self.assertEqual(result["results"][1]["peak_rss_bytes"], 12)
         self.assertIn("fixture_sha256", result["results"][0])
         self.assertEqual(result["engines"]["cleanup"]["runtime"], "fake")
+
+    def test_configured_startup_budget_reaches_worker_without_mutating_saved_config(self):
+        result = self.run_cases([{"id": "one", "input": "x", "expected": "x"}])
+        self.assertEqual(result["engines"]["cleanup"]["startup_seconds"], .3)
+        self.assertNotIn("startup_seconds", self.config["engines"]["cleanup"])
 
     def test_deadline_kills_worker_and_descendant_and_does_not_run_next_case(self):
         start = time.monotonic()

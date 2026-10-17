@@ -167,6 +167,48 @@ class WorkerTests(unittest.TestCase):
             finally:
                 process.terminate()
 
+    def test_cleanup_can_become_ready_after_120_seconds_with_larger_configured_budget(self):
+        process = Mock(pid=1)
+        process.poll.return_value = None
+        version = types.SimpleNamespace(stdout="fake llama 6420cf5", stderr="")
+        config = {"server": "server", "startup_seconds": 180, "artifacts": {"model": {"path": "model"}}}
+        attempts = []
+        def health(port, path, payload=None, timeout=1):
+            if path == "/health":
+                attempts.append(path)
+                return {"status": "loading" if len(attempts) == 1 else "ok"}
+            command = launched.call_args.args[0]
+            return {"data": [{"id": command[command.index("--alias") + 1]}]}
+        with patch("worker.subprocess.run", return_value=version), patch("worker.subprocess.Popen", return_value=process) as launched, patch("worker.http_json", side_effect=health), patch("worker.time.monotonic", side_effect=[0, 121]), patch("worker.time.sleep"):
+            try:
+                try:
+                    infer, metadata, server = worker.cleanup_engine(config)
+                except TimeoutError:
+                    self.fail("Configured 180-second startup was rejected by the old 120-second cap")
+                self.assertIs(server, process)
+                self.assertTrue(callable(infer))
+                self.assertEqual(len(attempts), 2)
+                process.terminate.assert_not_called()
+            finally:
+                worker.stop_server(process)
+
+    def test_cleanup_uses_smaller_configured_startup_budget_and_reaps_server(self):
+        process = Mock(pid=1)
+        process.poll.return_value = None
+        version = types.SimpleNamespace(stdout="fake llama 6420cf5", stderr="")
+        config = {"server": "server", "startup_seconds": .5, "artifacts": {"model": {"path": "model"}}}
+        outcome = None
+        with patch("worker.subprocess.run", return_value=version), patch("worker.subprocess.Popen", return_value=process), patch("worker.http_json", side_effect=[{"status": "loading"}, RuntimeError("continued past configured deadline")]), patch("worker.time.monotonic", side_effect=[0, .6]), patch("worker.time.sleep"):
+            try:
+                worker.cleanup_engine(config)
+            except TimeoutError:
+                outcome = "deadline"
+            except RuntimeError:
+                outcome = "past-deadline"
+        self.assertEqual(outcome, "deadline")
+        process.terminate.assert_called_once()
+        process.wait.assert_called_once()
+
     def test_s1_payload_preserves_exact_prompt_control_settings_and_empty_text(self):
         payload = worker.cleanup_payload("um send Sean the mock-ups")
         self.assertEqual(payload.get("temperature"), 0)

@@ -201,7 +201,7 @@ def run_suite(config, suites, *, command_for=None, startup_seconds=120, request_
                 raise Stopped("cancelled")
             command = command_for(task, settings) if command_for else [sys.executable, str(Path(__file__).with_name("worker.py")), task]
             worker = Worker(command)
-            remaining = worker.send({"configuration": settings}, startup_seconds, cancelled)
+            remaining = worker.send({"configuration": {**settings, "startup_seconds": startup_seconds}}, startup_seconds, cancelled)
             loaded = worker.receive(remaining, cancelled)
             if loaded.get("event") != "ready":
                 raise ValueError("Engine failed to become ready")
