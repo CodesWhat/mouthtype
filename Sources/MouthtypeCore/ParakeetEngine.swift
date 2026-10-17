@@ -16,8 +16,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     private var manager: AsrManager?
     private var loadedModels: AsrModels?
     private var previewManager: AsrManager?
-    private var previewInFlight = false
-    private var finalInFlight = 0
+    private let inference = ParakeetInferenceGate()
     private var speechDetector: VadManager?
 
     init(version: AsrModelVersion, language: Language? = nil) {
@@ -99,33 +98,56 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     public func preview(samples: [Float]) async throws -> String? {
         guard samples.count >= 32_000 else { return nil }
         guard let loadedModels, let speechDetector else { throw EngineError.notPrepared(id: id) }
-        guard !previewInFlight, finalInFlight == 0 else { return nil }
-        previewInFlight = true
-        defer { previewInFlight = false }
+        return try await inference.withPreview(prepare: {
+            try await self.preparePreview(samples: samples, models: loadedModels, detector: speechDetector)
+        }, predict: { input in
+            try await self.predictPreview(input)
+        })
+    }
+
+    private struct PreparedPreview: Sendable {
+        var manager: AsrManager
+        var state: TdtDecoderState
+        var samples: [Float]
+    }
+
+    private func preparePreview(samples: [Float], models: AsrModels, detector: VadManager) async throws -> PreparedPreview? {
         try Task.checkCancellation()
         let window = Array(samples.suffix(128_000))
-        let speech = try await speechDetector.process(window)
+        let speech = try await detector.process(window)
         try Task.checkCancellation()
-        guard speech.contains(where: { $0.isVoiceActive }) else { return "" }
+        guard speech.contains(where: { $0.isVoiceActive }) else { return nil }
         if previewManager == nil {
             let preview = AsrManager(config: .default)
-            try await preview.loadModels(loadedModels)
+            try await preview.loadModels(models)
             previewManager = preview
         }
         guard let previewManager else { return nil }
-        var state = TdtDecoderState.make(decoderLayers: await previewManager.decoderLayerCount)
-        let result = try await previewManager.transcribe(window, decoderState: &state, language: version == .v3 ? language : nil)
+        let state = TdtDecoderState.make(decoderLayers: await previewManager.decoderLayerCount)
+        return PreparedPreview(manager: previewManager, state: state, samples: window)
+    }
+
+    private func predictPreview(_ input: PreparedPreview?) async throws -> String? {
+        try Task.checkCancellation()
+        guard var input else { return "" }
+        let result = try await input.manager.transcribe(input.samples, decoderState: &input.state, language: version == .v3 ? language : nil)
         try Task.checkCancellation()
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func transcribe(samples: [Float]) async throws -> Transcription {
         guard let manager, let speechDetector else { throw EngineError.notPrepared(id: id) }
-        finalInFlight += 1
-        defer { finalInFlight -= 1 }
+        let startedAt = ContinuousClock.now
+        return try await inference.withFinal {
+            try await self.transcribeWithAccess(samples: samples, manager: manager, detector: speechDetector, startedAt: startedAt)
+        }
+    }
+
+    private func transcribeWithAccess(samples: [Float], manager: AsrManager, detector: VadManager,
+                                     startedAt: ContinuousClock.Instant) async throws -> Transcription {
         let clock = ContinuousClock()
-        let start = clock.now
-        let speech = try await speechDetector.process(samples)
+        let start = startedAt
+        let speech = try await detector.process(samples)
         guard speech.contains(where: { $0.isVoiceActive }) else {
             return Transcription(
                 text: "",
