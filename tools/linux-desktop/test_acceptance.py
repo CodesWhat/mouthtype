@@ -46,6 +46,22 @@ class MappingTests(unittest.TestCase):
         self.assertEqual(mapped_target(tree, 'app.mouthtype.Acceptance'),
                          {'id': 17, 'app_id': 'app.mouthtype.Acceptance'})
 
+class ClipboardTests(unittest.TestCase):
+    def test_empty_selection_is_pending_without_relaxing_exact_clipboard_check(self):
+        import subprocess
+        from unittest.mock import patch
+        from acceptance import clipboard_ready
+        empty = subprocess.CalledProcessError(1, ['wl-paste'], stderr=b'Nothing is copied')
+        with patch('acceptance.run', side_effect=empty):
+            self.assertFalse(clipboard_ready({}, b'original'))
+        with patch('acceptance.run', return_value=subprocess.CompletedProcess([], 0, stdout=b'original')):
+            self.assertTrue(clipboard_ready({}, b'original'))
+        with patch('acceptance.run', return_value=subprocess.CompletedProcess([], 0, stdout=b'changed')):
+            self.assertFalse(clipboard_ready({}, b'original'))
+        with patch('acceptance.run', side_effect=subprocess.CalledProcessError(2, ['wl-paste'])):
+            with self.assertRaises(subprocess.CalledProcessError):
+                clipboard_ready({}, b'original')
+
 class NativeTargetTests(unittest.TestCase):
     def test_existing_gtk_program_name_is_replaced_before_creating_surface(self):
         import runpy

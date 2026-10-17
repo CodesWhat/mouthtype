@@ -121,6 +121,15 @@ def run(command, env, **kwargs):
         raise
 
 
+def clipboard_ready(env, sentinel):
+    try:
+        return run(['wl-paste', '--no-newline'], env).stdout == sentinel
+    except subprocess.CalledProcessError as error:
+        if error.returncode == 1:
+            return False
+        raise
+
+
 def pipewire_component(root, env, processes):
     fragment = root / 'config/pipewire/pipewire.conf.d/90-mouthtype-test.conf'
     fragment.parent.mkdir(parents=True)
@@ -224,7 +233,7 @@ def sway_component(root, env, processes):
     sentinel = b'Mouthtype existing clipboard'
     clipboard.stdin.write(sentinel)
     clipboard.stdin.close()
-    wait_for(lambda: run(['wl-paste', '--no-newline'], env).stdout == sentinel)
+    wait_for(lambda: clipboard_ready(env, sentinel))
     expected = 'Hello, 世界. Émilie 👋'
     run(['wtype', '-'], env, input=expected.encode())
     def contents():
