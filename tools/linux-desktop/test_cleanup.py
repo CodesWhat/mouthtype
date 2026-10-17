@@ -43,3 +43,45 @@ class CleanupTests(unittest.TestCase):
     def test_swift_casing_treats_cased_invariant_modifier_letters_as_uppercase(self):
         self.assertEqual(spoken_commands('start period ʰello'), 'start. ʰello')
         self.assertEqual(spoken_commands('one new line eʰello'), 'one\neʰello')
+
+
+class CleanupAcceptanceTests(unittest.TestCase):
+    def test_component_never_bypasses_the_production_control_character_guard(self):
+        import io
+        import subprocess
+        import tempfile
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import acceptance
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            runtime = root / 'runtime'
+            runtime.mkdir()
+            target = root / 'target.json'
+            target.write_text('{"text":""}')
+            submitted = []
+            sentinel = b'Mouthtype existing clipboard'
+            class Processes:
+                def start(self, *_args, **_kwargs):
+                    (runtime / 'sway-ipc.unit.sock').touch()
+                    (runtime / 'wayland-unit').touch()
+                    return SimpleNamespace(stdin=io.BytesIO(), poll=lambda: None)
+            def run(command, _env, **kwargs):
+                if command[0] == 'wtype':
+                    text = kwargs['input'].decode('utf-8')
+                    self.assertFalse(any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in text),
+                                     'The component must not submit Return/Tab actions that production refuses')
+                    submitted.append(text)
+                    target.write_text(json.dumps({'text': text}))
+                return subprocess.CompletedProcess(command, 0, stdout=sentinel)
+            tree = {'id': 17, 'app_id': 'app.mouthtype.Acceptance', 'focused': True}
+            with patch('acceptance.os.getuid', return_value=1000), patch('acceptance.run', run), \
+                    patch('acceptance.compositor_tree', return_value=tree), \
+                    patch('acceptance.file_capability', return_value={'mode': '0o755'}), \
+                    patch('acceptance.read_phrase_clipboard', return_value=sentinel.decode()) as reader:
+                result = acceptance.sway_component(root, {'XDG_RUNTIME_DIR': str(runtime)}, Processes())
+            self.assertEqual(len(submitted), 1)
+            self.assertTrue(result['basic_cleanup_exact'])
+            self.assertTrue(result['multiline_delivery_guard'])
+            self.assertFalse(result['hyprland_adapter_tested'])
+            reader.assert_called_once()

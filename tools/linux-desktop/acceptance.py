@@ -16,7 +16,7 @@ import traceback
 import time
 import wave
 
-from desktop import PipeWireCapture, stop_process, read_phrase_clipboard
+from desktop import PipeWireCapture, stop_process, read_phrase_clipboard, HyprlandDelivery
 from phrases import load_phrases
 from cleanup import BasicCleanup
 
@@ -240,11 +240,25 @@ def sway_component(root, env, processes):
     phrase_path.write_text(json.dumps([{'trigger': 'example phrase',
                                        'expansion': 'Hello, 世界. Émilie 👋 {clipboard}'}]))
     phrases = load_phrases(phrase_path, clipboard=lambda: read_phrase_clipboard(env=env))
-    expected = 'Hello, 世界. Émilie 👋 Mouthtype existing clipboard\nNext item'
-    clean = BasicCleanup('basic').apply('example phrase new line next item')
-    if clean != 'Example phrase\nNext item':
+    multiline = BasicCleanup('basic').apply('example phrase new line next item')
+    if multiline != 'Example phrase\nNext item':
         raise ValueError('Cleanup differs from the synthetic fixture')
-    expanded = phrases.apply(clean)
+    expanded_multiline = phrases.apply(multiline)
+    if expanded_multiline != 'Hello, 世界. Émilie 👋 Mouthtype existing clipboard\nNext item':
+        raise ValueError('Multiline phrase snapshot differs from the synthetic fixture')
+    def refuse_helpers(*_args, **_kwargs):
+        raise RuntimeError('Unsupported text must be refused before compositor/helper calls')
+    delivery = HyprlandDelivery({'mode': 'type', 'allow_unknown_secure_field': True,
+                                 'allowed_classes': ['app.mouthtype.Acceptance']}, run=refuse_helpers)
+    if delivery.submit(expanded_multiline, {'class': 'app.mouthtype.Acceptance'}) != 'unsupported_text':
+        raise ValueError('Production delivery did not refuse control-bearing text')
+    if json.loads(text_path.read_text())['text'] != '':
+        raise ValueError('Unsupported text reached the target')
+    expected = 'Hello, 世界. Émilie 👋 Mouthtype existing clipboard.'
+    single = BasicCleanup('basic').apply('example phrase period')
+    if single != 'Example phrase.':
+        raise ValueError('Single-line cleanup differs from the synthetic fixture')
+    expanded = phrases.apply(single)
     if expanded != expected:
         raise ValueError('Phrase clipboard snapshot differs from the synthetic fixture')
     run(['wtype', '-'], env, input=expanded.encode())
@@ -267,7 +281,7 @@ def sway_component(root, env, processes):
             'compositor_file': file_capability(sway if '/' in sway else shutil.which(sway)),
             'native_target': 'GTK3 Wayland', 'unicode_exact': actual['text'] == expected,
             'helper_submissions': 1, 'focus_preserved': True, 'clipboard_preserved': True,
-            'phrase_snapshot_exact': True, 'phrase_clipboard_snapshot': True, 'basic_cleanup_exact': True,
+            'phrase_snapshot_exact': True, 'phrase_clipboard_snapshot': True, 'basic_cleanup_exact': True, 'multiline_delivery_guard': True,
             'hyprland_adapter_tested': False, 'hyprland_acceptance': False, 'omarchy_acceptance': False}
 
 
