@@ -1,0 +1,5 @@
+[
+  {"id": "speech-one", "text": "The silver compass is beside the window.", "expected": "The silver compass is beside the window."},
+  {"id": "speech-two", "text": "Please send the report before Friday.", "expected": "Please send the report before Friday."},
+  {"id": "silence", "text": "", "expected": ""}
+]

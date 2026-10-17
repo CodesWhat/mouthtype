@@ -1,0 +1,54 @@
+name: Disposable Arch speech setup smoke
+
+on:
+  pull_request:
+    paths: ["tools/linux-speech-smoke/**", ".github/workflows/linux-speech-smoke.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-speech-setup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container:
+      image: archlinux:base-20261011.0.609700@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+      options: --init
+    steps:
+      - name: Install signed Arch speech prerequisites
+        run: |
+          timeout --signal=TERM --kill-after=10s 180s pacman -Syu --noconfirm --needed git python python-pip curl pipewire-audio espeak-ng sox procps-ng
+          useradd --create-home --shell /bin/bash mouthtype-ci
+          mkdir /home/mouthtype-ci/runtime
+          chown mouthtype-ci:mouthtype-ci /home/mouthtype-ci/runtime
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prepare synthetic evidence directory
+        run: |
+          mkdir linux-speech-evidence
+          chown mouthtype-ci:mouthtype-ci linux-speech-evidence
+      - name: Run the explicit setup helper and unchanged three speech fixtures
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          timeout --signal=TERM --kill-after=10s 1000s runuser -u mouthtype-ci -- env RUNNER_TEMP=/home/mouthtype-ci/runtime MOUTHTYPE_SMOKE_EVIDENCE="$GITHUB_WORKSPACE/linux-speech-evidence" bash tools/linux-speech-smoke/run.sh
+      - name: Verify and clean remaining owned test processes
+        if: always()
+        run: |
+          if id mouthtype-ci >/dev/null 2>&1; then
+            if pgrep -a -u mouthtype-ci; then
+              pkill -TERM -u mouthtype-ci || true
+              sleep 1
+              pkill -KILL -u mouthtype-ci || true
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: linux-arch-speech-setup-evidence
+          path: linux-speech-evidence/
+          retention-days: 14
+          if-no-files-found: warn

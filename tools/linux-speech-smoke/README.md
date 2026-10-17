@@ -1,0 +1,9 @@
+# Disposable Arch speech setup smoke
+
+Verification-only PR for the actual explicit `tools/linux-desktop/setup_speech.py` helper from product commit c3872b7. Close after collecting evidence rather than merging this model-download workflow by default. No recurring schedule, model cache, weights upload, private audio, desktop service or live microphone is involved.
+
+A pinned official Arch image receives normal signed prerequisites, then a dedicated ordinary user invokes the real helper into a fresh private directory. This tests the helper's actual pinned download/hash/selected extraction, dedicated venv, binary requirements, native import/version check and recover-only configs. It then uses the resulting environment/config to run the existing resident speech worker on the unchanged synthetic speech-one, speech-two and silence fixtures. All three exact expectations must match. The validator rejects missing/duplicate cases, altered expected text, unavailable/fake/unpinned runtime reports and surviving owned workers.
+
+This is separate from the six-case CPU experiment, which completed real Arch inference with the preserved “three” versus “3” cleanup mismatch and remained failed5/6. No C++ or S1 is built/downloaded here, and success cannot certify cleanup, Hyprland, Omarchy or physical Arch desktop support. The kernel is the hosted Ubuntu runner's kernel; actual signed Arch package/Python versions are recorded.
+
+The job has read-only repository permissions, pinned actions/image, a20-minute hard limit and shorter setup/helper/proof deadlines. It stops and verifies owned processes, retains only synthetic fixtures/reports/preparation provenance/environment for14 days, and removes temporary source artifacts/environment/models. No local runtime or models are started. Local checks use `python3 -m unittest discover -s tools/linux-speech-smoke -p 'test_*.py'`, Bash syntax and actionlint.
