@@ -51,7 +51,7 @@ enum MicrophoneChoice: Hashable {
         error = nil
         do {
             priority = try MicrophonePriority.load(defaults)
-            preferred = try PreferredMicrophone.load(defaults)
+            preferred = priority?.enabled == true ? nil : try PreferredMicrophone.load(defaults)
             choice = priority?.enabled == true ? .priorityList : preferred.map { .device($0.uid) } ?? .systemDefault
         } catch {
             preferred = nil

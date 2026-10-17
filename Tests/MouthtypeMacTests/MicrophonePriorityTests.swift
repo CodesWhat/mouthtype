@@ -49,6 +49,18 @@ import Testing
 }
 
 @MainActor @Suite struct MicrophonePrioritySettingsTests {
+    @Test func explicitPriorityChoiceCanReplaceAnUnreadableFixedChoice() throws {
+        let suite = "priority-repair-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        defaults.set(Data("broken".utf8), forKey: PreferredMicrophone.defaultsKey)
+        let input = MicrophoneDevice(uid: "a", name: "A", input: .init(sampleRate: 48_000, channels: 1, id: 1))
+        let model = MicrophoneSettingsModel(defaults: defaults, devices: { [input] }, defaultInput: { 1 })
+        model.choose(.priorityList)
+        #expect(model.choice == .priorityList)
+        #expect(model.error == nil)
+    }
+
     @Test func enableReorderRemoveAndDisableRetainExplicitChoices() throws {
         let suite = "priority-settings-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))

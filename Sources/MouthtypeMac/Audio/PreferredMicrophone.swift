@@ -57,8 +57,9 @@ struct CaptureInputSelection: Equatable, Sendable {
     }
 
     static func current() throws -> Self {
-        try resolve(preferred: PreferredMicrophone.load(), priority: MicrophonePriority.load(),
-                    devices: InputDevice.availableMicrophones(), defaultInput: InputDevice.defaultInputID())
+        let priority = try MicrophonePriority.load()
+        let preferred = priority?.enabled == true ? nil : try PreferredMicrophone.load()
+        return try resolve(preferred: preferred, priority: priority, devices: InputDevice.availableMicrophones(), defaultInput: InputDevice.defaultInputID())
     }
 }
 
