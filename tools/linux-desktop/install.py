@@ -36,6 +36,14 @@ def install(source, prefix, *, destdir=None):
     payload, launcher = destination / 'lib/mouthtype-linux', destination / 'bin/mouthtype-linux'
     if payload.exists() or launcher.exists() or launcher.is_symlink():
         raise FileExistsError('Existing Linux client is preserved')
+    staged_parents = set()
+    if destdir is not None:
+        staged_root = Path(destdir).expanduser().resolve()
+        for directory in (payload.parent, launcher.parent):
+            while directory != staged_root:
+                if not directory.exists():
+                    staged_parents.add(directory)
+                directory = directory.parent
     payload.parent.mkdir(parents=True, exist_ok=True)
     launcher.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix='.mouthtype-install-', dir=payload.parent))
@@ -46,7 +54,11 @@ def install(source, prefix, *, destdir=None):
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source / name, destination)
         if destdir is not None:
+            for path in staging.rglob('*'):
+                path.chmod(0o755 if path.is_dir() else 0o644)
             staging.chmod(0o755)
+            for directory in staged_parents:
+                directory.chmod(0o755)
         os.rename(staging, payload)
         placed = True
         content = ('#!/usr/bin/env python3\nimport runpy\n'
