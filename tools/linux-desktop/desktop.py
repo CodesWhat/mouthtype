@@ -272,7 +272,8 @@ class PipeWireCapture:
                 stop_process(process)
                 raise ValueError('Capture stopped before release')
             stop_process(process, signal.SIGINT)
-            if process.returncode != 0:
+            # Upstream pw-record closes the WAV on SIGINT but returns1 unless playback drained.
+            if process.returncode not in (0, 1):
                 raise ValueError('Capture did not finalize')
         try:
             with wave.open(str(self.path), 'rb') as audio:

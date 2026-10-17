@@ -38,5 +38,13 @@ class DiagnosticTests(unittest.TestCase):
             run([sys.executable, '-c', 'import sys;sys.stderr.write("synthetic helper failure");sys.exit(3)'], dict(os.environ))
         self.assertIn('synthetic helper failure', output.getvalue())
 
+class MappingTests(unittest.TestCase):
+    def test_target_file_readiness_does_not_substitute_for_a_mapped_native_node(self):
+        from acceptance import mapped_target
+        self.assertIsNone(mapped_target({'nodes': []}, 'app.mouthtype.Acceptance'))
+        tree = {'nodes': [{'nodes': [{'id': 17, 'app_id': 'app.mouthtype.Acceptance'}]}]}
+        self.assertEqual(mapped_target(tree, 'app.mouthtype.Acceptance'),
+                         {'id': 17, 'app_id': 'app.mouthtype.Acceptance'})
+
 if __name__ == '__main__':
     unittest.main()

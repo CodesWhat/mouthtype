@@ -534,5 +534,51 @@ class AdmissionTests(unittest.TestCase):
             finally:
                 session.close()
 
+class CaptureExitContractTests(unittest.TestCase):
+    def check_helper(self, natural):
+        import sys
+        from desktop import PipeWireCapture
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'record.py'
+            ready = root / 'ready'
+            script.write_text("""import signal,sys,time,wave
+from pathlib import Path
+with wave.open(sys.argv[1],'wb') as audio:
+ audio.setparams((1,2,16000,0,'NONE',''))
+ audio.writeframes(b'\\0\\0'*1600)
+signal.signal(signal.SIGINT,lambda *_:sys.exit(1))
+Path(sys.argv[2]).touch()
+if sys.argv[3]=='natural':sys.exit(1)
+while True:time.sleep(.01)
+""")
+            capture = PipeWireCapture()
+            capture.argv = lambda path: [sys.executable, str(script), str(path), str(ready), 'natural' if natural else 'controlled']
+            try:
+                capture.start(root / 'take.wav')
+                process = capture.process
+                deadline = time.monotonic() + 1
+                while not ready.exists() and time.monotonic() < deadline:
+                    time.sleep(.005)
+                self.assertTrue(ready.exists())
+                if natural:
+                    process.wait(timeout=1)
+                    with self.assertRaises(ValueError):
+                        capture.stop()
+                else:
+                    finalized = True
+                    try:
+                        capture.stop()
+                    except ValueError:
+                        finalized = False
+                    self.assertTrue(finalized, 'pw-record controlled SIGINT exits1 after finalizing WAV')
+                    self.assertEqual(process.returncode, 1)
+            finally:
+                capture.cancel()
+    def test_controlled_sigint_exit_one_still_requires_valid_pcm(self):
+        self.check_helper(False)
+    def test_natural_exit_one_is_capture_interruption_even_with_valid_pcm(self):
+        self.check_helper(True)
+
 if __name__ == '__main__':
     unittest.main()

@@ -50,13 +50,24 @@ def file_capability(path):
     return result
 
 
+def packaged_sway_probe():
+    try:
+        result = subprocess.run(['sway', '--version'], capture_output=True, text=True, timeout=5)
+        return {'returncode': result.returncode, 'stdout': result.stdout[-4096:], 'stderr': result.stderr[-4096:]}
+    except OSError as error:
+        return {'error_class': type(error).__name__, 'errno': error.errno}
+    except subprocess.SubprocessError as error:
+        return {'error_class': type(error).__name__}
+
+
 def capabilities():
     return {'system': platform.system(), 'kernel': platform.release(),
             'architecture': platform.machine(), 'drm_nodes': [str(p) for p in Path('/dev/dri').glob('*')],
             'commands': {name: shutil.which(name) for name in
                          ('Hyprland', 'hyprctl', 'pipewire', 'pw-record', 'wireplumber', 'sway', 'wtype', 'wl-copy', 'wl-paste')},
             'hyprland_acceptance': False, 'omarchy_acceptance': False,
-            'sway_file': file_capability(shutil.which('sway'))}
+            'sway_file': file_capability(shutil.which('sway')),
+            'packaged_sway_version_probe': packaged_sway_probe()}
 
 
 class Processes:
@@ -158,6 +169,16 @@ context.objects = [
         os.environ.update(previous)
 
 
+def mapped_target(tree, application):
+    if tree.get('app_id') == application:
+        return {'id': tree['id'], 'app_id': tree['app_id']}
+    for child in tree.get('nodes', []) + tree.get('floating_nodes', []):
+        found = mapped_target(child, application)
+        if found:
+            return found
+    return None
+
+
 def focused_node(tree):
     if tree.get('focused') and tree.get('app_id'):
         return {'id': tree['id'], 'app_id': tree['app_id']}
@@ -176,7 +197,9 @@ def sway_component(root, env, processes):
                LC_ALL='C.UTF-8')
     config = root / 'sway.conf'
     config.write_text('output * resolution 1024x768\nfocus_follows_mouse no\n')
-    compositor = processes.start(['sway', '--config', str(config)])
+    sway = env.get('MOUTHTYPE_SWAY_BINARY', 'sway')
+    version = run([sway, '--version'], env).stdout.decode().strip()
+    compositor = processes.start([sway, '--config', str(config)])
     runtime = Path(env['XDG_RUNTIME_DIR'])
     ipc = wait_for(lambda: next(runtime.glob('sway-ipc.*.sock'), None))
     wayland = wait_for(lambda: next((p for p in runtime.glob('wayland-*') if not p.name.endswith('.lock')), None))
@@ -184,7 +207,9 @@ def sway_component(root, env, processes):
     text_path = root / 'target.json'
     target = processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(text_path)])
     wait_for(lambda: text_path.exists())
-    run(['swaymsg', '[app_id="app.mouthtype.Acceptance"] focus'], env)
+    mapped = wait_for(lambda: mapped_target(
+        json.loads(run(['swaymsg', '-t', 'get_tree'], env).stdout), 'app.mouthtype.Acceptance'))
+    run(['swaymsg', '[con_id=' + str(mapped['id']) + '] focus'], env)
     before = wait_for(lambda: focused_node(json.loads(run(['swaymsg', '-t', 'get_tree'], env).stdout)))
     if before['app_id'] != 'app.mouthtype.Acceptance':
         raise ValueError('Native acceptance target does not have focus')
@@ -208,6 +233,10 @@ def sway_component(root, env, processes):
     if compositor.poll() is not None or target.poll() is not None:
         raise ValueError('Component exited early')
     return {'component': 'sway-wtype', 'compositor': 'Sway headless pixman',
+            'compositor_version': version,
+            'runtime_build': 'source-built' if env.get('MOUTHTYPE_SWAY_BINARY') else 'distribution-package',
+            'source_revision': env.get('MOUTHTYPE_SWAY_REVISION'),
+            'compositor_file': file_capability(sway if '/' in sway else shutil.which(sway)),
             'native_target': 'GTK3 Wayland', 'unicode_exact': actual['text'] == expected,
             'helper_submissions': 1, 'focus_preserved': True, 'clipboard_preserved': True,
             'hyprland_adapter_tested': False, 'hyprland_acceptance': False, 'omarchy_acceptance': False}

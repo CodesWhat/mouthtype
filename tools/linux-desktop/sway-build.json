@@ -1,0 +1,8 @@
+{
+  "version": "1.12",
+  "revision": "88869399f421d9180dd8b6ed0b5a1f4a3585d252",
+  "archive": "https://codeload.github.com/swaywm/sway/tar.gz/88869399f421d9180dd8b6ed0b5a1f4a3585d252",
+  "sha256": "ce99acaba09282e565313699636f767a62c4d6aa772c036b3dd26762be8e0676",
+  "upstream": "https://github.com/swaywm/sway/releases/tag/1.12",
+  "license": "MIT"
+}
