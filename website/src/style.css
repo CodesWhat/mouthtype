@@ -806,21 +806,7 @@ footer {
     font-size: 8px;
   }
   .alpha-stamp {
-    width: 100%;
-    min-height: 0;
-    transform: none;
-    margin-top: 27px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 15px 12px;
-    gap: 12px;
-  }
-  .alpha-stamp strong {
-    font-size: 7px;
-  }
-  .alpha-stamp > span:last-child {
-    font-size: 7px;
+    margin: 27px auto 0;
   }
   footer {
     margin-top: 40px;
