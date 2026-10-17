@@ -42,6 +42,7 @@ final class DictationController {
     @ObservationIgnored private let inserter: any DictationInserting
     @ObservationIgnored private let pill: any DictationPill
     @ObservationIgnored private let sounds: any SoundPlayer
+    @ObservationIgnored private let audioQuiet: (any RecordingAudioQuieting)?
     @ObservationIgnored private let clock: any DictationClock
     @ObservationIgnored private let cards: any DictationCards
     /// Told when a paste lands and when the next dictation starts, so edits to the pasted text can be learned from.
@@ -90,7 +91,7 @@ final class DictationController {
     init(
         capture: any DictationCapturing, engine: any DictationEngine, pipeline: DictationPipeline,
         inserter: any DictationInserting, pill: any DictationPill, sounds: any SoundPlayer, clock: any DictationClock,
-        cards: any DictationCards, limits: Limits = .standard
+        cards: any DictationCards, limits: Limits = .standard, audioQuiet: (any RecordingAudioQuieting)? = nil
     ) {
         self.limits = limits
         self.capture = capture
@@ -99,6 +100,7 @@ final class DictationController {
         self.inserter = inserter
         self.pill = pill
         self.sounds = sounds
+        self.audioQuiet = audioQuiet
         self.clock = clock
         self.cards = cards
         cards.onUndo = { [weak self] in
@@ -197,6 +199,7 @@ final class DictationController {
             startError = error
         }
         if startError == nil {
+            audioQuiet?.begin()
             sounds.playStart()
             pill.showRecording()
             pipeline.smart?.recordingStarted()
@@ -316,7 +319,10 @@ final class DictationController {
         let saving = endTimers()
         endHandsFree()
         // The stop starts now so the next press can follow it; the rest waits its turn behind earlier dictations.
-        let stopped = Task { try await capture.stopSalvaging() }
+        let stopped = Task {
+            defer { audioQuiet?.end() }
+            return try await capture.stopSalvaging()
+        }
         stopping = stopped
         phase = .processing
         showProcessing()
@@ -427,6 +433,7 @@ final class DictationController {
         session = nil
         let saving = endTimers()
         await capture.cancel()
+        audioQuiet?.end()
         await saving?.value
         pipeline.discardPartial(current)
         await pipeline.finish(current, .tooShort)
@@ -446,6 +453,7 @@ final class DictationController {
         } catch {
             await capture.cancel()
         }
+        audioQuiet?.end()
         await saving?.value
         pipeline.discardPartial(current)
         let cancelledAt = clock.nowNanos()
@@ -529,6 +537,7 @@ final class DictationController {
             Log.app.error("could not keep the interrupted capture: \(String(describing: error), privacy: .public)")
             await capture.cancel()
         }
+        audioQuiet?.end()
         await saving?.value
         if salvaged?.samples.isEmpty != false {
             salvaged = await pipeline.recoverPartial(current)

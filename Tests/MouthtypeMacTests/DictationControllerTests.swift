@@ -383,6 +383,14 @@ private func capturedTone() -> CapturedAudio {
 }
 
 @MainActor
+private final class FakeAudioQuiet: RecordingAudioQuieting {
+    let log: CallLog
+    init(log: CallLog) { self.log = log }
+    func begin() { log.add("audio.quiet") }
+    func end() { log.add("audio.restore") }
+}
+
+@MainActor
 private struct Rig {
     let log = CallLog()
     let capture: FakeCapture
@@ -391,6 +399,7 @@ private struct Rig {
     let inserter: FakeInserter
     let pill: FakePill
     let sounds: FakeSounds
+    let audioQuiet: FakeAudioQuiet
     let cards: FakeCards
     let controller: DictationController
     let clock: FakeClock
@@ -405,7 +414,7 @@ private struct Rig {
         audio: CapturedAudio = capturedTone(), withStore: Bool = true, settings: CleanupSettings = CleanupSettings(),
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
-        appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }
+        quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -413,6 +422,7 @@ private struct Rig {
         inserter = FakeInserter(log: log)
         pill = FakePill(log: log)
         sounds = FakeSounds(log: log)
+        audioQuiet = FakeAudioQuiet(log: log)
         cards = FakeCards(log: log)
         let clock = FakeClock(start: keyUp)
         self.clock = clock
@@ -425,7 +435,7 @@ private struct Rig {
         pipeline.textPipeline = textPipeline
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
-            cards: cards, limits: limits
+            cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil
         )
         let counter = Counter()
         finishedAttempts = counter
@@ -1770,5 +1780,72 @@ private final class SlowCapture: DictationCapturing {
         await rig.until { !rig.inserter.delivered.isEmpty }
         #expect(rig.inserter.delivered == ["Hello world."])
         #expect(rig.controller.phase == .recording)
+    }
+}
+
+@MainActor @Suite struct QuietRecordingLifecycleTests {
+    @Test(arguments: [HotkeyEvent.released(at: keyUp), .cancelled(reason: .escape), .discarded(reason: .tooShort)])
+    func restoresAtCaptureEndBeforeProcessing(_ event: HotkeyEvent) async throws {
+        let rig = Rig(quietAudio: true)
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(rig.log.contains("audio.quiet"))
+        #expect(!rig.log.contains("audio.restore"))
+        await rig.controller.handle(event)
+        await rig.controller.waitForProcessing()
+        #expect(rig.log.all.filter { $0 == "audio.quiet" }.count == 1)
+        #expect(rig.log.all.filter { $0 == "audio.restore" }.count == 1)
+        if let stop = rig.log.index(of: "capture.stop"), let restore = rig.log.index(of: "audio.restore") {
+            #expect(restore > stop)
+        }
+        if let restore = rig.log.index(of: "audio.restore"), let transcribe = rig.log.index(of: "engine.transcribe") {
+            #expect(restore < transcribe)
+        }
+    }
+
+    @Test func failedStartNeverQuietsAndFailedStopRestores() async {
+        let start = Rig(quietAudio: true)
+        start.capture.startError = Boom()
+        await start.controller.handle(.pressed(at: keyDown))
+        #expect(!start.log.contains("audio.quiet"))
+        let stop = Rig(quietAudio: true)
+        stop.capture.stopError = Boom()
+        await stop.controller.handle(.pressed(at: keyDown))
+        await stop.controller.handle(.released(at: keyUp))
+        await stop.controller.waitForProcessing()
+        #expect(stop.log.all.filter { $0 == "audio.restore" }.count == 1)
+    }
+
+    @Test func olderProcessingFailureDoesNotRestoreANewerRecording() async {
+        let rig = Rig(quietAudio: true)
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.until { rig.log.contains("engine.transcribe") }
+        await rig.controller.handle(.pressed(at: keyUp + 1_000_000_000))
+        rig.engine.error = Boom()
+        rig.engine.releaseHeld()
+        await rig.until { rig.finishedAttempts.count == 1 }
+        #expect(rig.controller.phase == .recording)
+        #expect(rig.log.all.filter { $0 == "audio.quiet" }.count == 2)
+        #expect(rig.log.all.filter { $0 == "audio.restore" }.count == 1)
+        await rig.controller.handle(.discarded(reason: .tooShort))
+        #expect(rig.log.all.filter { $0 == "audio.restore" }.count == 2)
+    }
+
+    @Test func interruptionAndLengthLimitRestore() async {
+        let rig = Rig(quietAudio: true)
+        await rig.controller.handle(.pressed(at: keyDown))
+        rig.capture.interrupt()
+        for _ in 0..<100 where !rig.log.contains("audio.restore") { await Task.yield() }
+        #expect(rig.log.all.filter { $0 == "audio.restore" }.count == 1)
+        let limited = Rig(limits: .init(warningAfter: 1, stopAfter: 2, partialFlushEvery: 5), quietAudio: true)
+        await limited.controller.handle(.pressed(at: keyDown))
+        for _ in 0..<100 where limited.clock.sleeperCount == 0 { await Task.yield() }
+        limited.clock.advance(by: 1)
+        for _ in 0..<100 where limited.clock.sleeperCount == 0 { await Task.yield() }
+        limited.clock.advance(by: 1)
+        for _ in 0..<100 where !limited.log.contains("audio.restore") { await Task.yield() }
+        await limited.controller.waitForProcessing()
+        #expect(limited.log.all.filter { $0 == "audio.restore" }.count == 1)
     }
 }
