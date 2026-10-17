@@ -1,11 +1,12 @@
-Mouthtype 0.1.0-alpha.4
+Mouthtype 0.1.0-alpha.5
 
-New Settings window with General, Writing, Appearance and Diagnostics.
-Choose Hold to talk or Press to toggle for your dictation shortcut.
-Set a cleanup tone for individual apps while keeping the global default.
-A quieter menu keeps daily actions handy and moves diagnostics into Settings.
-Old interrupted recordings no longer automatically reappear after newer completed takes.
-Check for signed updates in the app and choose whether to enable automatic update checks.
+First-run setup now guides one task at a time and advances when each prerequisite is ready.
+Import saved spellings from CSV with a preview, duplicate/conflict checks and explicit confirmation.
+Keep Default typography or override Heading, Body and Readout fonts individually.
+Microphone interruptions during recording startup retain audio for recovery instead of losing the notification.
+If initial microphone preparation failed, a new dictation attempt can retry the current input and report the actual error.
+Add text-free paste diagnostics to investigate intermittent delivery and spacing reports.
 
 Requires Apple Silicon and macOS 26 or later. This is an alpha; review text before sending.
-Broader app delivery, fresh installs and physical update installation still need tester feedback.
+Intermittent Orca paste/spacing remains under investigation, not fixed by this release.
+Fresh installation, physical update installation and broader device/app delivery still need tester feedback.

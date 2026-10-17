@@ -1,0 +1,17 @@
+{
+  "sources": [
+    "Sources/MouthtypeCore/Gesture/GestureConfiguration.swift",
+    "Sources/MouthtypeCore/Gesture/GestureConstants.swift",
+    "Sources/MouthtypeCore/Gesture/GestureEngine.swift",
+    "Sources/MouthtypeCore/Gesture/HotKey.swift",
+    "Sources/MouthtypeCore/Gesture/HotKeyProcessor.swift",
+    "Sources/MouthtypeCore/Gesture/Key.swift",
+    "Sources/MouthtypeCore/Gesture/KeyEvent.swift",
+    "Sources/MouthtypeCore/Gesture/RecordingDecision.swift"
+  ],
+  "tests": [
+    "Tests/MouthtypeCoreTests/GestureEngineTests.swift",
+    "Tests/MouthtypeCoreTests/HotKeyProcessorTests.swift",
+    "Tests/MouthtypeCoreTests/RecordingToggleTests.swift"
+  ]
+}

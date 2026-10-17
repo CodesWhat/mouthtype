@@ -1,0 +1,38 @@
+name: Linux gesture proof
+
+on:
+  push:
+    branches: [main, dev/v0.1.0]
+    paths:
+      - "Sources/MouthtypeCore/Gesture/**"
+      - "Tests/MouthtypeCoreTests/**"
+      - "tools/linux-gesture-proof/**"
+      - ".github/workflows/linux-gesture-proof.yml"
+  pull_request:
+    paths:
+      - "Sources/MouthtypeCore/Gesture/**"
+      - "Tests/MouthtypeCoreTests/**"
+      - "tools/linux-gesture-proof/**"
+      - ".github/workflows/linux-gesture-proof.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  canonical-gesture-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container:
+      options: --init
+      image: swift:6.2.4-noble@sha256:eccc7a97f9b9881d9659e2e788081fd7675f86d39793b51200bfb178398b3784
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Validate inventory and temporary-package cleanup
+        run: python3 -W error::ResourceWarning -m unittest discover -s tools/linux-gesture-proof -p 'test_*.py'
+      - name: Compile and run the canonical gesture assertions on Linux Swift
+        run: python3 tools/linux-gesture-proof/gesture_proof.py --require-linux --receipt "${RUNNER_TEMP}/linux-gesture-proof.json"

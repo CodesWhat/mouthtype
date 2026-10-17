@@ -47,6 +47,8 @@ final class DictationController {
     /// Told when a paste lands and when the next dictation starts, so edits to the pasted text can be learned from.
     @ObservationIgnored weak var corrections: (any CorrectionObserving)?
     @ObservationIgnored private var session: DictationSession?
+    @ObservationIgnored private var captureStarting = false
+    @ObservationIgnored private var interruptedDuringStart = false
     @ObservationIgnored private var undo: PendingUndo?
     /// The last job queued. A job waits for the one before it, so the chain keeps deliveries in order.
     @ObservationIgnored private var processing: Task<Void, Never>?
@@ -161,10 +163,6 @@ final class DictationController {
             )
             return
         }
-        guard capture.isPrepared else {
-            pill.showMessage(Self.microphoneAccessMessage, duration: 3)
-            return
-        }
 
         // A new dictation ends the last one's card and the Undo it offered, and the last paste's read-back. With
         // earlier dictations still queued their deliveries haven't happened yet, so there is no read-back to end. A
@@ -188,6 +186,8 @@ final class DictationController {
             cleanupStyle: cleanupStyle
         )
         phase = .recording
+        captureStarting = true
+        interruptedDuringStart = false
 
         // The capture goes first: nothing else waits ahead of it.
         var startError: Error?
@@ -202,12 +202,19 @@ final class DictationController {
             pipeline.smart?.recordingStarted()
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
+        captureStarting = false
         if let startError {
+            interruptedDuringStart = false
             await fail(current, startError)
             return
         }
         session = current
-        startTimers(for: current)
+        if interruptedDuringStart {
+            interruptedDuringStart = false
+            await captureInterrupted()
+        } else {
+            startTimers(for: current)
+        }
     }
 
     // MARK: Hands-free
@@ -504,7 +511,13 @@ final class DictationController {
 
     /// The input went away mid-recording. What was captured is saved to disk first, then the card offers to run it.
     private func captureInterrupted() async {
-        guard phase == .recording, let current = session else { return }
+        guard phase == .recording else { return }
+        // Capture and history registration both suspend before the session can own its recovery card.
+        if captureStarting {
+            interruptedDuringStart = true
+            return
+        }
+        guard let current = session else { return }
         session = nil
         let saving = endTimers()
         endHandsFree()

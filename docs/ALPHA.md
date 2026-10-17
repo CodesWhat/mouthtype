@@ -1,4 +1,4 @@
-# Mouthtype 0.1.0-alpha.4
+# Mouthtype 0.1.0-alpha.5
 
 Alpha for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
 
@@ -7,7 +7,7 @@ Alpha for Apple Silicon Macs running macOS 26 or later. This is an early test bu
 1. Download the ZIP from https://mouthtype.app/download and expand it in Finder.
 2. Drag Mouthtype.app into Applications. Quit an older running Mouthtype before replacing it.
 3. Open Mouthtype from Applications. This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
-4. Allow Microphone access when prompted. Use Mouthtype’s permission guidance to grant Accessibility in System Settings, then return to the app.
+4. Follow Set Up Mouthtype, one card at a time. Allow Microphone access, then grant Accessibility in System Settings and return to the app. Each card advances when its prerequisite is ready. Reopen setup from Settings → General if you defer it.
 5. Wait for the speech model to download and prepare. Downloads need internet access; transcription and cleanup run on your Mac. Basic cleanup works without a cleanup-model download. Optional Fast is roughly 1.4 GB; Thorough is roughly 5.2 GB.
 6. Click a blank TextEdit document. Hold Fn, say a sentence, then release. Wait for text to appear. Dictate another sentence without clicking or typing between takes. Confirm one insertion per take and a space between them.
 
@@ -21,11 +21,11 @@ The shortcut recorder accepts a key or modifier combination. Click Change, press
 
 In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. Fn+Space also locks the default Fn shortcut. Escape cancels and offers Undo for five seconds. If Escape itself is your dictation shortcut, use the menu’s Cancel action. Caps Lock uses press-to-start/press-to-stop even in Hold mode; its system Caps Lock state may also change. Some system-reserved/media keys may be handled by macOS first. Control+Command+V pastes the last delivered take.
 
-**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app tone rules. Rules start empty and fall back to the global tone. Tone does not authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
+**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app tone rules. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Tone does not authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
 
 ## Updates
 
-Alpha.1 through alpha.3 do not contain an updater. Download alpha.4 once from the website and replace the old app to get it.
+Alpha.1 through alpha.3 do not contain an updater. Download alpha.5 once from the website and replace the old app to get it.
 
 Use **Check for Updates…** in Mouthtype’s menu to check manually. Sparkle asks whether to enable automatic update checks; you can change that choice in General. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
 
@@ -42,6 +42,7 @@ Earlier physical native checks covered microphone dictation, consecutive-take sp
 - Names and context-dependent recognition can be wrong. A real example was testing recognized as dusting across takes. Check text before sending. Mouthtype does not read previous chat messages to resolve it.
 - Broader browser/terminal/Electron behavior, clipboard restoration, microphone removal, silence, stop-cue counts and explicit Undo need more live coverage. Orca’s false-failure warning behavior is not fully verified.
 - Long terminal paste splitting is off by default. An interrupted split paste may already have inserted text. Inspect the field before copying the full recovery text. No Return is sent automatically.
+- Setup’s microphone status can lag a recovered input until you return to the app and refresh it. Device transitions still need live coverage.
 - First installation and model downloads on another Mac need confirmation. Existing developer-machine grants and caches do not verify that path.
 - Linux is not released. Arch is an explicit acceptance target for future Linux work.
 

@@ -11,6 +11,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dictionary = FileVocabulary()
     private let phrases = FilePhrases()
     private let diagnostics = SettingsDiagnostics()
+    private lazy var setupModel = SetupModel(diagnostics: diagnostics, engine: engineHost)
+    private lazy var setupWindow = SetupWindow(model: setupModel, actions: SetupActions(
+        refresh: { [weak self] in self?.refreshDiagnostics() },
+        microphone: { [weak self] in self?.requestSetupMicrophone() },
+        accessibility: { [weak self] in
+            self?.accessibility.start()
+            NSWorkspace.shared.open(AccessibilityAccess.settingsURL)
+        }, retrySpeech: { [weak self] in self?.engineHost.start() },
+        inputSettings: { [weak self] in self?.settingsWindow.present(page: .diagnostics) }))
     private let fontChooser = TextFontMenuSection()
     private lazy var appUpdater = AppUpdater(
         driver: UpdateLaunchPolicy.allows(arguments: CommandLine.arguments, bundleURL: Bundle.main.bundleURL,
@@ -22,7 +31,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
             onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
             onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) }),
-        actions: SettingsActions(changeShortcut: { [weak self] in self?.showShortcutEditor() },
+        actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
             openSpellings: { [weak self] in self?.spellingWindow.present() },
             openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
             diagnostics: diagnostics, retrySpeech: { [weak self] in self?.engineHost.start() },
@@ -154,7 +163,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let menuBar = MenuBarController()
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
         let settingsSection = SettingsMenuSection { [weak self] in self?.settingsWindow.present() }
-        menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in self?.settingsWindow.present(page: .diagnostics) }))
+        menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in
+            guard let self else { return }
+            if self.diagnostics.microphoneStatus != .authorized || !self.diagnostics.accessibilityGranted { self.showSetup() }
+            else { self.settingsWindow.present(page: .diagnostics) }
+        }))
         menuBar.add(section: settingsSection, startsGroup: false)
         NSApp.mainMenu = settingsSection.applicationMenu()
         menuBar.add(section: ActionsMenuSection(
@@ -208,10 +221,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         engineHost.start()
         cleanerHost.start()
         offerRecoveryWhenReady()
-        Task { await setUpCapture() }
+        let diagnosticLaunch = CaptureSelfTest.seconds(in: arguments) != nil || InputProbe.mode(in: arguments) != nil
+        let showFirstSetup = !diagnosticLaunch && SetupLaunchPolicy.claimPresentation(defaults: .standard,
+            microphone: MicrophoneAccess.status, accessibility: accessibility.isGranted)
+        Task { await setUpCapture(requestPermission: diagnosticLaunch) }
 
         accessibility.onChange = { [weak self] granted in self?.accessibilityChanged(granted) }
-        accessibility.start()
+        accessibility.start(prompt: diagnosticLaunch)
+        if showFirstSetup { showSetup() }
         appUpdater.start()
     }
 
@@ -294,6 +311,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func refreshDiagnostics() {
+        _ = accessibility.tick()
+        setupModel.refreshInstructions()
         refreshDiagnosticModels()
         refreshMicrophone()
         refreshGlobeCheck()
@@ -515,21 +534,50 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         window.present()
     }
 
+    private func showSetup() {
+        guard dictation?.phase == .idle, recovery?.isRecovering != true else {
+            pill?.showMessage("Finish or cancel this dictation before opening setup")
+            return
+        }
+        setupWindow.present()
+    }
+
+    private func requestSetupMicrophone() {
+        switch MicrophoneAccess.status {
+        case .denied, .restricted:
+            NSWorkspace.shared.open(MicrophoneAccess.settingsURL)
+        default:
+            Task {
+                await MicrophoneAccess.requestIfUndetermined()
+                refreshMicrophone()
+                _ = await prepareCapture()
+            }
+        }
+    }
+
     private func prepareCapture() async -> Bool {
+        guard MicrophoneAccess.status == .authorized else { return false }
+        guard !preparingCapture else { return false }
+        if micCapture.isPrepared { return true }
         preparingCapture = true
-        defer { preparingCapture = false }
+        setupModel.capturePreparing = true
+        setupModel.captureError = nil
+        defer { preparingCapture = false; setupModel.capturePreparing = false }
         do {
             try await micCapture.prepare()
+            setupModel.captureReady = true
             Log.capture.info("microphone ready")
             return true
         } catch {
+            setupModel.captureReady = false
+            setupModel.captureError = error.localizedDescription
             Log.capture.error("capture not prepared: \(String(describing: error), privacy: .public)")
             return false
         }
     }
 
-    private func setUpCapture() async {
-        await MicrophoneAccess.requestIfUndetermined()
+    private func setUpCapture(requestPermission: Bool) async {
+        if requestPermission { await MicrophoneAccess.requestIfUndetermined() }
         refreshMicrophone()
         let selfTestSeconds = CaptureSelfTest.seconds(in: CommandLine.arguments)
 

@@ -13,30 +13,35 @@ public final class AccessibilityAccess {
     public var onChange: (@MainActor (Bool) -> Void)?
 
     private let defaults: UserDefaults
+    private let requestPrompt: @MainActor () -> Void
     private let probe: @MainActor () -> Bool
     private var polling: Task<Void, Never>?
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         probe = { AXIsProcessTrusted() }
+        requestPrompt = {
+            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
+            AXIsProcessTrustedWithOptions(options)
+        }
         isGranted = AXIsProcessTrusted()
     }
 
-    init(defaults: UserDefaults, probe: @escaping @MainActor () -> Bool) {
+    init(defaults: UserDefaults, probe: @escaping @MainActor () -> Bool, requestPrompt: @escaping @MainActor () -> Void = {}) {
         self.defaults = defaults
         self.probe = probe
+        self.requestPrompt = requestPrompt
         isGranted = probe()
     }
 
     /// Shows the system prompt the first time only; after that the menu line opens the pane.
-    public func start() {
+    public func start(prompt: Bool = true) {
         isGranted = probe()
         onChange?(isGranted)
         guard !isGranted else { return }
-        if !defaults.bool(forKey: Self.promptedKey) {
+        if prompt, !defaults.bool(forKey: Self.promptedKey) {
             defaults.set(true, forKey: Self.promptedKey)
-            let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
-            AXIsProcessTrustedWithOptions(options)
+            requestPrompt()
             Log.permissions.info("accessibility prompt shown")
         }
         poll()
