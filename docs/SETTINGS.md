@@ -1,6 +1,6 @@
 # Settings
 
-Alpha.4 includes **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active.
+Alpha.5 includes **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active.
 
 The daily menu contains Settings, Paste Last, Copy Last, Saved Recordings, a collapsed Recent Dictations submenu, Help, About and Quit. Stop and Cancel appear during hands-free recording. Healthy model and permission lines stay out of the menu; an attention message opens Diagnostics when something needs repair. Recent items copy their full text and exclude secure fields. Stats live inside Recent.
 
@@ -16,7 +16,7 @@ App styles start empty. Choose **Add application…**, select an application, th
 
 **Appearance** contains Classic and Hi-Fi pill styles, Hi-Fi size and text fonts. A preview uses the app's actual pill drawing. Hi-Fi size changes apply the next time the live pill appears. The text-font sample shows the selected font; Hi-Fi's bitmap readouts keep their own artwork. Choose Font opens the existing native font chooser for the same global text-font preference.
 
-Development builds add **Override individual fonts** below the text-font choice in Appearance. It starts off. Turn it on to reveal Heading, Body and Readout family choices, each with Use base font as its default. Heading applies to the card header and pill messages; Body applies to transcripts, button labels and pill details; Readout applies to numeric text. Role sizes, weights and tabular figures are retained. These choices affect the Classic pill and delivery cards; Hi-Fi bitmap readouts keep their artwork.
+Alpha.5 adds **Override individual fonts** below the text-font choice in Appearance. It starts off. Turn it on to reveal Heading, Body and Readout family choices, each with Use base font as its default. Heading applies to the card header and pill messages; Body applies to transcripts, button labels and pill details; Readout applies to numeric text. Role sizes, weights and tabular figures are retained. These choices affect the Classic pill and delivery cards; Hi-Fi bitmap readouts keep their artwork.
 
 Turning overrides off hides the controls and keeps their saved choices. Changing the base font preserves the overrides. A saved family that is unavailable uses the base font without erasing its name. Choose Reset fonts to defaults to clear all overrides, turn them off and restore Default. Reset stays available for saved custom choices even with overrides off; the untouched Default view keeps it hidden. Existing global presets and custom families keep their previous behavior; Choose Font edits the base family. The preview shows the active choices.
 
