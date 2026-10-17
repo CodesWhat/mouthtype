@@ -427,7 +427,8 @@ private struct Rig {
         audio: CapturedAudio = capturedTone(), withStore: Bool = true, settings: CleanupSettings = CleanupSettings(),
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
-        quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false
+        quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false,
+        audioRetention: AudioRetentionPolicy = AudioRetentionPolicy()
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -446,6 +447,7 @@ private struct Rig {
         pipeline.appStyles = appStyles
         pipeline.vocabulary = vocabulary
         pipeline.textPipeline = textPipeline
+        pipeline.audioRetention = { audioRetention }
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
             cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil,
@@ -821,6 +823,18 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(insertion.finalText == "Hello world.")
         #expect(insertion.method == "paste" && insertion.outcome == "unknown" && insertion.focusMoved == false)
         #expect(rig.store.finishes.isEmpty)
+    }
+
+    @Test(arguments: [AudioRetentionAge.days14, .noAgeLimit])
+    func selectedAudioRetentionChangesOnlyNewAudioExpiration(age: AudioRetentionAge) async throws {
+        let policy = AudioRetentionPolicy(age: age)
+        let rig = Rig(audioRetention: policy)
+        await rig.dictate()
+        let capture = try #require(rig.store.capture)
+        #expect(capture.audioExpiresAt == policy.expiration(from: FakeClock.wall))
+        #expect(capture.audioPath != nil)
+        #expect(rig.store.transcription?.rawText == "Hello world.")
+        #expect(rig.inserter.delivered == ["Hello world."])
     }
 
     @Test func wordTimingsAreShiftedByTheHeadTrim() async throws {

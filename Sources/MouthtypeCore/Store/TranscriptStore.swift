@@ -267,6 +267,15 @@ public final class TranscriptStore: Sendable {
         }
     }
 
+    /// Only known completed takes are eligible, so later recordings and unknown WAVs stay untouched.
+    public func audioRetentionCandidateIDs() throws -> Set<String> {
+        try pool.read { db in
+            Set(try String.fetchAll(db, sql: "SELECT id FROM dictation WHERE status IN (?, ?, ?, ?)", arguments: [
+                DictationStatus.inserted, DictationStatus.cancelled, DictationStatus.tooShort, DictationStatus.empty,
+            ]))
+        }
+    }
+
     // MARK: Reads
 
     public func dictation(id: String) throws -> DictationRecord? {

@@ -71,15 +71,19 @@ public struct AudioArchive: Sendable {
     }
 
     /// Deletes files older than `cutoff`, then the oldest of the rest until the total fits `maxTotalBytes`.
+    /// When supplied, only `eligibleIDs` are counted or removed; crash partials are always excluded.
     /// Returns the ids removed so the caller can null `audio_path`.
-    public func purge(olderThan cutoff: Date, maxTotalBytes: Int = defaultMaxTotalBytes) throws -> [String] {
+    public func purge(olderThan cutoff: Date, maxTotalBytes: Int = defaultMaxTotalBytes, eligibleIDs: Set<String>? = nil) throws -> [String] {
         let manager = FileManager.default
         guard manager.fileExists(atPath: directory.path) else { return [] }
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
         var files: [(id: String, url: URL, date: Date, size: Int)] = []
-        for url in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys) where url.pathExtension == "wav" {
+        for url in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)
+        where url.pathExtension == "wav" && !url.lastPathComponent.hasSuffix(".partial.wav") {
+            let id = url.deletingPathExtension().lastPathComponent
+            guard eligibleIDs?.contains(id) != false else { continue }
             let values = try url.resourceValues(forKeys: Set(keys))
-            files.append((url.deletingPathExtension().lastPathComponent, url, values.contentModificationDate ?? .distantPast, values.fileSize ?? 0))
+            files.append((id, url, values.contentModificationDate ?? .distantPast, values.fileSize ?? 0))
         }
         files.sort { $0.date < $1.date }
 

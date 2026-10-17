@@ -16,6 +16,7 @@ import UniformTypeIdentifiers
     var page = SettingsPage.general
     private(set) var cleanup: CleanupSettings
     private(set) var livePreview = false
+    private(set) var audioRetention = AudioRetentionPolicy()
     private(set) var sounds: Bool
     private(set) var quietOtherAudio = false
     private(set) var skin: PillSkinKind
@@ -63,6 +64,7 @@ import UniformTypeIdentifiers
 
     func refresh() {
         microphone.refresh()
+        audioRetention = AudioRetentionPreference.load(defaults)
         livePreview = LivePreviewPreference.isEnabled(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
@@ -163,6 +165,16 @@ import UniformTypeIdentifiers
     func setLearnCorrections(_ enabled: Bool) {
         CorrectionSettings.set(enabled, in: defaults)
         learnCorrections = enabled
+    }
+
+    func setAudioRetentionAge(_ value: AudioRetentionAge) {
+        AudioRetentionPreference.setAge(value, in: defaults)
+        audioRetention = AudioRetentionPreference.load(defaults)
+    }
+
+    func setAudioRetentionSize(_ value: AudioRetentionSize) {
+        AudioRetentionPreference.setSize(value, in: defaults)
+        audioRetention = AudioRetentionPreference.load(defaults)
     }
     func setLowercaseStarts(_ enabled: Bool) { update { $0.style.capitalisation = enabled ? .lowercase : .sentence } }
     func setDropFinalStop(_ enabled: Bool) { update { $0.style.endingPunctuation = enabled ? .dropFinalFullStop : .keep } }

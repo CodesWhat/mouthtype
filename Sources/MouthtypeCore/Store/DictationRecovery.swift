@@ -27,7 +27,7 @@ public enum DictationRecovery {
     public static func saved(
         store: TranscriptStore, archive: AudioArchive, now: Date, launchedAt: Date
     ) throws -> [RecoverableDictation] {
-        try store.savedRecordingCandidates(from: now.addingTimeInterval(-AudioArchive.defaultRetention), before: launchedAt)
+        try store.savedRecordingCandidates(from: .distantPast, before: launchedAt)
             .compactMap { row in
                 guard let audio = audio(for: row, archive: archive) else { return nil }
                 return RecoverableDictation(

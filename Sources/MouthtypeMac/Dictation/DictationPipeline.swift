@@ -53,7 +53,7 @@ struct DictationPipeline: Sendable {
     let engine: any DictationEngine
     let clock: any DictationClock
 
-    var retention: TimeInterval = AudioArchive.defaultRetention
+    var audioRetention: @Sendable () -> AudioRetentionPolicy = { AudioRetentionPreference.load() }
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
     var appStyles: @Sendable () -> AppCleanupStyles = { (try? AppCleanupStyles.load()) ?? AppCleanupStyles() }
@@ -136,7 +136,7 @@ struct DictationPipeline: Sendable {
                 captureStartMs: rounded(audio.captureStartMs), firstSampleMs: rounded(audio.firstSampleMs),
                 firstNonzeroMs: rounded(audio.firstNonzeroMs), keyUpMs: keyUpMs, audioMs: rounded(audio.audioMs),
                 voicedMs: rounded(features.voicedMs), audioPath: audioPath,
-                audioExpiresAt: audioPath == nil ? nil : clock.now().addingTimeInterval(retention),
+                audioExpiresAt: audioPath == nil ? nil : audioRetention().expiration(from: clock.now()),
                 inputDeviceUID: audio.deviceUID, inputDeviceName: audio.deviceName, inputTransport: audio.deviceTransport,
                 sampleRateHz: Int(audio.sampleRate), rmsDb: features.rmsDb, peakDb: features.peakDb,
                 noiseFloorDb: features.noiseFloorDb

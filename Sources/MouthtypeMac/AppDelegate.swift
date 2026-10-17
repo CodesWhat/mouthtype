@@ -289,10 +289,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func purgeAudio(archive: AudioArchive, store: TranscriptStore?) {
+        guard let store else { return }
+        let policy = AudioRetentionPreference.load()
         Task.detached {
             do {
-                let removed = try archive.purge(olderThan: Date().addingTimeInterval(-AudioArchive.defaultRetention))
-                if !removed.isEmpty { try store?.clearAudio(ids: removed) }
+                let removed = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: policy, now: Date())
                 Log.app.info("audio purge removed \(removed.count, privacy: .public) files")
             } catch {
                 Log.app.error("audio purge failed: \(String(describing: error), privacy: .public)")

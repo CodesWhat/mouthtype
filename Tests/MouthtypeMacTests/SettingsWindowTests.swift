@@ -4,6 +4,24 @@ import MouthtypeCore
 @testable import MouthtypeMac
 
 @MainActor @Suite struct SettingsWindowTests {
+    @Test func audioRetentionControlsPersistAndRefreshWithoutChangingCleanup() {
+        let name = "SettingsRetentionTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let model = SettingsModel(defaults: defaults)
+        let cleanup = model.cleanup
+        #expect(model.audioRetention == AudioRetentionPolicy())
+        model.setAudioRetentionAge(.days14)
+        model.setAudioRetentionSize(.gb10)
+        #expect(model.audioRetention == AudioRetentionPolicy(age: .days14, size: .gb10))
+        #expect(AudioRetentionPreference.load(defaults) == model.audioRetention)
+        AudioRetentionPreference.setAge(.noAgeLimit, in: defaults)
+        model.refresh()
+        #expect(model.audioRetention.age == .noAgeLimit)
+        #expect(model.audioRetention.size == .gb10)
+        #expect(model.cleanup == cleanup)
+    }
+
     @Test func quietOtherAudioPersistsAndRefreshesWithoutChangingSounds() {
         let name = "SettingsQuietTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
