@@ -1,0 +1,26 @@
+name: Disposable Linux runtime smoke
+
+on:
+  pull_request:
+    paths: ["tools/linux-runtime-smoke/**", ".github/workflows/linux-runtime-smoke.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  real-cpu-engines:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.12"
+      - name: Install normal signed host prerequisites on this disposable runner
+        run: |
+          sudo timeout --signal=TERM --kill-after=10s 120s apt-get update
+          sudo timeout --signal=TERM --kill-after=10s 180s apt-get install --yes --no-install-recommends cmake ninja-build g++ git curl python3-venv espeak-ng sox
+      - name: Build pinned CPU runtime and evaluate exact synthetic fixtures
+        run: bash tools/linux-runtime-smoke/run.sh
