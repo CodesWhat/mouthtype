@@ -42,6 +42,7 @@ Earlier physical native checks covered microphone dictation, consecutive-take sp
 - Names and context-dependent recognition can be wrong. A real example was testing recognized as dusting across takes. Check text before sending. Mouthtype does not read previous chat messages to resolve it.
 - Broader browser/terminal/Electron behavior, clipboard restoration, microphone removal, silence, stop-cue counts and explicit Undo need more live coverage. Orca’s false-failure warning behavior is not fully verified.
 - Long terminal paste splitting is off by default. An interrupted split paste may already have inserted text. Inspect the field before copying the full recovery text. No Return is sent automatically.
+- Setup’s microphone status can lag a recovered input until you return to the app and refresh it. Device transitions still need live coverage.
 - First installation and model downloads on another Mac need confirmation. Existing developer-machine grants and caches do not verify that path.
 - Linux is not released. Arch is an explicit acceptance target for future Linux work.
 

@@ -4,6 +4,7 @@ First-run setup now guides one task at a time and advances when each prerequisit
 Import saved spellings from CSV with a preview, duplicate/conflict checks and explicit confirmation.
 Keep Default typography or override Heading, Body and Readout fonts individually.
 Microphone interruptions during recording startup retain audio for recovery instead of losing the notification.
+If initial microphone preparation failed, a new dictation attempt can retry the current input and report the actual error.
 Add text-free paste diagnostics to investigate intermittent delivery and spacing reports.
 
 Requires Apple Silicon and macOS 26 or later. This is an alpha; review text before sending.
