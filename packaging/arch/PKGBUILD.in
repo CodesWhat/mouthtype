@@ -1,0 +1,27 @@
+pkgname=mouthtype-linux
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Local dictation development client (test candidate)'
+arch=('x86_64')
+url='https://mouthtype.app'
+license=('GPL-3.0-only' 'MIT' 'Unicode-3.0')
+depends=('python' 'python-pip' 'curl' 'pipewire-audio')
+optdepends=('hyprland: optional target-aware typing adapter'
+            'wtype: optional Unicode typing delivery'
+            'libnotify: optional recording notifications')
+source=('mouthtype-linux-source.tar.gz')
+sha256sums=('@SOURCE_SHA256@')
+
+check() {
+    cd "$srcdir/mouthtype-linux"
+    python -W error::ResourceWarning -m unittest discover -s tools/linux-desktop -p 'test_*.py'
+}
+
+package() {
+    cd "$srcdir/mouthtype-linux"
+    python tools/linux-desktop/install.py --prefix /usr --destdir "$pkgdir"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+    install -Dm644 tools/linux-desktop/vendor/grapheme/LICENSE "$pkgdir/usr/share/licenses/$pkgname/grapheme-MIT"
+    install -Dm644 tools/linux-desktop/vendor/grapheme/UNICODE-LICENSE "$pkgdir/usr/share/licenses/$pkgname/Unicode-LICENSE"
+}

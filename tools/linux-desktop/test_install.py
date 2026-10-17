@@ -12,6 +12,33 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class InstallTests(unittest.TestCase):
+    def test_staging_uses_final_prefix_in_launcher_without_writing_there(self):
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = (Path(temp) / 'final').resolve()
+            staging = (Path(temp) / 'package').resolve()
+            launcher = installer.install(ROOT, runtime, destdir=staging)
+            staged_prefix = staging / runtime.relative_to('/')
+            self.assertEqual(launcher, staged_prefix / 'bin/mouthtype-linux')
+            self.assertFalse(runtime.exists(), 'Packaging must not write into the final prefix')
+            self.assertTrue((staged_prefix / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py').is_file())
+            text = launcher.read_text()
+            self.assertIn(str(runtime / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py'), text)
+            self.assertNotIn(str(staging), text)
+
+    def test_staging_cli_preserves_existing_final_install_and_requires_absolute_prefix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = (Path(temp) / 'final').resolve()
+            runtime.mkdir()
+            (runtime / 'mine').write_text('keep')
+            staging = Path(temp) / 'staging'
+            result = subprocess.run(['python3', str(Path(installer.__file__)), '--prefix', str(runtime),
+                                     '--destdir', str(staging)], capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((runtime / 'mine').read_text(), 'keep')
+            with self.assertRaises(ValueError):
+                installer.install(ROOT, 'relative', destdir=Path(temp) / 'other')
+            self.assertFalse((Path(temp) / 'other').exists())
+
     def test_install_is_runnable_and_preserves_existing_config(self):
         with tempfile.TemporaryDirectory() as temp:
             prefix = Path(temp) / 'local'
