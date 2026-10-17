@@ -185,8 +185,6 @@ struct DictationPipeline: Sendable {
         )
     }
 
-    var usesWebsiteStyles: Bool { !appStyles().websites.isEmpty }
-
     func cleanupStyle(forBundleID bundleID: String?, websiteHost: String? = nil) -> StyleOptions {
         let styles = appStyles()
         return styles.resolve(bundleID: bundleID, websiteHost: websiteHost, fallback: settings().style)

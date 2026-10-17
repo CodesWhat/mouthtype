@@ -272,7 +272,7 @@ struct SettingsView: View {
     private var websiteStyles: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Website tone").font(.headline)
-            Text("Website rules override app tone, including subdomains. Safari, Chrome, Edge and Brave use the focused window’s document URL when available. Otherwise app tone applies. URLs aren’t saved.")
+            Text("Website rules override app tone, including subdomains. Safari, Chrome, Edge and Brave use the focused window’s document URL when available. Otherwise app tone applies. These rules don’t retain document URLs.")
                 .font(.callout).foregroundStyle(.secondary)
             HStack {
                 TextField("Domain, e.g. slack.com", text: $websiteDomain).accessibilityIdentifier("settings-website-domain")
@@ -298,7 +298,7 @@ struct SettingsView: View {
                         .accessibilityLabel("Remove website tone for \(entry.domain)")
                 }
             }
-        }.disabled(!model.cleanup.enabled || model.appStylesError != nil)
+        }.disabled(!model.cleanup.enabled)
     }
 
     private var appStyles: some View {
