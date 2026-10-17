@@ -27,4 +27,4 @@ def activate(app):
 
 app = Gtk.Application(application_id='app.mouthtype.Acceptance')
 app.connect('activate', activate)
-sys.exit(app.run([sys.argv[0]]))
+sys.exit(app.run(['app.mouthtype.Acceptance']))

@@ -134,7 +134,7 @@ context.objects = [
    audio.rate = 16000
    audio.channels = 1
    audio.position = [ MONO ]
-   node.param.Props = { frequency = 440 volume = 0.1 }
+   node.param.Props = { frequency = 440 volume = 0.5 }
  } }
 ]
 ''')
