@@ -10,13 +10,19 @@ import tarfile
 import tempfile
 
 DESKTOP = ('desktop.py', 'install.py', 'README.md', 'config.example.json',
+           'spellings.py', 'test_spellings.py', 'test_spelling_session.py',
+           'spelling-fixtures.json', 'spelling-unicode.json',
            'hyprland.lua', 'hyprland-legacy.conf', 'test_desktop.py',
            'setup_speech.py', 'test_setup_speech.py',
            'test_install.py', 'test_acceptance.py', 'acceptance.py', 'wayland_target.py', 'run-ci.sh',
            'build_sway.py', 'sway-build.json', 'test_build_sway.py')
 ENGINE = ('proof.py', 'worker.py', 'prepare.py', 'pins.json', 'requirements.txt', 'README.md')
+GRAPHEME = ('__init__.py', 'api.py', 'finder.py', 'grapheme_property_group.py', 'incb_property_group.py',
+            'data/derived_core_property.json', 'data/grapheme_break_property.json',
+            'LICENSE', 'UNICODE-LICENSE', 'provenance.json', 'GraphemeBreakTest.txt')
 FILES = (['LICENSE', 'THIRD_PARTY_NOTICES.md'] +
          ['tools/linux-desktop/' + name for name in DESKTOP] +
+         ['tools/linux-desktop/vendor/grapheme/' + name for name in GRAPHEME] +
          ['tools/linux-engine-proof/' + name for name in ENGINE])
 
 

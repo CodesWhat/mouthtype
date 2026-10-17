@@ -18,20 +18,29 @@ import uuid
 import wave
 
 PROOF = Path(__file__).resolve().parents[1] / 'linux-engine-proof'
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(PROOF))
 from proof import Stopped, Worker, verify_artifacts
+from spellings import load_spellings
 
 
 def private_write(path, data):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    with os.fdopen(fd, 'w', encoding='utf-8') as output:
-        output.write(data)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as output:
+            output.write(data)
+    except BaseException:
+        # This invocation created the file. Never leave a partial result marked complete.
+        path.unlink(missing_ok=True)
+        raise
 
 
 class Session:
-    def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None):
+    def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
+                 dictionary=None):
         self.capture, self.engine, self.delivery = capture, engine, delivery
         self.feedback = feedback
+        self.dictionary = dictionary
         self.recovery = Path(recovery)
         self.recovery.mkdir(mode=0o700, parents=True, exist_ok=True)
         info = self.recovery.stat()
@@ -72,6 +81,12 @@ class Session:
                 if admit_before is not None and time.monotonic() >= admit_before:
                     self.error = 'command_expired'
                     return self.status()
+                try:
+                    spellings = load_spellings(self.dictionary)
+                except (OSError, ValueError):
+                    self.error = 'dictionary_unavailable'
+                    self._notify('error')
+                    return self.status()
                 target = self.delivery.snapshot()
                 if admit_before is not None and time.monotonic() >= admit_before:
                     self.error = 'command_expired'
@@ -83,6 +98,7 @@ class Session:
                 self.take.mkdir(mode=0o700)
                 self.discard_on_cancel = True
                 self.target = target
+                self.spellings = spellings
                 self.cancelled = threading.Event()
                 self.error, self.outcome = None, 'not_attempted'
                 try:
@@ -114,7 +130,8 @@ class Session:
                     return self.status()
                 self.state = 'transcribing'
                 self._notify('transcribing')
-                self.thread = threading.Thread(target=self._finish, args=(self.take, self.cancelled, self.target))
+                self.thread = threading.Thread(target=self._finish,
+                                               args=(self.take, self.cancelled, self.target, self.spellings))
                 self.thread.start()
             elif action == 'cancel':
                 if self.state != 'idle':
@@ -138,14 +155,18 @@ class Session:
             except OSError:
                 pass
 
-    def _finish(self, take, cancelled, target, allow_delivery=True):
+    def _finish(self, take, cancelled, target, spellings, allow_delivery=True):
         try:
-            text = self.engine.transcribe(take / 'recording.wav', cancelled)
-            if not isinstance(text, str):
+            raw_path = take / 'raw-recognition.txt'
+            raw = raw_path.read_bytes().decode('utf-8') if raw_path.exists() else self.engine.transcribe(take / 'recording.wav', cancelled)
+            if not isinstance(raw, str):
                 raise ValueError('Invalid transcript')
             with self.lock:
                 if cancelled.is_set() or self.closed:
                     return
+                if not raw_path.exists():
+                    private_write(raw_path, raw)
+                text = spellings.apply(raw)
                 private_write(take / 'transcript.txt', text)
                 self.outcome = 'empty' if not text else 'recover_only' if not allow_delivery else 'target_changed'
                 if allow_delivery and text and target == self.delivery.snapshot():
@@ -172,12 +193,18 @@ class Session:
                 return self.status()
             if not (take / 'recording.wav').is_file():
                 raise ValueError('No saved audio')
+            try:
+                spellings = load_spellings(self.dictionary)
+            except (OSError, ValueError):
+                self.error = 'dictionary_unavailable'
+                self._notify('error')
+                return self.status()
             self.take = take
             self.discard_on_cancel = False
             self.cancelled = threading.Event()
             self.error, self.outcome, self.state = None, 'not_attempted', 'transcribing'
             self._notify('transcribing')
-            self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, False))
+            self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, spellings, False))
             self.thread.start()
             return self.status()
 
@@ -382,7 +409,7 @@ def validate_config(value):
         if (not isinstance(classes, list) or not classes or
                 any(not isinstance(item, str) or not item or '*' in item for item in classes)):
             raise ValueError('Type delivery requires exact allowed_classes')
-    for name in ('python', 'capture_target'):
+    for name in ('python', 'capture_target', 'dictionary'):
         if name in result and (not isinstance(result[name], str) or not result[name] or '\0' in result[name]):
             raise ValueError('Invalid ' + name)
     return result
@@ -485,8 +512,8 @@ def recovery_list(root):
             if re.fullmatch('[0-9a-f]{32}', path.name) and path.is_dir() and not path.is_symlink()]
 
 
-def recovery_result(root, identity):
-    return (recovery_path(root, identity) / 'transcript.txt').read_text(encoding='utf-8')
+def recovery_result(root, identity, *, raw=False):
+    return (recovery_path(root, identity) / ('raw-recognition.txt' if raw else 'transcript.txt')).read_bytes().decode('utf-8')
 
 
 def main():
@@ -502,7 +529,10 @@ def main():
     for action in ('start', 'stop', 'toggle', 'cancel', 'status', 'shutdown', 'list'):
         commands.add_parser(action)
     for action in ('recover', 'transcribe', 'forget'):
-        commands.add_parser(action).add_argument('id')
+        command = commands.add_parser(action)
+        command.add_argument('id')
+        if action == 'recover':
+            command.add_argument('--raw', action='store_true', help='Print original recognition, if saved')
     args = parser.parse_args()
     path = args.runtime / 'session.sock'
     try:
@@ -510,7 +540,7 @@ def main():
             print(json.dumps(recovery_list(args.recovery)))
             return 0
         if args.action == 'recover':
-            sys.stdout.write(recovery_result(args.recovery, args.id))
+            sys.stdout.write(recovery_result(args.recovery, args.id, raw=args.raw))
             return 0
         if args.action == 'forget':
             take = recovery_path(args.recovery, args.id)
@@ -518,7 +548,7 @@ def main():
                 status = request(path, 'status')
                 if status.get('recovery') == args.id and status.get('state') != 'idle':
                     raise ValueError('Recovery is in use')
-            for name in ('recording.wav', 'transcript.txt'):
+            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt'):
                 (take / name).unlink(missing_ok=True)
             take.rmdir()
             return 0
@@ -534,6 +564,9 @@ def main():
         if not engine_path.is_absolute():
             engine_path = args.config.resolve().parent / engine_path
         settings = json.loads(engine_path.read_text())['engines']['speech']
+        dictionary = Path(config['dictionary']).expanduser() if 'dictionary' in config else None
+        if dictionary is not None and not dictionary.is_absolute():
+            dictionary = args.config.resolve().parent / dictionary
         args.runtime.mkdir(mode=0o700, parents=True, exist_ok=True)
         info = args.runtime.stat()
         if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
@@ -543,7 +576,7 @@ def main():
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
                           HyprlandDelivery(config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
-                          feedback=Notifications(config['notifications']))
+                          feedback=Notifications(config['notifications']), dictionary=dictionary)
         session._notify('ready')
         stopped = threading.Event()
         for event in (signal.SIGINT, signal.SIGTERM):

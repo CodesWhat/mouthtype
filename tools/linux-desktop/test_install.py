@@ -25,6 +25,14 @@ class InstallTests(unittest.TestCase):
                                     check=True, timeout=5)
             self.assertIn('toggle', result.stdout)
             self.assertIn('transcribe', result.stdout)
+            checks = subprocess.run([str(launcher), 'recover', '--help'], capture_output=True,
+                                    text=True, check=True, timeout=5)
+            self.assertIn('--raw', checks.stdout)
+            payload = prefix / 'lib/mouthtype-linux/tools/linux-desktop'
+            checks = subprocess.run(['python3', '-m', 'unittest', 'discover', '-s', str(payload),
+                                     '-p', 'test_spellings.py'], cwd=temp, capture_output=True,
+                                    text=True, timeout=5)
+            self.assertEqual(checks.returncode, 0, checks.stderr)
             self.assertEqual(config.read_text(), 'user content')
             with self.assertRaises(FileExistsError):
                 installer.install(ROOT, prefix)
@@ -47,6 +55,10 @@ class InstallTests(unittest.TestCase):
                 self.assertIn('mouthtype-linux/LICENSE', names)
                 self.assertIn('mouthtype-linux/tools/linux-desktop/desktop.py', names)
                 self.assertIn('mouthtype-linux/tools/linux-engine-proof/worker.py', names)
+                self.assertIn('mouthtype-linux/tools/linux-desktop/vendor/grapheme/data/grapheme_break_property.json', names)
+                self.assertIn('mouthtype-linux/tools/linux-desktop/vendor/grapheme/LICENSE', names)
+                self.assertIn('mouthtype-linux/tools/linux-desktop/vendor/grapheme/UNICODE-LICENSE', names)
+                self.assertIn('mouthtype-linux/tools/linux-desktop/spelling-unicode.json', names)
                 self.assertFalse(any('.planning' in name or '.onnx' in name or '.gguf' in name for name in names))
             with self.assertRaises(FileExistsError):
                 installer.package(ROOT, output)
