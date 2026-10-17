@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -12,6 +13,71 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class InstallTests(unittest.TestCase):
+    def test_staging_uses_final_prefix_in_launcher_without_writing_there(self):
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = (Path(temp) / 'final').resolve()
+            staging = (Path(temp) / 'package').resolve()
+            launcher = installer.install(ROOT, runtime, destdir=staging)
+            staged_prefix = staging / runtime.relative_to('/')
+            self.assertEqual(launcher, staged_prefix / 'bin/mouthtype-linux')
+            self.assertFalse(runtime.exists(), 'Packaging must not write into the final prefix')
+            self.assertTrue((staged_prefix / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py').is_file())
+            self.assertEqual((staged_prefix / 'lib/mouthtype-linux').stat().st_mode & 0o777, 0o755)
+            text = launcher.read_text()
+            self.assertIn(str(runtime / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py'), text)
+            self.assertNotIn(str(staging), text)
+
+    def test_staging_permissions_ignore_restrictive_child_umask_without_changing_manual_install(self):
+        with tempfile.TemporaryDirectory() as temp:
+            staging = Path(temp) / 'package'
+            manual = Path(temp) / 'manual'
+            child = ('import os, runpy, sys; os.umask(0o077); '
+                     'sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name="__main__")')
+            for arguments in (['--prefix', '/usr', '--destdir', str(staging)],
+                              ['--prefix', str(manual)]):
+                result = subprocess.run([sys.executable, '-c', child, str(Path(installer.__file__)),
+                                         *arguments], capture_output=True, text=True, timeout=5)
+                self.assertEqual(result.returncode, 0, result.stderr)
+            for path in (staging / 'usr', *(staging / 'usr').rglob('*')):
+                expected = 0o755 if path.is_dir() or path.name == 'mouthtype-linux' else 0o644
+                self.assertEqual(path.stat().st_mode & 0o777, expected, str(path))
+            payload = manual / 'lib/mouthtype-linux'
+            self.assertEqual(payload.stat().st_mode & 0o777, 0o700)
+            self.assertEqual((payload / 'tools').stat().st_mode & 0o777, 0o700)
+            self.assertEqual((payload / 'LICENSE').stat().st_mode & 0o777, 0o600)
+
+    def test_staging_preserves_existing_ancestor_permissions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            staging = Path(temp) / 'package'
+            staging.mkdir(mode=0o700)
+            ancestor = staging / 'usr'
+            ancestor.mkdir(mode=0o750)
+            child = ('import os, runpy, sys; os.umask(0o077); '
+                     'sys.argv = sys.argv[1:]; runpy.run_path(sys.argv[0], run_name="__main__")')
+            result = subprocess.run([sys.executable, '-c', child, str(Path(installer.__file__)),
+                                     '--prefix', '/usr/local', '--destdir', str(staging)],
+                                    capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(staging.stat().st_mode & 0o777, 0o700)
+            self.assertEqual(ancestor.stat().st_mode & 0o777, 0o750)
+            self.assertEqual((ancestor / 'local').stat().st_mode & 0o777, 0o755)
+            self.assertEqual((ancestor / 'local/lib').stat().st_mode & 0o777, 0o755)
+            self.assertEqual((ancestor / 'local/bin').stat().st_mode & 0o777, 0o755)
+
+    def test_staging_cli_preserves_existing_final_install_and_requires_absolute_prefix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            runtime = (Path(temp) / 'final').resolve()
+            runtime.mkdir()
+            (runtime / 'mine').write_text('keep')
+            staging = Path(temp) / 'staging'
+            result = subprocess.run(['python3', str(Path(installer.__file__)), '--prefix', str(runtime),
+                                     '--destdir', str(staging)], capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual((runtime / 'mine').read_text(), 'keep')
+            with self.assertRaises(ValueError):
+                installer.install(ROOT, 'relative', destdir=Path(temp) / 'other')
+            self.assertFalse((Path(temp) / 'other').exists())
+
     def test_install_is_runnable_and_preserves_existing_config(self):
         with tempfile.TemporaryDirectory() as temp:
             prefix = Path(temp) / 'local'
@@ -21,6 +87,7 @@ class InstallTests(unittest.TestCase):
             installer.install(ROOT, prefix)
             launcher = prefix / 'bin/mouthtype-linux'
             self.assertTrue(launcher.is_file())
+            self.assertEqual((prefix / 'lib/mouthtype-linux').stat().st_mode & 0o777, 0o700)
             result = subprocess.run([str(launcher), '--help'], capture_output=True, text=True,
                                     check=True, timeout=5)
             self.assertIn('toggle', result.stdout)
