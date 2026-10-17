@@ -42,6 +42,7 @@ class Session:
         self.thread = None
         self.cancelled = threading.Event()
         self.take = None
+        self.discard_on_cancel = False
         self.closed = False
 
     def status(self):
@@ -50,7 +51,7 @@ class Session:
                 'context': 'unsupported', 'secure_field_detection': 'unsupported',
                 'delivery_verified': False}
 
-    def command(self, action):
+    def command(self, action, *, admit_before=None):
         with self.lock:
             if action == 'status':
                 return self.status()
@@ -59,12 +60,20 @@ class Session:
             if action == 'toggle':
                 action = 'stop' if self.state == 'recording' else 'start'
             if action == 'start' and self.state == 'idle':
+                if admit_before is not None and time.monotonic() >= admit_before:
+                    self.error = 'command_expired'
+                    return self.status()
+                target = self.delivery.snapshot()
+                if admit_before is not None and time.monotonic() >= admit_before:
+                    self.error = 'command_expired'
+                    return self.status()
                 if len(list(self.recovery.iterdir())) >= 50:
                     self.error = 'recovery_full'
                     return self.status()
                 self.take = self.recovery / uuid.uuid4().hex
                 self.take.mkdir(mode=0o700)
-                self.target = self.delivery.snapshot()
+                self.discard_on_cancel = True
+                self.target = target
                 self.cancelled = threading.Event()
                 self.error, self.outcome = None, 'not_attempted'
                 try:
@@ -95,9 +104,9 @@ class Session:
         self.cancelled.set()
         if self.state == 'recording':
             self.capture.cancel()
-        self.state = 'cancelling' if self.state == 'transcribing' and self.thread and self.thread.is_alive() else 'idle'
+        self.state = 'cancelling' if self.state in ('transcribing', 'cancelling') and self.thread and self.thread.is_alive() else 'idle'
         self.outcome = 'not_attempted'
-        if discard and self.take:
+        if discard and self.discard_on_cancel and self.take:
             # Only the current recording is disposable. A completed transcript remains recoverable.
             (self.take / 'recording.wav').unlink(missing_ok=True)
             try:
@@ -138,6 +147,7 @@ class Session:
             if not (take / 'recording.wav').is_file():
                 raise ValueError('No saved audio')
             self.take = take
+            self.discard_on_cancel = False
             self.cancelled = threading.Event()
             self.error, self.outcome, self.state = None, 'not_attempted', 'transcribing'
             self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, False))
@@ -177,12 +187,12 @@ class HyprlandDelivery:
             return None
         try:
             locked = self.run(['hyprctl', '-j', 'locked'], capture_output=True,
-                              text=True, check=True, timeout=2)
+                              text=True, check=True, timeout=.5)
             lock_state = json.loads(locked.stdout)
             if not isinstance(lock_state, dict) or lock_state.get('locked') is not False:
                 return None
             result = self.run(['hyprctl', '-j', 'activewindow'], capture_output=True,
-                              text=True, check=True, timeout=2)
+                              text=True, check=True, timeout=.5)
             active = json.loads(result.stdout)
             if (not isinstance(active.get('address'), str) or not active['address'] or
                     not isinstance(active.get('class'), str) or not active['class'] or
@@ -232,8 +242,9 @@ def stop_process(process, first=signal.SIGTERM):
 
 
 class PipeWireCapture:
-    def __init__(self, target=None):
+    def __init__(self, target=None, *, errors=subprocess.DEVNULL):
         self.target, self.process, self.path = target, None, None
+        self.errors = errors
 
     def argv(self, path):
         result = ['pw-record', '--rate=16000', '--channels=1', '--format=s16']
@@ -248,7 +259,7 @@ class PipeWireCapture:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         os.close(fd)
         self.process = subprocess.Popen(self.argv(path), stdin=subprocess.DEVNULL,
-                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                        stdout=subprocess.DEVNULL, stderr=self.errors,
                                         start_new_session=True)
 
     def running(self):
@@ -394,7 +405,11 @@ def serve(path, session, stopped, *, lifetime_seconds=43200):
                             elif action == 'transcribe':
                                 result = session.recover_audio(message.get('id'))
                             elif action in ('start', 'stop', 'toggle', 'cancel', 'status'):
-                                result = session.command(action)
+                                admission = message.get('admit_before')
+                                if action in ('start', 'toggle') and (
+                                        type(admission) not in (int, float) or not math.isfinite(admission)):
+                                    raise ValueError('Recording admission deadline is required')
+                                result = session.command(action, admit_before=admission)
                             else:
                                 raise ValueError('Unknown action')
                         except (OSError, ValueError, TypeError):
@@ -411,7 +426,8 @@ def request(path, action, identity=None):
     with socket.socket(socket.AF_UNIX) as connection:
         connection.settimeout(2.5)
         connection.connect(str(path))
-        connection.sendall(json.dumps({'action': action, 'id': identity}).encode() + b'\n')
+        connection.sendall(json.dumps({'action': action, 'id': identity,
+                                       'admit_before': time.monotonic() + 1.5}).encode() + b'\n')
         return read_message(connection, maximum=16384)
 
 

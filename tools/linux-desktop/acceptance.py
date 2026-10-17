@@ -12,6 +12,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import traceback
 import time
 import wave
 
@@ -37,18 +38,32 @@ def tone_metrics(path):
     return {'frames': count, 'rate': 16000, 'channels': 1, 'rms': rms, 'frequency_hz': frequency}
 
 
+
+def file_capability(path):
+    if not path:
+        return None
+    result = {'mode': oct(Path(path).stat().st_mode & 0o7777)}
+    try:
+        result['capability_hex'] = os.getxattr(path, 'security.capability').hex()
+    except OSError as error:
+        result['capability_read_errno'] = error.errno
+    return result
+
+
 def capabilities():
     return {'system': platform.system(), 'kernel': platform.release(),
             'architecture': platform.machine(), 'drm_nodes': [str(p) for p in Path('/dev/dri').glob('*')],
             'commands': {name: shutil.which(name) for name in
                          ('Hyprland', 'hyprctl', 'pipewire', 'pw-record', 'wireplumber', 'sway', 'wtype', 'wl-copy', 'wl-paste')},
-            'hyprland_acceptance': False, 'omarchy_acceptance': False}
+            'hyprland_acceptance': False, 'omarchy_acceptance': False,
+            'sway_file': file_capability(shutil.which('sway'))}
 
 
 class Processes:
     def __init__(self, root, env):
         self.root, self.env, self.items = root, env, []
     def start(self, command, *, stdin=subprocess.DEVNULL):
+        sys.stderr.write('acceptance start: ' + json.dumps(command) + '\n')
         log = (self.root / ('process-' + str(len(self.items)) + '.log')).open('wb')
         try:
             process = subprocess.Popen(command, stdin=stdin, stdout=log, stderr=log,
@@ -84,7 +99,14 @@ def wait_for(check, seconds=8):
 
 
 def run(command, env, **kwargs):
-    return subprocess.run(command, env=env, timeout=5, check=True, capture_output=True, **kwargs)
+    sys.stderr.write('acceptance command: ' + json.dumps(command) + '\n')
+    try:
+        return subprocess.run(command, env=env, timeout=5, check=True, capture_output=True, **kwargs)
+    except subprocess.CalledProcessError as error:
+        for data in (error.stdout, error.stderr):
+            if data:
+                sys.stderr.write(data[-16384:].decode('utf-8', errors='replace') if isinstance(data, bytes) else data[-16384:])
+        raise
 
 
 def pipewire_component(root, env, processes):
@@ -108,7 +130,10 @@ context.objects = [
     processes.start(['pipewire'])
     wait_for(lambda: (Path(env['XDG_RUNTIME_DIR']) / 'pipewire-0').exists())
     processes.start(['wireplumber', '--profile=policy'])
-    capture = PipeWireCapture(target='mouthtype-synthetic-source')
+    capture_log = (root / 'capture.log').open('wb')
+    capture = PipeWireCapture(target='mouthtype-synthetic-source', errors=capture_log)
+    capture_argv = capture.argv
+    capture.argv = lambda path: capture_argv(path)[:-1] + ['--verbose', str(path)]
     previous = dict(os.environ)
     os.environ.update(env)
     try:
@@ -122,8 +147,13 @@ context.objects = [
         return {'component': 'pipewire', 'synthetic_source': True, 'capture': metrics,
                 'capture_reaped': True, 'physical_microphone': False,
                 'model_inference': False, 'hyprland_acceptance': False, 'omarchy_acceptance': False}
+    except BaseException:
+        capture_log.flush()
+        sys.stderr.write((root / 'capture.log').read_bytes()[-16384:].decode('utf-8', errors='replace'))
+        raise
     finally:
         capture.cancel()
+        capture_log.close()
         os.environ.clear()
         os.environ.update(previous)
 
@@ -218,6 +248,7 @@ def main():
                 check = pipewire_component if args.component == 'pipewire' else sway_component
                 result = check(root, env, processes)
             except BaseException:
+                traceback.print_exc(file=sys.stderr)
                 for _process, log in processes.items:
                     log.flush()
                     data = Path(log.name).read_bytes()[-16384:]
@@ -229,7 +260,8 @@ def main():
             print(json.dumps({'passed': True, **result}, indent=2))
         return 0
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-        print(json.dumps({'passed': False, 'component': args.component, 'error_class': type(error).__name__}))
+        print(json.dumps({'passed': False, 'component': args.component, 'error_class': type(error).__name__,
+                          'error_message': str(error)}))
         return 1
     finally:
         signal.alarm(0)

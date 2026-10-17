@@ -25,5 +25,18 @@ class ToneTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 tone_metrics(path)
 
+class DiagnosticTests(unittest.TestCase):
+    def test_synthetic_failed_command_keeps_bounded_stderr_for_investigation(self):
+        import contextlib
+        import io
+        import os
+        import subprocess
+        import sys
+        from acceptance import run
+        output = io.StringIO()
+        with contextlib.redirect_stderr(output), self.assertRaises(subprocess.CalledProcessError):
+            run([sys.executable, '-c', 'import sys;sys.stderr.write("synthetic helper failure");sys.exit(3)'], dict(os.environ))
+        self.assertIn('synthetic helper failure', output.getvalue())
+
 if __name__ == '__main__':
     unittest.main()

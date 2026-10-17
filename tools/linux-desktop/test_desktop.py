@@ -457,5 +457,82 @@ class EngineConfigTests(unittest.TestCase):
             with self.subTest(settings=settings), self.assertRaises(ValueError):
                 SpeechEngine(settings)
 
+class ReviewCancellationTests(unittest.TestCase):
+    def test_cancel_audio_recovery_preserves_original_audio_and_directory(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            take = root / ('a' * 32)
+            take.mkdir()
+            Capture().start(take / 'recording.wav')
+            original = (take / 'recording.wav').read_bytes()
+            engine = Engine()
+            engine.gate = threading.Event()
+            session = Session(Capture(), engine, Delivery(), root)
+            try:
+                session.recover_audio('a' * 32)
+                self.assertTrue(engine.entered.wait(1))
+                session.command('cancel')
+                session.wait()
+                self.assertTrue(take.is_dir())
+                self.assertTrue((take / 'recording.wav').is_file())
+                self.assertEqual((take / 'recording.wav').read_bytes(), original)
+                self.assertEqual(session.delivery.calls, [])
+            finally:
+                engine.gate.set()
+                session.close()
+    def test_repeated_cancel_stays_busy_until_worker_quiesces(self):
+        with tempfile.TemporaryDirectory() as temp:
+            engine = Engine()
+            entered, gate = threading.Event(), threading.Event()
+            def blocked(_path, _cancelled):
+                entered.set()
+                gate.wait(2)
+                return 'discarded'
+            engine.transcribe = blocked
+            session = Session(Capture(), engine, Delivery(), Path(temp))
+            try:
+                session.command('start')
+                session.command('stop')
+                self.assertTrue(entered.wait(1))
+                self.assertEqual(session.command('cancel')['state'], 'cancelling')
+                self.assertEqual(session.command('cancel')['state'], 'cancelling')
+                session.command('start')
+                self.assertEqual(session.capture.starts, 1)
+                gate.set()
+                session.wait()
+                self.assertEqual(session.state, 'idle')
+                self.assertEqual(session.delivery.calls, [])
+            finally:
+                gate.set()
+                session.close()
+
+class AdmissionTests(unittest.TestCase):
+    def test_expired_start_cannot_open_microphone_after_slow_target_lookup(self):
+        with tempfile.TemporaryDirectory() as temp:
+            delivery = Delivery()
+            original = delivery.snapshot
+            def slow():
+                time.sleep(.04)
+                return original()
+            delivery.snapshot = slow
+            session = Session(Capture(), Engine(), delivery, Path(temp))
+            try:
+                result = session.command('start', admit_before=time.monotonic() + .01)
+                self.assertEqual(session.capture.starts, 0)
+                self.assertEqual(result['state'], 'idle')
+                self.assertEqual(result['error'], 'command_expired')
+                self.assertEqual(list(Path(temp).iterdir()), [])
+            finally:
+                session.close()
+    def test_expired_queued_toggle_does_not_start_recording(self):
+        with tempfile.TemporaryDirectory() as temp:
+            session = Session(Capture(), Engine(), Delivery(), Path(temp))
+            try:
+                result = session.command('toggle', admit_before=time.monotonic() - 1)
+                self.assertEqual(session.capture.starts, 0)
+                self.assertEqual(result['error'], 'command_expired')
+            finally:
+                session.close()
+
 if __name__ == '__main__':
     unittest.main()
