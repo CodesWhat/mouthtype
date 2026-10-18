@@ -25,7 +25,7 @@ public final class TextInserter {
     private let inputGeneration: @MainActor () -> UInt64?
     private let observeBoundary: @MainActor (PasteBoundaryDiagnostic) -> Void
     private let restrictedToPID: pid_t?
-    private var batchActive = false
+    private var deliveryActive = false
     private var batchGeneration = 0
     private var lastText: String?
     private var lastPaste: LastPaste?
@@ -126,26 +126,57 @@ public final class TextInserter {
 
     /// Pastes `text` into whatever has focus now. `startFocus` only decides `focusMoved`.
     ///
-    /// Opt-in long pastes wait between parts, holding one clipboard lease and refusing concurrent delivery.
+    /// Automatic pastes wait for the preceding clipboard lease; long pastes also wait between parts.
     /// The read-back runs after this returns and never posts a paste again.
     public func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult {
         guard !text.isEmpty else {
             return DeliveryResult(method: .none, outcome: .unknown, focusMoved: false, target: nil, finalText: "")
         }
-        guard !batchActive else {
+        guard !deliveryActive else {
             return DeliveryResult(method: .none, outcome: .failed("Another paste is still in progress"),
                                   focusMoved: false, target: nil, finalText: text)
         }
-        deliveryGeneration += 1
-        let generation = deliveryGeneration
-        cancelVerification()
+        deliveryActive = true
+        defer { deliveryActive = false }
         var now = focus.snapshot()
         if let restrictedToPID, now.pid != restrictedToPID {
             Log.app.error("self-test focus moved; no paste or clipboard write")
             return DeliveryResult(method: .none, outcome: .failed("self-test focus moved"), focusMoved: true, target: nil, finalText: "")
         }
-        let secureInput = focus.isSecureInputEnabled
+        var secureInput = focus.isSecureInputEnabled
         let moved = startFocus?.hasChanged(to: now) ?? false
+
+        let previous = clipboard.pasteGeneration
+        if DeliveryDecision.decide(now: now, secureInput: secureInput) != .discardSecure,
+           clipboard.holdsPaste(previous) {
+            let settled = await waitForPreviousPaste(previous)
+            if Task.isCancelled {
+                lastText = text
+                return DeliveryResult(method: .none, outcome: .failed("Paste canceled"),
+                                      focusMoved: moved, target: now, finalText: text)
+            }
+            var checked = focus.snapshot()
+            let checkedSecureInput = focus.isSecureInputEnabled
+            if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
+                checked.isSecure = checked.isSecure || checkedSecureInput
+                return DeliveryResult(method: .none, outcome: .secureDiscard,
+                                      focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
+            }
+            lastText = text
+            guard checked.pid == now.pid, checked.bundleID == now.bundleID, checked.element == now.element else {
+                return DeliveryResult(method: .none, outcome: .failed("Focus changed before paste"),
+                                      focusMoved: true, target: checked, finalText: text)
+            }
+            guard settled else {
+                return DeliveryResult(method: .none, outcome: .failed("The previous paste has not settled. Copy this result after the app responds."),
+                                      focusMoved: moved, target: checked, finalText: text)
+            }
+            now = checked
+            secureInput = checkedSecureInput
+        }
+        deliveryGeneration += 1
+        let generation = deliveryGeneration
+        cancelVerification()
 
         switch DeliveryDecision.decide(now: now, secureInput: secureInput) {
         case .discardSecure:
@@ -239,12 +270,46 @@ public final class TextInserter {
         }
     }
 
+    private func waitForPreviousPaste(_ lease: Int) async -> Bool {
+        let generation = batchGeneration
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(PasteboardSession.receiptCap))
+        func mayContinue() -> Bool {
+            !Task.isCancelled && batchGeneration == generation && clock.now < deadline
+                && (clipboard.holdsPaste(lease) || clipboard.wasRestored(lease))
+        }
+        do {
+            let polls = Int((PasteboardSession.receiptCap / 0.02).rounded(.up))
+            for _ in 0..<polls {
+                guard mayContinue() else { return false }
+                if clipboard.wasRestored(lease) {
+                    return clipboard.firstReceiptMs != nil || clipboard.hadEarlyRead
+                }
+                if clipboard.firstReceiptMs != nil {
+                    for _ in 0..<40 {
+                        guard mayContinue() else { return false }
+                        if clipboard.wasRestored(lease) { return true }
+                        let reads = clipboard.readCount
+                        try await sleep(PasteboardSession.receiptSettle)
+                        guard mayContinue() else { return false }
+                        if clipboard.readCount == reads { return true }
+                    }
+                    return false
+                }
+                if clipboard.hadEarlyRead {
+                    try await sleep(PasteboardSession.unobservedDelay)
+                    return mayContinue()
+                }
+                try await sleep(0.02)
+            }
+        } catch { return false }
+        return false
+    }
+
     private func pasteInParts(_ parts: [String], keyCode: CGKeyCode, target: FocusSnapshot) async -> Bool {
-        batchActive = true
         clipboard.beginBatch()
         defer {
             clipboard.finishBatch()
-            batchActive = false
         }
         let input = inputGeneration()
         let generation = batchGeneration
@@ -445,6 +510,7 @@ final class PasteReceipts: @unchecked Sendable {
     }
 
     var readCount: Int { lock.withLock { reads } }
+    var hadEarlyRead: Bool { lock.withLock { early > 0 } }
 
     /// Chord to first counted read, in whole ms.
     var firstReceiptMs: Int? {
@@ -500,6 +566,7 @@ final class PasteboardSession {
     private var receiptCount = 0
     private var receipts: PasteReceipts?
     private var holdingRestore = false
+    private var restoredGeneration: Int?
 
     init(pasteboard: PasteboardAccess, poster: PasteEventPosting, schedule: @escaping Schedule = PasteboardSession.mainSchedule) {
         self.pasteboard = pasteboard
@@ -511,9 +578,14 @@ final class PasteboardSession {
 
     var pasteGeneration: Int { generation }
     var readCount: Int { receipts?.readCount ?? 0 }
+    var hadEarlyRead: Bool { receipts?.hadEarlyRead ?? false }
 
     func holdsPaste(_ expected: Int) -> Bool {
         generation == expected && saved != nil && pasteboard.changeCount == ourChangeCount
+    }
+
+    func wasRestored(_ expected: Int) -> Bool {
+        generation == expected && restoredGeneration == expected && pasteboard.changeCount == ourChangeCount
     }
 
     func beginBatch() { holdingRestore = true }
@@ -537,6 +609,7 @@ final class PasteboardSession {
             saved = pasteboard.snapshot()
         }
         generation += 1
+        restoredGeneration = nil
         receiptCount = 0
         let current = generation
         let receipts = PasteReceipts()
@@ -580,6 +653,7 @@ final class PasteboardSession {
     func copy(_ text: String) {
         saved = nil
         generation += 1
+        restoredGeneration = nil
         receipts = nil
         pasteboard.write(text, markers: Self.concealedMarkers)
         ourChangeCount = pasteboard.changeCount
@@ -594,6 +668,8 @@ final class PasteboardSession {
             return
         }
         pasteboard.restore(snapshot)
+        ourChangeCount = pasteboard.changeCount
+        restoredGeneration = expected
     }
 }
 

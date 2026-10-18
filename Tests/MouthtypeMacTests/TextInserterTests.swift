@@ -15,6 +15,10 @@ private final class FakePasteboard: PasteboardAccess {
     var contents = PasteboardSnapshot(items: [])
     var writes: [(text: String, markers: [String])] = []
     var snapshots = 0
+    var publishedText: String? {
+        guard let value = contents.items.first?.first(where: { $0.type == "public.utf8-plain-text" }) else { return nil }
+        return String(data: value.data, encoding: .utf8)
+    }
     /// The callback of the promise now on the pasteboard, as the system would run it.
     var onRead: (@Sendable () -> Void)?
 
@@ -191,6 +195,198 @@ private struct Rig {
 
 @MainActor
 @Suite struct TextInserterTests {
+    @Test func ordinaryPastesWaitForPreviousConsumption() async {
+        let rig = Rig(chunks: true)
+        defer { rig.poster.onPost = nil; rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        var consumed: [String] = []
+        func readTarget() {
+            consumed.append(rig.pasteboard.publishedText ?? "")
+            rig.pasteboard.read()
+        }
+        rig.poster.onPost = {
+            if rig.poster.posts == 2 {
+                while consumed.count < 2 { readTarget() }
+            }
+        }
+        let first = await rig.inserter.deliver("first", startFocus: nil)
+        rig.pauses.observe = { delay in
+            if delay == 0.02, consumed.isEmpty {
+                #expect(rig.poster.posts == 1)
+                #expect(rig.pasteboard.publishedText == first.finalText)
+                readTarget()
+            }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(first.method == .paste && second.method == .paste)
+        #expect(rig.poster.posts == 2)
+        #expect(consumed == [first.finalText, second.finalText])
+    }
+
+    @Test func unreadPreviousPasteRefusesTheNextWithoutReplacingIt() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        let first = rig.pasteboard.contents
+        var polls = 0
+        rig.pauses.observe = { delay in
+            if delay == 0.02 { polls += 1 }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(second.method == .none && second.finalText == "second")
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(rig.pasteboard.contents == first)
+        #expect(rig.inserter.lastDelivered == "second")
+        #expect(polls > 0 && polls <= 400)
+    }
+
+    @Test(arguments: ["field", "app", "secure", "secureInput", "copy"])
+    func aChangeDuringThePreviousPasteWaitNeverPostsTheNext(change: String) async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.focus.current.element = element(100)
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var changed = false
+        rig.pauses.observe = { delay in
+            guard delay == 0.02, !changed else { return }
+            changed = true
+            switch change {
+            case "field": rig.focus.current.element = element(101)
+            case "app": rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other", element: element(200))
+            case "secure": rig.focus.current.isSecure = true
+            case "secureInput":
+                rig.focus.isSecureInputEnabled = true
+                rig.focus.current.element = nil
+            default: rig.pasteboard.externalCopy("newer copy")
+            }
+            if change != "copy" { rig.pasteboard.read() }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(changed)
+        #expect(second.method == .none)
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(rig.pasteboard.publishedText == (change == "copy" ? "newer copy" : "first"))
+        if change == "secure" || change == "secureInput" {
+            #expect(second.outcome == .secureDiscard && second.finalText.isEmpty)
+            #expect(rig.inserter.lastDelivered == "first")
+        } else {
+            #expect(second.finalText == "second")
+        }
+    }
+
+    @Test func aWaitingPasteCanBeCanceledWithoutChangingTheClipboard() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var pending: Task<DeliveryResult, Never>?
+        rig.pauses.observe = { delay in
+            if delay == 0.02 { pending?.cancel() }
+        }
+        pending = Task { await rig.inserter.deliver("second", startFocus: nil) }
+        let result = await pending!.value
+        #expect(result.method == .none && result.finalText == "second")
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(rig.pasteboard.publishedText == "first")
+    }
+
+    @Test func anotherDeliveryCannotJumpAheadOfAWaitingPaste() async throws {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var third: Task<DeliveryResult, Never>?
+        rig.pauses.observe = { delay in
+            if delay == 0.02, third == nil {
+                third = Task {
+                    let result = await rig.inserter.deliver("third", startFocus: nil)
+                    rig.pasteboard.read()
+                    return result
+                }
+            }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        let attempt = try #require(third)
+        let blocked = await attempt.value
+        #expect(second.method == .paste && blocked.method == .none)
+        #expect(blocked.finalText == "third" && rig.poster.posts == 2)
+    }
+
+    @Test func anExpiredUnreadLeaseDoesNotAdmitTheWaitingPaste() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original")]])
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var expired = false
+        rig.pauses.observe = { delay in
+            if delay == 0.02, !expired {
+                expired = true
+                rig.pending.run(PasteboardSession.receiptCap)
+            }
+        }
+        let result = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(expired && result.method == .none && result.finalText == "second")
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(rig.pasteboard.publishedText == "original")
+    }
+
+    @Test func anEarlyClipboardReaderUsesTheBoundedFallbackBeforeTheNextPaste() async {
+        let rig = Rig(chunks: true)
+        defer { rig.poster.onPost = nil; rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.poster.onPost = { rig.pasteboard.read() }
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var fallback = false
+        rig.pauses.observe = { delay in
+            if delay == PasteboardSession.unobservedDelay {
+                fallback = true
+                #expect(rig.poster.posts == 1)
+                rig.pending.run(PasteboardSession.unobservedDelay)
+            }
+        }
+        let result = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(fallback && result.method == .paste && rig.poster.posts == 2)
+    }
+
+    @Test func aConsumedLeaseRestoredDuringTheWaitPreservesAllRichRepresentations() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        let original = PasteboardSnapshot(items: [[text("original"),
+            PasteboardRepresentation(type: "public.png", data: Data([0, 1, 2]))],
+            [PasteboardRepresentation(type: "public.file-url", data: Data("file:///example".utf8))]])
+        rig.pasteboard.contents = original
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var restored = false
+        rig.pauses.observe = { delay in
+            if delay == 0.02 { rig.pasteboard.read() }
+            if delay == PasteboardSession.receiptSettle, !restored {
+                restored = true
+                rig.pending.run(PasteboardSession.receiptSettle)
+                #expect(rig.pasteboard.contents == original)
+            }
+        }
+        let result = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(restored && result.method == .paste)
+        rig.pasteboard.read()
+        await hop()
+        rig.pending.run(PasteboardSession.receiptSettle)
+        #expect(rig.pasteboard.contents == original)
+    }
+
+    @Test func aReadableNormalFieldStillAcceptsAfterWaitingWithGlobalSecureInput() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.focus.current.element = element(100)
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var changed = false
+        rig.pauses.observe = { delay in
+            if delay == 0.02, !changed {
+                changed = true
+                rig.focus.isSecureInputEnabled = true
+                rig.pasteboard.read()
+            }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(changed && second.method == .paste && !second.finalText.isEmpty)
+        #expect(rig.poster.posts == 2)
+    }
+
     @Test(arguments: [false, true]) func preflightRecheckPrecedesMissingPasteKeyFallback(secureDestination: Bool) async {
         let rig = Rig()
         rig.keys.code = nil
@@ -433,10 +629,12 @@ private struct Rig {
         rig.focus.before = .start
         rig.input.value = service.userInputGeneration
         _ = await rig.inserter.deliver("First sentence.", startFocus: nil)
+        rig.pasteboard.read()
         // The listen-only tap sees the real remapped Fn key before the active tap consumes it.
         passive.countPassiveKey(TapSample(kind: .keyDown, keyCode: key, flags: 0, timestamp: 0))
         rig.input.value = service.userInputGeneration
         let next = await rig.inserter.deliver("Second sentence.", startFocus: nil)
+        rig.pasteboard.read()
         #expect(next.finalText == " Second sentence.")
         // A real Send key still invalidates the remembered boundary.
         passive.countPassiveKey(TapSample(kind: .keyDown, keyCode: 36, flags: 0, timestamp: 0))
@@ -648,6 +846,7 @@ private struct Rig {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 5, element: element(5))
         #expect(await rig.inserter.deliver("hi", startFocus: FocusSnapshot(pid: 5)).focusMoved == false)
+        rig.pasteboard.read()
         #expect(await rig.inserter.deliver("hi", startFocus: nil).focusMoved == false)
     }
 
@@ -662,6 +861,7 @@ private struct Rig {
         rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
         rig.focus.before = .character("o")
         #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == " world")
+        rig.pasteboard.read()
         rig.focus.before = .character(" ")
         #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
     }
@@ -681,6 +881,7 @@ private struct Rig {
                                           role: "AXTextField", element: element(100), focusedOwnerPID: 101)
         rig.focus.before = .start
         _ = await rig.inserter.deliver("Private first sentence.", startFocus: nil)
+        rig.pasteboard.read()
         let result = await rig.inserter.deliver("Private next sentence.", startFocus: nil)
         #expect(result.finalText == " Private next sentence.")
         #expect(rig.poster.targetPIDs == [100, 100])
@@ -695,10 +896,13 @@ private struct Rig {
         var diagnostics: [String] = []
         let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
         _ = await rig.inserter.deliver("first", startFocus: nil)
+        rig.pasteboard.read()
         rig.input.value = nil
         _ = await rig.inserter.deliver("second", startFocus: nil)
+        rig.pasteboard.read()
         rig.input.value = 2
         _ = await rig.inserter.deliver("third", startFocus: nil)
+        rig.pasteboard.read()
         rig.input.value = 3
         _ = await rig.inserter.deliver("fourth", startFocus: nil)
         #expect(diagnostics.count == 4)
@@ -713,6 +917,7 @@ private struct Rig {
         rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
         rig.focus.before = .character("秘密".last!)
         _ = await rig.inserter.deliver("confidential", startFocus: nil)
+        rig.pasteboard.read()
         rig.focus.before = .character("x")
         _ = await rig.inserter.deliver("- confidential item", startFocus: nil)
         #expect(diagnostics == [
@@ -729,6 +934,7 @@ private struct Rig {
         let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
         rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
         _ = await rig.inserter.deliver("private first", startFocus: nil)
+        rig.pasteboard.read()
         switch reason {
         case "target-changed": rig.focus.current.pid = 200
         case "element-changed": rig.focus.current.element = element(101)
@@ -754,6 +960,7 @@ private struct Rig {
         let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
         rig.focus.current = FocusSnapshot(pid: 100, isSecure: true)
         _ = await rig.inserter.deliver("secret", startFocus: nil)
+        rig.pasteboard.read()
         rig.focus.current = FocusSnapshot(pid: 100, role: "AXButton")
         _ = await rig.inserter.deliver("secret", startFocus: nil)
         #expect(diagnostics.isEmpty)
@@ -764,6 +971,7 @@ private struct Rig {
     @Test func twoDeliveriesToTheSameAppWithNoReadableContextGetASpaceBetween() async {
         let rig = Rig()
         #expect(await rig.inserter.deliver("My name is Hove.", startFocus: nil).finalText == "My name is Hove.")
+        rig.pasteboard.read()
         rig.clock.advance(30)
         #expect(await rig.inserter.deliver("Damn, can you check", startFocus: nil).finalText == " Damn, can you check")
     }
@@ -774,6 +982,7 @@ private struct Rig {
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", role: "AXTextField", element: element(100))
         rig.focus.before = reportsSpace ? .character(" ") : .start
         _ = await rig.inserter.deliver("This sentence is running together.", startFocus: nil)
+        rig.pasteboard.read()
         rig.clock.advance(15)
         #expect(await rig.inserter.deliver("It doesn't seem like spacing works.", startFocus: nil).finalText == " It doesn't seem like spacing works.")
     }
@@ -783,6 +992,7 @@ private struct Rig {
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", role: "AXTextField", element: element(100))
         rig.focus.before = .start
         _ = await rig.inserter.deliver("Previous message.", startFocus: nil)
+        rig.pasteboard.read()
         rig.input.value = 1
         #expect(await rig.inserter.deliver("New message.", startFocus: nil).finalText == "New message.")
     }
@@ -790,6 +1000,7 @@ private struct Rig {
     @Test func aKeyPressBetweenDeliveriesGetsNoSpace() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("My name is Hove.", startFocus: nil)
+        rig.pasteboard.read()
         rig.input.value = 1
         #expect(await rig.inserter.deliver("Damn, can you check", startFocus: nil).finalText == "Damn, can you check")
     }
@@ -797,8 +1008,10 @@ private struct Rig {
     @Test func aClickBetweenDeliveriesGetsNoSpaceAndOnlyTheNextOneRearms() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("one", startFocus: nil)
+        rig.pasteboard.read()
         rig.input.value = 5
         #expect(await rig.inserter.deliver("two", startFocus: nil).finalText == "two")
+        rig.pasteboard.read()
         #expect(await rig.inserter.deliver("three", startFocus: nil).finalText == " three")
     }
 
@@ -807,6 +1020,7 @@ private struct Rig {
         let input = rig.input
         rig.poster.onPost = { input.value = (input.value ?? 0) + 2 }
         _ = await rig.inserter.deliver("one", startFocus: nil)
+        rig.pasteboard.read()
         #expect(await rig.inserter.deliver("two", startFocus: nil).finalText == " two")
     }
 
@@ -814,9 +1028,12 @@ private struct Rig {
         let rig = Rig()
         rig.input.value = nil
         _ = await rig.inserter.deliver("one", startFocus: nil)
+        rig.pasteboard.read()
         #expect(await rig.inserter.deliver("two", startFocus: nil).finalText == "two")
+        rig.pasteboard.read()
         rig.input.value = 0
         _ = await rig.inserter.deliver("three", startFocus: nil)
+        rig.pasteboard.read()
         rig.input.value = nil
         #expect(await rig.inserter.deliver("four", startFocus: nil).finalText == "four")
     }
@@ -825,6 +1042,7 @@ private struct Rig {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
         _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.pasteboard.read()
         rig.input.value = 9
         rig.focus.before = .character("o")
         #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == " world")
@@ -833,8 +1051,10 @@ private struct Rig {
     @Test func aListAfterAnUnreadablePasteStartsOnANewLineAndKeepsTheContinuation() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("Groceries:", startFocus: nil)
+        rig.pasteboard.read()
         rig.clock.advance(30)
         #expect(await rig.inserter.deliver("- Milk\n- Eggs", startFocus: nil).finalText == "\n- Milk\n- Eggs")
+        rig.pasteboard.read()
         rig.clock.advance(30)
         #expect(await rig.inserter.deliver("Thanks", startFocus: nil).finalText == " Thanks")
     }
@@ -842,6 +1062,7 @@ private struct Rig {
     @Test func aResultStartingWithANewlineGetsNoLeadingSpace() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("Hello", startFocus: nil)
+        rig.pasteboard.read()
         #expect(await rig.inserter.deliver("\nWorld", startFocus: nil).finalText == "\nWorld")
     }
 
@@ -853,6 +1074,7 @@ private struct Rig {
     @Test func aDifferentAppGetsNoSpace() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.pasteboard.read()
         rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other")
         #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
     }
@@ -861,6 +1083,7 @@ private struct Rig {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
         _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.pasteboard.read()
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(101))
         #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
     }
@@ -868,6 +1091,7 @@ private struct Rig {
     @Test func outsideTheWindowGetsNoSpace() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.pasteboard.read()
         rig.clock.advance(TextInserter.continuationWindow + 1)
         #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
     }
@@ -875,6 +1099,7 @@ private struct Rig {
     @Test func atTheEdgeOfTheWindowStillGetsASpace() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.pasteboard.read()
         rig.clock.advance(TextInserter.continuationWindow)
         #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == " world")
     }
@@ -883,6 +1108,7 @@ private struct Rig {
         for ending in ["hello\n", "hello ", "hello ("] {
             let rig = Rig()
             _ = await rig.inserter.deliver(ending, startFocus: nil)
+            rig.pasteboard.read()
             #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
         }
     }
@@ -891,8 +1117,10 @@ private struct Rig {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
         _ = await rig.inserter.deliver("hello", startFocus: nil)
+        rig.pasteboard.read()
         rig.focus.before = .character(" ")
         #expect(await rig.inserter.deliver("world", startFocus: nil).finalText == "world")
+        rig.pasteboard.read()
         rig.focus.before = .start
         #expect(await rig.inserter.deliver("again", startFocus: nil).finalText == "again")
 
@@ -900,11 +1128,13 @@ private struct Rig {
         other.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
         other.focus.before = .character("x")
         _ = await other.inserter.deliver("hello.", startFocus: nil)
+        other.pasteboard.read()
         #expect(await other.inserter.deliver("world", startFocus: nil).finalText == " world")
         // Last paste ended in a space-free opener, but the field says a word precedes the cursor.
         let third = Rig()
         third.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", element: element(100))
         _ = await third.inserter.deliver("hello (", startFocus: nil)
+        third.pasteboard.read()
         third.focus.before = .character("o")
         #expect(await third.inserter.deliver("world", startFocus: nil).finalText == " world")
     }
@@ -912,8 +1142,10 @@ private struct Rig {
     @Test func aClipboardOnlyDeliveryIsNotTheLastPaste() async {
         let rig = Rig()
         _ = await rig.inserter.deliver("first.", startFocus: nil)
+        rig.pasteboard.read()
         rig.poster.succeeds = false
         #expect(await rig.inserter.deliver("lost", startFocus: nil).method == .clipboardOnly)
+        rig.pasteboard.read()
         rig.poster.succeeds = true
         // Memory still holds "first." so a space is added, not driven by "lost".
         #expect(await rig.inserter.deliver("next", startFocus: nil).finalText == " next")
@@ -1079,13 +1311,16 @@ private struct Rig {
         rig.pasteboard.contents = original
         _ = await rig.inserter.deliver("one", startFocus: nil)
         let stale = rig.pasteboard.onRead
-        _ = await rig.inserter.deliver("two", startFocus: nil)
-        stale?()
-        await hop()
-        #expect(!rig.pending.delays.contains(0.2))
         rig.pasteboard.read()
         await hop()
-        #expect(rig.pending.delays.filter { $0 == 0.2 }.count == 1)
+        _ = await rig.inserter.deliver("two", startFocus: nil)
+        let settledTimers = rig.pending.delays.filter { $0 == 0.2 }.count
+        stale?()
+        await hop()
+        #expect(rig.pending.delays.filter { $0 == 0.2 }.count == settledTimers)
+        rig.pasteboard.read()
+        await hop()
+        #expect(rig.pending.delays.filter { $0 == 0.2 }.count == settledTimers + 1)
         rig.pending.run(0.2)
         #expect(rig.pasteboard.contents == original)
     }
@@ -1307,6 +1542,7 @@ private struct Rig {
         var seen: [PasteVerification] = []
         rig.inserter.observeVerification { seen.append($0) }
         let first = await rig.inserter.deliver("one", startFocus: nil)
+        rig.pasteboard.read()
         let second = await rig.inserter.deliver("two", startFocus: nil)
         await rig.inserter.waitForVerification()
         #expect(seen.map(\.id) == [second.verificationID])
