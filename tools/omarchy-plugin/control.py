@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Small JSON bridge between the Omarchy panel and Mouthtype's local CLI."""
 
+import fcntl
 import json
 import os
 import re
@@ -398,16 +399,56 @@ def cue(name):
             pass
 
 
-def act(command, identity=None):
-    if identity is not None and (len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity)):
-        raise RuntimeError("Invalid recording ID")
-    if command in {"start", "toggle", "transcribe"} and not state()["running"]:
-        start_service()
-    if command == "shutdown" and unit_active():
-        # Stopping through systemd keeps Restart=always from bringing the service straight back.
-        subprocess.run(["systemctl", "--user", "stop", UNIT.name], check=False, timeout=20,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return state()
+HOLD = LOG.parent / "hold.json"
+HOLD_EARLY_SECONDS = 2.0
+
+
+def hold_update(change):
+    """Serialise the press and release processes, which start within milliseconds of each other."""
+    HOLD.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(HOLD.with_suffix(".lock"), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            data = json.loads(HOLD.read_text(encoding="utf-8")) if HOLD.is_file() else {}
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        if not isinstance(data, dict):
+            data = {}
+        result = change(data)
+        atomic_json(HOLD, data)
+        return result
+    finally:
+        os.close(fd)
+
+
+def hold_press():
+    """Register a press. Returns its id, or None when its release already arrived."""
+    def change(data):
+        data["press"] = data.get("press", 0) + 1
+        early, data["early_release"] = data.get("early_release"), None
+        if isinstance(early, (int, float)) and 0 <= time.time() - early < HOLD_EARLY_SECONDS:
+            data["released"] = data["press"]
+            return None
+        return data["press"]
+    return hold_update(change)
+
+
+def hold_release():
+    def change(data):
+        if data.get("released", 0) < data.get("press", 0):
+            data["released"] = data["press"]
+        else:
+            # The release outran its press process; the press will find this and not start.
+            data["early_release"] = time.time()
+    hold_update(change)
+
+
+def hold_released(press):
+    return hold_update(lambda data: data.get("released", 0) >= press)
+
+
+def deliver(command, identity=None):
     result = cli(command, *([identity] if identity else []))
     if result.returncode:
         raise RuntimeError("Mouthtype command failed")
@@ -419,7 +460,48 @@ def act(command, identity=None):
         raise RuntimeError("Mouthtype is not running")
     if response.get("error") == "file_import_active":
         raise import_error("file_import_active", "A file transcription is running")
-    if command in {"start", "toggle"} and response.get("state") == "recording":
+    return response
+
+
+def hold_start():
+    press = hold_press()
+    if press is None:
+        return state()
+    try:
+        response = deliver("start")
+    except RuntimeError:
+        if state()["running"]:
+            raise
+        start_service()
+        if hold_released(press):
+            return state()
+        response = deliver("start")
+    if hold_released(press):
+        # The key came up before the recording began, so its stop was a no-op. Stop now.
+        deliver("stop")
+        cue("stop")
+        return state()
+    if response.get("state") == "recording":
+        cue("start")
+    return state()
+
+
+def act(command, identity=None):
+    if identity is not None and (len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity)):
+        raise RuntimeError("Invalid recording ID")
+    if command == "start":
+        return hold_start()
+    if command == "stop":
+        hold_release()
+    if command in {"toggle", "transcribe"} and not state()["running"]:
+        start_service()
+    if command == "shutdown" and unit_active():
+        # Stopping through systemd keeps Restart=always from bringing the service straight back.
+        subprocess.run(["systemctl", "--user", "stop", UNIT.name], check=False, timeout=20,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return state()
+    response = deliver(command, identity)
+    if command == "toggle" and response.get("state") == "recording":
         cue("start")
     elif command in {"stop", "cancel", "toggle"} and response.get("state") != "recording":
         cue("stop")

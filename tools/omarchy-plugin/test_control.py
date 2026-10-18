@@ -2,6 +2,8 @@ import importlib.util
 import json
 import re
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -114,6 +116,78 @@ class SettingsDuringImportTests(unittest.TestCase):
         control.set_config("notifications", "off")
         self.assertEqual(self.shutdowns, ["shutdown"])
         self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["notifications"])
+
+
+class HoldToTalkTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name)
+        self.recording = False
+        self.calls = []
+        self.start_gate = None
+        self.lock = threading.Lock()
+        patches = [
+            mock.patch.object(control, "HOLD", root / "state" / "hold.json"),
+            mock.patch.object(control, "cli", self.fake_cli),
+            mock.patch.object(control, "cue", lambda name: self.calls.append("cue-" + name)),
+            mock.patch.object(control, "state", lambda: {"running": True, "state": "idle"}),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def fake_cli(self, command, *args, timeout=35):
+        if command == "start" and self.start_gate is not None:
+            self.start_gate.wait(5)
+        with self.lock:
+            self.calls.append(command)
+            if command == "start":
+                self.recording = True
+            elif command == "stop":
+                self.recording = False
+            return mock.Mock(returncode=0, stdout=json.dumps({"state": "recording" if self.recording else "idle"}),
+                             stderr="")
+
+    def test_release_that_arrives_before_start_still_stops_the_recording(self):
+        self.start_gate = threading.Event()
+        press = threading.Thread(target=control.act, args=("start",))
+        press.start()
+        deadline = time.monotonic() + 2
+        while json.loads(control.HOLD.read_text() if control.HOLD.is_file() else "{}").get("press") != 1:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(.005)
+        control.act("stop")
+        self.assertEqual(self.calls.count("stop"), 1)
+        self.start_gate.set()
+        press.join(5)
+        self.assertFalse(press.is_alive())
+        self.assertFalse(self.recording)
+        self.assertEqual([c for c in self.calls if not c.startswith("cue")], ["stop", "start", "stop"])
+
+    def test_release_that_beats_its_press_process_cancels_the_start(self):
+        control.act("stop")
+        control.act("start")
+        self.assertNotIn("start", self.calls)
+        self.assertFalse(self.recording)
+        # The next ordinary press is not affected.
+        control.act("start")
+        self.assertTrue(self.recording)
+
+    def test_ordinary_hold_starts_once_and_stops_once(self):
+        control.act("start")
+        self.assertTrue(self.recording)
+        control.act("stop")
+        self.assertFalse(self.recording)
+        self.assertEqual([c for c in self.calls if not c.startswith("cue")], ["start", "stop"])
+
+    def test_stale_early_release_does_not_cancel_a_later_press(self):
+        control.act("stop")
+        data = json.loads(control.HOLD.read_text())
+        data["early_release"] -= control.HOLD_EARLY_SECONDS + 1
+        control.HOLD.write_text(json.dumps(data))
+        control.act("start")
+        self.assertTrue(self.recording)
 
 
 class PanelActionTests(unittest.TestCase):
