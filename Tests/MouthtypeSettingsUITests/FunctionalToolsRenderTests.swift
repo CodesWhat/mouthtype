@@ -45,7 +45,7 @@ import MouthtypeCore
         let model = SettingsModel(defaults: defaults, microphone: microphone)
         model.setLevel(.basic)
         model.setWebsiteStyle(domain: "slack.com", tone: .formal)
-        let controller = SettingsWindow(model: model)
+        let controller = SettingsWindow(model: model, reduceTransparency: { true })
         for page in [SettingsPage.general, .writing] {
             model.page = page
             controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model, actions: SettingsActions()).frame(width: 1000, height: 690))
