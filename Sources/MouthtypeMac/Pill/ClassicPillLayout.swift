@@ -25,8 +25,9 @@ enum ClassicPillLayout {
     /// A taller pill keeps the corner of the 28 pt one, so the capsule becomes a rounded rectangle.
     static let cornerRadius: CGFloat = height / 2
 
-    /// The same measurements at a pill size. Large is exactly 2x every length, so the 28 pt pill becomes 56 pt with
-    /// 4.5 pt bars on an 8.5 pt pitch; the device-pixel snapping below still runs on the scaled values.
+    /// The same measurements at a pill size. Large is exactly 2x every length, so the 28 pt pill becomes 56 pt. The
+    /// bars are the exception to snapping after scaling: they are the Standard bars snapped to the pixel grid and then
+    /// doubled, so Large is an exact 2x of Standard at every backing scale.
     struct Metrics: Equatable, Sendable {
         let factor: CGFloat
         init(_ scale: PillScale) { factor = scale.factor }
@@ -72,13 +73,16 @@ enum ClassicPillLayout {
 
     /// Bar width and pitch on the pixel grid.
     static func barMetrics(scale: CGFloat, metrics m: Metrics = .standard) -> (width: CGFloat, pitch: CGFloat) {
-        (max(2 / scale, snapEven(m.barWidth, scale: scale)), max(2 / scale, snapEven(m.barPitch, scale: scale)))
+        (
+            max(2 / scale, snapEven(barWidth, scale: scale)) * m.factor,
+            max(2 / scale, snapEven(barPitch, scale: scale)) * m.factor
+        )
     }
 
     /// Dot height for silence and the tallest bar, both on the grid.
     static func barHeightRange(scale: CGFloat, metrics m: Metrics = .standard) -> ClosedRange<CGFloat> {
         let width = barMetrics(scale: scale, metrics: m).width
-        return width...max(width, snapEven(m.maxBarHeight, scale: scale))
+        return width...max(width, snapEven(maxBarHeight, scale: scale) * m.factor)
     }
 
     /// A smoothed 0...1 fraction as a bar height. The dB mapping and its knee are already in the fraction, so this is

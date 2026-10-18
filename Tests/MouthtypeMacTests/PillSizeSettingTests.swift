@@ -161,14 +161,17 @@ import Testing
         }
     }
 
-    @Test func largeBarsAreTheNominalGeometrySnappedToEvenPixels() {
-        // 4.5 / 8.5 / 28.5 pt: 9 / 17 / 57 device pixels at 2x, which snap to 5 / 9 / 29 pt. At 1x they snap to 4 / 8 / 28.
-        let two = L.barMetrics(scale: 2, metrics: .large)
-        #expect(two.width == 5 && two.pitch == 9 && L.barHeightRange(scale: 2, metrics: .large).upperBound == 29)
-        let one = L.barMetrics(scale: 1, metrics: .large)
-        #expect(one.width == 4 && one.pitch == 8 && L.barHeightRange(scale: 1, metrics: .large).upperBound == 28)
-        let standard = L.barMetrics(scale: 2)
-        #expect(standard.width == 2 && standard.pitch == 4)
+    @Test func largeBarsAreExactlyTwiceTheSnappedStandardBarsAtEveryBackingScale() {
+        for scale in [CGFloat(1), 2, 3] {
+            let s = L.barMetrics(scale: scale), l = L.barMetrics(scale: scale, metrics: .large)
+            #expect(l.width == 2 * s.width && l.pitch == 2 * s.pitch)
+            #expect(L.barHeightRange(scale: scale, metrics: .large).upperBound == 2 * L.barHeightRange(scale: scale).upperBound)
+        }
+        // Standard snaps 2.25 / 4.25 / 14.25 pt to 2 / 4 / 14, so Large is 4 / 8 / 28 at 1x and 2x.
+        for scale in [CGFloat(1), 2] {
+            let l = L.barMetrics(scale: scale, metrics: .large)
+            #expect(l.width == 4 && l.pitch == 8 && L.barHeightRange(scale: scale, metrics: .large).upperBound == 28)
+        }
     }
 
     @Test func largeCapsulesHoldTheBarsWithDoubledPaddingOnTheGrid() {
