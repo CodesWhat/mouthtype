@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "id": "dstahl.mouthtype",
+  "name": "Mouthtype",
+  "version": "1.3.0",
+  "author": "dstahl",
+  "license": "GPL-3.0-only",
+  "description": "Mac-style Mouthtype menu, floating pill, audio file transcription and Linux settings for Omarchy.",
+  "kinds": [
+    "bar-widget",
+    "service"
+  ],
+  "entryPoints": {
+    "barWidget": "Panel.qml",
+    "service": "Service.qml"
+  },
+  "barWidget": {
+    "displayName": "Mouthtype",
+    "description": "Record, review transcripts, and configure Mouthtype from the bar.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

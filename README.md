@@ -72,7 +72,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks, dependency maintenance and t
 
 ## Experimental Linux source
 
-Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source on this branch includes a daemon/CLI and setup diagnostics, with recovery-only delivery by default. **There is no supported Linux desktop release.** Physical acceptance remains open, and Mac features aren't Linux parity promises. Follow the [Linux setup and testing guide](tools/linux-desktop/README.md).
+Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI, setup diagnostics, an Omarchy bar plugin with a floating pill, single-file audio transcription, optional paste or typing delivery and optional local Fast and Thorough cleanup models. Delivery is recovery-only and cleanup is off by default. **There is no supported Linux desktop release.** Physical acceptance remains open, and the Linux cleanup models differ from the Mac ones (Thorough is Qwen3 4B, not Gemma). Follow the [Linux setup and testing guide](tools/linux-desktop/README.md) or the [Omarchy plugin guide](tools/omarchy-plugin/README.md). Coding agents can follow the ordered checklist at [mouthtype.app/linux/agent-install.md](website/public/linux/agent-install.md).
 
 ## License
 

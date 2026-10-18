@@ -1,5 +1,5 @@
 {
-  "retrieved": "2026-10-16",
+  "retrieved": "2026-10-17",
   "sherpa": {
     "version": "1.13.8",
     "revision": "11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf",
@@ -27,5 +27,17 @@
     "quantization": "Q4_K_M",
     "license": "Apache-2.0 plus required S1-mini by Superwhisper attribution",
     "license_source": "https://huggingface.co/superwhisper/s1-mini-GGUF/blob/34add00a48a2e5d24e5a4ee5405a99620a3a240c/LICENSE"
+  },
+  "qwen3_4b": {
+    "name": "Qwen3-4B-Instruct-2507 (GGUF Q4_K_M, unsloth build)",
+    "revision": "a06e946bb6b655725eafa393f4a9745d460374c9",
+    "source": "https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF/resolve/a06e946bb6b655725eafa393f4a9745d460374c9/Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+    "sha256": "3605803b982cb64aead44f6c1b2ae36e3acdb41d8e46c8a94c6533bc4c67e597",
+    "bytes": 2497281120,
+    "quantization": "Q4_K_M",
+    "license": "Apache-2.0",
+    "license_source": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE",
+    "model_card": "https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507",
+    "note": "Linux Thorough candidate. The Mac Thorough model (Gemma 4 E4B) has gated terms and no pinned llama.cpp build here; this Apache-2.0 model from the same Mac catalog uses the shared cleanup prompt."
   }
 }

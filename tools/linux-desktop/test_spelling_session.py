@@ -82,7 +82,7 @@ class SpellingSessionTests(unittest.TestCase):
             session.wait()
             self.assertEqual((session.take / 'transcript.txt').read_text(), 'API café')
         argv = ['mouthtype-linux', '--config', str(config), '--runtime', str(self.root / 'runtime'),
-                '--recovery', str(self.root / 'other-recovery'), 'serve']
+                '--recovery', str(self.root / 'other-recovery'), '--imports', str(self.root / 'other-imports'), 'serve']
         with patch('desktop.sys.argv', argv), patch('desktop.sys.platform', 'linux'), \
                 patch('desktop.signal.signal'), patch('desktop.SpeechEngine', return_value=self.engine), \
                 patch('desktop.PipeWireCapture', return_value=self.capture), \

@@ -9,7 +9,9 @@ import sys
 import tarfile
 import tempfile
 
-DESKTOP = ('doctor.py', 'test_doctor.py', 'desktop.py', 'install.py', 'README.md', 'config.example.json',
+DESKTOP = ('doctor.py', 'test_doctor.py', 'imports.py', 'test_imports.py', 'smart.py', 'test_smart.py',
+           'setup_cleanup.py', 'test_setup_cleanup.py', 'test_model_cleanup.py',
+           'desktop.py', 'install.py', 'README.md', 'config.example.json',
            'spellings.py', 'test_spellings.py', 'test_spelling_session.py',
            'phrases.py', 'test_phrases.py', 'test_phrase_session.py', 'test_phrase_context.py', 'phrase-fixtures.json',
            'spelling-fixtures.json', 'spelling-unicode.json',
