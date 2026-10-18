@@ -153,7 +153,7 @@ private final class CardRig {
     @Test func clearGlassUsesTheDarkInk() {
         let clear = CardPalette.resolve(style: .glass, dark: false, glass: .glass(.clear))
         #expect(clear.ink == hex(0x1D1D1F) && clear.warn == hex(0xD70015) && clear.primaryFill == hex(0x1D1D1F))
-        let solid = CardPalette.resolve(style: .glass, dark: false, glass: .solid(.lowContrast))
+        let solid = CardPalette.resolve(style: .glass, dark: false, glass: .solid(.reduceTransparency))
         #expect(solid.ink == hex(0xF4F3E8) && solid.bodyFill != nil)
     }
 
@@ -202,8 +202,8 @@ private final class CardRig {
     @Test func theSameSolidFallbacksAsThePill() {
         #expect(card(env(available: false)).glassDecision == .solid(.materialUnavailable))
         #expect(card(env(reduce: true)).glassDecision == .solid(.reduceTransparency))
-        #expect(card(env(backdrop: .init(luminance: 0.5, spread: 0.02))).glassDecision == .solid(.lowContrast))
-        #expect(card(env(backdrop: .init(luminance: 0.1, spread: 0.5))).glassDecision == .solid(.lowContrast))
+        #expect(card(env(backdrop: .init(luminance: 0.5, spread: 0.02))).glassDecision == .glass(.smoked))
+        #expect(card(env(backdrop: .init(luminance: 0.1, spread: 0.5))).glassDecision == .glass(.smoked))
         let solid = card(env(available: false))
         #expect(!solid.showsMaterial && solid.palette.bodyFill != nil && solid.palette.ink == NSColor(hex: 0xF4F3E8))
     }

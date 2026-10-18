@@ -45,11 +45,11 @@ extension SettingsView {
         VStack(spacing: 8) {
             GeometryReader { proxy in
                 ZStack(alignment: .bottom) {
-                    PreviewWallpaperView(wallpaper: model.previewWallpaper)
-                    PillPreviewStageView(kind: model.skin, size: model.pillSize, readout: model.readoutColour, wallpaper: model.previewWallpaper)
-                        .padding(.bottom, 10)
+                    PillPreviewStageView(kind: model.skin, size: model.pillSize, readout: model.readoutColour, wallpaper: model.previewWallpaper,
+                                         onStatus: { status in DispatchQueue.main.async { if model.previewStatus != status { model.previewStatus = status } } })
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     Text("\(model.skin.title) · live preview".uppercased()).font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1)
-                        .foregroundStyle(model.previewWallpaper.captionColor).padding(.bottom, 6).accessibilityHidden(true)
+                        .foregroundStyle(model.previewWallpaper.captionColor).shadow(color: model.previewWallpaper.captionShadow, radius: 2).padding(.bottom, 6).accessibilityHidden(true)
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .overlay(alignment: .topTrailing) { wallpaperPicker.padding(8) }
@@ -57,10 +57,15 @@ extension SettingsView {
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
                 .preference(key: PreviewWidthKey.self, value: proxy.size.width)
             }.frame(height: 156)
-            Text(PreviewFit.caption(size: model.pillSize, scale: PreviewFit.scale(availableWidth: previewWidth)))
-                .font(SettingsFont.sans(SettingsFont.detail)).foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
-                .accessibilityIdentifier("settings-pill-size-caption")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(PreviewFit.caption(size: model.pillSize, scale: PreviewFit.scale(availableWidth: previewWidth)))
+                    .accessibilityIdentifier("settings-pill-size-caption")
+                if let line = GlassPreviewCaption.text(model.previewStatus) {
+                    Text(line).accessibilityIdentifier("settings-glass-caption")
+                }
+            }
+            .font(SettingsFont.sans(SettingsFont.detail)).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
         }
         .onPreferenceChange(PreviewWidthKey.self) { previewWidth = $0 }
         .accessibilityElement(children: .contain)
@@ -82,12 +87,13 @@ private struct PreviewWidthKey: PreferenceKey {
 @MainActor enum SettingsPillImage {
     /// A settled still of the pill on the preview canvas, for a window that is not on screen, where a live skin never
     /// finishes its entrance. `.automatic` previews as Standard: the preview cannot know which screen the pill will land on.
-    static func make(skin: PillSkinKind, size: PillSize, readout: PillReadoutColour = .default, wallpaper: PreviewWallpaper = .dark) -> NSImage? {
+    static func make(skin: PillSkinKind, size: PillSize, readout: PillReadoutColour = .default, wallpaper: PreviewWallpaper = .dark,
+                     glassEnvironment: GlassPillEnvironment = .system) -> NSImage? {
         let canvas = PreviewFit.canvas
         let scale = size.resolved(visibleWidth: 0)
         let height = skin.pillHeight * scale.factor + 2 * PillGeometry.verticalMargin
         let frame = NSRect(x: 0, y: 0, width: canvas.width, height: height)
-        guard let view = try? PillSkinFactory.make(skin, frame: frame, scale: scale, readout: readout) else { return nil }
+        guard let view = try? PillSkinFactory.make(skin, frame: frame, scale: scale, readout: readout, glassEnvironment: glassEnvironment) else { return nil }
         view.appearance = wallpaper.appearance
         view.appear(reduceMotion: true)
         view.showRecording(locked: false)

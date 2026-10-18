@@ -12,18 +12,21 @@ struct GlassPillEnvironment {
     /// Measures the wallpaper in the background ahead of the first press.
     var prewarm: () -> Void = {}
 
-    static let system = GlassPillEnvironment(
+    static let system = system(cache: .shared)
+
+    /// The production wiring over `cache`; `.system` uses the shared one.
+    static func system(cache: GlassBackdropCache) -> GlassPillEnvironment { GlassPillEnvironment(
         materialAvailable: { NSClassFromString("NSGlassEffectView") != nil },
         reduceTransparency: { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
         backdrop: { view in
             guard let window = view.window, let screen = window.screen else { return nil }
             let local = (view as? GlassPillView)?.sampleRegion ?? view.bounds
             let region = window.convertToScreen(view.convert(local, to: nil))
-            guard case .ready(let backdrop) = GlassBackdropCache.shared.lookup(screen: screen, region: region) else { return nil }
+            guard case .ready(let backdrop) = cache.lookup(screen: screen, region: region) else { return nil }
             return backdrop
         },
-        prewarm: { GlassBackdropCache.shared.prewarmAll() }
-    )
+        prewarm: { cache.prewarmAll() }
+    ) }
 }
 
 /// The glass pill: the Classic pill's geometry, bars and controls over the system glass material (clear over light

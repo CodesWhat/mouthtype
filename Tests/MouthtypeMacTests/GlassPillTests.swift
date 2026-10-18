@@ -9,7 +9,7 @@ import Testing
         #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: 0.85, spread: 0.05)) == .glass(.clear))
         #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: 0.1, spread: 0.05)) == .glass(.smoked))
         #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: Policy.lightLimit, spread: 0)) == .glass(.clear))
-        #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: Policy.darkLimit, spread: 0)) == .glass(.smoked))
+        #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: Policy.lightLimit - 0.01, spread: 0)) == .glass(.smoked))
     }
 
     @Test func fallsBackToSolidWhenTheMaterialIsUnavailable() {
@@ -22,12 +22,13 @@ import Testing
         #expect(Policy.decide(materialAvailable: true, reduceTransparency: true, backdrop: nil) == .solid(.reduceTransparency))
     }
 
-    @Test func fallsBackToSolidWhenTheBackdropFailsTheContrastCheck() {
-        // Mid grey: neither the dark nor the light ink reads.
-        #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: 0.5, spread: 0.02)) == .solid(.lowContrast))
-        // Light but busy.
-        #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: 0.8, spread: 0.3)) == .solid(.lowContrast))
-        #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: 0.1, spread: 0.3)) == .solid(.lowContrast))
+    @Test func theWallpaperNeverMakesGlassSolid() {
+        // Mid grey, light but busy, dark but busy: all smoked, none solid.
+        for backdrop in [Policy.Backdrop(luminance: 0.5, spread: 0.02), .init(luminance: 0.8, spread: 0.3), .init(luminance: 0.1, spread: 0.3), .init(luminance: 0.61, spread: 0.9)] {
+            #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: backdrop).usesMaterial)
+        }
+        #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: 0.5, spread: 0.02)) == .glass(.smoked))
+        #expect(Policy.decide(materialAvailable: true, reduceTransparency: false, backdrop: .init(luminance: 0.1, spread: 0.3)) == .glass(.smoked))
     }
 
     @Test func anUnreadableWallpaperGetsSmokedGlass() {
@@ -87,10 +88,9 @@ import Testing
         #expect(glass.showsMaterial)
     }
 
-    @Test func fallsBackToTheSolidClassicBody() {
+    @Test func fallsBackToTheSolidClassicBodyOnlyForSystemReasons() {
         for env in [
             environment(available: false), environment(reduceTransparency: true),
-            environment(backdrop: .init(luminance: 0.5, spread: 0.01)),
         ] {
             let glass = view(env)
             glass.appear(reduceMotion: true)

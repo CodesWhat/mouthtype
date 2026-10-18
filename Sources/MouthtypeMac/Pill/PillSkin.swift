@@ -33,10 +33,11 @@ enum PillSkinKind: String, CaseIterable, Sendable {
 /// Builds the skin for a kind, shared by the live pill, the Settings preview and the tests.
 @MainActor
 enum PillSkinFactory {
-    static func make(_ kind: PillSkinKind, frame: NSRect, scale: PillScale, readout: PillReadoutColour = .default) throws -> any PillSkinView {
+    static func make(_ kind: PillSkinKind, frame: NSRect, scale: PillScale, readout: PillReadoutColour = .default,
+                     glassEnvironment: GlassPillEnvironment = .system) throws -> any PillSkinView {
         switch kind {
         case .classic: return ClassicPillView(frame: frame, size: scale)
-        case .glass: return GlassPillView(frame: frame, size: scale)
+        case .glass: return GlassPillView(frame: frame, size: scale, environment: glassEnvironment)
         case .matrix: return MatrixPillView(frame: frame, size: scale)
         case .minimal: return MinimalPillView(frame: frame, size: scale)
         case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale, readout: readout)
