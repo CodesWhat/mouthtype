@@ -39,7 +39,7 @@ Existing alpha.1–3 installations need one manual download to get the built-in 
   <img src="website/public/assets/classic-recording.png" alt="Mouthtype's Classic recording pill showing an active take" width="400">
 </p>
 
-See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current alpha caveats. **Quiet other audio** and **Live words** are optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Mouthtype never sends Return as part of dictation delivery.
+See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current alpha caveats. **Quiet other audio** and **Live words** are optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Split pastes preserve text and never synthesize a Return key press.
 
 ## Privacy and permissions
 

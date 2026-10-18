@@ -1,6 +1,6 @@
 # Security controls and limits
 
-Mouthtype is a single-user local dictation app, plus experimental Linux source and a static download website. Its meaningful boundaries are microphone capture, Accessibility-based text delivery, imported audio and local files, downloaded models, dependencies, and the signed release/update path. It isn't a hosted transcription service or a multi-tenant application.
+Mouthtype is a single-user local dictation app, plus experimental Linux source and a static download website. Its meaningful boundaries are microphone capture, Accessibility-based text delivery, imported audio and local files, downloaded models, dependencies, and the signed release/update path. It isn't a hosted transcription service or a multi-tenant application. Developer benchmark modes can explicitly invoke a Claude CLI cleaner or judge; those modes can send their input to that service and must use synthetic data. The Mac app's Fast and Thorough cleanup paths use local models.
 
 ## Implemented controls
 

@@ -16,6 +16,8 @@ Use plain Conventional Commits: `feat`, `fix`, `docs`, `style`, `refactor`, `per
 - Linux: use the component and fixture commands in [tools/linux-desktop/README.md](tools/linux-desktop/README.md). Source checks don't establish physical desktop acceptance.
 - Security: run `gitleaks git --redact --no-banner`, `actionlint`, and `zizmor --no-progress .github/workflows` when those tools are installed. Security CI also audits the website lockfile. Keep scanner findings and synthetic fixtures free of personal data.
 
+Optional benchmark cleaners and judge modes can invoke the Claude CLI and send their input to its service. Use synthetic text for those modes; they aren't the shipped Mac dictation path.
+
 Never launch desktop self-tests or replace a running app while another person or agent is using it. Read [the release procedure](docs/RELEASING.md) before signing, notarizing or publishing. Confirm actual downloaded artifacts and source identity before calling distribution verified.
 
 ## Dependency and security maintenance
