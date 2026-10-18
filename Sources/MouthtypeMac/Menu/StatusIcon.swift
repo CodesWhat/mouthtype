@@ -83,11 +83,15 @@ struct StatusGlyphGate {
     private var lastSwap: TimeInterval = -.infinity
     private var icon: StatusIcon?
 
-    /// The file to show now, or nil to leave the status item alone.
-    mutating func next(icon: StatusIcon, level: Float, reduceMotion: Bool, now: TimeInterval) -> String? {
+    /// The file to show now, or nil to leave the status item alone. Nothing is committed unless `canShow` says the
+    /// image for the wanted file is available, so a failed load is retried on the next update.
+    mutating func next(
+        icon: StatusIcon, level: Float, reduceMotion: Bool, now: TimeInterval, canShow: (String) -> Bool = { _ in true }
+    ) -> String? {
         let wanted = icon.glyphFile(level: level, reduceMotion: reduceMotion)
         guard wanted != file else { self.icon = icon; return nil }
         if icon == self.icon, icon == .recording, now - lastSwap < 1 / Self.maxFramesPerSecond { return nil }
+        guard canShow(wanted) else { return nil }
         file = wanted
         lastSwap = now
         self.icon = icon
