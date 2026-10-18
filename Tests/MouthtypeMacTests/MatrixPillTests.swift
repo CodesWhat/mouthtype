@@ -167,11 +167,13 @@ import Testing
 
     @Test func factoryAndControllerBuildTheRightViews() throws {
         #expect(try view(.matrix) is MatrixPillView)
+        #expect(try view(.minimal) is MinimalPillView)
         #expect(makePillController(skin: .matrix).skin is MatrixPillView)
-        #expect(PillSkinKind.matrix.pillHeight == 30 && PillSkinKind.glass.pillHeight == 28)
+        #expect(makePillController(skin: .minimal).skin is MinimalPillView)
+        #expect(PillSkinKind.matrix.pillHeight == 30 && PillSkinKind.minimal.pillHeight == 30 && PillSkinKind.glass.pillHeight == 28)
     }
 
-    @Test(arguments: [PillSkinKind.matrix], [PillScale.standard, .large])
+    @Test(arguments: [PillSkinKind.matrix, .minimal], [PillScale.standard, .large])
     func capsuleAndControlsFollowTheLayoutAtEverySize(kind: PillSkinKind, scale: PillScale) throws {
         let skin = try view(kind, scale: scale)
         let m = MatrixPillLayout.Metrics(scale)
@@ -186,7 +188,7 @@ import Testing
         #expect(skin.bounds.contains(skin.capsuleRect))
     }
 
-    @Test(arguments: [PillSkinKind.matrix])
+    @Test(arguments: [PillSkinKind.matrix, .minimal])
     func theClockShowsOnlyWhenLockedAndREConlyWhenHeld(kind: PillSkinKind) throws {
         let skin = try view(kind)
         skin.showRecording(locked: false)
@@ -201,16 +203,41 @@ import Testing
         #expect(skin.clockString == "1:05")
     }
 
+    @Test func matrixLightsDotsAndMinimalLightsBarsFromTheSameLevels() throws {
+        let matrix = try view(.matrix), minimal = try view(.minimal)
+        let levels: [Float] = [0, 0.2, 0.5, 0.9, 1, 1, 0.9, 0.5, 0.2, 0]
+        for skin in [matrix, minimal] { skin.showRecording(locked: false); skin.showFractions(levels) }
+        #expect(matrix.litHalfRows.count == 13 && minimal.litHalfRows.count == 10)
+        #expect(minimal.litHalfRows == MatrixPillLayout.barHalfRows(fractions: levels))
+        #expect(matrix.litHalfRows == MatrixPillLayout.dotHalfRows(fractions: levels))
+        #expect(matrix.litHalfRows[6] == 4 && matrix.litHalfRows[0] == 0 && minimal.litHalfRows[4] == 4)
+        matrix.showFractions(levels)
+        #expect(matrix.litHalfRows == MatrixPillLayout.dotHalfRows(fractions: levels))
+        matrix.beginProcessing()
+        matrix.updateProcessing(time: 0.2)
+        #expect(matrix.litHalfRows != MatrixPillLayout.dotHalfRows(fractions: levels))
+    }
+
     @Test func matrixFollowsTheAppearanceWithAWindowOnlyWhenLight() throws {
         #expect(try view(.matrix, dark: true).usesWindow == false)
         #expect(try view(.matrix, dark: false).usesWindow == true)
+        #expect(try view(.minimal, dark: false).usesWindow == false)
         let dark = SquirclePalette.resolve(.matrix, dark: true), light = SquirclePalette.resolve(.matrix, dark: false)
         #expect(dark.ink == NSColor(hex: 0xFFB327) && dark.rec == NSColor(hex: 0xFF4A3C) && dark.ghostAlpha == 0.11)
         #expect(dark.glow == NSColor(hex: 0xFF9A10) && dark.bodyTop == NSColor(hex: 0x252528) && dark.bodyBottom == NSColor(hex: 0x19191B))
         #expect(light.ink == NSColor(hex: 0x1D2815) && light.window?.top == NSColor(hex: 0xBFCAA6) && light.glow == nil)
     }
 
-    @Test(arguments: [PillSkinKind.matrix])
+    @Test func minimalPaletteFollowsTheSystemAppearance() {
+        let dark = SquirclePalette.resolve(.minimal, dark: true), light = SquirclePalette.resolve(.minimal, dark: false)
+        #expect(dark.ink == NSColor(hex: 0xF4F3E8) && dark.rec == NSColor(hex: 0xFF453A))
+        #expect(dark.bodyTop == NSColor(hex: 0x252528) && dark.window == nil)
+        #expect(light.ink == NSColor(hex: 0x1D1D1F) && light.rec == NSColor(hex: 0xE0281C) && light.error == NSColor(hex: 0xD70015))
+        #expect(light.bodyTop == NSColor(hex: 0xFBFBFC) && light.bodyBottom == NSColor(hex: 0xE6E6EA) && light.window == nil)
+        #expect(light.hairline.alphaComponent == 0.16)
+    }
+
+    @Test(arguments: [PillSkinKind.matrix, .minimal])
     func theRecLampBreathesOnATwoSecondCycleUnlessReduceMotionIsOn(kind: PillSkinKind) throws {
         let moving = try view(kind, reduceMotion: false)
         moving.showRecording(locked: false)
@@ -230,7 +257,7 @@ import Testing
         #expect(still.lampMotion == .steady && still.lampAnimation == nil)
     }
 
-    @Test(arguments: [PillSkinKind.matrix])
+    @Test(arguments: [PillSkinKind.matrix, .minimal])
     func theLampStopsBreathingWhenTheStateChanges(kind: PillSkinKind) throws {
         let skin = try view(kind)
         skin.showRecording(locked: false)
@@ -247,7 +274,7 @@ import Testing
         #expect(flash.duration == 1.1 && flash.repeatCount == 0)
     }
 
-    @Test(arguments: [PillSkinKind.matrix], [PillScale.standard, .large])
+    @Test(arguments: [PillSkinKind.matrix, .minimal], [PillScale.standard, .large])
     func messagesErrorsAndDetailsLayOut(kind: PillSkinKind, scale: PillScale) throws {
         let skin = try view(kind, scale: scale)
         skin.showMessage(PillMessage("Pasted"), overRecording: false)

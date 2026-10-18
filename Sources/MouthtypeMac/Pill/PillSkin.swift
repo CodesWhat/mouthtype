@@ -38,7 +38,7 @@ enum PillSkinFactory {
         case .classic: return ClassicPillView(frame: frame, size: scale)
         case .glass: return GlassPillView(frame: frame, size: scale)
         case .matrix: return MatrixPillView(frame: frame, size: scale)
-        case .minimal: return ClassicPillView(frame: frame, size: scale)
+        case .minimal: return MinimalPillView(frame: frame, size: scale)
         case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)
         }
     }
