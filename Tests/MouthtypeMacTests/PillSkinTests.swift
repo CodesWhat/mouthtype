@@ -22,6 +22,15 @@ import Testing
         #expect(makePillController(skin: .hifi).skinKind == .hifi)
     }
 
+    @Test func aSkinThatFailsToLoadFallsBackToClassic() {
+        struct Missing: Error {}
+        for scale in [PillScale.standard, .large] {
+            let skin = PillController.makeSkin(.hifi, scale: scale) { _, _, _, _ in throw Missing() }
+            #expect(skin is ClassicPillView)
+            #expect(skin.frame.size == PillGeometry.panelSize(for: scale))
+        }
+    }
+
     @Test func switchingWhileHiddenAppliesAtOnce() {
         let controller = makePillController()
         controller.setSkin(.hifi)
