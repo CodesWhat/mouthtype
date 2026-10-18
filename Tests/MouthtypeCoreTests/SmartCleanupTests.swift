@@ -40,9 +40,19 @@ final class FakeCleaner: TextCleaner, @unchecked Sendable {
 /// Holds a cleaner call open until `release()`, ignoring cancellation, like a generation that won't stop.
 actor Gate {
     private var open = false
+    private var arrived = false
+    private var arrivalObservers: [CheckedContinuation<Void, Never>] = []
     private var waiters: [CheckedContinuation<Void, Never>] = []
 
+    func waitForArrival() async {
+        if arrived { return }
+        await withCheckedContinuation { arrivalObservers.append($0) }
+    }
+
     func wait() async {
+        arrived = true
+        arrivalObservers.forEach { $0.resume() }
+        arrivalObservers = []
         if open { return }
         await withCheckedContinuation { waiters.append($0) }
     }
@@ -597,11 +607,18 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
             await gate.wait()
             return text
         }
-        let service = SmartCleanup(cleaner: cleaner, budget: { _ in .milliseconds(150) })
+        let admissions = OSAllocatedUnfairLock(initialState: 0)
+        let secondAdmitted = Gate()
+        let service = SmartCleanup(cleaner: cleaner, budget: { _ in
+            let count = admissions.withLock { $0 += 1; return $0 }
+            if count == 2 { Task { await secondAdmitted.release() } }
+            return .seconds(30)
+        })
         let first = Task { await service.run(request(sentence)) }
-        try? await Task.sleep(for: .milliseconds(20))
+        await gate.waitForArrival()
         let second = Task { await service.run(request(sentence)) }
-        try? await Task.sleep(for: .milliseconds(20))
+        await secondAdmitted.wait()
+        #expect(cleaner.calls == 1)
         await gate.release()
         let results = await [first.value, second.value]
         #expect(results[0].outcome == .ok && results[1].outcome == .ok)
