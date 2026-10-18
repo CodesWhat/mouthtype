@@ -52,10 +52,12 @@ import Testing
         }
     }
 
-    private func render(_ view: any PillSkinView, scale: PillScale, backdrop: Backdrop) throws -> CGImage {
+    private func render(_ view: any PillSkinView, scale: PillScale, backdrop: Backdrop, fullHeight: Bool = false) throws -> CGImage {
         let canvas = PillGeometry.panelSize(for: scale)
         let width = min(canvas.width, 230 * scale.factor)
-        let crop = CGRect(x: (canvas.width - width) / 2, y: 0, width: width, height: min(canvas.height, 24 + 72 * scale.factor))
+        let crop = CGRect(
+            x: (canvas.width - width) / 2, y: 0, width: width, height: fullHeight ? canvas.height : min(canvas.height, 24 + 72 * scale.factor)
+        )
         let pixels = (width: Int(crop.width * Self.backing), height: Int(crop.height * Self.backing))
         let context = try #require(CGContext(
             data: nil, width: pixels.width, height: pixels.height, bitsPerComponent: 8, bytesPerRow: 0,
@@ -108,6 +110,34 @@ import Testing
                     let image = try render(view, scale: scale, backdrop: backdrop)
                     #expect(image.width > 0)
                     if let directory { try write(image, to: directory, name: "glass-\(name)-\(sizeName(scale))-\(scene.rawValue)") }
+                }
+            }
+        }
+    }
+
+    /// A 300 character error in Matrix and Minimal at both sizes, at the start and the end of its scroll.
+    @Test func aLongMessageRendersAtTheStartAndEndOfItsScroll() throws {
+        _ = NSApplication.shared
+        FontRegistry.registerBundledFonts()
+        let directory = ProcessInfo.processInfo.environment["MOUTHTYPE_PILL_STYLE_PREVIEWS"].map { URL(fileURLWithPath: $0, isDirectory: true) }
+        if let directory { try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true) }
+        for scale in [PillScale.standard, .large] {
+            let frame = NSRect(origin: .zero, size: PillGeometry.panelSize(for: scale))
+            for kind in [PillSkinKind.matrix, .minimal] {
+                for (appearance, backdrop) in [(NSAppearance.Name.aqua, Backdrop.light), (.darkAqua, .dark)] {
+                    let view = try #require(try PillSkinFactory.make(kind, frame: frame, scale: scale) as? SquirclePillView)
+                    view.appearance = NSAppearance(named: appearance)
+                    view.reduceMotionOverride = true
+                    view.appear(reduceMotion: true)
+                    view.showMessage(PillMessage("Transcription failed", detail: SquirclePillViewTests.longError, isError: true), overRecording: false)
+                    for (name, offset) in [("start", 0), ("end", -view.messageScrollDistance)] {
+                        view.setMessageOffset(offset)
+                        let image = try render(view, scale: scale, backdrop: backdrop, fullHeight: true)
+                        #expect(image.width > 0)
+                        if let directory {
+                            try write(image, to: directory, name: "long-message-\(kind.rawValue)-\(sizeName(scale))-\(backdrop.rawValue)-\(name)")
+                        }
+                    }
                 }
             }
         }

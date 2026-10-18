@@ -91,6 +91,7 @@ public final class PillController {
         host.onPress = { [weak self] control in self?.press(control) }
         host.onActivate = { [weak self] control in self?.onControl?(control) }
         install(skin)
+        GlassBackdropCache.shared.startObserving()
         host.addSubview(previewView)
         _ = NotificationCenter.default.addObserver(
             forName: Typography.didChange, object: nil, queue: .main
@@ -117,12 +118,20 @@ public final class PillController {
         return PillPlacement.screen(pointer: NSEvent.mouseLocation, screens: screens)
     }
 
-    private static func makeSkin(_ kind: PillSkinKind, scale: PillScale, readout: PillReadoutColour) -> any PillSkinView {
+    /// A skin whose assets can't load (a Hi-Fi bundle missing its art) falls back to Classic rather than crashing the
+    /// app on a hotkey press.
+    static func makeSkin(
+        _ kind: PillSkinKind, scale: PillScale, readout: PillReadoutColour = .default,
+        factory: (PillSkinKind, NSRect, PillScale, PillReadoutColour) throws -> any PillSkinView = {
+            try PillSkinFactory.make($0, frame: $1, scale: $2, readout: $3)
+        }
+    ) -> any PillSkinView {
         let frame = NSRect(origin: .zero, size: PillGeometry.panelSize(for: scale))
         do {
-            return try PillSkinFactory.make(kind, frame: frame, scale: scale, readout: readout)
+            return try factory(kind, frame, scale, readout)
         } catch {
-            fatalError("pill resources missing from the bundle: \(error)")
+            Log.app.error("pill skin \(kind.rawValue, privacy: .public) unavailable, using Classic: \(String(describing: error), privacy: .public)")
+            return ClassicPillView(frame: frame, size: scale)
         }
     }
 

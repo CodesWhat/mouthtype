@@ -6,17 +6,23 @@ import QuartzCore
 struct GlassPillEnvironment {
     var materialAvailable: () -> Bool
     var reduceTransparency: () -> Bool
-    /// The wallpaper behind the pill's region on `view`'s screen, nil when it can't be read.
+    /// The wallpaper behind the pill on `view`'s screen, nil when it can't be read or isn't measured yet. It must
+    /// never decode on the calling thread: it runs between the hotkey and the pill appearing.
     var backdrop: (NSView) -> GlassPillPolicy.Backdrop?
+    /// Measures the wallpaper in the background ahead of the first press.
+    var prewarm: () -> Void = {}
 
     static let system = GlassPillEnvironment(
         materialAvailable: { NSClassFromString("NSGlassEffectView") != nil },
         reduceTransparency: { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
         backdrop: { view in
             guard let window = view.window, let screen = window.screen else { return nil }
-            let region = window.convertToScreen(view.convert(view.bounds, to: nil))
-            return GlassBackdropSampler.sample(screen: screen, region: region)
-        }
+            let local = (view as? GlassPillView)?.sampleRegion ?? view.bounds
+            let region = window.convertToScreen(view.convert(local, to: nil))
+            guard case .ready(let backdrop) = GlassBackdropCache.shared.lookup(screen: screen, region: region) else { return nil }
+            return backdrop
+        },
+        prewarm: { GlassBackdropCache.shared.prewarmAll() }
     )
 }
 
@@ -39,6 +45,21 @@ final class GlassPillView: NSView, PillSkinView {
     /// The capsule as last placed, in this view's coordinates.
     private(set) var bodyRect = CGRect.zero
 
+    /// The pill body at its held width in `bounds`, which is where the wallpaper is sampled: the panel is far larger
+    /// than the capsule, and a message's width and height would not be known until after the decision.
+    static func heldBodyRegion(bounds: CGSize, size: PillScale, backing: CGFloat) -> CGRect {
+        let metrics = ClassicPillLayout.Metrics(size)
+        return ClassicPillLayout.capsuleFrame(
+            width: ClassicPillLayout.holdWidth(scale: backing, metrics: metrics), height: metrics.height, bounds: bounds,
+            bottomMargin: PillGeometry.verticalMargin, scale: backing
+        )
+    }
+
+    /// The held pill body in this view's coordinates.
+    var sampleRegion: CGRect {
+        Self.heldBodyRegion(bounds: bounds.size, size: classic.pillScale, backing: window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
+    }
+
     var pillScale: PillScale { classic.pillScale }
     /// True while the system material is showing, false on the solid Classic body.
     var showsMaterial: Bool { !glass.isHidden }
@@ -55,6 +76,7 @@ final class GlassPillView: NSView, PillSkinView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = .clear
+        glass.wantsLayer = true
         glass.alphaValue = 0
         glass.isHidden = true
         addSubview(glass)
@@ -66,6 +88,7 @@ final class GlassPillView: NSView, PillSkinView {
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.reevaluate() } }
         reevaluate()
+        environment.prewarm()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -78,7 +101,7 @@ final class GlassPillView: NSView, PillSkinView {
 
     // MARK: Material
 
-    /// Samples the wallpaper once and decides again.
+    /// Reads the cached wallpaper sample (never decoding here) and decides again; an unmeasured wallpaper gets smoked glass.
     func refreshBackdrop() {
         backdrop = environment.backdrop(self)
         reevaluate()
@@ -109,16 +132,36 @@ final class GlassPillView: NSView, PillSkinView {
     private func placeGlass(_ rect: CGRect, animated: Bool) {
         bodyRect = rect
         glass.cornerRadius = min(rect.height, ClassicPillLayout.Metrics(classic.pillScale).height) / 2
-        guard animated else {
+        guard let layer = glass.layer else {
             glass.frame = rect
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.165
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            glass.animator().frame = rect
+        PillMotion.withoutActions { glass.frame = rect }
+        guard animated else {
+            layer.removeAnimation(forKey: "bounds")
+            layer.removeAnimation(forKey: "position")
+            return
         }
+        // The body's own spring, so the material grows with the capsule instead of trailing it.
+        let anchor = layer.anchorPoint
+        PillMotion.set(layer, "bounds", NSValue(rect: CGRect(origin: .zero, size: rect.size)), .spring)
+        PillMotion.set(
+            layer, "position",
+            NSValue(point: CGPoint(x: rect.minX + anchor.x * rect.width, y: rect.minY + anchor.y * rect.height)), .spring
+        )
     }
+
+    /// Scale about the glass's middle plus a drop, as the Classic container does for the capsule. A layer scales about
+    /// its anchor point, so the shift between the anchor and the middle is added back.
+    private func glassTransform(scale s: CGFloat, drop: CGFloat) -> NSValue {
+        guard let layer = glass.layer else { return NSValue(caTransform3D: CATransform3DIdentity) }
+        let size = layer.bounds.size
+        let dx = (1 - s) * (0.5 - layer.anchorPoint.x) * size.width
+        let dy = (1 - s) * (0.5 - layer.anchorPoint.y) * size.height - drop
+        return NSValue(caTransform3D: CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), s, s, 1))
+    }
+
+    var glassLayer: CALayer? { glass.layer }
 
     // MARK: PillSkinView
 
@@ -136,6 +179,13 @@ final class GlassPillView: NSView, PillSkinView {
     func appear(reduceMotion: Bool) {
         refreshBackdrop()
         classic.appear(reduceMotion: reduceMotion)
+        if let layer = glass.layer {
+            let identity = NSValue(caTransform3D: CATransform3DIdentity)
+            PillMotion.withoutActions {
+                layer.transform = reduceMotion ? identity.caTransform3DValue : glassTransform(scale: ClassicPillView.appearScale, drop: ClassicPillView.travel * classic.pillScale.factor).caTransform3DValue
+            }
+            PillMotion.set(layer, "transform", identity, reduceMotion ? .none : .ease(0.26))
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = reduceMotion ? 0.15 : 0.26
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
@@ -162,6 +212,10 @@ final class GlassPillView: NSView, PillSkinView {
     }
 
     func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void) {
+        if !reduceMotion, let layer = glass.layer {
+            let drop = ClassicPillView.travel * classic.pillScale.factor
+            PillMotion.set(layer, "transform", glassTransform(scale: ClassicPillView.appearScale, drop: drop), .easeIn(0.16))
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = reduceMotion ? 0.12 : 0.16
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.55, 0.055, 0.675, 0.19)

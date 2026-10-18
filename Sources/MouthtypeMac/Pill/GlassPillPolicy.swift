@@ -73,25 +73,14 @@ enum GlassPillPolicy {
     }
 }
 
-/// Samples the desktop picture under the pill. It reads the wallpaper file at thumbnail size, so it needs no screen
-/// recording permission, and it only runs when the pill appears. Windows over the wallpaper are not seen.
-@MainActor
+/// Reads the desktop picture under the pill at thumbnail size, so it needs no screen recording permission. Windows over
+/// the wallpaper are not seen. The decode is slow on a 5K or 6K picture, so it only ever runs off the main thread, see
+/// `GlassBackdropCache`.
 enum GlassBackdropSampler {
     private static let thumbnailPixels = 96
     private static let sampleSize = (width: 24, height: 8)
-    private static var cache: (key: String, backdrop: GlassPillPolicy.Backdrop?)?
 
-    /// `region` is the pill's area in global screen coordinates.
-    static func sample(screen: NSScreen, region: CGRect) -> GlassPillPolicy.Backdrop? {
-        guard let url = NSWorkspace.shared.desktopImageURL(for: screen) else { return nil }
-        let key = "\(url.path)|\(Int(region.minX)),\(Int(region.minY)),\(Int(region.width)),\(Int(region.height))"
-        if let cache, cache.key == key { return cache.backdrop }
-        let result = measure(url: url, screenFrame: screen.frame, region: region)
-        cache = (key, result)
-        return result
-    }
-
-    private static func measure(url: URL, screenFrame: CGRect, region: CGRect) -> GlassPillPolicy.Backdrop? {
+    nonisolated static func measure(url: URL, screenFrame: CGRect, region: CGRect) -> GlassPillPolicy.Backdrop? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -118,7 +107,7 @@ enum GlassBackdropSampler {
 
     /// The part of the wallpaper (in image pixels, top-left origin) behind `region`, with the picture scaled to fill
     /// the screen and centred, which is how the desktop shows most pictures.
-    static func cropRect(imageSize: CGSize, screenFrame: CGRect, region: CGRect) -> CGRect {
+    nonisolated static func cropRect(imageSize: CGSize, screenFrame: CGRect, region: CGRect) -> CGRect {
         let scale = max(screenFrame.width / imageSize.width, screenFrame.height / imageSize.height)
         let offsetX = (screenFrame.width - imageSize.width * scale) / 2
         let offsetY = (screenFrame.height - imageSize.height * scale) / 2
@@ -128,5 +117,138 @@ enum GlassBackdropSampler {
         let bounds = CGRect(origin: .zero, size: imageSize)
         let rect = CGRect(x: x, y: y, width: region.width / scale, height: region.height / scale).intersection(bounds)
         return rect.isNull || rect.width < 1 || rect.height < 1 ? bounds : rect.integral.intersection(bounds)
+    }
+}
+
+/// What the sampler measured, per screen, so the pill never decodes a wallpaper on the hotkey path. A lookup that has no
+/// answer yet returns `.pending`, starts the measurement in the background and lets the caller carry on (Glass treats it
+/// as an unreadable wallpaper and goes smoked). The entry is keyed on the picture's path and modification time and the
+/// region, so replacing the file or moving the pill measures again.
+@MainActor
+final class GlassBackdropCache {
+    typealias Measure = @Sendable (_ file: URL, _ screenFrame: CGRect, _ region: CGRect) -> GlassPillPolicy.Backdrop?
+
+    struct Key: Hashable, Sendable {
+        var path: String
+        var modified: TimeInterval
+        var x: Int, y: Int, width: Int, height: Int
+
+        init(file: URL, modified: Date?, region: CGRect) {
+            path = file.path
+            self.modified = modified?.timeIntervalSince1970 ?? 0
+            x = Int(region.minX.rounded())
+            y = Int(region.minY.rounded())
+            width = Int(region.width.rounded())
+            height = Int(region.height.rounded())
+        }
+    }
+
+    enum Lookup: Equatable {
+        case ready(GlassPillPolicy.Backdrop?)
+        case pending
+    }
+
+    static let shared = GlassBackdropCache()
+
+    private let measure: Measure
+    private let modificationDate: (URL) -> Date?
+    private var entries: [Int: (key: Key, backdrop: GlassPillPolicy.Backdrop?)] = [:]
+    private var inFlight: [Int: Key] = [:]
+    private var observing = false
+
+    init(
+        measure: @escaping Measure = GlassBackdropSampler.measure,
+        modificationDate: @escaping (URL) -> Date? = { try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate }
+    ) {
+        self.measure = measure
+        self.modificationDate = modificationDate
+    }
+
+    func key(file: URL, region: CGRect) -> Key {
+        Key(file: file, modified: modificationDate(file), region: region)
+    }
+
+    /// The measured backdrop for `screen` (any stable id) if it is cached for this file and region; otherwise starts a
+    /// background measurement and answers `.pending`. Never decodes on the calling thread.
+    func lookup(screen: Int, file: URL, screenFrame: CGRect, region: CGRect) -> Lookup {
+        let key = key(file: file, region: region)
+        if let entry = entries[screen], entry.key == key { return .ready(entry.backdrop) }
+        prewarm(screen: screen, file: file, screenFrame: screenFrame, region: region)
+        return .pending
+    }
+
+    /// Measures in the background unless the answer is cached or already on its way. The returned task finishes when the
+    /// result is stored; nil when there was nothing to do.
+    @discardableResult
+    func prewarm(screen: Int, file: URL, screenFrame: CGRect, region: CGRect) -> Task<Void, Never>? {
+        let key = key(file: file, region: region)
+        if entries[screen]?.key == key || inFlight[screen] == key { return nil }
+        inFlight[screen] = key
+        let measure = measure
+        return Task.detached(priority: .utility) { [weak self] in
+            let result = measure(file, screenFrame, region)
+            await self?.finish(screen: screen, key: key, backdrop: result)
+        }
+    }
+
+    private func finish(screen: Int, key: Key, backdrop: GlassPillPolicy.Backdrop?) {
+        if inFlight[screen] == key { inFlight[screen] = nil }
+        entries[screen] = (key, backdrop)
+    }
+}
+
+// MARK: System wiring
+
+extension GlassBackdropCache {
+    static func screenID(_ screen: NSScreen) -> Int {
+        (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue ?? 0
+    }
+
+    func lookup(screen: NSScreen, region: CGRect) -> Lookup {
+        guard let file = NSWorkspace.shared.desktopImageURL(for: screen) else { return .ready(nil) }
+        return lookup(screen: Self.screenID(screen), file: file, screenFrame: screen.frame, region: region)
+    }
+
+    /// Measures the wallpaper behind the held pill on every screen, at the size the pill will have there, so the first
+    /// hotkey press finds the answer waiting. Only while Glass is the chosen look.
+    func prewarmAll(defaults: UserDefaults = .standard) {
+        guard PillSkinPreference.current(defaults) == .glass else { return }
+        let size = PillSizePreference.current(defaults)
+        for screen in NSScreen.screens {
+            guard let file = NSWorkspace.shared.desktopImageURL(for: screen) else { continue }
+            let scale = size.resolved(visibleWidth: screen.visibleFrame.width)
+            let panel = PillGeometry.panelSize(for: scale)
+            let origin = PillPlacement.origin(
+                pointer: CGPoint(x: screen.frame.midX, y: screen.frame.midY),
+                screens: [PillPlacement.Screen(frame: screen.frame, visibleFrame: screen.visibleFrame)],
+                panelSize: panel, pillPadding: PillGeometry.verticalMargin
+            ) ?? screen.frame.origin
+            let local = GlassPillView.heldBodyRegion(bounds: panel, size: scale, backing: screen.backingScaleFactor)
+            prewarm(
+                screen: Self.screenID(screen), file: file, screenFrame: screen.frame,
+                region: local.offsetBy(dx: origin.x, dy: origin.y)
+            )
+        }
+    }
+
+    /// Prewarms now and again whenever the desktop could have changed: a Space switch (each Space can have its own
+    /// picture), a display change, or the system's desktop notification. A picture swapped without any of those is
+    /// caught by the modification time on the next lookup, which then answers pending and measures for the press after.
+    func startObserving() {
+        guard !observing else { return }
+        observing = true
+        let refresh: @Sendable (Notification) -> Void = { _ in
+            Task { @MainActor in GlassBackdropCache.shared.prewarmAll() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main, using: refresh
+        )
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didChangeScreenParametersNotification, object: nil, queue: .main, using: refresh
+        )
+        DistributedNotificationCenter.default().addObserver(
+            forName: Notification.Name("com.apple.desktop"), object: nil, queue: .main, using: refresh
+        )
+        prewarmAll()
     }
 }
