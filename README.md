@@ -6,13 +6,13 @@
 
 **Local dictation for your Mac. Hold Fn, speak, release to paste.**
 
-[Download the Mac alpha](https://mouthtype.app/download) · [Getting started](https://mouthtype.app/start/) · [Documentation](https://mouthtype.app/docs/) · [Security](SECURITY.md)
+[Download the Mac beta](https://mouthtype.app/download) · [Getting started](https://mouthtype.app/start/) · [Documentation](https://mouthtype.app/docs/) · [Security](SECURITY.md)
 
 </div>
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is in alpha. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
+The Mac app is in beta. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
 
 ## Install
 
@@ -39,7 +39,7 @@ Existing alpha.1–3 installations need one manual download to get the built-in 
   <img src="website/public/assets/classic-recording.png" alt="Mouthtype's Classic recording pill showing an active take" width="400">
 </p>
 
-See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current alpha caveats. **Quiet other audio** and **Live words** are optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Split pastes preserve text and never synthesize a Return key press.
+See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current prerelease caveats. **Quiet other audio** and **Live words** are optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Split pastes preserve text and never synthesize a Return key press.
 
 ## Privacy and permissions
 

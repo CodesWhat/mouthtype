@@ -1,4 +1,6 @@
-Mouthtype 0.1.0-alpha.9
+Mouthtype 0.1.0-beta.1
+
+Beta.1 hardens daily use: ordinary delivery waits for the previous clipboard read or returns recoverable text instead of overwriting it. Normal Quit preserves an active or queued take before settling an owned clipboard; a failed save keeps the take for retry. Saved Recordings loads on demand in pages, with older takes still reachable. Capture starts before detailed Accessibility context lookup. Missing cleanup assets trigger repair on explicit Download; Basic fallback honors saved spellings and the spoken-list switch. Cleanup diagnostics omit rejected text. These changes retain existing focus and secure-field checks.
 
 Website tone rules now match HTTP/HTTPS domains and subdomains before app/default tone when a supported browser exposes its document URL. Missing URL support falls back to app/default; document URLs are not retained.
 
@@ -16,4 +18,4 @@ Includes single-file WAV/AIFF/M4A transcription, remembered microphone selection
 
 The corresponding source includes an experimental Linux daemon/CLI and local Arch test-package builder, with saved spellings, phrase replacements and optional deterministic basic cleanup. Cleanup is off by default and does not add a model. Recovery-only delivery remains the default; automatic typing refuses multiline/control-bearing results and keeps the full transcript recoverable. There is no Linux GUI or supported Linux desktop release. Physical Arch/Omarchy, Hyprland and microphone acceptance remains open.
 
-Requires Apple Silicon and macOS 26 or later. This is an alpha; review text before sending. Microphone changes, supported output hardware, provisional display, real file-recognition quality, fresh installation and actual update installation/relaunch still need coordinated testing.
+Requires Apple Silicon and macOS 26 or later. This is a beta; review text before sending. Microphone changes, supported output hardware, provisional display, real file-recognition quality, fresh installation and actual update installation/relaunch still need coordinated testing.
