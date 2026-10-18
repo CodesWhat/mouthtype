@@ -8,6 +8,11 @@ timer window, and cancel and stop caps. The art is original to this project.
 `layout.json` (positions, meter geometry, text slots, colours). The generated files are checked in, so the app
 builds without Python.
 
+The same run writes the delivery card's window sprites to `.../Pill/hifi/card/`: a 9-slice brushed-metal frame with a
+title bar, the close button (up and pressed), a bevelled button cap (up and pressed), the VFD bezel, and
+`layout.json` with their slices, metrics and colours. The app tiles the slices at integer scales and draws labels live
+with the pill's fonts.
+
 Regenerate after changing the art (Python 3, standard library only; output is deterministic):
 
     python3 -I design/pill/export.py
