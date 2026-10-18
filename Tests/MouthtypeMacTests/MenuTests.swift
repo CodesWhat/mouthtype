@@ -83,6 +83,11 @@ private final class FakeLoginService: LoginItemService {
             let pixels = image.representations.map { [$0.pixelsWide, $0.pixelsHigh] }
             #expect(pixels == [[16, 15], [32, 30]], "\(icon.glyphName)")
         }
+        for name in StatusIcon.recordingFiles {
+            let image = try #require(StatusIcon.loadImage(named: name), "\(name) did not load")
+            #expect(image.isTemplate)
+            #expect(image.representations.map { [$0.pixelsWide, $0.pixelsHigh] } == [[16, 15], [32, 30]], "\(name)")
+        }
         #expect(Set(StatusIcon.allCases.map(\.glyphName)).count == 4)
     }
 
@@ -94,11 +99,54 @@ private final class FakeLoginService: LoginItemService {
     }
 
     @Test func eachStateDrawsDifferently() throws {
-        let bitmaps = try StatusIcon.allCases.map { icon in
-            let rep = try #require(icon.image?.representations.first as? NSBitmapImageRep)
+        let names = ["idle", "processing", "unavailable"] + StatusIcon.recordingFiles
+        let bitmaps = try names.map { name in
+            let rep = try #require(StatusIcon.loadImage(named: name)?.representations.first as? NSBitmapImageRep)
             return rep.representation(using: .png, properties: [:])
         }
-        #expect(Set(bitmaps).count == 4)
+        #expect(Set(bitmaps).count == 6)
+    }
+
+    @Test func theLevelPicksTheRecordingFrame() {
+        func frame(_ level: Float, reduce: Bool = false) -> Int { StatusIcon.recordingFrame(level: level, reduceMotion: reduce) }
+        #expect(frame(0) == 0)
+        #expect(frame(0.249) == 0)
+        #expect(frame(0.25) == 1)
+        #expect(frame(0.599) == 1)
+        #expect(frame(0.6) == 2)
+        #expect(frame(1) == 2)
+        #expect(frame(.nan) == 0)
+    }
+
+    @Test func reduceMotionPinsTheMiddleFrame() {
+        for level: Float in [0, 0.3, 0.9] {
+            #expect(StatusIcon.recordingFrame(level: level, reduceMotion: true) == 1)
+            #expect(StatusIcon.recording.glyphFile(level: level, reduceMotion: true) == "recording1")
+        }
+    }
+
+    @Test func eachStateMapsToItsGlyphFile() {
+        #expect(StatusIcon.idle.glyphFile(level: 1, reduceMotion: false) == "idle")
+        #expect(StatusIcon.processing.glyphFile(level: 1, reduceMotion: false) == "processing")
+        #expect(StatusIcon.unavailable.glyphFile(level: 1, reduceMotion: false) == "unavailable")
+        #expect(StatusIcon.recording.glyphFile(level: 0, reduceMotion: false) == "recording0")
+        #expect(StatusIcon.recording.glyphFile(level: 0.4, reduceMotion: false) == "recording1")
+        #expect(StatusIcon.recording.glyphFile(level: 0.9, reduceMotion: false) == "recording2")
+    }
+
+    @Test func frameSwapsAreThrottledAndOnlyOnChange() {
+        var gate = StatusGlyphGate()
+        #expect(gate.next(icon: .idle, level: 0, reduceMotion: false, now: 0) == "idle")
+        #expect(gate.next(icon: .idle, level: 0, reduceMotion: false, now: 0.01) == nil)
+        // a state change is never held back
+        #expect(gate.next(icon: .recording, level: 0, reduceMotion: false, now: 0.02) == "recording0")
+        // same frame: nothing to do
+        #expect(gate.next(icon: .recording, level: 0.1, reduceMotion: false, now: 1) == nil)
+        // a new frame inside the interval waits, then goes through
+        #expect(gate.next(icon: .recording, level: 0.9, reduceMotion: false, now: 1.01) == "recording2")
+        #expect(gate.next(icon: .recording, level: 0.3, reduceMotion: false, now: 1.02) == nil)
+        #expect(gate.next(icon: .recording, level: 0.3, reduceMotion: false, now: 1.08) == "recording1")
+        #expect(gate.next(icon: .processing, level: 0.3, reduceMotion: false, now: 1.081) == "processing")
     }
 
     @Test func phaseMapsToTheIconWhenEverythingWorks() {
