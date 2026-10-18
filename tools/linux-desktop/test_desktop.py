@@ -753,6 +753,32 @@ class PasteDeliveryTests(unittest.TestCase):
             self.assertEqual(delivery.submit(text, target), 'unsupported_text')
         self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
 
+    def test_dispatcher_timeout_does_not_fall_back_to_untargeted_wtype(self):
+        delivery, target, calls, restored = self.make({'any_window': True}, hyprland=True)
+        inner = delivery.run
+        def timing_out(argv, **kwargs):
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                calls.append((argv, kwargs))
+                raise subprocess.TimeoutExpired(argv, 5)
+            return inner(argv, **kwargs)
+        delivery.run = timing_out
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+        self.assertEqual(len([a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']]), 1)
+
+    def test_clean_dispatcher_failure_falls_back_only_while_the_target_is_active(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(len([a for a, _ in calls if a[0] == 'wtype']), 1)
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        snapshots = []
+        def moving():
+            snapshots.append(1)
+            return target if len(snapshots) <= 2 else {**target, 'address': '0x999'}
+        delivery.snapshot = moving
+        self.assertEqual(delivery.submit('text', target), 'target_changed')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+
     def test_hyprland_delivers_the_chord_to_the_captured_window_without_wtype(self):
         delivery, target, calls, _ = self.make({'any_window': True}, hyprland=True)
         self.assertEqual(delivery.submit('text', target), 'unknown')

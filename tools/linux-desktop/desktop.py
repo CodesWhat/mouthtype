@@ -481,7 +481,9 @@ class HyprlandDelivery:
                 return 'unknown'
             if self.snapshot() != target:
                 return 'target_changed'
-            self.send_paste_chord(target, terminal)
+            outcome = self.send_paste_chord(target, terminal)
+            if outcome:
+                return outcome
         except (OSError, subprocess.SubprocessError):
             return 'unknown'
         finally:
@@ -505,7 +507,9 @@ class HyprlandDelivery:
             time.sleep(.05)
 
     def send_paste_chord(self, target, terminal):
-        """Hyprland delivers the chord to the captured window itself; wtype is the fallback for other compositors."""
+        """Hyprland delivers the chord to the captured window itself; wtype is the fallback for other compositors.
+
+        Returns None once sent, or an outcome string when the chord must not be sent blindly."""
         mods = 'CTRL SHIFT' if terminal else 'CTRL'
         window = 'address:' + str(target.get('address', ''))
         attempts = (
@@ -515,11 +519,17 @@ class HyprlandDelivery:
         for argv in attempts:
             try:
                 result = self.run(argv, capture_output=True, text=True, check=False, timeout=5)
+            except subprocess.TimeoutExpired:
+                # The dispatcher may still have delivered the chord; a second one could paste twice.
+                return 'unknown'
             except (OSError, subprocess.SubprocessError):
                 continue
             output = (getattr(result, 'stdout', '') or '') + (getattr(result, 'stderr', '') or '')
             if getattr(result, 'returncode', 1) == 0 and 'ok' in output and 'error' not in output.lower():
-                return
+                return None
+        # wtype is untargeted, so only use it while the captured window is still the active one.
+        if self.snapshot() != target:
+            return 'target_changed'
         chord = (['wtype', '-M', 'ctrl', '-M', 'shift', '-k', 'v', '-m', 'shift', '-m', 'ctrl'] if terminal
                  else ['wtype', '-M', 'ctrl', '-k', 'v', '-m', 'ctrl'])
         self.run(chord, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=15)
