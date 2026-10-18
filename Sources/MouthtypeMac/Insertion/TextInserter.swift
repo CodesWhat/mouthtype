@@ -158,8 +158,8 @@ public final class TextInserter {
             Log.app.info("nothing frontmost; transcript left on the clipboard")
             return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
         case .paste:
-            lastText = text
             if PasteTargetPolicy.refuses(role: now.role, textSettable: now.isTextSettable) {
+                lastText = text
                 clipboard.copy(text)
                 Log.app.info("focused \(now.role ?? "element", privacy: .public) can't take text; transcript left on the clipboard")
                 return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
@@ -175,7 +175,24 @@ public final class TextInserter {
             observeBoundary(PasteBoundaryDiagnostic(
                 before: before, continuation: continuation, original: text, spaced: spaced, target: now
             ))
-            guard let keyCode = keys.pasteKeyCode() else {
+            let keyCode = keys.pasteKeyCode()
+            // Accessibility reads can wait on another app. Recheck before borrowing the clipboard or posting keys.
+            let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
+                ? now.element.map { focus.readField(of: $0) } : nil
+            var checked = focus.snapshot()
+            let checkedSecureInput = focus.isSecureInputEnabled
+            if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
+                checked.isSecure = checked.isSecure || checkedSecureInput
+                return DeliveryResult(method: .none, outcome: .secureDiscard,
+                                      focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
+            }
+            lastText = text
+            guard checked.pid == now.pid, checked.bundleID == now.bundleID, checked.element == now.element else {
+                Log.app.info("focus changed during paste preparation; no paste or clipboard write")
+                return DeliveryResult(method: .none, outcome: .failed("Focus changed before paste"),
+                                      focusMoved: true, target: checked, finalText: text)
+            }
+            guard let keyCode else {
                 clipboard.copy(spaced)
                 Log.app.error("no key types v in this keyboard layout; transcript left on the clipboard")
                 return DeliveryResult(
@@ -183,9 +200,6 @@ public final class TextInserter {
                     focusMoved: moved, target: now, finalText: spaced
                 )
             }
-            // What the field looked like before the chord, for the read-back to compare with.
-            let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
-                ? now.element.map { focus.readField(of: $0) } : nil
             let split = chunkedPaste(now.bundleID) && spaced.utf8.count > PasteChunks.byteLimit
             if split {
                 guard let parts = PasteChunks.parts(spaced), inputGeneration() != nil else {

@@ -82,6 +82,8 @@ private final class FakeFocus: FocusReading {
     var before: TextBeforeCursor = .unknown
     var isSecureInputEnabled = false
     var beforeReads = 0
+    var afterBeforeRead: (() -> Void)?
+    var afterFieldRead: (() -> Void)?
     /// What the field reads as on each call, the last one repeating. Empty reads as unreadable.
     var readings: [FieldReading] = []
     var reads = 0
@@ -89,6 +91,7 @@ private final class FakeFocus: FocusReading {
     func snapshot() -> FocusSnapshot { current }
 
     func readField(of element: FocusedElement) -> FieldReading {
+        defer { afterFieldRead?() }
         defer { reads += 1 }
         guard !readings.isEmpty else { return FieldReading() }
         return readings[min(reads, readings.count - 1)]
@@ -96,6 +99,7 @@ private final class FakeFocus: FocusReading {
 
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor {
         beforeReads += 1
+        afterBeforeRead?()
         return before
     }
 }
@@ -187,6 +191,93 @@ private struct Rig {
 
 @MainActor
 @Suite struct TextInserterTests {
+    @Test(arguments: [false, true]) func preflightRecheckPrecedesMissingPasteKeyFallback(secureDestination: Bool) async {
+        let rig = Rig()
+        rig.keys.code = nil
+        rig.focus.current.element = element(100)
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original clipboard")]])
+        let original = rig.pasteboard.contents
+        rig.focus.afterBeforeRead = {
+            rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other",
+                                              isSecure: secureDestination, element: element(200))
+        }
+
+        let result = await rig.inserter.deliver("keep this transcript", startFocus: nil)
+
+        #expect(rig.poster.posts == 0)
+        #expect(rig.pasteboard.writes.isEmpty)
+        #expect(rig.pasteboard.contents == original)
+        #expect(result.method == .none)
+        #expect(result.focusMoved)
+        #expect(!rig.inserter.isRestorePending)
+        if secureDestination {
+            #expect(result.outcome == .secureDiscard)
+            #expect(result.finalText.isEmpty)
+            #expect(rig.inserter.lastDelivered == nil)
+        } else {
+            #expect(result.outcome == .failed("Focus changed before paste"))
+            #expect(result.finalText == "keep this transcript")
+            #expect(rig.inserter.lastDelivered == "keep this transcript")
+        }
+    }
+
+    @Test(arguments: [false, true]) func focusChangeDuringPreflightDoesNotPostOrBorrowClipboard(duringFieldRead: Bool) async {
+        let rig = Rig()
+        rig.focus.current.element = element(100)
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original clipboard")]])
+        let original = rig.pasteboard.contents
+        let changeFocus = {
+            rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other", element: element(200))
+        }
+        if duringFieldRead { rig.focus.afterFieldRead = changeFocus }
+        else { rig.focus.afterBeforeRead = changeFocus }
+
+        let result = await rig.inserter.deliver("keep this transcript", startFocus: nil)
+
+        #expect(rig.poster.posts == 0)
+        #expect(rig.pasteboard.writes.isEmpty)
+        #expect(rig.pasteboard.contents == original)
+        #expect(result.method == .none)
+        #expect(result.focusMoved)
+        #expect(result.finalText == "keep this transcript")
+        #expect(rig.inserter.lastDelivered == "keep this transcript")
+        #expect(!rig.inserter.isRestorePending)
+    }
+
+    @Test func fieldChangeDuringPreflightDoesNotPasteIntoTheOldField() async {
+        let rig = Rig()
+        rig.focus.current.element = element(100)
+        rig.focus.afterBeforeRead = { rig.focus.current.element = element(101) }
+
+        let result = await rig.inserter.deliver("keep this transcript", startFocus: nil)
+
+        #expect(rig.poster.posts == 0)
+        #expect(rig.pasteboard.writes.isEmpty)
+        #expect(result.method == .none)
+        #expect(result.focusMoved)
+        #expect(result.finalText == "keep this transcript")
+    }
+
+    @Test(arguments: [false, true]) func secureInputEnabledDuringPreflightDiscardsWithoutClipboardWrites(secureField: Bool) async {
+        let rig = Rig()
+        rig.focus.current.element = element(100)
+        rig.focus.afterBeforeRead = {
+            if secureField { rig.focus.current.isSecure = true }
+            else {
+                rig.focus.isSecureInputEnabled = true
+                rig.focus.current.element = nil
+            }
+        }
+
+        let result = await rig.inserter.deliver("private transcript", startFocus: nil)
+
+        #expect(rig.poster.posts == 0)
+        #expect(rig.pasteboard.writes.isEmpty)
+        #expect(result.outcome == .secureDiscard)
+        #expect(result.finalText.isEmpty)
+        #expect(rig.inserter.lastDelivered == nil)
+    }
+
     @Test func longPasteWaitsForEachReceiptAndRestoresOneOriginalClipboard() async {
         let rig = Rig(chunks: true)
         rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original clipboard")]])
