@@ -33,13 +33,13 @@ enum PillSkinKind: String, CaseIterable, Sendable {
 /// Builds the skin for a kind, shared by the live pill, the Settings preview and the tests.
 @MainActor
 enum PillSkinFactory {
-    static func make(_ kind: PillSkinKind, frame: NSRect, scale: PillScale) throws -> any PillSkinView {
+    static func make(_ kind: PillSkinKind, frame: NSRect, scale: PillScale, readout: PillReadoutColour = .default) throws -> any PillSkinView {
         switch kind {
         case .classic: return ClassicPillView(frame: frame, size: scale)
         case .glass: return GlassPillView(frame: frame, size: scale)
         case .matrix: return MatrixPillView(frame: frame, size: scale)
         case .minimal: return MinimalPillView(frame: frame, size: scale)
-        case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)
+        case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale, readout: readout)
         }
     }
 }
@@ -53,6 +53,64 @@ enum PillSkinPreference {
 
     static func set(_ kind: PillSkinKind, in defaults: UserDefaults = .standard) {
         defaults.set(kind.rawValue, forKey: key)
+    }
+}
+
+/// The Hi-Fi pill's readout colour: the meter segments, the timer and the message text. Amber is the art as drawn;
+/// the others retint those layers from the board's palette. The REC lamp, caps and error text keep their own colours.
+enum PillReadoutColour: String, CaseIterable, Sendable {
+    case amber, coolWhite, red
+
+    static let `default` = PillReadoutColour.amber
+
+    var title: String {
+        switch self {
+        case .amber: "Amber"
+        case .coolWhite: "Cool white"
+        case .red: "Red"
+        }
+    }
+
+    /// The dot beside the name in Settings.
+    var swatchHex: String {
+        switch self {
+        case .amber: "#ffb02e"
+        case .coolWhite: "#e8f1ff"
+        case .red: "#ff3d32"
+        }
+    }
+
+    struct Palette: Equatable, Sendable {
+        var normal: String, hot: String, peak: String, text: String
+
+        func tier(_ name: String) -> CGColor {
+            switch name {
+            case "hot": PillLayout.color(hex: hot)
+            case "peak": PillLayout.color(hex: peak)
+            default: PillLayout.color(hex: normal)
+            }
+        }
+    }
+
+    /// `base` is the layout's own (amber) colours.
+    func palette(base: PillLayout.Colors) -> Palette {
+        switch self {
+        case .amber: Palette(normal: base.segmentNormal, hot: base.segmentHot, peak: base.segmentPeak, text: base.text)
+        case .coolWhite: Palette(normal: "#e8f1ff", hot: "#9cc0ff", peak: base.segmentPeak, text: "#e8f1ff")
+        case .red: Palette(normal: "#ff3d32", hot: "#ff8a7d", peak: "#ffd9d4", text: "#ff3d32")
+        }
+    }
+}
+
+enum PillReadoutPreference {
+    static let key = "pillReadoutColour"
+
+    static func current(_ defaults: UserDefaults = .standard) -> PillReadoutColour {
+        defaults.string(forKey: key).flatMap(PillReadoutColour.init(rawValue:)) ?? .default
+    }
+
+    static func set(_ colour: PillReadoutColour, in defaults: UserDefaults = .standard) {
+        defaults.set(colour.rawValue, forKey: key)
     }
 }
 

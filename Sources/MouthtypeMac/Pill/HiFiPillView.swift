@@ -34,6 +34,9 @@ final class HiFiPillView: NSView, PillSkinView {
     private let messageText = CALayer()
 
     private var mode = Mode.meter
+    private(set) var readout: PillReadoutColour
+    private var messageString = ""
+    private var messageIsError = false
     private var litCache: [[Bool]] = []
     private var timerSeconds: Int?
     private var ledOn = false
@@ -44,7 +47,8 @@ final class HiFiPillView: NSView, PillSkinView {
     /// How far the current message has to scroll, 0 when it sits centred.
     private(set) var messageScrollDistance = 0
 
-    init(frame: NSRect, assets: PillAssets, size: PillScale = .standard) {
+    init(frame: NSRect, assets: PillAssets, size: PillScale = .standard, readout: PillReadoutColour = .default) {
+        self.readout = readout
         artScale = size.factor
         self.assets = assets
         layout = assets.layout
@@ -73,7 +77,7 @@ final class HiFiPillView: NSView, PillSkinView {
             column.enumerated().map { row, rect in
                 let segment = CALayer()
                 segment.frame = layerFrame(of: rect)
-                segment.backgroundColor = layout.tierColor(layout.meter.rowTiers[row])
+                segment.backgroundColor = readout.palette(base: layout.colors).tier(layout.meter.rowTiers[row])
                 segment.isHidden = true
                 pill.addSublayer(segment)
                 return segment
@@ -160,6 +164,27 @@ final class HiFiPillView: NSView, PillSkinView {
         CATransaction.commit()
     }
 
+    // MARK: Readout colour
+
+    /// Retints the meter segments, the timer and the message text. The chassis, lamps and caps keep their art.
+    func setReadout(_ new: PillReadoutColour) {
+        guard new != readout else { return }
+        readout = new
+        let palette = new.palette(base: layout.colors)
+        withoutActions {
+            for column in segments {
+                for (row, segment) in column.enumerated() { segment.backgroundColor = palette.tier(layout.meter.rowTiers[row]) }
+            }
+        }
+        renderTimer()
+        if mode == .message { showMessage(messageString, isError: messageIsError) }
+    }
+
+    /// The colour a meter row is drawn in, for tests.
+    func segmentColor(column: Int, row: Int) -> CGColor? { segments[column][row].backgroundColor }
+    /// The colour the timer and message text are tinted, for tests.
+    var textColor: CGColor { PillLayout.color(hex: readout.palette(base: layout.colors).text) }
+
     // MARK: Meter
 
     /// Meter mode with `counts[column]` segments lit from the baseline up.
@@ -221,7 +246,7 @@ final class HiFiPillView: NSView, PillSkinView {
             let slot = isLocked ? layout.text.timerLocked : layout.text.timer
             guard let font = assets.fonts[slot.font],
                   let image = font.image(
-                      for: PillTimeline.timerText(seconds: seconds), color: PillLayout.color(hex: layout.colors.text)
+                      for: PillTimeline.timerText(seconds: seconds), color: PillLayout.color(hex: readout.palette(base: layout.colors).text)
                   ) else { return }
             timer.contents = image
             timer.frame = layerFrame(of: PillLayout.Rect(x: slot.x, y: slot.y, w: image.width, h: image.height))
@@ -348,7 +373,9 @@ final class HiFiPillView: NSView, PillSkinView {
     func showMessage(_ text: String, isError: Bool = false) {
         let slot = layout.text.message
         guard let font = assets.fonts[slot.font] else { return }
-        let color = PillLayout.color(hex: isError ? layout.colors.error : layout.colors.text)
+        messageString = text
+        messageIsError = isError
+        let color = PillLayout.color(hex: isError ? layout.colors.error : readout.palette(base: layout.colors).text)
         let image = font.image(for: text, color: color)
         messageWidth = image?.width ?? 0
         withoutActions {
