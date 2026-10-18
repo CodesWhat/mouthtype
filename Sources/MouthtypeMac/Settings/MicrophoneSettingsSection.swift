@@ -4,10 +4,8 @@ struct MicrophoneSettingsSection: View {
     @Bindable var model: MicrophoneSettingsModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Microphone").fontWeight(.medium)
-                Spacer()
+        Group {
+            SettingsRow(title: "Microphone", detail: model.status) {
                 Picker("Microphone", selection: Binding(get: { model.choice }, set: model.choose)) {
                     Text("System Default")
                         .tag(MicrophoneChoice.systemDefault)
@@ -21,40 +19,33 @@ struct MicrophoneSettingsSection: View {
                     if model.choice == .invalidPreference {
                         Text("Choose an input").tag(MicrophoneChoice.invalidPreference).disabled(true)
                     }
-                }.labelsHidden().frame(maxWidth: 300).accessibilityIdentifier("settings-microphone")
-                Button("Refresh inputs", action: model.refresh).accessibilityIdentifier("settings-microphone-refresh")
+                }.labelsHidden().fixedSize().accessibilityIdentifier("settings-microphone")
+                Button("Refresh inputs", action: model.refresh).fixedSize().accessibilityIdentifier("settings-microphone-refresh")
             }
             if model.choice == .priorityList, let priority = model.priority {
                 ForEach(Array(priority.devices.enumerated()), id: \.element.uid) { index, device in
-                    HStack {
-                        Text(device.name + (model.inputs.contains(where: { $0.uid == device.uid }) ? "" : " (unavailable)"))
-                        Spacer()
+                    SettingsRow(title: device.name + (model.inputs.contains(where: { $0.uid == device.uid }) ? "" : " (unavailable)")) {
                         Button { model.movePriority(uid: device.uid, offset: -1) } label: { Image(systemName: "arrow.up") }
-                            .disabled(index == 0).accessibilityLabel("Move \(device.name) up")
+                            .fixedSize().disabled(index == 0).accessibilityLabel("Move \(device.name) up")
                         Button { model.movePriority(uid: device.uid, offset: 1) } label: { Image(systemName: "arrow.down") }
-                            .disabled(index == priority.devices.count - 1).accessibilityLabel("Move \(device.name) down")
+                            .fixedSize().disabled(index == priority.devices.count - 1).accessibilityLabel("Move \(device.name) down")
                         Button { model.removePriority(uid: device.uid) } label: { Image(systemName: "minus.circle") }
-                            .disabled(priority.devices.count == 1 && !priority.fallbackToDefault).accessibilityLabel("Remove \(device.name)")
+                            .fixedSize().disabled(priority.devices.count == 1 && !priority.fallbackToDefault).accessibilityLabel("Remove \(device.name)")
                     }
                 }
-                Menu("Add microphone") {
+                SettingsRow(title: "Add microphone") { Menu("Add microphone") {
                     ForEach(model.inputs.filter { input in !priority.devices.contains(where: { $0.uid == input.uid }) }, id: \.uid) { input in
                         Button(input.name) { model.addPriority(uid: input.uid) }
                     }
-                }.disabled(priority.devices.count >= 32)
+                }.fixedSize().disabled(priority.devices.count >= 32) }
                 Toggle("Use System Default if no listed microphone is available", isOn: Binding(get: { priority.fallbackToDefault }, set: model.setPriorityFallback))
                     .disabled(priority.devices.isEmpty)
                 if priority.devices.isEmpty {
-                    Text("Add a microphone before turning off System Default fallback.")
-                        .font(.callout).foregroundStyle(.secondary)
+                    SettingsNote(text: "Add a microphone before turning off System Default fallback.")
                 }
-                Text("The first available listed microphone is chosen at the start of a take. A device change during recording still cancels that take.")
-                    .font(.callout).foregroundStyle(.secondary)
+                SettingsNote(text: "The first available listed microphone is chosen at the start of a take. A device change during recording still cancels that take.")
             }
-            Text(model.status).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            if let error = model.error {
-                Text(error).font(.callout).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
-            }
+            if let error = model.error { SettingsNote(text: error, tone: .red) }
         }
     }
 }

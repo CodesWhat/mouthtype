@@ -14,6 +14,8 @@ import UniformTypeIdentifiers
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
     var page = SettingsPage.general
+    var websiteDomain = ""
+    var websiteTone = StylePreset.formal
     private(set) var cleanup: CleanupSettings
     private(set) var livePreview = false
     private(set) var audioRetention = AudioRetentionPolicy()
