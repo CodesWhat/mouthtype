@@ -80,6 +80,42 @@ class AutostartTests(unittest.TestCase):
         self.assertEqual([call[0] for call in self.calls], ["disable"])
 
 
+class SettingsDuringImportTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name)
+        self.config = root / "linux.json"
+        self.config.write_text(json.dumps({"engine_config": "/x", "notifications": True}), encoding="utf-8")
+        self.file_import = {"state": "transcribing"}
+        self.shutdowns = []
+        patches = [
+            mock.patch.object(control, "CONFIG", self.config),
+            mock.patch.object(control, "DESKTOP", HERE.parent / "linux-desktop"),
+            mock.patch.object(control, "state", lambda: {"running": True, "state": "idle",
+                                                         "file_import": self.file_import}),
+            mock.patch.object(control, "act", lambda command: self.shutdowns.append(command)),
+            mock.patch.object(control, "start_service", lambda: None),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_restarting_change_is_refused_while_a_file_import_runs(self):
+        for state in ("preparing", "transcribing", "cancelling"):
+            self.file_import["state"] = state
+            with self.assertRaisesRegex(RuntimeError, "file transcription"):
+                control.set_config("notifications", "off")
+        self.assertEqual(self.shutdowns, [])
+        self.assertTrue(json.loads(self.config.read_text(encoding="utf-8"))["notifications"])
+
+    def test_change_applies_and_restarts_once_the_import_is_done(self):
+        self.file_import["state"] = "finished"
+        control.set_config("notifications", "off")
+        self.assertEqual(self.shutdowns, ["shutdown"])
+        self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["notifications"])
+
+
 class PanelActionTests(unittest.TestCase):
     def test_every_action_the_panel_runs_is_accepted_by_the_dispatcher(self):
         panel = (HERE / "Panel.qml").read_text(encoding="utf-8")

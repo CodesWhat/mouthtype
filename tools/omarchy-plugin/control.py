@@ -29,6 +29,8 @@ CLEANUP_DIR = HOME / ".local/share/mouthtype/cleanup-candidate"
 CLEANUP_LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/cleanup-setup.log"
 CLEANUP_SIZES = {"fast": "about 480 MB", "thorough": "about 2.5 GB"}
 
+IMPORT_ACTIVE = ("preparing", "transcribing", "cancelling")
+
 IMPORT_MESSAGES = {
     "busy": "Finish or cancel the current file transcription first.",
     "session_active": "Finish dictation or recovery before transcribing a file.",
@@ -461,6 +463,9 @@ def set_config(field, value, extra=None):
     validate_config(config)
     if config == json.loads(CONFIG.read_text(encoding="utf-8")):
         return state()
+    if current["running"] and current["file_import"].get("state") in IMPORT_ACTIVE:
+        # Applying the change restarts the service, which would cancel the running file transcription.
+        raise RuntimeError("Wait for the file transcription to finish or cancel it before changing settings")
     backup = CONFIG.with_name(f"linux.json.bak.{int(time.time())}")
     shutil.copy2(CONFIG, backup)
     atomic_json(CONFIG, config)
