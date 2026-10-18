@@ -31,7 +31,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             transcribingFile: self?.fileTranscriptionModel.isBusy == true, editingSelection: self?.selectionCleanupModel.hasPreview == true) })
     private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), busy: { [weak self] in
         guard let self else { return true }
-        return self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
+        return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
     }, changed: { [weak self] in self?.appUpdater.refreshActivity() })
     private lazy var selectionCleanupWindow = SelectionCleanupWindow(model: selectionCleanupModel)
     private lazy var fileTranscriptionModel: FileTranscriptionModel = FileTranscriptionModel(
@@ -41,7 +41,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             return AudioFileTranscription(decoder: MacAudioFileDecoder(), engine: engine)
         }, canBegin: { [weak self] in
-            guard let self else { return false }
+            guard let self, !self.isTerminating else { return false }
             return self.dictation?.phase == .idle && self.recovery?.isRecovering != true && !self.appUpdater.blocksNewWork
         }, activityChanged: { [weak self] in
             self?.appUpdater.refreshActivity()
@@ -95,6 +95,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let launchedAt = Date()
     private var inputStarted = false
     private var isTerminating = false
+    private let termination = AppTermination()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.info("launch \(AppInfo.version, privacy: .public)")
@@ -207,14 +208,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost] in
                 guard dictation?.phase == .idle, let engineHost else { return false }
-                guard self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true else { return false }
+                guard self?.isTerminating != true, self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true else { return false }
                 if case .ready = engineHost.state { return true }
                 return false
             }
             menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
             recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
         }
-        dictation.canStartRecording = { [weak self] in self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
+        dictation.canStartRecording = { [weak self] in self?.isTerminating != true && self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
         menuBar.add(section: history, startsGroup: false)
         menuBar.add(section: UpdateMenuSection(updater: appUpdater), isFooter: true)
         menuBar.add(section: HelpMenuSection(), isFooter: true)
@@ -274,7 +275,25 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        appUpdater.allowsTermination ? .terminateNow : .terminateCancel
+        if isTerminating { return .terminateLater }
+        guard appUpdater.allowsTermination else { return .terminateCancel }
+        isTerminating = true
+        termination.begin(preserve: { [self] in
+            await dictation?.prepareForTermination() ?? true
+        }, settleClipboard: { [self] in
+            await inserter?.prepareForTermination()
+        }, reply: { [self] ready in
+            if !ready { isTerminating = false }
+            sender.reply(toApplicationShouldTerminate: ready)
+            if !ready {
+                let alert = NSAlert()
+                alert.messageText = "Couldn't finish saving the recording"
+                alert.informativeText = "Mouthtype stayed open because the recording hasn't been fully saved. Resolve the storage or microphone problem, then try Quit again."
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
+        })
+        return .terminateLater
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
@@ -310,6 +329,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func pasteLast() {
+        guard !isTerminating else { return }
         guard let inserter, let pill, let cardPresenter else { return }
         Task {
             guard let result = await inserter.pasteLast() else {

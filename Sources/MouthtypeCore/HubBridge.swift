@@ -57,15 +57,28 @@ struct HubDownloader: MLXLMCommon.Downloader {
               let snapshot = try? cache.snapshotPath(repo: repo, kind: .model, commitHash: commit)
         else { return nil }
         let fm = FileManager.default
-        guard fm.fileExists(atPath: snapshot.appendingPathComponent("config.json").path) else { return nil }
-        let indexURL = snapshot.appendingPathComponent("model.safetensors.index.json")
-        if let data = try? Data(contentsOf: indexURL),
-           let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-           let weightMap = json["weight_map"] as? [String: String] {
-            return Set(weightMap.values).allSatisfy { fm.fileExists(atPath: snapshot.appendingPathComponent($0).path) } ? snapshot : nil
+        return snapshotIsComplete(files: (try? fm.contentsOfDirectory(atPath: snapshot.path)) ?? [],
+            fileExists: { fileIsNonempty(snapshot.appendingPathComponent($0)) },
+            contents: { try? Data(contentsOf: snapshot.appendingPathComponent($0)) }) ? snapshot : nil
+    }
+
+    static func fileIsNonempty(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        let path = url.resolvingSymlinksInPath().path
+        var directory: ObjCBool = false
+        guard fm.fileExists(atPath: path, isDirectory: &directory), !directory.boolValue else { return false }
+        return (((try? fm.attributesOfItem(atPath: path)[.size]) as? NSNumber)?.intValue ?? 0) > 0
+    }
+
+    static func snapshotIsComplete(files: [String], fileExists: (String) -> Bool, contents: (String) -> Data?) -> Bool {
+        guard fileExists("config.json"), fileExists("tokenizer.json") else { return false }
+        if files.contains("model.safetensors.index.json") {
+            guard let data = contents("model.safetensors.index.json"),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let weightMap = json["weight_map"] as? [String: String], !weightMap.isEmpty else { return false }
+            return Set(weightMap.values).allSatisfy(fileExists)
         }
-        let files = (try? fm.contentsOfDirectory(atPath: snapshot.path)) ?? []
-        return files.contains { $0.hasSuffix(".safetensors") } ? snapshot : nil
+        return files.contains { $0.hasSuffix(".safetensors") && fileExists($0) }
     }
 }
 

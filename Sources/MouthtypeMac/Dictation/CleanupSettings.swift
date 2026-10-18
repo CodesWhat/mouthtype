@@ -49,7 +49,8 @@ struct CleanupSettings: Equatable, Sendable {
     /// What the text pipeline runs. With cleanup off nothing runs at all, style included.
     var pipelineOptions: TextPipelineOptions {
         guard enabled else { return .none }
-        return TextPipelineOptions(fillers: fillers, spokenCommands: spokenCommands, numbers: numbers, style: style)
+        return TextPipelineOptions(fillers: fillers, spokenCommands: spokenCommands, countedLists: spokenCommands,
+                                   numbers: numbers, style: style)
     }
 
     /// The `style` column value: the preset name, or "custom".
