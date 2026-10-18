@@ -6,17 +6,23 @@ import QuartzCore
 struct GlassPillEnvironment {
     var materialAvailable: () -> Bool
     var reduceTransparency: () -> Bool
-    /// The wallpaper behind the pill's region on `view`'s screen, nil when it can't be read.
+    /// The wallpaper behind the pill on `view`'s screen, nil when it can't be read or isn't measured yet. It must
+    /// never decode on the calling thread: it runs between the hotkey and the pill appearing.
     var backdrop: (NSView) -> GlassPillPolicy.Backdrop?
+    /// Measures the wallpaper in the background ahead of the first press.
+    var prewarm: () -> Void = {}
 
     static let system = GlassPillEnvironment(
         materialAvailable: { NSClassFromString("NSGlassEffectView") != nil },
         reduceTransparency: { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
         backdrop: { view in
             guard let window = view.window, let screen = window.screen else { return nil }
-            let region = window.convertToScreen(view.convert(view.bounds, to: nil))
-            return GlassBackdropSampler.sample(screen: screen, region: region)
-        }
+            let local = (view as? GlassPillView)?.sampleRegion ?? view.bounds
+            let region = window.convertToScreen(view.convert(local, to: nil))
+            guard case .ready(let backdrop) = GlassBackdropCache.shared.lookup(screen: screen, region: region) else { return nil }
+            return backdrop
+        },
+        prewarm: { GlassBackdropCache.shared.prewarmAll() }
     )
 }
 
@@ -38,6 +44,21 @@ final class GlassPillView: NSView, PillSkinView {
     private(set) var decision: GlassPillPolicy.Decision = .solid(.materialUnavailable)
     /// The capsule as last placed, in this view's coordinates.
     private(set) var bodyRect = CGRect.zero
+
+    /// The pill body at its held width in `bounds`, which is where the wallpaper is sampled: the panel is far larger
+    /// than the capsule, and a message's width and height would not be known until after the decision.
+    static func heldBodyRegion(bounds: CGSize, size: PillScale, backing: CGFloat) -> CGRect {
+        let metrics = ClassicPillLayout.Metrics(size)
+        return ClassicPillLayout.capsuleFrame(
+            width: ClassicPillLayout.holdWidth(scale: backing, metrics: metrics), height: metrics.height, bounds: bounds,
+            bottomMargin: PillGeometry.verticalMargin, scale: backing
+        )
+    }
+
+    /// The held pill body in this view's coordinates.
+    var sampleRegion: CGRect {
+        Self.heldBodyRegion(bounds: bounds.size, size: classic.pillScale, backing: window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
+    }
 
     var pillScale: PillScale { classic.pillScale }
     /// True while the system material is showing, false on the solid Classic body.
@@ -66,6 +87,7 @@ final class GlassPillView: NSView, PillSkinView {
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.reevaluate() } }
         reevaluate()
+        environment.prewarm()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -78,7 +100,7 @@ final class GlassPillView: NSView, PillSkinView {
 
     // MARK: Material
 
-    /// Samples the wallpaper once and decides again.
+    /// Reads the cached wallpaper sample (never decoding here) and decides again; an unmeasured wallpaper gets smoked glass.
     func refreshBackdrop() {
         backdrop = environment.backdrop(self)
         reevaluate()

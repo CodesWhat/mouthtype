@@ -134,3 +134,115 @@ import Testing
         controller.hide()
     }
 }
+
+private final class SamplerProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var threads: [Bool] = []
+    private var date = Date(timeIntervalSince1970: 1_000)
+    /// Held shut until a test opens it, so a measurement can be seen to run apart from the caller.
+    let gate = DispatchSemaphore(value: 0)
+    var waitsForGate = true
+
+    var mainThreadCalls: Int { lock.withLock { threads.filter { $0 }.count } }
+    var calls: Int { lock.withLock { threads.count } }
+    var modified: Date {
+        get { lock.withLock { date } }
+        set { lock.withLock { date = newValue } }
+    }
+
+    func measured() -> GlassPillPolicy.Backdrop? {
+        lock.withLock { threads.append(Thread.isMainThread) }
+        if waitsForGate { _ = gate.wait(timeout: .now() + 2) }
+        return .init(luminance: 0.1, spread: 0.02)
+    }
+}
+
+@MainActor
+@Suite struct GlassBackdropCacheTests {
+    private let file = URL(fileURLWithPath: "/tmp/wallpaper.heic")
+    private let frame = CGRect(x: 0, y: 0, width: 1000, height: 600)
+    private let region = CGRect(x: 400, y: 20, width: 100, height: 28)
+
+    private func cache(_ probe: SamplerProbe) -> GlassBackdropCache {
+        GlassBackdropCache(measure: { _, _, _ in probe.measured() }, modificationDate: { _ in probe.modified })
+    }
+
+    @Test func aLookupNeverMeasuresOnTheCallingThread() async {
+        let probe = SamplerProbe()
+        let cache = cache(probe)
+        // The measurement is blocked on the gate, so a synchronous one would hang this call and return ready.
+        #expect(cache.lookup(screen: 1, file: file, screenFrame: frame, region: region) == .pending)
+        probe.gate.signal()
+        let task = cache.prewarm(screen: 1, file: file, screenFrame: frame, region: region)
+        #expect(task == nil)
+        for _ in 0..<200 where cache.lookup(screen: 1, file: file, screenFrame: frame, region: region) == .pending {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(cache.lookup(screen: 1, file: file, screenFrame: frame, region: region) == .ready(.init(luminance: 0.1, spread: 0.02)))
+        #expect(probe.calls == 1 && probe.mainThreadCalls == 0)
+    }
+
+    @Test func theKeyIncludesTheModificationTime() async {
+        let probe = SamplerProbe()
+        probe.waitsForGate = false
+        let cache = cache(probe)
+        await cache.prewarm(screen: 1, file: file, screenFrame: frame, region: region)?.value
+        #expect(cache.lookup(screen: 1, file: file, screenFrame: frame, region: region) != .pending)
+        probe.modified = Date(timeIntervalSince1970: 2_000)
+        #expect(cache.lookup(screen: 1, file: file, screenFrame: frame, region: region) == .pending)
+        #expect(cache.key(file: file, region: region) != GlassBackdropCache.Key(file: file, modified: Date(timeIntervalSince1970: 1_000), region: region))
+    }
+
+    @Test func eachScreenAndRegionHasItsOwnEntry() async {
+        let probe = SamplerProbe()
+        probe.waitsForGate = false
+        let cache = cache(probe)
+        await cache.prewarm(screen: 1, file: file, screenFrame: frame, region: region)?.value
+        await cache.prewarm(screen: 2, file: file, screenFrame: frame, region: region)?.value
+        #expect(probe.calls == 2)
+        #expect(cache.lookup(screen: 1, file: file, screenFrame: frame, region: region) != .pending)
+        #expect(cache.lookup(screen: 2, file: file, screenFrame: frame, region: region) != .pending)
+        #expect(cache.lookup(screen: 1, file: file, screenFrame: frame, region: region.offsetBy(dx: 40, dy: 0)) == .pending)
+    }
+
+    @Test func aMeasurementAlreadyOnItsWayIsNotStartedTwice() {
+        let probe = SamplerProbe()
+        let cache = cache(probe)
+        _ = cache.lookup(screen: 1, file: file, screenFrame: frame, region: region)
+        #expect(cache.prewarm(screen: 1, file: file, screenFrame: frame, region: region) == nil)
+        probe.gate.signal()
+    }
+
+    @Test func anUnmeasuredWallpaperGetsSmokedGlassWithoutWaiting() {
+        let probe = SamplerProbe()
+        let cache = cache(probe)
+        let environment = GlassPillEnvironment(
+            materialAvailable: { true }, reduceTransparency: { false },
+            backdrop: { [file, frame, region] _ in
+                guard case .ready(let backdrop) = cache.lookup(screen: 1, file: file, screenFrame: frame, region: region) else { return nil }
+                return backdrop
+            }
+        )
+        _ = NSApplication.shared
+        let glass = GlassPillView(frame: NSRect(origin: .zero, size: PillGeometry.panelSize), size: .standard, environment: environment)
+        glass.appear(reduceMotion: true)
+        #expect(glass.decision == .glass(.smoked))
+        #expect(glass.showsMaterial)
+        probe.gate.signal()
+    }
+}
+
+@MainActor
+@Suite struct GlassSampleRegionTests {
+    @Test func theRegionIsTheHeldBodyNotThePanel() {
+        for scale in [PillScale.standard, .large] {
+            let panel = PillGeometry.panelSize(for: scale)
+            let region = GlassPillView.heldBodyRegion(bounds: panel, size: scale, backing: 2)
+            let metrics = ClassicPillLayout.Metrics(scale)
+            #expect(region.width == ClassicPillLayout.holdWidth(scale: 2, metrics: metrics))
+            #expect(region.height == metrics.height && region.minY == PillGeometry.verticalMargin)
+            #expect(abs(region.midX - panel.width / 2) <= 0.5)
+            #expect(region.width < panel.width / 2)
+        }
+    }
+}
