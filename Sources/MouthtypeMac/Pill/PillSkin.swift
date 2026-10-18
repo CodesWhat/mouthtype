@@ -188,6 +188,12 @@ protocol PillSkinView: NSView {
     func setPressed(_ control: PillControl?)
     func appear(reduceMotion: Bool)
     func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void)
+    /// Draws the pill into `context` in this view's coordinates without a window, for the Settings preview and tests.
+    func renderOffscreen(in context: CGContext)
+}
+
+extension PillSkinView {
+    func renderOffscreen(in context: CGContext) { layer?.render(in: context) }
 }
 
 /// The panel's content view: holds the skin and takes the click on a control. It only answers hit tests over a

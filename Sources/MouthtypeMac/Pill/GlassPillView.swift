@@ -36,6 +36,8 @@ final class GlassPillView: NSView, PillSkinView {
     /// The last sampled wallpaper, kept so a Reduce Transparency change can decide again without sampling.
     private var backdrop: GlassPillPolicy.Backdrop?
     private(set) var decision: GlassPillPolicy.Decision = .solid(.materialUnavailable)
+    /// The capsule as last placed, in this view's coordinates.
+    private(set) var bodyRect = CGRect.zero
 
     var pillScale: PillScale { classic.pillScale }
     /// True while the system material is showing, false on the solid Classic body.
@@ -105,6 +107,7 @@ final class GlassPillView: NSView, PillSkinView {
     }
 
     private func placeGlass(_ rect: CGRect, animated: Bool) {
+        bodyRect = rect
         glass.cornerRadius = min(rect.height, ClassicPillLayout.Metrics(classic.pillScale).height) / 2
         guard animated else {
             glass.frame = rect
@@ -138,6 +141,24 @@ final class GlassPillView: NSView, PillSkinView {
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
             glass.animator().alphaValue = 1
         }
+    }
+
+    /// The system material only renders in a window, and the classic view lives in a subview with no layer of its own to
+    /// render offscreen. This draws a flat tint in the material's place, so it approximates the glass and is not it.
+    func renderOffscreen(in context: CGContext) {
+        if case .glass(let variant) = decision {
+            context.saveGState()
+            let radius = ClassicPillLayout.Metrics(classic.pillScale).cornerRadius
+            context.addPath(CGPath(roundedRect: bodyRect, cornerWidth: radius, cornerHeight: radius, transform: nil))
+            context.clip()
+            switch variant {
+            case .clear: context.setFillColor(NSColor.white.withAlphaComponent(0.36).cgColor)
+            case .smoked: context.setFillColor(NSColor(srgbRed: 34 / 255, green: 34 / 255, blue: 40 / 255, alpha: 0.45).cgColor)
+            }
+            context.fill(bodyRect)
+            context.restoreGState()
+        }
+        classic.layer?.render(in: context)
     }
 
     func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void) {

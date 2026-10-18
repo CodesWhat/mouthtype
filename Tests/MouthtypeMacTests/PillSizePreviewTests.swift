@@ -66,7 +66,7 @@ import Testing
             )
             context.draw(image, in: CGRect(origin: origin, size: size))
         }
-        view.layer?.render(in: context)
+        view.renderOffscreen(in: context)
         return try #require(context.makeImage())
     }
 

@@ -46,7 +46,7 @@ extension SettingsView {
         guard let context = CGContext(data: nil, width: 720, height: 220, bitsPerComponent: 8, bytesPerRow: 0,
                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         context.scaleBy(x: 2, y: 2)
-        view.layer?.render(in: context)
+        view.renderOffscreen(in: context)
         guard let image = context.makeImage() else { return nil }
         return NSImage(cgImage: image, size: frame.size)
     }
