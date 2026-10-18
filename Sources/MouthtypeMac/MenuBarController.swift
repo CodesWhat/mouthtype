@@ -90,7 +90,28 @@ extension MenuSection {
         statusItem.menu = daily.menu
     }
 
-    func setIcon(_ icon: StatusIcon) { statusItem.button?.image = icon.image }
+    private var icon = StatusIcon.idle
+    private var level: Float = 0
+    private var gate = StatusGlyphGate()
+
+    func setIcon(_ icon: StatusIcon) {
+        if icon != .recording { level = 0 }
+        self.icon = icon
+        applyGlyph()
+    }
+
+    /// The pill's smoothed meter level, 0...1. Only the recording icon follows it.
+    func setLevel(_ level: Float) {
+        self.level = level
+        if icon == .recording { applyGlyph() }
+    }
+
+    private func applyGlyph() {
+        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        guard let file = gate.next(icon: icon, level: level, reduceMotion: reduceMotion, now: ProcessInfo.processInfo.systemUptime),
+              let image = StatusIcon.loadImage(named: file) else { return }
+        statusItem.button?.image = image
+    }
     func setHandsFree(_ active: Bool) { daily.setHandsFree(active) }
     public func refresh() { daily.refresh() }
     public func add(section: any MenuSection, startsGroup: Bool = true, isFooter: Bool = false) { daily.add(section: section, startsGroup: startsGroup, isFooter: isFooter) }

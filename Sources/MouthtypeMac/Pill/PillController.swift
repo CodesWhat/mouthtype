@@ -32,6 +32,8 @@ public final class PillController {
 
     /// Read once per frame while recording. `PillDemo` swaps it for a synthetic curve.
     var levelSource: @MainActor () -> LevelReading
+    /// The loudest smoothed column, 0...1, once per frame while recording. The menu bar glyph follows it.
+    var onLevel: (@MainActor (Float) -> Void)?
     /// A click on the cancel or stop control of a locked pill.
     var onControl: (@MainActor (PillControl) -> Void)?
 
@@ -202,6 +204,7 @@ public final class PillController {
         bars.reset()
         lastTimestamp = nil
         skin.showFractions(bars.step(reading: .silence, dt: 0))
+        onLevel?(0)
         updateChrome(now: CACurrentMediaTime())
         startLink()
     }
@@ -317,7 +320,9 @@ public final class PillController {
         case .recording, .handsFree:
             let dt = lastTimestamp.map { min(0.1, max(0.001, now - $0)) } ?? 1.0 / 60
             lastTimestamp = now
-            skin.showFractions(bars.step(reading: levelSource(), dt: dt))
+            let fractions = bars.step(reading: levelSource(), dt: dt)
+            skin.showFractions(fractions)
+            onLevel?(fractions.max() ?? 0)
             updateChrome(now: now)
             if state == .handsFree { updateInteractivity(pointer: NSEvent.mouseLocation) }
         case .processing:
