@@ -762,6 +762,30 @@ class PasteDeliveryTests(unittest.TestCase):
         self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
         self.assertEqual(restored, [('earlier text', 'text')])
 
+    def test_terminal_with_custom_window_class_is_recognised_by_its_process(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=True)
+        target['class'] = 'org.example.custom-shell'
+        delivery.process_name = lambda pid: 'ghostty' if pid == 42 else None
+        self.assertEqual(delivery.submit('ls -la\nrm -rf /', target), 'unsupported_text')
+        self.assertEqual(delivery.submit('echo hello', target), 'unknown')
+        self.assertIn('"CTRL SHIFT"', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+        plain, target, calls, _ = self.make({'any_window': True}, hyprland=True)
+        plain.process_name = lambda pid: 'gedit'
+        plain.submit('echo hello', target)
+        self.assertIn('"CTRL"', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+        self.assertNotIn('SHIFT', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+        omarchy, target, calls, _ = self.make({'any_window': True}, hyprland=True)
+        target['class'] = 'org.omarchy.agent'
+        omarchy.process_name = lambda pid: None
+        omarchy.submit('echo hello', target)
+        self.assertIn('"CTRL SHIFT"', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+        from desktop import HyprlandDelivery
+        import os
+        real = HyprlandDelivery({'mode': 'paste', 'any_window': True, 'allow_unknown_secure_field': True})
+        self.assertEqual(real.process_name(os.getpid()), open('/proc/self/comm').read().strip())
+        self.assertIsNone(real.process_name(-1))
+        self.assertIsNone(real.process_name('42'))
+
     def test_allowlist_any_window_and_control_characters(self):
         delivery, target, calls, _ = self.make({'allowed_classes': ['other']})
         self.assertEqual(delivery.submit('text', target), 'recover_only')

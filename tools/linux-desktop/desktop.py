@@ -406,7 +406,20 @@ class HyprlandDelivery:
     # Terminals paste with Ctrl+Shift+V, and a pasted line break runs a command there.
     TERMINAL_CLASSES = ('Alacritty', 'kitty', 'foot', 'footclient', 'com.mitchellh.ghostty', 'org.wezfurlong.wezterm',
                         'konsole', 'org.kde.konsole', 'org.gnome.Terminal', 'gnome-terminal-server', 'xterm', 'st',
-                        'com.github.contour-terminal.contour', 'Terminal', 'tilix', 'com.gexperts.Tilix')
+                        'com.github.contour-terminal.contour', 'Terminal', 'tilix', 'com.gexperts.Tilix',
+                        'org.omarchy.agent')
+    # A terminal launched with a custom window class is still a terminal; its process name says so.
+    TERMINAL_EXECUTABLES = ('ghostty', 'alacritty', 'kitty', 'foot', 'footclient', 'wezterm-gui', 'wezterm', 'konsole',
+                            'gnome-terminal-server', 'gnome-terminal', 'xterm', 'st', 'tilix', 'contour', 'rio',
+                            'xfce4-terminal', 'urxvt', 'terminator', 'ptyxis', 'wayst', 'blackbox', 'tabby')
+
+    def process_name(self, pid):
+        try:
+            if type(pid) is not int or pid <= 0:
+                return None
+            return Path('/proc/%d/comm' % pid).read_text().strip()
+        except (OSError, ValueError):
+            return None
 
     def allowed(self, target):
         if (self.config.get('mode') not in ('type', 'paste') or
@@ -418,7 +431,10 @@ class HyprlandDelivery:
 
     def is_terminal(self, target):
         classes = self.config.get('terminal_classes', list(self.TERMINAL_CLASSES))
-        return target.get('class') in classes
+        if target.get('class') in classes:
+            return True
+        executables = self.config.get('terminal_executables', list(self.TERMINAL_EXECUTABLES))
+        return self.process_name(target.get('pid')) in executables
 
     def submit(self, text, target):
         if not self.allowed(target):
@@ -791,9 +807,10 @@ def validate_config(value):
         if 'allowed_classes' in delivery and (not isinstance(classes, list) or
                                               any(not isinstance(item, str) or not item for item in classes)):
             raise ValueError('allowed_classes must be a list of window classes')
-        terminals = delivery.get('terminal_classes')
-        if terminals is not None and (not isinstance(terminals, list) or any(not isinstance(item, str) for item in terminals)):
-            raise ValueError('terminal_classes must be a list of window classes')
+        for field in ('terminal_classes', 'terminal_executables'):
+            terminals = delivery.get(field)
+            if terminals is not None and (not isinstance(terminals, list) or any(not isinstance(item, str) for item in terminals)):
+                raise ValueError(field + ' must be a list of names')
     for name in ('python', 'capture_target', 'dictionary', 'phrases'):
         if name in result and (not isinstance(result[name], str) or not result[name] or '\0' in result[name]):
             raise ValueError('Invalid ' + name)
