@@ -40,7 +40,7 @@
     {
       "src": "/download/file",
       "headers": {
-        "Location": "/releases/0.1.0-alpha.8/Mouthtype-0.1.0-alpha.8-macos-arm64.zip",
+        "Location": "/releases/0.1.0-alpha.9/Mouthtype-0.1.0-alpha.9-macos-arm64.zip",
         "Cache-Control": "no-store"
       },
       "status": 302
@@ -48,7 +48,7 @@
     {
       "src": "/source",
       "headers": {
-        "Location": "/releases/0.1.0-alpha.8/Mouthtype-0.1.0-alpha.8-source.tar.gz",
+        "Location": "/releases/0.1.0-alpha.9/Mouthtype-0.1.0-alpha.9-source.tar.gz",
         "Cache-Control": "no-store"
       },
       "status": 302

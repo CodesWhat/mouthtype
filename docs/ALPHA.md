@@ -1,4 +1,4 @@
-# Mouthtype 0.1.0-alpha.8
+# Mouthtype 0.1.0-alpha.9
 
 Alpha for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
 
@@ -17,7 +17,7 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 Open **Settings… → General** to change the dictation shortcut, recording behavior, cleanup model, sounds and launch at login. **Hold to talk** remains the default. Choose **Press to toggle** to press your shortcut once to start recording, release it while speaking, then press it again to stop and insert. Changing behavior cancels an active recording.
 
-Choose System Default or a named microphone in General. Mouthtype remembers the chosen device and reports when it is missing. It does not change the Mac’s system input. A change applies to the next take. Quiet other audio is an optional, default-off control for supported output devices. It restores only output changes Mouthtype owns; hardware behavior still needs tester feedback.
+Choose System Default, a named microphone or an opt-in Priority list in General. The priority list chooses the first connected listed input at the start of a take; System Default fallback is a separate choice. Fixed microphone choices keep their unavailable-input behavior. Mouthtype remembers the chosen device and reports when it is missing. It does not change the Mac’s system input. A change applies to the next take. Quiet other audio is an optional, default-off control for supported output devices. It restores only output changes Mouthtype owns; hardware behavior still needs tester feedback.
 
 **Live words** in General is optional and off by default. It shows provisional words above the pill. The finished take still goes through full transcription and inserts once. Preview work is bounded to an eight-second audio window; that is not a wall-clock deadline. Final transcription waits for any already-running preview model work to finish.
 
@@ -25,7 +25,11 @@ The shortcut recorder accepts a key or modifier combination. Click Change, press
 
 In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. Fn+Space also locks the default Fn shortcut. Escape cancels and offers Undo for five seconds. If Escape itself is your dictation shortcut, use the menu’s Cancel action. Caps Lock uses press-to-start/press-to-stop even in Hold mode; its system Caps Lock state may also change. Some system-reserved/media keys may be handled by macOS first. Control+Command+V pastes the last delivered take.
 
-**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app tone rules. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Tone does not authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
+**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app and website tone rules. Website domains include subdomains; the most specific domain wins before app/default tone when the browser exposes its document URL. Missing URL support falls back, and URLs are not retained. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Tone does not authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
+
+## Clean selected text
+
+Select text in an accessible editable field, then choose **Clean Selected Text…**. Review or edit the deterministic Basic preview, then explicitly choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. Unsupported or changed selections keep **Copy result** available. Password fields are excluded. There is no AI rewrite, automatic paste or retry. Check the original field after Accept. See [writing tools](WRITING-TOOLS.md) for browser, device and selection limits.
 
 ## Transcribe an audio file
 
