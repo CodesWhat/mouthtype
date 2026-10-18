@@ -33,7 +33,7 @@ enum SettingsFont {
     static let serifName = FontRegistry.serifName
     static let monoName = FontRegistry.monoName
 
-    static let wordmark: CGFloat = 24
+    static let wordmark: CGFloat = 28
     static let title: CGFloat = 22
     static let headerDescription: CGFloat = 12.5
     static let body: CGFloat = 13
