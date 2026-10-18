@@ -11,7 +11,7 @@ enum GlassPillPolicy {
     }
 
     enum Fallback: Equatable, Sendable {
-        case materialUnavailable, reduceTransparency, lowContrast
+        case materialUnavailable, reduceTransparency
     }
 
     enum Decision: Equatable, Sendable {
@@ -31,12 +31,9 @@ enum GlassPillPolicy {
         var spread: Double
     }
 
-    /// Above this the backdrop is light enough for clear glass with dark ink; below `darkLimit`, dark enough for smoked
-    /// glass with light ink. Between them neither ink reads reliably.
+    /// At or above this the backdrop is light enough for clear glass with dark ink. Anything below it, mid-tone or busy
+    /// included, gets smoked glass with the Classic light ink: the wallpaper never makes Glass fall back to solid.
     static let lightLimit = 0.62
-    static let darkLimit = 0.38
-    /// A backdrop that varies more than this is too busy for either ink.
-    static let busySpread = 0.22
 
     /// `backdrop` nil means the wallpaper couldn't be read. Smoked glass is the dark-safe choice then, because its tint
     /// carries the light ink on its own.
@@ -44,10 +41,7 @@ enum GlassPillPolicy {
         guard materialAvailable else { return .solid(.materialUnavailable) }
         guard !reduceTransparency else { return .solid(.reduceTransparency) }
         guard let backdrop else { return .glass(.smoked) }
-        guard backdrop.spread <= busySpread else { return .solid(.lowContrast) }
-        if backdrop.luminance >= lightLimit { return .glass(.clear) }
-        if backdrop.luminance <= darkLimit { return .glass(.smoked) }
-        return .solid(.lowContrast)
+        return backdrop.luminance >= lightLimit ? .glass(.clear) : .glass(.smoked)
     }
 
     /// Relative luminance of an sRGB colour with 0...1 channels.
@@ -81,15 +75,15 @@ enum GlassBackdropSampler {
     private static let sampleSize = (width: 24, height: 8)
 
     nonisolated static func measure(url: URL, screenFrame: CGRect, region: CGRect) -> GlassPillPolicy.Backdrop? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: thumbnailPixels,
-        ]
-        guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        guard let image = thumbnail(url: url, maxPixels: thumbnailPixels) else { return nil }
         let crop = cropRect(imageSize: CGSize(width: image.width, height: image.height), screenFrame: screenFrame, region: region)
         guard let part = image.cropping(to: crop) else { return nil }
+        return backdrop(of: part)
+    }
+
+    /// Mean luminance and spread of `image`, sampled down to a small fixed grid. The one pixel path both the real pill
+    /// and the Appearance preview's swatches go through.
+    nonisolated static func backdrop(of image: CGImage) -> GlassPillPolicy.Backdrop? {
         let (w, h) = sampleSize
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
@@ -99,10 +93,22 @@ enum GlassBackdropSampler {
                 bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
             ) else { return false }
             context.interpolationQuality = .medium
-            context.draw(part, in: CGRect(x: 0, y: 0, width: w, height: h))
+            context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
             return true
         }
         return drawn ? GlassPillPolicy.analyze(rgba: pixels) : nil
+    }
+
+    /// The picture downsampled so its longest side is at most `maxPixels`, orientation applied. Slow on a large file, so
+    /// only ever call it off the main thread.
+    nonisolated static func thumbnail(url: URL, maxPixels: Int) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixels,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 
     /// The part of the wallpaper (in image pixels, top-left origin) behind `region`, with the picture scaled to fill
@@ -191,6 +197,17 @@ final class GlassBackdropCache {
         }
     }
 
+    /// The measured backdrop, waiting for it when it isn't cached. The decode runs off the main thread, so the caller
+    /// suspends instead of blocking. This is the same measurement `lookup` stores, for a caller that can wait for it.
+    func resolve(screen: Int, file: URL, screenFrame: CGRect, region: CGRect) async -> GlassPillPolicy.Backdrop? {
+        let key = key(file: file, region: region)
+        if let entry = entries[screen], entry.key == key { return entry.backdrop }
+        let measure = measure
+        let result = await Task.detached(priority: .userInitiated) { measure(file, screenFrame, region) }.value
+        finish(screen: screen, key: key, backdrop: result)
+        return result
+    }
+
     private func finish(screen: Int, key: Key, backdrop: GlassPillPolicy.Backdrop?) {
         if inFlight[screen] == key { inFlight[screen] = nil }
         entries[screen] = (key, backdrop)
@@ -216,19 +233,22 @@ extension GlassBackdropCache {
         let size = PillSizePreference.current(defaults)
         for screen in NSScreen.screens {
             guard let file = NSWorkspace.shared.desktopImageURL(for: screen) else { continue }
-            let scale = size.resolved(visibleWidth: screen.visibleFrame.width)
-            let panel = PillGeometry.panelSize(for: scale)
-            let origin = PillPlacement.origin(
-                pointer: CGPoint(x: screen.frame.midX, y: screen.frame.midY),
-                screens: [PillPlacement.Screen(frame: screen.frame, visibleFrame: screen.visibleFrame)],
-                panelSize: panel, pillPadding: PillGeometry.verticalMargin
-            ) ?? screen.frame.origin
-            let local = GlassPillView.heldBodyRegion(bounds: panel, size: scale, backing: screen.backingScaleFactor)
-            prewarm(
-                screen: Self.screenID(screen), file: file, screenFrame: screen.frame,
-                region: local.offsetBy(dx: origin.x, dy: origin.y)
-            )
+            let region = Self.heldRegion(frame: screen.frame, visibleFrame: screen.visibleFrame, backing: screen.backingScaleFactor, size: size)
+            prewarm(screen: Self.screenID(screen), file: file, screenFrame: screen.frame, region: region)
         }
+    }
+
+    /// Where the held pill body sits on a screen, in screen coordinates: centred, at the bottom of the visible frame, at
+    /// the size the pill resolves to there. The pill and the Appearance preview both measure this region.
+    static func heldRegion(frame: CGRect, visibleFrame: CGRect, backing: CGFloat, size: PillSize) -> CGRect {
+        let scale = size.resolved(visibleWidth: visibleFrame.width)
+        let panel = PillGeometry.panelSize(for: scale)
+        let origin = PillPlacement.origin(
+            pointer: CGPoint(x: frame.midX, y: frame.midY),
+            screens: [PillPlacement.Screen(frame: frame, visibleFrame: visibleFrame)],
+            panelSize: panel, pillPadding: PillGeometry.verticalMargin
+        ) ?? frame.origin
+        return GlassPillView.heldBodyRegion(bounds: panel, size: scale, backing: backing).offsetBy(dx: origin.x, dy: origin.y)
     }
 
     /// Prewarms now and again whenever the desktop could have changed: a Space switch (each Space can have its own
