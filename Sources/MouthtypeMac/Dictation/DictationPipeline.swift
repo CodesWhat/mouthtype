@@ -134,6 +134,7 @@ struct DictationPipeline: Sendable {
         }
         let capture = await recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs)
         guard capture.durable else { return false }
+        guard store != nil, session.rowOpen else { return true }
         return await write(session, "finish") { store in
             try await store.finish(session.id, status: .failed, errorMessage: DictationRecovery.interruptedMessage)
         }
@@ -161,7 +162,7 @@ struct DictationPipeline: Sendable {
                 noiseFloorDb: features.noiseFloorDb
             ))
         }
-        return (features, audioPath != nil && recorded)
+        return (features, audioPath != nil && (recorded || store == nil || !session.rowOpen))
     }
 
     /// Nil when nothing was voiced or the engine heard nothing; the row is then already finished as `.empty`.

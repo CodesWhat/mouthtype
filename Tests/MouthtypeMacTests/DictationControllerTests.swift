@@ -1931,6 +1931,55 @@ private final class SlowCapture: DictationCapturing {
         #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 2)
     }
 
+    @Test func terminationAllowsQuitAfterStopFailsWithoutDeletingAnUnreadablePartial() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-quit-lost-input-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = AudioArchive(supportDirectory: directory)
+        let rig = Rig(archive: archive)
+        await rig.controller.handle(.pressed(at: keyDown))
+        let id = try #require(rig.store.start?.id)
+        let partial = archive.partialURL(for: id)
+        try FileManager.default.createDirectory(at: partial.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let damaged = Data(repeating: 7, count: 80)
+        try damaged.write(to: partial)
+        rig.capture.stopError = Boom()
+        #expect(await rig.controller.prepareForTermination())
+        #expect(rig.controller.phase == .idle && rig.store.finishes.last?.0 == .failed)
+        #expect(try Data(contentsOf: partial) == damaged)
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(await rig.controller.prepareForTermination())
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func terminationWithUnavailableHistoryStillArchivesTheActualAudio(missingStore: Bool) async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-quit-no-history-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archive = AudioArchive(supportDirectory: directory)
+        let rig = Rig(withStore: !missingStore, archive: archive)
+        if !missingStore { rig.store.failing.insert("begin") }
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(await rig.controller.prepareForTermination())
+        let files = try FileManager.default.contentsOfDirectory(at: archive.url(for: "probe").deletingLastPathComponent(), includingPropertiesForKeys: nil)
+        #expect(files.count == 1)
+        let saved = try #require(files.first)
+        #expect(try AudioArchive.read(contentsOf: saved).count == capturedTone().samples.count)
+        #expect(rig.inserter.delivered.isEmpty)
+    }
+
+    @Test func terminationStillRequiresTheWavWhenHistoryIsUnavailable() async {
+        let archive = RetryArchive()
+        let rig = Rig(withStore: false, archive: archive)
+        await rig.controller.handle(.pressed(at: keyDown))
+        archive.setFailing(true)
+        #expect(!(await rig.controller.prepareForTermination()))
+        #expect(archive.savedIDs.isEmpty)
+        archive.setFailing(false)
+        #expect(await rig.controller.prepareForTermination())
+        #expect(archive.savedIDs.count == 1 && archive.attempts == 2)
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+    }
+
     @Test func terminationCanCloseAnEmptyCaptureWithoutInventingSavedAudio() async {
         var empty = capturedTone()
         empty.samples = []

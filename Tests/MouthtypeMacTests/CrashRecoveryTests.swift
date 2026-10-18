@@ -170,6 +170,11 @@ private struct Rig {
         let next = try #require(submenu.items.first { $0.title == "Older recordings" })
         _ = section.perform(try #require(next.action), with: next)
         #expect(shown() == Array(ids[20..<40]))
+        section.menuNeedsUpdate(submenu)
+        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(shown() == Array(ids[20..<40]))
         let oldest = try #require(submenu.items.first { $0.title == "Older recordings" })
         _ = section.perform(try #require(oldest.action), with: oldest)
         #expect(shown() == Array(ids[40..<45]))
@@ -177,6 +182,13 @@ private struct Rig {
         let newer = try #require(submenu.items.first { $0.title == "Newer recordings" })
         _ = section.perform(try #require(newer.action), with: newer)
         #expect(shown() == Array(ids[20..<40]))
+        for id in ids.prefix(40) { try rig.store.finish(id, status: .cancelled) }
+        section.menuNeedsUpdate(submenu)
+        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(shown() == Array(ids[40..<45]))
+        #expect(!submenu.items.contains { $0.title == "Newer recordings" || $0.title == "Older recordings" })
     }
 
     @Test func savedRecordingsMenuListsOlderAudioAndRespectsBusyState() async throws {

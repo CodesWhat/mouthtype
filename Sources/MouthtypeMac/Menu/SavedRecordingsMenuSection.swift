@@ -45,7 +45,7 @@ final class SavedRecordingsMenuSection: NSObject, MenuSection, NSMenuDelegate {
                 let recordings = try await load()
                 guard let self, generation == current else { return }
                 saved = recordings
-                page = 0
+                page = min(page, max(0, (saved.count - 1) / Self.pageSize))
                 loading = false
                 showPage()
             } catch {

@@ -58,13 +58,16 @@ struct HubDownloader: MLXLMCommon.Downloader {
         else { return nil }
         let fm = FileManager.default
         return snapshotIsComplete(files: (try? fm.contentsOfDirectory(atPath: snapshot.path)) ?? [],
-            fileExists: {
-                let path = snapshot.appendingPathComponent($0).path
-                var directory: ObjCBool = false
-                guard fm.fileExists(atPath: path, isDirectory: &directory), !directory.boolValue else { return false }
-                return (((try? fm.attributesOfItem(atPath: path)[.size]) as? NSNumber)?.intValue ?? 0) > 0
-            },
+            fileExists: { fileIsNonempty(snapshot.appendingPathComponent($0)) },
             contents: { try? Data(contentsOf: snapshot.appendingPathComponent($0)) }) ? snapshot : nil
+    }
+
+    static func fileIsNonempty(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        let path = url.resolvingSymlinksInPath().path
+        var directory: ObjCBool = false
+        guard fm.fileExists(atPath: path, isDirectory: &directory), !directory.boolValue else { return false }
+        return (((try? fm.attributesOfItem(atPath: path)[.size]) as? NSNumber)?.intValue ?? 0) > 0
     }
 
     static func snapshotIsComplete(files: [String], fileExists: (String) -> Bool, contents: (String) -> Data?) -> Bool {

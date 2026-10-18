@@ -28,6 +28,22 @@ private final class DownloadProbe: Downloader, @unchecked Sendable {
 }
 
 @Suite struct HubSnapshotTests {
+    @Test func cacheSizeChecksFollowTheBlobInsteadOfTheSymlinkMetadata() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-cache-size-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let blob = directory.appendingPathComponent("weights")
+        let link = directory.appendingPathComponent("model.safetensors")
+        try Data().write(to: blob)
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "weights")
+        #expect(!HubDownloader.fileIsNonempty(link))
+        try Data([1]).write(to: blob)
+        #expect(HubDownloader.fileIsNonempty(link))
+        try FileManager.default.removeItem(at: blob)
+        #expect(!HubDownloader.fileIsNonempty(link))
+        #expect(!HubDownloader.fileIsNonempty(directory))
+    }
+
     @Test(arguments: ["config.json", "tokenizer.json", "model.safetensors"], [false, true])
     func interruptedRequiredDownloadsAreNotReady(missing: String, empty: Bool) {
         var cache = CachedFiles()

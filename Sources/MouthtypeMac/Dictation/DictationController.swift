@@ -169,8 +169,11 @@ final class DictationController {
                 audioQuiet?.end()
                 await saving?.value
                 if audio?.samples.isEmpty != false, let partial = await pipeline.recoverPartial(current) { audio = partial }
-                guard let audio else { session = current; return false }
-                terminationCapture = (current, audio, self.clock.milliseconds(from: current.keyDownAt, to: self.clock.nowNanos()))
+                if let audio {
+                    terminationCapture = (current, audio, self.clock.milliseconds(from: current.keyDownAt, to: self.clock.nowNanos()))
+                } else {
+                    await pipeline.finish(current, .failed, errorMessage: "microphone disconnected; no audio could be recovered")
+                }
                 phase = pendingJobs > 0 ? .processing : .idle
             }
             if let pending = terminationCapture {
