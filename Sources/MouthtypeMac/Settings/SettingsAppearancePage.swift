@@ -46,7 +46,7 @@ extension SettingsView {
             GeometryReader { proxy in
                 ZStack(alignment: .bottom) {
                     PreviewWallpaperView(wallpaper: model.previewWallpaper)
-                    PillPreviewStageView(kind: model.skin, size: model.pillSize, readout: model.readoutColour)
+                    PillPreviewStageView(kind: model.skin, size: model.pillSize, readout: model.readoutColour, wallpaper: model.previewWallpaper)
                         .padding(.bottom, 10)
                     Text("\(model.skin.title) · live preview".uppercased()).font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1)
                         .foregroundStyle(model.previewWallpaper.captionColor).padding(.bottom, 6).accessibilityHidden(true)
@@ -82,12 +82,13 @@ private struct PreviewWidthKey: PreferenceKey {
 @MainActor enum SettingsPillImage {
     /// A settled still of the pill on the preview canvas, for a window that is not on screen, where a live skin never
     /// finishes its entrance. `.automatic` previews as Standard: the preview cannot know which screen the pill will land on.
-    static func make(skin: PillSkinKind, size: PillSize, readout: PillReadoutColour = .default) -> NSImage? {
+    static func make(skin: PillSkinKind, size: PillSize, readout: PillReadoutColour = .default, wallpaper: PreviewWallpaper = .dark) -> NSImage? {
         let canvas = PreviewFit.canvas
         let scale = size.resolved(visibleWidth: 0)
         let height = skin.pillHeight * scale.factor + 2 * PillGeometry.verticalMargin
         let frame = NSRect(x: 0, y: 0, width: canvas.width, height: height)
         guard let view = try? PillSkinFactory.make(skin, frame: frame, scale: scale, readout: readout) else { return nil }
+        view.appearance = wallpaper.appearance
         view.appear(reduceMotion: true)
         view.showRecording(locked: false)
         view.showFractions(PreviewLevel.still)

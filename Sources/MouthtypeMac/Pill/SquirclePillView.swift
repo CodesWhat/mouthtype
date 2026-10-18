@@ -102,6 +102,7 @@ class SquirclePillView: NSView, PillSkinView {
     var messageSize: CGSize { CGSize(width: block.width, height: block.height) }
     var messageScrollDistance: Int { 0 }
     var usesWindow: Bool { palette.window != nil }
+    var resolvedPalette: SquirclePalette { palette }
     var litHalfRows: [Int] { halfRows }
     var lampAnimation: CAAnimation? { lamp.animation(forKey: "motion") }
     var showsClock: Bool { clockLabel.opacity > 0.5 }

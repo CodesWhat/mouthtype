@@ -8,6 +8,8 @@ enum PreviewWallpaper: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
     var title: String { self == .light ? "Light" : "Dark" }
+    /// The appearance a pill over this swatch resolves its palette from.
+    var appearance: NSAppearance { NSAppearance(named: self == .dark ? .darkAqua : .aqua)! }
 
     /// The board's swatch: two soft radial washes over a diagonal base, light or dark.
     var base: [Color] {
@@ -100,6 +102,7 @@ final class PillPreviewStage: NSView {
     private(set) var kind: PillSkinKind?
     private(set) var scale: PillScale?
     private(set) var readout: PillReadoutColour?
+    private(set) var wallpaper: PreviewWallpaper?
     private let snapshot = NSImageView()
     private var link: CADisplayLink?
     private var started: CFTimeInterval = 0
@@ -140,9 +143,13 @@ final class PillPreviewStage: NSView {
 
     // MARK: Content
 
-    /// Rebuilds the pill when the style, size or readout colour differs from what is showing.
-    func configure(kind: PillSkinKind, scale: PillScale, readout: PillReadoutColour) {
-        guard kind != self.kind || scale != self.scale || (kind == .hifi && readout != self.readout) else { return }
+    /// Rebuilds the pill when the style, size, readout colour or swatch differs from what is showing. The swatch sets the
+    /// appearance the pill resolves its palette from, so Matrix, Minimal and Glass show the mode the swatch stands for.
+    func configure(kind: PillSkinKind, scale: PillScale, readout: PillReadoutColour, wallpaper: PreviewWallpaper) {
+        guard kind != self.kind || scale != self.scale || wallpaper != self.wallpaper || (kind == .hifi && readout != self.readout) else { return }
+        let appearance = wallpaper.appearance
+        canvas.appearance = appearance
+        snapshot.appearance = appearance
         let size = PreviewFit.canvas
         let height = (kind.pillHeight * scale.factor) + 2 * PillGeometry.verticalMargin
         let frame = NSRect(x: 0, y: ((size.height - height) / 2).rounded(), width: size.width, height: height)
@@ -152,6 +159,7 @@ final class PillPreviewStage: NSView {
         self.kind = kind
         self.scale = scale
         self.readout = readout
+        self.wallpaper = wallpaper
         canvas.addSubview(next)
         frozen = false
         next.layer?.speed = 1
@@ -160,7 +168,7 @@ final class PillPreviewStage: NSView {
         next.setElapsed(0)
         next.appear(reduceMotion: Self.reduceMotion())
         started = CACurrentMediaTime()
-        snapshot.image = SettingsPillImage.make(skin: kind, size: scale == .large ? .large : .standard, readout: readout)
+        snapshot.image = SettingsPillImage.make(skin: kind, size: scale == .large ? .large : .standard, readout: readout, wallpaper: wallpaper)
         refresh()
     }
 
@@ -278,11 +286,12 @@ struct PillPreviewStageView: NSViewRepresentable {
     let kind: PillSkinKind
     let size: PillSize
     let readout: PillReadoutColour
+    let wallpaper: PreviewWallpaper
 
     func makeNSView(context: Context) -> PillPreviewStage { PillPreviewStage() }
 
     func updateNSView(_ stage: PillPreviewStage, context: Context) {
-        stage.configure(kind: kind, scale: size.resolved(visibleWidth: 0), readout: readout)
+        stage.configure(kind: kind, scale: size.resolved(visibleWidth: 0), readout: readout, wallpaper: wallpaper)
         stage.pageVisible = true
     }
 
