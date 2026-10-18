@@ -14,11 +14,7 @@ import Testing
     }
 
     private func skinView(_ kind: PillSkinKind, scale: PillScale, size: CGSize) throws -> any PillSkinView {
-        let frame = NSRect(origin: .zero, size: size)
-        switch kind {
-        case .classic: return ClassicPillView(frame: frame, size: scale)
-        case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)
-        }
+        try PillSkinFactory.make(kind, frame: NSRect(origin: .zero, size: size), scale: scale)
     }
 
     private func cardImage(_ card: DeliveryCard) -> (image: CGImage, size: CGSize)? {
@@ -63,7 +59,7 @@ import Testing
         context.setFillColor(NSColor(hex: 0x8E96A3).cgColor)
         context.fill(CGRect(origin: .zero, size: canvas))
         if scene == .cardWithPill, let (image, size) = cardImage(card) {
-            let pillHeight = (kind == .hifi ? HiFiPillView.artSize.height : ClassicPillLayout.height) * scale.factor
+            let pillHeight = kind.pillHeight * scale.factor
             let origin = CGPoint(
                 x: ((canvas.width - size.width) / 2).rounded(.down),
                 y: PillGeometry.verticalMargin + pillHeight + CardLayout.pillGap - CardLayout.shadowMargin

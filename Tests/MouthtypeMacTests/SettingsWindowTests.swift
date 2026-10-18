@@ -73,6 +73,22 @@ import MouthtypeCore
         #expect(!SoundPreference.isEnabled(defaults))
     }
 
+    @Test func everyPillStylePersistsAndPreviews() {
+        let name = "SettingsStyleTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        var selected: [PillSkinKind] = []
+        let model = SettingsModel(defaults: defaults, onSkinChanged: { selected.append($0) })
+        #expect(model.skin == .classic)
+        for kind in PillSkinKind.allCases {
+            model.setSkin(kind)
+            #expect(model.skin == kind && PillSkinPreference.current(defaults) == kind)
+            #expect(SettingsPillImage.make(skin: kind, size: .standard) != nil)
+            #expect(SettingsPillImage.make(skin: kind, size: .large) != nil)
+        }
+        #expect(selected == PillSkinKind.allCases)
+    }
+
     @Test func fontOverridesRefreshPersistAndResetWithoutChangingOtherSettings() {
         let name = "SettingsFontTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

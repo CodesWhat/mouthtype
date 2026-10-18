@@ -39,9 +39,7 @@ extension SettingsView {
     static func make(skin: PillSkinKind, size: PillSize) -> NSImage? {
         let frame = NSRect(x: 0, y: 0, width: 360, height: 110)
         let scale = size.resolved(visibleWidth: 0)
-        let view: any PillSkinView
-        if skin == .hifi, let assets = try? PillAssets.loadHiFi() { view = HiFiPillView(frame: frame, assets: assets, size: scale) }
-        else { view = ClassicPillView(frame: frame, size: scale) }
+        guard let view = try? PillSkinFactory.make(skin, frame: frame, scale: scale) else { return nil }
         view.appear(reduceMotion: true)
         view.showRecording(locked: true)
         view.showFractions([0.2, 0.4, 0.6, 0.8, 0.5, 0.35, 0.65, 0.3, 0.2, 0.1])

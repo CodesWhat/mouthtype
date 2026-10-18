@@ -6,14 +6,39 @@ enum PillControl: Hashable, Sendable {
 }
 
 enum PillSkinKind: String, CaseIterable, Sendable {
-    case classic, hifi
+    case classic, glass, matrix, minimal, hifi
 
     static let `default` = PillSkinKind.classic
 
     var title: String {
         switch self {
         case .classic: "Classic"
+        case .glass: "Glass"
+        case .matrix: "Matrix"
+        case .minimal: "Minimal"
         case .hifi: "Hi-Fi"
+        }
+    }
+
+    /// The pill's height at Standard size, for placing a card above it.
+    @MainActor var pillHeight: CGFloat {
+        switch self {
+        case .classic, .glass, .matrix, .minimal: ClassicPillLayout.height
+        case .hifi: HiFiPillView.artSize.height
+        }
+    }
+}
+
+/// Builds the skin for a kind, shared by the live pill, the Settings preview and the tests.
+@MainActor
+enum PillSkinFactory {
+    static func make(_ kind: PillSkinKind, frame: NSRect, scale: PillScale) throws -> any PillSkinView {
+        switch kind {
+        case .classic: return ClassicPillView(frame: frame, size: scale)
+        case .glass: return ClassicPillView(frame: frame, size: scale)
+        case .matrix: return ClassicPillView(frame: frame, size: scale)
+        case .minimal: return ClassicPillView(frame: frame, size: scale)
+        case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)
         }
     }
 }
