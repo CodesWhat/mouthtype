@@ -211,6 +211,10 @@ NAMED_KEYS = {
     "semicolon", "apostrophe", "comma", "period", "slash", "backslash", "Caps_Lock", "Escape",
 }
 NAMED_LOOKUP = {name.lower(): name for name in NAMED_KEYS}
+# A modifier key on its own is a valid Hyprland key; its own modifier must be in the mask, as the Hyprland docs bind Super_L.
+MODIFIER_KEYSYMS = {"Control_L": "CTRL", "Control_R": "CTRL", "Shift_L": "SHIFT", "Shift_R": "SHIFT",
+                    "Alt_L": "ALT", "Alt_R": "ALT", "Super_L": "SUPER", "Super_R": "SUPER"}
+MODIFIER_KEYSYM_LOOKUP = {name.lower(): name for name in MODIFIER_KEYSYMS}
 DEFAULT_SHORTCUTS = {"toggle": "SUPER + ALT + M", "hold": "F10"}
 
 
@@ -232,12 +236,16 @@ def parse_shortcut(spec):
         key = key.upper()
     elif key.lower() in NAMED_LOOKUP:
         key = NAMED_LOOKUP[key.lower()]
+    elif key.lower() in MODIFIER_KEYSYM_LOOKUP:
+        key = MODIFIER_KEYSYM_LOOKUP[key.lower()]
+        if MODIFIER_KEYSYMS[key] not in modifiers:
+            modifiers.append(MODIFIER_KEYSYMS[key])
     elif re.fullmatch(r"code:[0-9]{1,3}", key.lower()):
         key = key.lower()
     elif re.fullmatch(r"XF86[A-Za-z0-9]{1,40}", key):
         pass
     else:
-        raise RuntimeError("Unsupported key; use a letter, digit, F-key or a named key such as Insert")
+        raise RuntimeError("Unsupported key; use a letter, digit, F-key, a named key such as Insert, or a modifier key such as Control_R")
     order = [name for name in ("SUPER", "ALT", "CTRL", "SHIFT") if name in modifiers]
     mask = sum(MODIFIER_MASKS[name] for name in order)
     return " + ".join(order + [key]), mask, key

@@ -72,10 +72,40 @@ Panel {
     return named[k] || ""
   }
 
+  property string pendingModifier: ""
+
+  // Left/right modifier keysyms by evdev scan code (X keycode), so a bare Right Control can be chosen.
+  function modifierKeysym(event) {
+    var byCode = { 37: "Control_L", 105: "Control_R", 50: "Shift_L", 62: "Shift_R", 64: "Alt_L", 108: "Alt_R", 133: "Super_L", 134: "Super_R" }
+    if (byCode[event.nativeScanCode]) return byCode[event.nativeScanCode]
+    if (event.key === Qt.Key_Control) return "Control_L"
+    if (event.key === Qt.Key_Shift) return "Shift_L"
+    if (event.key === Qt.Key_Alt) return "Alt_L"
+    if (event.key === Qt.Key_Meta || event.key === Qt.Key_Super_L) return "Super_L"
+    if (event.key === Qt.Key_Super_R) return "Super_R"
+    return ""
+  }
+
+  function releaseShortcut(event) {
+    if (!capturing) return
+    var keysym = modifierKeysym(event)
+    if (keysym !== "" && pendingModifier === keysym) {
+      // A modifier pressed and released on its own becomes the key, with its own modifier implied.
+      var mod = keysym.indexOf("Control") === 0 ? "CTRL" : keysym.indexOf("Shift") === 0 ? "SHIFT" : keysym.indexOf("Alt") === 0 ? "ALT" : "SUPER"
+      shortcutDraft = mod + " + " + keysym
+      capturing = false
+    }
+    pendingModifier = ""
+    event.accepted = true
+  }
+
   function captureShortcut(event) {
-    if (event.key === Qt.Key_Escape) { capturing = false; event.accepted = true; return }
-    var modifierKeys = [Qt.Key_Shift, Qt.Key_Control, Qt.Key_Alt, Qt.Key_Meta, Qt.Key_Super_L, Qt.Key_Super_R, Qt.Key_AltGr, Qt.Key_CapsLock]
-    if (modifierKeys.indexOf(event.key) !== -1) { event.accepted = true; return }
+    if (event.isAutoRepeat) { event.accepted = true; return }
+    if (event.key === Qt.Key_Escape) { capturing = false; pendingModifier = ""; event.accepted = true; return }
+    var keysym = modifierKeysym(event)
+    if (keysym !== "") { pendingModifier = keysym; event.accepted = true; return }
+    if (event.key === Qt.Key_AltGr || event.key === Qt.Key_CapsLock) { event.accepted = true; return }
+    pendingModifier = ""
     var name = hyprlandKeyName(event)
     if (name === "") { event.accepted = true; return }
     var parts = []
@@ -249,6 +279,7 @@ Panel {
     function toggle(): void { root.toggle() }
     function refresh(): void { root.refresh() }
     function openPage(name: string): void { root.openPage(name); if (!root.opened) root.open() }
+    function startCapture(): void { root.openPage("shortcut"); if (!root.opened) root.open(); root.capturing = true; root.pendingModifier = ""; shortcutCapture.forceActiveFocus() }
   }
 
   WidgetButton {
@@ -416,6 +447,7 @@ Panel {
           }
 
           Column {
+            id: cleanupPage
             visible: root.page === "cleanup"
             width: parent.width
             readonly property var models: root.cleanupInfo.models || ({})
@@ -436,32 +468,32 @@ Panel {
             MenuDivider { width: parent.width }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Off"; checked: root.config.cleanup === "off" || !root.config.cleanup; onActivated: root.run(["set-config", "cleanup", "off"]) }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Basic"; checked: root.config.cleanup === "basic"; onActivated: root.run(["set-config", "cleanup", "basic"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Fast"; detail: modelDetail("fast"); checked: root.config.cleanup === "fast"; enabled: models.fast === "prepared"; onActivated: root.run(["set-config", "cleanup", "fast"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Thorough"; detail: modelDetail("thorough"); checked: root.config.cleanup === "thorough"; enabled: models.thorough === "prepared"; onActivated: root.run(["set-config", "cleanup", "thorough"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Fast"; detail: cleanupPage.modelDetail("fast"); checked: root.config.cleanup === "fast"; enabled: cleanupPage.models.fast === "prepared"; onActivated: root.run(["set-config", "cleanup", "fast"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Thorough"; detail: cleanupPage.modelDetail("thorough"); checked: root.config.cleanup === "thorough"; enabled: cleanupPage.models.thorough === "prepared"; onActivated: root.run(["set-config", "cleanup", "thorough"]) }
             MenuDivider { width: parent.width }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: models.fast !== "prepared"; enabled: !setupActive; label: "Prepare Fast cleanup…"; detail: "≈480 MB"; onActivated: root.run(["cleanup-setup", "fast"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: models.thorough !== "prepared"; enabled: !setupActive; label: "Prepare Thorough cleanup…"; detail: "≈2.5 GB"; onActivated: root.run(["cleanup-setup", "thorough"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.fast !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Fast cleanup…"; detail: "≈480 MB"; onActivated: root.run(["cleanup-cleanupPage.setup", "fast"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.thorough !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Thorough cleanup…"; detail: "≈2.5 GB"; onActivated: root.run(["cleanup-cleanupPage.setup", "thorough"]) }
             Text {
-              visible: !!setup && setup.state !== "ready"
+              visible: !!cleanupPage.setup && cleanupPage.setup.state !== "ready"
               x: Style.space(30); width: parent.width - Style.space(50)
-              text: !setup ? "" : setup.state === "building" ? "Building the pinned llama.cpp server…"
-                : setup.state === "downloading" ? "Downloading and verifying the " + (setup.level || "") + " model…"
-                : setup.state === "preparing" ? "Preparing…"
-                : setup.state === "failed" ? "Preparation failed (" + (setup.error || "error") + "). Check the cleanup setup log." : ""
-              color: setup && setup.state === "failed" ? "#B72F26" : "#4A4A49"; wrapMode: Text.Wrap
+              text: !cleanupPage.setup ? "" : cleanupPage.setup.state === "building" ? "Building the pinned llama.cpp server…"
+                : cleanupPage.setup.state === "downloading" ? "Downloading and verifying the " + (cleanupPage.setup.level || "") + " model…"
+                : cleanupPage.setup.state === "preparing" ? "Preparing…"
+                : cleanupPage.setup.state === "failed" ? "Preparation failed (" + (cleanupPage.setup.error || "error") + "). Check the cleanup cleanupPage.setup log." : ""
+              color: cleanupPage.setup && cleanupPage.setup.state === "failed" ? "#B72F26" : "#4A4A49"; wrapMode: Text.Wrap
               font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
             }
             Text {
-              visible: !!(service && service.last_outcome && (root.config.cleanup === "fast" || root.config.cleanup === "thorough"))
+              visible: !!(cleanupPage.service && cleanupPage.service.last_outcome && (root.config.cleanup === "fast" || root.config.cleanup === "thorough"))
               x: Style.space(30); width: parent.width - Style.space(50)
-              text: service && service.last_outcome ? "Last take: " + (service.last_outcome === "ok" ? "model text accepted" : service.last_outcome === "guard-rejected" ? "kept Basic (guard)" : service.last_outcome === "timeout" ? "kept Basic (over budget)" : service.last_outcome === "skipped" ? "model skipped" : "kept Basic (model error)") + (service.last_ms !== null && service.last_ms !== undefined ? " · " + service.last_ms + " ms" : "") : ""
+              text: cleanupPage.service && cleanupPage.service.last_outcome ? "Last take: " + (cleanupPage.service.last_outcome === "ok" ? "model text accepted" : cleanupPage.service.last_outcome === "guard-rejected" ? "kept Basic (guard)" : cleanupPage.service.last_outcome === "timeout" ? "kept Basic (over budget)" : cleanupPage.service.last_outcome === "skipped" ? "model skipped" : "kept Basic (model error)") + (cleanupPage.service.last_ms !== null && cleanupPage.service.last_ms !== undefined ? " · " + cleanupPage.service.last_ms + " ms" : "") : ""
               color: "#4A4A49"; wrapMode: Text.Wrap
               font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
             }
             Text {
               width: parent.width - Style.space(40)
               x: Style.space(30)
-              text: "Basic formats spoken punctuation, lists and paragraphs. Fast adds S1-mini by Superwhisper and Thorough adds Qwen3 4B, both local llama.cpp models on the CPU with the Mac guard rules; when a model times out or changes meaning, the Basic text is kept."
+              text: "Basic formats spoken punctuation, lists and paragraphs. Fast adds S1-mini by Superwhisper and Thorough adds Qwen3 4B, both local llama.cpp cleanupPage.models on the CPU with the Mac guard rules; when a model times out or changes meaning, the Basic text is kept."
               color: "#6F6F6D"; wrapMode: Text.Wrap
               font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
             }
@@ -635,13 +667,33 @@ Panel {
               width: 1; height: 1
               focus: root.capturing
               Keys.onPressed: function(event) { root.captureShortcut(event) }
+              Keys.onReleased: function(event) { root.releaseShortcut(event) }
               onFocusChanged: if (root.capturing && !activeFocus) forceActiveFocus()
             }
             MenuRow {
               fontFamily: root.menuFont; width: parent.width
               label: root.capturing ? "Press the keys now… (Esc cancels)" : "Press a new key combination…"
-              onActivated: { root.capturing = !root.capturing; if (root.capturing) shortcutCapture.forceActiveFocus() }
+              onActivated: { root.capturing = !root.capturing; root.pendingModifier = ""; if (root.capturing) shortcutCapture.forceActiveFocus() }
             }
+            Text {
+              x: Style.space(30); width: parent.width - Style.space(50)
+              text: "Or pick a modifier key on its own:"
+              color: "#4A4A49"; font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
+            }
+            Flow {
+              x: Style.space(30); width: parent.width - Style.space(50); spacing: Style.space(6)
+              Repeater {
+                model: [["Right Ctrl", "CTRL + Control_R"], ["Left Ctrl", "CTRL + Control_L"], ["Right Alt", "ALT + Alt_R"], ["Left Alt", "ALT + Alt_L"],
+                        ["Right Shift", "SHIFT + Shift_R"], ["Left Shift", "SHIFT + Shift_L"], ["Right Super", "SUPER + Super_R"], ["Left Super", "SUPER + Super_L"]]
+                ControlButton {
+                  required property var modelData
+                  label: modelData[0]
+                  enabled: root.shortcutDraft !== modelData[1]
+                  onClicked: { root.capturing = false; root.shortcutDraft = modelData[1] }
+                }
+              }
+            }
+            Item { height: Style.space(4) }
             TextField {
               id: shortcutField
               x: Style.space(30); width: parent.width - Style.space(60)
@@ -657,7 +709,7 @@ Panel {
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Use for hold-to-talk"; enabled: root.shortcutDraft.trim() !== ""; onActivated: root.run(["set-shortcut", "hold", root.shortcutDraft.trim()]) }
             Text {
               x: Style.space(30); width: parent.width - Style.space(50)
-              text: "Letters, digits, F-keys and named keys such as Insert or Page_Down, with optional SUPER, ALT, CTRL or SHIFT. A key Hyprland already binds is refused, and a combination that Hyprland grabs globally cannot be captured here, so type it instead. Hold-to-talk works best on a key without modifiers."
+              text: "Letters, digits, F-keys, named keys such as Insert or Page_Down, or a modifier key on its own, with optional SUPER, ALT, CTRL or SHIFT. Modifier keys pressed alone are not delivered to applications on desktops with an input method such as fcitx5, so choose them with the buttons or type them. A key Hyprland already binds is refused. A lone modifier also fires inside its own shortcuts: Right Ctrl as hold-to-talk will start and stop a take whenever you use Right Ctrl for Ctrl+C."
               color: "#6F6F6D"; wrapMode: Text.Wrap
               font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
             }
