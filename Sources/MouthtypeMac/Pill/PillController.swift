@@ -117,15 +117,10 @@ public final class PillController {
 
     private static func makeSkin(_ kind: PillSkinKind, scale: PillScale) -> any PillSkinView {
         let frame = NSRect(origin: .zero, size: PillGeometry.panelSize(for: scale))
-        switch kind {
-        case .classic:
-            return ClassicPillView(frame: frame, size: scale)
-        case .hifi:
-            do {
-                return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)
-            } catch {
-                fatalError("pill resources missing from the bundle: \(error)")
-            }
+        do {
+            return try PillSkinFactory.make(kind, frame: frame, scale: scale)
+        } catch {
+            fatalError("pill resources missing from the bundle: \(error)")
         }
     }
 
@@ -315,8 +310,7 @@ public final class PillController {
         ) else { return nil }
         return .init(
             midX: origin.x.rounded(.down) + size.width / 2,
-            top: origin.y.rounded(.down) + Self.pillPadding
-                + (skinKind == .hifi ? HiFiPillView.artSize.height : ClassicPillLayout.height) * scale.factor,
+            top: origin.y.rounded(.down) + Self.pillPadding + skinKind.pillHeight * scale.factor,
             visible: screen.visibleFrame
         )
     }

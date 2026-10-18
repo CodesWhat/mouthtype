@@ -6,14 +6,40 @@ enum PillControl: Hashable, Sendable {
 }
 
 enum PillSkinKind: String, CaseIterable, Sendable {
-    case classic, hifi
+    case classic, glass, matrix, minimal, hifi
 
     static let `default` = PillSkinKind.classic
 
     var title: String {
         switch self {
         case .classic: "Classic"
+        case .glass: "Glass"
+        case .matrix: "Matrix"
+        case .minimal: "Minimal"
         case .hifi: "Hi-Fi"
+        }
+    }
+
+    /// The pill's height at Standard size, for placing a card above it.
+    @MainActor var pillHeight: CGFloat {
+        switch self {
+        case .classic, .glass: ClassicPillLayout.height
+        case .matrix, .minimal: MatrixPillLayout.height
+        case .hifi: HiFiPillView.artSize.height
+        }
+    }
+}
+
+/// Builds the skin for a kind, shared by the live pill, the Settings preview and the tests.
+@MainActor
+enum PillSkinFactory {
+    static func make(_ kind: PillSkinKind, frame: NSRect, scale: PillScale) throws -> any PillSkinView {
+        switch kind {
+        case .classic: return ClassicPillView(frame: frame, size: scale)
+        case .glass: return GlassPillView(frame: frame, size: scale)
+        case .matrix: return MatrixPillView(frame: frame, size: scale)
+        case .minimal: return MinimalPillView(frame: frame, size: scale)
+        case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)
         }
     }
 }
@@ -163,6 +189,12 @@ protocol PillSkinView: NSView {
     func setPressed(_ control: PillControl?)
     func appear(reduceMotion: Bool)
     func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void)
+    /// Draws the pill into `context` in this view's coordinates without a window, for the Settings preview and tests.
+    func renderOffscreen(in context: CGContext)
+}
+
+extension PillSkinView {
+    func renderOffscreen(in context: CGContext) { layer?.render(in: context) }
 }
 
 /// The panel's content view: holds the skin and takes the click on a control. It only answers hit tests over a

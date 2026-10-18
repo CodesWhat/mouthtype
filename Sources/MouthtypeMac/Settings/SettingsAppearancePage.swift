@@ -39,16 +39,14 @@ extension SettingsView {
     static func make(skin: PillSkinKind, size: PillSize) -> NSImage? {
         let frame = NSRect(x: 0, y: 0, width: 360, height: 110)
         let scale = size.resolved(visibleWidth: 0)
-        let view: any PillSkinView
-        if skin == .hifi, let assets = try? PillAssets.loadHiFi() { view = HiFiPillView(frame: frame, assets: assets, size: scale) }
-        else { view = ClassicPillView(frame: frame, size: scale) }
+        guard let view = try? PillSkinFactory.make(skin, frame: frame, scale: scale) else { return nil }
         view.appear(reduceMotion: true)
         view.showRecording(locked: true)
         view.showFractions([0.2, 0.4, 0.6, 0.8, 0.5, 0.35, 0.65, 0.3, 0.2, 0.1])
         guard let context = CGContext(data: nil, width: 720, height: 220, bitsPerComponent: 8, bytesPerRow: 0,
                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         context.scaleBy(x: 2, y: 2)
-        view.layer?.render(in: context)
+        view.renderOffscreen(in: context)
         guard let image = context.makeImage() else { return nil }
         return NSImage(cgImage: image, size: frame.size)
     }

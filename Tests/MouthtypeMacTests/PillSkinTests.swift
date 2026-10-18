@@ -42,19 +42,35 @@ import Testing
         controller.hide()
     }
 
-    @Test func menuListsBothSkinsWithTheCurrentOneChecked() {
+    @Test func everyKindRoundTripsThroughThePreference() {
+        let defaults = freshDefaults()
+        for kind in PillSkinKind.allCases {
+            PillSkinPreference.set(kind, in: defaults)
+            #expect(PillSkinPreference.current(defaults) == kind)
+            #expect(defaults.string(forKey: "pillSkin") == kind.rawValue)
+        }
+        #expect(PillSkinKind.allCases == [.classic, .glass, .matrix, .minimal, .hifi])
+        #expect(PillSkinKind.allCases.map(\.rawValue) == ["classic", "glass", "matrix", "minimal", "hifi"])
+        #expect(PillSkinKind.default == .classic)
+    }
+
+    @Test func menuListsEverySkinWithTheCurrentOneChecked() {
         let defaults = freshDefaults()
         var picked: [PillSkinKind] = []
         let section = PillSkinMenuSection(defaults: defaults, onSelect: { picked.append($0) })
         let submenu = section.items[0].submenu
         #expect(section.items[0].title == "Pill Style")
-        #expect(submenu?.items.prefix(2).map(\.title) == ["Classic", "Hi-Fi"])
-        #expect(submenu?.items.prefix(2).map(\.state) == [.on, .off])
-        let hifi = submenu!.items[1]
+        #expect(submenu?.items.prefix(5).map(\.title) == ["Classic", "Glass", "Matrix", "Minimal", "Hi-Fi"])
+        #expect(submenu?.items.prefix(5).map(\.state) == [.on, .off, .off, .off, .off])
+        let hifi = submenu!.items[4]
         _ = hifi.target?.perform(hifi.action, with: hifi)
         #expect(picked == [.hifi])
         #expect(PillSkinPreference.current(defaults) == .hifi)
-        #expect(submenu?.items.prefix(2).map(\.state) == [.off, .on])
+        #expect(submenu?.items.prefix(5).map(\.state) == [.off, .off, .off, .off, .on])
+        let matrix = submenu!.items[2]
+        _ = matrix.target?.perform(matrix.action, with: matrix)
+        #expect(picked == [.hifi, .matrix])
+        #expect(submenu?.items.prefix(5).map(\.state) == [.off, .off, .on, .off, .off])
     }
 }
 
