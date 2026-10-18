@@ -61,7 +61,7 @@ def probe_command(source, command=None):
 def decode_command(source, destination, command=None):
     return list(command or ['ffmpeg']) + ['-nostdin', '-hide_banner', '-loglevel', 'error', '-i', str(source),
                                            '-vn', '-map', '0:a:0', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le',
-                                           '-bitexact', '-f', 'wav', '-y', str(destination)]
+                                           '-t', str(MAXIMUM_SECONDS + 1), '-bitexact', '-f', 'wav', '-y', str(destination)]
 
 
 def probe(source, *, command=None, seconds=20):

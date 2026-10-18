@@ -315,6 +315,8 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(decode[-1], str(target))
         self.assertEqual(decode[decode.index('-ar') + 1:decode.index('-ar') + 2], ['16000'])
         self.assertEqual(decode[decode.index('-ac') + 1], '1')
+        self.assertEqual(decode[decode.index('-t') + 1], str(imports.MAXIMUM_SECONDS + 1))
+        self.assertLess(decode.index('-t'), len(decode) - 1)
 
     def test_probe_identifies_containers_and_refuses_others(self):
         def fake(report, returncode=0):
@@ -345,6 +347,22 @@ class CommandTests(unittest.TestCase):
         with self.assertRaises(FileError) as refused:
             imports.probe('/unused', command=['/nonexistent/ffprobe'])
         self.assertEqual(refused.exception.code, 'decoder_unavailable')
+
+    def test_decode_caps_output_and_rejects_audio_longer_than_the_maximum(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            # Stands in for ffmpeg that ignores the probed length: it writes as much as -t allows.
+            fake = root / 'ffmpeg.py'
+            fake.write_text('import sys, wave\n'
+                            'seconds = float(sys.argv[sys.argv.index("-t") + 1])\n'
+                            'with wave.open(sys.argv[-1], "wb") as out:\n'
+                            '    out.setnchannels(1); out.setsampwidth(2); out.setframerate(16000)\n'
+                            '    out.writeframes(bytes(int(seconds * 16000) * 2))\n')
+            with self.assertRaises(FileError) as refused:
+                imports.decode(root / 'in.wav', root / 'out.wav', threading.Event(), command=[sys.executable, str(fake)])
+            self.assertEqual(refused.exception.code, 'too_long')
+            with wave.open(str(root / 'out.wav')) as written:
+                self.assertEqual(written.getnframes(), 16000 * (imports.MAXIMUM_SECONDS + 1))
 
     def test_decode_refuses_failed_or_missing_decoder_and_keeps_destination_private(self):
         with tempfile.TemporaryDirectory() as temp:
