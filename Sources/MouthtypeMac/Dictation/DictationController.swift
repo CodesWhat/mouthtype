@@ -55,6 +55,7 @@ final class DictationController {
     @ObservationIgnored private var termination: Task<Bool, Never>?
     @ObservationIgnored private var captureFinalizations = 0
     @ObservationIgnored private var terminationCapture: (session: DictationSession, audio: CapturedAudio, keyUpMs: Int)?
+    @ObservationIgnored private var unsavedQueuedAudio: [String: (session: DictationSession, audio: CapturedAudio, keyUpMs: Int)] = [:]
     @ObservationIgnored private var interruptedDuringStart = false
     @ObservationIgnored private var undo: PendingUndo?
     /// The last job queued. A job waits for the one before it, so the chain keeps deliveries in order.
@@ -179,6 +180,10 @@ final class DictationController {
             while captureFinalizations > 0 {
                 guard clock.now < deadline else { return false }
                 try? await Task.sleep(for: .milliseconds(20))
+            }
+            for pending in Array(unsavedQueuedAudio.values) {
+                guard await pipeline.preserveForTermination(pending.audio, session: pending.session, keyUpMs: pending.keyUpMs) else { return false }
+                unsavedQueuedAudio[pending.session.id] = nil
             }
             undo?.timer.cancel()
             undo = nil
@@ -461,7 +466,7 @@ final class DictationController {
             sounds.playStop()
             await saving?.value
             let keyUpMs = clock.milliseconds(from: session.keyDownAt, to: releasedAt)
-            let features = await pipeline.recordCapture(audio, session: session, keyUpMs: keyUpMs)
+            let features = await captureForProcessing(audio, session: session, keyUpMs: keyUpMs)
             captureFinalizations -= 1
             savingCapture = false
             let waits = pendingJobs > 1
@@ -482,8 +487,15 @@ final class DictationController {
         if phase != .recording { pill.hide() }
     }
 
+    private func captureForProcessing(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> AudioFeatures {
+        let captured = await pipeline.recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs)
+        if !captured.durable { unsavedQueuedAudio[session.id] = (session, audio, keyUpMs) }
+        return captured.features
+    }
+
     /// Everything after the audio is on disk, shared by a normal release, an Undo and a saved recording.
     private func transcribeAndDeliver(_ audio: CapturedAudio, features: AudioFeatures, session: DictationSession) async throws {
+        defer { if !shuttingDown { unsavedQueuedAudio[session.id] = nil } }
         guard await continueProcessing(session) else { return }
         guard let transcribed = try await pipeline.transcribe(audio, session: session, voicedMs: features.voicedMs) else {
             hidePill()
@@ -630,7 +642,7 @@ final class DictationController {
             showProcessing()
             do {
                 let keyUpMs = clock.milliseconds(from: pending.session.keyDownAt, to: pending.cancelledAt)
-                let features = await pipeline.recordCapture(pending.audio, session: pending.session, keyUpMs: keyUpMs)
+                let features = await captureForProcessing(pending.audio, session: pending.session, keyUpMs: keyUpMs)
                 captureFinalizations -= 1
                 try await transcribeAndDeliver(pending.audio, features: features, session: pending.session)
             } catch {
@@ -678,7 +690,7 @@ final class DictationController {
             return
         }
         let keyUpMs = clock.milliseconds(from: current.keyDownAt, to: keyUpAt)
-        let features = await pipeline.recordCapture(audio, session: current, keyUpMs: keyUpMs)
+        let features = await captureForProcessing(audio, session: current, keyUpMs: keyUpMs)
         await pipeline.finish(current, .failed, errorMessage: DictationRecovery.interruptedMessage)
         interrupted = PendingInterruption(session: current, audio: audio, features: features, keyUpAt: keyUpAt)
         Log.app.info("microphone lost mid-recording; kept \(audio.samples.count, privacy: .public) samples")
@@ -710,6 +722,7 @@ final class DictationController {
     func discardInterrupted() async {
         guard let pending = interrupted else { return }
         interrupted = nil
+        unsavedQueuedAudio[pending.session.id] = nil
         await pipeline.finish(pending.session, .cancelled)
     }
 

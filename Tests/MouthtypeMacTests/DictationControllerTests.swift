@@ -191,12 +191,15 @@ private final class RetryArchive: DictationArchiving, @unchecked Sendable {
     private let lock = NSLock()
     private var failing = false
     private var writes = 0
+    private var saved: Set<String> = []
+    var savedIDs: Set<String> { lock.withLock { saved } }
     var attempts: Int { lock.withLock { writes } }
     func setFailing(_ value: Bool) { lock.withLock { failing = value } }
     func archive(samples: [Float], id: String) throws -> URL {
         try lock.withLock {
             writes += 1
             if failing { throw Boom() }
+            saved.insert(id)
             return URL(fileURLWithPath: "/virtual/audio/\(id).wav")
         }
     }
@@ -1898,6 +1901,34 @@ private final class SlowCapture: DictationCapturing {
         await rig.controller.handle(.pressed(at: keyDown + 1))
         #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
         #expect(rig.clock.sleeperCount == 0)
+    }
+
+    @Test(arguments: ["archive", "recordCapture"])
+    func terminationRetriesUnsavedQueuedAudioBeforeAllowingQuit(failure: String) async throws {
+        let archive = RetryArchive()
+        let rig = Rig(archive: archive)
+        rig.engine.holds = 1
+        defer { rig.engine.releaseHeld() }
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.pressed(at: keyUp + 1))
+        let queuedID = try #require(rig.store.start?.id)
+        if failure == "archive" { archive.setFailing(true) }
+        else { rig.store.failing.insert("recordCapture") }
+        await rig.controller.handle(.released(at: keyUp + 2))
+        await rig.until { rig.log.all.filter { $0 == "store.recordCapture" }.count == 2 }
+        #expect(!(await rig.controller.prepareForTermination()))
+        archive.setFailing(false)
+        rig.store.failing.removeAll()
+        #expect(await rig.controller.prepareForTermination())
+        #expect(archive.savedIDs.contains(queuedID))
+        #expect(archive.attempts >= 4)
+        #expect(rig.store.capture?.audioPath == "/virtual/audio/\(queuedID).wav")
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty && rig.engine.samplesSeen.count == 1)
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 2)
     }
 
     @Test func terminationCanCloseAnEmptyCaptureWithoutInventingSavedAudio() async {

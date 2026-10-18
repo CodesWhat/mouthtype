@@ -139,7 +139,7 @@ struct DictationPipeline: Sendable {
         }
     }
 
-    private func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
+    func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
         let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))
         var audioPath: String?
         if let archive {
