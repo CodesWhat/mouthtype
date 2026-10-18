@@ -94,12 +94,12 @@ def main():
     corpus = output / "corpus"
     corpus.mkdir()
     fixture = json.loads((ROOT / "Tests/Fixtures/daily-use-speech.json").read_text())
-    synthesize(fixture["short"], "synthetic_01_clean", corpus, args.voice, args.rate)
+    synthesize(fixture["short"], "synthetic-01-clean", corpus, args.voice, args.rate)
     long_text = " ".join([fixture["long_paragraph"]] * args.long_repeats + [fixture["closing_checkpoint"]])
-    synthesize(long_text, "synthetic_04_long", corpus, args.voice, args.rate)
-    samples = read_pcm(corpus / "synthetic_01_clean.wav")
+    synthesize(long_text, "synthetic-04-long", corpus, args.voice, args.rate)
+    samples = read_pcm(corpus / "synthetic-01-clean.wav")
     noise = {}
-    for name, snr, seed in [("synthetic_02_noise20", 20, 41), ("synthetic_03_noise10", 10, 42)]:
+    for name, snr, seed in [("synthetic-02-noise20", 20, 41), ("synthetic-03-noise10", 10, 42)]:
         mixed, noise[name] = add_noise(samples, snr, seed)
         write_pcm(corpus / (name + ".wav"), mixed)
         (corpus / (name + ".txt")).write_text(fixture["short"] + "\n")
