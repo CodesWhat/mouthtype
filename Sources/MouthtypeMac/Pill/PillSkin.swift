@@ -30,22 +30,67 @@ enum PillSkinPreference {
     }
 }
 
-enum HiFiPillSize: Int, CaseIterable, Sendable {
-    case standard = 1, large = 2
+/// The size setting. Automatic is decided each time the pill shows, from the screen it lands on.
+enum PillSize: String, CaseIterable, Sendable {
+    case automatic, standard, large
 
-    var scale: CGFloat { CGFloat(rawValue) }
-    var title: String { self == .standard ? "Standard" : "Large (2×)" }
-}
+    static let `default` = PillSize.automatic
+    /// A visible frame at least this wide (in points) gets the large pill under Automatic.
+    static let largeScreenWidth: CGFloat = 2000
 
-enum HiFiPillSizePreference {
-    static let key = "hiFiPillSize"
-
-    static func current(_ defaults: UserDefaults = .standard) -> HiFiPillSize {
-        HiFiPillSize(rawValue: defaults.integer(forKey: key)) ?? .standard
+    var title: String {
+        switch self {
+        case .automatic: "Automatic"
+        case .standard: "Standard"
+        case .large: "Large"
+        }
     }
 
-    static func set(_ size: HiFiPillSize, in defaults: UserDefaults = .standard) {
+    func resolved(visibleWidth: CGFloat) -> PillScale {
+        switch self {
+        case .standard: .standard
+        case .large: .large
+        case .automatic: visibleWidth >= Self.largeScreenWidth ? .large : .standard
+        }
+    }
+}
+
+/// What a size setting resolves to: the integer multiple every length in the pill is drawn at.
+enum PillScale: Int, Sendable {
+    case standard = 1, large = 2
+
+    var factor: CGFloat { CGFloat(rawValue) }
+}
+
+enum PillSizePreference {
+    static let key = "pillSize"
+    /// The Hi-Fi only setting this replaced: 1 standard, 2 large.
+    static let legacyKey = "hiFiPillSize"
+
+    static func current(_ defaults: UserDefaults = .standard) -> PillSize {
+        migrateLegacy(defaults)
+        return defaults.string(forKey: key).flatMap(PillSize.init(rawValue:)) ?? .default
+    }
+
+    static func set(_ size: PillSize, in defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: legacyKey)
         defaults.set(size.rawValue, forKey: key)
+    }
+
+    /// A saved Hi-Fi size of 1 stays Standard and 2 becomes the large pill; anything else becomes Automatic. The old
+    /// key goes either way, and a choice already made under the new key is left alone.
+    static func migrateLegacy(_ defaults: UserDefaults) {
+        guard defaults.object(forKey: legacyKey) != nil else { return }
+        if defaults.object(forKey: key) == nil {
+            let migrated: PillSize
+            switch defaults.integer(forKey: legacyKey) {
+            case 1: migrated = .standard
+            case 2: migrated = .large
+            default: migrated = .automatic
+            }
+            defaults.set(migrated.rawValue, forKey: key)
+        }
+        defaults.removeObject(forKey: legacyKey)
     }
 }
 
@@ -56,9 +101,15 @@ enum PillGeometry {
     static let verticalMargin: CGFloat = 20
     /// Tall enough for a message wrapped onto many lines; the panel is click-through, so spare room costs nothing.
     static let maxPillSize = CGSize(width: ClassicPillLayout.messageCap, height: 160)
-    static let panelSize = CGSize(
-        width: maxPillSize.width + 2 * horizontalMargin, height: maxPillSize.height + 2 * verticalMargin
-    )
+    static let panelSize = panelSize(for: .standard)
+
+    /// The panel grows with the pill, so a large message has the same room a standard one does.
+    static func panelSize(for scale: PillScale) -> CGSize {
+        CGSize(
+            width: maxPillSize.width * scale.factor + 2 * horizontalMargin,
+            height: maxPillSize.height * scale.factor + 2 * verticalMargin
+        )
+    }
 }
 
 /// Hit-testing for the two controls, pure so both skins share it.

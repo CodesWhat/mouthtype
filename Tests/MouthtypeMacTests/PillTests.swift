@@ -280,6 +280,8 @@ func makePillController(skin: PillSkinKind? = nil, level: @escaping @MainActor (
     _ = NSApplication.shared
     let defaults = UserDefaults(suiteName: "pill-tests-\(UUID().uuidString)")!
     if let skin { PillSkinPreference.set(skin, in: defaults) }
+    // Automatic would follow whatever screen the test machine has.
+    PillSizePreference.set(.standard, in: defaults)
     return PillController(level: level, defaults: defaults)
 }
 

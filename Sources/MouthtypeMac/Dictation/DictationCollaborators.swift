@@ -111,11 +111,17 @@ protocol DictationPill: AnyObject {
     func showPreview(_ text: String)
     func showProcessing()
     func showMessage(_ message: PillMessage, duration: TimeInterval)
+    /// The line shown under a delivery card, held until `hideCardMessage`.
+    func showCardMessage(_ message: PillMessage)
+    /// Takes the pill down only if it is still showing the card's line.
+    func hideCardMessage()
     func hide()
 }
 
 extension DictationPill {
     func showPreview(_ text: String) {}
+    func showCardMessage(_ message: PillMessage) {}
+    func hideCardMessage() {}
     func showMessage(_ text: String, duration: TimeInterval) {
         showMessage(PillMessage(text), duration: duration)
     }

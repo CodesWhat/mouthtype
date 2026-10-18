@@ -8,7 +8,7 @@ Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or p
 
 The latest published release, 0.1.0-rc.1, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](ALPHA.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
 
-For a larger Winamp-style pill, choose **Settings → Appearance → Hi-Fi size → Large (2×)**. The size is saved. Changes during recording take effect the next time the pill appears.
+For a larger pill in either style, choose **Settings → Appearance → Pill size → Large**. Automatic, the default, picks Large on screens at least 2000 pt wide. The size is saved. Changes during recording take effect the next time the pill appears.
 
 ## Run from source
 

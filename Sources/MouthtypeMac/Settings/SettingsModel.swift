@@ -20,7 +20,7 @@ import UniformTypeIdentifiers
     private(set) var sounds: Bool
     private(set) var quietOtherAudio = false
     private(set) var skin: PillSkinKind
-    private(set) var hiFiSize: HiFiPillSize
+    private(set) var pillSize: PillSize
     private(set) var fontOverrides: TextFontOverrides
     private(set) var fontFamilies: [String] = []
     private(set) var font: TextFontChoice
@@ -51,7 +51,7 @@ import UniformTypeIdentifiers
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
         skin = PillSkinPreference.current(defaults)
-        hiFiSize = HiFiPillSizePreference.current(defaults)
+        pillSize = PillSizePreference.current(defaults)
         font = TextFontPreference.current(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
         refresh()
@@ -70,7 +70,7 @@ import UniformTypeIdentifiers
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
         skin = PillSkinPreference.current(defaults)
-        hiFiSize = HiFiPillSizePreference.current(defaults)
+        pillSize = PillSizePreference.current(defaults)
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
@@ -205,10 +205,10 @@ import UniformTypeIdentifiers
         skin = value
         onSkinChanged(value)
     }
-    func setHiFiSize(_ value: HiFiPillSize) {
-        HiFiPillSizePreference.set(value, in: defaults)
-        hiFiSize = value
-        setSkin(.hifi)
+    func setPillSize(_ value: PillSize) {
+        PillSizePreference.set(value, in: defaults)
+        pillSize = value
+        onSkinChanged(skin)
     }
     func setFont(_ value: TextFontChoice) {
         TextFontPreference.set(value, in: defaults)

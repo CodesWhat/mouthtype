@@ -37,7 +37,7 @@ import MouthtypeCore
         #expect(controller.window?.isVisible == false)
     }
 
-    @Test func minimumWindowRendersAppRulesAndLargeHiFi() throws {
+    @Test func minimumWindowRendersAppRulesAndLargePill() throws {
         let name = "SettingsMinimumTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
@@ -46,7 +46,7 @@ import MouthtypeCore
         try styles.set(bundleID: "com.tinyspeck.slackmacgap", appName: "Slack", style: StylePreset.formal.options)
         try styles.save(to: defaults)
         PillSkinPreference.set(.hifi, in: defaults)
-        HiFiPillSizePreference.set(.large, in: defaults)
+        PillSizePreference.set(.large, in: defaults)
         FontRegistry.registerBundledFonts()
         let model = SettingsModel(defaults: defaults)
         let state = diagnostics()
@@ -75,7 +75,7 @@ import MouthtypeCore
             }
         }
         #expect(controller.window?.isVisible == false)
-        #expect(model.appStyles.entries.count == 2 && model.hiFiSize == .large)
+        #expect(model.appStyles.entries.count == 2 && model.pillSize == .large)
     }
 
     private func diagnostics() -> SettingsDiagnostics {

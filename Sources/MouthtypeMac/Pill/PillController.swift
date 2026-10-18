@@ -21,6 +21,7 @@ public final class PillController {
 
     static let horizontalPadding = PillGeometry.horizontalMargin
     static let pillPadding = PillGeometry.verticalMargin
+    /// The standard-size panel; a large pill sits in a larger one, see `panelSize`.
     static let panelSize = PillGeometry.panelSize
 
     private(set) var state: State = .hidden
@@ -29,6 +30,9 @@ public final class PillController {
     let host: PillHostView
     private(set) var skinKind: PillSkinKind
     private(set) var skin: any PillSkinView
+    /// What the size setting resolved to for the pill on screen or about to be.
+    private(set) var pillScale: PillScale
+    var panelSize: CGSize { PillGeometry.panelSize(for: pillScale) }
 
     /// Read once per frame while recording. `PillDemo` swaps it for a synthetic curve.
     var levelSource: @MainActor () -> LevelReading
@@ -38,7 +42,7 @@ public final class PillController {
     var onControl: (@MainActor (PillControl) -> Void)?
 
     private let defaults: UserDefaults
-    private var hiFiSize: HiFiPillSize
+    private var pillSize: PillSize
     private var pendingSkin: PillSkinKind?
     private var bars = BarModel()
     private var link: CADisplayLink?
@@ -50,17 +54,22 @@ public final class PillController {
     /// Bumped by every state change, so a message timer or a hide completion only acts on its own state.
     private var generation = 0
     private var pressedControl: PillControl?
+    /// True while the message on screen is the one held under a card, which stays until the card goes.
+    private(set) var cardHeld = false
 
     public init(level: @escaping @MainActor () -> LevelReading, defaults: UserDefaults = .standard) {
         self.defaults = defaults
         levelSource = level
         skinKind = PillSkinPreference.current(defaults)
-        hiFiSize = HiFiPillSizePreference.current(defaults)
-        skin = Self.makeSkin(skinKind, size: hiFiSize)
-        host = PillHostView(frame: NSRect(origin: .zero, size: Self.panelSize))
-        previewView = PillPreviewView(frame: NSRect(x: Self.horizontalPadding, y: 94, width: ClassicPillLayout.messageCap, height: 100))
+        pillSize = PillSizePreference.current(defaults)
+        let scale = pillSize.resolved(visibleWidth: Self.pointerScreen()?.visibleFrame.width ?? 0)
+        pillScale = scale
+        skin = Self.makeSkin(skinKind, scale: scale)
+        let panelSize = PillGeometry.panelSize(for: scale)
+        host = PillHostView(frame: NSRect(origin: .zero, size: panelSize))
+        previewView = PillPreviewView(frame: Self.previewFrame(panelSize: panelSize, scale: scale))
         panel = PillPanel(
-            contentRect: NSRect(origin: .zero, size: Self.panelSize),
+            contentRect: NSRect(origin: .zero, size: panelSize),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
@@ -92,14 +101,28 @@ public final class PillController {
     }
 
 
-    private static func makeSkin(_ kind: PillSkinKind, size: HiFiPillSize) -> any PillSkinView {
-        let frame = NSRect(origin: .zero, size: PillGeometry.panelSize)
+    /// The live preview readout sits centred over the pill, one pill height higher at the large size.
+    private static func previewFrame(panelSize: CGSize, scale: PillScale) -> NSRect {
+        let width = ClassicPillLayout.messageCap
+        return NSRect(
+            x: ((panelSize.width - width) / 2).rounded(.down), y: 94 + ClassicPillLayout.height * (scale.factor - 1),
+            width: width, height: 100
+        )
+    }
+
+    private static func pointerScreen() -> PillPlacement.Screen? {
+        let screens = NSScreen.screens.map { PillPlacement.Screen(frame: $0.frame, visibleFrame: $0.visibleFrame) }
+        return PillPlacement.screen(pointer: NSEvent.mouseLocation, screens: screens)
+    }
+
+    private static func makeSkin(_ kind: PillSkinKind, scale: PillScale) -> any PillSkinView {
+        let frame = NSRect(origin: .zero, size: PillGeometry.panelSize(for: scale))
         switch kind {
         case .classic:
-            return ClassicPillView(frame: frame)
+            return ClassicPillView(frame: frame, size: scale)
         case .hifi:
             do {
-                return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: size)
+                return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)
             } catch {
                 fatalError("pill resources missing from the bundle: \(error)")
             }
@@ -122,19 +145,25 @@ public final class PillController {
     }
 
     /// Switches skins at once when the pill is down, else at the next time it shows, so a recording is never
-    /// redrawn under the user.
+    /// redrawn under the user. A changed size setting is picked up the same way.
     func setSkin(_ kind: PillSkinKind) {
-        let sizeChanged = kind == .hifi && HiFiPillSizePreference.current(defaults) != hiFiSize
-        pendingSkin = kind == skinKind && !sizeChanged ? nil : kind
+        pendingSkin = kind
         if state == .hidden { applyPendingSkin() }
     }
 
+    /// Settles the skin and size for the screen the pill is about to appear on, rebuilding only when something
+    /// differs from what is installed. Runs while the pill is hidden, never under a recording.
     private func applyPendingSkin() {
-        guard let kind = pendingSkin else { return }
+        let kind = pendingSkin ?? skinKind
         pendingSkin = nil
+        pillSize = PillSizePreference.current(defaults)
+        let scale = pillSize.resolved(visibleWidth: Self.pointerScreen()?.visibleFrame.width ?? 0)
+        guard kind != skinKind || scale != pillScale else { return }
         skinKind = kind
-        hiFiSize = HiFiPillSizePreference.current(defaults)
-        install(Self.makeSkin(kind, size: hiFiSize))
+        pillScale = scale
+        panel.setContentSize(panelSize)
+        previewView.frame = Self.previewFrame(panelSize: panelSize, scale: scale)
+        install(Self.makeSkin(kind, scale: scale))
     }
 
     public func showRecording() {
@@ -179,6 +208,20 @@ public final class PillController {
         presentMessage(message, overRecording: false, duration: duration) { [weak self] in self?.hide() }
     }
 
+    /// The line under a delivery card: the message stays up, click-through, until `hideCardMessage` or another state
+    /// takes over.
+    func showCardMessage(_ message: PillMessage) {
+        enter(.message(message))
+        cardHeld = true
+        recordingStart = nil
+        presentMessage(message, overRecording: false, duration: nil) {}
+    }
+
+    /// Takes the pill down if it is still showing the card's line, and leaves anything newer alone.
+    func hideCardMessage() {
+        if cardHeld { hide() }
+    }
+
     func showMessage(_ text: String, isError: Bool = false, duration: TimeInterval = 2.5) {
         showMessage(PillMessage(text, isError: isError), duration: duration)
     }
@@ -187,6 +230,7 @@ public final class PillController {
         previewView.update("")
         guard state != .hidden else { return }
         generation += 1
+        cardHeld = false
         state = .hidden
         recordingStart = nil
         stopLink()
@@ -217,14 +261,15 @@ public final class PillController {
 
     /// Shows `message`, and runs `after` once it has been up for `duration`, or for as long as it takes to scroll through.
     private func presentMessage(
-        _ message: PillMessage, overRecording: Bool, duration: TimeInterval,
+        _ message: PillMessage, overRecording: Bool, duration: TimeInterval?,
         then after: @escaping @MainActor () -> Void
     ) {
         skin.showMessage(message, overRecording: overRecording)
         messageStart = CACurrentMediaTime()
         let distance = skin.messageScrollDistance
-        let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance) + 0.3) : duration
         if distance > 0 || recordingStart != nil { startLink() } else { stopLink() }
+        guard let duration else { return }
+        let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance) + 0.3) : duration
         let shown = generation
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(shownFor))
@@ -236,6 +281,7 @@ public final class PillController {
     /// Moves to `next`, placing and showing the panel unless it is already up.
     private func enter(_ next: State) {
         generation += 1
+        cardHeld = false
         let wasShown = isShown
         state = next
         if next != .recording && next != .handsFree { previewView.update("") }
@@ -250,7 +296,7 @@ public final class PillController {
     private func place() {
         let screens = NSScreen.screens.map { PillPlacement.Screen(frame: $0.frame, visibleFrame: $0.visibleFrame) }
         guard let origin = PillPlacement.origin(
-            pointer: NSEvent.mouseLocation, screens: screens, panelSize: Self.panelSize, pillPadding: Self.pillPadding
+            pointer: NSEvent.mouseLocation, screens: screens, panelSize: panelSize, pillPadding: Self.pillPadding
         ) else { return }
         panel.setFrameOrigin(CGPoint(x: origin.x.rounded(.down), y: origin.y.rounded(.down)))
     }
@@ -258,17 +304,20 @@ public final class PillController {
     /// Where the pill sits, or would if it showed now, for the card that goes above it.
     func cardAnchor() -> DeliveryCardController.Anchor? {
         let pointer = NSEvent.mouseLocation
-        let screens = NSScreen.screens
-        let placements = screens.map { PillPlacement.Screen(frame: $0.frame, visibleFrame: $0.visibleFrame) }
+        let placements = NSScreen.screens.map { PillPlacement.Screen(frame: $0.frame, visibleFrame: $0.visibleFrame) }
+        guard let screen = PillPlacement.screen(pointer: pointer, screens: placements) else { return nil }
+        // A hidden pill shows at the size this screen resolves to, which is what the card has to clear.
+        let scale = state == .hidden
+            ? PillSizePreference.current(defaults).resolved(visibleWidth: screen.visibleFrame.width) : pillScale
+        let size = PillGeometry.panelSize(for: scale)
         guard let origin = PillPlacement.origin(
-            pointer: pointer, screens: placements, panelSize: Self.panelSize, pillPadding: Self.pillPadding
+            pointer: pointer, screens: placements, panelSize: size, pillPadding: Self.pillPadding
         ) else { return nil }
-        let screen = screens.first { $0.frame.contains(pointer) } ?? screens.first
         return .init(
-            midX: origin.x.rounded(.down) + Self.panelSize.width / 2,
+            midX: origin.x.rounded(.down) + size.width / 2,
             top: origin.y.rounded(.down) + Self.pillPadding
-                + (skinKind == .hifi ? HiFiPillView.artSize.height * hiFiSize.scale : ClassicPillLayout.height),
-            visible: screen?.visibleFrame ?? .zero
+                + (skinKind == .hifi ? HiFiPillView.artSize.height : ClassicPillLayout.height) * scale.factor,
+            visible: screen.visibleFrame
         )
     }
 

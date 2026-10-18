@@ -121,6 +121,15 @@ final class DictationController {
         cards.onDismissed = { [weak self] card in
             if card.kind == .cancelled { self?.discardPendingUndo() }
         }
+        cards.onCardChange = { [weak self] card in
+            guard let self else { return }
+            // A card raised during a recording (the limit warning) must not take the recording's pill.
+            if let message = card?.pillMessage, self.phase != .recording {
+                self.pill.showCardMessage(message)
+            } else {
+                self.pill.hideCardMessage()
+            }
+        }
         inserter.observeVerification { [weak self] verification in
             self?.verificationEnded(verification)
         }
@@ -526,8 +535,10 @@ final class DictationController {
         if result.method == .paste, result.outcome == .unknown {
             corrections?.pasted(result.finalText, dictationID: session.id, target: result.target)
         }
-        hidePill()
-        if let card = DeliveryCard.forDelivery(result, transcript: cleaned.text) { cards.present(card) }
+        let card = DeliveryCard.forDelivery(result, transcript: cleaned.text)
+        // A card with a detail line keeps the pill up under it, so the pill only comes down here without one.
+        if card?.pillMessage == nil { hidePill() }
+        if let card { cards.present(card) }
         if verifying?.id == result.verificationID {
             verifying?.wrappedUp = true
             if let arrived = verifying?.arrived { verificationEnded(arrived) }

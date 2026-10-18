@@ -27,6 +27,7 @@ private final class StubCards: DictationCards {
     var actions: [CardAction: @MainActor () -> Void] = [:]
     var onUndo: (@MainActor () -> Void)?
     var onDismissed: (@MainActor (DeliveryCard) -> Void)?
+    var onCardChange: (@MainActor (DeliveryCard?) -> Void)?
 
     func present(_ card: DeliveryCard, actions: [CardAction: @MainActor () -> Void]) {
         presented.append(card)
