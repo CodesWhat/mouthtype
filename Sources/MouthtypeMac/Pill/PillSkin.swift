@@ -23,7 +23,8 @@ enum PillSkinKind: String, CaseIterable, Sendable {
     /// The pill's height at Standard size, for placing a card above it.
     @MainActor var pillHeight: CGFloat {
         switch self {
-        case .classic, .glass, .matrix, .minimal: ClassicPillLayout.height
+        case .classic, .glass: ClassicPillLayout.height
+        case .matrix, .minimal: MatrixPillLayout.height
         case .hifi: HiFiPillView.artSize.height
         }
     }
@@ -36,7 +37,7 @@ enum PillSkinFactory {
         switch kind {
         case .classic: return ClassicPillView(frame: frame, size: scale)
         case .glass: return GlassPillView(frame: frame, size: scale)
-        case .matrix: return ClassicPillView(frame: frame, size: scale)
+        case .matrix: return MatrixPillView(frame: frame, size: scale)
         case .minimal: return ClassicPillView(frame: frame, size: scale)
         case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)
         }
