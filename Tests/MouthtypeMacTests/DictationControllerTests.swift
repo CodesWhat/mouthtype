@@ -446,7 +446,7 @@ private struct Rig {
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
         quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false,
-        audioRetention: AudioRetentionPolicy = AudioRetentionPolicy()
+        audioRetention: AudioRetentionPolicy = AudioRetentionPolicy(), storeWriter: (any DictationStoring)? = nil
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -459,7 +459,7 @@ private struct Rig {
         let clock = FakeClock(start: keyUp)
         self.clock = clock
         var pipeline = DictationPipeline(
-            store: withStore ? store : nil, archive: archive ?? FakeArchive(log: log, writesPartials: partials), engine: engine, clock: clock
+            store: storeWriter ?? (withStore ? store : nil), archive: archive ?? FakeArchive(log: log, writesPartials: partials), engine: engine, clock: clock
         )
         pipeline.settings = { settings }
         pipeline.appStyles = appStyles
@@ -1803,7 +1803,7 @@ private final class SlowCapture: DictationCapturing {
 
         #expect(rig.cards.presented.last == .micDisconnected(seconds: 2))
         #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
-        #expect(rig.store.finishes.isEmpty)
+        #expect(rig.store.finishes.map(\.0) == [.failed])
         #expect(rig.store.capture?.audioPath == archive.url(for: id).path)
         let restored = try? archive.read(id: id)
         #expect(restored?.count == samples.count)
@@ -1818,7 +1818,7 @@ private final class SlowCapture: DictationCapturing {
             await rig.controller.insertInterrupted()
             await rig.controller.handle(.released(at: keyUp))
             #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
-            #expect(rig.store.finishes.map(\.0) == [.cancelled])
+            #expect(rig.store.finishes.map(\.0) == [.failed, .cancelled])
         }
     }
 
@@ -1843,6 +1843,31 @@ private final class SlowCapture: DictationCapturing {
         #expect(rig.pill.messages.last?.detail == "No audio could be recovered")
     }
 
+    @Test func interruptedAudioStaysReachableAfterANewerCanceledCardWithoutExposingAnActiveTake() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-saved-interruption-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("history.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let rig = Rig(archive: archive, storeWriter: TranscriptStoreWriter(store: store))
+        let launch = FakeClock.wall.addingTimeInterval(-60)
+        await rig.controller.handle(.pressed(at: keyDown))
+        let active = try #require(try store.unfinished(from: .distantPast, before: .distantFuture).first?.id)
+        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: launch).isEmpty)
+        rig.capture.interrupt()
+        await rig.until { rig.controller.phase == .idle }
+        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: launch).map(\.id) == [active])
+        await rig.controller.handle(.pressed(at: keyDown + 1))
+        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: launch).map(\.id) == [active])
+        await rig.controller.handle(.cancelled(reason: .escape))
+        #expect(rig.cards.presented.last?.kind == .cancelled)
+        let saved = try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: launch)
+        #expect(saved.map(\.id) == [active])
+        #expect(try archive.read(id: active).count == capturedTone().samples.count)
+        #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
+        _ = try DictationRecovery.scan(store: store, archive: archive, now: FakeClock.wall.addingTimeInterval(60), launchedAt: FakeClock.wall.addingTimeInterval(60))
+        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall.addingTimeInterval(60), launchedAt: FakeClock.wall.addingTimeInterval(60)).map(\.id) == [active])
+    }
+
     @Test func aLostMicrophoneKeepsTheAudioAndOffersInsertOrDiscard() async {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
@@ -1857,7 +1882,7 @@ private final class SlowCapture: DictationCapturing {
         // The audio is on disk and the row says so before the card shows.
         #expect(log.firstIndex(of: "store.recordCapture")! < log.firstIndex(of: "card.present:micDisconnected")!)
         #expect(rig.controller.phase == .idle && rig.inserter.delivered.isEmpty)
-        #expect(rig.store.finishes.isEmpty && rig.log.contains("sound.error"))
+        #expect(rig.store.finishes.map(\.0) == [.failed] && rig.log.contains("sound.error"))
 
         // The key coming up afterwards has nothing left to stop.
         await rig.controller.handle(.released(at: keyUp))
@@ -1885,7 +1910,7 @@ private final class SlowCapture: DictationCapturing {
         await rig.until { rig.controller.phase == .idle }
         rig.cards.click(.discard)
         await rig.settle()
-        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.store.finishes.map(\.0) == [.failed, .cancelled])
         #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
         // A second click on a card that's gone does nothing.
         await rig.controller.insertInterrupted()

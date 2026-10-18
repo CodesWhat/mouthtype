@@ -604,6 +604,7 @@ final class DictationController {
         }
         let keyUpMs = clock.milliseconds(from: current.keyDownAt, to: keyUpAt)
         let features = await pipeline.recordCapture(audio, session: current, keyUpMs: keyUpMs)
+        await pipeline.finish(current, .failed, errorMessage: DictationRecovery.interruptedMessage)
         interrupted = PendingInterruption(session: current, audio: audio, features: features, keyUpAt: keyUpAt)
         Log.app.info("microphone lost mid-recording; kept \(audio.samples.count, privacy: .public) samples")
         cards.present(.micDisconnected(seconds: audio.audioMs / 1000), actions: [
