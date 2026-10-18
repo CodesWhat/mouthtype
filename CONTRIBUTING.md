@@ -11,7 +11,7 @@ Use plain Conventional Commits: `feat`, `fix`, `docs`, `style`, `refactor`, `per
 ## Checks
 
 - Mac code: Xcode with Swift 6.2 on Apple Silicon and macOS 26 or later, then `swift test`. Add meaningful regression coverage for changed behavior. Physical microphone and destination-app checks are separate from logic tests.
-- Release helpers: `python3 -m unittest discover -s Tests/ReleaseTests -p 'test_*.py'`.
+- Release helpers: `python3 -m unittest discover -s Tests/ReleaseTests -p 'test_*.py'`. The real archive integration test requires macOS `ditto`; Linux explicitly skips that one test.
 - Website: `npm --prefix website ci`, `npm --prefix website run build`, then `npm --prefix website test`. Install the Playwright browser as described in [website/README.md](website/README.md).
 - Linux: use the component and fixture commands in [tools/linux-desktop/README.md](tools/linux-desktop/README.md). Source checks don't establish physical desktop acceptance.
 - Security: run `gitleaks git --redact --no-banner`, `actionlint`, and `zizmor --no-progress .github/workflows` when those tools are installed. Security CI also audits the website lockfile. Keep scanner findings and synthetic fixtures free of personal data.
