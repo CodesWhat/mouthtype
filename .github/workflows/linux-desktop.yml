@@ -37,7 +37,7 @@ jobs:
           apt-get update
           apt-get install --yes --no-install-recommends git ca-certificates python3 python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus dbus-x11 procps sway wtype wl-clipboard
           useradd --create-home --shell /bin/bash mouthtype-ci
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Record actual Ubuntu package and host versions
@@ -83,7 +83,7 @@ jobs:
         run: |
           pacman -Syu --noconfirm --needed git python python-pip curl pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols namcap
           useradd --create-home --shell /bin/bash mouthtype-ci
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Record actual Arch package and host versions
