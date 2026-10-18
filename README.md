@@ -6,13 +6,13 @@
 
 **Local dictation for your Mac. Hold Fn, speak, release to paste.**
 
-[Download the Mac beta](https://mouthtype.app/download) · [Getting started](https://mouthtype.app/start/) · [Documentation](https://mouthtype.app/docs/) · [Security](SECURITY.md)
+[Download the Mac release candidate](https://mouthtype.app/download) · [Getting started](https://mouthtype.app/start/) · [Documentation](https://mouthtype.app/docs/) · [Security](SECURITY.md)
 
 </div>
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is in beta. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
+The Mac app is a release candidate. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
 
 ## Install
 

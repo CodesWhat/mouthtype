@@ -1,6 +1,6 @@
 # Settings
 
-Beta.1 includes **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active.
+RC.1 includes **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active.
 
 The daily menu contains Settings, Paste Last, Copy Last, Saved Recordings, a collapsed Recent Dictations submenu, Help, About and Quit. Stop and Cancel appear during hands-free recording. Healthy model and permission lines stay out of the menu; an attention message opens Diagnostics when something needs repair. Recent items copy their full text and exclude secure fields. Stats live inside Recent.
 
@@ -66,4 +66,4 @@ Core Audio exposes property notifications, not the identity of the person or app
 
 Alpha.9 adds [website tone, selected-text cleanup and microphone priorities](WRITING-TOOLS.md).
 
-Beta.1 keeps System Default fallback enabled while the microphone priority list is empty. Add an input before turning fallback off. Saved Recordings loads on demand in pages; older saved audio remains reachable. Use Download to repair an incomplete cleanup-model cache.
+RC.1 keeps System Default fallback enabled while the microphone priority list is empty. Add an input before turning fallback off. Saved Recordings loads on demand in pages; older saved audio remains reachable. Use Download to repair an incomplete cleanup-model cache.
