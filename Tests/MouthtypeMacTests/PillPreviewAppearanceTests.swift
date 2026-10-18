@@ -71,4 +71,14 @@ import Testing
             #expect(light > dark + 0.15, "\(kind) snapshot light \(light) dark \(dark)")
         }
     }
+
+    @Test func aRebuiltSkinIsFrozenWhenNoLinkRuns() throws {
+        // An unhosted stage has no window, so no display link ever starts.
+        let stage = PillPreviewStage(frame: NSRect(origin: .zero, size: PreviewFit.canvas))
+        for kind in [PillSkinKind.matrix, .minimal, .matrix] {
+            stage.configure(kind: kind, scale: .standard, readout: .amber, wallpaper: .dark)
+            #expect(!stage.isAnimating)
+            #expect(stage.skin?.layer?.speed == 0, "\(kind)")
+        }
+    }
 }

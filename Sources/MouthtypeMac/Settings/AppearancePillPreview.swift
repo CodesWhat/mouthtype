@@ -241,7 +241,6 @@ final class PillPreviewStage: NSView {
     }
 
     private func stop() {
-        guard link != nil else { return }
         link?.invalidate()
         link = nil
         freeze()
