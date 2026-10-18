@@ -23,6 +23,7 @@ import UniformTypeIdentifiers
     private(set) var quietOtherAudio = false
     private(set) var skin: PillSkinKind
     private(set) var pillSize: PillSize
+    private(set) var readoutColour: PillReadoutColour
     private(set) var fontOverrides: TextFontOverrides
     private(set) var fontFamilies: [String] = []
     private(set) var font: TextFontChoice
@@ -54,6 +55,7 @@ import UniformTypeIdentifiers
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
         skin = PillSkinPreference.current(defaults)
         pillSize = PillSizePreference.current(defaults)
+        readoutColour = PillReadoutPreference.current(defaults)
         font = TextFontPreference.current(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
         refresh()
@@ -73,6 +75,7 @@ import UniformTypeIdentifiers
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
         skin = PillSkinPreference.current(defaults)
         pillSize = PillSizePreference.current(defaults)
+        readoutColour = PillReadoutPreference.current(defaults)
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
@@ -210,6 +213,11 @@ import UniformTypeIdentifiers
     func setPillSize(_ value: PillSize) {
         PillSizePreference.set(value, in: defaults)
         pillSize = value
+        onSkinChanged(skin)
+    }
+    func setReadoutColour(_ value: PillReadoutColour) {
+        PillReadoutPreference.set(value, in: defaults)
+        readoutColour = value
         onSkinChanged(skin)
     }
     func setFont(_ value: TextFontChoice) {
