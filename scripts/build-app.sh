@@ -57,6 +57,21 @@ cp "$BIN_DIR/mouthtype-fn-guard" "$APP/Contents/MacOS/mouthtype-fn-guard"
 strip -x "$APP/Contents/MacOS/mouthtype-fn-guard"
 cp packaging/Info.plist "$APP/Contents/Info.plist"
 cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# macOS 26 icon: the Icon Composer bundle compiled to Assets.car (CFBundleIconName), so the system masks it and
+# renders Dark, Clear and Tinted. The .icns above stays as the fallback and is what CFBundleIconFile names;
+# actool's own AppIcon.icns output is discarded. Needs Xcode's actool; without it the .icns alone ships.
+if xcrun --find actool >/dev/null 2>&1; then
+    ICON_OUT="$(mktemp -d)"
+    xcrun actool "$PWD/design/icon/AppIcon.icon" --compile "$ICON_OUT" \
+        --output-format human-readable-text --notices --warnings --errors \
+        --output-partial-info-plist "$ICON_OUT/icon-info.plist" \
+        --app-icon AppIcon --include-all-app-icons --enable-on-demand-resources NO \
+        --development-region en --target-device mac --minimum-deployment-target 26.0 --platform macosx
+    cp "$ICON_OUT/Assets.car" "$APP/Contents/Resources/Assets.car"
+    rm -rf "$ICON_OUT"
+else
+    echo "! actool not found; shipping the .icns icon only (no Dark, Clear or Tinted appearances)."
+fi
 cp LICENSE "$APP/Contents/Resources/LICENSE"
 cp docs/ALPHA.md "$APP/Contents/Resources/Read Me.txt"
 plutil -replace CFBundleShortVersionString -string "$SHORT_VERSION" "$APP/Contents/Info.plist"
