@@ -47,18 +47,19 @@ private struct SelectionCleanupView: View {
     var maximumContentHeight: CGFloat
     var close: () -> Void
     var resize: () -> Void
+    private var compact: Bool { maximumContentHeight < 320 }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: compact ? 6 : 10) {
             Text("Clean selected text").font(.title2.bold())
             Text("Original").font(.callout).foregroundStyle(.secondary)
             ScrollView { Text(model.original).font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
                 .frame(height: textHeight(model.original, width: 576, minimum: 22,
-                                         maximum: min(120, (maximumContentHeight - 240) / 3)))
+                                         maximum: max(22, min(120, (maximumContentHeight - 240) / 3))))
             Text("Preview").font(.callout).foregroundStyle(.secondary)
             TextEditor(text: $model.result).font(.body).disabled(!model.hasPreview || model.submitted)
                 .frame(height: textHeight(model.result, width: 552, minimum: 44,
-                                         maximum: min(240, (maximumContentHeight - 240) * 2 / 3 - 12)))
+                                         maximum: max(44, min(240, (maximumContentHeight - 240) * 2 / 3 - 12))))
                 .padding(6)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
@@ -74,7 +75,7 @@ private struct SelectionCleanupView: View {
                 Button("Accept", action: model.accept).disabled(!model.canAccept)
                     .accessibilityIdentifier("selection-cleanup-accept")
             }
-        }.padding(22).frame(width: 620)
+        }.padding(compact ? 16 : 22).frame(width: 620)
             .background(Color(nsColor: .windowBackgroundColor))
             .onChange(of: model.result) { resize() }
             .onChange(of: model.message) { resize() }

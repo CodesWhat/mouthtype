@@ -56,7 +56,7 @@ import Testing
         #expect(controller.window?.isVisible == false)
     }
 
-    @Test(arguments: [300.0, 400.0])
+    @Test(arguments: [260.0, 300.0, 400.0])
     func longSelectionFitsShortDisplay(heightLimit: CGFloat) throws {
         let model = SelectionCleanupModel(editor: PreviewSelectionEditor(text: String(repeating: "hello world ", count: 1_000)))
         model.prepare()
@@ -66,6 +66,10 @@ import Testing
         view.layoutSubtreeIfNeeded()
         #expect(view.fittingSize.height <= heightLimit)
         #expect(view.frame.height <= heightLimit)
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        let editor = try #require(descendants(of: view).compactMap { $0 as? NSTextView }.first)
+        #expect(editor.enclosingScrollView?.contentView.bounds.height ?? 0 >= 44)
         #expect(model.message.contains("selection changed"))
         #expect(controller.window?.isVisible == false)
     }
