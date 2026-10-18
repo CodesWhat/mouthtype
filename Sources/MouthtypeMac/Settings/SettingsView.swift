@@ -50,11 +50,10 @@ struct SettingsView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                if let url = Bundle.module.url(forResource: "mouthtype", withExtension: "png", subdirectory: "Settings"),
-                   let mark = NSImage(contentsOf: url) {
-                    Image(nsImage: mark).resizable().interpolation(.none).frame(width: 28, height: 28)
-                        .clipShape(RoundedRectangle(cornerRadius: 6)).accessibilityHidden(true)
+            HStack(spacing: 10) {
+                if let mark = SidebarMark.image {
+                    Image(nsImage: mark).resizable().interpolation(.high).frame(width: SidebarMark.size, height: SidebarMark.size)
+                        .accessibilityHidden(true)
                 }
                 Text("mouthtype").font(SettingsFont.serif(SettingsFont.wordmark))
             }.padding(.horizontal, 10).padding(.top, 52).padding(.bottom, 22)
@@ -95,5 +94,31 @@ struct SettingsView: View {
                 .background { if selected { RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.1)) } }
         }.buttonStyle(.plain).accessibilityIdentifier(id)
             .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// The sidebar mark is the app's own icon as the system draws it (squircle mask, Dark and Tinted styles). Builds without
+/// a bundle icon, such as tests and previews, fall back to the exported art clipped to the same shape.
+@MainActor
+enum SidebarMark {
+    static let size: CGFloat = 36
+
+    static var image: NSImage? {
+        if Bundle.main.object(forInfoDictionaryKey: "CFBundleIconName") != nil
+            || Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") != nil {
+            return NSApp.applicationIconImage
+        }
+        guard let url = Bundle.module.url(forResource: "mouthtype", withExtension: "png", subdirectory: "Settings"),
+              let art = NSImage(contentsOf: url) else { return nil }
+        return clipped(art)
+    }
+
+    private static func clipped(_ art: NSImage) -> NSImage {
+        let side: CGFloat = 256
+        return NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSBezierPath(roundedRect: rect, xRadius: side * 0.225, yRadius: side * 0.225).addClip()
+            art.draw(in: rect)
+            return true
+        }
     }
 }

@@ -72,7 +72,7 @@ import MouthtypeCore
     @Test func noSettingsFontIsBelowTenPoints() throws {
         #expect(SettingsFont.minimum == 10)
         #expect(SettingsFont.all.allSatisfy { $0 >= 10 })
-        #expect(SettingsFont.eyebrow == 10 && SettingsFont.footer == 10 && SettingsFont.wordmark == 24 && SettingsFont.title == 22)
+        #expect(SettingsFont.eyebrow == 10 && SettingsFont.footer == 10 && SettingsFont.wordmark == 28 && SettingsFont.title == 22)
         #expect(SettingsFont.headerDescription == 12.5)
         FontRegistry.registerBundledFonts()
         for name in [SettingsFont.sansName, SettingsFont.serifName, SettingsFont.monoName] {
