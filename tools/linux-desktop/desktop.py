@@ -706,6 +706,10 @@ class CleanupEngine:
         self.startup_seconds = startup_seconds
         self.worker = None
         self.lock = threading.Lock()
+        # close() sets this so a load in progress stops promptly instead of holding the lock for minutes.
+        self.shutdown = threading.Event()
+        self.warming = None
+        self.warm_guard = threading.Lock()
         present = all(Path(item['path']).is_file() for item in settings['artifacts'].values())
         self.state = 'idle' if present else 'absent'
         self.error = None
@@ -736,21 +740,24 @@ class CleanupEngine:
         def run():
             with self.lock:
                 try:
-                    self._ensure_loaded(threading.Event())
+                    self._ensure_loaded(self.shutdown)
                     self._prime()
                 except (OSError, ValueError, KeyError, TypeError, Stopped) as error:
                     self._fail(error)
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
-        return thread
+        with self.warm_guard:
+            if self.warming is not None and self.warming.is_alive():
+                return self.warming
+            self.warming = threading.Thread(target=run, daemon=True)
+            self.warming.start()
+            return self.warming
 
     def _prime(self):
         """One short request so the server caches the system prompt; the first real take then pays only for its words."""
         try:
             identity = uuid.uuid4().hex
             remaining = self.worker.send({'id': identity, 'input': 'Warm up, please.', 'deadline_seconds': 60},
-                                         60, threading.Event())
-            self.worker.receive(remaining, threading.Event())
+                                         60, self.shutdown)
+            self.worker.receive(remaining, self.shutdown)
         except (OSError, ValueError, KeyError, TypeError, Stopped):
             pass
 
@@ -761,10 +768,21 @@ class CleanupEngine:
             worker.close()
 
     def clean(self, text, cancelled, *, seconds, controls=None):
-        """The model's text, or None when the request timed out while the server stayed warm."""
-        with self.lock:
+        """The model's text, or None when the request timed out or the server is not warm yet.
+
+        A cold server never blocks a take: it loads in the background and this take keeps its basic text."""
+        if self.worker is None or self.state != 'ready':
+            if self.state == 'idle':
+                self.warm()
+            return None
+        end = time.monotonic() + seconds
+        while not self.lock.acquire(timeout=.05):
+            if cancelled.is_set() or time.monotonic() >= end:
+                return None
+        try:
+            if self.worker is None or self.state != 'ready':
+                return None
             try:
-                self._ensure_loaded(cancelled)
                 identity = uuid.uuid4().hex
                 request = {'id': identity, 'input': text, 'deadline_seconds': seconds}
                 if controls:
@@ -784,8 +802,11 @@ class CleanupEngine:
                     # A cancelled or crashed request reloads on the next take.
                     self.state = 'idle'
                 raise RuntimeError('Cleanup engine unavailable') from None
+        finally:
+            self.lock.release()
 
     def close(self):
+        self.shutdown.set()
         with self.lock:
             worker, self.worker = self.worker, None
             if worker:

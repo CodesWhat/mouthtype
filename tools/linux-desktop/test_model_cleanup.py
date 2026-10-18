@@ -158,14 +158,70 @@ for line in sys.stdin:
     def test_hung_worker_is_reaped_and_engine_recovers_on_next_request(self):
         settings, script = self.worker('''print(json.dumps({'event':'ready'}),flush=True)
 for line in sys.stdin:
- time.sleep(10)
+ r=json.loads(line)
+ if r['input']=='Warm up, please.': print(json.dumps({'id':r['id'],'text':'ok'}),flush=True)
+ else: time.sleep(10)
 ''')
         engine = CleanupEngine(settings, worker=script)
         self.addCleanup(engine.close)
+        engine.warm().join(5)
         with self.assertRaises(RuntimeError):
             engine.clean('hello there', threading.Event(), seconds=.05)
         self.assertIsNone(engine.worker)
         self.assertEqual(engine.state, 'idle')
+
+    def test_cold_engine_returns_none_at_once_and_warms_in_the_background(self):
+        settings, script = self.worker('''time.sleep(.5)
+print(json.dumps({'event':'ready'}),flush=True)
+for line in sys.stdin:
+ r=json.loads(line)
+ print(json.dumps({'id':r['id'],'text':r['input'].upper()}),flush=True)
+''')
+        engine = CleanupEngine(settings, worker=script)
+        self.addCleanup(engine.close)
+        started = time.monotonic()
+        self.assertIsNone(engine.clean('hello there', threading.Event(), seconds=2))
+        self.assertLess(time.monotonic() - started, .3)
+        thread = engine.warming
+        self.assertIsNotNone(thread)
+        self.assertIs(engine.warm(), thread)
+        thread.join(5)
+        self.assertEqual(engine.state, 'ready')
+        self.assertEqual(engine.clean('hello there', threading.Event(), seconds=2), 'HELLO THERE')
+
+    def test_close_stops_a_load_in_progress(self):
+        settings, script = self.worker('''time.sleep(30)
+print(json.dumps({'event':'ready'}),flush=True)
+''')
+        engine = CleanupEngine(settings, worker=script, startup_seconds=300)
+        thread = engine.warm()
+        deadline = time.monotonic() + 2
+        while engine.state != 'loading' and time.monotonic() < deadline:
+            time.sleep(.01)
+        started = time.monotonic()
+        engine.close()
+        thread.join(2)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertFalse(thread.is_alive())
+        self.assertIsNone(engine.worker)
+
+    def test_clean_gives_up_waiting_for_a_busy_engine_within_its_budget(self):
+        settings, script = self.worker('''print(json.dumps({'event':'ready'}),flush=True)
+for line in sys.stdin:
+ r=json.loads(line)
+ print(json.dumps({'id':r['id'],'text':'x'}),flush=True)
+''')
+        engine = CleanupEngine(settings, worker=script)
+        self.addCleanup(engine.close)
+        engine.warm().join(5)
+        self.assertEqual(engine.state, 'ready')
+        with engine.lock:
+            started = time.monotonic()
+            self.assertIsNone(engine.clean('hello there', threading.Event(), seconds=.2))
+            self.assertLess(time.monotonic() - started, 1)
+            cancelled = threading.Event()
+            cancelled.set()
+            self.assertIsNone(engine.clean('hello there', cancelled, seconds=30))
 
     def test_missing_weights_report_absent_and_bad_settings_are_rejected(self):
         settings, script = self.worker('print(json.dumps({"event":"ready"}),flush=True)\n')
