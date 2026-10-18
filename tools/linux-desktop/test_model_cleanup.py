@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -62,6 +64,17 @@ class ModelCleanupSessionTests(unittest.TestCase):
         self.assertEqual(status['cleanup']['last_outcome'], 'ok')
         self.assertEqual(status['cleanup']['model']['state'], 'ready')
         self.assertNotIn('ship', json.dumps(status))
+
+    def test_forgetting_a_model_cleaned_take_leaves_no_directory(self):
+        session, take = self.run_take(FakeCleanup('So we should ship it, right?'))
+        self.assertTrue((take / 'cleanup.json').is_file())
+        runtime = tempfile.TemporaryDirectory()
+        self.addCleanup(runtime.cleanup)
+        result = subprocess.run([sys.executable, str(Path(desktop.__file__)), '--recovery', str(session.recovery),
+                                 '--runtime', runtime.name, 'forget', take.name],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(take.exists())
 
     def test_timeout_failure_and_guard_rejection_fall_back_to_basic(self):
         for cleanup, outcome in ((FakeCleanup(timeout=True), 'timeout'), (FakeCleanup(fail=True), 'failed'),

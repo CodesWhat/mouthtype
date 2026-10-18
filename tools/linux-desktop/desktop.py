@@ -1123,7 +1123,7 @@ def main():
                 status = request(path, 'status')
                 if status.get('recovery') == args.id and status.get('state') != 'idle':
                     raise ValueError('Recovery is in use')
-            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt'):
+            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json'):
                 (take / name).unlink(missing_ok=True)
             take.rmdir()
             return 0
