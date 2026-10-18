@@ -80,11 +80,13 @@ enum MatrixPillLayout {
     enum Mode: Equatable {
         case hold, locked, processing
         case message(width: CGFloat, height: CGFloat)
+        /// The readout row of a card folded into the pill: the lamp, the idle meter and one short label or clock.
+        case readout(CardReadout)
     }
 
     static func capsuleWidth(_ mode: Mode, metrics m: Metrics = .standard) -> CGFloat {
         switch mode {
-        case .hold, .processing: m.heldWidth
+        case .hold, .processing, .readout: m.heldWidth
         case .locked: m.lockedWidth
         case .message(let width, _): width
         }
@@ -101,6 +103,9 @@ enum MatrixPillLayout {
     ) -> CGRect {
         CGRect(x: ClassicPillLayout.snap((bounds.width - width) / 2, scale: scale), y: bottomMargin, width: width, height: height)
     }
+
+    /// The squircle's corner reference for a card of corner `radius`: the path's corner is `cornerFactor` of it.
+    static func cornerReference(radius: CGFloat) -> CGFloat { radius / cornerFactor }
 
     /// The cancel and finish squircles at the right end, 3 pt apart and 5 pt from the edge.
     static func controlFrames(capsule: CGRect, metrics m: Metrics = .standard) -> [PillControl: CGRect] {

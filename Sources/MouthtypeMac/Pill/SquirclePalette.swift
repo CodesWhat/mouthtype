@@ -31,6 +31,8 @@ struct SquirclePalette {
     var finishGlyph: NSColor
 
     static let darkBody = (top: NSColor(hex: 0x252528), bottom: NSColor(hex: 0x19191B))
+    /// A Minimal card on a light desktop: the pill's top, and a bottom lighter than the pill's.
+    static let lightCardBottom = NSColor(hex: 0xF0F0F3)
     static let lightBody = (top: NSColor(hex: 0xFBFBFC), bottom: NSColor(hex: 0xE6E6EA))
 
     static func resolve(_ flavor: SquircleFlavor, dark: Bool) -> SquirclePalette {

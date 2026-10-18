@@ -33,6 +33,9 @@ struct DeliveryCard: Equatable, Sendable {
         /// A question about the dictionary rather than a report on a delivery.
         var isOffer: Bool { self == .rememberSpelling || self == .forgetSpelling }
 
+        /// A card that asks the user something, so a skin can mark it with a question accent.
+        var isQuestion: Bool { isOffer || self == .recoverOffer }
+
         /// A card that asks or reports something good rather than a failure, so it wears the quiet ink, not the error red.
         var isQuiet: Bool { isOffer || self == .recoverOffer || self == .recovered }
     }

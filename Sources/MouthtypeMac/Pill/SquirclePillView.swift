@@ -86,6 +86,22 @@ class SquirclePillView: NSView, PillSkinView {
     private var width: CGFloat
     private var height: CGFloat
     private var presented = false
+    /// When the fade-out in flight began, how long it takes and the opacity it started from; nil when none is.
+    private var fadeOut: (start: CFTimeInterval, duration: TimeInterval, from: Float)?
+    /// The opacity the last `appear` began from: 0 for a pill coming up from nothing, above 0 for one turned round mid
+    /// fade-out. For tests.
+    private(set) var appearStartOpacity: Float = 0
+    /// A card folded into the pill: its width, the height above the readout row, and what the row says about it.
+    private var cardWidth: CGFloat?
+    private var cardHeight: CGFloat = 0
+    private var cardReadout: CardReadout?
+    /// The height of the pill's own row: 30 pt, or the message block's height.
+    private var rowHeight: CGFloat
+    private let rowClip = CALayer()
+    private let rowClipMask = CAShapeLayer()
+    private let rowShade = CALayer()
+    private let rowRule = CALayer()
+    private let cardBar = CALayer()
     private(set) var typography = Typography.current()
     private var message: PillMessage?
     private var messageOverRecording = false
@@ -115,6 +131,11 @@ class SquirclePillView: NSView, PillSkinView {
     }
     /// Where the message can be seen, in the capsule's coordinates.
     var messageViewport: CGRect { textClip.bounds }
+    /// The body's gradient, top to bottom. A Minimal card on a light desktop is lighter than the pill, per the spec.
+    var bodyColours: [NSColor] {
+        if cardWidth != nil, flavor == .minimal, !isDark { return [palette.bodyTop, SquirclePalette.lightCardBottom] }
+        return [palette.bodyTop, palette.bodyBottom]
+    }
     var usesWindow: Bool { palette.window != nil }
     var resolvedPalette: SquirclePalette { palette }
     var litHalfRows: [Int] { halfRows }
@@ -127,10 +148,28 @@ class SquirclePillView: NSView, PillSkinView {
     /// The spring on the body, nil when it is not moving.
     var widthAnimation: CAAnimation? { bodyShape.mask.animation(forKey: "path") }
     var capsuleRect: CGRect { capsule(width: width, height: height) }
+    /// The pill's own row, at the bottom of the capsule; the whole capsule unless a card is folded in.
+    var rowRect: CGRect {
+        let rect = capsuleRect
+        return CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rowHeight)
+    }
+
+    var growsIntoCard: Bool { true }
+    var grownFrame: CGRect? { cardWidth == nil ? nil : capsuleRect }
+    /// Where the card's content goes: the capsule less its row, in this view's coordinates.
+    var cardFrame: CGRect? {
+        guard cardWidth != nil else { return nil }
+        let rect = capsuleRect
+        return CGRect(x: rect.minX, y: rect.maxY - cardHeight, width: rect.width, height: cardHeight)
+    }
+    var readoutLabelMinX: CGFloat { (mode.readout?.isClock == true ? clockLabel : recLabel).frame.minX }
+    var readoutLabel: String? { cardReadout?.label }
+    var cardProgress: CGFloat? { cardReadout?.progress }
+    var lampTone: CardReadout.Tone? { mode.readout?.tone }
 
     var controlFrames: [PillControl: CGRect] {
         guard isLocked, mode == .locked else { return [:] }
-        return MatrixPillLayout.controlFrames(capsule: capsule(width: width), metrics: metrics)
+        return MatrixPillLayout.controlFrames(capsule: rowRect, metrics: metrics)
     }
 
     private var isDark: Bool {
@@ -149,6 +188,7 @@ class SquirclePillView: NSView, PillSkinView {
         metrics = MatrixPillLayout.Metrics(size)
         width = metrics.heldWidth
         height = metrics.height
+        rowHeight = metrics.height
         palette = SquirclePalette.resolve(flavor, dark: true)
         block = ClassicPillLayout.MessageBlock(width: 0, height: metrics.height, lines: [])
         halfRows = [Int](repeating: 0, count: flavor == .minimal ? MatrixPillLayout.barCount : MatrixPillLayout.columns)
@@ -171,6 +211,11 @@ class SquirclePillView: NSView, PillSkinView {
         }
         container.addSublayer(bodyShape.layer)
         container.addSublayer(highlightShape.layer)
+        rowClip.mask = rowClipMask
+        rowClipMask.fillColor = NSColor.black.cgColor
+        for layer in [rowShade, rowRule, cardBar] { layer.anchorPoint = .zero; rowClip.addSublayer(layer) }
+        rowClip.isHidden = true
+        container.addSublayer(rowClip)
         rim.fillColor = nil
         container.addSublayer(rim)
         container.addSublayer(windowShape.layer)
@@ -286,7 +331,7 @@ class SquirclePillView: NSView, PillSkinView {
         PillMotion.withoutActions {
             ambient.shadowOpacity = p.ambientShadow
             contact.shadowOpacity = p.contactShadow
-            bodyShape.setColors([p.bodyTop, p.bodyBottom])
+            bodyShape.setColors(bodyColours)
             highlightShape.setColors([p.highlight, p.highlight.withAlphaComponent(0)])
             rim.strokeColor = p.hairline.cgColor
             rim.lineWidth = max(0.5 * k, 1 / scale)
@@ -377,40 +422,87 @@ class SquirclePillView: NSView, PillSkinView {
         width = newWidth
         height = newHeight
         let rect = capsule(width: newWidth, height: newHeight)
-        let path = MatrixPillLayout.squirclePath(rect, reference: metrics.height)
+        let row = CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: rowHeight)
+        // A card's corner is its own 16 pt; the pill keeps the 30 pt pill's.
+        let reference = cardWidth == nil ? metrics.height : MatrixPillLayout.cornerReference(radius: CardLayout.cornerRadius * k)
+        let path = MatrixPillLayout.squirclePath(rect, reference: reference)
         let bounds = container.bounds
         PillMotion.withoutActions {
             bodyShape.setSpan(top: rect.maxY, bottom: rect.minY, in: bounds)
             highlightShape.setSpan(top: rect.maxY, bottom: rect.maxY - 1.5 * k, in: bounds)
-            windowShape.setSpan(top: rect.maxY - metrics.windowInset, bottom: rect.minY + metrics.windowInset, in: bounds)
+            windowShape.setSpan(top: row.maxY - metrics.windowInset, bottom: row.minY + metrics.windowInset, in: bounds)
+            rowClip.frame = bounds
+            rowClipMask.frame = rowClip.bounds
         }
         PillMotion.set(bodyShape.mask, "path", path, timing)
         PillMotion.set(highlightShape.mask, "path", path, timing)
+        PillMotion.set(rowClipMask, "path", path, timing)
         PillMotion.set(ambient, "shadowPath", path, timing)
         PillMotion.set(contact, "shadowPath", path, timing)
-        PillMotion.set(rim, "path", MatrixPillLayout.squirclePath(rect.insetBy(dx: 0.25 * k, dy: 0.25 * k), reference: metrics.height), timing)
-        let window = MatrixPillLayout.windowFrame(capsule: rect, locked: newWidth == metrics.lockedWidth, metrics: metrics)
+        PillMotion.set(rim, "path", MatrixPillLayout.squirclePath(rect.insetBy(dx: 0.25 * k, dy: 0.25 * k), reference: reference), timing)
+        let window = cardWidth == nil
+            ? MatrixPillLayout.windowFrame(capsule: rect, locked: newWidth == metrics.lockedWidth, metrics: metrics)
+            : MatrixPillLayout.windowFrame(capsule: row, locked: !mode.isMessage, metrics: metrics).offsetBy(dx: rowShift, dy: 0)
         let windowPath = MatrixPillLayout.squirclePath(window, reference: window.height)
         PillMotion.set(windowShape.mask, "path", windowPath, timing)
         PillMotion.set(windowEdge, "path", windowPath, timing)
         PillMotion.set(content, "position", NSValue(point: rect.origin), timing)
         PillMotion.withoutActions { content.bounds = CGRect(origin: .zero, size: rect.size) }
+        placeRowChrome(rect: rect, timing: timing)
         // Controls travel with the capsule's right end while hidden too, so they fade in where they will sit.
-        let frames = MatrixPillLayout.controlFrames(capsule: rect, metrics: metrics)
+        let frames = MatrixPillLayout.controlFrames(capsule: row, metrics: metrics)
         for (control, disc) in discs {
             guard let frame = frames[control] else { continue }
             PillMotion.set(disc.group, "position", NSValue(point: CGPoint(x: frame.midX, y: frame.midY)), timing)
         }
     }
 
+    /// The row's backing, the rule above it and the countdown bar, which only a folded card has.
+    private func placeRowChrome(rect: CGRect, timing: PillMotion.Timing) {
+        PillMotion.withoutActions { rowClip.isHidden = cardWidth == nil }
+        let origin = NSValue(point: rect.origin)
+        PillMotion.set(rowShade, "position", origin, timing)
+        PillMotion.set(rowShade, "bounds", NSValue(rect: CGRect(x: 0, y: 0, width: rect.width, height: rowHeight)), timing)
+        PillMotion.set(rowRule, "position", NSValue(point: CGPoint(x: rect.minX, y: rect.minY + rowHeight)), timing)
+        PillMotion.set(rowRule, "bounds", NSValue(rect: CGRect(x: 0, y: 0, width: rect.width, height: 0.5 * k)), timing)
+        PillMotion.set(cardBar, "position", origin, timing)
+        applyCardChrome()
+    }
+
+    private var goodColor: NSColor { flavor == .minimal && !isDark ? NSColor(hex: 0x315B54) : palette.ink }
+
+    private func toneColor(_ tone: CardReadout.Tone) -> NSColor {
+        switch tone {
+        case .alert: palette.error
+        case .quiet: goodColor
+        case .question: palette.ink
+        }
+    }
+
+    /// Colours and the bar's fill for the card's readout. The bar is 3 pt along the capsule's bottom edge.
+    private func applyCardChrome() {
+        PillMotion.withoutActions {
+            let hasWindow = palette.window != nil
+            rowShade.backgroundColor = (isDark ? NSColor.black.withAlphaComponent(0.25) : NSColor.black.withAlphaComponent(hasWindow ? 0 : 0.04)).cgColor
+            rowRule.backgroundColor = (isDark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.08)).cgColor
+            if let readout = cardReadout, let progress = readout.progress {
+                cardBar.isHidden = false
+                cardBar.backgroundColor = toneColor(readout.tone).withAlphaComponent(0.7).cgColor
+                cardBar.bounds = CGRect(x: 0, y: 0, width: capsuleRect.width * min(1, max(0, progress)), height: 3 * k)
+            } else {
+                cardBar.isHidden = true
+            }
+        }
+    }
+
     /// Where everything inside the content group sits, in the capsule's own coordinates (origin at its bottom left).
     private func layoutContent() {
-        let midY = height / 2
+        let midY = rowHeight / 2
         PillMotion.withoutActions {
             // The first text line's middle, so a wrapped message keeps its indicator beside the headline.
             let indicatorY = mode.isMessage && !block.lines.isEmpty ? midY - block.lines[0].centerOffset - block.overflow / 2 : midY
-            lampGroup.position = CGPoint(x: metrics.indicatorCentre, y: indicatorY)
-            lips.position = CGPoint(x: metrics.indicatorCentre, y: midY)
+            lampGroup.position = CGPoint(x: metrics.indicatorCentre + rowShift, y: indicatorY)
+            lips.position = CGPoint(x: metrics.indicatorCentre + rowShift, y: midY)
             for (i, dot) in processingDots.enumerated() {
                 dot.position = CGPoint(x: metrics.labelX + (1.5 + 6 * CGFloat(i)) * k, y: midY)
             }
@@ -418,6 +510,30 @@ class SquirclePillView: NSView, PillSkinView {
         rebuildMeter()
         layoutLabels()
         layoutText()
+    }
+
+    /// The readout group's right edge, in the capsule's coordinates before any shift. A clock is held to its slot so the
+    /// group doesn't wander as the digits change; a label is measured; no label ends the group at the meter.
+    private func readoutRight(_ readout: CardReadout) -> CGFloat {
+        if readout.isClock { return metrics.labelX + metrics.clockSlot }
+        guard !readout.label.isEmpty else { return metrics.meterX + metrics.meterWidth }
+        return metrics.labelX + labelString(readout.label, font: recFont(), color: palette.ink).size().width
+    }
+
+    /// How far the readout group (lamp, meter and label) moves right to sit in the middle of a grown card's row. Only
+    /// the card's own readout is centred; a recording or a message under the card keeps the pill's usual slots.
+    private var rowShift: CGFloat {
+        guard let cardWidth, let readout = mode.readout else { return 0 }
+        let width = max(cardWidth, MatrixPillLayout.capsuleWidth(mode, metrics: metrics))
+        let left = metrics.padLeft
+        return max(0, ClassicPillLayout.snap((width - (readoutRight(readout) - left)) / 2 - left, scale: scale))
+    }
+
+    /// The readout group's left and right edges in the capsule's coordinates as laid out now, nil outside a grown card's
+    /// readout row. For tests.
+    var readoutGroupExtent: (minX: CGFloat, maxX: CGFloat)? {
+        guard cardWidth != nil, let readout = mode.readout else { return nil }
+        return (metrics.padLeft + rowShift, readoutRight(readout) + rowShift)
     }
 
     private func textFrame(font: NSFont, x: CGFloat, width: CGFloat, midY: CGFloat) -> CGRect {
@@ -431,17 +547,30 @@ class SquirclePillView: NSView, PillSkinView {
         NSAttributedString(string: string, attributes: [.font: font, .foregroundColor: color, .kern: 0.9 * k])
     }
 
+    /// "REC", or the card's short label when the row belongs to a card.
+    private var recText: String {
+        if let readout = mode.readout, !readout.isClock { return readout.label }
+        return "REC"
+    }
+
+    private var shownClock: String {
+        if let readout = mode.readout, readout.isClock { return readout.label }
+        return clockText
+    }
+
     private func layoutLabels() {
-        let midY = height / 2
+        let midY = rowHeight / 2
         let rec = recFont(), clock = clockFont()
         let recColor = isBars ? palette.ink.withAlphaComponent(0.9) : palette.ink
         PillMotion.withoutActions {
-            recLabel.string = labelString("REC", font: rec, color: recColor)
-            recLabel.frame = textFrame(font: rec, x: metrics.labelX, width: metrics.recSlot, midY: midY)
+            recLabel.string = labelString(recText, font: rec, color: recColor)
+            // A card's label ("SAFE") is a letter longer than REC, and the folded pill has the room.
+            let recWidth = mode.readout == nil ? metrics.recSlot : metrics.recSlot + 10 * k
+            recLabel.frame = textFrame(font: rec, x: metrics.labelX + rowShift, width: recWidth, midY: midY)
             clockLabel.string = NSAttributedString(
-                string: clockText, attributes: [.font: clock, .foregroundColor: palette.ink]
+                string: shownClock, attributes: [.font: clock, .foregroundColor: palette.ink]
             )
-            clockLabel.frame = textFrame(font: clock, x: metrics.labelX, width: metrics.clockSlot, midY: midY)
+            clockLabel.frame = textFrame(font: clock, x: metrics.labelX + rowShift, width: metrics.clockSlot, midY: midY)
         }
     }
 
@@ -474,7 +603,7 @@ class SquirclePillView: NSView, PillSkinView {
                 layer.isHidden = false
                 layer.string = NSAttributedString(string: line.text, attributes: [.font: font, .foregroundColor: color])
                 layer.frame = textFrame(
-                    font: font, x: metrics.textX, width: max(0, width - metrics.textX - metrics.padRight), midY: height / 2 - line.centerOffset
+                    font: font, x: metrics.textX, width: max(0, width - metrics.textX - metrics.padRight), midY: rowHeight / 2 - line.centerOffset
                 )
             }
         }
@@ -483,8 +612,8 @@ class SquirclePillView: NSView, PillSkinView {
     // MARK: Meter
 
     private func rebuildMeter() {
-        let midY = height / 2
-        let x = metrics.meterX
+        let midY = rowHeight / 2
+        let x = metrics.meterX + rowShift
         let litPath = CGMutablePath(), idlePath = CGMutablePath()
         if isBars {
             for (i, n) in halfRows.enumerated() {
@@ -607,7 +736,7 @@ class SquirclePillView: NSView, PillSkinView {
     // MARK: Indicator
 
     private enum Lamp {
-        case rec, ink, error, hidden
+        case rec, ink, error, good, hidden
     }
 
     private var lampKind: Lamp {
@@ -616,6 +745,12 @@ class SquirclePillView: NSView, PillSkinView {
         case .locked: .hidden
         case .processing: .ink
         case .message: message?.isError == true ? .error : .ink
+        case .readout(let readout):
+            switch readout.tone {
+            case .alert: .error
+            case .quiet: .good
+            case .question: .ink
+            }
         }
     }
 
@@ -624,6 +759,7 @@ class SquirclePillView: NSView, PillSkinView {
         switch lampKind {
         case .rec: colour = palette.rec
         case .error: colour = palette.error
+        case .good: colour = goodColor
         case .ink, .hidden: colour = palette.ink
         }
         PillMotion.withoutActions {
@@ -643,7 +779,7 @@ class SquirclePillView: NSView, PillSkinView {
         case .rec: wanted = .breathing
         case .ink: wanted = mode == .processing ? .pulsing : .steady
         case .error: wanted = .flashing
-        case .hidden: wanted = .steady
+        case .good, .hidden: wanted = .steady
         }
         guard !reduceMotion, wanted != .steady else {
             lampMotion = .steady
@@ -679,14 +815,16 @@ class SquirclePillView: NSView, PillSkinView {
 
     private func apply(_ new: MatrixPillLayout.Mode) {
         mode = new
+        rowHeight = MatrixPillLayout.capsuleHeight(new, metrics: metrics)
         let moving = presented && !reduceMotion
         let fadeIn: PillMotion.Timing = presented ? .ease(reduceMotion ? 0.15 : 0.12, delay: reduceMotion ? 0 : 0.07) : .none
         let fadeOut: PillMotion.Timing = presented ? .ease(reduceMotion ? 0.15 : 0.05) : .none
         place(
-            width: MatrixPillLayout.capsuleWidth(new, metrics: metrics),
-            height: MatrixPillLayout.capsuleHeight(new, metrics: metrics),
+            width: max(cardWidth ?? 0, MatrixPillLayout.capsuleWidth(new, metrics: metrics)),
+            height: cardHeight + rowHeight,
             timing: moving ? .spring : .none
         )
+        if new.readout != nil { applyHalfRows([Int](repeating: 0, count: halfRows.count)) }
         layoutContent()
 
         func fade(_ layer: CALayer, _ visible: Bool) {
@@ -694,11 +832,12 @@ class SquirclePillView: NSView, PillSkinView {
         }
         var isMessage = false
         if case .message = new { isMessage = true }
+        let readout = new.readout
         fade(lampGroup, new != .locked)
         fade(lips, new == .locked)
         fade(meterGroup, !isMessage)
-        fade(recLabel, new == .hold)
-        fade(clockLabel, new == .locked)
+        fade(recLabel, new == .hold || (readout.map { !$0.isClock && !$0.label.isEmpty } ?? false))
+        fade(clockLabel, new == .locked || (readout?.isClock ?? false))
         fade(textGroup, isMessage)
         fade(processingGroup, new == .processing)
         dotsLit = -1
@@ -756,6 +895,43 @@ class SquirclePillView: NSView, PillSkinView {
         PillMotion.withoutActions { textGroup.position = CGPoint(x: 0, y: messageScroll - block.overflow / 2) }
     }
 
+    // MARK: Card
+
+    /// Grows the capsule upward to hold a card `width` wide and `height` tall above the row, which keeps saying what it
+    /// said, or `readout` when `showReadout` is set.
+    func growCard(width: CGFloat, height: CGFloat, readout: CardReadout, showReadout: Bool) {
+        cardWidth = width
+        cardHeight = height
+        cardReadout = readout
+        PillMotion.withoutActions { bodyShape.setColors(bodyColours) }
+        apply(showReadout ? .readout(readout) : mode)
+    }
+
+    /// The card's readout changed without the card (the countdown ticked).
+    func updateCardReadout(_ readout: CardReadout) {
+        cardReadout = readout
+        if mode.readout != nil {
+            mode = .readout(readout)
+            layoutLabels()
+        }
+        applyCardChrome()
+    }
+
+    /// Shows the card's readout in the row, for a card with no recording or message under it.
+    func showCardReadout(_ readout: CardReadout) {
+        cardReadout = readout
+        apply(.readout(readout))
+    }
+
+    /// Back to the plain pill. A row that was only the card's readout stays as it is.
+    func shrinkCard() {
+        cardWidth = nil
+        cardHeight = 0
+        cardReadout = nil
+        PillMotion.withoutActions { bodyShape.setColors(bodyColours) }
+        apply(mode)
+    }
+
     // MARK: Show and hide
 
     private func pillTransform(scale s: CGFloat, drop: CGFloat) -> CATransform3D {
@@ -765,35 +941,73 @@ class SquirclePillView: NSView, PillSkinView {
         return CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), s, s, 1)
     }
 
-    /// 260 ms ease-out: fades in, grows from 90 percent and rises 5 pt. Fade only under Reduce Motion.
+    /// How long the pill takes to appear.
+    static func appearDuration(reduceMotion: Bool) -> TimeInterval { reduceMotion ? 0.15 : 0.26 }
+
+    private static let disappearCurve = (x1: 0.55, y1: 0.055, x2: 0.675, y2: 0.19)
+
+    /// How far a fade-out started `elapsed` ago has got, 1 untouched down to 0 gone, on the same ease-in curve.
+    static func fadeOutOpacity(from start: Float, elapsed: TimeInterval, duration: TimeInterval) -> Float {
+        guard duration > 0 else { return 0 }
+        let t = min(1, max(0, elapsed / duration))
+        // Solve the bezier's x for t by bisection, then read y.
+        let c = disappearCurve
+        func bezier(_ u: Double, _ a: Double, _ b: Double) -> Double {
+            3 * (1 - u) * (1 - u) * u * a + 3 * (1 - u) * u * u * b + u * u * u
+        }
+        var low = 0.0, high = 1.0
+        for _ in 0..<24 {
+            let mid = (low + high) / 2
+            if bezier(mid, c.x1, c.x2) < t { low = mid } else { high = mid }
+        }
+        let progress = bezier((low + high) / 2, c.y1, c.y2)
+        return Float(Double(start) * (1 - progress))
+    }
+
+    /// 260 ms ease-out: fades in, grows from 90 percent and rises 5 pt. Fade only under Reduce Motion. A pill still
+    /// fading out when this runs is not snapped to nothing: it turns round and fades back up from where it is.
     func appear(reduceMotion: Bool) {
+        let resumed = fadingOutOpacity()
         presented = true
-        PillMotion.withoutActions {
-            container.opacity = 0
-            container.transform = reduceMotion ? CATransform3DIdentity : pillTransform(scale: Self.appearScale, drop: Self.travel * k)
-            lampGroup.opacity = 0
-            lips.opacity = 0
-            meterGroup.opacity = 0
-            recLabel.opacity = 0
-            clockLabel.opacity = 0
-            textGroup.opacity = 0
-            processingGroup.opacity = 0
-            discs.values.forEach { $0.group.opacity = 0 }
+        fadeOut = nil
+        appearStartOpacity = resumed ?? 0
+        if resumed == nil {
+            PillMotion.withoutActions {
+                container.opacity = 0
+                container.transform = reduceMotion ? CATransform3DIdentity : pillTransform(scale: Self.appearScale, drop: Self.travel * k)
+                lampGroup.opacity = 0
+                lips.opacity = 0
+                meterGroup.opacity = 0
+                recLabel.opacity = 0
+                clockLabel.opacity = 0
+                textGroup.opacity = 0
+                processingGroup.opacity = 0
+                discs.values.forEach { $0.group.opacity = 0 }
+            }
         }
         clockText = "0:00"
-        place(width: metrics.heldWidth, timing: .none)
+        rowHeight = metrics.height
+        place(width: max(cardWidth ?? 0, metrics.heldWidth), height: cardHeight + rowHeight, timing: .none)
         layoutContent()
-        let timing: PillMotion.Timing = .ease(reduceMotion ? 0.15 : 0.26)
+        let timing: PillMotion.Timing = .ease(Self.appearDuration(reduceMotion: reduceMotion))
         PillMotion.set(container, "opacity", Float(1), timing)
         PillMotion.set(container, "transform", CATransform3DIdentity, reduceMotion ? .none : timing)
     }
 
+    /// The opacity the pill has now while it is still fading out, nil when it is not, or has all but gone.
+    private func fadingOutOpacity() -> Float? {
+        guard let fadeOut else { return nil }
+        let now = Self.fadeOutOpacity(from: fadeOut.from, elapsed: CACurrentMediaTime() - fadeOut.start, duration: fadeOut.duration)
+        return now > 0.01 ? now : nil
+    }
+
     /// 160 ms ease-in: fades, shrinks to 90 percent and drops 5 pt.
     func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void) {
+        let duration: TimeInterval = reduceMotion ? 0.12 : 0.16
+        fadeOut = (CACurrentMediaTime(), duration, fadingOutOpacity() ?? Float(container.opacity))
         presented = false
         CATransaction.begin()
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
-        let duration: TimeInterval = reduceMotion ? 0.12 : 0.16
         PillMotion.set(container, "opacity", Float(0), .easeIn(duration))
         if !reduceMotion {
             PillMotion.set(container, "transform", pillTransform(scale: Self.appearScale, drop: Self.travel * k), .easeIn(duration))
@@ -803,6 +1017,11 @@ class SquirclePillView: NSView, PillSkinView {
 }
 
 extension MatrixPillLayout.Mode {
+    var readout: CardReadout? {
+        if case .readout(let readout) = self { return readout }
+        return nil
+    }
+
     var isMessage: Bool {
         if case .message = self { return true }
         return false

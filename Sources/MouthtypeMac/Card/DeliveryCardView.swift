@@ -9,6 +9,9 @@ class CardControlView: NSView {
     private(set) var isHovered = false
     private(set) var isPressed = false
     var isActive = true { didSet { needsDisplay = true } }
+    var palette = CardPalette.classic { didSet { needsDisplay = true } }
+    /// The pill size's multiple, for the drawn glyph and corners.
+    var k: CGFloat = 1 { didSet { needsDisplay = true } }
 
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { false }
@@ -48,29 +51,41 @@ class CardControlView: NSView {
         isPressed = pressed
         needsDisplay = true
     }
+
+    /// Fills the control's shape: the capsule or disc of the round skins, a squircle of `radius` on the others.
+    func fillShape(in rect: CGRect, radius: CGFloat, round: Bool, color: NSColor) {
+        color.setFill()
+        if palette.squircleControls {
+            guard let context = NSGraphicsContext.current?.cgContext else { return }
+            context.addPath(MatrixPillLayout.squirclePath(rect, reference: radius / MatrixPillLayout.cornerFactor))
+            context.fillPath()
+        } else if round {
+            NSBezierPath(ovalIn: rect).fill()
+        } else {
+            NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
+        }
+    }
 }
 
-/// The 24 pt round dismiss control.
+/// The 24 pt dismiss control: a disc, or a squircle on the squircle cards.
 @MainActor
 final class CardDismissView: CardControlView {
     override func draw(_ dirtyRect: NSRect) {
-        let alpha: CGFloat = isPressed ? 0.42 : isHovered ? 0.30 : 0.16
-        NSColor(white: 0.5, alpha: alpha).setFill()
-        NSBezierPath(ovalIn: bounds).fill()
-        let c = CGPoint(x: bounds.midX, y: bounds.midY), h: CGFloat = 3.2
+        fillShape(in: bounds, radius: 9 * k, round: true, color: palette.dismiss.fill(hovered: isHovered, pressed: isPressed))
+        let c = CGPoint(x: bounds.midX, y: bounds.midY), h: CGFloat = 3.2 * k
         let cross = NSBezierPath()
         cross.move(to: CGPoint(x: c.x - h, y: c.y - h))
         cross.line(to: CGPoint(x: c.x + h, y: c.y + h))
         cross.move(to: CGPoint(x: c.x - h, y: c.y + h))
         cross.line(to: CGPoint(x: c.x + h, y: c.y - h))
-        cross.lineWidth = 1.6
+        cross.lineWidth = 1.6 * k
         cross.lineCapStyle = .round
-        NSColor(white: 1, alpha: 0.85).setStroke()
+        palette.dismissGlyph.setStroke()
         cross.stroke()
     }
 }
 
-/// A pill-shaped text button: the first of a card's buttons is the filled primary, the rest the quiet kind.
+/// A text button: the first of a card's buttons is the filled primary, the rest the quiet kind.
 @MainActor
 final class CardButtonView: CardControlView {
     var label = NSAttributedString()
@@ -81,36 +96,51 @@ final class CardButtonView: CardControlView {
         let rect = bounds.insetBy(dx: bounds.width * (1 - scale) / 2, dy: bounds.height * (1 - scale) / 2)
         let fill: NSColor
         if isPrimary {
-            let base = CardPalette.ink
+            let base = palette.primaryFill
             fill = isPressed ? base.blended(withFraction: 0.18, of: .black) ?? base
                 : isHovered ? base.blended(withFraction: 0.5, of: .white) ?? base : base
         } else {
-            fill = NSColor(white: 0.5, alpha: isPressed ? 0.42 : isHovered ? 0.30 : 0.18)
+            fill = palette.secondary.fill(hovered: isHovered, pressed: isPressed)
         }
-        fill.setFill()
-        NSBezierPath(roundedRect: rect, xRadius: rect.height / 2, yRadius: rect.height / 2).fill()
+        fillShape(in: rect, radius: 10 * k, round: false, color: fill)
+        if !isPrimary, palette.chips, let context = NSGraphicsContext.current?.cgContext {
+            // The glass chip's specular edge along its top.
+            context.saveGState()
+            context.addPath(CGPath(roundedRect: rect, cornerWidth: rect.height / 2, cornerHeight: rect.height / 2, transform: nil))
+            context.clip()
+            context.setFillColor(NSColor.white.withAlphaComponent(0.35).cgColor)
+            context.fill(CGRect(x: rect.minX, y: rect.minY, width: rect.width, height: 0.6 * k))
+            context.restoreGState()
+        }
         let size = label.size()
         label.draw(at: CGPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2))
     }
 }
 
-enum CardPalette {
-    static let ink = NSColor(hex: 0xF4F3E8)
-    static let body = NSColor(hex: 0xF1F0E6)
-    static let onInk = NSColor(hex: 0x1D1D1F)
-    static let warn = NSColor(hex: 0xFF453A)
+/// What the pill's readout row says while a card is folded into it: the short thing, not the header again.
+struct CardReadout: Equatable, Sendable {
+    enum Tone: Equatable, Sendable { case alert, quiet, question }
 
-    /// The status dot and countdown bar: red for a delivery problem, the quiet ink for a question.
-    static func accent(for kind: DeliveryCard.Kind) -> NSColor { kind.isQuiet ? ink : warn }
+    /// "SAFE" over a transcript, the clock over a countdown, nothing otherwise.
+    var label: String
+    var isClock: Bool
+    var tone: Tone
+    /// The countdown bar's fill, 1 down to 0; nil when the card has no countdown.
+    var progress: CGFloat?
 }
 
-/// The card: the dark surface, the reason line with its status dot, the transcript, the buttons and the dismiss
-/// control, laid out by `CardLayout`. The view fills its panel, with the face inset by the shadow margin.
+/// The card: the surface, the reason line with its status dot, the transcript, the buttons and the dismiss control,
+/// laid out by `CardLayout` at the pill's size. It draws in the colours of the skin it is configured for. As a
+/// standalone card the view fills its panel, with the face inset by the shadow margin. Folded into a pill
+/// (`embedded`) it draws only the face's content, on the pill's own body, and is exactly the face's size.
 @MainActor
 final class DeliveryCardView: NSView {
     var onAction: (@MainActor (CardAction) -> Void)?
     var onDismiss: (@MainActor () -> Void)?
 
+    private let environment: GlassPillEnvironment
+    private let glass = NSGlassEffectView()
+    private let shadows = CALayer()
     private let ambient = CALayer()
     private let contact = CALayer()
     private let body = CALayer()
@@ -126,38 +156,48 @@ final class DeliveryCardView: NSView {
 
     private var state: CardViewState?
     private var typography = Typography.current()
-    private var countdownStart: CFTimeInterval?
+    /// When the Undo clock started, shared with the card's other view so a skin change doesn't restart it.
+    private(set) var countdownStart: CFTimeInterval?
+    /// The tallest the face may be; a longer transcript scrolls to fit. Set for a card folded into a pill on a short screen.
+    var maxFaceHeight: CGFloat?
+    private var backdrop: GlassPillPolicy.Backdrop?
     private(set) var frames: CardLayout.Frames?
+    private(set) var style = CardStyle.classic
+    private(set) var pillScale = PillScale.standard
+    private(set) var embedded = false
+    private(set) var palette = CardPalette.classic
+    private(set) var glassDecision: GlassPillPolicy.Decision = .solid(.materialUnavailable)
     /// The face size, without the shadow margin.
     var faceSize: CGSize { frames?.size ?? .zero }
+    /// True while the system glass material is the card's body.
+    var showsMaterial: Bool { !glass.isHidden }
+    var showsDot: Bool { !dot.isHidden }
+    /// The drop shadow layers' paths, for tests.
+    var shadowPaths: [CGPath?] { [ambient.shadowPath, contact.shadowPath] }
 
-    override init(frame: NSRect) {
+    private var k: CGFloat { pillScale.factor }
+    private var isDark: Bool { effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
+
+    init(frame: NSRect, environment: GlassPillEnvironment = .system) {
+        self.environment = environment
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = .clear
-        for (shadow, opacity, radius, drop) in [(ambient, Float(0.50), CGFloat(6), CGFloat(4)), (contact, 0.35, 1, 0.8)] {
+        glass.isHidden = true
+        addSubview(glass)
+        layer?.addSublayer(shadows)
+        for (shadow, opacity) in [(ambient, Float(0.50)), (contact, 0.35)] {
             shadow.backgroundColor = ClassicPillView.fill.cgColor
-            shadow.cornerRadius = CardLayout.cornerRadius
             shadow.cornerCurve = .continuous
             shadow.shadowColor = NSColor.black.cgColor
             shadow.shadowOpacity = opacity
-            shadow.shadowRadius = radius
-            shadow.shadowOffset = CGSize(width: 0, height: -drop)
-            layer?.addSublayer(shadow)
+            shadows.addSublayer(shadow)
         }
-        body.backgroundColor = ClassicPillView.fill.withAlphaComponent(0.96).cgColor
-        body.cornerRadius = CardLayout.cornerRadius
         body.cornerCurve = .continuous
-        body.borderWidth = 1
-        body.borderColor = ClassicPillView.stroke.cgColor
         layer?.addSublayer(body)
 
         addSubview(content)
-        dot.cornerRadius = CardLayout.dot / 2
-        dot.backgroundColor = CardPalette.warn.cgColor
-        dot.shadowColor = CardPalette.warn.cgColor
         dot.shadowOpacity = 0.9
-        dot.shadowRadius = 3
         dot.shadowOffset = .zero
         content.wantsLayer = true
         content.layer?.addSublayer(dot)
@@ -165,7 +205,6 @@ final class DeliveryCardView: NSView {
         header.isSelectable = false
         header.maximumNumberOfLines = 0
         header.lineBreakMode = .byWordWrapping
-        header.textColor = CardPalette.ink.withAlphaComponent(0.85)
         header.drawsBackground = false
         content.addSubview(header)
 
@@ -191,18 +230,52 @@ final class DeliveryCardView: NSView {
         content.addSubview(scroll)
 
         // The countdown bar is clipped to the card's rounded shape and drains along its bottom edge.
-        barClip.cornerRadius = CardLayout.cornerRadius
         barClip.cornerCurve = .continuous
         barClip.masksToBounds = true
-        barFill.backgroundColor = CardPalette.warn.withAlphaComponent(0.6).cgColor
         barClip.addSublayer(barFill)
         layer?.addSublayer(barClip)
+        resolvePalette()
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        restyle()
+    }
+
+    /// Picks the skin, size and whether the card is folded into a pill. Takes effect at the next `render`.
+    func configure(style: CardStyle, scale: PillScale, embedded: Bool) {
+        self.style = style
+        pillScale = scale
+        self.embedded = embedded
+        resolvePalette()
+    }
+
+    /// Samples the wallpaper under the card once and decides the Glass card's material again. Runs when the card shows.
+    func refreshBackdrop() {
+        guard style == .glass else { return }
+        backdrop = environment.backdrop(self)
+        restyle()
+    }
+
+    private func resolvePalette() {
+        glassDecision = style == .glass && !embedded
+            ? GlassPillPolicy.decide(
+                materialAvailable: environment.materialAvailable(), reduceTransparency: environment.reduceTransparency(),
+                backdrop: backdrop
+            )
+            : .solid(.materialUnavailable)
+        palette = CardPalette.resolve(style: style, dark: isDark, glass: glassDecision)
+    }
+
+    private func restyle() {
+        resolvePalette()
+        if let state { render(state, typography: typography) }
+    }
 
     /// Where a control's middle is, in this view's coordinates. For the click test.
     func center(of action: CardAction) -> CGPoint? {
@@ -212,25 +285,34 @@ final class DeliveryCardView: NSView {
 
     var dismissCenter: CGPoint { convert(CGPoint(x: dismiss.bounds.midX, y: dismiss.bounds.midY), from: dismiss) }
 
-    /// Fills the card for `state` and returns the whole size the view needs, shadow margin included.
+    /// Every button's frame, in this view's coordinates, for hit tests.
+    var buttonFrames: [CardAction: CGRect] {
+        Dictionary(uniqueKeysWithValues: buttons.map { ($0.action, convert($0.view.bounds, from: $0.view)) })
+    }
+
+    var dismissFrame: CGRect { convert(dismiss.bounds, from: dismiss) }
+
+    /// Fills the card for `state` and returns the whole size the view needs: shadow margin included, unless embedded.
     @discardableResult
-    func render(_ new: CardViewState, typography: Typography) -> CGSize {
+    func render(_ new: CardViewState, typography: Typography, countdownStart sharedStart: CFTimeInterval? = nil) -> CGSize {
         let isNewCard = state?.card != new.card
         state = new
         self.typography = typography
-        if isNewCard { countdownStart = new.card.countdown == nil ? nil : CACurrentMediaTime() }
+        if isNewCard { countdownStart = new.card.countdown == nil ? nil : (sharedStart ?? CACurrentMediaTime()) }
         let card = new.card
+        let k = self.k
 
-        let headerFont = typography.font(.header)
-        let bodyFont = typography.font(.body)
-        let buttonFont = typography.font(.button)
-        let numericFont = typography.font(.numeric)
+        let headerFont = typography.font(.header, scale: k)
+        let bodyFont = typography.font(.body, scale: k)
+        let buttonFont = typography.font(.button, scale: k)
+        let numericFont = typography.font(.numeric, scale: k)
 
+        header.textColor = palette.ink.withAlphaComponent(0.85)
         let headerString = NSAttributedString(
-            string: card.header, attributes: [.font: headerFont, .foregroundColor: header.textColor ?? CardPalette.ink]
+            string: card.header, attributes: [.font: headerFont, .foregroundColor: header.textColor ?? palette.ink]
         )
         header.attributedStringValue = headerString
-        let headerHeight = Self.height(of: headerString, width: CardLayout.headerTextWidth)
+        let headerHeight = Self.height(of: headerString, width: CardLayout.headerTextWidth(scale: k, showsDot: palette.showsDot))
 
         let bodyStyle = NSMutableParagraphStyle()
         bodyStyle.lineBreakMode = .byWordWrapping
@@ -238,43 +320,90 @@ final class DeliveryCardView: NSView {
         var transcriptString: NSAttributedString?
         if let text = card.transcript {
             transcriptString = NSAttributedString(
-                string: text, attributes: [.font: bodyFont, .foregroundColor: CardPalette.body, .paragraphStyle: bodyStyle]
+                string: text, attributes: [.font: bodyFont, .foregroundColor: palette.body, .paragraphStyle: bodyStyle]
             )
         } else if let pair = card.pair {
-            transcriptString = Self.pairString(pair, bodyFont: bodyFont, emphasis: buttonFont, style: bodyStyle)
+            transcriptString = Self.pairString(pair, palette: palette, bodyFont: bodyFont, emphasis: buttonFont, style: bodyStyle)
         }
-        let accent = CardPalette.accent(for: card.kind)
+        let accent = palette.accent(for: card.kind)
         dot.backgroundColor = accent.cgColor
         dot.shadowColor = accent.cgColor
         barFill.backgroundColor = accent.withAlphaComponent(0.6).cgColor
-        let transcriptHeight = transcriptString.map { Self.height(of: $0, width: CardLayout.contentWidth) }
+        let transcriptHeight = transcriptString.map { Self.height(of: $0, width: CardLayout.contentWidth(scale: k)) }
         let lineHeight = Typography.lineHeight(bodyFont) + max(0, round(bodyFont.pointSize * 1.38) - Typography.lineHeight(bodyFont))
 
         // Every label a button can show, so its width holds still while the label changes.
         var labels: [CardAction: [NSAttributedString]] = [:]
         for action in card.actions {
-            labels[action] = Self.labels(for: action, in: new, primary: card.actions.first == action, buttonFont: buttonFont, numericFont: numericFont, remaining: card.countdown)
+            labels[action] = Self.labels(for: action, in: new, primary: card.actions.first == action, palette: palette, buttonFont: buttonFont, numericFont: numericFont, remaining: card.countdown)
         }
         let layout = CardLayout.make(.init(
             headerTextHeight: headerHeight, headerLineHeight: Typography.lineHeight(headerFont),
             transcriptTextHeight: transcriptHeight, transcriptLineHeight: lineHeight,
             buttonLabelWidths: card.actions.map { action in (labels[action] ?? []).map { $0.size().width }.max() ?? 0 },
-            hasCountdownBar: card.countdown != nil
-        ))
+            hasCountdownBar: card.countdown != nil && !embedded, maxHeight: embedded ? maxFaceHeight : nil
+        ), scale: k, showsDot: palette.showsDot)
         frames = layout
 
-        let margin = CardLayout.shadowMargin
+        let margin = embedded ? 0 : CardLayout.shadowMargin * k
         let panelSize = CGSize(width: layout.size.width + 2 * margin, height: layout.size.height + 2 * margin)
         setFrameSize(panelSize)
         let face = CGRect(x: margin, y: margin, width: layout.size.width, height: layout.size.height)
-        ambient.frame = face
-        contact.frame = face
-        body.frame = face
+        let radius = CardLayout.cornerRadius * k
+        let material = glassDecision.usesMaterial
+        withoutActions {
+            shadows.frame = CGRect(origin: .zero, size: panelSize)
+            shadows.isHidden = embedded
+            for (shadow, drop, blur) in [(ambient, 4 * k, 6 * k), (contact, 0.8 * k, 1 * k)] {
+                shadow.frame = face
+                shadow.cornerRadius = radius
+                shadow.shadowRadius = blur
+                shadow.shadowOffset = CGSize(width: 0, height: -drop)
+                shadow.backgroundColor = material ? NSColor.clear.cgColor : palette.shadowFill.cgColor
+                // An explicit path, so the glass card (clear background) still casts its shadow.
+                shadow.shadowPath = CGPath(roundedRect: CGRect(origin: .zero, size: face.size), cornerWidth: radius, cornerHeight: radius, transform: nil)
+            }
+            if material {
+                // Keep the shadow outside the card, so it doesn't darken the glass from behind.
+                let mask = CAShapeLayer()
+                mask.fillRule = .evenOdd
+                let path = CGMutablePath()
+                path.addRect(shadows.bounds)
+                path.addRoundedRect(in: face, cornerWidth: radius, cornerHeight: radius)
+                mask.path = path
+                shadows.mask = mask
+            } else {
+                shadows.mask = nil
+            }
+            body.frame = face
+            body.isHidden = embedded
+            body.cornerRadius = radius
+            body.backgroundColor = palette.bodyFill?.cgColor ?? NSColor.clear.cgColor
+            body.borderWidth = palette.border == nil ? 0 : k
+            body.borderColor = palette.border?.cgColor
+            dot.isHidden = !palette.showsDot
+            dot.cornerRadius = CardLayout.dot * k / 2
+            dot.shadowRadius = 3 * k
+        }
         content.frame = face
+        glass.isHidden = !material || embedded
+        if material {
+            glass.frame = face
+            glass.cornerRadius = radius
+            if case .glass(.clear) = glassDecision {
+                glass.style = .clear
+                glass.tintColor = NSColor.white.withAlphaComponent(0.12)
+            } else {
+                glass.style = .regular
+                glass.tintColor = NSColor(srgbRed: 18 / 255, green: 18 / 255, blue: 22 / 255, alpha: 0.55)
+            }
+        }
 
         dot.frame = layout.dot
         header.frame = layout.header
         dismiss.frame = layout.dismiss
+        dismiss.palette = palette
+        dismiss.k = k
 
         if let transcript = layout.transcript, let transcriptString {
             scroll.isHidden = false
@@ -291,17 +420,22 @@ final class DeliveryCardView: NSView {
         buttons = []
         for (index, action) in card.actions.enumerated() where index < layout.buttons.count {
             let view = CardButtonView(frame: layout.buttons[index])
+            view.palette = palette
+            view.k = k
             view.isPrimary = index == 0
             view.isActive = !new.copied
-            view.label = Self.labels(for: action, in: new, primary: index == 0, buttonFont: buttonFont, numericFont: numericFont, remaining: remaining)[0]
+            view.label = Self.labels(for: action, in: new, primary: index == 0, palette: palette, buttonFont: buttonFont, numericFont: numericFont, remaining: remaining)[0]
             view.onClick = { [weak self] in self?.onAction?(action) }
             content.addSubview(view)
             buttons.append((action, view))
         }
 
-        barClip.isHidden = layout.bar == nil
-        barClip.frame = face
-        withoutActions { barFill.frame = CGRect(x: 0, y: 0, width: face.width, height: CardLayout.barHeight) }
+        withoutActions {
+            barClip.isHidden = layout.bar == nil
+            barClip.cornerRadius = radius
+            barClip.frame = face
+            barFill.frame = CGRect(x: 0, y: 0, width: face.width, height: CardLayout.barHeight * k)
+        }
         tick()
         needsDisplay = true
         return panelSize
@@ -312,13 +446,25 @@ final class DeliveryCardView: NSView {
         return max(0, total - (CACurrentMediaTime() - start))
     }
 
+    /// What the pill's readout row shows for the card now. Nil when no card is rendered.
+    var readout: CardReadout? {
+        guard let card = state?.card else { return nil }
+        let tone: CardReadout.Tone = card.kind.isQuestion ? .question : card.kind.isQuiet ? .quiet : .alert
+        if let total = card.countdown, let remaining {
+            let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            let fraction = CardLayout.countdownFraction(remaining: reduce ? ceil(remaining) : remaining, total: total)
+            return CardReadout(label: PillTimeline.timerText(seconds: Int(ceil(remaining))), isClock: true, tone: tone, progress: fraction)
+        }
+        return CardReadout(label: card.transcript == nil ? "" : "SAFE", isClock: false, tone: tone, progress: nil)
+    }
+
     /// Re-draws the Undo countdown: the seconds on the button and the bar.
     func tick() {
         guard let state, let layout = frames, let remaining, let total = state.card.countdown else { return }
         if !state.copied {
             for entry in buttons where entry.action == .undo {
                 entry.view.label = Self.labels(
-                    for: .undo, in: state, primary: state.card.actions.first == .undo, buttonFont: typography.font(.button), numericFont: typography.font(.numeric),
+                    for: .undo, in: state, primary: state.card.actions.first == .undo, palette: palette, buttonFont: typography.font(.button, scale: k), numericFont: typography.font(.numeric, scale: k),
                     remaining: remaining
                 )[0]
                 entry.view.needsDisplay = true
@@ -329,7 +475,7 @@ final class DeliveryCardView: NSView {
             let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
             let shown = reduce ? ceil(remaining) : remaining
             let fraction = CardLayout.countdownFraction(remaining: shown, total: total)
-            withoutActions { barFill.frame = CGRect(x: 0, y: 0, width: CardLayout.width * fraction, height: CardLayout.barHeight) }
+            withoutActions { barFill.frame = CGRect(x: 0, y: 0, width: CardLayout.width * k * fraction, height: CardLayout.barHeight * k) }
         }
     }
 
@@ -342,13 +488,13 @@ final class DeliveryCardView: NSView {
 
     /// The label to show first, then every other the button might show (for sizing).
     private static func labels(
-        for action: CardAction, in state: CardViewState, primary: Bool, buttonFont: NSFont, numericFont: NSFont,
+        for action: CardAction, in state: CardViewState, primary: Bool, palette: CardPalette, buttonFont: NSFont, numericFont: NSFont,
         remaining: TimeInterval?
     ) -> [NSAttributedString] {
         func text(_ string: String, color: NSColor) -> NSAttributedString {
             NSAttributedString(string: string, attributes: [.font: buttonFont, .foregroundColor: color])
         }
-        let color = primary ? CardPalette.onInk : CardPalette.body
+        let color = primary ? palette.primaryText : palette.secondaryText
         if state.copied && action == .copy { return [text("Copied", color: color)] }
         if state.copied && action == .save { return [text("Saved", color: color)] }
         if state.copied && action == .forget { return [text("Forgotten", color: color)] }
@@ -381,12 +527,12 @@ final class DeliveryCardView: NSView {
     }
 
     /// `heard → corrected` in the body face, the corrected form in the button face's heavier weight.
-    private static func pairString(_ pair: SpellingPair, bodyFont: NSFont, emphasis: NSFont, style: NSParagraphStyle) -> NSAttributedString {
-        let plain: [NSAttributedString.Key: Any] = [.font: bodyFont, .foregroundColor: CardPalette.body, .paragraphStyle: style]
+    private static func pairString(_ pair: SpellingPair, palette: CardPalette, bodyFont: NSFont, emphasis: NSFont, style: NSParagraphStyle) -> NSAttributedString {
+        let plain: [NSAttributedString.Key: Any] = [.font: bodyFont, .foregroundColor: palette.body, .paragraphStyle: style]
         let bold = NSFont(descriptor: emphasis.fontDescriptor, size: bodyFont.pointSize) ?? bodyFont
         let result = NSMutableAttributedString(string: "\(pair.heard) \u{2192} ", attributes: plain)
         result.append(NSAttributedString(string: pair.corrected, attributes: [
-            .font: bold, .foregroundColor: CardPalette.ink, .paragraphStyle: style,
+            .font: bold, .foregroundColor: palette.emphasis, .paragraphStyle: style,
         ]))
         return result
     }
