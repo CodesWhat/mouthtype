@@ -260,7 +260,9 @@ class FileTranscriptionTests(unittest.TestCase):
             self.assertEqual(self.files.status()['state'], 'failed')
             self.assertTrue((self.root / 'imports' / finished / 'transcript.txt').is_file())
             self.assertEqual(imports.result_text(self.root / 'imports'), text)
+            self.assertEqual(self.files.status()['retained_id'], finished)
         self.files.forget()
+        self.assertIsNone(self.files.status()['retained_id'])
         self.assertEqual(list((self.root / 'imports').iterdir()), [])
 
     def test_startup_adopts_finished_result_and_removes_interrupted_jobs(self):

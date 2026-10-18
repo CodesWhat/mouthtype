@@ -54,6 +54,8 @@ Panel {
   readonly property bool canImportFiles: !!(capabilities && capabilities.file_transcription)
   readonly property bool importActive: fileImport.state === "preparing" || fileImport.state === "transcribing" || fileImport.state === "cancelling"
   readonly property bool importHasResult: fileImport.state === "finished" || fileImport.state === "empty"
+  readonly property bool importRetained: !importActive && !importHasResult && fileImport.retained === true
+  readonly property bool importCanExport: fileImport.state === "finished" || importRetained
 
   function hyprlandKeyName(event) {
     var k = event.key
@@ -774,8 +776,8 @@ Panel {
               }
             }
             Item { height: Style.space(6); visible: root.fileImport.state === "finished" }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.importHasResult; enabled: root.fileImport.state === "finished"; label: "Copy"; onActivated: root.run(["import-copy"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.importHasResult; enabled: root.fileImport.state === "finished"; label: "Save Text…"; onActivated: root.run(["import-save"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.importHasResult || root.importRetained; enabled: root.importCanExport; label: "Copy"; onActivated: root.run(["import-copy"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.importHasResult || root.importRetained; enabled: root.importCanExport; label: "Save Text…"; onActivated: root.run(["import-save"]) }
             MenuDivider { width: parent.width; visible: !root.importActive }
             MenuRow { fontFamily: root.menuFont; width: parent.width; visible: !root.importActive; label: "Transcribe Another File…"; enabled: root.sessionState === "off" || root.sessionState === "idle"; onActivated: root.run(["import-pick"]) }
             MenuRow { fontFamily: root.menuFont; width: parent.width; visible: !root.importActive && root.fileImport.state !== "idle" && root.fileImport.state !== "off"; label: "Clear Result"; onActivated: root.run(["import-forget"]) }

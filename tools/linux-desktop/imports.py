@@ -211,7 +211,9 @@ class FileTranscription:
                 remove_job(job)
 
     def status(self):
+        retained = self.previous is not None and (self.previous / 'transcript.txt').is_file()
         return {'state': self.state, 'error': self.error, 'id': self.job.name if self.job else None,
+                'retained_id': self.previous.name if retained else None,
                 'duration_seconds': self.duration, 'format': self.format,
                 'maximum_seconds': MAXIMUM_SECONDS, 'maximum_bytes': MAXIMUM_SOURCE_BYTES}
 

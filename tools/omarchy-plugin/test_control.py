@@ -118,6 +118,52 @@ class SettingsDuringImportTests(unittest.TestCase):
         self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["notifications"])
 
 
+class RetainedImportResultTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        root = Path(self.directory.name)
+        (root / "launcher").write_text("", encoding="utf-8")
+        (root / "linux.json").write_text("{}", encoding="utf-8")
+        self.status = {}
+        patches = [
+            mock.patch.object(control, "LAUNCHER", root / "launcher"),
+            mock.patch.object(control, "CONFIG", root / "linux.json"),
+            mock.patch.object(control, "cli", lambda *a, **k: mock.Mock(returncode=0, stdout=json.dumps(self.status))),
+            mock.patch.object(control, "recent_dictations", lambda limit=None: []),
+            mock.patch.object(control, "words_today", lambda entries: 0),
+            mock.patch.object(control, "capabilities", lambda: {}),
+            mock.patch.object(control, "config_summary", lambda: {}),
+            mock.patch.object(control, "preferences", lambda: {"sounds": True, "pill": {}, "font": {}}),
+            mock.patch.object(control, "cleanup_models", lambda: {"models": {}}),
+            mock.patch.object(control, "unit_enabled", lambda: False),
+            mock.patch.object(control, "shortcut_mode", lambda: "off"),
+            mock.patch.object(control, "shortcut_info", lambda: {"keys": ""}),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_failed_replacement_reports_the_retained_previous_result(self):
+        self.status = {"state": "idle", "file_import": {"state": "failed", "error": "invalid_audio",
+                                                        "id": "b" * 32, "retained_id": "a" * 32}}
+        self.assertTrue(control.state()["file_import"]["retained"])
+
+    def test_no_retained_result_when_the_service_reports_none(self):
+        self.status = {"state": "idle", "file_import": {"state": "failed", "error": "invalid_audio",
+                                                        "id": "b" * 32, "retained_id": None}}
+        self.assertFalse(control.state()["file_import"]["retained"])
+        self.status = {"state": "idle"}
+        self.assertFalse(control.state()["file_import"]["retained"])
+
+    def test_panel_offers_copy_and_save_for_a_retained_result(self):
+        panel = (HERE / "Panel.qml").read_text(encoding="utf-8")
+        self.assertIn("fileImport.retained", panel)
+        for action in ("import-copy", "import-save"):
+            row = next(line for line in panel.splitlines() if 'root.run(["%s"])' % action in line)
+            self.assertIn("importRetained", row)
+
+
 class HoldToTalkTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

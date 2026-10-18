@@ -324,6 +324,8 @@ def state():
     if not isinstance(file_import, dict):
         file_import = {"state": "off", "error": None, "duration_seconds": None}
     file_import["message"] = IMPORT_MESSAGES.get(file_import.get("error") or "", "")
+    # A failed replacement keeps the previous result readable through import-result.
+    file_import["retained"] = bool(file_import.get("retained_id"))
     return {"running": running, "state": status.get("state", "off") if running else "off",
             "error": status.get("error") if running else None,
             "recent": transcripts[:5], "has_transcript": bool(transcripts),
