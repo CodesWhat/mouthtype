@@ -69,8 +69,16 @@ import Testing
         #expect(preferences.object(forKey: "hiFiPillSize") == nil)
     }
 
+    @Test func anExplicitStandardHiFiSizeStaysStandard() {
+        let preferences = defaults()
+        preferences.set(1, forKey: "hiFiPillSize")
+        #expect(PillSizePreference.current(preferences) == .standard)
+        #expect(preferences.string(forKey: "pillSize") == "standard")
+        #expect(preferences.object(forKey: "hiFiPillSize") == nil)
+    }
+
     @Test func anythingElseSavedBecomesAutomaticAndTheOldKeyGoes() {
-        for legacy in [1, 0, 3, -2, 99] {
+        for legacy in [0, 3, -2, 99] {
             let preferences = defaults()
             preferences.set(legacy, forKey: "hiFiPillSize")
             #expect(PillSizePreference.current(preferences) == .automatic)

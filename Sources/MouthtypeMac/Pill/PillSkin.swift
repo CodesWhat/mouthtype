@@ -77,12 +77,18 @@ enum PillSizePreference {
         defaults.set(size.rawValue, forKey: key)
     }
 
-    /// A saved Hi-Fi size of large becomes the large pill and anything else becomes Automatic. The old key goes either
-    /// way, and a choice already made under the new key is left alone.
+    /// A saved Hi-Fi size of 1 stays Standard and 2 becomes the large pill; anything else becomes Automatic. The old
+    /// key goes either way, and a choice already made under the new key is left alone.
     static func migrateLegacy(_ defaults: UserDefaults) {
         guard defaults.object(forKey: legacyKey) != nil else { return }
         if defaults.object(forKey: key) == nil {
-            defaults.set((defaults.integer(forKey: legacyKey) == 2 ? PillSize.large : .automatic).rawValue, forKey: key)
+            let migrated: PillSize
+            switch defaults.integer(forKey: legacyKey) {
+            case 1: migrated = .standard
+            case 2: migrated = .large
+            default: migrated = .automatic
+            }
+            defaults.set(migrated.rawValue, forKey: key)
         }
         defaults.removeObject(forKey: legacyKey)
     }
