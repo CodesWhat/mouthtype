@@ -335,10 +335,31 @@ def state():
             "file_import": file_import}
 
 
+def unit_enabled():
+    return (UNIT.parent / "default.target.wants" / UNIT.name).is_symlink()
+
+
+def unit_active():
+    try:
+        return subprocess.run(["systemctl", "--user", "is-active", "--quiet", UNIT.name], timeout=5).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def start_service():
     current = state()
     if current["running"]:
         return current
+    if unit_enabled():
+        # The login daemon owns the service; let systemd start and supervise it.
+        subprocess.run(["systemctl", "--user", "start", UNIT.name], check=False, timeout=15,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for _ in range(25):
+            time.sleep(0.2)
+            current = state()
+            if current["running"]:
+                return current
+        raise RuntimeError("The Mouthtype service did not start. Check: systemctl --user status mouthtype-linux")
     LOG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     fd = os.open(LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     try:
@@ -376,6 +397,11 @@ def act(command, identity=None):
         raise RuntimeError("Invalid recording ID")
     if command in {"start", "toggle", "transcribe"} and not state()["running"]:
         start_service()
+    if command == "shutdown" and unit_active():
+        # Stopping through systemd keeps Restart=always from bringing the service straight back.
+        subprocess.run(["systemctl", "--user", "stop", UNIT.name], check=False, timeout=20,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return state()
     result = cli(command, *([identity] if identity else []))
     if result.returncode:
         raise RuntimeError("Mouthtype command failed")
@@ -486,6 +512,8 @@ def set_autostart(value):
         raise RuntimeError("Unsupported login setting")
     if value == "on":
         marker = "# Managed by the Mouthtype Omarchy plugin"
+        if shutil.which("systemctl") is None:
+            raise RuntimeError("systemd user services are unavailable")
         if UNIT.exists() and marker not in UNIT.read_text(encoding="utf-8"):
             raise RuntimeError("An existing Mouthtype user service was not changed")
         UNIT.parent.mkdir(parents=True, exist_ok=True)

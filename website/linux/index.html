@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       name="description"
-      content="Install the experimental Mouthtype Linux test client from source. Initial target: Arch/Omarchy, Hyprland and PipeWire."
+      content="Install the experimental Mouthtype Linux client and its Omarchy bar plugin from source: dictation, floating pill, paste delivery and optional local AI cleanup on Arch/Omarchy, Hyprland and PipeWire."
     />
     <meta name="theme-color" content="#ffffff" />
     <title>Linux test client · Mouthtype</title>
@@ -13,7 +13,7 @@
     <meta property="og:site_name" content="Mouthtype" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Linux test client · Mouthtype" />
-    <meta property="og:description" content="Install the experimental Mouthtype Linux test client from source. Initial target: Arch/Omarchy, Hyprland and PipeWire." />
+    <meta property="og:description" content="Install the experimental Mouthtype Linux client and its Omarchy bar plugin from source: dictation, floating pill, paste delivery and optional local AI cleanup on Arch/Omarchy, Hyprland and PipeWire." />
     <meta property="og:url" content="https://mouthtype.app/linux/" />
     <meta property="og:image" content="https://mouthtype.app/social/home.png" />
     <meta property="og:image:type" content="image/png" />
@@ -22,7 +22,7 @@
     <meta property="og:image:alt" content="Mouthtype: Words, straight from the source, with the Mouthtype recording pill." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Linux test client · Mouthtype" />
-    <meta name="twitter:description" content="Install the experimental Mouthtype Linux test client from source. Initial target: Arch/Omarchy, Hyprland and PipeWire." />
+    <meta name="twitter:description" content="Install the experimental Mouthtype Linux client and its Omarchy bar plugin from source: dictation, floating pill, paste delivery and optional local AI cleanup on Arch/Omarchy, Hyprland and PipeWire." />
     <meta name="twitter:image" content="https://mouthtype.app/social/home.png" />
     <meta name="twitter:image:alt" content="Mouthtype: Words, straight from the source, with the Mouthtype recording pill." />
     <link rel="icon" type="image/png" href="/assets/mouthtype-icon.png" />
@@ -55,8 +55,8 @@
         <section class="page-intro">
           <p class="eyebrow">EARLY DAYS. ANOTHER DESKTOP.</p>
           <h1>Mouthtype for Linux.</h1>
-          <p class="page-lede">An experimental dictation client for Arch/Omarchy.<br />Install from source, then try it on your own desktop.</p>
-          <p class="page-meta">LINUX x86_64 · HYPRLAND · PIPEWIRE · DEVELOPMENT CLIENT</p>
+          <p class="page-lede">An experimental dictation client for Arch/Omarchy, with a bar menu, floating pill and paste delivery.<br />Install from source, or point your coding agent at the <a href="/linux/agent-install.md">step-by-step install file</a>.</p>
+          <p class="page-meta">LINUX x86_64 · ARCH/OMARCHY · HYPRLAND · PIPEWIRE · DEVELOPMENT CLIENT</p>
           <div class="page-actions">
             <a class="primary" href="/source">Download Linux source <span aria-hidden="true">↓</span></a>
             <a class="text-link" href="/download/">Looking for the Mac release candidate?</a>
@@ -68,17 +68,17 @@
               <span class="step-sign" aria-hidden="true">↳</span>
               <div>
                 <h2>Start with the right setup.</h2>
-                <p>The initial target is Linux <strong>x86_64</strong>, <strong>Arch/Omarchy</strong>, <strong>Hyprland</strong> and <strong>PipeWire</strong>. This is a terminal-driven test client with no Linux GUI. Other compositors and architectures are not supported by this client.</p>
-                <p>Use your distro’s normal signed package management for <code>python</code>, <code>python-pip</code>, <code>curl</code> and <code>pipewire-audio</code>. Optional <code>libnotify</code> provides recording cues. Automatic typing additionally requires <code>wtype</code> and a separate opt-in.</p>
+                <p>The target is Linux <strong>x86_64</strong>, <strong>Arch/Omarchy</strong>, <strong>Hyprland</strong> and <strong>PipeWire</strong>. The client is a terminal-driven service; the Omarchy plugin gives it a bar menu, a floating pill and settings. Other compositors and architectures are not supported by this client.</p>
+                <p>Use your distro’s signed package management for <code>python</code>, <code>python-pip</code>, <code>curl</code>, <code>pipewire-audio</code>, <code>ffmpeg</code>, <code>wl-clipboard</code>, <code>wtype</code> and <code>libnotify</code>. Optional AI cleanup additionally needs <code>git</code>, <code>cmake</code> and <code>base-devel</code>. Keep <code>~/.local/bin</code> on your PATH.</p>
               </div>
             </li>
             <li id="install">
               <span class="step-sign" aria-hidden="true">↳</span>
               <div>
                 <h2>Install the client.</h2>
-                <p>The download is the corresponding GPL-3.0 source archive for the current Mac release candidate. It includes the Linux client, its setup guide and license notices, with no models or personal data bundled. It is not a Linux app ZIP or a supported packaged desktop release.</p>
+                <p>The download is the GPL-3.0 source archive for the current Mac release. It includes the Linux client, the Omarchy plugin under <code>tools/omarchy-plugin</code> (in archives that contain that directory), the setup guides and license notices, with no models or personal data bundled. It is not a packaged desktop release.</p>
                 <p>Extract it and open a terminal in the extracted source directory. Read <code>tools/linux-desktop/README.md</code>, then run <code>python3 tools/linux-desktop/install.py --prefix "$HOME/.local"</code>.</p>
-                <p>This installs <code>~/.local/bin/mouthtype-linux</code> and its payload. Keep that directory on your PATH. The installer refuses to overwrite an existing installation; choose another prefix to preserve it. It does not change shortcuts, compositor settings or services.</p>
+                <p>This installs <code>~/.local/bin/mouthtype-linux</code> and its payload. The installer refuses to overwrite an existing installation; move an old one aside to upgrade. Check it with <code>mouthtype-linux capabilities</code>.</p>
               </div>
             </li>
             <li id="speech">
@@ -86,25 +86,32 @@
               <div>
                 <h2>Prepare speech explicitly.</h2>
                 <p>From the same source directory, run <code>python3 tools/linux-desktop/setup_speech.py --destination "$HOME/.local/share/mouthtype/speech-candidate"</code>. The destination must be new.</p>
-                <p>This downloads and verifies the pinned speech files, creates a dedicated Python environment and writes a local configuration. It does not start recording or install an autostart service. If a required helper or binary wheel is unavailable, preparation fails without changing system Python.</p>
-                <p>The helper prints the exact foreground launch command. Start it explicitly. For a bounded test, append <code>--lifetime-seconds 900</code> after <code>serve</code>. Use the same launcher and configuration for all subsequent commands.</p>
+                <p>This downloads and verifies the pinned speech model, creates a dedicated Python environment and writes a local configuration. It does not record or start anything. Confirm the setup with <code>mouthtype-linux --config "$HOME/.local/share/mouthtype/speech-candidate/linux.json" doctor</code>.</p>
+              </div>
+            </li>
+            <li id="plugin">
+              <span class="step-sign" aria-hidden="true">↳</span>
+              <div>
+                <h2>Install the Omarchy plugin.</h2>
+                <p>Run <code>python3 tools/omarchy-plugin/install.py</code>. It adds the Mouthtype widget to the right side of the bar, enables a <code>systemd</code> user service so dictation starts with every login and is restarted if it stops, starts it now, and restarts the Omarchy shell. Pass <code>--no-autostart</code> to keep the service manual; <strong>Launch at Login</strong> in the menu toggles it later.</p>
+                <p>From the menu: start, stop and cancel dictation, read and copy recent takes, retry saved audio, transcribe one audio file, choose the Classic or Hi-Fi floating pill and the text font, and pick Basic, Fast or Thorough cleanup. Fast and Thorough download verified local models and build the pinned llama.cpp server on your explicit request.</p>
               </div>
             </li>
             <li id="first-test">
               <span class="step-sign" aria-hidden="true">↳</span>
               <div>
-                <h2>Keep the first take local.</h2>
-                <p>The default delivery is <strong>recovery-only</strong>. Start and stop one short take, then inspect the saved result with <code>list</code> and <code>recover ID</code>. Nothing is typed into another app automatically. Shut down the foreground service explicitly when finished.</p>
-                <p>The source guide covers hold and toggle shortcuts, Escape/cancel, recovery, optional saved spellings and phrases, and basic cleanup. Inspect existing Omarchy/Voxtype bindings before choosing unused keys. Nothing replaces your bindings automatically.</p>
-                <p>Automatic typing is a separate explicit opt-in for a native editor, with field and focus limits. Multiline/control-bearing results are refused and stay recoverable; the client does not send Return or Tab to make them fit. Mac AI cleanup and file transcription are not Linux parity promises.</p>
+                <h2>Choose delivery and a key, then speak.</h2>
+                <p>The default delivery is <strong>recovery-only</strong>: a take is saved locally and nothing is typed. In <strong>Paste Options</strong>, choose <strong>Paste into the active window</strong> to paste each take into the window that was active when you started, with your previous text clipboard restored. Terminals get Ctrl+Shift+V and no multi-line pastes.</p>
+                <p>Under <strong>Change Dictation Shortcut…</strong>, pick press-to-toggle or hold-to-talk on any key, including a lone modifier such as Right Ctrl. Keys Hyprland already binds are refused. Then press the key, speak, and watch the pill at the bottom of the display. Every take also stays readable with <code>list</code> and <code>recover ID</code>.</p>
+                <p>Linux cannot detect password fields, so pasting goes wherever the cursor is, and insertion is not verified. Audio and text never leave the machine.</p>
               </div>
             </li>
           </ol>
           <aside class="start-aside" aria-label="Linux testing status">
-            <h2>Built. Still being tested.</h2>
-            <p>Automated Ubuntu/Arch, synthetic audio, headless Wayland and local package checks pass for their tested components.</p>
-            <p><strong>Physical microphone, Hyprland and Omarchy acceptance remains unverified.</strong> The Arch test-package builder in the source requires a clean committed Git checkout. The downloadable source archive has no Git history; use the source installer above.</p>
-            <p>Record your actual distro, compositor and audio versions when testing. Inspect a result before retrying an uncertain insertion. Share only the text or recordings you choose.</p>
+            <h2>Built. Tested on one desk.</h2>
+            <p>Automated Ubuntu/Arch, synthetic audio and headless Wayland checks pass, and the full flow (microphone takes, pill, paste delivery, file import and local cleanup) was exercised on one Arch/Omarchy desktop with Hyprland 0.56 and PipeWire.</p>
+            <p><strong>Wider hardware, HiDPI and multi-monitor acceptance remains open.</strong> The Arch test-package builder in the source requires a clean committed Git checkout; the downloadable archive has no Git history, so use the installers above.</p>
+            <p>Coding agents: <a href="/linux/agent-install.md">agent-install.md</a> is the same procedure as an ordered checklist with a check after every step.</p>
             <a class="text-link" href="/docs/#linux">More Linux details <span aria-hidden="true">↗</span></a>
           </aside>
         </div>
