@@ -1,0 +1,115 @@
+{
+ "version": 1,
+ "sprites": {
+  "frame": {
+   "file": "frame.png",
+   "w": 40,
+   "h": 40,
+   "slices": {
+    "left": 4,
+    "top": 13,
+    "right": 4,
+    "bottom": 4
+   }
+  },
+  "close_up": {
+   "file": "close_up.png",
+   "w": 10,
+   "h": 10
+  },
+  "close_down": {
+   "file": "close_down.png",
+   "w": 10,
+   "h": 10
+  },
+  "button_up": {
+   "file": "button_up.png",
+   "w": 12,
+   "h": 12,
+   "slices": {
+    "left": 3,
+    "top": 3,
+    "right": 3,
+    "bottom": 3
+   }
+  },
+  "button_down": {
+   "file": "button_down.png",
+   "w": 12,
+   "h": 12,
+   "slices": {
+    "left": 3,
+    "top": 3,
+    "right": 3,
+    "bottom": 3
+   }
+  },
+  "vfd": {
+   "file": "vfd.png",
+   "w": 12,
+   "h": 12,
+   "slices": {
+    "left": 3,
+    "top": 3,
+    "right": 3,
+    "bottom": 3
+   }
+  }
+ },
+ "metrics": {
+  "titleBar": 13,
+  "margin": 6,
+  "plate": {
+   "x": 6,
+   "y": 2,
+   "h": 9,
+   "padX": 4,
+   "ledGap": 3
+  },
+  "close": {
+   "right": 6,
+   "y": 1,
+   "hitW": 16,
+   "hitH": 13
+  },
+  "vfd": {
+   "gapTop": 3,
+   "ring": 3,
+   "padX": 3,
+   "padY": 3,
+   "lineGap": 2,
+   "barGap": 3,
+   "barH": 2,
+   "barSegW": 3,
+   "barSegGap": 1
+  },
+  "button": {
+   "h": 17,
+   "minW": 36,
+   "padX": 8,
+   "gap": 4,
+   "gapTop": 5,
+   "labelPressedDy": 1
+  },
+  "bottomPad": 3,
+  "maxLines": 5
+ },
+ "colors": {
+  "metal": "#2c2e33",
+  "metal_hi": "#5c6068",
+  "metal_lo": "#0b0c0e",
+  "metal_edge": "#050506",
+  "engrave": "#9aa0aa",
+  "engrave_dim": "#5d616a",
+  "engrave_hi": "#d0d4dc",
+  "cap": "#3a3d43",
+  "cap_hi": "#6a6e76",
+  "cap_lo": "#141518",
+  "ink": "#d0d4dc",
+  "vfd_bg": "#080b0a",
+  "vfd": "#ffb02e",
+  "led_on": "#ff3b2e",
+  "led_hi": "#ffa090",
+  "seg_off": "#2e2008"
+ }
+}

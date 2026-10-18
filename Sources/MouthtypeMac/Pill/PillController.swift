@@ -365,7 +365,7 @@ public final class PillController {
         return .init(
             midX: origin.x.rounded(.down) + size.width / 2,
             top: origin.y.rounded(.down) + Self.pillPadding + skinKind.pillHeight * scale.factor,
-            visible: screen.visibleFrame, style: skinKind.cardStyle, scale: scale, maxFaceHeight: maxFace, merger: self
+            visible: screen.visibleFrame, style: skinKind.cardStyle, scale: scale, maxFaceHeight: maxFace, readout: readout, merger: self
         )
     }
 
