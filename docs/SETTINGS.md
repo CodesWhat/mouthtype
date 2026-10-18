@@ -1,6 +1,6 @@
 # Settings
 
-Alpha.9 includes **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active.
+Beta.1 includes **Settings…** in the Mouthtype menu. Command-comma opens the same window while Mouthtype is active.
 
 The daily menu contains Settings, Paste Last, Copy Last, Saved Recordings, a collapsed Recent Dictations submenu, Help, About and Quit. Stop and Cancel appear during hands-free recording. Healthy model and permission lines stay out of the menu; an attention message opens Diagnostics when something needs repair. Recent items copy their full text and exclude secure fields. Stats live inside Recent.
 
@@ -65,3 +65,5 @@ A device that was already muted is left alone. Mouthtype never changes volume. A
 Core Audio exposes property notifications, not the identity of the person or app making a change, or an atomic compare-and-set. Mouthtype registers its change listener after its own mute write and restores only if no later change was observed and the original device is still muted. Same-value writes and changes inside the registration/restore windows cannot be attributed exactly. A crash or force-quit cannot run normal restoration; check macOS output mute if that happens. This option does not pause media players or prevent call apps from hearing the microphone. Physical device behavior still needs coordinated testing.
 
 Alpha.9 adds [website tone, selected-text cleanup and microphone priorities](WRITING-TOOLS.md).
+
+Beta.1 keeps System Default fallback enabled while the microphone priority list is empty. Add an input before turning fallback off. Saved Recordings loads on demand in pages; older saved audio remains reachable. Use Download to repair an incomplete cleanup-model cache.

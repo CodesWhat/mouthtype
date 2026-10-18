@@ -75,6 +75,7 @@ struct FocusProbe: Sendable {
 /// The Accessibility and secure-input reads delivery needs. The system in the app, a fake in tests.
 @MainActor
 protocol FocusReading: AnyObject {
+    func snapshotApplication() -> FocusSnapshot
     func snapshot() -> FocusSnapshot
     func websiteHost(for snapshot: FocusSnapshot) -> String?
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor
@@ -86,6 +87,7 @@ protocol FocusReading: AnyObject {
 }
 
 extension FocusReading {
+    func snapshotApplication() -> FocusSnapshot { snapshot() }
     func websiteHost(for snapshot: FocusSnapshot) -> String? { nil }
     func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
     func readField(of element: FocusedElement) -> FieldReading { FieldReading() }
@@ -98,9 +100,13 @@ final class AccessibilityFocusReader: FocusReading {
 
     var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
 
-    func snapshot() -> FocusSnapshot {
+    func snapshotApplication() -> FocusSnapshot {
         let app = NSWorkspace.shared.frontmostApplication
-        var snapshot = FocusSnapshot(pid: app?.processIdentifier, bundleID: app?.bundleIdentifier, appName: app?.localizedName)
+        return FocusSnapshot(pid: app?.processIdentifier, bundleID: app?.bundleIdentifier, appName: app?.localizedName)
+    }
+
+    func snapshot() -> FocusSnapshot {
+        var snapshot = snapshotApplication()
 
         let systemWide = bounded(AXUIElementCreateSystemWide())
         guard let element = elementValue(systemWide, kAXFocusedUIElementAttribute) else {

@@ -118,6 +118,13 @@ final class CrashRecovery {
         }
     }
 
+    func loadSavedRecordings() async throws -> [RecoverableDictation] {
+        let store = store, archive = archive, now = clock.now(), launchedAt = launchedAt
+        return try await Task.detached {
+            try DictationRecovery.saved(store: store, archive: archive, now: now, launchedAt: launchedAt)
+        }.value
+    }
+
     func savedRecordings() throws -> [RecoverableDictation] {
         try DictationRecovery.saved(store: store, archive: archive, now: clock.now(), launchedAt: launchedAt)
     }

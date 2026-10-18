@@ -16,6 +16,8 @@ Settings → General → Microphone now offers Priority list alongside System De
 
 System Default fallback is a separate opt-in. Without it, no listed device means an explicit unavailable-input error. The existing fixed-device setting keeps its behavior and does not silently fall back. The priority policy does not change the Mac's system input. It does not switch devices mid-recording; an interrupted route still ends that take under the existing policy. It does not infer clamshell availability or claim verified Bluetooth/sleep behavior.
 
+Beta.1 keeps fallback enabled while the priority list is empty. Add an input before turning it off. Removing the final input requires keeping fallback enabled so the saved list still has a usable policy.
+
 ## Clean selected text
 
 Select text in an accessible editable field, then choose **Clean Selected Text…** from Mouthtype's menu. A nonactivating preview shows the original and a result you can review or edit. This first version uses deterministic basic cleanup: filler removal, spoken punctuation and whitespace/capitalization. It does not run an AI rewrite, expand phrases, rewrite numbers or use surrounding text.

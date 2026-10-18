@@ -12,11 +12,12 @@ struct EngineWorker: AsyncParsableCommand {
     @Option var runs: Int = 5
     @Option var warmups: Int = 1
     @Option var result: String
+    @Flag(help: "Use the English hint enabled by the Mac app.") var englishHint = false
 
     func run() async throws {
         var output = WorkerOutput(engineID: engine, displayName: engine, prepare: nil, peakRSSBytes: 0, peakFootprintBytes: nil, firstTranscribeMs: nil, modelBytes: nil, modelPath: nil, clips: [], error: nil)
         do {
-            let transcriber = try EngineCatalog.make(id: engine)
+            let transcriber = try EngineCatalog.make(id: engine, englishHint: englishHint)
             output.displayName = transcriber.displayName
             if let measured = transcriber as? any MeasuredTranscriber {
                 output.prepare = try await measured.prepareMeasured()
