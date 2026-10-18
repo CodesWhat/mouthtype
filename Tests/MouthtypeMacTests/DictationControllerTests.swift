@@ -207,6 +207,11 @@ private final class FakeInserter: DictationInserting {
         self.log = log
     }
 
+    func snapshotApplication() -> FocusSnapshot {
+        log.add("inserter.application")
+        return FocusSnapshot(pid: focus.pid, bundleID: focus.bundleID, appName: focus.appName)
+    }
+
     func snapshotFocus() -> FocusSnapshot {
         log.add("inserter.snapshot")
         return focus
@@ -505,6 +510,27 @@ private struct Rig {
 
 @MainActor
 @Suite struct DictationCleanupTests {
+    @Test func detailedAccessibilityReadsStartAfterMicrophoneCapture() async throws {
+        let rig = Rig()
+        await rig.dictate()
+        let app = try #require(rig.log.index(of: "inserter.application"))
+        let capture = try #require(rig.log.index(of: "capture.start"))
+        let ax = try #require(rig.log.index(of: "inserter.snapshot"))
+        #expect(app < capture && capture < ax)
+        #expect(rig.inserter.startFocusSeen?.role == "AXTextArea")
+    }
+
+    @Test func movingAppsDuringCaptureStartCannotAttributeTheNewFieldsToTheSource() async {
+        let rig = Rig()
+        rig.capture.duringStart = {
+            rig.inserter.focus = FocusSnapshot(pid: 9, bundleID: "org.example.other", appName: "Other", role: "AXButton")
+        }
+        await rig.dictate()
+        #expect(rig.inserter.startFocusSeen?.bundleID == "com.apple.Notes")
+        #expect(rig.inserter.startFocusSeen?.role == nil)
+        #expect(rig.store.start?.target.bundleID == "com.apple.Notes")
+    }
+
     private let messy = "um so the build is uh green new line ship it"
     private let cleaned = "So the build is green\nShip it"
 
@@ -815,7 +841,7 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.dictate()
 
         #expect(rig.log.all == [
-            "card.dismiss", "inserter.snapshot", "capture.start", "sound.start", "pill.recording", "store.begin",
+            "card.dismiss", "inserter.application", "capture.start", "inserter.snapshot", "sound.start", "pill.recording", "store.begin",
             "pill.processing", "capture.stop", "sound.stop",
             "archive.write", "store.recordCapture", "engine.transcribe", "store.recordTranscription",
             "inserter.deliver", "store.recordInsertion", "pill.hide",
@@ -1416,7 +1442,7 @@ private final class FakeCorrections: CorrectionObserving {
 
         #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
         #expect(rig.log.all == [
-            "card.dismiss", "inserter.snapshot", "capture.start", "sound.start", "pill.recording", "store.begin",
+            "card.dismiss", "inserter.application", "capture.start", "inserter.snapshot", "sound.start", "pill.recording", "store.begin",
             "sound.lock", "pill.handsFree", "store.recordLock",
         ])
         let lock = try #require(rig.store.handsFreeLock)

@@ -185,7 +185,7 @@ final class DictationController {
         }
         corrections?.dictationStarted()
 
-        let startFocus = inserter.snapshotFocus()
+        var startFocus = inserter.snapshotApplication()
         let appStyles = pipeline.appStyles()
         let cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, fallback: pipeline.settings().style)
         // The last release's capture stop finishes first; the audio unit takes one recording at a time.
@@ -206,6 +206,11 @@ final class DictationController {
             startError = error
         }
         if startError == nil {
+            let detailedFocus = inserter.snapshotFocus()
+            if detailedFocus.pid == startFocus.pid, detailedFocus.bundleID == startFocus.bundleID {
+                startFocus = detailedFocus
+                current.startFocus = detailedFocus
+            }
             sounds.playStart()
             beginQuietAfterStartCue()
             pill.showRecording()
