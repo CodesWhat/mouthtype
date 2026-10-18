@@ -58,7 +58,7 @@ reports `checks passed` (a stopped service is a warning, not an error).
 python3 tools/omarchy-plugin/install.py
 ```
 
-Copies the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype`, adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts at login and is restarted if it stops, starts it now, and restarts the Omarchy shell. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
+Copies the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype`, adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with the graphical session (after the Wayland session is up, not at bare login) and is restarted if it stops, starts it now, and restarts the Omarchy shell. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
 
 If a `mouthtype-linux.service` user unit already exists that the installer didn't create, it stops with "An existing Mouthtype user service was not changed"; remove or rename that unit and run it again.
 

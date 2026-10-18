@@ -329,13 +329,17 @@ def state():
             "config": config_summary(), "sounds": preferences()["sounds"],
             "pill": preferences()["pill"], "font": preferences()["font"],
             "cleanup": {**cleanup_models(), "service": status.get("cleanup") if running else None},
-            "autostart": (UNIT.parent / "default.target.wants/mouthtype-linux.service").is_symlink(),
+            "autostart": unit_enabled(),
             "shortcut": shortcut_mode(), "shortcut_keys": shortcut_info()["keys"],
             "interface": report.get("interface"), "capabilities": report.get("features", {}),
             "file_import": file_import}
 
 
 def unit_enabled():
+    return (UNIT.parent / "graphical-session.target.wants" / UNIT.name).is_symlink()
+
+
+def legacy_unit_enabled():
     return (UNIT.parent / "default.target.wants" / UNIT.name).is_symlink()
 
 
@@ -507,22 +511,36 @@ def set_sounds(value):
     return state()
 
 
+UNIT_MARKER = "# Managed by the Mouthtype Omarchy plugin"
+
+
+def unit_quote(value):
+    value = str(value)
+    if not any(c in value for c in " \t\"'\\%"):
+        return value
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
+
+
 def set_autostart(value):
     if value not in {"on", "off"}:
         raise RuntimeError("Unsupported login setting")
+    if UNIT.exists() and UNIT_MARKER not in UNIT.read_text(encoding="utf-8"):
+        raise RuntimeError("An existing Mouthtype user service was not changed")
     if value == "on":
-        marker = "# Managed by the Mouthtype Omarchy plugin"
         if shutil.which("systemctl") is None:
             raise RuntimeError("systemd user services are unavailable")
-        if UNIT.exists() and marker not in UNIT.read_text(encoding="utf-8"):
-            raise RuntimeError("An existing Mouthtype user service was not changed")
+        if legacy_unit_enabled():
+            # Older installs linked into default.target; unlink it while the old unit still names that target.
+            subprocess.run(["systemctl", "--user", "disable", UNIT.name], check=True, timeout=10,
+                           stdout=subprocess.DEVNULL)
         UNIT.parent.mkdir(parents=True, exist_ok=True)
         unit = ("[Unit]\nDescription=Mouthtype Linux dictation service\n"
+                "PartOf=graphical-session.target\n"
                 "After=graphical-session.target pipewire.service\n\n"
-                "[Service]\nType=simple\n" + marker + "\n"
-                f"ExecStart={LAUNCHER} --config {CONFIG} serve --lifetime-seconds 86400\n"
+                "[Service]\nType=simple\n" + UNIT_MARKER + "\n"
+                f"ExecStart={unit_quote(LAUNCHER)} --config {unit_quote(CONFIG)} serve --lifetime-seconds 86400\n"
                 "Restart=always\nRestartSec=2\n\n"
-                "[Install]\nWantedBy=default.target\n")
+                "[Install]\nWantedBy=graphical-session.target\n")
         UNIT.write_text(unit, encoding="utf-8")
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True, timeout=10)
         subprocess.run(["systemctl", "--user", "enable", UNIT.name], check=True, timeout=10,
