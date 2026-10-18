@@ -322,7 +322,7 @@ Panel {
     padding: 0
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(330))
-    contentHeight: panel.fittedContentHeight(content.implicitHeight, Style.space(680))
+    contentHeight: panel.fittedContentHeight(content.implicitHeight, Style.space(1000))
 
     Rectangle {
       anchors.fill: parent
