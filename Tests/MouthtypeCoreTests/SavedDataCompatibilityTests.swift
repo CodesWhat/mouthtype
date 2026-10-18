@@ -4,8 +4,7 @@ import GRDB
 import Testing
 @testable import MouthtypeCore
 
-@Suite(.enabled(if: ProcessInfo.processInfo.environment["MOUTHTYPE_COMPAT_DATABASE"] != nil))
-struct SavedDataCompatibilityTests {
+@Suite struct SavedDataCompatibilityTests {
     private struct State: Equatable {
         var schema: [String]
         var rows: [String: Int]
@@ -44,13 +43,42 @@ struct SavedDataCompatibilityTests {
         }
     }
 
-    @Test func reopeningAnExistingSnapshotPreservesItsSchemaAndEveryStoredValue() throws {
+    private func copyDatabase(from source: URL, to destination: URL) throws {
+        var configuration = Configuration()
+        configuration.readonly = true
+        let reader = try DatabaseQueue(path: source.path, configuration: configuration)
+        let writer = try DatabaseQueue(path: destination.path)
+        try reader.backup(to: writer)
+    }
+
+    @Test func copyingIncludesCommittedRowsStillInTheWriteAheadLog() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-wal-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let source = directory.appendingPathComponent("source.sqlite")
+        let pool = try DatabasePool(path: source.path)
+        try pool.writeWithoutTransaction { db in
+            try db.execute(sql: "PRAGMA wal_autocheckpoint = 0")
+            try db.execute(sql: "CREATE TABLE pending_write (value TEXT); INSERT INTO pending_write VALUES ('preserved')")
+        }
+        let copy = directory.appendingPathComponent("copy.sqlite")
+        try copyDatabase(from: source, to: copy)
+        let copied = try DatabaseQueue(path: copy.path).read { db -> String? in
+            guard try db.tableExists("pending_write") else { return nil }
+            return try String.fetchOne(db, sql: "SELECT value FROM pending_write")
+        }
+        #expect(copied == "preserved")
+        withExtendedLifetime(pool) {}
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["MOUTHTYPE_COMPAT_DATABASE"] != nil))
+    func reopeningAnExistingSnapshotPreservesItsSchemaAndEveryStoredValue() throws {
         let path = try #require(ProcessInfo.processInfo.environment["MOUTHTYPE_COMPAT_DATABASE"])
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-compat-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let copy = directory.appendingPathComponent("snapshot.sqlite")
-        try FileManager.default.copyItem(at: URL(fileURLWithPath: path), to: copy)
+        try copyDatabase(from: URL(fileURLWithPath: path), to: copy)
         let before = try state(copy)
         let store = try TranscriptStore(url: copy)
         _ = try store.recent(limit: 1)
