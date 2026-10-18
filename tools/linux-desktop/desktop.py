@@ -457,10 +457,13 @@ class HyprlandDelivery:
 
     def paste(self, text, target):
         """Clipboard plus a paste chord. Line breaks and tabs travel as text; other controls are refused."""
+        terminal = self.is_terminal(target)
+        if terminal:
+            # A trailing line break would run the command, so it never travels; the check below sees the exact payload.
+            text = text.rstrip('\r\n')
         if any((ord(char) < 32 and char not in '\n\t') or 127 <= ord(char) <= 159 for char in text):
             return 'unsupported_text'
-        terminal = self.is_terminal(target)
-        if terminal and '\n' in text.strip() and self.config.get('allow_terminal_multiline') is not True:
+        if terminal and ('\n' in text or '\r' in text) and self.config.get('allow_terminal_multiline') is not True:
             return 'unsupported_text'
         if self.snapshot() != target:
             return 'target_changed'

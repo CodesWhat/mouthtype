@@ -1,4 +1,5 @@
 import json
+import subprocess
 from pathlib import Path
 import tempfile
 import threading
@@ -741,6 +742,16 @@ class PasteDeliveryTests(unittest.TestCase):
         self.assertEqual(chord, ['wtype', '-M', 'ctrl', '-M', 'shift', '-k', 'v', '-m', 'shift', '-m', 'ctrl'])
         permissive, target, calls, _ = self.make({'any_window': True, 'allow_terminal_multiline': True}, terminal=True)
         self.assertEqual(permissive.submit('one\ntwo', target), 'unknown')
+
+    def test_terminal_payload_is_stripped_and_the_exact_payload_is_checked(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, terminal=True)
+        self.assertEqual(delivery.submit('echo hi\n', target), 'unknown')
+        self.assertEqual(delivery.submit('echo hi\r\n\n', target), 'unknown')
+        self.assertEqual([k['input'] for a, k in calls if a[0] == 'wl-copy'], [b'echo hi', b'echo hi'])
+        calls.clear()
+        for text in ('echo a\n\nrm b', 'echo a\rrm b', '\necho a'):
+            self.assertEqual(delivery.submit(text, target), 'unsupported_text')
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
 
     def test_hyprland_delivers_the_chord_to_the_captured_window_without_wtype(self):
         delivery, target, calls, _ = self.make({'any_window': True}, hyprland=True)
