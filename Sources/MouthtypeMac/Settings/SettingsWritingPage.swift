@@ -107,14 +107,14 @@ extension SettingsView {
             SettingsNote(text: "Website rules override app tone, including subdomains. Safari, Chrome, Edge and Brave use the focused window’s document URL when available. Otherwise app tone applies. These rules don’t retain document URLs.")
             if model.appStylesError != nil { storeErrorRow }
             HStack {
-                TextField("Domain, e.g. slack.com", text: $websiteDomain).accessibilityIdentifier("settings-website-domain")
-                Picker("Website tone", selection: $websiteTone) {
+                TextField("Domain, e.g. slack.com", text: $model.websiteDomain).accessibilityIdentifier("settings-website-domain")
+                Picker("Website tone", selection: $model.websiteTone) {
                     ForEach(StylePreset.allCases, id: \.rawValue) { Text($0.title).tag($0) }
                 }.labelsHidden().fixedSize()
                 Button("Add") {
-                    model.setWebsiteStyle(domain: websiteDomain, tone: websiteTone)
-                    if model.appStylesError == nil { websiteDomain = "" }
-                }.disabled(websiteDomain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    model.setWebsiteStyle(domain: model.websiteDomain, tone: model.websiteTone)
+                    if model.appStylesError == nil { model.websiteDomain = "" }
+                }.disabled(model.websiteDomain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }.frame(minHeight: SettingsTheme.rowMinHeight - 14)
             ForEach(model.appStyles.websites, id: \.domain) { entry in
                 SettingsRow(title: entry.domain) {

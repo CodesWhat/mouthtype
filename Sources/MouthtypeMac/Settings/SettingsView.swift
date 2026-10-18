@@ -8,8 +8,6 @@ struct SettingsView: View {
     @Bindable var model: SettingsModel
     var actions = SettingsActions()
     var solid = true
-    @State var websiteDomain = ""
-    @State var websiteTone = StylePreset.formal
 
     var body: some View {
         HStack(spacing: 0) {
@@ -64,6 +62,9 @@ struct SettingsView: View {
                     sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.page = page }
                 }
             }
+            .focusable().focusEffectDisabled()
+            .onKeyPress(.upArrow) { model.page = model.page.moved(by: -1); return .handled }
+            .onKeyPress(.downArrow) { model.page = model.page.moved(by: 1); return .handled }
             Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
                 .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
             VStack(alignment: .leading, spacing: 2) {

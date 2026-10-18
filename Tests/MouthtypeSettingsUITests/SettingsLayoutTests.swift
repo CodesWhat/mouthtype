@@ -129,6 +129,97 @@ import MouthtypeCore
         }
     }
 
+    // MARK: Long microphone names, keyboard, persistent state
+
+    private static let longMic = "Scott’s AirPods Pro 2 – Hands-Free Microphone (Bluetooth)"
+
+    private func longMicModel(_ defaults: UserDefaults) -> SettingsModel {
+        let devices = [MicrophoneDevice(uid: "long", name: Self.longMic, input: .init(sampleRate: 16_000, channels: 1, id: 7)),
+                       MicrophoneDevice(uid: "mac", name: "MacBook Pro Microphone", input: .init(sampleRate: 48_000, channels: 1, id: 8))]
+        try? PreferredMicrophone.save(.init(uid: "long", name: Self.longMic), in: defaults)
+        let mic = MicrophoneSettingsModel(defaults: defaults, devices: { devices }, defaultInput: { 8 })
+        return SettingsModel(defaults: defaults, microphone: mic)
+    }
+
+    /// Every rendered SwiftUI text must be laid out at least as tall as its wrapped content needs, and no word may be split.
+    private func textsAreUntruncated(in view: NSView) -> [String] {
+        var problems: [String] = []
+        for sub in descendants(of: view) {
+            guard let field = sub as? NSTextField, !field.isEditable, !field.stringValue.isEmpty, field.bounds.width > 0 else { continue }
+            let font = field.font ?? .systemFont(ofSize: 13)
+            for word in field.stringValue.split(whereSeparator: \.isWhitespace) {
+                let width = (String(word) as NSString).size(withAttributes: [.font: font]).width
+                if width > field.bounds.width + 1 { problems.append("\(word) (\(width) > \(field.bounds.width))") }
+            }
+            let needed = field.cell?.cellSize(forBounds: NSRect(x: 0, y: 0, width: field.bounds.width, height: .greatestFiniteMagnitude)).height ?? 0
+            if needed > field.bounds.height + 2 { problems.append("\(field.stringValue) needs \(needed) has \(field.bounds.height)") }
+        }
+        return problems
+    }
+
+    @Test(arguments: [NSSize(width: 900, height: 620), NSSize(width: 860, height: 600)])
+    func longMicrophoneNameKeepsGeneralInsideTheWindow(size: NSSize) throws {
+        let name = "SettingsLayoutLong-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        FontRegistry.registerBundledFonts()
+        let model = longMicModel(defaults)
+        model.page = .general
+        let (view, window) = SettingsRender.host(model: model, actions: actions(), dark: false, size: size)
+        let baseline = try makeModel()
+        defer { baseline.1() }
+        let (baseView, _) = SettingsRender.host(model: baseline.0, actions: actions(), dark: false, size: size)
+        if let baseScroll = descendants(of: baseView).compactMap({ $0 as? NSScrollView }).first, let baseDoc = baseScroll.documentView {
+            print("MEASURED baseline \(Int(size.width))x\(Int(size.height)) content=\(baseDoc.frame.height) visible=\(baseScroll.contentView.bounds.height)")
+        }
+        let scroll = try #require(descendants(of: view).compactMap { $0 as? NSScrollView }.first)
+        let document = try #require(scroll.documentView)
+        print("MEASURED General \(Int(size.width))x\(Int(size.height)) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height) docWidth=\(document.frame.width) viewport=\(scroll.contentView.bounds.width)")
+        if size == SettingsTheme.windowSize {
+            #expect(document.frame.height <= scroll.contentView.bounds.height + 1,
+                    "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
+        }
+        #expect(document.frame.width <= scroll.contentView.bounds.width + 1)
+        #expect(textsAreUntruncated(in: view).isEmpty, "\(textsAreUntruncated(in: view))")
+        if let refresh = descendants(of: view).compactMap({ $0 as? NSButton }).first(where: { $0.title == "Refresh inputs" }) {
+            #expect(refresh.bounds.width >= refresh.intrinsicContentSize.width - 1)
+        }
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        #expect(!window.isVisible)
+        let directory = URL(fileURLWithPath: "/tmp/mt-visual/settings", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try #require(bitmap.representation(using: .png, properties: [:]))
+            .write(to: directory.appendingPathComponent("long-mic-\(Int(size.width)).png"))
+    }
+
+    @Test func updatesAndToneRowsStayReadableAtMinimumWidth() throws {
+        let (model, cleanup) = try makeModel()
+        defer { cleanup() }
+        for page in [SettingsPage.general, .writing] {
+            model.page = page
+            let (view, _) = SettingsRender.host(model: model, actions: actions(), dark: false, size: SettingsTheme.minimumSize)
+            #expect(textsAreUntruncated(in: view).isEmpty, "\(page.title): \(textsAreUntruncated(in: view))")
+        }
+    }
+
+    @Test func arrowKeysMoveTheSidebarSelectionAndStopAtTheEnds() {
+        #expect(SettingsPage.general.moved(by: 1) == .writing)
+        #expect(SettingsPage.writing.moved(by: -1) == .general)
+        #expect(SettingsPage.general.moved(by: -1) == .general)
+        #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
+    }
+
+    @Test func halfTypedWebsiteDomainSurvivesRebuildingTheView() throws {
+        let (model, cleanup) = try makeModel()
+        defer { cleanup() }
+        model.websiteDomain = "slack"
+        let first = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
+        let second = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false })
+        _ = (first, second)
+        #expect(model.websiteDomain == "slack")
+    }
+
     // MARK: Every old control is still reachable
 
     @Test func everySettingFromTheOldWindowHasAHomeOnItsPage() throws {

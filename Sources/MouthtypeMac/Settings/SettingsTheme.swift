@@ -19,6 +19,8 @@ enum SettingsTheme {
     static let sidebarWidth: CGFloat = 210
     static let headerHeight: CGFloat = 46
     static let rowMinHeight: CGFloat = 36
+    static let rowLabelWidth: CGFloat = 220
+    static let popupMaxWidth: CGFloat = 220
 }
 
 private extension NSAppearance {
@@ -48,22 +50,35 @@ enum SettingsFont {
 }
 
 /// One row of a grouped form: title and optional detail on the left, controls on the right. Text wraps, never truncates.
+/// The label column keeps at least `rowLabelWidth`; when the controls don't fit beside it they wrap below the label.
+/// Callers keep buttons at their intrinsic size with `.fixedSize()` and cap popups with `.frame(maxWidth: SettingsTheme.popupMaxWidth)`.
 struct SettingsRow<Controls: View>: View {
     let title: String
     var detail: String?
     @ViewBuilder var controls: () -> Controls
 
-    var body: some View {
-        HStack(alignment: .center, spacing: 14) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(SettingsFont.sans(SettingsFont.body))
-                if let detail, !detail.isEmpty {
-                    Text(detail).font(SettingsFont.sans(SettingsFont.detail)).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+    private var label: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(SettingsFont.sans(SettingsFont.body)).fixedSize(horizontal: false, vertical: true)
+            if let detail, !detail.isEmpty {
+                Text(detail).font(SettingsFont.sans(SettingsFont.detail)).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 6)
-            controls()
+        }
+    }
+
+    private var controlRow: some View { HStack(spacing: 8) { controls() } }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .center, spacing: 14) {
+                label.frame(minWidth: SettingsTheme.rowLabelWidth, idealWidth: SettingsTheme.rowLabelWidth, maxWidth: .infinity, alignment: .leading)
+                controlRow.layoutPriority(1)
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                label.frame(maxWidth: .infinity, alignment: .leading)
+                controlRow
+            }.padding(.vertical, 2)
         }
         .frame(minHeight: SettingsTheme.rowMinHeight - 8)
     }

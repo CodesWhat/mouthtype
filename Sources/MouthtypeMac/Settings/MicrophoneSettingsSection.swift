@@ -19,18 +19,18 @@ struct MicrophoneSettingsSection: View {
                     if model.choice == .invalidPreference {
                         Text("Choose an input").tag(MicrophoneChoice.invalidPreference).disabled(true)
                     }
-                }.labelsHidden().fixedSize().accessibilityIdentifier("settings-microphone")
-                Button("Refresh inputs", action: model.refresh).accessibilityIdentifier("settings-microphone-refresh")
+                }.labelsHidden().frame(maxWidth: SettingsTheme.popupMaxWidth).accessibilityIdentifier("settings-microphone")
+                Button("Refresh inputs", action: model.refresh).fixedSize().accessibilityIdentifier("settings-microphone-refresh")
             }
             if model.choice == .priorityList, let priority = model.priority {
                 ForEach(Array(priority.devices.enumerated()), id: \.element.uid) { index, device in
                     SettingsRow(title: device.name + (model.inputs.contains(where: { $0.uid == device.uid }) ? "" : " (unavailable)")) {
                         Button { model.movePriority(uid: device.uid, offset: -1) } label: { Image(systemName: "arrow.up") }
-                            .disabled(index == 0).accessibilityLabel("Move \(device.name) up")
+                            .fixedSize().disabled(index == 0).accessibilityLabel("Move \(device.name) up")
                         Button { model.movePriority(uid: device.uid, offset: 1) } label: { Image(systemName: "arrow.down") }
-                            .disabled(index == priority.devices.count - 1).accessibilityLabel("Move \(device.name) down")
+                            .fixedSize().disabled(index == priority.devices.count - 1).accessibilityLabel("Move \(device.name) down")
                         Button { model.removePriority(uid: device.uid) } label: { Image(systemName: "minus.circle") }
-                            .disabled(priority.devices.count == 1 && !priority.fallbackToDefault).accessibilityLabel("Remove \(device.name)")
+                            .fixedSize().disabled(priority.devices.count == 1 && !priority.fallbackToDefault).accessibilityLabel("Remove \(device.name)")
                     }
                 }
                 SettingsRow(title: "Add microphone") { Menu("Add microphone") {

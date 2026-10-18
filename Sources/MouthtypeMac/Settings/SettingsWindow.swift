@@ -94,6 +94,12 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case general, writing, appearance, diagnostics
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
+    /// The page `offset` rows away, stopping at the first and last pages.
+    func moved(by offset: Int) -> SettingsPage {
+        let pages = Self.allCases
+        let index = pages.firstIndex(of: self) ?? 0
+        return pages[min(max(index + offset, 0), pages.count - 1)]
+    }
     var icon: String {
         switch self { case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
     }

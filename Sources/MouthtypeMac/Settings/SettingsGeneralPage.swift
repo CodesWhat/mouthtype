@@ -57,8 +57,9 @@ extension SettingsView {
             if let updater = actions.updater {
                 SettingsRow(title: "Updates", detail: updater.statusText) {
                     Toggle("Check automatically", isOn: Binding(get: { updater.automaticallyChecksForUpdates }, set: updater.setAutomaticChecks))
-                        .toggleStyle(.checkbox).disabled(!updater.isAvailable).accessibilityIdentifier("settings-auto-updates")
+                        .toggleStyle(.checkbox).fixedSize().disabled(!updater.isAvailable).accessibilityIdentifier("settings-auto-updates")
                     Button(updater.hasUpdate ? "Review Update…" : "Check for Updates…") { updater.checkForUpdates() }
+                        .fixedSize()
                         .disabled(!updater.canCheckForUpdates).accessibilityIdentifier("settings-check-updates")
                 }
             }
