@@ -56,6 +56,42 @@ import Testing
         #expect(srgb(view.segmentColor(column: 0, row: 0)) == [0xff, 0xb0, 0x2e])
     }
 
+    private func rgb(_ hex: String) -> [Double] {
+        srgb(PillLayout.color(hex: hex)).map(Double.init)
+    }
+
+    private func distance(_ a: String, _ b: String) -> Double {
+        zip(rgb(a), rgb(b)).map { ($0 - $1) * ($0 - $1) }.reduce(0, +).squareRoot()
+    }
+
+    @Test func errorTextIsDistinctFromTheReadoutInEveryColour() {
+        let colors = PillLayout.Colors(segmentNormal: "#ffb02e", segmentHot: "#ff7a1e", segmentPeak: "#ff3b2e", segmentDim: "#2e2008", windowBackground: "#080b0a", text: "#ffb02e", error: "#ff3b2e")
+        for readout in PillReadoutColour.allCases {
+            let palette = readout.palette(base: colors)
+            #expect(distance(palette.error, palette.text) > 100, "\(readout) error vs text")
+        }
+        #expect(PillReadoutColour.red.palette(base: colors).error == "#e8f1ff")
+        #expect(PillReadoutColour.amber.palette(base: colors).error == colors.error)
+        #expect(PillReadoutColour.coolWhite.palette(base: colors).error == colors.error)
+        #expect(distance(PillReadoutColour.coolWhite.palette(base: colors).peak, colors.error) > 100)
+    }
+
+    @Test func theHiFiPillPaintsTheErrorInThePaletteErrorColour() throws {
+        var errors: [String: [Int]] = [:]
+        for readout in PillReadoutColour.allCases {
+            let view = try hifi(readout)
+            view.showMessage("Mic unavailable", isError: true)
+            let error = srgb(view.messageColor)
+            view.showMessage("Pasted")
+            let text = srgb(view.messageColor)
+            errors[readout.rawValue] = error
+            let gap = zip(error, text).map { Double(($0 - $1) * ($0 - $1)) }.reduce(0, +).squareRoot()
+            #expect(gap > 100, "\(readout) error vs text \(gap)")
+        }
+        #expect(errors["red"] == [0xe8, 0xf1, 0xff])
+        #expect(errors["amber"] == [0xff, 0x3b, 0x2e])
+    }
+
     @Test func thePaletteIsDistinctPerColour() {
         let colors = PillLayout.Colors(segmentNormal: "#ffb02e", segmentHot: "#ff7a1e", segmentPeak: "#ff3b2e", segmentDim: "#2e2008", windowBackground: "#080b0a", text: "#ffb02e", error: "#ff3b2e")
         let palettes = PillReadoutColour.allCases.map { $0.palette(base: colors) }

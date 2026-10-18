@@ -57,7 +57,7 @@ enum PillSkinPreference {
 }
 
 /// The Hi-Fi pill's readout colour: the meter segments, the timer and the message text. Amber is the art as drawn;
-/// the others retint those layers from the board's palette. The REC lamp, caps and error text keep their own colours.
+/// the others retint those layers from the board's palette. The REC lamp and caps keep their own colours, and error text keeps its red except on Red, where it takes the cool-white ink.
 enum PillReadoutColour: String, CaseIterable, Sendable {
     case amber, coolWhite, red
 
@@ -82,6 +82,8 @@ enum PillReadoutColour: String, CaseIterable, Sendable {
 
     struct Palette: Equatable, Sendable {
         var normal: String, hot: String, peak: String, text: String
+        /// The error message colour. Red readouts would hide it, so they take the cool-white ink instead.
+        var error: String
 
         func tier(_ name: String) -> CGColor {
             switch name {
@@ -95,9 +97,9 @@ enum PillReadoutColour: String, CaseIterable, Sendable {
     /// `base` is the layout's own (amber) colours.
     func palette(base: PillLayout.Colors) -> Palette {
         switch self {
-        case .amber: Palette(normal: base.segmentNormal, hot: base.segmentHot, peak: base.segmentPeak, text: base.text)
-        case .coolWhite: Palette(normal: "#e8f1ff", hot: "#9cc0ff", peak: base.segmentPeak, text: "#e8f1ff")
-        case .red: Palette(normal: "#ff3d32", hot: "#ff8a7d", peak: "#ffd9d4", text: "#ff3d32")
+        case .amber: Palette(normal: base.segmentNormal, hot: base.segmentHot, peak: base.segmentPeak, text: base.text, error: base.error)
+        case .coolWhite: Palette(normal: "#e8f1ff", hot: "#9cc0ff", peak: "#ffffff", text: "#e8f1ff", error: base.error)
+        case .red: Palette(normal: "#ff3d32", hot: "#ff8a7d", peak: "#ffd9d4", text: "#ff3d32", error: "#e8f1ff")
         }
     }
 }

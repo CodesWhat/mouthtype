@@ -37,6 +37,8 @@ final class HiFiPillView: NSView, PillSkinView {
     private(set) var readout: PillReadoutColour
     private var messageString = ""
     private var messageIsError = false
+    /// The colour the current message was drawn in.
+    private(set) var messageColor: CGColor?
     private var litCache: [[Bool]] = []
     private var timerSeconds: Int?
     private var ledOn = false
@@ -375,7 +377,9 @@ final class HiFiPillView: NSView, PillSkinView {
         guard let font = assets.fonts[slot.font] else { return }
         messageString = text
         messageIsError = isError
-        let color = PillLayout.color(hex: isError ? layout.colors.error : readout.palette(base: layout.colors).text)
+        let palette = readout.palette(base: layout.colors)
+        let color = PillLayout.color(hex: isError ? palette.error : palette.text)
+        messageColor = color
         let image = font.image(for: text, color: color)
         messageWidth = image?.width ?? 0
         withoutActions {
