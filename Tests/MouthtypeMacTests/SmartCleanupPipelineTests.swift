@@ -52,6 +52,17 @@ private struct Rules: VocabularyProviding {
     func snippets() -> [Snippet] { phrases }
 }
 
+private final class CleanupDiagnostics: @unchecked Sendable {
+    private let lock = NSLock()
+    private var captured: [String] = []
+    func record(_ message: String) { lock.withLock { captured.append(message) } }
+    var messages: [String] { lock.withLock { captured } }
+}
+
+private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
+    var description: String
+}
+
 @MainActor
 @Suite struct SmartCleanupPipelineTests {
     private let raw = "um let's grab coffee at two"
@@ -242,6 +253,27 @@ private struct Rules: VocabularyProviding {
         let cleaned = await clean(pipeline, text: "what's the capital of France")
         #expect(cleaned.text == "What's the capital of France" && cleaned.cleanup.outcome == "guard-rejected")
         #expect(!cleaned.edits.contains { $0.stage == "llm" })
+    }
+
+    @Test(arguments: [false, true])
+    func publicDiagnosticsExcludeRejectedTextAndModelErrorDetails(modelFails: Bool) async {
+        let privatePath = "/Users/example/Private-Person/model-fixture"
+        let cleaner = ScriptedCleaner { _, _ in
+            if modelFails { throw CleanupDiagnosticFixtureError(description: privatePath) }
+            return "Send this to john@example.com."
+        }
+        var (pipeline, _) = pipeline(cleaner)
+        let diagnostics = CleanupDiagnostics()
+        pipeline.smartDiagnostic = { diagnostics.record($0) }
+        let result = await clean(pipeline, text: "send this to jon@example.com",
+                                 context: InsertionContext(before: "Customer: Fixture Person\n"))
+        let outcome = modelFails ? "failed" : "guard-rejected"
+        #expect(result.cleanup.outcome == outcome && result.text.contains("jon@example.com"))
+        #expect(diagnostics.messages.count == 1)
+        #expect(diagnostics.messages.contains { $0.contains(outcome) && $0.contains("ms=") })
+        for content in ["jon@example.com", "john@example.com", "Fixture Person", privatePath] {
+            #expect(diagnostics.messages.allSatisfy { !$0.contains(content) })
+        }
     }
 
     @Test func shortInputReachesTheModel() async {

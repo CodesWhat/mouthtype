@@ -60,6 +60,9 @@ struct DictationPipeline: Sendable {
     var textPipeline = TextPipeline()
     /// The local model pass for light and medium. Nil runs everything as basic.
     var smart: (any SmartCleaning)?
+    var smartDiagnostic: @Sendable (String) -> Void = { message in
+        Log.cleaner.info("\(message, privacy: .public)")
+    }
 
     /// Cleanup slower than this is thrown away and the raw text goes out.
     static let cleanupBudgetMs = 50.0
@@ -282,10 +285,7 @@ struct DictationPipeline: Sendable {
         record.ms = (record.ms ?? 0) + modelResult.milliseconds
         record.outcome = modelResult.outcome.rawValue
         record.promptSha = modelResult.promptSHA
-        if let reason = modelResult.rejection {
-            Log.cleaner.info("smart cleanup \(modelResult.outcome.rawValue, privacy: .public): \(reason, privacy: .public)")
-        }
-        Log.cleaner.info("smart cleanup \(modelResult.outcome.rawValue, privacy: .public) ms=\(modelResult.milliseconds)")
+        smartDiagnostic("smart cleanup \(modelResult.outcome.rawValue) ms=\(modelResult.milliseconds)")
         let final = phrases.apply(modelResult.text)
         guard phrases.matchingTriggers(in: modelResult.text) == expected else {
             record.outcome = "guard-rejected"
