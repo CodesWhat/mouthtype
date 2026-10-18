@@ -124,6 +124,22 @@ struct DictationPipeline: Sendable {
 
     /// Features on the untrimmed samples, the WAV before any transcribing, then the capture row.
     func recordCapture(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> AudioFeatures {
+        await recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs).features
+    }
+
+    func preserveForTermination(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> Bool {
+        if audio.samples.isEmpty {
+            await finish(session, .empty)
+            return true
+        }
+        let capture = await recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs)
+        guard capture.durable else { return false }
+        return await write(session, "finish") { store in
+            try await store.finish(session.id, status: .failed, errorMessage: DictationRecovery.interruptedMessage)
+        }
+    }
+
+    private func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
         let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))
         var audioPath: String?
         if let archive {
@@ -134,7 +150,7 @@ struct DictationPipeline: Sendable {
             }
         }
         func rounded(_ ms: Double?) -> Int? { ms.map { Int($0.rounded()) } }
-        await write(session, "recordCapture") { store in
+        let recorded = await write(session, "recordCapture") { store in
             try await store.recordCapture(session.id, CaptureRecord(
                 captureStartMs: rounded(audio.captureStartMs), firstSampleMs: rounded(audio.firstSampleMs),
                 firstNonzeroMs: rounded(audio.firstNonzeroMs), keyUpMs: keyUpMs, audioMs: rounded(audio.audioMs),
@@ -145,7 +161,7 @@ struct DictationPipeline: Sendable {
                 noiseFloorDb: features.noiseFloorDb
             ))
         }
-        return features
+        return (features, audioPath != nil && recorded)
     }
 
     /// Nil when nothing was voiced or the engine heard nothing; the row is then already finished as `.empty`.
@@ -346,14 +362,16 @@ struct DictationPipeline: Sendable {
         }
     }
 
-    private func write(
+    @discardableResult private func write(
         _ session: DictationSession, _ label: String, _ body: (any DictationStoring) async throws -> Void
-    ) async {
-        guard let store, session.rowOpen else { return }
+    ) async -> Bool {
+        guard let store, session.rowOpen else { return false }
         do {
             try await body(store)
+            return true
         } catch {
             Log.app.error("store \(label, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            return false
         }
     }
 }

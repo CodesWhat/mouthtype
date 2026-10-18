@@ -187,6 +187,21 @@ private struct FakeArchive: DictationArchiving {
     func discardPartial(id: String) { log.add("archive.discardPartial") }
 }
 
+private final class RetryArchive: DictationArchiving, @unchecked Sendable {
+    private let lock = NSLock()
+    private var failing = false
+    private var writes = 0
+    var attempts: Int { lock.withLock { writes } }
+    func setFailing(_ value: Bool) { lock.withLock { failing = value } }
+    func archive(samples: [Float], id: String) throws -> URL {
+        try lock.withLock {
+            writes += 1
+            if failing { throw Boom() }
+            return URL(fileURLWithPath: "/virtual/audio/\(id).wav")
+        }
+    }
+}
+
 @MainActor
 private final class FakeInserter: DictationInserting {
     let log: CallLog
@@ -1841,6 +1856,117 @@ private final class SlowCapture: DictationCapturing {
         #expect(rig.store.finishes.map(\.0) == [.failed])
         #expect(rig.cards.presented.isEmpty && rig.inserter.delivered.isEmpty)
         #expect(rig.pill.messages.last?.detail == "No audio could be recovered")
+    }
+
+    @Test(arguments: ["archive", "recordCapture", "finish"])
+    func terminationRefusesFailedPreservationAndRetriesTheRetainedAudioWithoutStoppingTwice(failure: String) async {
+        let archive = RetryArchive()
+        let rig = Rig(archive: archive)
+        await rig.controller.handle(.pressed(at: keyDown))
+        if failure == "archive" { archive.setFailing(true) }
+        else { rig.store.failing.insert(failure) }
+        #expect(!(await rig.controller.prepareForTermination()))
+        #expect(rig.inserter.delivered.isEmpty)
+        await rig.controller.handle(.pressed(at: keyUp + 1))
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
+        archive.setFailing(false)
+        rig.store.failing.removeAll()
+        #expect(await rig.controller.prepareForTermination())
+        #expect(archive.attempts == 2)
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+        #expect(rig.store.finishes.last?.0 == .failed)
+    }
+
+    @Test func terminationPreservesTheWholeActiveTakeBeforeTheFirstPartialFlush() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-quit-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("history.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let rig = Rig(archive: archive, quietAudio: true, storeWriter: TranscriptStoreWriter(store: store))
+        await rig.controller.handle(.pressed(at: keyDown))
+        let id = try #require(try store.unfinished(from: .distantPast, before: .distantFuture).first?.id)
+        #expect(!FileManager.default.fileExists(atPath: archive.partialURL(for: id).path))
+        #expect(await rig.controller.prepareForTermination())
+        #expect(try archive.read(id: id).count == capturedTone().samples.count)
+        let row = try #require(try store.dictation(id: id))
+        #expect(row.status == .failed && row.audioPath == archive.url(for: id).path)
+        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(-1)).map(\.id) == [id])
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+        #expect(!rig.log.contains("engine.transcribe") && rig.inserter.delivered.isEmpty)
+        #expect(rig.log.contains("audio.restore"))
+        #expect(await rig.controller.prepareForTermination())
+        await rig.controller.handle(.pressed(at: keyDown + 1))
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
+        #expect(rig.clock.sleeperCount == 0)
+    }
+
+    @Test func terminationCanCloseAnEmptyCaptureWithoutInventingSavedAudio() async {
+        var empty = capturedTone()
+        empty.samples = []
+        empty.audioMs = 0
+        let rig = Rig(audio: empty)
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(await rig.controller.prepareForTermination())
+        #expect(rig.store.finishes.last?.0 == .empty)
+        #expect(!rig.log.contains("archive.write") && !rig.log.contains("engine.transcribe"))
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+    }
+
+    @Test func terminationPreservesAnActiveTakeAndQueuedCapturesWithoutWaitingForTheEarlierModel() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-queued-quit-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("history.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let rig = Rig(archive: archive, storeWriter: TranscriptStoreWriter(store: store))
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.pressed(at: keyUp + 1))
+        await rig.controller.handle(.released(at: keyUp + 2))
+        await rig.until { (try? store.unfinished(from: .distantPast, before: .distantFuture).filter { $0.audioPath != nil }.count) == 2 }
+        await rig.controller.handle(.pressed(at: keyUp + 3))
+        #expect(await rig.controller.prepareForTermination())
+        let beforeRestart = try store.unfinished(from: .distantPast, before: .distantFuture)
+        #expect(beforeRestart.count == 2 && beforeRestart.allSatisfy { $0.audioPath != nil })
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        let saved = try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(-1))
+        #expect(saved.count == 3)
+        for item in saved { #expect(try archive.read(id: item.id).count == capturedTone().samples.count) }
+        #expect(rig.engine.samplesSeen.count == 1 && rig.inserter.delivered.isEmpty)
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 3)
+    }
+
+    @Test func terminationDoesNotWaitForAStalledModelOrAllowItsLatePaste() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        #expect(await rig.controller.prepareForTermination())
+        #expect(rig.log.contains("store.recordCapture"))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.store.finishes.last?.0 == .failed)
+    }
+
+    @Test func terminationDuringCaptureStartupWaitsForRegistrationAndKeepsTheTail() async throws {
+        let rig = Rig()
+        var completion: Task<Bool, Never>?
+        rig.capture.duringStart = {
+            completion = Task { await rig.controller.prepareForTermination() }
+            await rig.settle()
+            #expect(!rig.log.contains("capture.stop"))
+        }
+        await rig.controller.handle(.pressed(at: keyDown))
+        let pending = try #require(completion)
+        #expect(await pending.value)
+        #expect(rig.log.contains("store.recordCapture"))
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
+        #expect(rig.clock.sleeperCount == 0)
+        rig.capture.duringStart = nil
     }
 
     @Test func interruptedAudioStaysReachableAfterANewerCanceledCardWithoutExposingAnActiveTake() async throws {

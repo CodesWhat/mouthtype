@@ -195,6 +195,25 @@ private struct Rig {
 
 @MainActor
 @Suite struct TextInserterTests {
+    @Test func terminationCancelsAWaitingSecondDeliveryWithoutReplacingTheFirst() async throws {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original")]])
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var shutdown: Task<Void, Never>?
+        rig.pauses.observe = { delay in
+            if delay == 0.02, shutdown == nil {
+                shutdown = Task { await rig.inserter.prepareForTermination() }
+            }
+        }
+        let next = await rig.inserter.deliver("second", startFocus: nil)
+        let finished = try #require(shutdown)
+        await finished.value
+        #expect(next.method == .none && next.finalText == "second")
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(rig.pasteboard.publishedText == "original")
+    }
+
     @Test func terminationWaitsForAnUnreadPasteThenRestoresAndInvalidatesCallbacks() async {
         let rig = Rig(chunks: true)
         defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }

@@ -51,6 +51,10 @@ final class DictationController {
     @ObservationIgnored weak var corrections: (any CorrectionObserving)?
     @ObservationIgnored private var session: DictationSession?
     @ObservationIgnored private var captureStarting = false
+    @ObservationIgnored private var shuttingDown = false
+    @ObservationIgnored private var termination: Task<Bool, Never>?
+    @ObservationIgnored private var captureFinalizations = 0
+    @ObservationIgnored private var terminationCapture: (session: DictationSession, audio: CapturedAudio, keyUpMs: Int)?
     @ObservationIgnored private var interruptedDuringStart = false
     @ObservationIgnored private var undo: PendingUndo?
     /// The last job queued. A job waits for the one before it, so the chain keeps deliveries in order.
@@ -133,6 +137,7 @@ final class DictationController {
     }
 
     func handle(_ event: HotkeyEvent) async {
+        guard !shuttingDown else { return }
         switch event {
         case let .pressed(nanos): await pressed(at: nanos)
         case let .locked(_, trigger): await locked(trigger)
@@ -140,6 +145,49 @@ final class DictationController {
         case .discarded: await discarded()
         case .cancelled: await cancelled()
         }
+    }
+
+    func prepareForTermination() async -> Bool {
+        if let termination { return await termination.value }
+        shuttingDown = true
+        inserter.cancelVerification()
+        let work = Task { [self] in
+            let clock = ContinuousClock()
+            let deadline = clock.now.advanced(by: .seconds(8))
+            while captureStarting {
+                guard clock.now < deadline else { return false }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            if phase == .recording, let current = session {
+                session = nil
+                let saving = endTimers()
+                endHandsFree()
+                var audio: CapturedAudio?
+                do { audio = try await capture.stopSalvaging() }
+                catch { await capture.cancel() }
+                audioQuiet?.end()
+                await saving?.value
+                if audio?.samples.isEmpty != false, let partial = await pipeline.recoverPartial(current) { audio = partial }
+                guard let audio else { session = current; return false }
+                terminationCapture = (current, audio, self.clock.milliseconds(from: current.keyDownAt, to: self.clock.nowNanos()))
+                phase = pendingJobs > 0 ? .processing : .idle
+            }
+            if let pending = terminationCapture {
+                guard await pipeline.preserveForTermination(pending.audio, session: pending.session, keyUpMs: pending.keyUpMs) else { return false }
+                terminationCapture = nil
+            }
+            while captureFinalizations > 0 {
+                guard clock.now < deadline else { return false }
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            undo?.timer.cancel()
+            undo = nil
+            return true
+        }
+        termination = work
+        let ready = await work.value
+        if !ready { termination = nil; shuttingDown = false }
+        return ready
     }
 
     /// Returns when the current release has been fully processed. For tests and the self-test.
@@ -150,6 +198,10 @@ final class DictationController {
     // MARK: Press
 
     private func pressed(at nanos: UInt64) async {
+        guard terminationCapture == nil else {
+            pill.showMessage(PillMessage("Recording not saved", detail: "Retry Quit to save the kept audio", isError: true), duration: 3)
+            return
+        }
         guard canStartRecording() else {
             pill.showMessage(PillMessage("Mouthtype is busy", detail: "Try again in a moment"), duration: 2.5)
             return
@@ -228,6 +280,7 @@ final class DictationController {
             return
         }
         session = current
+        if shuttingDown { return }
         if interruptedDuringStart {
             interruptedDuringStart = false
             await captureInterrupted()
@@ -278,13 +331,13 @@ final class DictationController {
 
     /// The menu's Stop Dictation: the same as tapping the key to end a locked recording.
     func stopHandsFree() {
-        guard isHandsFree else { return }
+        guard !shuttingDown, isHandsFree else { return }
         released(at: clock.nowNanos())
     }
 
     /// The menu's Cancel Dictation: the same as Esc.
     func cancelHandsFree() async {
-        guard isHandsFree else { return }
+        guard !shuttingDown, isHandsFree else { return }
         await cancelled()
     }
 
@@ -378,6 +431,7 @@ final class DictationController {
         stopping = stopped
         phase = .processing
         showProcessing()
+        captureFinalizations += 1
         enqueue { [self] previous in
             await process(current, releasedAt: nanos, stopped: stopped, saving: saving, after: previous)
         }
@@ -398,6 +452,8 @@ final class DictationController {
         _ session: DictationSession, releasedAt: UInt64, stopped: Task<CapturedAudio, Error>,
         saving: Task<Void, Never>?, after previous: Task<Void, Never>?
     ) async {
+        var savingCapture = true
+        defer { if savingCapture { captureFinalizations -= 1 } }
         do {
             // A capture cut short by the input going away still holds what was said; it goes through like any other.
             let audio = try await stopped.value
@@ -406,6 +462,8 @@ final class DictationController {
             await saving?.value
             let keyUpMs = clock.milliseconds(from: session.keyDownAt, to: releasedAt)
             let features = await pipeline.recordCapture(audio, session: session, keyUpMs: keyUpMs)
+            captureFinalizations -= 1
+            savingCapture = false
             let waits = pendingJobs > 1
             await previous?.value
             if waits { showProcessing() }
@@ -426,11 +484,13 @@ final class DictationController {
 
     /// Everything after the audio is on disk, shared by a normal release, an Undo and a saved recording.
     private func transcribeAndDeliver(_ audio: CapturedAudio, features: AudioFeatures, session: DictationSession) async throws {
+        guard await continueProcessing(session) else { return }
         guard let transcribed = try await pipeline.transcribe(audio, session: session, voicedMs: features.voicedMs) else {
             hidePill()
             return
         }
 
+        guard await continueProcessing(session) else { return }
         let inputs = pipeline.cleanupInputs(style: session.cleanupStyle)
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
@@ -443,6 +503,7 @@ final class DictationController {
             return
         }
 
+        guard await continueProcessing(session) else { return }
         let result = await inserter.deliver(cleaned.text, startFocus: session.startFocus)
         // Before anything suspends: the read-back can end while the row is still being written.
         verifying = result.verificationID.map { PendingVerification(id: $0, session: session, text: result.finalText) }
@@ -456,6 +517,12 @@ final class DictationController {
             verifying?.wrappedUp = true
             if let arrived = verifying?.arrived { verificationEnded(arrived) }
         }
+    }
+
+    private func continueProcessing(_ session: DictationSession) async -> Bool {
+        guard shuttingDown else { return true }
+        await pipeline.finish(session, .failed, errorMessage: DictationRecovery.interruptedMessage)
+        return false
     }
 
     // MARK: Read-back
@@ -482,6 +549,8 @@ final class DictationController {
 
     private func discarded() async {
         guard phase == .recording, let current = session else { return }
+        captureFinalizations += 1
+        defer { captureFinalizations -= 1 }
         session = nil
         let saving = endTimers()
         await capture.cancel()
@@ -497,6 +566,8 @@ final class DictationController {
     /// once, so nothing is lost if the app quits during the window.
     private func cancelled() async {
         guard phase == .recording, let current = session else { return }
+        captureFinalizations += 1
+        defer { captureFinalizations -= 1 }
         session = nil
         let saving = endTimers()
         var kept: CapturedAudio?
@@ -550,15 +621,17 @@ final class DictationController {
 
     /// The card's Undo: runs the normal pipeline on the kept audio and delivers wherever focus is now.
     func undoCancel() async {
-        guard phase == .idle, canStartRecording(), let pending = undo else { return }
+        guard !shuttingDown, phase == .idle, canStartRecording(), let pending = undo else { return }
         pending.timer.cancel()
         undo = nil
+        captureFinalizations += 1
         enqueue { [self] _ in
             await pipeline.reopen(pending.session)
             showProcessing()
             do {
                 let keyUpMs = clock.milliseconds(from: pending.session.keyDownAt, to: pending.cancelledAt)
                 let features = await pipeline.recordCapture(pending.audio, session: pending.session, keyUpMs: keyUpMs)
+                captureFinalizations -= 1
                 try await transcribeAndDeliver(pending.audio, features: features, session: pending.session)
             } catch {
                 await failJob(pending.session, error)
@@ -571,13 +644,15 @@ final class DictationController {
 
     /// The input went away mid-recording. What was captured is saved to disk first, then the card offers to run it.
     private func captureInterrupted() async {
-        guard phase == .recording else { return }
+        guard !shuttingDown, phase == .recording else { return }
         // Capture and history registration both suspend before the session can own its recovery card.
         if captureStarting {
             interruptedDuringStart = true
             return
         }
         guard let current = session else { return }
+        captureFinalizations += 1
+        defer { captureFinalizations -= 1 }
         session = nil
         let saving = endTimers()
         endHandsFree()
@@ -607,6 +682,7 @@ final class DictationController {
         await pipeline.finish(current, .failed, errorMessage: DictationRecovery.interruptedMessage)
         interrupted = PendingInterruption(session: current, audio: audio, features: features, keyUpAt: keyUpAt)
         Log.app.info("microphone lost mid-recording; kept \(audio.samples.count, privacy: .public) samples")
+        guard !shuttingDown else { finished(); return }
         cards.present(.micDisconnected(seconds: audio.audioMs / 1000), actions: [
             .insert: { [weak self] in Task { await self?.insertInterrupted() } },
             .discard: { [weak self] in Task { await self?.discardInterrupted() } },
@@ -616,7 +692,7 @@ final class DictationController {
 
     /// The card's Insert: runs the saved recording like any other and delivers wherever focus is now.
     func insertInterrupted() async {
-        guard canStartRecording(), let pending = interrupted else { return }
+        guard !shuttingDown, canStartRecording(), let pending = interrupted else { return }
         interrupted = nil
         enqueue { [self] previous in
             await previous?.value
