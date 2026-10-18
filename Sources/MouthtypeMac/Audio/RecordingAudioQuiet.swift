@@ -43,7 +43,7 @@ final class RecordingAudioQuiet: RecordingAudioQuieting {
             guard try !output.isMuted(device) else { return }
             try output.setMuted(true, output: device)
             do {
-                // Subscribe after our write rather than registering during the mutation.
+                // The output adapter also filters delayed notifications from our mute write.
                 let observation = try output.observeChanges(device)
                 owned = (device, observation)
             } catch {

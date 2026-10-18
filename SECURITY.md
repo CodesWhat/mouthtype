@@ -4,8 +4,8 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.1.0-beta.1 | Supported through the next verified Mac prerelease |
-| 0.1.0-alpha.x and superseded Mac prereleases | Upgrade to the latest published prerelease |
+| 0.1.0-rc.1 | Supported through the next verified Mac prerelease |
+| 0.1.0-beta.x, 0.1.0-alpha.x and superseded Mac prereleases | Upgrade to the latest published prerelease |
 | Experimental Linux source | Development only; no supported desktop release |
 
 There is no stable release yet. Fixes land on the active development branch and ship in the next verified Mac prerelease. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current version.
