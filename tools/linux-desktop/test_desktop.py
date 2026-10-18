@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import threading
@@ -742,6 +744,42 @@ class PasteDeliveryTests(unittest.TestCase):
         permissive, target, calls, _ = self.make({'any_window': True, 'allow_terminal_multiline': True}, terminal=True)
         self.assertEqual(permissive.submit('one\ntwo', target), 'unknown')
 
+    def test_terminal_payload_is_stripped_and_the_exact_payload_is_checked(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, terminal=True)
+        self.assertEqual(delivery.submit('echo hi\n', target), 'unknown')
+        self.assertEqual(delivery.submit('echo hi\r\n\n', target), 'unknown')
+        self.assertEqual([k['input'] for a, k in calls if a[0] == 'wl-copy'], [b'echo hi', b'echo hi'])
+        calls.clear()
+        for text in ('echo a\n\nrm b', 'echo a\rrm b', '\necho a'):
+            self.assertEqual(delivery.submit(text, target), 'unsupported_text')
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_dispatcher_timeout_does_not_fall_back_to_untargeted_wtype(self):
+        delivery, target, calls, restored = self.make({'any_window': True}, hyprland=True)
+        inner = delivery.run
+        def timing_out(argv, **kwargs):
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                calls.append((argv, kwargs))
+                raise subprocess.TimeoutExpired(argv, 5)
+            return inner(argv, **kwargs)
+        delivery.run = timing_out
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+        self.assertEqual(len([a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']]), 1)
+
+    def test_clean_dispatcher_failure_falls_back_only_while_the_target_is_active(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(len([a for a, _ in calls if a[0] == 'wtype']), 1)
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        snapshots = []
+        def moving():
+            snapshots.append(1)
+            return target if len(snapshots) <= 2 else {**target, 'address': '0x999'}
+        delivery.snapshot = moving
+        self.assertEqual(delivery.submit('text', target), 'target_changed')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+
     def test_hyprland_delivers_the_chord_to_the_captured_window_without_wtype(self):
         delivery, target, calls, _ = self.make({'any_window': True}, hyprland=True)
         self.assertEqual(delivery.submit('text', target), 'unknown')
@@ -762,6 +800,7 @@ class PasteDeliveryTests(unittest.TestCase):
         self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
         self.assertEqual(restored, [('earlier text', 'text')])
 
+    @unittest.skipUnless(sys.platform == 'linux', 'reads /proc')
     def test_terminal_with_custom_window_class_is_recognised_by_its_process(self):
         delivery, target, calls, _ = self.make({'any_window': True}, hyprland=True)
         target['class'] = 'org.example.custom-shell'

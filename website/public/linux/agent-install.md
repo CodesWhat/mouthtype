@@ -24,7 +24,7 @@ mkdir -p ~/src/mouthtype && tar -xzf mouthtype-source.tar.gz -C ~/src/mouthtype 
 cd ~/src/mouthtype
 ```
 
-Check: `tools/linux-desktop/install.py`, `tools/linux-desktop/setup_speech.py` and `tools/omarchy-plugin/install.py` exist. If `tools/omarchy-plugin` is missing, this archive predates the plugin; install the client only (steps 3, 4 and 7) or use a newer archive.
+Check: `tools/linux-desktop/install.py`, `tools/linux-desktop/setup_speech.py` and `tools/omarchy-plugin/install.py` exist. If `tools/omarchy-plugin` is missing, this archive predates the plugin and the step 3 check below will also fail, because older clients have no `file_transcription` capability. Use a newer archive or a git checkout of the repository instead.
 
 ## 3. Client
 
@@ -58,7 +58,9 @@ reports `checks passed` (a stopped service is a warning, not an error).
 python3 tools/omarchy-plugin/install.py
 ```
 
-Copies the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype`, adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with every graphical session and is restarted if it stops, starts it now, and restarts the Omarchy shell. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
+Copies the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype`, adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with the graphical session (after the Wayland session is up, not at bare login) and is restarted if it stops, starts it now, and restarts the Omarchy shell. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
+
+If a `mouthtype-linux.service` user unit already exists that the installer didn't create, it stops with "An existing Mouthtype user service was not changed"; remove or rename that unit and run it again.
 
 Check: `systemctl --user is-enabled mouthtype-linux.service` prints `enabled`; after a few seconds `mouthtype-linux status` prints JSON with `"state": "idle"`; the Mouthtype glyph is visible near the right end of the bar.
 
@@ -107,6 +109,8 @@ Check: `mouthtype-linux --config "$HOME/.local/share/mouthtype/speech-candidate/
 ```bash
 systemctl --user disable --now mouthtype-linux.service
 rm -rf ~/.config/omarchy/plugins/dstahl.mouthtype ~/.local/lib/mouthtype-linux ~/.local/bin/mouthtype-linux
+rm -f ~/.config/systemd/user/mouthtype-linux.service ~/.config/mouthtype/omarchy-plugin.json
+systemctl --user daemon-reload
 ```
 
 Then remove the `dstahl.mouthtype` entry from `~/.config/omarchy/shell.json` and the marked Mouthtype block from `~/.config/hypr/bindings.lua`, and restart the shell with `omarchy-restart-shell`. Models and recordings live under `~/.local/share/mouthtype` and `~/.local/state/mouthtype`; delete them only if you no longer want them.

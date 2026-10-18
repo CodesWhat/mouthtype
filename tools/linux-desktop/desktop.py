@@ -457,10 +457,13 @@ class HyprlandDelivery:
 
     def paste(self, text, target):
         """Clipboard plus a paste chord. Line breaks and tabs travel as text; other controls are refused."""
+        terminal = self.is_terminal(target)
+        if terminal:
+            # A trailing line break would run the command, so it never travels; the check below sees the exact payload.
+            text = text.rstrip('\r\n')
         if any((ord(char) < 32 and char not in '\n\t') or 127 <= ord(char) <= 159 for char in text):
             return 'unsupported_text'
-        terminal = self.is_terminal(target)
-        if terminal and '\n' in text.strip() and self.config.get('allow_terminal_multiline') is not True:
+        if terminal and ('\n' in text or '\r' in text) and self.config.get('allow_terminal_multiline') is not True:
             return 'unsupported_text'
         if self.snapshot() != target:
             return 'target_changed'
@@ -478,7 +481,9 @@ class HyprlandDelivery:
                 return 'unknown'
             if self.snapshot() != target:
                 return 'target_changed'
-            self.send_paste_chord(target, terminal)
+            outcome = self.send_paste_chord(target, terminal)
+            if outcome:
+                return outcome
         except (OSError, subprocess.SubprocessError):
             return 'unknown'
         finally:
@@ -502,7 +507,9 @@ class HyprlandDelivery:
             time.sleep(.05)
 
     def send_paste_chord(self, target, terminal):
-        """Hyprland delivers the chord to the captured window itself; wtype is the fallback for other compositors."""
+        """Hyprland delivers the chord to the captured window itself; wtype is the fallback for other compositors.
+
+        Returns None once sent, or an outcome string when the chord must not be sent blindly."""
         mods = 'CTRL SHIFT' if terminal else 'CTRL'
         window = 'address:' + str(target.get('address', ''))
         attempts = (
@@ -512,11 +519,17 @@ class HyprlandDelivery:
         for argv in attempts:
             try:
                 result = self.run(argv, capture_output=True, text=True, check=False, timeout=5)
+            except subprocess.TimeoutExpired:
+                # The dispatcher may still have delivered the chord; a second one could paste twice.
+                return 'unknown'
             except (OSError, subprocess.SubprocessError):
                 continue
             output = (getattr(result, 'stdout', '') or '') + (getattr(result, 'stderr', '') or '')
             if getattr(result, 'returncode', 1) == 0 and 'ok' in output and 'error' not in output.lower():
-                return
+                return None
+        # wtype is untargeted, so only use it while the captured window is still the active one.
+        if self.snapshot() != target:
+            return 'target_changed'
         chord = (['wtype', '-M', 'ctrl', '-M', 'shift', '-k', 'v', '-m', 'shift', '-m', 'ctrl'] if terminal
                  else ['wtype', '-M', 'ctrl', '-k', 'v', '-m', 'ctrl'])
         self.run(chord, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=15)
@@ -680,7 +693,10 @@ class SpeechEngine:
 class CleanupEngine:
     """A resident llama.cpp server behind the proof worker, loaded once and stopped with the service."""
 
-    def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300):
+    RETRY_SECONDS = (30, 120, 480, 1800)
+    ABSENT_RECHECK_SECONDS = 30
+
+    def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic):
         if (not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict) or
                 not isinstance(settings.get('server'), str) or settings.get('prompt', 's1') not in ('s1', 'shared')):
             raise ValueError('Invalid cleanup engine configuration')
@@ -693,10 +709,32 @@ class CleanupEngine:
         self.startup_seconds = startup_seconds
         self.worker = None
         self.lock = threading.Lock()
-        present = all(Path(item['path']).is_file() for item in settings['artifacts'].values())
-        self.state = 'idle' if present else 'absent'
+        # close() sets this so a load in progress stops promptly instead of holding the lock for minutes.
+        self.shutdown = threading.Event()
+        self.warming = None
+        self.warm_guard = threading.Lock()
+        self.clock = clock
+        # A failed load retries from clean() on a growing delay; a reload of the config builds a fresh engine.
+        self.failures, self.retry_at = 0, 0.0
+        self.artifacts_checked = clock()
+        self.state = 'idle' if self._artifacts_present() else 'absent'
         self.error = None
         self.load_ms = None
+
+    def _artifacts_present(self):
+        return all(Path(item['path']).is_file() for item in self.settings['artifacts'].values())
+
+    def _recover(self):
+        """Called from clean() while not ready. Starts a background load when one is due; never waits."""
+        if self.state == 'idle':
+            self.warm()
+        elif self.state == 'failed' and self.clock() >= self.retry_at:
+            self.warm()
+        elif self.state == 'absent' and self.clock() - self.artifacts_checked >= self.ABSENT_RECHECK_SECONDS:
+            self.artifacts_checked = self.clock()
+            if self._artifacts_present():
+                self.state = 'idle'
+                self.warm()
 
     def status(self):
         return {'state': self.state, 'error': self.error, 'load_ms': self.load_ms,
@@ -717,41 +755,57 @@ class CleanupEngine:
         self.load_ms = int((time.monotonic() - started) * 1000)
         self.state = 'ready'
         self.error = None
+        self.failures, self.retry_at = 0, 0.0
 
     def warm(self):
         """Load in the background so the first take does not pay the cold start."""
         def run():
             with self.lock:
                 try:
-                    self._ensure_loaded(threading.Event())
+                    self._ensure_loaded(self.shutdown)
                     self._prime()
                 except (OSError, ValueError, KeyError, TypeError, Stopped) as error:
                     self._fail(error)
-        thread = threading.Thread(target=run, daemon=True)
-        thread.start()
-        return thread
+        with self.warm_guard:
+            if self.warming is not None and self.warming.is_alive():
+                return self.warming
+            self.warming = threading.Thread(target=run, daemon=True)
+            self.warming.start()
+            return self.warming
 
     def _prime(self):
         """One short request so the server caches the system prompt; the first real take then pays only for its words."""
         try:
             identity = uuid.uuid4().hex
             remaining = self.worker.send({'id': identity, 'input': 'Warm up, please.', 'deadline_seconds': 60},
-                                         60, threading.Event())
-            self.worker.receive(remaining, threading.Event())
+                                         60, self.shutdown)
+            self.worker.receive(remaining, self.shutdown)
         except (OSError, ValueError, KeyError, TypeError, Stopped):
             pass
 
     def _fail(self, error):
         self.state, self.error = 'failed', type(error).__name__
+        self.retry_at = self.clock() + self.RETRY_SECONDS[min(self.failures, len(self.RETRY_SECONDS) - 1)]
+        self.failures += 1
         worker, self.worker = self.worker, None
         if worker:
             worker.close()
 
     def clean(self, text, cancelled, *, seconds, controls=None):
-        """The model's text, or None when the request timed out while the server stayed warm."""
-        with self.lock:
+        """The model's text, or None when the request timed out or the server is not warm yet.
+
+        A cold server never blocks a take: it loads in the background and this take keeps its basic text."""
+        if self.worker is None or self.state != 'ready':
+            self._recover()
+            return None
+        end = time.monotonic() + seconds
+        while not self.lock.acquire(timeout=.05):
+            if cancelled.is_set() or time.monotonic() >= end:
+                return None
+        try:
+            if self.worker is None or self.state != 'ready':
+                return None
             try:
-                self._ensure_loaded(cancelled)
                 identity = uuid.uuid4().hex
                 request = {'id': identity, 'input': text, 'deadline_seconds': seconds}
                 if controls:
@@ -771,8 +825,11 @@ class CleanupEngine:
                     # A cancelled or crashed request reloads on the next take.
                     self.state = 'idle'
                 raise RuntimeError('Cleanup engine unavailable') from None
+        finally:
+            self.lock.release()
 
     def close(self):
+        self.shutdown.set()
         with self.lock:
             worker, self.worker = self.worker, None
             if worker:
@@ -1110,7 +1167,7 @@ def main():
                 status = request(path, 'status')
                 if status.get('recovery') == args.id and status.get('state') != 'idle':
                     raise ValueError('Recovery is in use')
-            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt'):
+            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json'):
                 (take / name).unlink(missing_ok=True)
             take.rmdir()
             return 0

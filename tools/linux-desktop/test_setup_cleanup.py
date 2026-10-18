@@ -2,12 +2,16 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import platform
+import sys
 import tempfile
 import unittest
 
 import setup_cleanup
 
 
+@unittest.skipUnless(sys.platform == 'linux' and platform.machine() in ('x86_64', 'AMD64'),
+                     'cleanup setup pins Linux x86_64 artifacts')
 class SetupCleanupTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

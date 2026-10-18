@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Small JSON bridge between the Omarchy panel and Mouthtype's local CLI."""
 
+import fcntl
 import json
 import os
 import re
@@ -28,6 +29,8 @@ SAVE_DIALOG = Path(__file__).resolve().parent / "save_dialog.py"
 CLEANUP_DIR = HOME / ".local/share/mouthtype/cleanup-candidate"
 CLEANUP_LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/cleanup-setup.log"
 CLEANUP_SIZES = {"fast": "about 480 MB", "thorough": "about 2.5 GB"}
+
+IMPORT_ACTIVE = ("preparing", "transcribing", "cancelling")
 
 IMPORT_MESSAGES = {
     "busy": "Finish or cancel the current file transcription first.",
@@ -321,6 +324,8 @@ def state():
     if not isinstance(file_import, dict):
         file_import = {"state": "off", "error": None, "duration_seconds": None}
     file_import["message"] = IMPORT_MESSAGES.get(file_import.get("error") or "", "")
+    # A failed replacement keeps the previous result readable through import-result.
+    file_import["retained"] = bool(file_import.get("retained_id"))
     return {"running": running, "state": status.get("state", "off") if running else "off",
             "error": status.get("error") if running else None,
             "recent": transcripts[:5], "has_transcript": bool(transcripts),
@@ -329,13 +334,17 @@ def state():
             "config": config_summary(), "sounds": preferences()["sounds"],
             "pill": preferences()["pill"], "font": preferences()["font"],
             "cleanup": {**cleanup_models(), "service": status.get("cleanup") if running else None},
-            "autostart": (UNIT.parent / "default.target.wants/mouthtype-linux.service").is_symlink(),
+            "autostart": unit_enabled(),
             "shortcut": shortcut_mode(), "shortcut_keys": shortcut_info()["keys"],
             "interface": report.get("interface"), "capabilities": report.get("features", {}),
             "file_import": file_import}
 
 
 def unit_enabled():
+    return (UNIT.parent / "graphical-session.target.wants" / UNIT.name).is_symlink()
+
+
+def legacy_unit_enabled():
     return (UNIT.parent / "default.target.wants" / UNIT.name).is_symlink()
 
 
@@ -392,16 +401,130 @@ def cue(name):
             pass
 
 
-def act(command, identity=None):
-    if identity is not None and (len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity)):
-        raise RuntimeError("Invalid recording ID")
-    if command in {"start", "toggle", "transcribe"} and not state()["running"]:
-        start_service()
-    if command == "shutdown" and unit_active():
-        # Stopping through systemd keeps Restart=always from bringing the service straight back.
-        subprocess.run(["systemctl", "--user", "stop", UNIT.name], check=False, timeout=20,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return state()
+HOLD = LOG.parent / "hold.json"
+PROCESS_FALLBACK_TIME = time.monotonic()
+
+
+def event_time():
+    """When this process was launched, in clock ticks since boot.
+
+    Lock arrival order is not key order: a press and a release can reach the lock in either order.
+    Launch time is stamped by the kernel before any of our code runs, so it orders the key events."""
+    try:
+        stat = Path("/proc/self/stat").read_text(encoding="utf-8")
+        # comm (field 2) may contain spaces and parentheses, so count fields from the last ')'.
+        return int(stat[stat.rindex(")") + 2:].split()[19])
+    except (OSError, ValueError, IndexError):
+        return PROCESS_FALLBACK_TIME
+
+
+def boot_id():
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def hold_normalise(data):
+    """The saved hold state, or a fresh one when the file is malformed or left by an earlier boot."""
+    fresh = {"boot": boot_id(), "seq": 0, "press": None, "last_release_t": None}
+    if not isinstance(data, dict) or data.get("boot") != fresh["boot"] or not isinstance(data.get("seq"), int):
+        return fresh
+    press = data.get("press")
+    if press is not None:
+        if (not isinstance(press, dict) or not isinstance(press.get("id"), int) or not number(press.get("t"))
+                or not all(isinstance(press.get(key), bool) for key in ("started", "released"))):
+            press = None
+    last = data.get("last_release_t")
+    return {**fresh, "seq": data["seq"], "press": press,
+            "last_release_t": last if number(last) else None}
+
+
+def hold_update(change):
+    """Serialise the press and release processes, which start within milliseconds of each other."""
+    HOLD.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(HOLD.with_suffix(".lock"), os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        try:
+            data = json.loads(HOLD.read_text(encoding="utf-8")) if HOLD.is_file() else {}
+        except (OSError, ValueError):
+            data = {}
+        data = hold_normalise(data)
+        result = change(data)
+        atomic_json(HOLD, data)
+        return result
+    finally:
+        os.close(fd)
+
+
+def hold_press(t):
+    """Register a press launched at t. Returns its id, or None when it must not start a recording."""
+    def change(data):
+        data["seq"] += 1
+        mine = data["seq"]
+        press, last = data["press"], data["last_release_t"]
+        if press is not None and press["t"] > t:
+            return None  # a newer press already owns the session
+        if last is not None and last >= t:
+            # The release of this very press was processed first. Nothing to start.
+            data["press"] = {"id": mine, "t": t, "started": False, "released": True, "skipped": True}
+            return None
+        data["press"] = {"id": mine, "t": t, "started": False, "released": False}
+        return mine
+    return hold_update(change)
+
+
+def hold_release(t):
+    """Register a release launched at t. Returns False when it belongs to a press that is already over."""
+    def change(data):
+        last = data["last_release_t"]
+        data["last_release_t"] = t if last is None else max(last, t)
+        press = data["press"]
+        if press is None:
+            return True
+        if press["t"] > t:
+            return False  # a late release for an older press; the current press is still held
+        press["released"] = True
+        return True
+    return hold_update(change)
+
+
+def hold_alive(mine):
+    def change(data):
+        press = data["press"]
+        return press is not None and press["id"] == mine and not press["released"]
+    return hold_update(change)
+
+
+def hold_settle(mine):
+    """After the start request returned: True when the key already came up and the recording must stop."""
+    def change(data):
+        press = data["press"]
+        if press is None:
+            return False
+        if press["id"] != mine:
+            if press["released"] and press.get("skipped"):
+                # The newest press came and went without starting; this start would otherwise leak.
+                press["skipped"] = False
+                try:
+                    deliver("stop")
+                except RuntimeError:
+                    pass
+                cue("stop")
+            return False
+        if press["released"]:
+            return True
+        press["started"] = True
+        return False
+    return hold_update(change)
+
+
+def deliver(command, identity=None):
     result = cli(command, *([identity] if identity else []))
     if result.returncode:
         raise RuntimeError("Mouthtype command failed")
@@ -413,7 +536,49 @@ def act(command, identity=None):
         raise RuntimeError("Mouthtype is not running")
     if response.get("error") == "file_import_active":
         raise import_error("file_import_active", "A file transcription is running")
-    if command in {"start", "toggle"} and response.get("state") == "recording":
+    return response
+
+
+def hold_start(t):
+    mine = hold_press(t)
+    if mine is None:
+        return state()
+    try:
+        response = deliver("start")
+    except RuntimeError:
+        if state()["running"]:
+            raise
+        start_service()
+        if not hold_alive(mine):
+            return state()
+        response = deliver("start")
+    if hold_settle(mine):
+        # The key came up before the recording began, so its stop was a no-op. Stop now.
+        deliver("stop")
+        cue("stop")
+        return state()
+    if response.get("state") == "recording":
+        cue("start")
+    return state()
+
+
+def act(command, identity=None):
+    t = event_time() if command in {"start", "stop"} else None
+    if identity is not None and (len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity)):
+        raise RuntimeError("Invalid recording ID")
+    if command == "start":
+        return hold_start(t)
+    if command == "stop" and not hold_release(t):
+        return state()
+    if command in {"toggle", "transcribe"} and not state()["running"]:
+        start_service()
+    if command == "shutdown" and unit_active():
+        # Stopping through systemd keeps Restart=always from bringing the service straight back.
+        subprocess.run(["systemctl", "--user", "stop", UNIT.name], check=False, timeout=20,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return state()
+    response = deliver(command, identity)
+    if command == "toggle" and response.get("state") == "recording":
         cue("start")
     elif command in {"stop", "cancel", "toggle"} and response.get("state") != "recording":
         cue("stop")
@@ -457,6 +622,9 @@ def set_config(field, value, extra=None):
     validate_config(config)
     if config == json.loads(CONFIG.read_text(encoding="utf-8")):
         return state()
+    if current["running"] and current["file_import"].get("state") in IMPORT_ACTIVE:
+        # Applying the change restarts the service, which would cancel the running file transcription.
+        raise RuntimeError("Wait for the file transcription to finish or cancel it before changing settings")
     backup = CONFIG.with_name(f"linux.json.bak.{int(time.time())}")
     shutil.copy2(CONFIG, backup)
     atomic_json(CONFIG, config)
@@ -507,22 +675,36 @@ def set_sounds(value):
     return state()
 
 
+UNIT_MARKER = "# Managed by the Mouthtype Omarchy plugin"
+
+
+def unit_quote(value):
+    value = str(value)
+    if not any(c in value for c in " \t\"'\\%"):
+        return value
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
+
+
 def set_autostart(value):
     if value not in {"on", "off"}:
         raise RuntimeError("Unsupported login setting")
+    if UNIT.exists() and UNIT_MARKER not in UNIT.read_text(encoding="utf-8"):
+        raise RuntimeError("An existing Mouthtype user service was not changed")
     if value == "on":
-        marker = "# Managed by the Mouthtype Omarchy plugin"
         if shutil.which("systemctl") is None:
             raise RuntimeError("systemd user services are unavailable")
-        if UNIT.exists() and marker not in UNIT.read_text(encoding="utf-8"):
-            raise RuntimeError("An existing Mouthtype user service was not changed")
+        if legacy_unit_enabled():
+            # Older installs linked into default.target; unlink it while the old unit still names that target.
+            subprocess.run(["systemctl", "--user", "disable", UNIT.name], check=True, timeout=10,
+                           stdout=subprocess.DEVNULL)
         UNIT.parent.mkdir(parents=True, exist_ok=True)
         unit = ("[Unit]\nDescription=Mouthtype Linux dictation service\n"
+                "PartOf=graphical-session.target\n"
                 "After=graphical-session.target pipewire.service\n\n"
-                "[Service]\nType=simple\n" + marker + "\n"
-                f"ExecStart={LAUNCHER} --config {CONFIG} serve --lifetime-seconds 86400\n"
+                "[Service]\nType=simple\n" + UNIT_MARKER + "\n"
+                f"ExecStart={unit_quote(LAUNCHER)} --config {unit_quote(CONFIG)} serve --lifetime-seconds 86400\n"
                 "Restart=always\nRestartSec=2\n\n"
-                "[Install]\nWantedBy=default.target\n")
+                "[Install]\nWantedBy=graphical-session.target\n")
         UNIT.write_text(unit, encoding="utf-8")
         subprocess.run(["systemctl", "--user", "daemon-reload"], check=True, timeout=10)
         subprocess.run(["systemctl", "--user", "enable", UNIT.name], check=True, timeout=10,
@@ -737,14 +919,16 @@ def import_save():
     return output
 
 
+VALID_ACTIONS = {
+    "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
+    "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
+    "set-autostart", "set-shortcut", "import-pick", "import-start", "import-cancel",
+    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
+}
+
+
 def main():
-    valid = {
-        "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
-        "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
-        "set-autostart", "set-shortcut", "import-pick", "import-start", "import-cancel",
-        "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
-    }
-    if len(sys.argv) < 2 or sys.argv[1] not in valid or (
+    if len(sys.argv) < 2 or sys.argv[1] not in VALID_ACTIONS or (
         sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "import-start", "cleanup-setup"}
         and len(sys.argv) != 3
     ) or (sys.argv[1] == "set-shortcut" and len(sys.argv) not in {3, 4}

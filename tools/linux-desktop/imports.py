@@ -61,7 +61,7 @@ def probe_command(source, command=None):
 def decode_command(source, destination, command=None):
     return list(command or ['ffmpeg']) + ['-nostdin', '-hide_banner', '-loglevel', 'error', '-i', str(source),
                                            '-vn', '-map', '0:a:0', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le',
-                                           '-bitexact', '-f', 'wav', '-y', str(destination)]
+                                           '-t', str(MAXIMUM_SECONDS + 1), '-bitexact', '-f', 'wav', '-y', str(destination)]
 
 
 def probe(source, *, command=None, seconds=20):
@@ -194,6 +194,8 @@ class FileTranscription:
         self.lock = threading.RLock()
         self.state, self.error = 'idle', None
         self.job, self.thread = None, None
+        # The last finished result stays on disk until its replacement is decoded and ready to transcribe.
+        self.previous = None
         self.cancelled = threading.Event()
         self.duration, self.format = None, None
         self.closed = False
@@ -209,7 +211,9 @@ class FileTranscription:
                 remove_job(job)
 
     def status(self):
+        retained = self.previous is not None and (self.previous / 'transcript.txt').is_file()
         return {'state': self.state, 'error': self.error, 'id': self.job.name if self.job else None,
+                'retained_id': self.previous.name if retained else None,
                 'duration_seconds': self.duration, 'format': self.format,
                 'maximum_seconds': MAXIMUM_SECONDS, 'maximum_bytes': MAXIMUM_SOURCE_BYTES}
 
@@ -241,7 +245,12 @@ class FileTranscription:
             if info.st_size == 0:
                 return self._refused('empty')
             if self.job is not None:
-                remove_job(self.job)
+                if (self.job / 'transcript.txt').is_file():
+                    if self.previous is not None:
+                        remove_job(self.previous)
+                    self.previous = self.job
+                else:
+                    remove_job(self.job)
             self.job = self.root / uuid.uuid4().hex
             self.job.mkdir(mode=0o700)
             _private_write(self.job / 'source.json', json.dumps({'source': str(path), 'bytes': info.st_size}))
@@ -266,6 +275,9 @@ class FileTranscription:
                 if cancelled.is_set() or self.closed:
                     return
                 self.duration, self.state = duration, 'transcribing'
+                if self.previous is not None:
+                    remove_job(self.previous)
+                    self.previous = None
             text = self.engine.transcribe(decoded, cancelled, seconds=max(self.request_seconds, 60 + duration))
             if not isinstance(text, str):
                 raise ValueError('Invalid transcript')
@@ -305,9 +317,10 @@ class FileTranscription:
         with self.lock:
             if self.active():
                 return self._refused('busy')
-            if self.job is not None:
-                remove_job(self.job)
-            self.job, self.state, self.error = None, 'idle', None
+            for job in (self.job, self.previous):
+                if job is not None:
+                    remove_job(job)
+            self.job, self.previous, self.state, self.error = None, None, 'idle', None
             self.duration, self.format = None, None
             return self.status()
 

@@ -54,6 +54,8 @@ Panel {
   readonly property bool canImportFiles: !!(capabilities && capabilities.file_transcription)
   readonly property bool importActive: fileImport.state === "preparing" || fileImport.state === "transcribing" || fileImport.state === "cancelling"
   readonly property bool importHasResult: fileImport.state === "finished" || fileImport.state === "empty"
+  readonly property bool importRetained: !importActive && !importHasResult && fileImport.retained === true
+  readonly property bool importCanExport: fileImport.state === "finished" || importRetained
 
   function hyprlandKeyName(event) {
     var k = event.key
@@ -471,15 +473,15 @@ Panel {
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Fast"; detail: cleanupPage.modelDetail("fast"); checked: root.config.cleanup === "fast"; enabled: cleanupPage.models.fast === "prepared"; onActivated: root.run(["set-config", "cleanup", "fast"]) }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Thorough"; detail: cleanupPage.modelDetail("thorough"); checked: root.config.cleanup === "thorough"; enabled: cleanupPage.models.thorough === "prepared"; onActivated: root.run(["set-config", "cleanup", "thorough"]) }
             MenuDivider { width: parent.width }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.fast !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Fast cleanup…"; detail: "≈480 MB"; onActivated: root.run(["cleanup-cleanupPage.setup", "fast"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.thorough !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Thorough cleanup…"; detail: "≈2.5 GB"; onActivated: root.run(["cleanup-cleanupPage.setup", "thorough"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.fast !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Fast cleanup…"; detail: "≈480 MB"; onActivated: root.run(["cleanup-setup", "fast"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.thorough !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Thorough cleanup…"; detail: "≈2.5 GB"; onActivated: root.run(["cleanup-setup", "thorough"]) }
             Text {
               visible: !!cleanupPage.setup && cleanupPage.setup.state !== "ready"
               x: Style.space(30); width: parent.width - Style.space(50)
               text: !cleanupPage.setup ? "" : cleanupPage.setup.state === "building" ? "Building the pinned llama.cpp server…"
                 : cleanupPage.setup.state === "downloading" ? "Downloading and verifying the " + (cleanupPage.setup.level || "") + " model…"
                 : cleanupPage.setup.state === "preparing" ? "Preparing…"
-                : cleanupPage.setup.state === "failed" ? "Preparation failed (" + (cleanupPage.setup.error || "error") + "). Check the cleanup cleanupPage.setup log." : ""
+                : cleanupPage.setup.state === "failed" ? "Preparation failed (" + (cleanupPage.setup.error || "error") + "). Check the cleanup setup log." : ""
               color: cleanupPage.setup && cleanupPage.setup.state === "failed" ? "#B72F26" : "#4A4A49"; wrapMode: Text.Wrap
               font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
             }
@@ -774,8 +776,8 @@ Panel {
               }
             }
             Item { height: Style.space(6); visible: root.fileImport.state === "finished" }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.importHasResult; enabled: root.fileImport.state === "finished"; label: "Copy"; onActivated: root.run(["import-copy"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.importHasResult; enabled: root.fileImport.state === "finished"; label: "Save Text…"; onActivated: root.run(["import-save"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.importHasResult || root.importRetained; enabled: root.importCanExport; label: "Copy"; onActivated: root.run(["import-copy"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.importHasResult || root.importRetained; enabled: root.importCanExport; label: "Save Text…"; onActivated: root.run(["import-save"]) }
             MenuDivider { width: parent.width; visible: !root.importActive }
             MenuRow { fontFamily: root.menuFont; width: parent.width; visible: !root.importActive; label: "Transcribe Another File…"; enabled: root.sessionState === "off" || root.sessionState === "idle"; onActivated: root.run(["import-pick"]) }
             MenuRow { fontFamily: root.menuFont; width: parent.width; visible: !root.importActive && root.fileImport.state !== "idle" && root.fileImport.state !== "off"; label: "Clear Result"; onActivated: root.run(["import-forget"]) }

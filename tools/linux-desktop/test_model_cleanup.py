@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -62,6 +64,17 @@ class ModelCleanupSessionTests(unittest.TestCase):
         self.assertEqual(status['cleanup']['last_outcome'], 'ok')
         self.assertEqual(status['cleanup']['model']['state'], 'ready')
         self.assertNotIn('ship', json.dumps(status))
+
+    def test_forgetting_a_model_cleaned_take_leaves_no_directory(self):
+        session, take = self.run_take(FakeCleanup('So we should ship it, right?'))
+        self.assertTrue((take / 'cleanup.json').is_file())
+        runtime = tempfile.TemporaryDirectory()
+        self.addCleanup(runtime.cleanup)
+        result = subprocess.run([sys.executable, str(Path(desktop.__file__)), '--recovery', str(session.recovery),
+                                 '--runtime', runtime.name, 'forget', take.name],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(take.exists())
 
     def test_timeout_failure_and_guard_rejection_fall_back_to_basic(self):
         for cleanup, outcome in ((FakeCleanup(timeout=True), 'timeout'), (FakeCleanup(fail=True), 'failed'),
@@ -145,14 +158,70 @@ for line in sys.stdin:
     def test_hung_worker_is_reaped_and_engine_recovers_on_next_request(self):
         settings, script = self.worker('''print(json.dumps({'event':'ready'}),flush=True)
 for line in sys.stdin:
- time.sleep(10)
+ r=json.loads(line)
+ if r['input']=='Warm up, please.': print(json.dumps({'id':r['id'],'text':'ok'}),flush=True)
+ else: time.sleep(10)
 ''')
         engine = CleanupEngine(settings, worker=script)
         self.addCleanup(engine.close)
+        engine.warm().join(5)
         with self.assertRaises(RuntimeError):
             engine.clean('hello there', threading.Event(), seconds=.05)
         self.assertIsNone(engine.worker)
         self.assertEqual(engine.state, 'idle')
+
+    def test_cold_engine_returns_none_at_once_and_warms_in_the_background(self):
+        settings, script = self.worker('''time.sleep(.5)
+print(json.dumps({'event':'ready'}),flush=True)
+for line in sys.stdin:
+ r=json.loads(line)
+ print(json.dumps({'id':r['id'],'text':r['input'].upper()}),flush=True)
+''')
+        engine = CleanupEngine(settings, worker=script)
+        self.addCleanup(engine.close)
+        started = time.monotonic()
+        self.assertIsNone(engine.clean('hello there', threading.Event(), seconds=2))
+        self.assertLess(time.monotonic() - started, .3)
+        thread = engine.warming
+        self.assertIsNotNone(thread)
+        self.assertIs(engine.warm(), thread)
+        thread.join(5)
+        self.assertEqual(engine.state, 'ready')
+        self.assertEqual(engine.clean('hello there', threading.Event(), seconds=2), 'HELLO THERE')
+
+    def test_close_stops_a_load_in_progress(self):
+        settings, script = self.worker('''time.sleep(30)
+print(json.dumps({'event':'ready'}),flush=True)
+''')
+        engine = CleanupEngine(settings, worker=script, startup_seconds=300)
+        thread = engine.warm()
+        deadline = time.monotonic() + 2
+        while engine.state != 'loading' and time.monotonic() < deadline:
+            time.sleep(.01)
+        started = time.monotonic()
+        engine.close()
+        thread.join(2)
+        self.assertLess(time.monotonic() - started, 2)
+        self.assertFalse(thread.is_alive())
+        self.assertIsNone(engine.worker)
+
+    def test_clean_gives_up_waiting_for_a_busy_engine_within_its_budget(self):
+        settings, script = self.worker('''print(json.dumps({'event':'ready'}),flush=True)
+for line in sys.stdin:
+ r=json.loads(line)
+ print(json.dumps({'id':r['id'],'text':'x'}),flush=True)
+''')
+        engine = CleanupEngine(settings, worker=script)
+        self.addCleanup(engine.close)
+        engine.warm().join(5)
+        self.assertEqual(engine.state, 'ready')
+        with engine.lock:
+            started = time.monotonic()
+            self.assertIsNone(engine.clean('hello there', threading.Event(), seconds=.2))
+            self.assertLess(time.monotonic() - started, 1)
+            cancelled = threading.Event()
+            cancelled.set()
+            self.assertIsNone(engine.clean('hello there', cancelled, seconds=30))
 
     def test_missing_weights_report_absent_and_bad_settings_are_rejected(self):
         settings, script = self.worker('print(json.dumps({"event":"ready"}),flush=True)\n')
@@ -169,6 +238,83 @@ for line in sys.stdin:
         self.addCleanup(engine.close)
         engine.warm().join(5)
         self.assertEqual((engine.state, engine.error), ('failed', 'ValueError'))
+
+    def test_failed_load_retries_with_backoff_and_recovers(self):
+        settings, script = self.worker('')
+        flag = Path(script).parent / 'attempted'
+        script.write_text('import json,sys,time,os\nconfig=json.loads(sys.stdin.readline())\n'
+                          'flag=%r\n'
+                          'if not os.path.exists(flag):\n open(flag,"w").close()\n'
+                          ' print(json.dumps({"event":"error","error_class":"ValueError"}),flush=True)\n sys.exit(1)\n'
+                          'print(json.dumps({"event":"ready"}),flush=True)\n'
+                          'for line in sys.stdin:\n r=json.loads(line)\n'
+                          ' print(json.dumps({"id":r["id"],"text":r["input"].upper()}),flush=True)\n' % str(flag))
+        now = [1000.0]
+        engine = CleanupEngine(settings, worker=script, clock=lambda: now[0])
+        self.addCleanup(engine.close)
+        engine.warm().join(5)
+        self.assertEqual(engine.state, 'failed')
+        # Before the 30 s backoff elapses a take does not start another load.
+        now[0] += 29
+        self.assertIsNone(engine.clean('hello', threading.Event(), seconds=2))
+        self.assertEqual(engine.state, 'failed')
+        now[0] += 2
+        started = time.monotonic()
+        self.assertIsNone(engine.clean('hello', threading.Event(), seconds=2))
+        self.assertLess(time.monotonic() - started, .3)
+        engine.warming.join(5)
+        self.assertEqual(engine.state, 'ready')
+        self.assertEqual((engine.failures, engine.retry_at), (0, 0.0))
+        self.assertEqual(engine.clean('hello', threading.Event(), seconds=2), 'HELLO')
+
+    def test_retry_delay_grows_and_is_capped(self):
+        settings, script = self.worker('print(json.dumps({"event":"error","error_class":"ValueError"}),flush=True)\nsys.exit(1)\n')
+        now = [0.0]
+        engine = CleanupEngine(settings, worker=script, clock=lambda: now[0])
+        self.addCleanup(engine.close)
+        delays = []
+        for _ in range(6):
+            engine.warm().join(5)
+            self.assertEqual(engine.state, 'failed')
+            delays.append(engine.retry_at - now[0])
+            now[0] = engine.retry_at
+            engine.clean('x', threading.Event(), seconds=1)
+        self.assertEqual(delays, [30, 120, 480, 1800, 1800, 1800])
+
+    def test_artifacts_restored_while_absent_are_picked_up_without_a_restart(self):
+        settings, script = self.worker('''print(json.dumps({'event':'ready'}),flush=True)
+for line in sys.stdin:
+ r=json.loads(line)
+ print(json.dumps({'id':r['id'],'text':r['input'].upper()}),flush=True)
+''')
+        model = Path(settings['artifacts']['model']['path'])
+        weights = model.read_bytes()
+        model.unlink()
+        now = [50.0]
+        engine = CleanupEngine(settings, worker=script, clock=lambda: now[0])
+        self.addCleanup(engine.close)
+        self.assertEqual(engine.state, 'absent')
+        model.write_bytes(weights)
+        # Rechecked at most once per 30 s.
+        now[0] += 10
+        self.assertIsNone(engine.clean('hello', threading.Event(), seconds=2))
+        self.assertEqual(engine.state, 'absent')
+        self.assertIsNone(engine.warming)
+        now[0] += 25
+        self.assertIsNone(engine.clean('hello', threading.Event(), seconds=2))
+        engine.warming.join(5)
+        self.assertEqual(engine.state, 'ready')
+        self.assertEqual(engine.clean('hello', threading.Event(), seconds=2), 'HELLO')
+
+    def test_absent_engine_with_still_missing_artifacts_stays_absent(self):
+        settings, script = self.worker('print(json.dumps({"event":"ready"}),flush=True)\n')
+        Path(settings['artifacts']['model']['path']).unlink()
+        now = [0.0]
+        engine = CleanupEngine(settings, worker=script, clock=lambda: now[0])
+        now[0] += 31
+        self.assertIsNone(engine.clean('hello', threading.Event(), seconds=2))
+        self.assertEqual(engine.state, 'absent')
+        self.assertIsNone(engine.warming)
 
 
 if __name__ == '__main__':
