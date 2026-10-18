@@ -52,6 +52,17 @@ private struct Rules: VocabularyProviding {
     func snippets() -> [Snippet] { phrases }
 }
 
+private final class CleanupDiagnostics: @unchecked Sendable {
+    private let lock = NSLock()
+    private var captured: [String] = []
+    func record(_ message: String) { lock.withLock { captured.append(message) } }
+    var messages: [String] { lock.withLock { captured } }
+}
+
+private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
+    var description: String
+}
+
 @MainActor
 @Suite struct SmartCleanupPipelineTests {
     private let raw = "um let's grab coffee at two"
@@ -244,6 +255,27 @@ private struct Rules: VocabularyProviding {
         #expect(!cleaned.edits.contains { $0.stage == "llm" })
     }
 
+    @Test(arguments: [false, true])
+    func publicDiagnosticsExcludeRejectedTextAndModelErrorDetails(modelFails: Bool) async {
+        let privatePath = "/Users/example/Private-Person/model-fixture"
+        let cleaner = ScriptedCleaner { _, _ in
+            if modelFails { throw CleanupDiagnosticFixtureError(description: privatePath) }
+            return "Send this to john@example.com."
+        }
+        var (pipeline, _) = pipeline(cleaner)
+        let diagnostics = CleanupDiagnostics()
+        pipeline.smartDiagnostic = { diagnostics.record($0) }
+        let result = await clean(pipeline, text: "send this to jon@example.com",
+                                 context: InsertionContext(before: "Customer: Fixture Person\n"))
+        let outcome = modelFails ? "failed" : "guard-rejected"
+        #expect(result.cleanup.outcome == outcome && result.text.contains("jon@example.com"))
+        #expect(diagnostics.messages.count == 1)
+        #expect(diagnostics.messages.contains { $0.contains(outcome) && $0.contains("ms=") })
+        for content in ["jon@example.com", "john@example.com", "Fixture Person", privatePath] {
+            #expect(diagnostics.messages.allSatisfy { !$0.contains(content) })
+        }
+    }
+
     @Test func shortInputReachesTheModel() async {
         let cleaner = ScriptedCleaner(returning: "See you soon.")
         let (pipeline, _) = pipeline(cleaner)
@@ -266,6 +298,33 @@ private struct Rules: VocabularyProviding {
         let (pipeline, _) = pipeline(cleaner, ready: false)
         let cleaned = await clean(pipeline)
         #expect(cleaner.calls == 0 && cleaned.text == det && cleaned.cleanup.level == "basic" && cleaned.cleanup.outcome == "ok")
+    }
+
+    @Test(arguments: [CleanupLevel.light, .medium], [false, true])
+    func unavailableModelMatchesBasicWithJoinedSpellingsAndPhrases(level: CleanupLevel, overlappingPhrase: Bool) async {
+        let cleaner = ScriptedCleaner(returning: "must not run")
+        let rules = [DictionaryRule(heard: "mouth type", written: "Mouthtype")]
+        let snippets = overlappingPhrase ? [Snippet(trigger: "mouth type", expansion: "{clipboard} {date}")] : []
+        let (pipeline, _) = pipeline(cleaner, level: level, rules: rules, ready: false, snippets: snippets)
+        var inputs = pipeline.cleanupInputs()
+        inputs.now = Date(timeIntervalSince1970: 1_791_763_200)
+        var basicInputs = inputs
+        basicInputs.settings.level = .basic
+        let transcribed = TranscribedDictation(text: "the mouth type build is green", rawText: "the mouth type build is green", asrDoneMs: 0, words: [])
+        let basic = await pipeline.clean(transcribed, inputs: basicInputs, context: nil, clipboard: "unchanged {date}")
+        let fallback = await pipeline.clean(transcribed, inputs: inputs, context: nil, clipboard: "unchanged {date}")
+        #expect(fallback.text == basic.text)
+        #expect(fallback.edits == basic.edits)
+        #expect(fallback.cleanup.level == "basic" && fallback.cleanup.cleanerID == "deterministic")
+        #expect(fallback.cleanup.outcome == "ok")
+        #expect(cleaner.calls == 0)
+        if overlappingPhrase {
+            #expect(fallback.text.contains("unchanged {date}"))
+            #expect(fallback.edits.contains { $0.stage == "snippet" })
+        } else {
+            #expect(fallback.text.contains("Mouthtype"))
+            #expect(fallback.edits.contains { $0.stage == "dictionary" })
+        }
     }
 
     @Test func mediumIsRecordedAsMedium() async {

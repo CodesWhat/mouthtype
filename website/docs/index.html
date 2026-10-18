@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <meta
       name="description"
-      content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac alpha guidance."
+      content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac release candidate guidance."
     />
     <meta name="theme-color" content="#ffffff" />
     <title>Documentation · Mouthtype</title>
@@ -13,7 +13,7 @@
     <meta property="og:site_name" content="Mouthtype" />
     <meta property="og:type" content="website" />
     <meta property="og:title" content="Documentation · Mouthtype" />
-    <meta property="og:description" content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac alpha guidance." />
+    <meta property="og:description" content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac release candidate guidance." />
     <meta property="og:url" content="https://mouthtype.app/docs/" />
     <meta property="og:image" content="https://mouthtype.app/social/docs.png" />
     <meta property="og:image:type" content="image/png" />
@@ -22,7 +22,7 @@
     <meta property="og:image:alt" content="Mouthtype documentation: The useful details, with the Mouthtype recording pill." />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Documentation · Mouthtype" />
-    <meta name="twitter:description" content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac alpha guidance." />
+    <meta name="twitter:description" content="Mouthtype shortcuts, cleanup, saved words, recovery and local data, with current Mac release candidate guidance." />
     <meta name="twitter:image" content="https://mouthtype.app/social/docs.png" />
     <meta name="twitter:image:alt" content="Mouthtype documentation: The useful details, with the Mouthtype recording pill." />
     <link rel="icon" type="image/png" href="/assets/mouthtype-icon.png" />
@@ -81,14 +81,16 @@
             <section id="builds">
               <h2>Find your build.</h2>
               <p>
-                The Mac download is <strong>0.1.0-alpha.8 (build 8)</strong>, for
+                The Mac download is <strong>0.1.0-rc.1 (build 11)</strong>, for
                 macOS 26 or later and Apple Silicon. Settings groups controls
                 into General, Writing, Appearance and Diagnostics, with Saved
                 spellings and Phrases in the sidebar. The menu keeps recording,
                 recent text and recovery actions available.
               </p>
               <p>
-                This reference describes alpha.8. If you’re still using
+                RC.1 fixes quieting restoration and retains clipboard ownership, recording preservation on Quit,
+                paged Saved Recordings and incomplete cleanup-model recovery.
+                This reference describes rc.1. If you’re still using
                 alpha.1–3, <a href="#updates">download the new app manually</a>
                 once to get the current Settings window and built-in updater.
               </p>
@@ -140,6 +142,14 @@
                 chosen microphone stays selected and is reported as unavailable.
                 Reconnect it or explicitly choose another input. Changes apply to
                 the next take; use <strong>Refresh inputs</strong> after connecting a device.
+              </p>
+              <p>
+                <strong>Priority list</strong> is an opt-in microphone choice.
+                Order your inputs; the first connected listed microphone is
+                chosen at the start of a take. <strong>System Default fallback</strong>
+                is a separate opt-in when no listed input is available. This
+                does not switch devices during a take or establish Bluetooth,
+                sleep or clamshell support.
               </p>
               <p>
                 <strong>Quiet other audio</strong> is off by default. On supported
@@ -202,9 +212,21 @@
               </p>
               <p>
                 Settings → General contains Level; Writing contains Tone and
-                per-app rules. Those rules start empty. The application where recording starts determines the
-                tone for that take; other apps use the default. A browser rule
-                applies to the browser, not individual websites.
+                per-app and website rules. Rules start empty. A matching website
+                domain includes subdomains; the most specific domain wins before
+                app/default tone. Safari, Chrome, Edge and Brave are eligible when
+                the focused window exposes an HTTP/HTTPS document URL through
+                Accessibility. Missing URL support falls back to app/default.
+                URLs are not retained; the chosen tone stays with the take.
+              </p>
+              <p>
+                <strong>Clean Selected Text…</strong> opens an editable Basic
+                cleanup preview for an accessible selection. Explicitly choose
+                <strong>Accept</strong> to request replacement only if the original
+                app, field, range and selected text still match. Check the field
+                afterward. Changed or unsupported selections keep <strong>Copy result</strong>
+                available. Password fields are excluded. There is no AI rewrite,
+                automatic paste or retry.
               </p>
               <p>
                 Cleanup can use limited surrounding field text for boundary
@@ -304,7 +326,7 @@
               <p>
                 <strong>Alpha.1–3 need one manual upgrade.</strong> Those builds
                 do not include the updater. <a href="/download/">Download the Mac
-                alpha ZIP</a>, quit Mouthtype, expand the ZIP and replace
+                release candidate ZIP</a>, quit Mouthtype, expand the ZIP and replace
                 Mouthtype.app in Applications manually. Open the new copy from
                 Applications. Replacing the app does not erase the separate
                 history and recordings described below.
@@ -370,7 +392,7 @@
                 Browser, terminal and Electron compatibility still need wider
                 testing. A fresh install on another Mac, physical custom-key
                 dictation, device changes and actual in-app update installation
-                remain part of alpha testing. Real file-recognition quality also
+                remain part of prerelease testing. Real file-recognition quality also
                 needs tester feedback. Linux source testing is described below.
               </p>
             </section>

@@ -17,7 +17,7 @@ function startCountdown() {
   if (!automaticMac || requested) {
     if (!requested) status.textContent = linux
       ? "On Linux? Open the Linux test-client guide. The Mac ZIP won’t download automatically."
-      : "Choose your platform below. Download now gets the Mac alpha.";
+      : "Choose your platform below. Download now gets the Mac release candidate.";
     return;
   }
   clearInterval(timer);

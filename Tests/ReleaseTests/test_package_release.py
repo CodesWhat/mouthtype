@@ -2,6 +2,7 @@ import importlib.util
 import pathlib
 import plistlib
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -13,6 +14,7 @@ spec.loader.exec_module(release)
 
 
 class ReleaseGuardsTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == "darwin", "Archive integration requires macOS ditto")
     def test_update_zip_places_only_the_app_at_the_archive_root(self):
         app = self.root / 'Mouthtype.app'
         (app / 'Contents').mkdir(parents=True)

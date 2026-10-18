@@ -1,6 +1,6 @@
-# Mouthtype 0.1.0-alpha.8
+# Mouthtype 0.1.0-rc.1
 
-Alpha for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
+Release candidate for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
 
 ## Install
 
@@ -13,11 +13,19 @@ Alpha for Apple Silicon Macs running macOS 26 or later. This is an early test bu
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
 
+## Daily-use hardening in rc.1
+
+Ordinary delivery waits for a previous owned clipboard read before replacing it. If that read cannot be established within the bound, the new take remains recoverable. Check the destination before retrying. Normal Quit first preserves active and queued capture audio, then settles Mouthtype’s clipboard changes without overwriting a newer user copy. A failed save keeps the app open so Quit can be retried; no late model result is pasted during shutdown. If history storage is unavailable but WAV preservation succeeds, recovery may require opening the saved file from the local data directory.
+
+Saved Recordings loads when opened and keeps older audio accessible through pages. Recording starts before detailed Accessibility context lookup, while delivery keeps its focus checks. An incomplete cleanup-model cache can be repaired with Download. Basic fallback honors saved spellings and the spoken commands/lists choice. The empty microphone priority list keeps System Default fallback enabled until an input is added.
+
+Synthetic recognition checks cover clean/noisy speech and a repeated 19-minute clip; see [measurements and their limits](benchmarks/2026-10-18-daily-use.md). Those checks do not establish physical microphone, sleep, Bluetooth or end-to-end delivery acceptance.
+
 ## Shortcuts and Settings
 
 Open **Settings… → General** to change the dictation shortcut, recording behavior, cleanup model, sounds and launch at login. **Hold to talk** remains the default. Choose **Press to toggle** to press your shortcut once to start recording, release it while speaking, then press it again to stop and insert. Changing behavior cancels an active recording.
 
-Choose System Default or a named microphone in General. Mouthtype remembers the chosen device and reports when it is missing. It does not change the Mac’s system input. A change applies to the next take. Quiet other audio is an optional, default-off control for supported output devices. It restores only output changes Mouthtype owns; hardware behavior still needs tester feedback.
+Choose System Default, a named microphone or an opt-in Priority list in General. The priority list chooses the first connected listed input at the start of a take; System Default fallback is a separate choice. Fixed microphone choices keep their unavailable-input behavior. Mouthtype remembers the chosen device and reports when it is missing. It does not change the Mac’s system input. A change applies to the next take. Quiet other audio is an optional, default-off control for supported output devices. It restores only output changes Mouthtype owns; hardware behavior still needs tester feedback.
 
 **Live words** in General is optional and off by default. It shows provisional words above the pill. The finished take still goes through full transcription and inserts once. Preview work is bounded to an eight-second audio window; that is not a wall-clock deadline. Final transcription waits for any already-running preview model work to finish.
 
@@ -25,7 +33,11 @@ The shortcut recorder accepts a key or modifier combination. Click Change, press
 
 In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. Fn+Space also locks the default Fn shortcut. Escape cancels and offers Undo for five seconds. If Escape itself is your dictation shortcut, use the menu’s Cancel action. Caps Lock uses press-to-start/press-to-stop even in Hold mode; its system Caps Lock state may also change. Some system-reserved/media keys may be handled by macOS first. Control+Command+V pastes the last delivered take.
 
-**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app tone rules. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Tone does not authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
+**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app and website tone rules. Website domains include subdomains; the most specific domain wins before app/default tone when the browser exposes its document URL. Missing URL support falls back, and URLs are not retained. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Tone does not authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
+
+## Clean selected text
+
+Select text in an accessible editable field, then choose **Clean Selected Text…**. Review or edit the deterministic Basic preview, then explicitly choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. Unsupported or changed selections keep **Copy result** available. Password fields are excluded. There is no AI rewrite, automatic paste or retry. Check the original field after Accept. See [writing tools](WRITING-TOOLS.md) for browser, device and selection limits.
 
 ## Transcribe an audio file
 
@@ -37,11 +49,19 @@ Imports do not apply cleanup, saved spellings or phrases, paste automatically, o
 
 ## Updates
 
-Alpha.1 through alpha.3 do not contain an updater. Download the current Mac alpha once from the website and replace the old app to get it.
+Alpha.1 through alpha.3 do not contain an updater. Download the current Mac prerelease once from the website and replace the old app to get it.
 
 Use **Check for Updates…** in Mouthtype’s menu to check manually. Sparkle asks whether to enable automatic update checks; you can change that choice in General. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
 
 Available updates show a notification and release notes. Choose installation in the app. Updates use signed archives, a signed feed and Developer ID signatures. Installation waits while dictation, recovery or file transcription is active. Automatic silent installation is disabled. Do not remove your data folder when upgrading.
+
+## Current release-candidate evidence
+
+The built-in output passed ten actual quiet/restore cycles after reproducing the delayed mute-notification failure. Separate native checks preserved an observed unmute/remute and a volume adjustment. The tests restored their owned output baseline. Optional quieting remains off by default; this does not certify other output devices.
+
+Private native pasteboard checks preserve rich/multiple items through a promise read and restoration, and retain a newer copy during shutdown. They emit no keyboard events and never use the general clipboard. A disposable copy of existing saved data opens through the production store with unchanged schema and value digests; a WAL fixture verifies committed rows are included. These checks do not establish fresh-install permissions or normal updater installation/relaunch.
+
+TextEdit and Chrome each passed two physical ordered takes on beta.1; provisional live words and one final insertion were observed. That is historical evidence for unchanged delivery code, not a new RC hardware matrix. Fresh installation, normal updater installation/relaunch, Settings keyboard/VoiceOver and additional supported hardware remain unverified. The maintainer ended the manual QA loop; no manual handoff is pending. See [release readiness](RELEASE-READINESS.md) for the scoped evidence and remaining gates.
 
 ## What has been checked
 

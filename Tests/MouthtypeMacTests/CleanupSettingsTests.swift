@@ -73,6 +73,24 @@ import MouthtypeCore
         #expect(settings.pipelineOptions == .none)
     }
 
+    @Test(arguments: CleanupLevel.allCases, [false, true])
+    func spokenCommandsAndListsFollowTheSameSwitch(level: CleanupLevel, enabled: Bool) {
+        var settings = CleanupSettings()
+        settings.level = level
+        settings.spokenCommands = enabled
+        let options = settings.pipelineOptions
+        let expected = level != .off && enabled
+        #expect(options.spokenCommands == expected)
+        #expect(options.countedLists == expected)
+        let prose = "First, call the bank. Second, email Priya."
+        let result = TextPipeline().run(TextPipelineInput(text: prose, options: options))
+        if expected {
+            #expect(result.text.hasPrefix("1.") && result.text.contains("\n2."))
+        } else {
+            #expect(result.text == prose)
+        }
+    }
+
     @Test func aMixedStyleIsCustom() {
         var settings = CleanupSettings()
         settings.style = StyleOptions(capitalisation: .lowercase, endingPunctuation: .keep)
