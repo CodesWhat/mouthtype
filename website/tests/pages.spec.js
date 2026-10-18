@@ -66,7 +66,7 @@ for (const [path, heading] of pages) {
 
 test("start describes the current alpha features", async ({ page }) => {
   await page.goto("/start/");
-  await expect(page.locator("main")).toContainText("0.1.0-alpha.8");
+  await expect(page.locator("main")).toContainText("0.1.0-alpha.9");
   await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
@@ -100,7 +100,7 @@ test("reference help covers everyday tasks with explicit build labels", async ({
   ]) {
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
-  await expect(page.locator("#builds")).toContainText("alpha.8");
+  await expect(page.locator("#builds")).toContainText("alpha.9");
   await expect(page.locator("#builds")).toContainText("Settings");
   await expect(page.locator("#builds")).not.toContainText("reference describes alpha.5");
   await expect(page.locator("#recording-options")).toContainText("Live words");

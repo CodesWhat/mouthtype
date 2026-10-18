@@ -194,6 +194,8 @@ private final class FakeInserter: DictationInserting {
     var delivered: [String] = []
     var startFocusSeen: FocusSnapshot?
     var focus = FocusSnapshot(pid: 7, bundleID: "com.apple.Notes", appName: "Notes", role: "AXTextArea")
+    var website: String?
+    func websiteHost(for snapshot: FocusSnapshot) -> String? { log.add("inserter.website"); return website }
     var context: InsertionContext?
     var clipboard: String?
     private(set) var contextReads = 0
@@ -527,6 +529,27 @@ private struct Rig {
         #expect(rig.inserter.delivered == ["See Maya Friday"])
         #expect(rig.store.insertion?.cleanup?.style == "casual")
         #expect(rig.inserter.startFocusSeen?.bundleID == "com.apple.Notes")
+    }
+
+    @Test func websiteRuleIsCapturedAfterCaptureStartsAndMissingRulesDoNotReadURL() async throws {
+        var styles = AppCleanupStyles()
+        try styles.setWebsite(domain: "slack.com", style: StylePreset.casual.options)
+        let configured = styles
+        let rig = Rig(appStyles: { configured })
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "work.slack.com"
+        rig.engine.result.text = "See Maya Friday."
+        await rig.controller.handle(.pressed(at: keyDown))
+        let capture = try #require(rig.log.index(of: "capture.start"))
+        let website = try #require(rig.log.index(of: "inserter.website"))
+        #expect(capture < website)
+        rig.inserter.website = "other.example"
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["See Maya Friday"])
+        let plain = Rig()
+        await plain.dictate()
+        #expect(!plain.log.contains("inserter.website"))
     }
 
     @Test func unknownAppUsesGlobalToneAndOffStillBypassesTone() async throws {

@@ -1,8 +1,16 @@
-Mouthtype 0.1.0-alpha.8
+Mouthtype 0.1.0-alpha.9
+
+Website tone rules now match HTTP/HTTPS domains and subdomains before app/default tone when a supported browser exposes its document URL. Missing URL support falls back to app/default; document URLs are not retained.
+
+Microphone Priority list is opt-in. Choose an ordered list of inputs and separately enable System Default fallback if wanted. Fixed-device choices still report an unavailable input without silently switching. The list applies at the next take, not mid-recording.
+
+Clean Selected Text opens an editable Basic cleanup preview. Accept requests replacement only while the original app, field, range and selected text still match. Unsupported or changed selections keep Copy result available. No AI rewrite, automatic paste or retry.
+
+Paste delivery rechecks focus and secure input after Accessibility reads, before clipboard writes or key delivery. A focus-change abort keeps the transcript recoverable; a secure destination discards it. This closes a reproduced preflight gap, without claiming the intermittent Chrome incident is explained.
 
 Choose how long to keep completed recordings in Settings → General → Saved audio: 14, 30 or 90 days, or No age limit, with a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch, to completed Mouthtype audio only. Text and timings stay; unfinished recordings and recovery audio are protected. Previously removed recordings cannot be restored.
 
-Microphone readiness now follows the actual capture result, so setup reflects successful starts and input errors. A missing chosen device still requires reconnecting it or explicitly choosing another input; there is no automatic fallback.
+Microphone readiness now follows the actual capture result, so setup reflects successful starts and input errors. A missing fixed device still requires reconnecting it or explicitly choosing another input. Priority-list fallback is a separate opt-in.
 
 Includes single-file WAV/AIFF/M4A transcription, remembered microphone selection, optional Quiet other audio and optional Live words. Quieting and provisional words remain off by default; the completed take is inserted once. Imported audio is preserved and its raw result is exported only by explicit Copy or Save Text.
 
