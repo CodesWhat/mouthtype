@@ -68,10 +68,7 @@ private struct SelectionCleanupView: View {
             HStack {
                 Button("Cancel", action: close)
                 Spacer()
-                Button("Copy result") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(model.result, forType: .string)
-                }.disabled(model.result.isEmpty)
+                Button("Copy result", action: copyResult).disabled(model.result.isEmpty)
                 Button("Accept", action: model.accept).disabled(!model.canAccept)
                     .accessibilityIdentifier("selection-cleanup-accept")
             }
@@ -79,6 +76,17 @@ private struct SelectionCleanupView: View {
             .background(Color(nsColor: .windowBackgroundColor))
             .onChange(of: model.result) { resize() }
             .onChange(of: model.message) { resize() }
+            .alert("Couldn’t replace selected text", isPresented: $model.acceptanceErrorPresented) {
+                Button("Copy result", action: copyResult)
+                Button("Keep preview", role: .cancel) {}
+            } message: {
+                Text(model.message)
+            }
+    }
+
+    private func copyResult() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(model.result, forType: .string)
     }
 
     private func textHeight(_ text: String, width: CGFloat, minimum: CGFloat, maximum: CGFloat) -> CGFloat {

@@ -59,6 +59,7 @@ enum SelectionCleanupError: Error { case unavailable }
     var result = ""
     private(set) var message = ""
     private(set) var submitted = false
+    var acceptanceErrorPresented = false
     var hasPreview: Bool { captured != nil }
     var canAccept: Bool { captured != nil && !submitted && !result.isEmpty && result.utf16.count <= 16_000 }
 
@@ -90,11 +91,17 @@ enum SelectionCleanupError: Error { case unavailable }
 
     func accept() {
         guard let captured, canAccept else { return }
-        guard !busy() else { message = "Finish the current dictation or file job first."; return }
-        guard editor.replace(captured, with: result) else {
-            message = "The selection changed or this app refused replacement. Select the text again, or copy the result."
+        guard !busy() else {
+            message = "Finish the current dictation or file job first."
+            acceptanceErrorPresented = true
             return
         }
+        guard editor.replace(captured, with: result) else {
+            message = "The selection changed or the app refused replacement. Select the original text again and reopen Clean Selected Text, or copy the result."
+            acceptanceErrorPresented = true
+            return
+        }
+        acceptanceErrorPresented = false
         submitted = true
         message = "Replacement requested. Check the original field. You can still copy the result."
     }
@@ -105,6 +112,7 @@ enum SelectionCleanupError: Error { case unavailable }
         result = ""
         message = ""
         submitted = false
+        acceptanceErrorPresented = false
         changed()
     }
 }

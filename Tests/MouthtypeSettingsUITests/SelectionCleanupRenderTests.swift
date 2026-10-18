@@ -61,6 +61,7 @@ import Testing
         let model = SelectionCleanupModel(editor: PreviewSelectionEditor(text: String(repeating: "hello world ", count: 1_000)))
         model.prepare()
         model.accept()
+        model.acceptanceErrorPresented = false
         let controller = SelectionCleanupWindow(model: model, maximumContentHeight: heightLimit)
         let view = try #require(controller.window?.contentView)
         view.layoutSubtreeIfNeeded()

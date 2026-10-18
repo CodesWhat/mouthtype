@@ -45,6 +45,7 @@ import Testing
         #expect(!model.submitted)
         #expect(model.result == "Hello world")
         #expect(model.message.contains("selection"))
+        #expect(model.acceptanceErrorPresented)
     }
 
     @Test func cancelClearsPrivateTextAndUnavailableFieldsHaveNoResult() {
@@ -96,5 +97,30 @@ import Testing
         isBusy = true
         model.accept()
         #expect(editor.attempts == 0)
+        #expect(model.acceptanceErrorPresented)
+    }
+
+    @Test func failureAlertCanBeDismissedAndAValidRetryClearsIt() {
+        let editor = SelectionFixture()
+        let model = SelectionCleanupModel(editor: editor)
+        model.prepare()
+        var changed = editor.selected
+        changed.range.location += 1
+        editor.current = changed
+        model.accept()
+        #expect(model.acceptanceErrorPresented)
+        #expect(model.result == "Hello world" && model.canAccept)
+        model.acceptanceErrorPresented = false
+        model.accept()
+        #expect(model.acceptanceErrorPresented)
+        editor.current = nil
+        model.accept()
+        #expect(!model.acceptanceErrorPresented && model.submitted)
+        #expect(editor.attempts == 1)
+        model.prepare()
+        editor.current = changed
+        model.accept()
+        model.cancel()
+        #expect(!model.acceptanceErrorPresented && !model.hasPreview)
     }
 }
