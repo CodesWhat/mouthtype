@@ -529,7 +529,9 @@ class SquirclePillView: NSView, PillSkinView {
         let recColor = isBars ? palette.ink.withAlphaComponent(0.9) : palette.ink
         PillMotion.withoutActions {
             recLabel.string = labelString(recText, font: rec, color: recColor)
-            recLabel.frame = textFrame(font: rec, x: metrics.labelX, width: metrics.recSlot, midY: midY)
+            // A card's label ("SAFE") is a letter longer than REC, and the folded pill has the room.
+            let recWidth = mode.readout == nil ? metrics.recSlot : metrics.recSlot + 10 * k
+            recLabel.frame = textFrame(font: rec, x: metrics.labelX, width: recWidth, midY: midY)
             clockLabel.string = NSAttributedString(
                 string: shownClock, attributes: [.font: clock, .foregroundColor: palette.ink]
             )
