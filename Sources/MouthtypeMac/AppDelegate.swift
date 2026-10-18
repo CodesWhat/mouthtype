@@ -17,7 +17,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshDiagnostics()
             Task { _ = await self?.prepareCapture() }
         },
-        poll: { [weak self] in self?.refreshDiagnostics() },
+        poll: { [weak self] in self?.refreshSetupReadiness() },
         microphone: { [weak self] in self?.requestSetupMicrophone() },
         accessibility: { [weak self] in
             self?.accessibility.start()
@@ -379,6 +379,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         else { diagnostics.dictionaryError = nil }
         do { _ = try phrases.all(); diagnostics.phrasesError = nil }
         catch { diagnostics.phrasesError = error.localizedDescription }
+    }
+
+    /// The setup poll refreshes only what `SetupReadiness` reads. Engine state and microphone preparation are observed
+    /// directly, and the Globe conflict is rechecked on the full refresh when the window becomes key.
+    private func refreshSetupReadiness() {
+        _ = accessibility.tick()
+        diagnostics.microphoneStatus = MicrophoneAccess.status
+        diagnostics.accessibilityGranted = accessibility.isGranted
+        diagnostics.hotkeyHealth = hotkeyService?.health ?? .off
     }
 
     private func refreshDiagnosticModels() {
