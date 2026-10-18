@@ -130,6 +130,9 @@ enum ClassicPillLayout {
         var width: CGFloat
         var height: CGFloat
         var lines: [MessageLine]
+        /// How far the lines run past the room the capsule has for them, 0 when they all fit. A pill with room to grow
+        /// never has any; a capped one scrolls its text by this much.
+        var overflow: CGFloat = 0
     }
 
     /// Breaks a message at its logical point: the headline on its own line or lines, the detail under it. A part wraps

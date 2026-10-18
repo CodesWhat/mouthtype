@@ -74,6 +74,8 @@ class SquirclePillView: NSView, PillSkinView {
     private let clockLabel = CATextLayer()
     private let processingGroup = CALayer()
     private let processingDots = (0..<3).map { _ in CAShapeLayer() }
+    /// Clips the message to the room inside the capsule, so a message too long for the panel scrolls rather than spills.
+    private let textClip = CALayer()
     private let textGroup = CALayer()
     private var lineLayers: [CATextLayer] = []
     private let discs: [PillControl: Disc] = [.cancel: Disc(), .stop: Disc()]
@@ -87,6 +89,8 @@ class SquirclePillView: NSView, PillSkinView {
     private(set) var typography = Typography.current()
     private var message: PillMessage?
     private var messageOverRecording = false
+    /// How far the text has scrolled up, 0 at the start and `block.overflow` at the end.
+    private var messageScroll: CGFloat = 0
     private var block: ClassicPillLayout.MessageBlock
     private var halfRows: [Int]
     private var clockText = "0:00"
@@ -100,7 +104,14 @@ class SquirclePillView: NSView, PillSkinView {
 
     var messageLines: [ClassicPillLayout.MessageLine] { block.lines }
     var messageSize: CGSize { CGSize(width: block.width, height: block.height) }
-    var messageScrollDistance: Int { 0 }
+    /// How far a message too tall for the panel has to scroll, 0 when it all fits.
+    var messageScrollDistance: Int { Int(block.overflow.rounded(.up)) }
+    /// The message's lines in the capsule's coordinates as drawn now, scrolled.
+    var messageLineFrames: [CGRect] {
+        lineLayers.prefix(block.lines.count).map { $0.frame.offsetBy(dx: textGroup.position.x, dy: textGroup.position.y) }
+    }
+    /// Where the message can be seen, in the capsule's coordinates.
+    var messageViewport: CGRect { textClip.bounds }
     var usesWindow: Bool { palette.window != nil }
     var resolvedPalette: SquirclePalette { palette }
     var litHalfRows: [Int] { halfRows }
@@ -192,7 +203,10 @@ class SquirclePillView: NSView, PillSkinView {
         processingGroup.opacity = 0
         content.addSublayer(processingGroup)
         textGroup.opacity = 0
-        content.addSublayer(textGroup)
+        textClip.anchorPoint = .zero
+        textClip.masksToBounds = true
+        textClip.addSublayer(textGroup)
+        content.addSublayer(textClip)
 
         for (control, disc) in discs {
             disc.group.bounds = CGRect(origin: .zero, size: CGSize(width: metrics.controlSize, height: metrics.controlSize))
@@ -322,7 +336,7 @@ class SquirclePillView: NSView, PillSkinView {
 
     private var allLayers: [CALayer] {
         [ambient, contact, bodyShape.mask, highlightShape.mask, rim, windowShape.mask, windowEdge, lamp, ghost, lit, idle,
-         recLabel, clockLabel, textGroup, lips] + lineLayers + processingDots + discs.values.flatMap { [$0.group, $0.shape, $0.glyph] }
+         recLabel, clockLabel, textClip, textGroup, lips] + lineLayers + processingDots + discs.values.flatMap { [$0.group, $0.shape, $0.glyph] }
     }
 
     private func capsule(width: CGFloat, height: CGFloat? = nil) -> CGRect {
@@ -372,7 +386,7 @@ class SquirclePillView: NSView, PillSkinView {
         let midY = height / 2
         PillMotion.withoutActions {
             // The first text line's middle, so a wrapped message keeps its indicator beside the headline.
-            let indicatorY = mode.isMessage && !block.lines.isEmpty ? midY - block.lines[0].centerOffset : midY
+            let indicatorY = mode.isMessage && !block.lines.isEmpty ? midY - block.lines[0].centerOffset - block.overflow / 2 : midY
             lampGroup.position = CGPoint(x: metrics.indicatorCentre, y: indicatorY)
             lips.position = CGPoint(x: metrics.indicatorCentre, y: midY)
             for (i, dot) in processingDots.enumerated() {
@@ -421,6 +435,12 @@ class SquirclePillView: NSView, PillSkinView {
         }
         let isError = message?.isError == true
         PillMotion.withoutActions {
+            // A capped message starts with its first line at the top of the room and scrolls up from there.
+            let pad = block.overflow > 0 ? metrics.messageVerticalPadding : 0
+            let viewport = CGRect(x: 0, y: pad, width: width, height: max(0, height - 2 * pad))
+            textClip.bounds = viewport
+            textClip.position = viewport.origin
+            textGroup.position = CGPoint(x: 0, y: messageScroll - block.overflow / 2)
             for (index, layer) in lineLayers.enumerated() {
                 guard index < block.lines.count else {
                     layer.isHidden = true
@@ -666,10 +686,12 @@ class SquirclePillView: NSView, PillSkinView {
         if !overRecording { isLocked = false }
         self.message = message
         messageOverRecording = overRecording
+        messageScroll = 0
         block = MatrixPillLayout.messageBlock(
             headline: message.headline, detail: message.detail,
             headlineLineHeight: Typography.lineHeight(messageFont(isDetail: false)),
-            detailLineHeight: Typography.lineHeight(messageFont(isDetail: true)), scale: scale, metrics: metrics
+            detailLineHeight: Typography.lineHeight(messageFont(isDetail: true)), scale: scale, metrics: metrics,
+            maxHeight: PillGeometry.maxPillSize.height * metrics.factor
         ) { text, isDetail in
             NSAttributedString(string: text, attributes: [.font: self.messageFont(isDetail: isDetail)]).size().width
         }
@@ -691,7 +713,13 @@ class SquirclePillView: NSView, PillSkinView {
         layoutLabels()
     }
 
-    func setMessageOffset(_ offset: Int) {}
+    /// `offset` runs from 0 to `-messageScrollDistance`, as for the marquee, and here moves the text up.
+    func setMessageOffset(_ offset: Int) {
+        let next = min(block.overflow, max(0, CGFloat(-offset)))
+        guard next != messageScroll else { return }
+        messageScroll = next
+        PillMotion.withoutActions { textGroup.position = CGPoint(x: 0, y: messageScroll - block.overflow / 2) }
+    }
 
     // MARK: Show and hide
 

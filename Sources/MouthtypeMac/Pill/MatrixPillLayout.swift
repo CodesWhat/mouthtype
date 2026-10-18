@@ -195,10 +195,12 @@ enum MatrixPillLayout {
     // MARK: Message
 
     /// Breaks a message like the Classic pill does, but at 150 pt, with the text starting after the indicator. The
-    /// pill is as wide as the text needs (at least the held width) and grows taller for wrapped lines.
+    /// pill is as wide as the text needs (at least the held width) and grows taller for wrapped lines, up to
+    /// `maxHeight`. Past that the pill stays that tall and `overflow` says how far the text has to scroll.
     static func messageBlock(
         headline: String, detail: String?, headlineLineHeight: CGFloat, detailLineHeight: CGFloat,
-        scale: CGFloat, metrics m: Metrics = .standard, measure: (String, _ isDetail: Bool) -> CGFloat
+        scale: CGFloat, metrics m: Metrics = .standard, maxHeight: CGFloat = .greatestFiniteMagnitude,
+        measure: (String, _ isDetail: Bool) -> CGFloat
     ) -> ClassicPillLayout.MessageBlock {
         let head = ClassicPillLayout.wrap(headline, width: m.wrapWidth) { measure($0, false) }
         let tail = (detail?.isEmpty == false) ? ClassicPillLayout.wrap(detail ?? "", width: m.wrapWidth) { measure($0, true) } : []
@@ -208,9 +210,14 @@ enum MatrixPillLayout {
         let stack = head.count * Int(headlineLineHeight.rounded()) + tail.count * Int(detailLineHeight.rounded())
         let gap = tail.isEmpty ? 0 : ClassicPillLayout.detailGap * m.factor
         let block = CGFloat(stack) + gap
-        let height = head.count + tail.count == 1
+        let wanted = head.count + tail.count == 1
             ? m.height
             : max(m.height, ClassicPillLayout.evenCeil(block + 2 * m.messageVerticalPadding, scale: scale))
+        let cap = maxHeight.isFinite && maxHeight < .greatestFiniteMagnitude
+            ? max(m.height, 2 * (maxHeight * scale / 2).rounded(.down) / scale)
+            : wanted
+        let height = min(wanted, cap)
+        let overflow = max(0, block - (height - 2 * m.messageVerticalPadding))
         var lines: [ClassicPillLayout.MessageLine] = []
         var y = -block / 2
         for text in head {
@@ -222,7 +229,7 @@ enum MatrixPillLayout {
             lines.append(.init(text: text, isDetail: true, centerOffset: y + detailLineHeight / 2, height: detailLineHeight))
             y += detailLineHeight
         }
-        return ClassicPillLayout.MessageBlock(width: width, height: height, lines: lines)
+        return ClassicPillLayout.MessageBlock(width: width, height: height, lines: lines, overflow: overflow)
     }
 
     // MARK: Squircle
