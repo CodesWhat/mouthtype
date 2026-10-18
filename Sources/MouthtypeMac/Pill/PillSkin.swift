@@ -35,7 +35,7 @@ enum PillSkinFactory {
     static func make(_ kind: PillSkinKind, frame: NSRect, scale: PillScale) throws -> any PillSkinView {
         switch kind {
         case .classic: return ClassicPillView(frame: frame, size: scale)
-        case .glass: return ClassicPillView(frame: frame, size: scale)
+        case .glass: return GlassPillView(frame: frame, size: scale)
         case .matrix: return ClassicPillView(frame: frame, size: scale)
         case .minimal: return ClassicPillView(frame: frame, size: scale)
         case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale)

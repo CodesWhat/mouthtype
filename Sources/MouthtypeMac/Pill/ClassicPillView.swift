@@ -17,6 +17,11 @@ final class ClassicPillView: NSView, PillSkinView {
         case none, spring
         case ease(TimeInterval, delay: TimeInterval = 0)
         case easeIn(TimeInterval)
+
+        var isAnimated: Bool {
+            if case .none = self { return false }
+            return true
+        }
     }
 
     private static let easeOutCubic = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
@@ -36,6 +41,7 @@ final class ClassicPillView: NSView, PillSkinView {
     private let contact = CAShapeLayer()
     private let body = CAShapeLayer()
     private let rim = CAShapeLayer()
+    private let specular = CAGradientLayer()
     private let barsLayer = CALayer()
     private let bars = (0..<BarModel.barCount).map { _ in CAShapeLayer() }
     private let textGroup = CALayer()
@@ -59,6 +65,13 @@ final class ClassicPillView: NSView, PillSkinView {
     private var hovered: PillControl?
     private var pressed: PillControl?
     private(set) var isLocked = false
+    /// The bars, text and cancel glyph colours; Glass swaps them for dark ink over clear glass.
+    private var inkColor = ClassicPillView.ink
+    private var errorInkColor = ClassicPillView.errorInk
+    private(set) var glassBody = false
+    /// Called whenever the capsule is placed, with its rect in this view and whether the move is animated. Glass lays its
+    /// material under the same rect.
+    var onBodyPlaced: ((CGRect, _ animated: Bool) -> Void)?
     /// The laid-out lines of the current message, for tests.
     var messageLines: [ClassicPillLayout.MessageLine] { block.lines }
     var messageSize: CGSize { CGSize(width: block.width, height: block.height) }
@@ -103,7 +116,7 @@ final class ClassicPillView: NSView, PillSkinView {
 
         container.addSublayer(barsLayer)
         for bar in bars {
-            bar.fillColor = Self.ink.cgColor
+            bar.fillColor = inkColor.cgColor
             barsLayer.addSublayer(bar)
         }
 
@@ -150,6 +163,43 @@ final class ClassicPillView: NSView, PillSkinView {
         relayout()
     }
 
+    // MARK: Glass
+
+    /// Drops the solid body and its shadows for a specular edge, so a material laid under this view shows through.
+    func useGlassBody(_ on: Bool) {
+        guard on != glassBody else { return }
+        glassBody = on
+        withoutActions {
+            ambient.isHidden = on
+            contact.isHidden = on
+            body.isHidden = on
+            if on {
+                rim.removeFromSuperlayer()
+                rim.strokeColor = NSColor.white.cgColor
+                rim.lineWidth = 0.8 * k
+                specular.colors = [0.95, 0.35, 0.08, 0.42].map { NSColor.white.withAlphaComponent($0).cgColor }
+                specular.locations = [0, 0.28, 0.6, 1]
+                specular.mask = rim
+                container.insertSublayer(specular, above: body)
+            } else {
+                specular.removeFromSuperlayer()
+                specular.mask = nil
+                rim.strokeColor = Self.stroke.cgColor
+                rim.lineWidth = k
+                container.insertSublayer(rim, above: body)
+            }
+        }
+        relayout()
+    }
+
+    /// Recolours the bars and the message text. The controls keep their own colours.
+    func setInk(_ ink: NSColor, error: NSColor) {
+        inkColor = ink
+        errorInkColor = error
+        withoutActions { bars.forEach { $0.fillColor = ink.cgColor } }
+        layoutText()
+    }
+
     // MARK: Geometry
 
     private func applyScale() {
@@ -159,7 +209,7 @@ final class ClassicPillView: NSView, PillSkinView {
     }
 
     private var allLayers: [CALayer] {
-        [ambient, contact, body, rim, textGroup] + lineLayers + bars + discs.values.flatMap { [$0.group, $0.disc, $0.glyph] }
+        [ambient, contact, body, rim, specular, textGroup] + lineLayers + bars + discs.values.flatMap { [$0.group, $0.disc, $0.glyph] }
     }
 
     private func capsule(width: CGFloat, height: CGFloat? = nil) -> CGRect {
@@ -191,6 +241,14 @@ final class ClassicPillView: NSView, PillSkinView {
         set(ambient, "shadowPath", path, timing)
         set(contact, "shadowPath", path, timing)
         set(rim, "path", capsulePath(rect, inset: 0.5 * k), timing)
+        if glassBody {
+            withoutActions {
+                specular.frame = container.bounds
+                specular.startPoint = CGPoint(x: rect.minX / max(1, bounds.width), y: rect.maxY / max(1, bounds.height))
+                specular.endPoint = CGPoint(x: rect.maxX / max(1, bounds.width), y: rect.minY / max(1, bounds.height))
+            }
+        }
+        onBodyPlaced?(rect, timing.isAnimated)
         // Controls travel with the capsule's ends while hidden too, so they fade in where they will sit.
         let frames = ClassicPillLayout.controlFrames(capsule: rect, metrics: metrics)
         for (control, disc) in discs {
@@ -234,7 +292,7 @@ final class ClassicPillView: NSView, PillSkinView {
                 }
                 let line = block.lines[index]
                 let font = typography.font(line.isDetail ? .pillDetail : .pillMessage, scale: k)
-                let color = line.isDetail ? Self.ink.withAlphaComponent(Self.detailAlpha) : (isError ? Self.errorInk : Self.ink)
+                let color = line.isDetail ? inkColor.withAlphaComponent(Self.detailAlpha) : (isError ? errorInkColor : inkColor)
                 let descent = -font.descender
                 // Cap-height centred on the line's middle, which reads as centred for sentence-case text.
                 let baseline = rect.midY - line.centerOffset - font.capHeight / 2
