@@ -32,8 +32,10 @@ public actor MLXCleaner: MeasuredCleaner {
     public nonisolated let spec: Spec
 
     private var container: ModelContainer?
+    private let downloadSource: any Downloader
 
-    init(spec: Spec) {
+    init(spec: Spec, downloadSource: any Downloader = HubDownloader()) {
+        self.downloadSource = downloadSource
         self.spec = spec
         id = spec.id
         displayName = spec.displayName
@@ -53,7 +55,7 @@ public actor MLXCleaner: MeasuredCleaner {
     public func download(progress: @escaping @Sendable (Double) -> Void) async throws {
         let configuration = LLMModelFactory.shared.configuration(id: spec.repo)
         _ = try await resolve(
-            configuration: configuration, from: HubDownloader(), useLatest: false,
+            configuration: configuration, from: downloadSource, useLatest: true,
             progressHandler: { progress($0.fractionCompleted) })
     }
 

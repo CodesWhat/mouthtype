@@ -1,4 +1,5 @@
 import Foundation
+import AppKit
 import Testing
 import MouthtypeCore
 @testable import MouthtypeMac
@@ -116,6 +117,80 @@ private struct Rig {
         #expect(rig.engine.calls == 1 && rig.cards.presented.last?.kind == .recovered)
     }
 
+    @Test func parentRefreshNeverLoadsOrWaitsAndStaleScansCannotReplaceANewerResult() async throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let id = try rig.seed(ago: 10)
+        _ = await rig.recovery.offerIfNeeded()
+        let recording = try #require(try rig.recovery.savedRecordings().first { $0.id == id })
+        var requests: [Int: CheckedContinuation<[RecoverableDictation], Error>] = [:]
+        var calls = 0
+        defer { requests.values.forEach { $0.resume(returning: []) } }
+        let section = SavedRecordingsMenuSection(recovery: rig.recovery, canRecover: { true }, load: {
+            calls += 1
+            let request = calls
+            return try await withCheckedThrowingContinuation { requests[request] = $0 }
+        })
+        let menu = try #require(section.items.first?.submenu)
+        for _ in 0..<100 { section.refresh() }
+        #expect(calls == 0)
+        section.menuNeedsUpdate(menu)
+        for _ in 0..<1_000 where calls < 1 { await Task.yield() }
+        #expect(calls == 1)
+        for _ in 0..<100 { section.refresh() }
+        #expect(calls == 1 && menu.items.count == 1 && menu.items[0].title == "Loading saved recordings…")
+        section.menuNeedsUpdate(menu)
+        for _ in 0..<1_000 where calls < 2 { await Task.yield() }
+        let newerRequest = requests.removeValue(forKey: 2)
+        try #require(newerRequest).resume(returning: [])
+        for _ in 0..<1_000 where menu.items.first?.title != "No saved recordings" { await Task.yield() }
+        let olderRequest = requests.removeValue(forKey: 1)
+        try #require(olderRequest).resume(returning: [recording])
+        for _ in 0..<50 { await Task.yield() }
+        #expect(menu.items.count == 1 && menu.items[0].title == "No saved recordings")
+    }
+
+    @Test func savedRecordingsLoadOnlyWhenOpenedAndOlderPagesRemainReachable() async throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        var ids: [String] = []
+        for index in 0..<45 { ids.append(try rig.seed(ago: Double(index + 1))) }
+        for index in 0..<1_000 { try rig.seed(ago: Double(index + 100), audio: false) }
+        _ = await rig.recovery.offerIfNeeded()
+        let section = SavedRecordingsMenuSection(recovery: rig.recovery, canRecover: { true })
+        let submenu = try #require(section.items.first?.submenu)
+        section.refresh()
+        #expect(submenu.items.count == 1 && submenu.items[0].representedObject == nil)
+        submenu.delegate?.menuNeedsUpdate?(submenu)
+        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        func shown() -> [String] { submenu.items.compactMap { ($0.representedObject as? RecoverableDictation)?.id } }
+        #expect(shown() == Array(ids.prefix(20)))
+        let next = try #require(submenu.items.first { $0.title == "Older recordings" })
+        _ = section.perform(try #require(next.action), with: next)
+        #expect(shown() == Array(ids[20..<40]))
+        section.menuNeedsUpdate(submenu)
+        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(shown() == Array(ids[20..<40]))
+        let oldest = try #require(submenu.items.first { $0.title == "Older recordings" })
+        _ = section.perform(try #require(oldest.action), with: oldest)
+        #expect(shown() == Array(ids[40..<45]))
+        #expect(!submenu.items.contains { $0.title == "Older recordings" })
+        let newer = try #require(submenu.items.first { $0.title == "Newer recordings" })
+        _ = section.perform(try #require(newer.action), with: newer)
+        #expect(shown() == Array(ids[20..<40]))
+        for id in ids.prefix(40) { try rig.store.finish(id, status: .cancelled) }
+        section.menuNeedsUpdate(submenu)
+        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        #expect(shown() == Array(ids[40..<45]))
+        #expect(!submenu.items.contains { $0.title == "Newer recordings" || $0.title == "Older recordings" })
+    }
+
     @Test func savedRecordingsMenuListsOlderAudioAndRespectsBusyState() async throws {
         let rig = try Rig()
         defer { rig.cleanUp() }
@@ -123,7 +198,12 @@ private struct Rig {
         let newest = try rig.seed(ago: 50)
         await rig.recovery.offerIfNeeded()
         let menu = SavedRecordingsMenuSection(recovery: rig.recovery, canRecover: { true })
-        let entries = try #require(menu.items.first?.submenu?.items)
+        let submenu = try #require(menu.items.first?.submenu)
+        submenu.delegate?.menuNeedsUpdate?(submenu)
+        for _ in 0..<400 where submenu.items.allSatisfy({ $0.representedObject == nil }) {
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        let entries = submenu.items
         #expect(menu.items.first?.submenu?.autoenablesItems == false)
         #expect(entries.count == 2)
         #expect((entries[0].representedObject as? RecoverableDictation)?.id == newest)

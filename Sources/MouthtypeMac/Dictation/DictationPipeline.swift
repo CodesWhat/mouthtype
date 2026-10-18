@@ -60,6 +60,9 @@ struct DictationPipeline: Sendable {
     var textPipeline = TextPipeline()
     /// The local model pass for light and medium. Nil runs everything as basic.
     var smart: (any SmartCleaning)?
+    var smartDiagnostic: @Sendable (String) -> Void = { message in
+        Log.cleaner.info("\(message, privacy: .public)")
+    }
 
     /// Cleanup slower than this is thrown away and the raw text goes out.
     static let cleanupBudgetMs = 50.0
@@ -121,6 +124,23 @@ struct DictationPipeline: Sendable {
 
     /// Features on the untrimmed samples, the WAV before any transcribing, then the capture row.
     func recordCapture(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> AudioFeatures {
+        await recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs).features
+    }
+
+    func preserveForTermination(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> Bool {
+        if audio.samples.isEmpty {
+            await finish(session, .empty)
+            return true
+        }
+        let capture = await recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs)
+        guard capture.durable else { return false }
+        guard store != nil, session.rowOpen else { return true }
+        return await write(session, "finish") { store in
+            try await store.finish(session.id, status: .failed, errorMessage: DictationRecovery.interruptedMessage)
+        }
+    }
+
+    func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
         let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))
         var audioPath: String?
         if let archive {
@@ -131,7 +151,7 @@ struct DictationPipeline: Sendable {
             }
         }
         func rounded(_ ms: Double?) -> Int? { ms.map { Int($0.rounded()) } }
-        await write(session, "recordCapture") { store in
+        let recorded = await write(session, "recordCapture") { store in
             try await store.recordCapture(session.id, CaptureRecord(
                 captureStartMs: rounded(audio.captureStartMs), firstSampleMs: rounded(audio.firstSampleMs),
                 firstNonzeroMs: rounded(audio.firstNonzeroMs), keyUpMs: keyUpMs, audioMs: rounded(audio.audioMs),
@@ -142,7 +162,7 @@ struct DictationPipeline: Sendable {
                 noiseFloorDb: features.noiseFloorDb
             ))
         }
-        return features
+        return (features, audioPath != nil && (recorded || store == nil || !session.rowOpen))
     }
 
     /// Nil when nothing was voiced or the engine heard nothing; the row is then already finished as `.empty`.
@@ -218,19 +238,27 @@ struct DictationPipeline: Sendable {
         let spoken = phrases.matchingTriggers(in: transcribed.text)
         var options = settings.pipelineOptions
         options.snippets = false
-        var result = textPipeline.run(TextPipelineInput(
-            text: transcribed.text, dictionary: inputs.dictionary.filter { !settings.level.needsModel || smart == nil || !$0.isJoinedSpelling }, snippets: [], context: context,
-            now: inputs.now, clipboard: clipboard, options: options
-        ))
-        // Cleanup may remove a filler or format a number that is part of a saved trigger.
-        // Keep the spoken trigger intact rather than silently losing its replacement.
-        if !spoken.isEmpty, phrases.matchingTriggers(in: result.text) != spoken {
-            result = TextPipelineResult(text: transcribed.text)
+
+        func deterministic(_ dictionary: [DictionaryRule], startedAt start: ContinuousClock.Instant)
+            -> (result: TextPipelineResult, expanded: StageResult, expected: [String], ms: Double) {
+            var result = textPipeline.run(TextPipelineInput(
+                text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
+                now: inputs.now, clipboard: clipboard, options: options
+            ))
+            // Cleanup may remove a filler or format a number that is part of a saved trigger.
+            // Keep the spoken trigger intact rather than silently losing its replacement.
+            if !spoken.isEmpty, phrases.matchingTriggers(in: result.text) != spoken {
+                result = TextPipelineResult(text: transcribed.text)
+            }
+            let expanded = phrases.apply(result.text)
+            let expected = phrases.matchingTriggers(in: result.text)
+            let elapsed = clock.now - start
+            let ms = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
+            return (result, expanded, expected, ms)
         }
-        let expanded = phrases.apply(result.text)
-        let expected = phrases.matchingTriggers(in: result.text)
-        let elapsed = clock.now - start
-        let ms = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
+
+        let dictionary = inputs.dictionary.filter { !settings.level.needsModel || smart == nil || !$0.isJoinedSpelling }
+        let (result, expanded, expected, ms) = deterministic(dictionary, startedAt: start)
         var record = CleanupRecord(
             cleanerID: Self.cleanerID, level: CleanupLevel.basic.rawValue, style: settings.styleName,
             ms: Int(ms.rounded()), outcome: "ok"
@@ -252,6 +280,18 @@ struct DictationPipeline: Sendable {
             text: result.text, level: level, style: settings.style, destination: destination,
             dictionary: inputs.dictionary, snippets: [], context: context, appName: appName
         ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
+            if dictionary.count != inputs.dictionary.count {
+                let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
+                let totalMs = ms + fallback.ms
+                record.ms = Int(totalMs.rounded())
+                if totalMs > Self.cleanupBudgetMs {
+                    Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the raw text")
+                    record.outcome = "timeout"
+                    return CleanedDictation(text: transcribed.rawText, edits: transcribed.guardEdits, cleanup: record)
+                }
+                return CleanedDictation(text: fallback.expanded.text,
+                    edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)
+            }
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         let model = delivery.model
@@ -262,10 +302,7 @@ struct DictationPipeline: Sendable {
         record.ms = (record.ms ?? 0) + modelResult.milliseconds
         record.outcome = modelResult.outcome.rawValue
         record.promptSha = modelResult.promptSHA
-        if let reason = modelResult.rejection {
-            Log.cleaner.info("smart cleanup \(modelResult.outcome.rawValue, privacy: .public): \(reason, privacy: .public)")
-        }
-        Log.cleaner.info("smart cleanup \(modelResult.outcome.rawValue, privacy: .public) ms=\(modelResult.milliseconds)")
+        smartDiagnostic("smart cleanup \(modelResult.outcome.rawValue) ms=\(modelResult.milliseconds)")
         let final = phrases.apply(modelResult.text)
         guard phrases.matchingTriggers(in: modelResult.text) == expected else {
             record.outcome = "guard-rejected"
@@ -326,14 +363,16 @@ struct DictationPipeline: Sendable {
         }
     }
 
-    private func write(
+    @discardableResult private func write(
         _ session: DictationSession, _ label: String, _ body: (any DictationStoring) async throws -> Void
-    ) async {
-        guard let store, session.rowOpen else { return }
+    ) async -> Bool {
+        guard let store, session.rowOpen else { return false }
         do {
             try await body(store)
+            return true
         } catch {
             Log.app.error("store \(label, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            return false
         }
     }
 }

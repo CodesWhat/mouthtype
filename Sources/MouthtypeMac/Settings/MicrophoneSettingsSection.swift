@@ -43,6 +43,11 @@ struct MicrophoneSettingsSection: View {
                     }
                 }.disabled(priority.devices.count >= 32)
                 Toggle("Use System Default if no listed microphone is available", isOn: Binding(get: { priority.fallbackToDefault }, set: model.setPriorityFallback))
+                    .disabled(priority.devices.isEmpty)
+                if priority.devices.isEmpty {
+                    Text("Add a microphone before turning off System Default fallback.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
                 Text("The first available listed microphone is chosen at the start of a take. A device change during recording still cancels that take.")
                     .font(.callout).foregroundStyle(.secondary)
             }

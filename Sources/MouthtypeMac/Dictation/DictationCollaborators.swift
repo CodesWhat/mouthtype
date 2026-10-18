@@ -78,6 +78,7 @@ extension DictationArchiving {
 
 @MainActor
 protocol DictationInserting: AnyObject {
+    func snapshotApplication() -> FocusSnapshot
     func snapshotFocus() -> FocusSnapshot
     func websiteHost(for snapshot: FocusSnapshot) -> String?
     func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult
@@ -92,6 +93,7 @@ protocol DictationInserting: AnyObject {
 }
 
 extension DictationInserting {
+    func snapshotApplication() -> FocusSnapshot { snapshotFocus() }
     func websiteHost(for snapshot: FocusSnapshot) -> String? { nil }
     func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void) {}
     func cancelVerification() {}
