@@ -165,10 +165,16 @@ final class DeliveryCardView: NSView {
     private(set) var style = CardStyle.classic
     private(set) var pillScale = PillScale.standard
     private(set) var embedded = false
+    /// The Hi-Fi readout colour the Hi-Fi card's text and bar wear.
+    private(set) var hifiReadout = PillReadoutColour.default
+    /// The Hi-Fi card's window, built when the skin first asks for it; nil without its art.
+    private(set) var hifi: HiFiCardView?
     private(set) var palette = CardPalette.classic
     private(set) var glassDecision: GlassPillPolicy.Decision = .solid(.materialUnavailable)
     /// The face size, without the shadow margin.
-    var faceSize: CGSize { frames?.size ?? .zero }
+    var faceSize: CGSize { showsHiFi ? hifi?.faceSize ?? .zero : frames?.size ?? .zero }
+    /// True while the Hi-Fi window is the card's body.
+    var showsHiFi: Bool { style == .hifi && hifi != nil && !embedded }
     /// True while the system glass material is the card's body.
     var showsMaterial: Bool { !glass.isHidden }
     var showsDot: Bool { !dot.isHidden }
@@ -248,10 +254,18 @@ final class DeliveryCardView: NSView {
     }
 
     /// Picks the skin, size and whether the card is folded into a pill. Takes effect at the next `render`.
-    func configure(style: CardStyle, scale: PillScale, embedded: Bool) {
+    func configure(style: CardStyle, scale: PillScale, embedded: Bool, readout: PillReadoutColour = .default) {
         self.style = style
         pillScale = scale
         self.embedded = embedded
+        hifiReadout = readout
+        if style == .hifi, hifi == nil, let assets = HiFiCardAssets.shared {
+            let window = HiFiCardView(assets: assets)
+            window.onAction = { [weak self] in self?.onAction?($0) }
+            window.onDismiss = { [weak self] in self?.onDismiss?() }
+            content.addSubview(window)
+            hifi = window
+        }
         resolvePalette()
     }
 
@@ -279,18 +293,26 @@ final class DeliveryCardView: NSView {
 
     /// Where a control's middle is, in this view's coordinates. For the click test.
     func center(of action: CardAction) -> CGPoint? {
+        if showsHiFi, let view = hifi?.buttonViews[action] { return convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), from: view) }
         guard let view = buttons.first(where: { $0.action == action })?.view else { return nil }
         return convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), from: view)
     }
 
-    var dismissCenter: CGPoint { convert(CGPoint(x: dismiss.bounds.midX, y: dismiss.bounds.midY), from: dismiss) }
+    var dismissCenter: CGPoint {
+        if showsHiFi, let view = hifi?.closeView { return convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), from: view) }
+        return convert(CGPoint(x: dismiss.bounds.midX, y: dismiss.bounds.midY), from: dismiss)
+    }
 
     /// Every button's frame, in this view's coordinates, for hit tests.
     var buttonFrames: [CardAction: CGRect] {
-        Dictionary(uniqueKeysWithValues: buttons.map { ($0.action, convert($0.view.bounds, from: $0.view)) })
+        if showsHiFi, let hifi { return Dictionary(uniqueKeysWithValues: hifi.buttonViews.map { ($0.key, convert($0.value.bounds, from: $0.value)) }) }
+        return Dictionary(uniqueKeysWithValues: buttons.map { ($0.action, convert($0.view.bounds, from: $0.view)) })
     }
 
-    var dismissFrame: CGRect { convert(dismiss.bounds, from: dismiss) }
+    var dismissFrame: CGRect {
+        if showsHiFi, let view = hifi?.closeView { return convert(view.bounds, from: view) }
+        return convert(dismiss.bounds, from: dismiss)
+    }
 
     /// Fills the card for `state` and returns the whole size the view needs: shadow margin included, unless embedded.
     @discardableResult
@@ -301,6 +323,10 @@ final class DeliveryCardView: NSView {
         if isNewCard { countdownStart = new.card.countdown == nil ? nil : (sharedStart ?? CACurrentMediaTime()) }
         let card = new.card
         let k = self.k
+        header.isHidden = showsHiFi
+        dismiss.isHidden = showsHiFi
+        hifi?.isHidden = !showsHiFi
+        if showsHiFi { return renderHiFi(new) }
 
         let headerFont = typography.font(.header, scale: k)
         let bodyFont = typography.font(.body, scale: k)
@@ -441,6 +467,48 @@ final class DeliveryCardView: NSView {
         return panelSize
     }
 
+    /// The Hi-Fi window as the card: the classic pieces step aside, the shadow and size stay the card's own.
+    private func renderHiFi(_ new: CardViewState) -> CGSize {
+        guard let hifi else { return .zero }
+        let k = self.k
+        let size = hifi.render(new, scale: pillScale, readout: hifiReadout, remaining: remaining, fraction: barFraction)
+        frames = nil
+        let margin = CardLayout.shadowMargin * k
+        let panelSize = CGSize(width: size.width + 2 * margin, height: size.height + 2 * margin)
+        setFrameSize(panelSize)
+        let face = CGRect(x: margin, y: margin, width: size.width, height: size.height)
+        withoutActions {
+            shadows.frame = CGRect(origin: .zero, size: panelSize)
+            shadows.isHidden = false
+            shadows.mask = nil
+            for (shadow, drop, blur) in [(ambient, 4 * k, 6 * k), (contact, 0.8 * k, 1 * k)] {
+                shadow.frame = face
+                shadow.cornerRadius = 3 * k
+                shadow.shadowRadius = blur
+                shadow.shadowOffset = CGSize(width: 0, height: -drop)
+                shadow.backgroundColor = NSColor(hex: 0x050506).cgColor
+            }
+            body.isHidden = true
+            dot.isHidden = true
+            scroll.isHidden = true
+            barClip.isHidden = true
+        }
+        glass.isHidden = true
+        content.frame = face
+        hifi.frame = CGRect(origin: .zero, size: size)
+        for entry in buttons { entry.view.removeFromSuperview() }
+        buttons = []
+        needsDisplay = true
+        return panelSize
+    }
+
+    /// The countdown bar's fill now, nil without a countdown. Under Reduce Motion it steps once a second.
+    private var barFraction: CGFloat? {
+        guard let total = state?.card.countdown, let remaining else { return nil }
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        return CardLayout.countdownFraction(remaining: reduce ? ceil(remaining) : remaining, total: total)
+    }
+
     private var remaining: TimeInterval? {
         guard let total = state?.card.countdown, let start = countdownStart else { return nil }
         return max(0, total - (CACurrentMediaTime() - start))
@@ -460,6 +528,10 @@ final class DeliveryCardView: NSView {
 
     /// Re-draws the Undo countdown: the seconds on the button and the bar.
     func tick() {
+        if showsHiFi {
+            hifi?.tick(remaining: remaining, fraction: barFraction)
+            return
+        }
         guard let state, let layout = frames, let remaining, let total = state.card.countdown else { return }
         if !state.copied {
             for entry in buttons where entry.action == .undo {

@@ -133,8 +133,8 @@ private final class CardRig {
 @Suite struct CardPaletteTests {
     private func hex(_ value: UInt32) -> NSColor { NSColor(hex: value) }
 
-    @Test func hiFiWearsTheClassicCard() {
-        #expect(PillSkinKind.hifi.cardStyle == .classic && PillSkinKind.classic.cardStyle == .classic)
+    @Test func hiFiFallsBackToTheClassicColoursWithoutItsArt() {
+        #expect(PillSkinKind.hifi.cardStyle == .hifi && PillSkinKind.classic.cardStyle == .classic)
         #expect(PillSkinKind.glass.cardStyle == .glass && PillSkinKind.matrix.cardStyle == .matrix && PillSkinKind.minimal.cardStyle == .minimal)
         let hifi = CardPalette.resolve(style: PillSkinKind.hifi.cardStyle, dark: false)
         #expect(hifi.ink == hex(0xF4F3E8) && hifi.primaryFill == hex(0xF4F3E8) && hifi.bodyFill != nil && hifi.showsDot)
@@ -269,7 +269,7 @@ private final class CardRig {
         rig.presenter.present(.pasteFailed("Send the notes."))
         #expect(!rig.cards.isMerged && !rig.pill.isGrown)
         #expect(rig.cards.panel.isVisible)
-        #expect(rig.cards.view.style == (skin == "glass" ? .glass : .classic))
+        #expect(rig.cards.view.style == (skin == "glass" ? .glass : skin == "hifi" ? .hifi : .classic))
         #expect(rig.cards.view.palette.showsDot)
         if skin == "hifi" { #expect(rig.cards.view.palette.primaryFill == NSColor(hex: 0xF4F3E8)) }
         rig.finish()

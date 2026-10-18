@@ -1,8 +1,8 @@
 import AppKit
 
-/// Which skin's card is drawn. Hi-Fi has no card of its own and wears Classic's.
+/// Which skin's card is drawn. Hi-Fi draws its own pixel-art window; without its art it wears Classic's colours.
 enum CardStyle: Equatable, Sendable {
-    case classic, glass, matrix, minimal
+    case classic, glass, matrix, minimal, hifi
 
     /// Matrix and Minimal fold the card into the pill: one squircle that grows upward, not a second panel.
     var mergesIntoPill: Bool { self == .matrix || self == .minimal }
@@ -11,7 +11,7 @@ enum CardStyle: Equatable, Sendable {
         switch self {
         case .matrix: .matrix
         case .minimal: .minimal
-        case .classic, .glass: nil
+        case .classic, .glass, .hifi: nil
         }
     }
 }
@@ -19,7 +19,8 @@ enum CardStyle: Equatable, Sendable {
 extension PillSkinKind {
     var cardStyle: CardStyle {
         switch self {
-        case .classic, .hifi: .classic
+        case .classic: .classic
+        case .hifi: .hifi
         case .glass: .glass
         case .matrix: .matrix
         case .minimal: .minimal
@@ -95,7 +96,7 @@ struct CardPalette {
     /// `glass` is how the Glass pill's rules decided for the card's backdrop; nil is the solid body.
     static func resolve(style: CardStyle, dark: Bool, glass: GlassPillPolicy.Decision? = nil) -> CardPalette {
         switch style {
-        case .classic:
+        case .classic, .hifi:
             return classic
         case .glass:
             var p = classic

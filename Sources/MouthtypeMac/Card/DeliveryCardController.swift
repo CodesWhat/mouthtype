@@ -35,6 +35,8 @@ final class DeliveryCardController: CardSurface {
         var scale: PillScale = .standard
         /// The tallest a card folded into the pill may be and still fit above it on the screen; nil is no limit.
         var maxFaceHeight: CGFloat?
+        /// The Hi-Fi readout colour, which the Hi-Fi card's text and bar wear.
+        var readout: PillReadoutColour = .default
         weak var merger: (any CardMerging)?
     }
 
@@ -166,7 +168,7 @@ final class DeliveryCardController: CardSurface {
         }
         let isNew = current?.card != state.card || !shown
         current = state
-        view.configure(style: style, scale: scale, embedded: false)
+        view.configure(style: style, scale: scale, embedded: false, readout: anchor?.readout ?? .default)
         let size = view.render(state, typography: Typography.current(), countdownStart: countdownStart(for: state.card))
         if let anchor {
             panel.setFrame(
