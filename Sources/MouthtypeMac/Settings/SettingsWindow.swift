@@ -274,6 +274,13 @@ struct SettingsView: View {
             Text("Website tone").font(.headline)
             Text("Website rules override app tone, including subdomains. Safari, Chrome, Edge and Brave use the focused window’s document URL when available. Otherwise app tone applies. These rules don’t retain document URLs.")
                 .font(.callout).foregroundStyle(.secondary)
+            if let error = model.appStylesError {
+                HStack {
+                    Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.red)
+                    Spacer()
+                    Button("Reload") { model.refresh() }
+                }.font(.callout)
+            }
             HStack {
                 TextField("Domain, e.g. slack.com", text: $websiteDomain).accessibilityIdentifier("settings-website-domain")
                 Picker("Website tone", selection: $websiteTone) {
@@ -295,8 +302,8 @@ struct SettingsView: View {
                         if entry.style.preset == nil { Text("Custom").tag("custom") }
                     }.labelsHidden().frame(width: 140)
                     Button { model.removeWebsiteStyle(domain: entry.domain) } label: { Image(systemName: "minus.circle") }
-                        .accessibilityLabel("Remove website tone for \(entry.domain)")
-                }
+                        .buttonStyle(.plain).accessibilityLabel("Remove website tone for \(entry.domain)")
+                }.disabled(model.appStylesError != nil)
             }
         }.disabled(!model.cleanup.enabled)
     }
