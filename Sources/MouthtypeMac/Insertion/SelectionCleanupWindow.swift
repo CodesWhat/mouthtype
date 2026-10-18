@@ -3,9 +3,11 @@ import SwiftUI
 
 @MainActor final class SelectionCleanupWindow: NSWindowController, NSWindowDelegate {
     let model: SelectionCleanupModel
+    private let maximumContentHeight: CGFloat
 
-    init(model: SelectionCleanupModel) {
+    init(model: SelectionCleanupModel, maximumContentHeight: CGFloat? = nil) {
         self.model = model
+        self.maximumContentHeight = max(260, min(620, maximumContentHeight ?? ((NSScreen.main?.visibleFrame.height ?? 684) - 64)))
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 620, height: 280),
                             styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "Clean Selected Text"
@@ -15,6 +17,7 @@ import SwiftUI
         super.init(window: panel)
         panel.delegate = self
         panel.contentView = NSHostingView(rootView: SelectionCleanupView(model: model,
+            maximumContentHeight: self.maximumContentHeight,
             close: { [weak self] in self?.close() }, resize: { [weak self] in self?.resizeToFitContent() }))
         resizeToFitContent()
         panel.center()
@@ -34,12 +37,14 @@ import SwiftUI
     private func resizeToFitContent() {
         guard let window, let content = window.contentView else { return }
         content.layoutSubtreeIfNeeded()
-        window.setContentSize(content.fittingSize)
+        let fitting = content.fittingSize
+        window.setContentSize(NSSize(width: fitting.width, height: min(maximumContentHeight, fitting.height)))
     }
 }
 
 private struct SelectionCleanupView: View {
     @Bindable var model: SelectionCleanupModel
+    var maximumContentHeight: CGFloat
     var close: () -> Void
     var resize: () -> Void
 
@@ -48,10 +53,12 @@ private struct SelectionCleanupView: View {
             Text("Clean selected text").font(.title2.bold())
             Text("Original").font(.callout).foregroundStyle(.secondary)
             ScrollView { Text(model.original).font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
-                .frame(height: textHeight(model.original, width: 576, minimum: 22, maximum: 120))
+                .frame(height: textHeight(model.original, width: 576, minimum: 22,
+                                         maximum: min(120, (maximumContentHeight - 240) / 3)))
             Text("Preview").font(.callout).foregroundStyle(.secondary)
             TextEditor(text: $model.result).font(.body).disabled(!model.hasPreview || model.submitted)
-                .frame(height: textHeight(model.result, width: 552, minimum: 44, maximum: 240))
+                .frame(height: textHeight(model.result, width: 552, minimum: 44,
+                                         maximum: min(240, (maximumContentHeight - 240) * 2 / 3 - 12)))
                 .padding(6)
                 .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
                 .overlay(RoundedRectangle(cornerRadius: 6).stroke(.quaternary))
