@@ -471,15 +471,15 @@ Panel {
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Fast"; detail: cleanupPage.modelDetail("fast"); checked: root.config.cleanup === "fast"; enabled: cleanupPage.models.fast === "prepared"; onActivated: root.run(["set-config", "cleanup", "fast"]) }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Thorough"; detail: cleanupPage.modelDetail("thorough"); checked: root.config.cleanup === "thorough"; enabled: cleanupPage.models.thorough === "prepared"; onActivated: root.run(["set-config", "cleanup", "thorough"]) }
             MenuDivider { width: parent.width }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.fast !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Fast cleanup…"; detail: "≈480 MB"; onActivated: root.run(["cleanup-cleanupPage.setup", "fast"]) }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.thorough !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Thorough cleanup…"; detail: "≈2.5 GB"; onActivated: root.run(["cleanup-cleanupPage.setup", "thorough"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.fast !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Fast cleanup…"; detail: "≈480 MB"; onActivated: root.run(["cleanup-setup", "fast"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: cleanupPage.models.thorough !== "prepared"; enabled: !cleanupPage.setupActive; label: "Prepare Thorough cleanup…"; detail: "≈2.5 GB"; onActivated: root.run(["cleanup-setup", "thorough"]) }
             Text {
               visible: !!cleanupPage.setup && cleanupPage.setup.state !== "ready"
               x: Style.space(30); width: parent.width - Style.space(50)
               text: !cleanupPage.setup ? "" : cleanupPage.setup.state === "building" ? "Building the pinned llama.cpp server…"
                 : cleanupPage.setup.state === "downloading" ? "Downloading and verifying the " + (cleanupPage.setup.level || "") + " model…"
                 : cleanupPage.setup.state === "preparing" ? "Preparing…"
-                : cleanupPage.setup.state === "failed" ? "Preparation failed (" + (cleanupPage.setup.error || "error") + "). Check the cleanup cleanupPage.setup log." : ""
+                : cleanupPage.setup.state === "failed" ? "Preparation failed (" + (cleanupPage.setup.error || "error") + "). Check the cleanup setup log." : ""
               color: cleanupPage.setup && cleanupPage.setup.state === "failed" ? "#B72F26" : "#4A4A49"; wrapMode: Text.Wrap
               font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
             }

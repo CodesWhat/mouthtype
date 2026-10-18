@@ -755,14 +755,16 @@ def import_save():
     return output
 
 
+VALID_ACTIONS = {
+    "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
+    "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
+    "set-autostart", "set-shortcut", "import-pick", "import-start", "import-cancel",
+    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
+}
+
+
 def main():
-    valid = {
-        "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
-        "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
-        "set-autostart", "set-shortcut", "import-pick", "import-start", "import-cancel",
-        "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
-    }
-    if len(sys.argv) < 2 or sys.argv[1] not in valid or (
+    if len(sys.argv) < 2 or sys.argv[1] not in VALID_ACTIONS or (
         sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "import-start", "cleanup-setup"}
         and len(sys.argv) != 3
     ) or (sys.argv[1] == "set-shortcut" and len(sys.argv) not in {3, 4}

@@ -80,5 +80,15 @@ class AutostartTests(unittest.TestCase):
         self.assertEqual([call[0] for call in self.calls], ["disable"])
 
 
+class PanelActionTests(unittest.TestCase):
+    def test_every_action_the_panel_runs_is_accepted_by_the_dispatcher(self):
+        panel = (HERE / "Panel.qml").read_text(encoding="utf-8")
+        actions = set(re.findall(r'root\.run\(\["([^"]+)"', panel))
+        self.assertIn("cleanup-setup", actions)
+        self.assertEqual(sorted(actions - control.VALID_ACTIONS), [])
+        self.assertNotIn("cleanup-cleanupPage", panel)
+        self.assertNotIn("cleanup cleanupPage", panel)
+
+
 if __name__ == "__main__":
     unittest.main()
