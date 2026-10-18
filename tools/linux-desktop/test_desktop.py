@@ -1,5 +1,6 @@
 import json
 import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import threading
@@ -799,6 +800,7 @@ class PasteDeliveryTests(unittest.TestCase):
         self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
         self.assertEqual(restored, [('earlier text', 'text')])
 
+    @unittest.skipUnless(sys.platform == 'linux', 'reads /proc')
     def test_terminal_with_custom_window_class_is_recognised_by_its_process(self):
         delivery, target, calls, _ = self.make({'any_window': True}, hyprland=True)
         target['class'] = 'org.example.custom-shell'
