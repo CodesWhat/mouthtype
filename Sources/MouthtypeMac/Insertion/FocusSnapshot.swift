@@ -76,6 +76,7 @@ struct FocusProbe: Sendable {
 @MainActor
 protocol FocusReading: AnyObject {
     func snapshot() -> FocusSnapshot
+    func websiteHost(for snapshot: FocusSnapshot) -> String?
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor
     /// A bounded window of text around the cursor, for the cleanup pass. Nil when the app doesn't say.
     func insertionContext(of element: FocusedElement) -> InsertionContext?
@@ -85,6 +86,7 @@ protocol FocusReading: AnyObject {
 }
 
 extension FocusReading {
+    func websiteHost(for snapshot: FocusSnapshot) -> String? { nil }
     func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
     func readField(of element: FocusedElement) -> FieldReading { FieldReading() }
 }
@@ -117,6 +119,15 @@ final class AccessibilityFocusReader: FocusReading {
         if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(element) }
         snapshot.windowTitle = elementValue(element, kAXWindowAttribute).flatMap(title(of:))
         return snapshot
+    }
+
+    func websiteHost(for snapshot: FocusSnapshot) -> String? {
+        guard !snapshot.isSecure, !isSecureInputEnabled, WebsiteContext.supports(bundleID: snapshot.bundleID),
+              let element = snapshot.element, let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+              let window = elementValue(bounded(element.ref), kAXWindowAttribute) else { return nil }
+        // Apple's AXDocument attribute is a URL string. Missing browser support is a fallback, never a guess.
+        return WebsiteContext.host(document: stringValue(bounded(window), kAXDocumentAttribute), bundleID: snapshot.bundleID)
     }
 
     /// Diagnostic ownership only. Event delivery still uses the frontmost application.

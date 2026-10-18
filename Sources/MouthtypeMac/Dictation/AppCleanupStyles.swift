@@ -7,15 +7,22 @@ struct AppCleanupStyle: Equatable, Sendable {
     let style: StyleOptions
 }
 
+struct WebsiteCleanupStyle: Equatable, Sendable {
+    let domain: String
+    let style: StyleOptions
+}
+
 struct AppCleanupStyles: Equatable, Sendable {
     static let preferenceKey = "cleanupAppStyles"
     private(set) var entries: [AppCleanupStyle] = []
+    private(set) var websites: [WebsiteCleanupStyle] = []
 
     enum ValidationError: LocalizedError {
-        case invalidBundleID, missingAppName, invalidPreferences
+        case invalidBundleID, missingAppName, invalidPreferences, invalidDomain
 
         var errorDescription: String? {
             switch self {
+            case .invalidDomain: "Enter a domain such as slack.com, without a scheme, path or wildcard."
             case .invalidBundleID: "Choose an application with a valid bundle identifier."
             case .missingAppName: "The application needs a name."
             case .invalidPreferences: "Saved app styles couldn't be read. Existing preferences have been kept."
@@ -30,9 +37,16 @@ struct AppCleanupStyles: Equatable, Sendable {
         let endingPunctuation: String
     }
 
+    private struct WebsiteRecord: Codable {
+        let domain: String
+        let capitalisation: String
+        let endingPunctuation: String
+    }
+
     private struct Document: Codable {
         var version = 1
         let entries: [Record]
+        var websites: [WebsiteRecord]?
     }
 
     static func load(_ defaults: UserDefaults = .standard) throws -> AppCleanupStyles {
@@ -54,6 +68,14 @@ struct AppCleanupStyles: Equatable, Sendable {
                 try result.set(bundleID: bundleID, appName: entry.appName,
                                style: StyleOptions(capitalisation: capitalisation, endingPunctuation: ending))
             }
+            for entry in document.websites ?? [] {
+                guard let capitalisation = Capitalisation(rawValue: entry.capitalisation),
+                      let ending = EndingPunctuation(rawValue: entry.endingPunctuation),
+                      !result.websites.contains(where: { $0.domain == Self.normalizedDomain(entry.domain) }) else {
+                    throw ValidationError.invalidPreferences
+                }
+                try result.setWebsite(domain: entry.domain, style: StyleOptions(capitalisation: capitalisation, endingPunctuation: ending))
+            }
             return result
         } catch {
             throw ValidationError.invalidPreferences
@@ -64,6 +86,8 @@ struct AppCleanupStyles: Equatable, Sendable {
         let document = Document(entries: entries.map {
             Record(bundleID: $0.bundleID, appName: $0.appName, capitalisation: $0.style.capitalisation.rawValue,
                    endingPunctuation: $0.style.endingPunctuation.rawValue)
+        }, websites: websites.map {
+            WebsiteRecord(domain: $0.domain, capitalisation: $0.style.capitalisation.rawValue, endingPunctuation: $0.style.endingPunctuation.rawValue)
         })
         defaults.set(try JSONEncoder().encode(document), forKey: Self.preferenceKey)
     }
@@ -92,7 +116,33 @@ struct AppCleanupStyles: Equatable, Sendable {
         entries.removeAll { $0.bundleID == bundleID }
     }
 
-    func resolve(bundleID: String?, fallback: StyleOptions) -> StyleOptions {
-        entries.first { $0.bundleID == bundleID }?.style ?? fallback
+    static func normalizedDomain(_ input: String) -> String? {
+        var domain = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if domain.hasSuffix(".") { domain.removeLast() }
+        let labels = domain.split(separator: ".", omittingEmptySubsequences: false)
+        let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
+        guard domain.utf8.count <= 253, labels.count >= 2, labels.allSatisfy({
+            !$0.isEmpty && $0.utf8.count <= 63 && $0.first != "-" && $0.last != "-" && $0.allSatisfy(allowed.contains)
+        }) else { return nil }
+        return domain
+    }
+
+    mutating func setWebsite(domain: String, style: StyleOptions) throws {
+        guard let domain = Self.normalizedDomain(domain) else { throw ValidationError.invalidDomain }
+        websites.removeAll { $0.domain == domain }
+        websites.append(WebsiteCleanupStyle(domain: domain, style: style))
+        websites.sort { $0.domain < $1.domain }
+    }
+
+    mutating func removeWebsite(domain: String) {
+        websites.removeAll { $0.domain == Self.normalizedDomain(domain) }
+    }
+
+    func resolve(bundleID: String?, websiteHost: String? = nil, fallback: StyleOptions) -> StyleOptions {
+        if let websiteHost, let host = Self.normalizedDomain(websiteHost), WebsiteContext.supports(bundleID: bundleID),
+           let match = websites.filter({ host == $0.domain || host.hasSuffix("." + $0.domain) }).max(by: { $0.domain.count < $1.domain.count }) {
+            return match.style
+        }
+        return entries.first { $0.bundleID == bundleID }?.style ?? fallback
     }
 }

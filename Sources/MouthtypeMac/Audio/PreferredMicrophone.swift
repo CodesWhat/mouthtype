@@ -42,10 +42,24 @@ struct CaptureInputSelection: Equatable, Sendable {
     var device: InputDevice
     var followsDefault: Bool
 
+    static func resolve(preferred: PreferredMicrophone?, priority: MicrophonePriority?, devices: [MicrophoneDevice], defaultInput: AudioDeviceID?) throws -> Self {
+        if let priority, priority.enabled {
+            for choice in priority.devices {
+                if let found = devices.first(where: { $0.uid == choice.uid }) {
+                    try InputDevice.validate(sampleRate: found.input.sampleRate, channels: found.input.channels)
+                    return Self(device: found.input, followsDefault: false)
+                }
+            }
+            guard priority.fallbackToDefault else { throw CaptureError.selectedMicrophoneUnavailable }
+            return Self(device: try PreferredMicrophone.resolve(nil, devices: devices, defaultInput: defaultInput), followsDefault: true)
+        }
+        return Self(device: try PreferredMicrophone.resolve(preferred, devices: devices, defaultInput: defaultInput), followsDefault: preferred == nil)
+    }
+
     static func current() throws -> Self {
-        let preference = try PreferredMicrophone.load()
-        let device = try PreferredMicrophone.resolve(preference, devices: InputDevice.availableMicrophones(), defaultInput: InputDevice.defaultInputID())
-        return Self(device: device, followsDefault: preference == nil)
+        let priority = try MicrophonePriority.load()
+        let preferred = priority?.enabled == true ? nil : try PreferredMicrophone.load()
+        return try resolve(preferred: preferred, priority: priority, devices: InputDevice.availableMicrophones(), defaultInput: InputDevice.defaultInputID())
     }
 }
 

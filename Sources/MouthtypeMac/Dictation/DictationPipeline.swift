@@ -185,8 +185,9 @@ struct DictationPipeline: Sendable {
         )
     }
 
-    func cleanupStyle(forBundleID bundleID: String?) -> StyleOptions {
-        appStyles().resolve(bundleID: bundleID, fallback: settings().style)
+    func cleanupStyle(forBundleID bundleID: String?, websiteHost: String? = nil) -> StyleOptions {
+        let styles = appStyles()
+        return styles.resolve(bundleID: bundleID, websiteHost: websiteHost, fallback: settings().style)
     }
 
     func cleanupInputs(style: StyleOptions? = nil) -> CleanupInputs {
