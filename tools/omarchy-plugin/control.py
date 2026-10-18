@@ -402,7 +402,46 @@ def cue(name):
 
 
 HOLD = LOG.parent / "hold.json"
-HOLD_EARLY_SECONDS = 2.0
+PROCESS_FALLBACK_TIME = time.monotonic()
+
+
+def event_time():
+    """When this process was launched, in clock ticks since boot.
+
+    Lock arrival order is not key order: a press and a release can reach the lock in either order.
+    Launch time is stamped by the kernel before any of our code runs, so it orders the key events."""
+    try:
+        stat = Path("/proc/self/stat").read_text(encoding="utf-8")
+        # comm (field 2) may contain spaces and parentheses, so count fields from the last ')'.
+        return int(stat[stat.rindex(")") + 2:].split()[19])
+    except (OSError, ValueError, IndexError):
+        return PROCESS_FALLBACK_TIME
+
+
+def boot_id():
+    try:
+        return Path("/proc/sys/kernel/random/boot_id").read_text(encoding="utf-8").strip() or None
+    except OSError:
+        return None
+
+
+def number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def hold_normalise(data):
+    """The saved hold state, or a fresh one when the file is malformed or left by an earlier boot."""
+    fresh = {"boot": boot_id(), "seq": 0, "press": None, "last_release_t": None}
+    if not isinstance(data, dict) or data.get("boot") != fresh["boot"] or not isinstance(data.get("seq"), int):
+        return fresh
+    press = data.get("press")
+    if press is not None:
+        if (not isinstance(press, dict) or not isinstance(press.get("id"), int) or not number(press.get("t"))
+                or not all(isinstance(press.get(key), bool) for key in ("started", "released"))):
+            press = None
+    last = data.get("last_release_t")
+    return {**fresh, "seq": data["seq"], "press": press,
+            "last_release_t": last if number(last) else None}
 
 
 def hold_update(change):
@@ -413,10 +452,9 @@ def hold_update(change):
         fcntl.flock(fd, fcntl.LOCK_EX)
         try:
             data = json.loads(HOLD.read_text(encoding="utf-8")) if HOLD.is_file() else {}
-        except (OSError, json.JSONDecodeError):
+        except (OSError, ValueError):
             data = {}
-        if not isinstance(data, dict):
-            data = {}
+        data = hold_normalise(data)
         result = change(data)
         atomic_json(HOLD, data)
         return result
@@ -424,30 +462,66 @@ def hold_update(change):
         os.close(fd)
 
 
-def hold_press():
-    """Register a press. Returns its id, or None when its release already arrived."""
+def hold_press(t):
+    """Register a press launched at t. Returns its id, or None when it must not start a recording."""
     def change(data):
-        data["press"] = data.get("press", 0) + 1
-        early, data["early_release"] = data.get("early_release"), None
-        if isinstance(early, (int, float)) and 0 <= time.time() - early < HOLD_EARLY_SECONDS:
-            data["released"] = data["press"]
+        data["seq"] += 1
+        mine = data["seq"]
+        press, last = data["press"], data["last_release_t"]
+        if press is not None and press["t"] > t:
+            return None  # a newer press already owns the session
+        if last is not None and last >= t:
+            # The release of this very press was processed first. Nothing to start.
+            data["press"] = {"id": mine, "t": t, "started": False, "released": True, "skipped": True}
             return None
-        return data["press"]
+        data["press"] = {"id": mine, "t": t, "started": False, "released": False}
+        return mine
     return hold_update(change)
 
 
-def hold_release():
+def hold_release(t):
+    """Register a release launched at t. Returns False when it belongs to a press that is already over."""
     def change(data):
-        if data.get("released", 0) < data.get("press", 0):
-            data["released"] = data["press"]
-        else:
-            # The release outran its press process; the press will find this and not start.
-            data["early_release"] = time.time()
-    hold_update(change)
+        last = data["last_release_t"]
+        data["last_release_t"] = t if last is None else max(last, t)
+        press = data["press"]
+        if press is None:
+            return True
+        if press["t"] > t:
+            return False  # a late release for an older press; the current press is still held
+        press["released"] = True
+        return True
+    return hold_update(change)
 
 
-def hold_released(press):
-    return hold_update(lambda data: data.get("released", 0) >= press)
+def hold_alive(mine):
+    def change(data):
+        press = data["press"]
+        return press is not None and press["id"] == mine and not press["released"]
+    return hold_update(change)
+
+
+def hold_settle(mine):
+    """After the start request returned: True when the key already came up and the recording must stop."""
+    def change(data):
+        press = data["press"]
+        if press is None:
+            return False
+        if press["id"] != mine:
+            if press["released"] and press.get("skipped"):
+                # The newest press came and went without starting; this start would otherwise leak.
+                press["skipped"] = False
+                try:
+                    deliver("stop")
+                except RuntimeError:
+                    pass
+                cue("stop")
+            return False
+        if press["released"]:
+            return True
+        press["started"] = True
+        return False
+    return hold_update(change)
 
 
 def deliver(command, identity=None):
@@ -465,9 +539,9 @@ def deliver(command, identity=None):
     return response
 
 
-def hold_start():
-    press = hold_press()
-    if press is None:
+def hold_start(t):
+    mine = hold_press(t)
+    if mine is None:
         return state()
     try:
         response = deliver("start")
@@ -475,10 +549,10 @@ def hold_start():
         if state()["running"]:
             raise
         start_service()
-        if hold_released(press):
+        if not hold_alive(mine):
             return state()
         response = deliver("start")
-    if hold_released(press):
+    if hold_settle(mine):
         # The key came up before the recording began, so its stop was a no-op. Stop now.
         deliver("stop")
         cue("stop")
@@ -489,12 +563,13 @@ def hold_start():
 
 
 def act(command, identity=None):
+    t = event_time() if command in {"start", "stop"} else None
     if identity is not None and (len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity)):
         raise RuntimeError("Invalid recording ID")
     if command == "start":
-        return hold_start()
-    if command == "stop":
-        hold_release()
+        return hold_start(t)
+    if command == "stop" and not hold_release(t):
+        return state()
     if command in {"toggle", "transcribe"} and not state()["running"]:
         start_service()
     if command == "shutdown" and unit_active():
