@@ -112,7 +112,7 @@ def main():
                       "reference_sha256": hashlib.sha256(audio_path.with_suffix(".txt").read_bytes()).hexdigest()})
     manifest = {"source_head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "macos": platform.mac_ver()[0], "python": platform.python_version(), "voice": args.voice,
-                "words_per_minute": args.rate, "runs": args.runs, "warmups": 1,
+                "words_per_minute": args.rate, "runs": args.runs, "warmups": 1, "language_hint": "english",
                 "long_repeats": args.long_repeats, "closing_checkpoint": fixture["closing_checkpoint"],
                 "noise": noise, "clips": clips,
                 "scope": "Synthetic TTS and additive noise; recognition-only timings, no microphone or UI delivery acceptance"}
@@ -128,7 +128,7 @@ def main():
         manifest["benchmark_built_here"] = args.bench_path is None
         (output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
         result = output / "recognition.json"
-        run([str(bench), "engine-worker", "parakeet-tdt-v3", "--mode", "full", "--corpus", str(corpus),
+        run([str(bench), "engine-worker", "parakeet-tdt-v3", "--english-hint", "--mode", "full", "--corpus", str(corpus),
              "--runs", str(args.runs), "--warmups", "1", "--result", str(result)], output / "recognition.log", 600)
         report = json.loads(result.read_text())
         if report.get("error") or len(report.get("clips", [])) != len(clips):
