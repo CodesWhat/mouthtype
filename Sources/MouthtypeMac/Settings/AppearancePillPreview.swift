@@ -107,6 +107,9 @@ final class PillPreviewStage: NSView {
     private var link: CADisplayLink?
     private var started: CFTimeInterval = 0
     private var frozen = false
+    /// True from building a skin until its entrance has played. The entrance waits for the stage to be on screen, so the
+    /// user sees it, and a layer frozen offscreen never holds it half done.
+    private var entrancePending = false
     private var observers: [NSObjectProtocol] = []
     private(set) var framesDriven = 0
     var pageVisible = true { didSet { refresh() } }
@@ -163,10 +166,7 @@ final class PillPreviewStage: NSView {
         canvas.addSubview(next)
         frozen = false
         next.layer?.speed = 1
-        next.showRecording(locked: false)
-        next.showFractions(PreviewLevel.still)
-        next.setElapsed(0)
-        next.appear(reduceMotion: Self.reduceMotion())
+        entrancePending = true
         started = CACurrentMediaTime()
         snapshot.image = SettingsPillImage.make(skin: kind, size: scale == .large ? .large : .standard, readout: readout, wallpaper: wallpaper)
         refresh()
@@ -224,11 +224,24 @@ final class PillPreviewStage: NSView {
             windowOnscreen: !closing && !isHiddenOrHasHiddenAncestor && Self.windowOnscreen(window),
             reduceMotion: Self.reduceMotion()
         )
-        if activity.animates { start() } else { stop() }
-        // A window that has never been shown cannot run the entrance animations, so it shows a settled still instead.
-        let still = !(window?.isVisible ?? false)
+        if activity.animates { playEntrance(); start() } else { stop() }
+        // Only a stage that is animating shows the live skin. A window that has never been shown cannot run the entrance
+        // animations, and Reduce Motion wants a settled pose, so both show the still instead.
+        let still = !activity.animates
         snapshot.isHidden = !still
         canvas.isHidden = still
+    }
+
+    /// The same order `PillController` uses: the pill appears first, then the recording state arrives. Classic's `appear`
+    /// places the pill as a dot, so a state set before it is wiped and the width never springs out.
+    private func playEntrance() {
+        guard entrancePending, let skin else { return }
+        entrancePending = false
+        skin.appear(reduceMotion: Self.reduceMotion())
+        skin.showRecording(locked: false)
+        skin.showFractions(PreviewLevel.still)
+        skin.setElapsed(0)
+        started = CACurrentMediaTime()
     }
 
     private func start() {

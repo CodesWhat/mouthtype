@@ -56,6 +56,8 @@ final class ClassicPillView: NSView, PillSkinView {
     private var mode = ClassicPillLayout.Mode.hold
     private var width: CGFloat
     private var height: CGFloat
+    /// The capsule's width as last placed, before any spring has run. For tests.
+    var capsuleWidth: CGFloat { width }
     private var presented = false
     private(set) var typography = Typography.current()
     private var message: PillMessage?

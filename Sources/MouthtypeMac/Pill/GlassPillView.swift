@@ -61,6 +61,7 @@ final class GlassPillView: NSView, PillSkinView {
     }
 
     var pillScale: PillScale { classic.pillScale }
+    var capsuleWidth: CGFloat { classic.capsuleWidth }
     /// True while the system material is showing, false on the solid Classic body.
     var showsMaterial: Bool { !glass.isHidden }
     var bodyIsGlass: Bool { classic.glassBody }
