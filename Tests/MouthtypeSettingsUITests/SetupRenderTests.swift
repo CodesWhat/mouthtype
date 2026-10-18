@@ -70,12 +70,12 @@ import Testing
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
         let model = SetupModel(diagnostics: SettingsDiagnostics(), engine: EngineHost(makeEngine: { _ in SetupRenderEngine() }), defaults: defaults)
-        let glass = SetupWindow(model: model, actions: SetupActions(), reduceTransparency: false)
+        let glass = SetupWindow(model: model, actions: SetupActions(), reduceTransparency: { false })
         #expect(glass.window?.contentView is NSGlassEffectView)
         #expect(glass.window?.styleMask.contains(.fullSizeContentView) == true)
         #expect(glass.window?.titlebarAppearsTransparent == true)
         #expect(glass.window?.contentRect(forFrameRect: glass.window?.frame ?? .zero).size == SetupWindow.contentSize)
-        let solid = SetupWindow(model: model, actions: SetupActions(), reduceTransparency: true)
+        let solid = SetupWindow(model: model, actions: SetupActions(), reduceTransparency: { true })
         #expect(!(solid.window?.contentView is NSGlassEffectView))
     }
 
@@ -107,6 +107,78 @@ import Testing
         #expect(controller.isPolling)
         controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
         #expect(!controller.isPolling)
+    }
+
+    @Test func realWindowFooterClearsTheSafeAreaWithBottomMargin() throws {
+        let name = "SetupRenderTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        FontRegistry.registerBundledFonts()
+        let model = SetupModel(diagnostics: SettingsDiagnostics(), engine: EngineHost(makeEngine: { _ in SetupRenderEngine() }), defaults: defaults)
+        for dark in [false, true] {
+            let controller = SetupWindow(model: model, actions: SetupActions(), reduceTransparency: { true })
+            let window = try #require(controller.window)
+            #expect(window.styleMask.contains(.fullSizeContentView))
+            window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            let content = try #require(window.contentView)
+            content.layoutSubtreeIfNeeded()
+            let hosting = try #require(content as? NSHostingView<SetupView>)
+            let bounds = hosting.bounds
+            #expect(bounds.size == SetupWindow.contentSize)
+            let bitmap = try #require(hosting.bitmapImageRepForCachingDisplay(in: bounds))
+            hosting.cacheDisplay(in: bounds, to: bitmap)
+            // The footer is the lowest ink on the sheet. Measure the clear band under it from the real render.
+            let scale = CGFloat(bitmap.pixelsHigh) / bounds.height
+            let background = try #require(bitmap.colorAt(x: 1, y: bitmap.pixelsHigh - 1))
+            func isInk(_ x: Int, _ y: Int) -> Bool {
+                guard let c = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), let b = background.usingColorSpace(.sRGB) else { return false }
+                return abs(c.redComponent - b.redComponent) + abs(c.greenComponent - b.greenComponent) + abs(c.blueComponent - b.blueComponent) > 0.15
+            }
+            var lowestInkRow = -1
+            scan: for y in stride(from: bitmap.pixelsHigh - 1, through: 0, by: -1) {
+                for x in stride(from: 0, to: bitmap.pixelsWide, by: 1) where isInk(x, y) { lowestInkRow = y; break scan }
+            }
+            let bottomMargin = CGFloat(bitmap.pixelsHigh - 1 - lowestInkRow) / scale
+            print("setup real-window dark=\(dark) footer bottom margin = \(bottomMargin) pt, lowest ink row \(lowestInkRow) of \(bitmap.pixelsHigh)")
+            #expect(lowestInkRow >= 0)
+            #expect(bottomMargin >= 12, "footer ink within \(bottomMargin) pt of the bottom edge")
+            // Footer ink must also exist in the bottom band on both the leading and trailing sides (Done/Set up later and the step names).
+            let bandTop = bitmap.pixelsHigh - Int(48 * scale)
+            func hasInk(xRange: Range<Int>) -> Bool {
+                for y in bandTop..<bitmap.pixelsHigh { for x in xRange where isInk(x, y) { return true } }
+                return false
+            }
+            #expect(hasInk(xRange: 0..<bitmap.pixelsWide / 3), "footer button missing from the bottom band")
+            #expect(hasInk(xRange: bitmap.pixelsWide * 2 / 3..<bitmap.pixelsWide), "footer step names missing from the bottom band")
+            let output = URL(fileURLWithPath: "/tmp/mt-visual/setup", isDirectory: true)
+            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+            try #require(bitmap.representation(using: .png, properties: [:])).write(to: output.appendingPathComponent("real-window-\(dark ? "dark" : "light").png"))
+        }
+    }
+
+    @Test func reduceTransparencySwapsGlassAndSolidLive() {
+        let name = "SetupRenderTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let model = SetupModel(diagnostics: SettingsDiagnostics(), engine: EngineHost(makeEngine: { _ in SetupRenderEngine() }), defaults: defaults)
+        let center = NotificationCenter()
+        var reduced = false
+        let controller = SetupWindow(model: model, actions: SetupActions(), reduceTransparency: { reduced }, notifications: center)
+        #expect(controller.window?.contentView is NSGlassEffectView)
+        #expect(!controller.isObservingTransparency)
+        controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+        #expect(controller.isObservingTransparency)
+        reduced = true
+        center.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        #expect(!(controller.window?.contentView is NSGlassEffectView))
+        reduced = false
+        center.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        #expect(controller.window?.contentView is NSGlassEffectView)
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        #expect(!controller.isObservingTransparency)
+        reduced = true
+        center.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        #expect(controller.window?.contentView is NSGlassEffectView)
     }
 
     @Test func everyStepRendersInLightAndDark() async throws {

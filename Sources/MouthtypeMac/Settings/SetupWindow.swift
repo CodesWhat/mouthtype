@@ -20,14 +20,23 @@ import SwiftUI
     private let poll: () -> Void
     private let pollInterval: TimeInterval
     private var pollTimer: Timer?
+    private var actions: SetupActions
+    private let reduceTransparency: () -> Bool
+    private let notifications: NotificationCenter
+    private nonisolated(unsafe) var transparencyObserver: NSObjectProtocol?
     var isPolling: Bool { pollTimer != nil }
+    var isObservingTransparency: Bool { transparencyObserver != nil }
 
     init(model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
-         reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) {
+         reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+         notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
         self.model = model
         self.pollInterval = pollInterval
+        self.reduceTransparency = reduceTransparency
+        self.notifications = notifications
         refresh = actions.refresh
         poll = actions.poll
+        self.actions = actions
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Set Up Mouthtype"
@@ -36,18 +45,8 @@ import SwiftUI
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         super.init(window: window)
-        var actions = actions
-        actions.done = { [weak self] in self?.close() }
-        let hosting = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: reduceTransparency))
-        hosting.sizingOptions = []
-        if reduceTransparency {
-            window.backgroundColor = .windowBackgroundColor
-            window.contentView = hosting
-        } else {
-            let glass = NSGlassEffectView()
-            glass.contentView = hosting
-            window.contentView = glass
-        }
+        self.actions.done = { [weak self] in self?.close() }
+        applyContent()
         window.setContentSize(Self.contentSize)
         window.delegate = self
         window.center()
@@ -55,7 +54,46 @@ import SwiftUI
 
     required init?(coder: NSCoder) { nil }
 
+    deinit {
+        if let transparencyObserver { notifications.removeObserver(transparencyObserver) }
+    }
+
+    /// Installs the glass or solid content to match Reduce Transparency. Called at init and again whenever the setting changes.
+    private func applyContent() {
+        guard let window else { return }
+        let solid = reduceTransparency()
+        let hosting = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: solid))
+        hosting.sizingOptions = []
+        if solid {
+            window.backgroundColor = .windowBackgroundColor
+            window.contentView = hosting
+        } else {
+            window.backgroundColor = .clear
+            let glass = NSGlassEffectView()
+            glass.contentView = hosting
+            window.contentView = glass
+        }
+        window.setContentSize(Self.contentSize)
+    }
+
+    private func startObservingTransparency() {
+        guard transparencyObserver == nil else { return }
+        transparencyObserver = notifications.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyContent() }
+        }
+        applyContent()
+    }
+
+    private func stopObservingTransparency() {
+        guard let transparencyObserver else { return }
+        notifications.removeObserver(transparencyObserver)
+        self.transparencyObserver = nil
+    }
+
     func present() {
+        startObservingTransparency()
         refresh()
         model.refreshInstructions()
         showWindow(nil)
@@ -64,6 +102,7 @@ import SwiftUI
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
+        startObservingTransparency()
         refresh()
         model.refreshInstructions()
         startPolling()
@@ -71,7 +110,10 @@ import SwiftUI
 
     func windowDidResignKey(_ notification: Notification) { stopPolling() }
 
-    func windowWillClose(_ notification: Notification) { stopPolling() }
+    func windowWillClose(_ notification: Notification) {
+        stopPolling()
+        stopObservingTransparency()
+    }
 
     private func startPolling() {
         guard pollTimer == nil else { return }
@@ -93,13 +135,16 @@ struct SetupView: View {
     var actions: SetupActions
     var solid = false
 
+    /// The window extends under the title bar, so the dots sit below the traffic lights (about 28 pt tall) with a gap.
+    static let dotsTopInset: CGFloat = 36
+
     private static let brand = Color(red: 0.19, green: 0.36, blue: 0.34)
 
     private var step: SetupStep { model.readiness.step }
 
     var body: some View {
         VStack(spacing: 0) {
-            SetupStepDots(dots: step.dots).padding(.top, 18)
+            SetupStepDots(dots: step.dots).padding(.top, SetupView.dotsTopInset)
             ScrollView {
                 VStack(spacing: 12) {
                     SetupLips().padding(.bottom, 6)
@@ -136,20 +181,22 @@ struct SetupView: View {
             .font(.callout).padding(.horizontal, 20).padding(.bottom, 16)
         }
         .frame(width: SetupWindow.contentSize.width, height: SetupWindow.contentSize.height)
+        .ignoresSafeArea()
         .font(.custom("InstrumentSans-Regular", size: 14))
         .tint(Self.brand)
         .background { if solid { Color(nsColor: .windowBackgroundColor) } }
     }
 
+    /// One Text so the names wrap onto a second line at narrow widths instead of truncating.
     private var footerSteps: some View {
-        HStack(spacing: 6) {
-            ForEach(Array(SetupStep.footerNames.enumerated()), id: \.offset) { index, name in
-                if index > 0 { Text("·") }
-                Text(name).foregroundStyle(index + 1 == step.rawValue ? Color.primary : Color.secondary)
-            }
+        let line = SetupStep.footerNames.enumerated().reduce(Text("")) { text, entry in
+            let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? .primary : .secondary)
+            return entry.offset == 0 ? name : text + Text(" · ").foregroundColor(.secondary) + name
         }
-        .font(.custom("JetBrainsMono-Medium", size: 8)).tracking(1)
-        .foregroundStyle(.secondary)
+        return line
+        .font(.custom("JetBrainsMono-Medium", size: 10)).tracking(1)
+        .multilineTextAlignment(.trailing)
+        .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
     }
