@@ -18,7 +18,23 @@ enum SelectionCleanupError: Error { case unavailable }
 }
 
 @MainActor final class AccessibilitySelectionEditor: SelectionEditing {
-    private let focus = AccessibilityFocusReader()
+    private let focus: any FocusReading
+    private let readRange: (FocusedElement) -> NSRange?
+    private let readText: (FocusedElement) -> String?
+    private let writeText: (FocusedElement, String) -> Bool
+
+    convenience init() {
+        self.init(focus: AccessibilityFocusReader(), readRange: Self.selectedRange,
+                  readText: Self.selectedText, writeText: Self.setSelectedText)
+    }
+
+    init(focus: any FocusReading, readRange: @escaping (FocusedElement) -> NSRange?,
+         readText: @escaping (FocusedElement) -> String?, writeText: @escaping (FocusedElement, String) -> Bool) {
+        self.focus = focus
+        self.readRange = readRange
+        self.readText = readText
+        self.writeText = writeText
+    }
 
     func capture() throws -> SelectedText {
         let snapshot = focus.snapshot()
@@ -28,25 +44,38 @@ enum SelectionCleanupError: Error { case unavailable }
               ["AXTextField", "AXTextArea", "AXComboBox"].contains(snapshot.role ?? "") else {
             throw SelectionCleanupError.unavailable
         }
-        AXUIElementSetMessagingTimeout(element.ref, AccessibilityFocusReader.messagingTimeout)
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element.ref, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXValueGetTypeID() else { throw SelectionCleanupError.unavailable }
-        var range = CFRange()
-        guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, (1...16_000).contains(range.length) else {
+        guard let range = readRange(element), range.location >= 0, (1...16_000).contains(range.length),
+              let text = readText(element), !text.isEmpty, text.utf16.count == range.length else {
             throw SelectionCleanupError.unavailable
         }
-        var text: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element.ref, kAXSelectedTextAttribute as CFString, &text) == .success,
-              let text = text as? String, !text.isEmpty, text.utf16.count == range.length else { throw SelectionCleanupError.unavailable }
-        return SelectedText(pid: pid, element: element, range: NSRange(location: range.location, length: range.length), text: text)
+        return SelectedText(pid: pid, element: element, range: range, text: text)
     }
 
     func replace(_ original: SelectedText, with replacement: String) -> Bool {
         guard !replacement.isEmpty, replacement.utf16.count <= 16_000,
               (try? capture()) == original, let element = original.element else { return false }
         // The user explicitly accepts this edit. No clipboard paste, keyboard events or retry.
-        return AXUIElementSetAttributeValue(element.ref, kAXSelectedTextAttribute as CFString, replacement as CFString) == .success
+        return writeText(element, replacement)
+    }
+
+    private static func selectedRange(_ element: FocusedElement) -> NSRange? {
+        AXUIElementSetMessagingTimeout(element.ref, AccessibilityFocusReader.messagingTimeout)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element.ref, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
+        return NSRange(location: range.location, length: range.length)
+    }
+
+    private static func selectedText(_ element: FocusedElement) -> String? {
+        var text: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element.ref, kAXSelectedTextAttribute as CFString, &text) == .success else { return nil }
+        return text as? String
+    }
+
+    private static func setSelectedText(_ element: FocusedElement, _ replacement: String) -> Bool {
+        AXUIElementSetAttributeValue(element.ref, kAXSelectedTextAttribute as CFString, replacement as CFString) == .success
     }
 }
 
