@@ -191,6 +191,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         correctionWatcher = watcher
 
         let menuBar = MenuBarController()
+        pill.onLevel = { [weak menuBar] level in menuBar?.setLevel(level) }
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
         let settingsSection = SettingsMenuSection { [weak self] in self?.settingsWindow.present() }
         menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in

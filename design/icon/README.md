@@ -10,12 +10,12 @@ below 64 px.
 
 `export.py` writes `AppIcon.iconset/` and `AppIcon-1024.png` here, builds `packaging/AppIcon.icns` with `iconutil` (macOS
 only), and writes the menu bar glyphs to `Sources/MouthtypeMac/Resources/MenuBar/`: one template glyph per status
-state (idle, recording, processing, unavailable) at 16 x 15 and 32 x 30: a classic smiley, outlined when idle, solid while
-recording, with three dots for a mouth while processing and a struck-through flat face when unavailable. The generated files are checked in, so the app
+state (idle, three recording frames, processing, unavailable) at 16 x 15 and 32 x 30: the caret-free lips, closed when idle, open with the voice while
+recording, the middle frame with three dots while processing and closed lips struck through when unavailable. The generated files are checked in, so the app
 builds without Python.
 
 Regenerate after changing the art (Python 3, standard library only; output is deterministic):
 
     python3 -I design/icon/export.py
 
-`sprites.py` holds the lips at the three tile sizes, `glyphs.py` the four glyphs, `canvas.py` the pixel canvas and PNG writer.
+`sprites.py` holds the lips at the three tile sizes, `glyphs.py` the menu bar glyphs, `canvas.py` the pixel canvas and PNG writer.

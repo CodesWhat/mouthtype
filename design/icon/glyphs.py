@@ -1,52 +1,65 @@
 """Menu bar glyphs, one per status state. 16 x 15, '#' is template ink and '.' is clear. The 2x file is the same
-art doubled, which is exact for pixel art. A classic smiley: outlined when idle, solid while recording."""
+art doubled, which is exact for pixel art. The lips from the app icon: closed when idle, open with the voice while
+recording (three frames), the same mouth with dots while processing."""
 
+# closed lips with a one pixel seam: "idle"
 IDLE = [
-    ".....######.....",
-    "...##......##...",
-    "..#..........#..",
-    ".#............#.",
-    ".#...##..##...#.",
-    "#....##..##....#",
-    "#..............#",
-    "#..............#",
-    "#..#........#..#",
-    "#..##......##..#",
-    ".#..########..#.",
-    ".#............#.",
-    "..#..........#..",
-    "...##......##...",
-    ".....######.....",
-]
-
-# solid face with the eyes and smile knocked out: "on"
-RECORDING = [
-    ".....######.....",
+    "................",
+    "................",
+    "....###..###....",
     "...##########...",
     "..############..",
     ".##############.",
-    ".####..##..####.",
-    "#####..##..#####",
     "################",
+    "#..............#",
     "################",
-    "###.########.###",
-    "###..######..###",
-    ".###........###.",
-    ".#####....#####.",
+    ".##############.",
     "..############..",
     "...##########...",
     ".....######.....",
+    "................",
+    "................",
 ]
 
-# the smile becomes three typing dots, 1 px so they don't read as a die face against the 2 x 2 eyes
-PROCESSING = IDLE[:6] + [
-    "#..............#",
-    "#..............#",
-    "#..............#",
-    "#..............#",
-    ".#..#..#..#...#.",
-    ".#............#.",
-] + IDLE[12:]
+# the mouth opens with the voice: three frames, and no caret inside
+RECORDING_0 = IDLE[:6] + ["##............##"] * 3 + IDLE[9:]
+RECORDING_1 = [
+    "................",
+    "....###..###....",
+    "...##########...",
+    "..############..",
+    ".##############.",
+    "##............##",
+    "##............##",
+    "##............##",
+    "##............##",
+    ".##..........##.",
+    "..############..",
+    "...##########...",
+    ".....######.....",
+    "................",
+    "................",
+]
+RECORDING_2 = [
+    "....###..###....",
+    "...##########...",
+    "..############..",
+    ".##..........##.",
+    "##............##",
+    "##............##",
+    "##............##",
+    "##............##",
+    "##............##",
+    "##............##",
+    ".##..........##.",
+    "..############..",
+    "...##########...",
+    ".....######.....",
+    "................",
+]
+
+# the middle frame with three 1 px dots on the centre row
+PROCESSING = [("##...#..#..#..##" if i == 7 else r) for i, r in enumerate(RECORDING_1)]
 
 
 def _slashed(rows):
@@ -65,7 +78,14 @@ def _slashed(rows):
     return ["".join(r) for r in g]
 
 
-# a flat mouth, struck through
-UNAVAILABLE = _slashed(IDLE[:8] + ["#..............#", "#..##########..#", ".#............#.", ".#............#."] + IDLE[12:])
+# closed lips, struck through
+UNAVAILABLE = _slashed(IDLE)
 
-GLYPHS = {"idle": IDLE, "recording": RECORDING, "processing": PROCESSING, "unavailable": UNAVAILABLE}
+GLYPHS = {
+    "idle": IDLE,
+    "recording0": RECORDING_0,
+    "recording1": RECORDING_1,
+    "recording2": RECORDING_2,
+    "processing": PROCESSING,
+    "unavailable": UNAVAILABLE,
+}
