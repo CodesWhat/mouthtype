@@ -84,7 +84,15 @@ private final class QuietOutputListener {
         block = { count, addresses in
             for address in UnsafeBufferPointer(start: addresses, count: Int(count)) {
                 switch address.mSelector {
-                case kAudioDevicePropertyMute, kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyVolumeDecibels:
+                case kAudioDevicePropertyMute:
+                    var property = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute,
+                        mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
+                    var muted: UInt32 = 0
+                    var size = UInt32(MemoryLayout<UInt32>.size)
+                    let read = AudioObjectGetPropertyData(device, &property, 0, nil, &size, &muted)
+                    // Our mute can notify after registration. A matching value is still ours.
+                    if read != noErr || muted == 0 { change.markChanged() }
+                case kAudioDevicePropertyVolumeScalar, kAudioDevicePropertyVolumeDecibels:
                     change.markChanged()
                 default: break
                 }
