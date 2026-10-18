@@ -297,6 +297,34 @@ private struct Rig {
         #expect(fallback && rig.pasteboard.publishedText == "original")
     }
 
+    @Test(arguments: [false, true])
+    func secureFocusDiscardsAConcurrentDeliveryBeforeTheBusyFailure(secureInput: Bool) async throws {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var concurrent: Task<DeliveryResult, Never>?
+        rig.pauses.observe = { delay in
+            if delay == 0.02, concurrent == nil {
+                concurrent = Task {
+                    rig.focus.current.isSecure = !secureInput
+                    rig.focus.isSecureInputEnabled = secureInput
+                    let result = await rig.inserter.deliver("private concurrent result", startFocus: nil)
+                    #expect(rig.inserter.lastDelivered == "first")
+                    rig.focus.current.isSecure = false
+                    rig.focus.isSecureInputEnabled = false
+                    rig.pasteboard.read()
+                    return result
+                }
+            }
+        }
+        _ = await rig.inserter.deliver("second", startFocus: nil)
+        let attempt = try #require(concurrent)
+        let result = await attempt.value
+        #expect(result.method == .none && result.outcome == .secureDiscard && result.finalText.isEmpty)
+        #expect(rig.poster.posts == 2 && rig.pasteboard.writes.count == 2)
+        #expect(!rig.pasteboard.writes.contains { $0.text.contains("private") })
+    }
+
     @Test func ordinaryPastesWaitForPreviousConsumption() async {
         let rig = Rig(chunks: true)
         defer { rig.poster.onPost = nil; rig.pauses.observe = nil; rig.inserter.cancelVerification() }
