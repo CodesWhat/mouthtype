@@ -1,6 +1,6 @@
-# Mouthtype 0.1.0-alpha.9
+# Mouthtype 0.1.0-beta.1
 
-Alpha for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
+Beta for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
 
 ## Install
 
@@ -12,6 +12,14 @@ Alpha for Apple Silicon Macs running macOS 26 or later. This is an early test bu
 6. Click a blank TextEdit document. Hold Fn, say a sentence, then release. Wait for text to appear. Dictate another sentence without clicking or typing between takes. Confirm one insertion per take and a space between them.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
+
+## Daily-use hardening in beta.1
+
+Ordinary delivery waits for a previous owned clipboard read before replacing it. If that read cannot be established within the bound, the new take remains recoverable. Check the destination before retrying. Normal Quit first preserves active and queued capture audio, then settles Mouthtype’s clipboard changes without overwriting a newer user copy. A failed save keeps the app open so Quit can be retried; no late model result is pasted during shutdown. If history storage is unavailable but WAV preservation succeeds, recovery may require opening the saved file from the local data directory.
+
+Saved Recordings loads when opened and keeps older audio accessible through pages. Recording starts before detailed Accessibility context lookup, while delivery keeps its focus checks. An incomplete cleanup-model cache can be repaired with Download. Basic fallback honors saved spellings and the spoken commands/lists choice. The empty microphone priority list keeps System Default fallback enabled until an input is added.
+
+Synthetic recognition checks cover clean/noisy speech and a repeated 19-minute clip; see [measurements and their limits](benchmarks/2026-10-18-daily-use.md). Those checks do not establish physical microphone, sleep, Bluetooth or end-to-end delivery acceptance.
 
 ## Shortcuts and Settings
 
@@ -41,7 +49,7 @@ Imports do not apply cleanup, saved spellings or phrases, paste automatically, o
 
 ## Updates
 
-Alpha.1 through alpha.3 do not contain an updater. Download the current Mac alpha once from the website and replace the old app to get it.
+Alpha.1 through alpha.3 do not contain an updater. Download the current Mac prerelease once from the website and replace the old app to get it.
 
 Use **Check for Updates…** in Mouthtype’s menu to check manually. Sparkle asks whether to enable automatic update checks; you can change that choice in General. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
 

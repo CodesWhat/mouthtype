@@ -1,6 +1,6 @@
-# Alpha releases
+# Mac prereleases
 
-Release metadata lives in packaging/Version.plist. The display version includes the prerelease label; Apple’s marketing version and positive integer build number remain numeric. Increment the build number for each distributed build.
+Release metadata lives in packaging/Version.plist. The display version includes the prerelease label; Apple’s marketing version and positive integer build number remain numeric. Increment the build number for each distributed build. Update packaging/ReleaseNotes.txt, README.md, SECURITY.md, docs/ALPHA.md, affected usage guides, website build labels and redirects, and their existing browser checks together. SECURITY.md must name the supported prerelease and retire the previous line. Keep publication on hold until the app, source, feed and website all select that exact version/build.
 
 Follow the CodesWhat dev-branch, reviewed-PR and main-sync procedure. Keep deferred work out of the candidate, preserve dirty checkouts, and tag only the reviewed main revision. Sign the annotated `v<display version>` tag with the existing GitHub-recognized release signing key and push it. The release helper refuses a dirty source tree or a HEAD that does not match that tag.
 
