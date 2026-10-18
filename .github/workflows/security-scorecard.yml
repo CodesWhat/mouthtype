@@ -1,0 +1,46 @@
+name: Private security posture
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '54 7 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: private-scorecard
+  cancel-in-progress: true
+
+jobs:
+  scorecard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      actions: read
+      checks: read
+      issues: read
+      pull-requests: read
+    steps:
+      - name: Install verified Scorecard CLI
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/scorecard"
+          cd "$RUNNER_TEMP/scorecard"
+          curl --fail --silent --show-error --location --retry 3 --max-time 120 -o scorecard.tar.gz https://github.com/ossf/scorecard/releases/download/v5.6.0/scorecard_5.6.0_linux_amd64.tar.gz
+          echo '19bde07129450cb65a95c6e3b9f34e034341579e6f0e241546ec3ae6efb2dd9a  scorecard.tar.gz' | sha256sum --check --strict
+          tar -xzf scorecard.tar.gz scorecard
+      - name: Assess default branch without publishing results
+        env:
+          GITHUB_AUTH_TOKEN: ${{ github.token }}
+          SCORECARD_REPOSITORY: github.com/${{ github.repository }}
+        run: '"$RUNNER_TEMP/scorecard/scorecard" --repo="$SCORECARD_REPOSITORY" --format=json --show-details > "$RUNNER_TEMP/scorecard/results.json"'
+      - name: Retain private report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: private-security-posture
+          path: ${{ runner.temp }}/scorecard/results.json
+          retention-days: 7
+          if-no-files-found: error

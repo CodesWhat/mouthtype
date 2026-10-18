@@ -1,73 +1,76 @@
+<div align="center">
+
+<img src="website/public/assets/mouthtype-icon.png" alt="Mouthtype app icon" width="112">
+
 # Mouthtype
 
-Local dictation for Apple Silicon Macs running macOS 26 or later.
+**Local dictation for your Mac. Hold Fn, speak, release to paste.**
 
-Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or press Fn+Space for hands-free dictation; tap Fn to stop. Esc cancels, with a five-second Undo window.
+[Download the Mac alpha](https://mouthtype.app/download) · [Getting started](https://mouthtype.app/start/) · [Documentation](https://mouthtype.app/docs/) · [Security](SECURITY.md)
 
-## Mac alpha
+</div>
 
-The alpha is `0.1.0-alpha.8` for Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](docs/ALPHA.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
+Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-For a larger Winamp-style pill, choose **Settings → Appearance → Hi-Fi size → Large (2×)**. The size is saved. Changes during recording take effect the next time the pill appears.
+The Mac app is in alpha. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
 
-## Run from source
+## Install
 
-Install Xcode with Swift 6.2, then run `bash scripts/run-app.sh`. The script builds and opens a signed app bundle. A Developer ID identity keeps permission grants stable between builds; without one, builds use ad-hoc signing.
+1. Download the signed, notarized ZIP from [mouthtype.app/download](https://mouthtype.app/download).
+2. Extract Mouthtype, move it to Applications and open it.
+3. Grant Microphone and Accessibility access when prompted. The speech model and a small speech detector download on first launch.
+4. Click an ordinary text field, hold **Fn**, speak, then release.
 
-The alpha includes a native **Settings…** window for General, Writing and Appearance, including per-app tone rules. See [settings](docs/SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and wait for dictation, recovery and file transcription to finish.
+Existing alpha.1–3 installations need one manual download to get the built-in updater. Later alphas offer **Check for Updates…** and optional automatic checking. See the [install and upgrade notes](docs/ALPHA.md) before replacing an existing app.
 
-**Settings → General → Recording behavior** offers **Hold to talk** (the default) or **Press to toggle**. Toggle starts recording with one press and stops with the next; releasing the shortcut keeps recording. This preserves your chosen key or combination. Escape cancels, except when Escape itself is your dictation key; use the pill or menu to cancel then.
+## What it does
 
-Allow Microphone and Accessibility access when macOS asks. Settings → Diagnostics has permission repair links; the menu also has **How to Use Mouthtype**. Fn remapping is enabled by default while Mouthtype runs; it hides the emoji picker and preserves Fn navigation combinations.
+| Feature | Behavior |
+| --- | --- |
+| Hold or hands-free dictation | Hold Fn, double-tap Fn, or use Fn+Space. Recording behavior and shortcuts are configurable. |
+| Local cleanup | Basic formatting works without a cleanup model. Fast and Thorough use optional local models and preserve wording. |
+| Writing rules | Choose Formal, Casual or Very casual, with per-app and website tone rules. |
+| Saved spellings and phrases | Keep exact local spelling rules and reusable text, including multiline phrases. |
+| Microphone selection | Follow System Default, choose a named input, or opt into an ordered priority list. |
+| Recovery | Copy or retry saved text after a failed paste. Interrupted audio remains recoverable. |
+| File transcription | Import one WAV, AIFF or M4A, up to 10 minutes and 512 MB, then explicitly copy or save the result. |
 
-The speech model and a small speech detector download on first launch. The detector keeps empty recordings from becoming invented words. Download and loading status are in Settings → Diagnostics; an attention item in the menu opens it when preparation fails. Transcription runs locally. Parakeet v3 decoding uses an English language hint to prevent accidental Cyrillic output; Whisper also requests English. Smart cleanup is a separate optional model download, with basic cleanup available without it.
+<p align="center">
+  <img src="website/public/assets/classic-recording.png" alt="Mouthtype's Classic recording pill showing an active take" width="400">
+</p>
 
-Fast cleanup uses S1-mini by Superwhisper locally, a roughly 1.4 GB download. Thorough uses Gemma 4 E4B, a roughly 5.2 GB download. Both handle fillers, corrections and spoken technical notation while preserving wording. Neither mode authorizes paraphrasing or a more formal voice. Cleanup can read up to 300 UTF-16 units before the cursor and 40 after it when available, excluding secure fields. This supports boundary formatting and limited spelling hints; it does not read previous chat messages as conversation history. Fast cleanup receives the current take, and Thorough receives extracted spelling hints. Invalid output or a missed deadline delivers the basic cleanup instead. Known project spellings can be joined in clear software contexts, while ordinary phrases such as a boat in dry dock are preserved. In model-backed cleanup, dictionary entries that only join words are context hints; Basic retains literal dictionary replacements. Ambiguous names still have gaps, especially with Fast cleanup. Neither model is downloaded until requested. Switching models loads the selected cached model and unloads the inactive one after pending work finishes.
+See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current alpha caveats. **Quiet other audio** and **Live words** are optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Mouthtype never sends Return as part of dictation delivery.
 
-Open **Settings → Saved spellings** to add, edit or delete exact spelling rules. “Heard as” is the word or phrase Mouthtype gets wrong; “Write as” is the spelling you want. Rules match whole words and phrases regardless of capitalization, so use a specific phrase for ambiguous common words. An exact “geoff → Jeff” rule leaves “Geoffrey” alone through model cleanup too. The editor uses the existing local dictionary and learned corrections. It rejects blank or duplicate rules, preserves other entries, and keeps your draft if the file changes outside the editor. **Edit Dictionary…** still opens the file for manual repair. Cleanup Off leaves words unchanged.
+## Privacy and permissions
 
-Open **Settings → Phrases** to save a spoken phrase and the exact text to insert. For example, set “my work email” to your email address, then say it alone or inside a sentence. Matching ignores capitalization, uses whole phrases, and picks the longest match. The library starts empty and is stored locally in `~/Library/Application Support/Mouthtype/phrases.json`. Add, edit, or delete phrases in the editor; save or cancel a draft before changing selection. Duplicate triggers are rejected. A malformed file keeps the last good library in use and must be repaired before editing.
+Audio, transcripts, settings, spellings and phrases stay on this Mac. The default data directory is `~/Library/Application Support/Mouthtype/`. Text history is retained indefinitely. Completed audio defaults to 90 days and 2 GB; unfinished and recovery audio are protected from normal retention cleanup. The local database and recordings aren't encrypted by Mouthtype, so protect the Mac and its backups accordingly.
 
-Replacements expand after cleanup, so their spelling, capitalization, spaces, and line breaks survive Basic, Fast, Thorough, and every tone. A model that changes the spoken triggers falls back to Basic text. `{date}` inserts the current long date in your locale; `{clipboard}` inserts the clipboard text captured for that dictation, or nothing if no text is available. Inserted text is never expanded again. Punctuation outside the spoken trigger stays outside the replacement. Cleanup Off also turns phrase expansion off.
+Microphone access records a take. Accessibility access handles the global shortcut, examines the destination and inserts text. Cleanup can read a small amount of nearby text for formatting and spelling hints, excluding secure fields. Phrase rules can explicitly insert the clipboard's text. These are powerful permissions; grant them only to a build you trust.
 
-For a terminal that loses text from large pastes, open **Settings → General → Advanced delivery** and enable split long pastes for that app. This is off by default and saved separately for Terminal, iTerm2, Ghostty, kitty and WezTerm. It applies to all windows of the selected terminal app, including CLI editors such as Claude Code and Codex CLI; it does not detect the program running inside a terminal.
+Model downloads and optional update checks use the network. Dictation and cleanup run locally. The [security policy](SECURITY.md) and [security controls and limits](docs/SECURITY.md) describe reporting, distribution integrity and the boundaries of those claims.
 
-Split pastes preserve the text exactly and never send Return. Each part waits for a clipboard read and a settling delay before the next part. Typing, focus changes, a new clipboard copy, cancellation, an unread part, or the eight-second overall limit stop the paste. A read permits advancing the clipboard; it does not prove insertion. The original clipboard is restored unless you copied something else. An interrupted paste offers the full transcript with Copy and warns that some text may already be there. Check the field before pasting the full copy, to avoid duplicates. Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanup styles are available under **Settings → Writing**. Rules start empty and preserve the global fallback.
+## Documentation
 
+- [Install, update and remove](docs/ALPHA.md)
+- [Settings, tone rules and input selection](docs/SETTINGS.md)
+- [Usage and cleanup reference](docs/USAGE.md)
+- [Saved audio and retention](docs/AUDIO-RETENTION.md)
+- [File transcription](docs/FILE-TRANSCRIPTION.md)
+- [Website development](website/README.md)
+- [Release procedure](docs/RELEASING.md)
 
+## Build and contribute
 
-## Choose cleanup strength and writing style
+Install Xcode with Swift 6.2 on a supported Mac. Run `bash scripts/run-app.sh` to build and open a signed app bundle. Without a Developer ID identity, the script uses ad-hoc signing; permission grants and distribution guarantees differ from the released app.
 
-Open **Settings → General → Cleanup** to choose the cleanup path: Off keeps the recognized text, Basic applies local formatting rules, Fast adds S1-mini and Thorough uses Gemma. Both model modes preserve wording; they differ in speed and model capability, independently of Tone. Existing saved Light settings become Fast, and Medium becomes Thorough; Off, Basic and tone settings stay as saved.
+Run `swift test` for core, macOS integration logic and Fn guardian tests. Desktop self-tests take focus and require a free desktop. Tests don't replace physical microphone or third-party app acceptance.
 
-**Tone** is a separate writing-style choice. **Formal** keeps sentence capitalization and punctuation. **Casual** keeps sentence capitalization and drops the final full stop. **Very Casual** also relaxes sentence capitalization while protecting names and technical spellings. Questions still keep their question marks. These presets don't add enthusiasm or rewrite your personality.
-
-## Microphone, live words and files
-
-**Settings → General → Microphone** follows System Default or remembers a named input for Mouthtype. A missing chosen microphone is reported instead of silently using another input. The choice applies to the next take and does not change the Mac’s system input.
-
-**Quiet other audio** and **Live words** are optional and off by default. Quieting mutes supported output while recording and restores the state Mouthtype still owns. Live words shows provisional text above the pill. Preview text can change; the completed take is still transcribed and inserted once. See [Settings](docs/SETTINGS.md) for hardware and execution limits.
-
-Choose **Transcribe Audio File…** from the menu to import one WAV, AIFF or M4A up to 10 minutes and 512 MB. The full raw result is selectable, with explicit Copy and Save Text. It preserves the original and does not paste, run cleanup or change dictation statistics. See [file transcription](docs/FILE-TRANSCRIPTION.md).
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks, dependency maintenance and the reviewed development-branch workflow. Bug reports from repository collaborators belong in private issues. Include the app version, macOS version, destination app and reproduction steps; omit personal transcripts and recordings. Report vulnerabilities through [SECURITY.md](SECURITY.md).
 
 ## Experimental Linux source
 
-The source includes a daemon/CLI targeting Linux x86_64, Arch/Omarchy, Hyprland and PipeWire. Its explicit speech-preparation helper verifies pinned model files and creates a dedicated runtime environment. It defaults to recovery-only delivery, with no clipboard or key changes. There is no Linux GUI or supported desktop release; physical Arch/Omarchy acceptance remains open. Follow [the Linux setup and testing guide](tools/linux-desktop/README.md). The client supports optional saved spellings, phrase replacements and deterministic basic cleanup. Cleanup defaults off and preserves raw results for recovery. Automatic typing refuses multiline/control-bearing results rather than sending Return or Tab. There is a local Arch test-package builder, with no supported desktop release; Mac AI cleanup and file import are not Linux parity promises.
+Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI and setup diagnostics, with recovery-only delivery by default. **There is no supported Linux desktop release.** Physical acceptance remains open, and Mac features aren't Linux parity promises. Follow the [Linux setup and testing guide](tools/linux-desktop/README.md).
 
-## Recovery and sound
+## License
 
-If a paste fails or there's nowhere to paste, the result stays available to copy. **Paste Last** and **Copy Last** restore the latest saved transcript after restart. The menu also lists recent transcripts.
-
-A recording interrupted by a crash can be recovered on the next launch. **Saved Recordings** makes older interrupted or failed recordings available to recover without pasting into the wrong app. Failed recovery keeps a Recover action so it can be retried. Recovery pauses new recordings until it finishes.
-
-Click is the default sound set: a bright key-down thunk to start, a duller key-up thunk to stop, and matching lock and error cues. **Settings → General → Recording sounds** turns cues on or off. Other sound sets and a picker are deferred.
-
-## Data
-
-History, settings, dictionary and audio stay on this Mac. The default store is `~/Library/Application Support/Mouthtype/mouthtype.sqlite`; recordings are in its sibling `audio` directory. Text history is retained indefinitely. **Settings → General → Saved audio** offers 14, 30 or 90 days, or No age limit, and a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. The next launch prunes only completed Mouthtype recordings; unfinished and recovery audio are protected, and text and timings stay. See [saved audio](docs/AUDIO-RETENTION.md). Model downloads require network access.
-
-Run `swift test` to check the core, macOS integration logic and Fn guardian. The bundled app also has isolated paste and recovery self-tests, which take desktop focus and should be run only when the desktop is free. Those tests restrict keyboard events to their own process and refuse delivery when another app has focus. Live microphone quality and behavior in individual third-party apps still need their own checks.
-
-## Website
-
-The Vercel-ready product site lives in [website/](website/README.md), with its own static build and browser checks. It builds independently of the native app.
+Mouthtype is licensed under [GPL-3.0](LICENSE). [Corresponding release source](https://mouthtype.app/source) is available separately from the app download. Dependencies, fonts, adapted code and downloaded models have their own terms, recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
