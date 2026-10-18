@@ -49,6 +49,9 @@ enum CardLayout {
         /// Intrinsic label width of each button, in order.
         var buttonLabelWidths: [CGFloat]
         var hasCountdownBar: Bool
+        /// The tallest the whole face may be, for a card folded into a pill on a short screen. The transcript gives up
+        /// lines (and scrolls) to fit, down to one; nil is no limit.
+        var maxHeight: CGFloat?
     }
 
     struct Frames: Equatable {
@@ -93,7 +96,12 @@ enum CardLayout {
         var transcript: CGRect?
         var scrolls = false
         if let textHeight = input.transcriptTextHeight {
-            let cap = CGFloat(maxTranscriptLines) * input.transcriptLineHeight
+            var cap = CGFloat(maxTranscriptLines) * input.transcriptLineHeight
+            if let maxHeight = input.maxHeight {
+                let below = (input.buttonLabelWidths.isEmpty ? 0 : transcriptBottom * k + buttonHeight * k) + insets.bottom * k
+                let room = maxHeight - (y + transcriptTop * k) - below
+                cap = min(cap, max(input.transcriptLineHeight, floor(room)))
+            }
             scrolls = textHeight > cap + 0.5
             y += transcriptTop * k
             transcript = CGRect(x: left, y: y, width: contentWidth(scale: k), height: ceil(scrolls ? cap : textHeight))

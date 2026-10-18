@@ -156,7 +156,10 @@ final class DeliveryCardView: NSView {
 
     private var state: CardViewState?
     private var typography = Typography.current()
-    private var countdownStart: CFTimeInterval?
+    /// When the Undo clock started, shared with the card's other view so a skin change doesn't restart it.
+    private(set) var countdownStart: CFTimeInterval?
+    /// The tallest the face may be; a longer transcript scrolls to fit. Set for a card folded into a pill on a short screen.
+    var maxFaceHeight: CGFloat?
     private var backdrop: GlassPillPolicy.Backdrop?
     private(set) var frames: CardLayout.Frames?
     private(set) var style = CardStyle.classic
@@ -169,6 +172,8 @@ final class DeliveryCardView: NSView {
     /// True while the system glass material is the card's body.
     var showsMaterial: Bool { !glass.isHidden }
     var showsDot: Bool { !dot.isHidden }
+    /// The drop shadow layers' paths, for tests.
+    var shadowPaths: [CGPath?] { [ambient.shadowPath, contact.shadowPath] }
 
     private var k: CGFloat { pillScale.factor }
     private var isDark: Bool { effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua }
@@ -289,11 +294,11 @@ final class DeliveryCardView: NSView {
 
     /// Fills the card for `state` and returns the whole size the view needs: shadow margin included, unless embedded.
     @discardableResult
-    func render(_ new: CardViewState, typography: Typography) -> CGSize {
+    func render(_ new: CardViewState, typography: Typography, countdownStart sharedStart: CFTimeInterval? = nil) -> CGSize {
         let isNewCard = state?.card != new.card
         state = new
         self.typography = typography
-        if isNewCard { countdownStart = new.card.countdown == nil ? nil : CACurrentMediaTime() }
+        if isNewCard { countdownStart = new.card.countdown == nil ? nil : (sharedStart ?? CACurrentMediaTime()) }
         let card = new.card
         let k = self.k
 
@@ -336,7 +341,7 @@ final class DeliveryCardView: NSView {
             headerTextHeight: headerHeight, headerLineHeight: Typography.lineHeight(headerFont),
             transcriptTextHeight: transcriptHeight, transcriptLineHeight: lineHeight,
             buttonLabelWidths: card.actions.map { action in (labels[action] ?? []).map { $0.size().width }.max() ?? 0 },
-            hasCountdownBar: card.countdown != nil && !embedded
+            hasCountdownBar: card.countdown != nil && !embedded, maxHeight: embedded ? maxFaceHeight : nil
         ), scale: k, showsDot: palette.showsDot)
         frames = layout
 
@@ -355,6 +360,8 @@ final class DeliveryCardView: NSView {
                 shadow.shadowRadius = blur
                 shadow.shadowOffset = CGSize(width: 0, height: -drop)
                 shadow.backgroundColor = material ? NSColor.clear.cgColor : palette.shadowFill.cgColor
+                // An explicit path, so the glass card (clear background) still casts its shadow.
+                shadow.shadowPath = CGPath(roundedRect: CGRect(origin: .zero, size: face.size), cornerWidth: radius, cornerHeight: radius, transform: nil)
             }
             if material {
                 // Keep the shadow outside the card, so it doesn't darken the glass from behind.

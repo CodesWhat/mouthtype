@@ -33,6 +33,8 @@ final class DeliveryCardController: CardSurface {
         var visible: CGRect
         var style: CardStyle = .classic
         var scale: PillScale = .standard
+        /// The tallest a card folded into the pill may be and still fit above it on the screen; nil is no limit.
+        var maxFaceHeight: CGFloat?
         weak var merger: (any CardMerging)?
     }
 
@@ -61,6 +63,8 @@ final class DeliveryCardController: CardSurface {
     private var generation = 0
     private var ticker: Task<Void, Never>?
     private var current: CardViewState?
+    /// The card whose Undo clock is running and when it began, so both views show the same clock.
+    private var countdown: (card: DeliveryCard, start: CFTimeInterval)?
 
     init() {
         view = DeliveryCardView(frame: NSRect(x: 0, y: 0, width: 300, height: 200))
@@ -95,19 +99,43 @@ final class DeliveryCardController: CardSurface {
             hide()
             return
         }
-        let anchor = anchor()
-        let style = anchor?.style ?? .classic
-        let scale = anchor?.scale ?? .standard
-        if style.mergesIntoPill, let merger = anchor?.merger, renderMerged(state, style: style, scale: scale, merger: merger) {
+        let first = anchor()
+        let firstStyle = first?.style ?? .classic
+        let firstScale = first?.scale ?? .standard
+        if firstStyle.mergesIntoPill, let merger = first?.merger,
+           renderMerged(state, style: firstStyle, scale: firstScale, maxFaceHeight: first?.maxFaceHeight, merger: merger) {
             return
         }
-        renderPanel(state, anchor: anchor, style: style, scale: scale)
+        guard firstStyle.mergesIntoPill else {
+            renderPanel(state, anchor: first, style: firstStyle, scale: firstScale)
+            return
+        }
+        // The pill had no card form after all. Draw on the skin actually installed now, which has a body of its own,
+        // or on Classic's.
+        let now = anchor()
+        let style = now.map { $0.style.mergesIntoPill ? CardStyle.classic : $0.style } ?? .classic
+        renderPanel(state, anchor: now, style: style, scale: now?.scale ?? firstScale)
+    }
+
+    /// The start of `card`'s countdown: when it first rendered, whichever view drew it.
+    private func countdownStart(for card: DeliveryCard) -> CFTimeInterval? {
+        guard card.countdown != nil else {
+            countdown = nil
+            return nil
+        }
+        if let countdown, countdown.card == card { return countdown.start }
+        let start = CACurrentMediaTime()
+        countdown = (card, start)
+        return start
     }
 
     /// The card goes into the pill. False when the pill has no card form after all.
-    private func renderMerged(_ state: CardViewState, style: CardStyle, scale: PillScale, merger: any CardMerging) -> Bool {
+    private func renderMerged(
+        _ state: CardViewState, style: CardStyle, scale: PillScale, maxFaceHeight: CGFloat?, merger: any CardMerging
+    ) -> Bool {
         mergedView.configure(style: style, scale: scale, embedded: true)
-        mergedView.render(state, typography: Typography.current())
+        mergedView.maxFaceHeight = maxFaceHeight
+        mergedView.render(state, typography: Typography.current(), countdownStart: countdownStart(for: state.card))
         guard let readout = mergedView.readout, merger.growCard(view: mergedView, face: mergedView.faceSize, readout: readout) else {
             return false
         }
@@ -139,7 +167,7 @@ final class DeliveryCardController: CardSurface {
         let isNew = current?.card != state.card || !shown
         current = state
         view.configure(style: style, scale: scale, embedded: false)
-        let size = view.render(state, typography: Typography.current())
+        let size = view.render(state, typography: Typography.current(), countdownStart: countdownStart(for: state.card))
         if let anchor {
             panel.setFrame(
                 CardLayout.panelFrame(
@@ -166,6 +194,7 @@ final class DeliveryCardController: CardSurface {
         let mine = generation
         shown = false
         current = nil
+        countdown = nil
         ticker?.cancel()
         ticker = nil
         if isMerged {

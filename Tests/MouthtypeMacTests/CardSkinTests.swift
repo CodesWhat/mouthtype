@@ -16,11 +16,12 @@ private final class CardRig {
     let cards = DeliveryCardController()
     let presenter: DeliveryCardPresenter
     let clock = FakeClock(start: 0)
+    let defaults: UserDefaults
 
     init(skin: String, size: String = "standard") {
         _ = NSApplication.shared
         FontRegistry.registerBundledFonts()
-        let defaults = UserDefaults(suiteName: "card-skin-test-\(UUID().uuidString)")!
+        defaults = UserDefaults(suiteName: "card-skin-test-\(UUID().uuidString)")!
         defaults.set(skin, forKey: "pillSkin")
         defaults.set(size, forKey: "pillSize")
         pill = PillController(level: { .silence }, defaults: defaults)
@@ -452,6 +453,212 @@ private final class CardRig {
         rig.cards.anchor = { .init(midX: 500, top: 100, visible: CGRect(x: 0, y: 0, width: 1000, height: 800)) }
         rig.presenter.present(.pasteFailed("y"))
         #expect(!rig.cards.isMerged && !rig.pill.isGrown && rig.cards.panel.isVisible)
+        rig.finish()
+    }
+}
+
+/// A merger whose pill never takes a card, standing in for a skin that was swapped under the card.
+@MainActor
+private final class RefusingMerger: CardMerging {
+    func growCard(view: DeliveryCardView, face: CGSize, readout: CardReadout) -> Bool { false }
+    func updateCardReadout(_ readout: CardReadout) {}
+    func shrinkCard() {}
+}
+
+@MainActor
+@Suite struct CardReviewFixTests {
+    private let longText = Array(repeating: "the quarterly numbers are due Friday", count: 30).joined(separator: " ")
+
+    // MARK: Centred readout
+
+    @Test(arguments: ["matrix", "minimal"], ["standard", "large"])
+    func theReadoutGroupSitsInTheMiddleOfTheGrownRow(skin: String, size: String) throws {
+        let k: CGFloat = size == "large" ? 2 : 1
+        for card in [DeliveryCard.pasteFailed("Send the notes."), .cancelled()] {
+            let rig = CardRig(skin: skin, size: size)
+            rig.presenter.present(card)
+            let squircle = try #require(rig.squircle)
+            let grown = try #require(squircle.grownFrame)
+            let group = try #require(squircle.readoutGroupExtent)
+            // The same room on each side, to the pixel the capsule snaps to.
+            #expect(abs(group.minX - (grown.width - group.maxX)) <= 1.5 * k)
+            #expect(group.minX > 12 * k)
+            // The label really moved with it.
+            #expect(abs(squircle.readoutLabelMinX - (group.minX + 62 * k)) <= 0.5)
+            rig.finish()
+        }
+    }
+
+    @Test func aRecordingUnderTheCardKeepsThePillsOwnSlots() throws {
+        let rig = CardRig(skin: "matrix")
+        rig.presenter.present(.pasteFailed("x"))
+        rig.pill.showRecording()
+        #expect(rig.squircle?.readoutGroupExtent == nil)
+        rig.finish()
+    }
+
+    // MARK: F1
+
+    @Test func aSkinSwitchedMidDictationGivesTheNextCardItsBodyBack() throws {
+        let rig = CardRig(skin: "matrix")
+        rig.pill.showRecording()
+        rig.pill.setSkin(.classic)
+        #expect(rig.pill.skinKind == .matrix)
+        rig.pill.hide()
+        rig.presenter.present(.pasteFailed("Send the notes."))
+        #expect(rig.pill.skinKind == .classic && !rig.cards.isMerged && !rig.pill.isGrown)
+        #expect(rig.cards.panel.isVisible && rig.cards.view.style == .classic)
+        #expect(rig.cards.view.palette.bodyFill != nil && rig.cards.view.palette.border != nil)
+        rig.finish()
+    }
+
+    @Test func aPillThatRefusesTheCardFallsBackToAPaletteWithABody() throws {
+        let rig = CardRig(skin: "matrix")
+        let visible = CGRect(x: 0, y: 0, width: 1000, height: 800)
+        let merger = RefusingMerger()
+        rig.cards.anchor = { .init(midX: 500, top: 100, visible: visible, style: .matrix, scale: .standard, merger: merger) }
+        rig.presenter.present(.pasteFailed("x"))
+        #expect(!rig.cards.isMerged && rig.cards.panel.isVisible)
+        #expect(rig.cards.view.style == .classic && rig.cards.view.palette.bodyFill != nil)
+        rig.finish()
+    }
+
+    // MARK: F2
+
+    @Test func aGrownHiddenPillKeepsItsScaleWhateverTheSettingResolvesTo() throws {
+        let rig = CardRig(skin: "matrix", size: "standard")
+        rig.presenter.present(.cancelled())
+        #expect(rig.pill.isGrown && rig.pill.state == .hidden)
+        rig.defaults.set("large", forKey: "pillSize")
+        let anchor = try #require(rig.pill.cardAnchor())
+        #expect(anchor.scale == .standard && rig.cards.mergedView.pillScale == .standard)
+        rig.presenter.dismiss()
+        // Once it is down the new setting is picked up, for the card and the pill together.
+        #expect(rig.pill.cardAnchor()?.scale == .large)
+        rig.finish()
+    }
+
+    // MARK: F3
+
+    @Test func theCardContentFadesInOnTheBodysOwnTiming() {
+        #expect(PillController.cardFadeDuration(appearing: true, reduceMotion: false) == 0.26)
+        #expect(PillController.cardFadeDuration(appearing: true, reduceMotion: true) == 0.15)
+        #expect(PillController.cardFadeDuration(appearing: true, reduceMotion: false) == SquirclePillView.appearDuration(reduceMotion: false))
+        #expect(PillController.cardFadeDuration(appearing: false, reduceMotion: false) == 0.12)
+    }
+
+    @Test func aCardRightAfterHideTurnsTheFadeRoundInsteadOfSnappingToNothing() throws {
+        let rig = CardRig(skin: "matrix")
+        rig.pill.showRecording()
+        rig.pill.hide()
+        #expect(rig.pill.state == .hidden && rig.pill.panel.isVisible)
+        rig.presenter.present(.pasteFailed("Send the notes."))
+        let squircle = try #require(rig.squircle)
+        #expect(squircle.appearStartOpacity > 0.5)
+        #expect(rig.pill.isGrown && rig.pill.panel.isVisible)
+        rig.finish()
+    }
+
+    @Test func aCardOnAPillThatWasFullyDownStartsFromNothing() throws {
+        let rig = CardRig(skin: "minimal")
+        rig.presenter.present(.pasteFailed("Send the notes."))
+        #expect(rig.squircle?.appearStartOpacity == 0)
+        rig.finish()
+    }
+
+    @Test func theFadeOutCurveRunsFromTheStartingOpacityDownToNothing() {
+        #expect(SquirclePillView.fadeOutOpacity(from: 1, elapsed: 0, duration: 0.16) == 1)
+        let middle = SquirclePillView.fadeOutOpacity(from: 1, elapsed: 0.08, duration: 0.16)
+        #expect(middle > 0.5 && middle < 1)
+        #expect(SquirclePillView.fadeOutOpacity(from: 1, elapsed: 0.16, duration: 0.16) < 0.001)
+        #expect(SquirclePillView.fadeOutOpacity(from: 0.5, elapsed: 0, duration: 0.16) == 0.5)
+    }
+
+    // MARK: F4
+
+    @Test func theGlassCardKeepsADropShadowWithItsClearBackground() throws {
+        _ = NSApplication.shared
+        FontRegistry.registerBundledFonts()
+        let env = GlassPillEnvironment(
+            materialAvailable: { true }, reduceTransparency: { false }, backdrop: { _ in .init(luminance: 0.1, spread: 0.02) }
+        )
+        let view = DeliveryCardView(frame: .zero, environment: env)
+        view.configure(style: .glass, scale: .standard, embedded: false)
+        view.render(CardViewState(card: .pasteFailed("Send the notes.")), typography: Typography(choice: .systema))
+        view.refreshBackdrop()
+        #expect(view.showsMaterial)
+        for path in view.shadowPaths {
+            let bounds = try #require(path).boundingBoxOfPath
+            #expect(bounds.size == view.faceSize)
+        }
+    }
+
+    // MARK: F5
+
+    @Test func aLightMinimalCardHasItsOwnLighterBodyAndThePillKeepsItsOwn() {
+        _ = NSApplication.shared
+        let card = MinimalPillView(frame: NSRect(x: 0, y: 0, width: 300, height: 300))
+        card.appearance = NSAppearance(named: .aqua)
+        #expect(card.bodyColours == [NSColor(hex: 0xFBFBFC), NSColor(hex: 0xE6E6EA)])
+        card.growCard(width: 224, height: 120, readout: CardReadout(label: "SAFE", isClock: false, tone: .alert, progress: nil), showReadout: true)
+        #expect(card.bodyColours == [NSColor(hex: 0xFBFBFC), NSColor(hex: 0xF0F0F3)])
+        card.shrinkCard()
+        #expect(card.bodyColours == [NSColor(hex: 0xFBFBFC), NSColor(hex: 0xE6E6EA)])
+        card.appearance = NSAppearance(named: .darkAqua)
+        card.growCard(width: 224, height: 120, readout: CardReadout(label: "SAFE", isClock: false, tone: .alert, progress: nil), showReadout: true)
+        #expect(card.bodyColours == [SquirclePalette.darkBody.top, SquirclePalette.darkBody.bottom])
+    }
+
+    // MARK: F6
+
+    @Test func aGrownPanelStaysOnAShortScreenAndTheTranscriptScrollsToFit() throws {
+        let rig = CardRig(skin: "matrix")
+        let visible = CGRect(x: 0, y: 0, width: 1000, height: 200)
+        rig.pill.screensSource = { [.init(frame: CGRect(x: 0, y: 0, width: 1000, height: 220), visibleFrame: visible)] }
+        rig.pill.pointerSource = { CGPoint(x: 500, y: 100) }
+        rig.presenter.present(.pasteFailed(longText))
+        let squircle = try #require(rig.squircle)
+        let anchor = try #require(rig.pill.cardAnchor())
+        let maxFace = try #require(anchor.maxFaceHeight)
+        let face = rig.cards.mergedView.faceSize
+        #expect(face.height <= maxFace && rig.cards.mergedView.frames?.transcriptScrolls == true)
+        let panel = rig.pill.panel.frame
+        #expect(panel.maxY <= visible.maxY && panel.minX >= visible.minX && panel.maxX <= visible.maxX)
+        let grown = try #require(squircle.grownFrame)
+        #expect(grown.maxY <= rig.pill.host.bounds.maxY && grown.minY >= 0)
+        rig.finish()
+    }
+
+    @Test func theGrownFrameKeepsItsBottomAndMiddleAndNeverClipsTheCapsule() {
+        let visible = CGRect(x: 0, y: 0, width: 1000, height: 300)
+        let old = CGRect(x: 100, y: -8, width: 256, height: 100)
+        let plain = CGSize(width: 256, height: 100)
+        let roomy = PillController.grownFrame(old: old, face: CGSize(width: 224, height: 100), plainSize: plain, scale: 1, visible: visible)
+        #expect(roomy.minY == old.minY && roomy.midX == old.midX && roomy.maxY <= visible.maxY)
+        // Too tall for the room above the pill: the panel stops at the screen top.
+        let tall = PillController.grownFrame(old: old, face: CGSize(width: 224, height: 200), plainSize: plain, scale: 1, visible: visible)
+        #expect(tall.minY == old.minY && tall.maxY <= visible.maxY && tall.height >= 20 + 200 + 30 + 16)
+        // A face that can never fit moves the panel down rather than clipping the capsule.
+        let huge = PillController.grownFrame(old: old, face: CGSize(width: 224, height: 270), plainSize: plain, scale: 1, visible: visible)
+        #expect(huge.height >= 20 + 270 + 30 + 16)
+        // Off the side of a narrow screen.
+        let side = PillController.grownFrame(
+            old: CGRect(x: -100, y: -8, width: 256, height: 100), face: CGSize(width: 224, height: 100), plainSize: plain, scale: 1, visible: visible
+        )
+        #expect(side.minX >= visible.minX)
+    }
+
+    // MARK: F7
+
+    @Test func theUndoClockSurvivesASkinChangeMidCard() throws {
+        let rig = CardRig(skin: "matrix")
+        rig.presenter.present(.cancelled())
+        let merged = try #require(rig.cards.mergedView.countdownStart)
+        // Matrix to Classic while the card is up: the card moves to its own panel.
+        rig.cards.anchor = { .init(midX: 500, top: 100, visible: CGRect(x: 0, y: 0, width: 1000, height: 800)) }
+        rig.cards.render(rig.presenter.state)
+        #expect(!rig.cards.isMerged)
+        #expect(rig.cards.view.countdownStart == merged)
         rig.finish()
     }
 }

@@ -41,6 +41,12 @@ public final class PillController {
     /// A click on the cancel or stop control of a locked pill.
     var onControl: (@MainActor (PillControl) -> Void)?
 
+    /// The screens and the pointer the pill is placed by. Tests replace them.
+    var screensSource: @MainActor () -> [PillPlacement.Screen] = {
+        NSScreen.screens.map { PillPlacement.Screen(frame: $0.frame, visibleFrame: $0.visibleFrame) }
+    }
+    var pointerSource: @MainActor () -> CGPoint = { NSEvent.mouseLocation }
+
     private let defaults: UserDefaults
     private var pillSize: PillSize
     private var readout: PillReadoutColour
@@ -330,9 +336,9 @@ public final class PillController {
     }
 
     private func place() {
-        let screens = NSScreen.screens.map { PillPlacement.Screen(frame: $0.frame, visibleFrame: $0.visibleFrame) }
+        let screens = screensSource()
         guard let origin = PillPlacement.origin(
-            pointer: NSEvent.mouseLocation, screens: screens, panelSize: panelSize, pillPadding: Self.pillPadding
+            pointer: pointerSource(), screens: screens, panelSize: panelSize, pillPadding: Self.pillPadding
         ) else { return }
         panel.setFrame(
             NSRect(origin: CGPoint(x: origin.x.rounded(.down), y: origin.y.rounded(.down)), size: panelSize), display: false
@@ -341,20 +347,25 @@ public final class PillController {
 
     /// Where the pill sits, or would if it showed now, for the card that goes above it.
     func cardAnchor() -> DeliveryCardController.Anchor? {
-        let pointer = NSEvent.mouseLocation
-        let placements = NSScreen.screens.map { PillPlacement.Screen(frame: $0.frame, visibleFrame: $0.visibleFrame) }
+        // A pill that is down takes its pending skin and size first, so the card is drawn for the skin that will show.
+        if !isShown { applyPendingSkin() }
+        let pointer = pointerSource()
+        let placements = screensSource()
         guard let screen = PillPlacement.screen(pointer: pointer, screens: placements) else { return nil }
-        // A hidden pill shows at the size this screen resolves to, which is what the card has to clear.
-        let scale = state == .hidden
+        // A pill that is down shows at the size this screen resolves to, which is what the card has to clear. One that
+        // is up, or holds a card, keeps the scale its skin was built at.
+        let scale = !isShown
             ? PillSizePreference.current(defaults).resolved(visibleWidth: screen.visibleFrame.width) : pillScale
         let size = PillGeometry.panelSize(for: scale)
         guard let origin = PillPlacement.origin(
             pointer: pointer, screens: placements, panelSize: size, pillPadding: Self.pillPadding
         ) else { return nil }
+        let maxFace = screen.visibleFrame.maxY - origin.y.rounded(.down) - Self.pillPadding - Self.cardRowHeight * scale.factor
+            - CardLayout.shadowMargin * scale.factor
         return .init(
             midX: origin.x.rounded(.down) + size.width / 2,
             top: origin.y.rounded(.down) + Self.pillPadding + skinKind.pillHeight * scale.factor,
-            visible: screen.visibleFrame, style: skinKind.cardStyle, scale: scale, merger: self
+            visible: screen.visibleFrame, style: skinKind.cardStyle, scale: scale, maxFaceHeight: maxFace, merger: self
         )
     }
 
@@ -365,19 +376,41 @@ public final class PillController {
 
     /// Room under the pill for a message wrapped onto a few lines while a card is up.
     private static let cardRowRoom: CGFloat = 3 * MatrixPillLayout.height
+    /// The pill's own row under a card.
+    private static let cardRowHeight: CGFloat = MatrixPillLayout.height
 
     /// The panel's size with a card of `face` folded in: the usual panel, or taller and wider to hold the card, with its
     /// bottom edge and middle where they were.
     private func growPanel(forFace face: CGSize) {
         let k = pillScale.factor
         let margin = CardLayout.shadowMargin * k
-        let size = CGSize(
-            width: max(panelSize.width, face.width + 2 * margin),
-            height: max(panelSize.height, Self.pillPadding + face.height + Self.cardRowRoom * k + margin)
-        )
         let old = panel.frame
-        let origin = CGPoint(x: (old.midX - size.width / 2).rounded(.down), y: old.minY)
-        panel.setFrame(NSRect(origin: origin, size: size), display: false)
+        let visible = PillPlacement.screen(
+            pointer: CGPoint(x: old.midX, y: old.minY + Self.pillPadding), screens: screensSource()
+        )?.visibleFrame
+        panel.setFrame(Self.grownFrame(
+            old: old, face: face, plainSize: panelSize, scale: k, visible: visible
+        ), display: false)
+    }
+
+    /// The panel's frame once it holds a card of `face`: wider and taller, with its bottom edge and middle where they
+    /// were, then held inside `visible`. Taller is capped at the room above the pill, but never below what the capsule
+    /// itself needs, so its top is not clipped (the card's transcript scrolls to fit, see `Anchor.maxFaceHeight`).
+    static func grownFrame(old: CGRect, face: CGSize, plainSize: CGSize, scale k: CGFloat, visible: CGRect?) -> CGRect {
+        let margin = CardLayout.shadowMargin * k
+        var width = max(plainSize.width, face.width + 2 * margin)
+        var height = max(plainSize.height, pillPadding + face.height + cardRowRoom * k + margin)
+        let needed = pillPadding + face.height + cardRowHeight * k + margin
+        var x = (old.midX - width / 2).rounded(.down)
+        var y = old.minY
+        if let visible {
+            width = min(width, visible.width)
+            x = min(max((old.midX - width / 2).rounded(.down), visible.minX), max(visible.minX, visible.maxX - width))
+            height = max(needed, min(height, visible.maxY - old.minY))
+            // Only when the capsule itself would not fit does the panel move down.
+            if y + height > visible.maxY { y = max(visible.minY - pillPadding, visible.maxY - height) }
+        }
+        return CGRect(x: x, y: y, width: width, height: height)
     }
 
     private func restorePanelSize() {
@@ -422,15 +455,22 @@ public final class PillController {
         placeCardView()
         if view.alphaValue < 1 || !wasShown {
             view.alphaValue = 0
+            let appearing = !wasShown
             NSAnimationContext.runAnimationGroup { context in
-                context.duration = reduce ? 0.15 : 0.12
-                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                context.duration = Self.cardFadeDuration(appearing: appearing, reduceMotion: reduce)
+                context.timingFunction = appearing ? PillMotion.easeOutCubic : CAMediaTimingFunction(name: .easeOut)
                 view.animator().alphaValue = 1
             }
         }
         startLink()
         refreshInteractivity()
         return true
+    }
+
+    /// How long the card's content takes to fade in. When the pill appears with the card it is the body's own appear
+    /// time on the same curve, so the text is never ahead of the body.
+    static func cardFadeDuration(appearing: Bool, reduceMotion: Bool) -> TimeInterval {
+        appearing ? SquirclePillView.appearDuration(reduceMotion: reduceMotion) : (reduceMotion ? 0.15 : 0.12)
     }
 
     /// The card's countdown ticked: the row's clock and bar follow.
