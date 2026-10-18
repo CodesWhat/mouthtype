@@ -251,10 +251,30 @@ protocol PillSkinView: NSView {
     func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void)
     /// Draws the pill into `context` in this view's coordinates without a window, for the Settings preview and tests.
     func renderOffscreen(in context: CGContext)
+
+    /// True for a skin whose pill grows upward into the delivery card (Matrix and Minimal), so there is no second panel.
+    var growsIntoCard: Bool { get }
+    /// The grown capsule in this view's coordinates, nil while it is a plain pill.
+    var grownFrame: CGRect? { get }
+    /// Where the card's content sits while grown, in this view's coordinates.
+    var cardFrame: CGRect? { get }
+    /// Grows to hold a card `width` by `height` above the pill's row. `showReadout` puts the card's readout in the row.
+    func growCard(width: CGFloat, height: CGFloat, readout: CardReadout, showReadout: Bool)
+    func updateCardReadout(_ readout: CardReadout)
+    func showCardReadout(_ readout: CardReadout)
+    func shrinkCard()
 }
 
 extension PillSkinView {
     func renderOffscreen(in context: CGContext) { layer?.render(in: context) }
+
+    var growsIntoCard: Bool { false }
+    var grownFrame: CGRect? { nil }
+    var cardFrame: CGRect? { nil }
+    func growCard(width: CGFloat, height: CGFloat, readout: CardReadout, showReadout: Bool) {}
+    func updateCardReadout(_ readout: CardReadout) {}
+    func showCardReadout(_ readout: CardReadout) {}
+    func shrinkCard() {}
 }
 
 /// The panel's content view: holds the skin and takes the click on a control. It only answers hit tests over a
@@ -262,6 +282,8 @@ extension PillSkinView {
 @MainActor
 final class PillHostView: NSView {
     var controlAt: (CGPoint) -> PillControl? = { _ in nil }
+    /// The delivery card folded into the pill, which takes clicks over its own frame.
+    weak var cardView: NSView?
     var onPress: (PillControl?) -> Void = { _ in }
     var onActivate: (PillControl) -> Void = { _ in }
     private var pressed: PillControl?
@@ -271,7 +293,9 @@ final class PillHostView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        controlAt(convert(point, from: superview)) == nil ? nil : self
+        let local = convert(point, from: superview)
+        if let cardView, !cardView.isHidden, cardView.frame.contains(local) { return super.hitTest(point) }
+        return controlAt(local) == nil ? nil : self
     }
 
     override func mouseDown(with event: NSEvent) {
