@@ -85,7 +85,8 @@ private final class QuietOutputListener {
             for address in UnsafeBufferPointer(start: addresses, count: Int(count)) {
                 switch address.mSelector {
                 case kAudioDevicePropertyMute:
-                    var property = address
+                    var property = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute,
+                        mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
                     var muted: UInt32 = 0
                     var size = UInt32(MemoryLayout<UInt32>.size)
                     let read = AudioObjectGetPropertyData(device, &property, 0, nil, &size, &muted)
