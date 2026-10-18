@@ -43,6 +43,7 @@ public final class PillController {
 
     private let defaults: UserDefaults
     private var pillSize: PillSize
+    private var readout: PillReadoutColour
     private var pendingSkin: PillSkinKind?
     private var bars = BarModel()
     private var link: CADisplayLink?
@@ -62,9 +63,10 @@ public final class PillController {
         levelSource = level
         skinKind = PillSkinPreference.current(defaults)
         pillSize = PillSizePreference.current(defaults)
+        readout = PillReadoutPreference.current(defaults)
         let scale = pillSize.resolved(visibleWidth: Self.pointerScreen()?.visibleFrame.width ?? 0)
         pillScale = scale
-        skin = Self.makeSkin(skinKind, scale: scale)
+        skin = Self.makeSkin(skinKind, scale: scale, readout: readout)
         let panelSize = PillGeometry.panelSize(for: scale)
         host = PillHostView(frame: NSRect(origin: .zero, size: panelSize))
         previewView = PillPreviewView(frame: Self.previewFrame(panelSize: panelSize, scale: scale))
@@ -115,10 +117,10 @@ public final class PillController {
         return PillPlacement.screen(pointer: NSEvent.mouseLocation, screens: screens)
     }
 
-    private static func makeSkin(_ kind: PillSkinKind, scale: PillScale) -> any PillSkinView {
+    private static func makeSkin(_ kind: PillSkinKind, scale: PillScale, readout: PillReadoutColour) -> any PillSkinView {
         let frame = NSRect(origin: .zero, size: PillGeometry.panelSize(for: scale))
         do {
-            return try PillSkinFactory.make(kind, frame: frame, scale: scale)
+            return try PillSkinFactory.make(kind, frame: frame, scale: scale, readout: readout)
         } catch {
             fatalError("pill resources missing from the bundle: \(error)")
         }
@@ -153,12 +155,14 @@ public final class PillController {
         pendingSkin = nil
         pillSize = PillSizePreference.current(defaults)
         let scale = pillSize.resolved(visibleWidth: Self.pointerScreen()?.visibleFrame.width ?? 0)
-        guard kind != skinKind || scale != pillScale else { return }
+        let colour = PillReadoutPreference.current(defaults)
+        guard kind != skinKind || scale != pillScale || (kind == .hifi && colour != readout) else { return }
+        readout = colour
         skinKind = kind
         pillScale = scale
         panel.setContentSize(panelSize)
         previewView.frame = Self.previewFrame(panelSize: panelSize, scale: scale)
-        install(Self.makeSkin(kind, scale: scale))
+        install(Self.makeSkin(kind, scale: scale, readout: colour))
     }
 
     public func showRecording() {
