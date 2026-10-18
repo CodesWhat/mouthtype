@@ -4,6 +4,7 @@ import SwiftUI
 
 @MainActor struct SetupActions {
     var refresh: () -> Void = {}
+    var poll: () -> Void = {}
     var microphone: () -> Void = {}
     var accessibility: () -> Void = {}
     var retrySpeech: () -> Void = {}
@@ -12,21 +13,42 @@ import SwiftUI
 }
 
 @MainActor final class SetupWindow: NSWindowController, NSWindowDelegate {
+    static let contentSize = NSSize(width: 560, height: 440)
+
     let model: SetupModel
     private let refresh: () -> Void
+    private let poll: () -> Void
+    private let pollInterval: TimeInterval
+    private var pollTimer: Timer?
+    var isPolling: Bool { pollTimer != nil }
 
-    init(model: SetupModel, actions: SetupActions) {
+    init(model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
+         reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) {
         self.model = model
+        self.pollInterval = pollInterval
         refresh = actions.refresh
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 590),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        poll = actions.poll
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Set Up Mouthtype"
-        window.minSize = NSSize(width: 560, height: 540)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         super.init(window: window)
         var actions = actions
         actions.done = { [weak self] in self?.close() }
-        window.contentView = NSHostingView(rootView: SetupView(model: model, actions: actions))
+        let hosting = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: reduceTransparency))
+        hosting.sizingOptions = []
+        if reduceTransparency {
+            window.backgroundColor = .windowBackgroundColor
+            window.contentView = hosting
+        } else {
+            let glass = NSGlassEffectView()
+            glass.contentView = hosting
+            window.contentView = glass
+        }
+        window.setContentSize(Self.contentSize)
         window.delegate = self
         window.center()
     }
@@ -41,38 +63,52 @@ import SwiftUI
         window?.makeKeyAndOrderFront(nil)
     }
 
-    func windowDidBecomeKey(_ notification: Notification) { refresh(); model.refreshInstructions() }
+    func windowDidBecomeKey(_ notification: Notification) {
+        refresh()
+        model.refreshInstructions()
+        startPolling()
+    }
+
+    func windowDidResignKey(_ notification: Notification) { stopPolling() }
+
+    func windowWillClose(_ notification: Notification) { stopPolling() }
+
+    private func startPolling() {
+        guard pollTimer == nil else { return }
+        let timer = Timer(timeInterval: pollInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.poll() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pollTimer = timer
+    }
+
+    private func stopPolling() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+    }
 }
 
 struct SetupView: View {
     @Bindable var model: SetupModel
     var actions: SetupActions
+    var solid = false
+
+    private static let brand = Color(red: 0.19, green: 0.36, blue: 0.34)
 
     private var step: SetupStep { model.readiness.step }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("MOUTHTYPE / GET STARTED")
-                Spacer()
-                Text(step == .ready ? "READY" : "STEP \(step.rawValue) OF 4")
-                    .accessibilityIdentifier("setup-progress")
-            }
-            .font(.custom("JetBrainsMono-Medium", size: 10)).foregroundStyle(.secondary)
-            .padding(.horizontal, 32).padding(.top, 28)
+            SetupStepDots(dots: step.dots).padding(.top, 18)
             ScrollView {
-                VStack(spacing: 20) {
-                    Image(systemName: symbol).font(.system(size: 28))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 68, height: 68)
-                        .background(Color(red: 0.19, green: 0.36, blue: 0.34).opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
-                        .accessibilityHidden(true)
-                    Text(title).font(.custom("InstrumentSerif-Regular", size: 42))
+                VStack(spacing: 12) {
+                    SetupLips().padding(.bottom, 6)
+                    Text(title).font(.custom("InstrumentSerif-Regular", size: 30))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                     Text(detail).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    controls
+                    controls.padding(.top, 4)
                     if step == .ready {
                         Text("Change your shortcut or recording behavior in Settings. Fast and Thorough use Basic until their cleanup model is ready.")
                             .font(.callout).foregroundStyle(.secondary)
@@ -80,30 +116,42 @@ struct SetupView: View {
                     }
                 }
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 480, minHeight: 360)
-                .padding(32).frame(maxWidth: .infinity)
+                .frame(maxWidth: 400)
+                .padding(.horizontal, 40).padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 330)
                 .accessibilityIdentifier("setup-card")
                 .id(step)
             }.defaultScrollAnchor(.top)
-            VStack(spacing: 14) {
-                Divider()
-                HStack {
-                    Button("Refresh status", action: actions.refresh).accessibilityIdentifier("setup-refresh")
-                    Spacer()
-                    if step == .ready {
-                        Button("Done", action: actions.done)
-                            .keyboardShortcut(.defaultAction).accessibilityIdentifier("setup-done")
-                    } else {
-                        Button("Set up later", action: actions.done).accessibilityIdentifier("setup-done")
-                    }
+            HStack {
+                if step == .ready {
+                    Button("Done", action: actions.done)
+                        .keyboardShortcut(.defaultAction).accessibilityIdentifier("setup-done")
+                } else {
+                    Button("Set up later", action: actions.done).buttonStyle(.link)
+                        .foregroundStyle(.secondary).accessibilityIdentifier("setup-done")
                 }
-                Text("Reopen setup from Settings → General.").font(.callout).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }.padding(.horizontal, 32).padding(.bottom, 22)
+                Spacer()
+                footerSteps.accessibilityIdentifier("setup-progress")
+            }
+            .font(.callout).padding(.horizontal, 20).padding(.bottom, 16)
         }
+        .frame(width: SetupWindow.contentSize.width, height: SetupWindow.contentSize.height)
         .font(.custom("InstrumentSans-Regular", size: 14))
-        .tint(Color(red: 0.19, green: 0.36, blue: 0.34))
-        .background(Color(nsColor: .textBackgroundColor))
+        .tint(Self.brand)
+        .background { if solid { Color(nsColor: .windowBackgroundColor) } }
+    }
+
+    private var footerSteps: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(SetupStep.footerNames.enumerated()), id: \.offset) { index, name in
+                if index > 0 { Text("·") }
+                Text(name).foregroundStyle(index + 1 == step.rawValue ? Color.primary : Color.secondary)
+            }
+        }
+        .font(.custom("JetBrainsMono-Medium", size: 8)).tracking(1)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
     }
 
     private var title: String {
@@ -116,21 +164,11 @@ struct SetupView: View {
         }
     }
 
-    private var symbol: String {
-        switch step {
-        case .microphone: "mic"
-        case .accessibility: "hand.raised"
-        case .speech: "waveform"
-        case .shortcut: "keyboard"
-        case .ready: "checkmark"
-        }
-    }
-
     private var detail: String {
         switch step {
         case .microphone:
             switch model.diagnostics.microphoneStatus {
-            case .notDetermined: "Allow microphone access so Mouthtype can hear you while you dictate."
+            case .notDetermined: "Allow microphone access so Mouthtype can hear you while you dictate. Audio stays on this Mac."
             case .denied, .restricted: "Microphone access is not allowed. Enable Mouthtype in System Settings, then return here."
             case .authorized:
                 if model.capturePreparing { "Preparing your microphone…" }
@@ -182,5 +220,40 @@ struct SetupView: View {
     private func action(_ title: String, identifier: String, perform: @escaping () -> Void) -> some View {
         Button(title, action: perform).buttonStyle(.borderedProminent).controlSize(.large)
             .keyboardShortcut(.defaultAction).accessibilityIdentifier(identifier)
+    }
+}
+
+struct SetupStepDots: View {
+    var dots: [SetupDot]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(dots.enumerated()), id: \.offset) { _, dot in
+                Capsule().fill(fill(dot)).frame(width: dot == .active ? 18 : 5, height: 5)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func fill(_ dot: SetupDot) -> Color {
+        switch dot {
+        case .active: Color(red: 0.19, green: 0.36, blue: 0.34)
+        case .done: Color(red: 0.19, green: 0.36, blue: 0.34).opacity(0.5)
+        case .pending: Color.primary.opacity(0.18)
+        }
+    }
+}
+
+struct SetupLips: View {
+    static let size = CGSize(width: 36, height: 22)
+    static let scale: CGFloat = 1.5
+
+    var body: some View {
+        if let url = Bundle.module.url(forResource: "lips-36x22", withExtension: "png", subdirectory: "Settings"),
+           let sprite = NSImage(contentsOf: url) {
+            Image(nsImage: sprite).resizable().interpolation(.none).antialiased(false)
+                .frame(width: Self.size.width * Self.scale, height: Self.size.height * Self.scale)
+                .accessibilityHidden(true)
+        }
     }
 }

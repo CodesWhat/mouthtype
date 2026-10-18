@@ -17,6 +17,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.refreshDiagnostics()
             Task { _ = await self?.prepareCapture() }
         },
+        poll: { [weak self] in self?.refreshDiagnostics() },
         microphone: { [weak self] in self?.requestSetupMicrophone() },
         accessibility: { [weak self] in
             self?.accessibility.start()
