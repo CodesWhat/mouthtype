@@ -1,4 +1,4 @@
-# Mouthtype 0.1.0-rc.1
+# Mouthtype 0.1.0-rc.2
 
 Release candidate for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
 
@@ -12,6 +12,12 @@ Release candidate for Apple Silicon Macs running macOS 26 or later. This is an e
 6. Click a blank TextEdit document. Hold Fn, say a sentence, then release. Wait for text to appear. Dictate another sentence without clicking or typing between takes. Confirm one insertion per take and a space between them.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
+
+## What changed in rc.2
+
+The menu bar icon is lips that open with your voice. The app icon and the first-run setup window are redrawn, and Settings has a new layout with a glass sidebar. Pill size is Automatic, Standard or Large, and Pill style adds Glass, Matrix and Minimal beside Classic and Hi-Fi. Delivery cards follow the chosen style and size, including a pixel-art card for Hi-Fi. Appearance has a live preview with a Desktop, Light or Dark swatch, and Hi-Fi has a readout colour. Glass and the glass windows use a solid background under Reduce Transparency.
+
+Update checks are now on by default without a prompt. Dictation, cleanup and delivery behavior did not change. The new interface has automated and offscreen rendering checks only; physical acceptance of it has not been done.
 
 ## Daily-use hardening in rc.1
 
@@ -51,7 +57,7 @@ Imports do not apply cleanup, saved spellings or phrases, paste automatically, o
 
 Alpha.1 through alpha.3 do not contain an updater. Download the current Mac prerelease once from the website and replace the old app to get it.
 
-Use **Check for Updates…** in Mouthtype’s menu to check manually. Sparkle asks whether to enable automatic update checks; you can change that choice in General. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
+Use **Check for Updates…** in Mouthtype’s menu to check manually. Automatic update checks are on by default without a prompt; you can turn them off in General. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
 
 Available updates show a notification and release notes. Choose installation in the app. Updates use signed archives, a signed feed and Developer ID signatures. Installation waits while dictation, recovery or file transcription is active. Automatic silent installation is disabled. Do not remove your data folder when upgrading.
 
