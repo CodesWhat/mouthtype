@@ -1,0 +1,5 @@
+{
+  "short": "The river meets the morning sun. Please send the revised notes before the meeting. We checked the build this morning and the tests are passing. Keep the old recording until the new result is safely saved. When the review is finished, copy the final sentence and close the window.",
+  "long_paragraph": "The morning meeting began with a review of the release plan. The team checked the microphone choice and confirmed that the saved recordings were still available. Each recording should reach the correct text field in the order it was spoken. A busy application may need more time to read the clipboard, so the next result must wait. If the microphone disconnects, keep the audio and offer a clear way to recover it. At the end of the day, closing the application should finish saving the active recording and restore any clipboard contents it borrowed. These checks help us understand ordinary daily use before making the next release available.",
+  "closing_checkpoint": "This is the final checkpoint. The last words are silver river."
+}
