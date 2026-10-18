@@ -61,4 +61,16 @@ import Testing
         let palettes = PillReadoutColour.allCases.map { $0.palette(base: colors) }
         #expect(Set(palettes.map(\.normal)).count == 3)
     }
+
+    @Test func theSettingsModelStoresTheChoiceAndTellsThePill() {
+        let store = defaults()
+        var notified: [PillSkinKind] = []
+        let model = SettingsModel(defaults: store, onSkinChanged: { notified.append($0) })
+        #expect(model.readoutColour == .amber)
+        model.setSkin(.hifi)
+        model.setReadoutColour(.red)
+        #expect(model.readoutColour == .red && PillReadoutPreference.current(store) == .red)
+        #expect(notified == [.hifi, .hifi])
+        #expect(SettingsModel(defaults: store).readoutColour == .red)
+    }
 }
