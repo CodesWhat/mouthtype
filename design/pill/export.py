@@ -2,7 +2,8 @@
 
 Everything is drawn at 1x, one art pixel per point, and written to Sources/MouthtypeMac/Resources/Pill/hifi/:
 the static chassis, the small state sprites, the two font atlases and layout.json (every position, rect and colour
-the app needs). Output is deterministic, so a second run changes no bytes."""
+the app needs). The delivery card's window sprites go to hifi/card/ with their own layout.json. Output is
+deterministic, so a second run changes no bytes."""
 import json
 import math
 import os
@@ -17,6 +18,8 @@ from palette import HIFI as P
 
 W, H = 146, 32
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "Sources", "MouthtypeMac", "Resources", "Pill", "hifi")
+
+CARD_OUT = os.path.join(OUT, "card")
 
 # geometry, in art pixels, origin top-left
 TALK = (15, 14)                    # centre of the push button
@@ -184,6 +187,136 @@ def hexcolor(c):
     return "#%02x%02x%02x" % rgba(c)[:3]
 
 
+# ---- delivery card window: 9-slice sprites, 1x. Slices are (left, top, right, bottom) and tile, never smooth-scale.
+FRAME = (40, 40, (4, 13, 4, 4))     # brushed metal window with a title bar 13 px tall (grips, then a divider)
+CLOSE = (10, 10)                   # title-bar close button
+BUTTON = (12, 12, (3, 3, 3, 3))    # bevelled grey cap; the label is drawn live
+VFD = (12, 12, (3, 3, 3, 3))       # sunk amber-display bezel; the glass is drawn live
+
+
+def card_frame():
+    w, h, _ = FRAME
+    cv = Canvas(w, h)
+    rnd = random.Random(23)
+    tones = [P["metal"], P["metal_a"], P["metal_b"], P["metal_a"]]
+    grid = []
+    for y in range(h):
+        row, x = [], 0
+        while x < w:
+            run, c = rnd.randint(6, 24), rnd.choice(tones)
+            row += [c] * run
+            x += run
+        grid.append(row[:w])
+    shape(cv, 0, 0, w, h, lambda x, y: inside_rr(x, y, w, h, 3), lambda x, y: grid[y][x], P["metal_edge"])
+    cv.hline(3, 1, w - 6, P["metal_hi"])
+    cv.vline(1, 3, h - 6, mix(P["metal_hi"], P["metal"], .5))
+    cv.hline(3, h - 2, w - 6, P["metal_lo"])
+    cv.vline(w - 2, 3, h - 6, P["metal_lo"])
+    for yy in (3, 5, 7):
+        cv.hline(4, yy, w - 8, mix(P["metal"], P["metal_lo"], .7))
+        cv.hline(4, yy + 1, w - 8, mix(P["metal"], P["metal_hi"], .5))
+    cv.hline(2, 11, w - 4, P["metal_lo"])
+    cv.hline(2, 12, w - 4, mix(P["metal"], P["metal_hi"], .35))
+    return cv
+
+
+CLOSE_X = ["#...#", ".#.#.", "..#..", ".#.#.", "#...#"]
+
+
+def card_close(pressed):
+    w, h = CLOSE
+    cv = Canvas(w, h)
+    cv.rect(0, 0, w, h, P["metal_lo"])
+    if pressed:
+        cv.rect(1, 1, w - 2, h - 2, mix(P["cap"], P["metal_lo"], .35))
+        cv.bevel(1, 1, w - 2, h - 2, mix(P["cap"], P["cap_hi"], .4), P["cap_lo"], raised=False)
+    else:
+        cv.rect(1, 1, w - 2, h - 2, P["cap"])
+        cv.bevel(1, 1, w - 2, h - 2, P["cap_hi"], P["cap_lo"])
+    ox = 3 if pressed else 2
+    for j, row in enumerate(CLOSE_X):
+        for i, ch in enumerate(row):
+            if ch == "#":
+                cv.px(ox + i, ox + j, P["ink"])
+    return cv
+
+
+def card_button(pressed):
+    w, h, _ = BUTTON
+    cv = Canvas(w, h)
+    for y in range(h):
+        for x in range(w):
+            on_ring = x in (0, w - 1) or y in (0, h - 1)
+            corner = x in (0, w - 1) and y in (0, h - 1)
+            if on_ring and not corner:
+                cv.px(x, y, P["metal_lo"])
+    cv.rect(1, 1, w - 2, h - 2, mix(P["cap"], P["metal_lo"], .35) if pressed else P["cap"])
+    if pressed:
+        cv.bevel(1, 1, w - 2, h - 2, mix(P["cap"], P["cap_hi"], .4), P["cap_lo"], raised=False)
+    else:
+        cv.bevel(1, 1, w - 2, h - 2, P["cap_hi"], P["cap_lo"])
+        cv.hline(2, 2, w - 4, mix(P["cap"], P["cap_hi"], .35))
+    return cv
+
+
+def card_vfd():
+    w, h, _ = VFD
+    cv = Canvas(w, h)
+    for y in range(h):
+        for x in range(w):
+            ring = min(x, y, w - 1 - x, h - 1 - y)
+            if ring == 0:
+                c = mix(P["metal_hi"], P["metal"], .4) if (y == h - 1 or x == w - 1) else P["metal_lo"]
+            elif ring == 1:
+                c = P["metal_lo"]
+            elif ring == 2:
+                c = P["vfd_edge"]
+            else:
+                c = P["vfd_bg"]
+            cv.px(x, y, c)
+    return cv
+
+
+def export_card():
+    os.makedirs(CARD_OUT, exist_ok=True)
+    sprites = {}
+
+    def emit(name, cv, slices=None):
+        cv.png(os.path.join(CARD_OUT, name + ".png"))
+        sprites[name] = {"file": name + ".png", "w": cv.w, "h": cv.h}
+        if slices:
+            sprites[name]["slices"] = dict(zip(("left", "top", "right", "bottom"), slices))
+
+    emit("frame", card_frame(), FRAME[2])
+    emit("close_up", card_close(False))
+    emit("close_down", card_close(True))
+    emit("button_up", card_button(False), BUTTON[2])
+    emit("button_down", card_button(True), BUTTON[2])
+    emit("vfd", card_vfd(), VFD[2])
+    layout = {
+        "version": 1,
+        "sprites": sprites,
+        # every length is in art pixels at 1x. The card is as wide as CardLayout.width, which is 224.
+        "metrics": {
+            "titleBar": 13, "margin": 6,
+            "plate": {"x": 6, "y": 2, "h": 9, "padX": 4, "ledGap": 3},
+            "close": {"right": 6, "y": 1, "hitW": 16, "hitH": 13},
+            "vfd": {"gapTop": 3, "ring": 3, "padX": 3, "padY": 3, "lineGap": 2,
+                    "barGap": 3, "barH": 2, "barSegW": 3, "barSegGap": 1},
+            "button": {"h": 17, "minW": 36, "padX": 8, "gap": 4, "gapTop": 5, "labelPressedDy": 1},
+            "bottomPad": 3,
+            "maxLines": 5,
+        },
+        "colors": {k: hexcolor(P[k]) for k in (
+            "metal", "metal_hi", "metal_lo", "metal_edge", "engrave", "engrave_dim", "engrave_hi",
+            "cap", "cap_hi", "cap_lo", "ink", "vfd_bg", "vfd", "led_on", "led_hi", "seg_off")},
+    }
+    with open(os.path.join(CARD_OUT, "layout.json"), "w", encoding="utf-8") as f:
+        json.dump(layout, f, indent=1, ensure_ascii=False)
+        f.write("\n")
+    print("wrote", os.path.normpath(CARD_OUT))
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     layout = {"version": 1, "size": {"w": W, "h": H}}
@@ -252,6 +385,7 @@ def main():
         json.dump(layout, f, indent=1, ensure_ascii=False)
         f.write("\n")
     print("wrote", os.path.normpath(OUT))
+    export_card()
 
 
 if __name__ == "__main__":

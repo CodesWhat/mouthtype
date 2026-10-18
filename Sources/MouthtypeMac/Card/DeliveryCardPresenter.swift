@@ -30,6 +30,8 @@ protocol DictationCards: AnyObject {
     var onUndo: (@MainActor () -> Void)? { get set }
     /// The dismiss control was clicked.
     var onDismissed: (@MainActor (DeliveryCard) -> Void)? { get set }
+    /// The card up changed: the new card on a present (a replacement included), nil when the card goes by any route.
+    var onCardChange: (@MainActor (DeliveryCard?) -> Void)? { get set }
 }
 
 extension DictationCards {
@@ -59,6 +61,7 @@ final class DeliveryCardPresenter: DictationCards {
     private var generation = 0
 
     var onUndo: (@MainActor () -> Void)?
+    var onCardChange: (@MainActor (DeliveryCard?) -> Void)?
     var onInsert: (@MainActor () -> Void)?
     var onDismissed: (@MainActor (DeliveryCard) -> Void)?
     /// Save or Forget was clicked: do it, and say whether it worked. A false leaves the card down with no confirmation.
@@ -80,6 +83,7 @@ final class DeliveryCardPresenter: DictationCards {
         generation += 1
         state = CardViewState(card: card)
         surface.render(state)
+        onCardChange?(card)
         guard card.kind.isOffer else { return }
         openOffer = card
         let shown = generation
@@ -98,6 +102,7 @@ final class DeliveryCardPresenter: DictationCards {
         guard state != nil else { return }
         state = nil
         surface.render(nil)
+        onCardChange?(nil)
     }
 
     private func resolveOffer(_ resolution: OfferResolution) {

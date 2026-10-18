@@ -83,11 +83,29 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
             add('phrase_clipboard', 'ok' if clipboard else 'error', 'Clipboard helper availability checked; clipboard was not read.',
                 '' if clipboard else 'Install wl-clipboard using normal package policy, or disable phrase_clipboard.')
         delivery = config['delivery']['mode']
+        helpers = ('hyprctl', 'wtype') if delivery == 'type' else ('hyprctl', 'wtype', 'wl-copy', 'wl-paste')
         available = delivery == 'recover' or (config['delivery'].get('allow_unknown_secure_field') is True
-                                              and all(which(name) for name in ('hyprctl', 'wtype')))
+                                              and all(which(name) for name in helpers))
         add('delivery', 'ok' if available else 'error',
-            'Recovery-only delivery is configured.' if delivery == 'recover' else 'Automatic typing helpers checked; editable-field and paste verification remain unsupported.',
-            '' if available else 'Type mode requires hyprctl/wtype and explicit allow_unknown_secure_field opt-in. Choose recovery-only delivery unless a suitable field is known.')
+            'Recovery-only delivery is configured.' if delivery == 'recover' else 'Automatic delivery helpers checked; editable-field and insertion verification remain unsupported.',
+            '' if available else 'Automatic delivery requires ' + '/'.join(helpers) + ' and explicit allow_unknown_secure_field opt-in. Choose recovery-only delivery unless a suitable field is known.')
+        if config['cleanup'] in ('fast', 'thorough'):
+            try:
+                engines = json.loads(relative(config['cleanup_engine']).read_text())['engines']
+                entry = engines[config['cleanup']]
+                if entry.get('prompt', 's1') not in ('s1', 'shared') or not isinstance(entry.get('server'), str):
+                    raise ValueError('Invalid cleanup engine entry')
+                if any(not Path(item['path']).is_file() for item in entry['artifacts'].values()):
+                    raise ValueError('Cleanup artifacts must be regular files')
+                verify_artifacts(entry)
+                add('cleanup_model', 'ok', 'Configured ' + config['cleanup'] + ' cleanup model and server hashes match. Inference was not run.')
+            except (OSError, ValueError, TypeError, KeyError):
+                add('cleanup_model', 'error', 'The ' + config['cleanup'] + ' cleanup model is not prepared or its files changed.',
+                    'Run tools/linux-desktop/setup_cleanup.py --destination PATH --level ' + config['cleanup'] + ', or choose off or basic cleanup.')
+        decoder = all(which(name) is not None for name in ('ffprobe', 'ffmpeg'))
+        add('file_transcription', 'ok' if decoder else 'warning',
+            'Audio file decoder helpers checked; no file was decoded.',
+            '' if decoder else 'Optional: install ffmpeg using the normal distro package manager to transcribe WAV, AIFF or M4A files.')
         if config['notifications']:
             notifications = which('notify-send') is not None
             add('notifications', 'ok' if notifications else 'warning', 'Notification helper checked; display is unverified.',

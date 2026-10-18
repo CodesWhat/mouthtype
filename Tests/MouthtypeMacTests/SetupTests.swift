@@ -26,6 +26,15 @@ import MouthtypeCore
         state = ready; state.globeConflict = true; #expect(!state.isReady)
     }
 
+    @Test func stepDotsMarkDoneActiveAndPendingAndFinishWhenReady() {
+        #expect(SetupStep.microphone.dots == [.active, .pending, .pending, .pending])
+        #expect(SetupStep.accessibility.dots == [.done, .active, .pending, .pending])
+        #expect(SetupStep.speech.dots == [.done, .done, .active, .pending])
+        #expect(SetupStep.shortcut.dots == [.done, .done, .done, .active])
+        #expect(SetupStep.ready.dots == [.done, .done, .done, .done])
+        #expect(SetupStep.footerNames == ["MICROPHONE", "ACCESSIBILITY", "SPEECH", "SHORTCUT"])
+    }
+
     @Test func cardsAdvanceOnlyWhenTheirPrerequisiteActuallyPasses() {
         var state = ready
         state.microphone = .notDetermined

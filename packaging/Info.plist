@@ -11,6 +11,8 @@
 	<string>Mouthtype</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>com.codeswhat.mouthtype</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -40,6 +42,8 @@
 	<key>SUVerifyUpdateBeforeExtraction</key>
 	<true/>
 	<key>SURequireSignedFeed</key>
+	<true/>
+	<key>SUEnableAutomaticChecks</key>
 	<true/>
 	<key>SUAllowsAutomaticUpdates</key>
 	<false/>

@@ -14,30 +14,21 @@ import MouthtypeCore
         let model = SettingsModel(defaults: defaults)
         let state = diagnostics()
         let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state, updater: AppUpdater(driver: PreviewUpdateDriver(), activity: { .idle }))
-        let controller = SettingsWindow(model: model, actions: actions)
+        let controller = SettingsWindow(model: model, actions: actions, reduceTransparency: { true })
         #expect(controller.window?.isVisible == false)
         #expect(controller.window?.title == "Mouthtype Settings")
-        for page in SettingsPage.allCases {
-            model.page = page
-            controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model, actions: actions).frame(width: 1000, height: 690))
-            let view = try #require(controller.window?.contentView)
-            view.setFrameSize(NSSize(width: 1000, height: 690))
-            view.layoutSubtreeIfNeeded()
-            let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            let image = try #require(bitmap.cgImage)
-            #expect(image.width >= 1000 && image.height >= 690)
-            if let directory = ProcessInfo.processInfo.environment["MOUTHTYPE_SETTINGS_PREVIEWS"] {
-                let url = URL(fileURLWithPath: directory, isDirectory: true)
-                try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-                let data = try #require(NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:]))
-                try data.write(to: url.appendingPathComponent("settings-\(page.rawValue).png"))
+        for appearance in ["light", "dark"] {
+            for page in SettingsPage.allCases {
+                model.page = page
+                let bitmap = try SettingsRender.render(model: model, actions: actions, dark: appearance == "dark")
+                #expect(bitmap.pixelsWide >= 900 && bitmap.pixelsHigh >= 620)
+                try SettingsRender.save(bitmap, name: "settings-\(page.rawValue)-\(appearance)")
             }
         }
         #expect(controller.window?.isVisible == false)
     }
 
-    @Test func minimumWindowRendersAppRulesAndLargeHiFi() throws {
+    @Test func minimumWindowRendersAppRulesAndLargePill() throws {
         let name = "SettingsMinimumTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
@@ -46,7 +37,7 @@ import MouthtypeCore
         try styles.set(bundleID: "com.tinyspeck.slackmacgap", appName: "Slack", style: StylePreset.formal.options)
         try styles.save(to: defaults)
         PillSkinPreference.set(.hifi, in: defaults)
-        HiFiPillSizePreference.set(.large, in: defaults)
+        PillSizePreference.set(.large, in: defaults)
         FontRegistry.registerBundledFonts()
         let model = SettingsModel(defaults: defaults)
         let state = diagnostics()
@@ -55,27 +46,17 @@ import MouthtypeCore
         state.microphoneStatus = .denied
         state.globe = GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true)
         let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state, updater: AppUpdater(driver: PreviewUpdateDriver(), activity: { .idle }))
-        let controller = SettingsWindow(model: model, actions: actions)
-        controller.window?.setContentSize(NSSize(width: 860, height: 590))
+        let controller = SettingsWindow(model: model, actions: actions, reduceTransparency: { true })
         model.setRecordingMode(.toggle)
         for page in [SettingsPage.general, .writing, .appearance, .diagnostics] {
             model.page = page
-            controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model, actions: actions).frame(width: 860, height: 590))
-            let view = try #require(controller.window?.contentView)
-            view.setFrameSize(NSSize(width: 860, height: 590))
-            view.layoutSubtreeIfNeeded()
-            let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            #expect(bitmap.pixelsWide >= 860 && bitmap.pixelsHigh >= 590)
-            if let directory = ProcessInfo.processInfo.environment["MOUTHTYPE_SETTINGS_PREVIEWS"] {
-                let output = URL(fileURLWithPath: directory, isDirectory: true)
-                try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-                let data = try #require(bitmap.representation(using: .png, properties: [:]))
-                try data.write(to: output.appendingPathComponent("settings-\(page.rawValue)-minimum.png"))
-            }
+            let bitmap = try SettingsRender.render(model: model, actions: actions, dark: false,
+                                                   size: SettingsTheme.minimumSize)
+            #expect(bitmap.pixelsWide >= 860 && bitmap.pixelsHigh >= 600)
+            try SettingsRender.save(bitmap, name: "settings-\(page.rawValue)-minimum")
         }
         #expect(controller.window?.isVisible == false)
-        #expect(model.appStyles.entries.count == 2 && model.hiFiSize == .large)
+        #expect(model.appStyles.entries.count == 2 && model.pillSize == .large)
     }
 
     private func diagnostics() -> SettingsDiagnostics {

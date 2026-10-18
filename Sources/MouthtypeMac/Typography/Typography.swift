@@ -117,13 +117,15 @@ struct Typography: Sendable {
         }
     }
 
-    func font(_ role: TextRole) -> NSFont {
+    /// `scale` multiplies the role's point size, for the large pill.
+    func font(_ role: TextRole, scale: CGFloat = 1) -> NSFont {
         let baseChoice = effectiveChoice
         let effective: TextFontChoice
         if overrides.enabled, let family = overrides.families[FontGroup(role: role)], isInstalled(family) {
             effective = .custom(family)
         } else { effective = baseChoice }
-        let spec = Self.spec(role, systema: baseChoice == .systema)
+        var spec = Self.spec(role, systema: baseChoice == .systema)
+        spec.size *= scale
         let base: NSFont
         switch effective {
         case .systema: base = Self.systema(role, spec)

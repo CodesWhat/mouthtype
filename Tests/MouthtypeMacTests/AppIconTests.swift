@@ -38,5 +38,57 @@ import Testing
         let plist = Self.root.appendingPathComponent("packaging/Info.plist")
         let dict = try #require(NSDictionary(contentsOf: plist))
         #expect(dict["CFBundleIconFile"] as? String == "AppIcon")
+        #expect(dict["CFBundleIconName"] as? String == "AppIcon")
+    }
+
+    private func alphaAt(_ image: CGImage, x: Int, y: Int) throws -> UInt8 {
+        var pixel = [UInt8](repeating: 0, count: 4)
+        let context = try #require(CGContext(
+            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.draw(image, in: CGRect(x: -x, y: -(image.height - 1 - y), width: image.width, height: image.height))
+        return pixel[3]
+    }
+
+    private func image(_ path: String) throws -> CGImage {
+        let url = Self.root.appendingPathComponent(path)
+        let source = try #require(CGImageSourceCreateWithURL(url as CFURL, nil), "\(path) missing")
+        return try #require(CGImageSourceCreateImageAtIndex(source, 0, nil))
+    }
+
+    @Test func theTileIsFullBleedWithNoBakedShadowOrCorners() throws {
+        for path in ["design/icon/AppIcon-1024.png", "design/icon/AppIcon.iconset/icon_32x32.png"] {
+            let tile = try image(path)
+            for (x, y) in [(0, 0), (tile.width - 1, 0), (0, tile.height - 1), (tile.width - 1, tile.height - 1)] {
+                #expect(try alphaAt(tile, x: x, y: y) == 255, "\(path) corner (\(x), \(y)) should be opaque")
+            }
+        }
+    }
+
+    @Test func theIconBundleHasTileAndLipsLayers() throws {
+        let bundle = Self.root.appendingPathComponent("design/icon/AppIcon.icon")
+        let json = try #require(JSONSerialization.jsonObject(
+            with: Data(contentsOf: bundle.appendingPathComponent("icon.json"))) as? [String: Any])
+        let groups = try #require(json["groups"] as? [[String: Any]])
+        let layers = try #require(groups.first?["layers"] as? [[String: Any]])
+        let names = Set(layers.compactMap { $0["name"] as? String })
+        #expect(names == ["tile", "lips", "lips-mono"])
+        for layer in layers {
+            let file = try #require(layer["image-name"] as? String)
+            let url = bundle.appendingPathComponent("Assets/" + file)
+            #expect(try pixelSize(of: url) == [1024, 1024], "\(file)")
+        }
+        #expect(json["fill-specializations"] != nil, "the Dark appearance needs its own tile fill")
+    }
+
+    @Test func theMonoLipsKnockOutTheMouthAndCursor() throws {
+        let lips = try image("design/icon/AppIcon.icon/Assets/lips-mono.png")
+        let colour = try image("design/icon/AppIcon.icon/Assets/lips.png")
+        // the cursor stem sits at the centre: opaque in the coloured lips, knocked out in the mono ones
+        #expect(try alphaAt(colour, x: 512, y: 512) == 255)
+        #expect(try alphaAt(lips, x: 512, y: 512) == 0)
+        // the red body of the lips stays solid
+        #expect(try alphaAt(lips, x: 512, y: 420) == 255)
+        #expect(try alphaAt(lips, x: 4, y: 4) == 0)
     }
 }

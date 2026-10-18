@@ -6,14 +6,41 @@ enum PillControl: Hashable, Sendable {
 }
 
 enum PillSkinKind: String, CaseIterable, Sendable {
-    case classic, hifi
+    case classic, glass, matrix, minimal, hifi
 
     static let `default` = PillSkinKind.classic
 
     var title: String {
         switch self {
         case .classic: "Classic"
+        case .glass: "Glass"
+        case .matrix: "Matrix"
+        case .minimal: "Minimal"
         case .hifi: "Hi-Fi"
+        }
+    }
+
+    /// The pill's height at Standard size, for placing a card above it.
+    @MainActor var pillHeight: CGFloat {
+        switch self {
+        case .classic, .glass: ClassicPillLayout.height
+        case .matrix, .minimal: MatrixPillLayout.height
+        case .hifi: HiFiPillView.artSize.height
+        }
+    }
+}
+
+/// Builds the skin for a kind, shared by the live pill, the Settings preview and the tests.
+@MainActor
+enum PillSkinFactory {
+    static func make(_ kind: PillSkinKind, frame: NSRect, scale: PillScale, readout: PillReadoutColour = .default,
+                     glassEnvironment: GlassPillEnvironment = .system) throws -> any PillSkinView {
+        switch kind {
+        case .classic: return ClassicPillView(frame: frame, size: scale)
+        case .glass: return GlassPillView(frame: frame, size: scale, environment: glassEnvironment)
+        case .matrix: return MatrixPillView(frame: frame, size: scale)
+        case .minimal: return MinimalPillView(frame: frame, size: scale)
+        case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale, readout: readout)
         }
     }
 }
@@ -30,22 +57,127 @@ enum PillSkinPreference {
     }
 }
 
-enum HiFiPillSize: Int, CaseIterable, Sendable {
-    case standard = 1, large = 2
+/// The Hi-Fi pill's readout colour: the meter segments, the timer and the message text. Amber is the art as drawn;
+/// the others retint those layers from the board's palette. The REC lamp and caps keep their own colours, and error text keeps its red except on Red, where it takes the cool-white ink.
+enum PillReadoutColour: String, CaseIterable, Sendable {
+    case amber, coolWhite, red
 
-    var scale: CGFloat { CGFloat(rawValue) }
-    var title: String { self == .standard ? "Standard" : "Large (2×)" }
-}
+    static let `default` = PillReadoutColour.amber
 
-enum HiFiPillSizePreference {
-    static let key = "hiFiPillSize"
-
-    static func current(_ defaults: UserDefaults = .standard) -> HiFiPillSize {
-        HiFiPillSize(rawValue: defaults.integer(forKey: key)) ?? .standard
+    var title: String {
+        switch self {
+        case .amber: "Amber"
+        case .coolWhite: "Cool white"
+        case .red: "Red"
+        }
     }
 
-    static func set(_ size: HiFiPillSize, in defaults: UserDefaults = .standard) {
+    /// The dot beside the name in Settings.
+    var swatchHex: String {
+        switch self {
+        case .amber: "#ffb02e"
+        case .coolWhite: "#e8f1ff"
+        case .red: "#ff3d32"
+        }
+    }
+
+    struct Palette: Equatable, Sendable {
+        var normal: String, hot: String, peak: String, text: String
+        /// The error message colour. Red readouts would hide it, so they take the cool-white ink instead.
+        var error: String
+
+        func tier(_ name: String) -> CGColor {
+            switch name {
+            case "hot": PillLayout.color(hex: hot)
+            case "peak": PillLayout.color(hex: peak)
+            default: PillLayout.color(hex: normal)
+            }
+        }
+    }
+
+    /// `base` is the layout's own (amber) colours.
+    func palette(base: PillLayout.Colors) -> Palette {
+        switch self {
+        case .amber: Palette(normal: base.segmentNormal, hot: base.segmentHot, peak: base.segmentPeak, text: base.text, error: base.error)
+        case .coolWhite: Palette(normal: "#e8f1ff", hot: "#9cc0ff", peak: "#ffffff", text: "#e8f1ff", error: base.error)
+        case .red: Palette(normal: "#ff3d32", hot: "#ff8a7d", peak: "#ffd9d4", text: "#ff3d32", error: "#e8f1ff")
+        }
+    }
+}
+
+enum PillReadoutPreference {
+    static let key = "pillReadoutColour"
+
+    static func current(_ defaults: UserDefaults = .standard) -> PillReadoutColour {
+        defaults.string(forKey: key).flatMap(PillReadoutColour.init(rawValue:)) ?? .default
+    }
+
+    static func set(_ colour: PillReadoutColour, in defaults: UserDefaults = .standard) {
+        defaults.set(colour.rawValue, forKey: key)
+    }
+}
+
+/// The size setting. Automatic is decided each time the pill shows, from the screen it lands on.
+enum PillSize: String, CaseIterable, Sendable {
+    case automatic, standard, large
+
+    static let `default` = PillSize.automatic
+    /// A visible frame at least this wide (in points) gets the large pill under Automatic.
+    static let largeScreenWidth: CGFloat = 2000
+
+    var title: String {
+        switch self {
+        case .automatic: "Automatic"
+        case .standard: "Standard"
+        case .large: "Large"
+        }
+    }
+
+    func resolved(visibleWidth: CGFloat) -> PillScale {
+        switch self {
+        case .standard: .standard
+        case .large: .large
+        case .automatic: visibleWidth >= Self.largeScreenWidth ? .large : .standard
+        }
+    }
+}
+
+/// What a size setting resolves to: the integer multiple every length in the pill is drawn at.
+enum PillScale: Int, Sendable {
+    case standard = 1, large = 2
+
+    var factor: CGFloat { CGFloat(rawValue) }
+}
+
+enum PillSizePreference {
+    static let key = "pillSize"
+    /// The Hi-Fi only setting this replaced: 1 standard, 2 large.
+    static let legacyKey = "hiFiPillSize"
+
+    static func current(_ defaults: UserDefaults = .standard) -> PillSize {
+        migrateLegacy(defaults)
+        return defaults.string(forKey: key).flatMap(PillSize.init(rawValue:)) ?? .default
+    }
+
+    static func set(_ size: PillSize, in defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: legacyKey)
         defaults.set(size.rawValue, forKey: key)
+    }
+
+    /// A saved Hi-Fi size of 1 stays Standard and 2 becomes the large pill; anything else becomes Automatic. The old
+    /// key goes either way, and a choice already made under the new key is left alone.
+    static func migrateLegacy(_ defaults: UserDefaults) {
+        guard defaults.object(forKey: legacyKey) != nil else { return }
+        if defaults.object(forKey: key) == nil {
+            let migrated: PillSize
+            switch defaults.integer(forKey: legacyKey) {
+            case 1: migrated = .standard
+            case 2: migrated = .large
+            default: migrated = .automatic
+            }
+            defaults.set(migrated.rawValue, forKey: key)
+        }
+        defaults.removeObject(forKey: legacyKey)
     }
 }
 
@@ -56,9 +188,15 @@ enum PillGeometry {
     static let verticalMargin: CGFloat = 20
     /// Tall enough for a message wrapped onto many lines; the panel is click-through, so spare room costs nothing.
     static let maxPillSize = CGSize(width: ClassicPillLayout.messageCap, height: 160)
-    static let panelSize = CGSize(
-        width: maxPillSize.width + 2 * horizontalMargin, height: maxPillSize.height + 2 * verticalMargin
-    )
+    static let panelSize = panelSize(for: .standard)
+
+    /// The panel grows with the pill, so a large message has the same room a standard one does.
+    static func panelSize(for scale: PillScale) -> CGSize {
+        CGSize(
+            width: maxPillSize.width * scale.factor + 2 * horizontalMargin,
+            height: maxPillSize.height * scale.factor + 2 * verticalMargin
+        )
+    }
 }
 
 /// Hit-testing for the two controls, pure so both skins share it.
@@ -112,6 +250,32 @@ protocol PillSkinView: NSView {
     func setPressed(_ control: PillControl?)
     func appear(reduceMotion: Bool)
     func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void)
+    /// Draws the pill into `context` in this view's coordinates without a window, for the Settings preview and tests.
+    func renderOffscreen(in context: CGContext)
+
+    /// True for a skin whose pill grows upward into the delivery card (Matrix and Minimal), so there is no second panel.
+    var growsIntoCard: Bool { get }
+    /// The grown capsule in this view's coordinates, nil while it is a plain pill.
+    var grownFrame: CGRect? { get }
+    /// Where the card's content sits while grown, in this view's coordinates.
+    var cardFrame: CGRect? { get }
+    /// Grows to hold a card `width` by `height` above the pill's row. `showReadout` puts the card's readout in the row.
+    func growCard(width: CGFloat, height: CGFloat, readout: CardReadout, showReadout: Bool)
+    func updateCardReadout(_ readout: CardReadout)
+    func showCardReadout(_ readout: CardReadout)
+    func shrinkCard()
+}
+
+extension PillSkinView {
+    func renderOffscreen(in context: CGContext) { layer?.render(in: context) }
+
+    var growsIntoCard: Bool { false }
+    var grownFrame: CGRect? { nil }
+    var cardFrame: CGRect? { nil }
+    func growCard(width: CGFloat, height: CGFloat, readout: CardReadout, showReadout: Bool) {}
+    func updateCardReadout(_ readout: CardReadout) {}
+    func showCardReadout(_ readout: CardReadout) {}
+    func shrinkCard() {}
 }
 
 /// The panel's content view: holds the skin and takes the click on a control. It only answers hit tests over a
@@ -119,6 +283,8 @@ protocol PillSkinView: NSView {
 @MainActor
 final class PillHostView: NSView {
     var controlAt: (CGPoint) -> PillControl? = { _ in nil }
+    /// The delivery card folded into the pill, which takes clicks over its own frame.
+    weak var cardView: NSView?
     var onPress: (PillControl?) -> Void = { _ in }
     var onActivate: (PillControl) -> Void = { _ in }
     private var pressed: PillControl?
@@ -128,7 +294,9 @@ final class PillHostView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        controlAt(convert(point, from: superview)) == nil ? nil : self
+        let local = convert(point, from: superview)
+        if let cardView, !cardView.isHidden, cardView.frame.contains(local) { return super.hitTest(point) }
+        return controlAt(local) == nil ? nil : self
     }
 
     override func mouseDown(with event: NSEvent) {

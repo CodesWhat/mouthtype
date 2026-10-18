@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 from pathlib import Path
 import tempfile
 import threading
@@ -620,7 +622,7 @@ class FeedbackTests(unittest.TestCase):
                 session.command('start')
                 session.command('stop')
                 session.wait()
-                self.assertEqual(feedback.events, ['recording', 'transcribing', 'saved'])
+                self.assertEqual(feedback.events, ['recording', 'transcribing', 'delivered'])
                 self.assertNotIn(session.engine.text, json.dumps(feedback.events))
                 self.assertEqual(session.command('status')['feedback'], 'submitted_unknown')
             finally:
@@ -680,3 +682,282 @@ class ShutdownFeedbackTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class PasteDeliveryTests(unittest.TestCase):
+    def make(self, config, clipboard='earlier text', terminal=False, hyprland=None):
+        from desktop import HyprlandDelivery
+        calls = []
+        target = {'address': '0x123', 'class': 'kitty' if terminal else 'editor', 'pid': 42}
+        def run(argv, **kwargs):
+            calls.append((argv, kwargs))
+            if argv[-1] == 'locked':
+                return type('Result', (), {'stdout': json.dumps({'locked': False})})()
+            if argv[-1] == 'activewindow':
+                return type('Result', (), {'stdout': json.dumps({**target, 'title': 'private'})})()
+            return type('Result', (), {'returncode': 0})()
+        delivery = HyprlandDelivery({'mode': 'paste', 'allow_unknown_secure_field': True, **config}, run=run)
+        delivery.settle_seconds = 0
+        state = {'copied': None}
+        def read():
+            if state['copied'] is not None:
+                return state['copied']
+            if isinstance(clipboard, Exception):
+                raise clipboard
+            return clipboard
+        delivery.clipboard = read
+        original_run = delivery.run
+        def tracking_run(argv, **kwargs):
+            if argv[0] == 'wl-copy':
+                state['copied'] = kwargs['input'].decode('utf-8')
+            if argv[:2] == ['hyprctl', 'dispatch'] and hyprland is not None:
+                calls.append((argv, kwargs))
+                return type('Result', (), {'returncode': 0 if hyprland else 1, 'stdout': 'ok' if hyprland else '', 'stderr': '' if hyprland else 'error: nil'})()
+            return original_run(argv, **kwargs)
+        delivery.run = tracking_run
+        restored = []
+        delivery.schedule_restore = lambda previous, ours, **_: restored.append((previous, ours))
+        return delivery, target, calls, restored
+
+    def test_paste_is_clipboard_then_one_chord_and_restores_earlier_text(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        self.assertEqual(delivery.submit('Hello, 世界.\nSecond line', target), 'unknown')
+        helpers = [a for a, _ in calls if a[0] in ('wl-copy', 'wtype')]
+        self.assertEqual(helpers[0][:1], ['wl-copy'])
+        self.assertEqual(helpers[1], ['wtype', '-M', 'ctrl', '-k', 'v', '-m', 'ctrl'])
+        self.assertEqual(len(helpers), 2)
+        dispatches = [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']]
+        self.assertEqual(len(dispatches), 2)
+        self.assertIn('address:0x123', dispatches[0][2])
+        self.assertIn('send_shortcut', dispatches[0][2])
+        self.assertEqual([k['input'] for a, k in calls if a[0] == 'wl-copy'], ['Hello, 世界.\nSecond line'.encode()])
+        self.assertEqual(restored, [('earlier text', 'Hello, 世界.\nSecond line')])
+        self.assertNotIn('private', json.dumps(delivery.snapshot()))
+
+    def test_terminal_uses_shift_chord_and_refuses_line_breaks_unless_allowed(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, terminal=True)
+        self.assertEqual(delivery.submit('ls -la\nrm -rf /', target), 'unsupported_text')
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+        self.assertEqual(delivery.submit('echo hello', target), 'unknown')
+        chord = [a for a, _ in calls if a[0] == 'wtype'][0]
+        self.assertEqual(chord, ['wtype', '-M', 'ctrl', '-M', 'shift', '-k', 'v', '-m', 'shift', '-m', 'ctrl'])
+        permissive, target, calls, _ = self.make({'any_window': True, 'allow_terminal_multiline': True}, terminal=True)
+        self.assertEqual(permissive.submit('one\ntwo', target), 'unknown')
+
+    def test_terminal_payload_is_stripped_and_the_exact_payload_is_checked(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, terminal=True)
+        self.assertEqual(delivery.submit('echo hi\n', target), 'unknown')
+        self.assertEqual(delivery.submit('echo hi\r\n\n', target), 'unknown')
+        self.assertEqual([k['input'] for a, k in calls if a[0] == 'wl-copy'], [b'echo hi', b'echo hi'])
+        calls.clear()
+        for text in ('echo a\n\nrm b', 'echo a\rrm b', '\necho a'):
+            self.assertEqual(delivery.submit(text, target), 'unsupported_text')
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_dispatcher_timeout_does_not_fall_back_to_untargeted_wtype(self):
+        delivery, target, calls, restored = self.make({'any_window': True}, hyprland=True)
+        inner = delivery.run
+        def timing_out(argv, **kwargs):
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                calls.append((argv, kwargs))
+                raise subprocess.TimeoutExpired(argv, 5)
+            return inner(argv, **kwargs)
+        delivery.run = timing_out
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+        self.assertEqual(len([a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']]), 1)
+
+    def test_clean_dispatcher_failure_falls_back_only_while_the_target_is_active(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(len([a for a, _ in calls if a[0] == 'wtype']), 1)
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        snapshots = []
+        def moving():
+            snapshots.append(1)
+            return target if len(snapshots) <= 2 else {**target, 'address': '0x999'}
+        delivery.snapshot = moving
+        self.assertEqual(delivery.submit('text', target), 'target_changed')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+
+    def test_hyprland_delivers_the_chord_to_the_captured_window_without_wtype(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=True)
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+        dispatches = [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']]
+        self.assertEqual(len(dispatches), 1)
+        self.assertIn('"CTRL"', dispatches[0][2])
+        self.assertIn('address:0x123', dispatches[0][2])
+        terminal, target, calls, _ = self.make({'any_window': True}, hyprland=True, terminal=True)
+        terminal.submit('ls', target)
+        self.assertIn('"CTRL SHIFT"', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+
+    def test_clipboard_that_never_becomes_live_sends_no_chord(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        delivery.run = lambda argv, **kwargs: calls.append((argv, kwargs)) or type('Result', (), {'returncode': 0, 'stdout': json.dumps({'locked': False}) if argv[-1] == 'locked' else json.dumps({**target, 'title': 'private'}) if argv[-1] == 'activewindow' else ''})()
+        delivery.clipboard = lambda: 'earlier text'
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
+        self.assertEqual(restored, [('earlier text', 'text')])
+
+    @unittest.skipUnless(sys.platform == 'linux', 'reads /proc')
+    def test_terminal_with_custom_window_class_is_recognised_by_its_process(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=True)
+        target['class'] = 'org.example.custom-shell'
+        delivery.process_name = lambda pid: 'ghostty' if pid == 42 else None
+        self.assertEqual(delivery.submit('ls -la\nrm -rf /', target), 'unsupported_text')
+        self.assertEqual(delivery.submit('echo hello', target), 'unknown')
+        self.assertIn('"CTRL SHIFT"', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+        plain, target, calls, _ = self.make({'any_window': True}, hyprland=True)
+        plain.process_name = lambda pid: 'gedit'
+        plain.submit('echo hello', target)
+        self.assertIn('"CTRL"', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+        self.assertNotIn('SHIFT', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+        omarchy, target, calls, _ = self.make({'any_window': True}, hyprland=True)
+        target['class'] = 'org.omarchy.agent'
+        omarchy.process_name = lambda pid: None
+        omarchy.submit('echo hello', target)
+        self.assertIn('"CTRL SHIFT"', [a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']][0][2])
+        from desktop import HyprlandDelivery
+        import os
+        real = HyprlandDelivery({'mode': 'paste', 'any_window': True, 'allow_unknown_secure_field': True})
+        self.assertEqual(real.process_name(os.getpid()), open('/proc/self/comm').read().strip())
+        self.assertIsNone(real.process_name(-1))
+        self.assertIsNone(real.process_name('42'))
+
+    def test_allowlist_any_window_and_control_characters(self):
+        delivery, target, calls, _ = self.make({'allowed_classes': ['other']})
+        self.assertEqual(delivery.submit('text', target), 'recover_only')
+        delivery, target, calls, _ = self.make({'allowed_classes': ['editor']})
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(delivery.submit('bad\x1b[A', target), 'unsupported_text')
+        self.assertEqual(delivery.submit('tab\tok', target), 'unknown')
+        from desktop import HyprlandDelivery
+        plain = HyprlandDelivery({'mode': 'paste', 'any_window': True}, run=lambda *a, **k: None)
+        self.assertEqual(plain.submit('text', target), 'recover_only')
+
+    def test_unreadable_or_disabled_clipboard_is_not_restored_and_target_change_aborts(self):
+        from phrases import PhraseContextUnavailable
+        delivery, target, calls, restored = self.make({'any_window': True}, clipboard=PhraseContextUnavailable('image'))
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(restored, [])
+        delivery, target, calls, restored = self.make({'any_window': True, 'restore_clipboard': False})
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(restored, [])
+        delivery, target, calls, restored = self.make({'any_window': True})
+        self.assertEqual(delivery.submit('text', {**target, 'address': '0x999'}), 'target_changed')
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_restore_only_replaces_our_own_clipboard(self):
+        from desktop import HyprlandDelivery
+        calls = []
+        delivery = HyprlandDelivery({'mode': 'paste', 'any_window': True, 'allow_unknown_secure_field': True},
+                                    run=lambda argv, **k: calls.append((argv, k)))
+        current = ['ours']
+        delivery.clipboard = lambda: current[0]
+        delivery.schedule_restore('before', 'ours', delay=0)
+        time.sleep(.1)
+        self.assertEqual([k['input'] for a, k in calls], [b'before'])
+        current[0] = 'something newer'
+        delivery.schedule_restore('before', 'ours', delay=0)
+        time.sleep(.1)
+        self.assertEqual(len(calls), 1)
+
+    def test_paste_configuration_validation(self):
+        from desktop import validate_config
+        base = {'engine_config': '/local/engines.json'}
+        validate_config({**base, 'delivery': {'mode': 'paste', 'any_window': True, 'allow_unknown_secure_field': True}})
+        validate_config({**base, 'delivery': {'mode': 'paste', 'allowed_classes': ['editor'], 'terminal_classes': ['kitty']}})
+        for delivery in ({'mode': 'paste'}, {'mode': 'paste', 'any_window': 'yes'},
+                         {'mode': 'paste', 'any_window': True, 'restore_clipboard': 1},
+                         {'mode': 'paste', 'allowed_classes': ['*']}, {'mode': 'paste', 'any_window': True, 'terminal_classes': 'kitty'}):
+            with self.subTest(delivery=delivery), self.assertRaises(ValueError):
+                validate_config({**base, 'delivery': delivery})
+
+    def test_delivered_outcome_has_its_own_coarse_cue(self):
+        class Feedback:
+            def __init__(self):
+                self.states, self.status = [], 'disabled'
+            def notify(self, state):
+                self.states.append(state)
+        with tempfile.TemporaryDirectory() as temp:
+            feedback = Feedback()
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), feedback=feedback)
+            try:
+                session.command('start')
+                session.command('stop')
+                session.wait()
+                self.assertEqual(feedback.states, ['recording', 'transcribing', 'delivered'])
+                self.assertNotIn(session.engine.text, json.dumps(feedback.states))
+            finally:
+                session.close()
+
+
+class WatchStreamTests(unittest.TestCase):
+    def test_level_from_pcm_bytes(self):
+        from desktop import level_db
+        import math
+        self.assertEqual(level_db(b''), -120.0)
+        self.assertEqual(level_db(b'\0\0' * 1600), -120.0)
+        tone = bytes()
+        import struct
+        tone = b''.join(struct.pack('<h', int(0.5 * 32767 * math.sin(2 * math.pi * 440 * i / 16000))) for i in range(1600))
+        self.assertAlmostEqual(level_db(tone), 20 * math.log10(0.5 / math.sqrt(2)), delta=.3)
+
+    def test_watch_stream_reports_transitions_levels_and_service_exit(self):
+        from desktop import serve, request, watch
+        import io
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 5})
+            thread.start()
+            output = io.StringIO()
+            halt = threading.Event()
+            watcher = threading.Thread(target=watch, args=(path, output), kwargs={'retry': True, 'stopped': halt, 'interval': .05})
+            try:
+                deadline = time.monotonic() + 2
+                while time.monotonic() < deadline:
+                    try:
+                        request(path, 'status')
+                        break
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                watcher.start()
+                time.sleep(.3)
+                request(path, 'start')
+                time.sleep(.3)
+                request(path, 'stop')
+                session.wait()
+                time.sleep(.3)
+                lines = [json.loads(line) for line in output.getvalue().splitlines()]
+                states = [line.get('state') for line in lines if line.get('event') == 'state']
+                self.assertEqual(states[0], 'idle')
+                self.assertIn('recording', states)
+                self.assertEqual(states[-1], 'idle')
+                recording = [line for line in lines if line.get('state') == 'recording']
+                self.assertTrue(all(isinstance(line['elapsed'], float) for line in recording))
+                self.assertTrue(all(line['level'] is None or isinstance(line['level'], float) for line in recording))
+                self.assertNotIn(session.engine.text, output.getvalue())
+                self.assertNotIn('transcript', output.getvalue())
+                stopped.set()
+                thread.join(3)
+                time.sleep(.3)
+                tail = [json.loads(line) for line in output.getvalue().splitlines()][-2:]
+                self.assertEqual([line.get('event') for line in tail], ['stopping', 'disconnected'])
+            finally:
+                halt.set()
+                watcher.join(3)
+                stopped.set()
+                thread.join(3)
+                session.close()
+            self.assertFalse(watcher.is_alive())
+
+    def test_watch_without_retry_exits_when_service_is_absent(self):
+        from desktop import watch
+        import io
+        output = io.StringIO()
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertEqual(watch(Path(temp) / 'missing.sock', output), 0)
+        self.assertEqual(json.loads(output.getvalue())['event'], 'disconnected')

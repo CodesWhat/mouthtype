@@ -297,6 +297,16 @@ private final class FakePill: DictationPill {
         log.add("pill.message:\(message.headline)")
     }
     func hide() { log.add("pill.hide") }
+    var cardMessage: PillMessage?
+    func showCardMessage(_ message: PillMessage) {
+        cardMessage = message
+        log.add("pill.card:\(message.detail ?? message.headline)")
+    }
+    var cardHides = 0
+    func hideCardMessage() {
+        cardMessage = nil
+        cardHides += 1
+    }
 }
 
 @MainActor
@@ -305,6 +315,7 @@ private final class FakeCards: DictationCards {
     var presented: [DeliveryCard] = []
     var onUndo: (@MainActor () -> Void)?
     var onDismissed: (@MainActor (DeliveryCard) -> Void)?
+    var onCardChange: (@MainActor (DeliveryCard?) -> Void)?
 
     init(log: CallLog) {
         self.log = log
@@ -316,6 +327,7 @@ private final class FakeCards: DictationCards {
         presented.append(card)
         self.actions = actions
         log.add("card.present:\(card.kind)")
+        onCardChange?(card)
     }
 
     /// Clicks a button on the card up now.
@@ -325,7 +337,10 @@ private final class FakeCards: DictationCards {
         handler?()
     }
 
-    func dismiss() { log.add("card.dismiss") }
+    func dismiss() {
+        log.add("card.dismiss")
+        onCardChange?(nil)
+    }
 }
 
 @MainActor
@@ -764,6 +779,51 @@ private struct Rig {
         rig.inserter.result = DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: false, target: nil, finalText: "")
         await rig.dictate()
         #expect(rig.cards.presented == [.secure(cleaned)])
+    }
+
+    @Test func thePillStaysUnderADeliveryCardAndShowsItsDetail() async {
+        let rig = Rig()
+        rig.engine.result.text = messy
+        rig.inserter.result = DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: false, target: nil, finalText: "")
+        await rig.dictate()
+        #expect(rig.pill.cardMessage == PillMessage(DeliveryCard.textIsSafe, isError: true))
+        #expect(!rig.log.contains("pill.hide"))
+    }
+
+    @Test func dismissingTheCardTakesTheCardMessageDown() async {
+        let rig = Rig()
+        rig.engine.result.text = messy
+        rig.inserter.result = DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: false, target: nil, finalText: "")
+        await rig.dictate()
+        rig.cards.dismiss()
+        #expect(rig.pill.cardMessage == nil)
+        #expect(rig.pill.cardHides == 2)
+    }
+
+    @Test func aReplacementCardUpdatesTheCardMessage() async {
+        let rig = Rig()
+        rig.cards.present(.secure("hello"))
+        #expect(rig.pill.cardMessage?.headline == DeliveryCard.textIsSafe)
+        rig.cards.present(.notLanded("hello"))
+        #expect(rig.pill.cardMessage == PillMessage("The field didn't change", isError: true))
+        rig.cards.present(.cancelled())
+        #expect(rig.pill.cardMessage == nil)
+    }
+
+    @Test func aCardWithNoDetailLeavesThePillHidden() async {
+        let rig = Rig()
+        rig.cards.present(.cancelled())
+        #expect(rig.pill.cardMessage == nil)
+        #expect(rig.pill.cardHides == 1)
+        #expect(!rig.log.all.contains { $0.hasPrefix("pill.card:") })
+    }
+
+    @Test func aCardRaisedDuringARecordingDoesNotTakeTheRecordingPill() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        rig.cards.present(.limitWarning(stopsAfter: 1200))
+        #expect(rig.pill.cardMessage == nil)
+        #expect(!rig.log.all.contains { $0.hasPrefix("pill.card:") })
     }
 }
 
@@ -1445,8 +1505,13 @@ private final class FakeCorrections: CorrectionObserving {
             rig.inserter.result = DeliveryResult(method: method, outcome: outcome, focusMoved: false, target: nil, finalText: finalText)
             await rig.dictate()
             #expect(rig.cards.presented.map(\.kind) == (kind.map { [$0] } ?? []))
-            #expect(rig.pill.messages.isEmpty && rig.log.contains("pill.hide"))
-            guard let card = rig.cards.presented.first else { continue }
+            #expect(rig.pill.messages.isEmpty)
+            guard let card = rig.cards.presented.first else {
+                #expect(rig.log.contains("pill.hide"))
+                continue
+            }
+            // The pill stays under the card with its detail line instead of hiding.
+            #expect(rig.pill.cardMessage == card.pillMessage && !rig.log.contains("pill.hide"))
             #expect(card.header == header && card.actions == [.copy] && card.countdown == nil)
             #expect(card.transcript == (finalText.isEmpty ? "Hello world." : finalText))
         }

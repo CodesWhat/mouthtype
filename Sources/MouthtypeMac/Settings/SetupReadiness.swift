@@ -3,6 +3,21 @@ import Foundation
 
 enum SetupStep: Int {
     case microphone = 1, accessibility, speech, shortcut, ready
+
+    static let footerNames = ["MICROPHONE", "ACCESSIBILITY", "SPEECH", "SHORTCUT"]
+
+    /// One dot per setup step. The ready step has nothing left to do, so every dot is done.
+    var dots: [SetupDot] {
+        (1...4).map { index in
+            if self == .ready || index < rawValue { .done }
+            else if index == rawValue { .active }
+            else { .pending }
+        }
+    }
+}
+
+enum SetupDot: Equatable {
+    case done, active, pending
 }
 
 struct SetupReadiness {

@@ -4,6 +4,7 @@ import SwiftUI
 
 @MainActor struct SetupActions {
     var refresh: () -> Void = {}
+    var poll: () -> Void = {}
     var microphone: () -> Void = {}
     var accessibility: () -> Void = {}
     var retrySpeech: () -> Void = {}
@@ -12,28 +13,87 @@ import SwiftUI
 }
 
 @MainActor final class SetupWindow: NSWindowController, NSWindowDelegate {
+    static let contentSize = NSSize(width: 560, height: 440)
+
     let model: SetupModel
     private let refresh: () -> Void
+    private let poll: () -> Void
+    private let pollInterval: TimeInterval
+    private var pollTimer: Timer?
+    private var actions: SetupActions
+    private let reduceTransparency: () -> Bool
+    private let notifications: NotificationCenter
+    private nonisolated(unsafe) var transparencyObserver: NSObjectProtocol?
+    var isPolling: Bool { pollTimer != nil }
+    var isObservingTransparency: Bool { transparencyObserver != nil }
 
-    init(model: SetupModel, actions: SetupActions) {
+    init(model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
+         reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+         notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
         self.model = model
+        self.pollInterval = pollInterval
+        self.reduceTransparency = reduceTransparency
+        self.notifications = notifications
         refresh = actions.refresh
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 650, height: 590),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        poll = actions.poll
+        self.actions = actions
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Set Up Mouthtype"
-        window.minSize = NSSize(width: 560, height: 540)
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         super.init(window: window)
-        var actions = actions
-        actions.done = { [weak self] in self?.close() }
-        window.contentView = NSHostingView(rootView: SetupView(model: model, actions: actions))
+        self.actions.done = { [weak self] in self?.close() }
+        applyContent()
+        window.setContentSize(Self.contentSize)
         window.delegate = self
         window.center()
     }
 
     required init?(coder: NSCoder) { nil }
 
+    deinit {
+        if let transparencyObserver { notifications.removeObserver(transparencyObserver) }
+    }
+
+    /// Installs the glass or solid content to match Reduce Transparency. Called at init and again whenever the setting changes.
+    private func applyContent() {
+        guard let window else { return }
+        let solid = reduceTransparency()
+        let hosting = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: solid))
+        hosting.sizingOptions = []
+        if solid {
+            window.backgroundColor = .windowBackgroundColor
+            window.contentView = hosting
+        } else {
+            window.backgroundColor = .clear
+            let glass = NSGlassEffectView()
+            glass.contentView = hosting
+            window.contentView = glass
+        }
+        window.setContentSize(Self.contentSize)
+    }
+
+    private func startObservingTransparency() {
+        guard transparencyObserver == nil else { return }
+        transparencyObserver = notifications.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.applyContent() }
+        }
+        applyContent()
+    }
+
+    private func stopObservingTransparency() {
+        guard let transparencyObserver else { return }
+        notifications.removeObserver(transparencyObserver)
+        self.transparencyObserver = nil
+    }
+
     func present() {
+        startObservingTransparency()
         refresh()
         model.refreshInstructions()
         showWindow(nil)
@@ -41,38 +101,59 @@ import SwiftUI
         window?.makeKeyAndOrderFront(nil)
     }
 
-    func windowDidBecomeKey(_ notification: Notification) { refresh(); model.refreshInstructions() }
+    func windowDidBecomeKey(_ notification: Notification) {
+        startObservingTransparency()
+        refresh()
+        model.refreshInstructions()
+        startPolling()
+    }
+
+    func windowDidResignKey(_ notification: Notification) { stopPolling() }
+
+    func windowWillClose(_ notification: Notification) {
+        stopPolling()
+        stopObservingTransparency()
+    }
+
+    private func startPolling() {
+        guard pollTimer == nil else { return }
+        let timer = Timer(timeInterval: pollInterval, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.poll() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pollTimer = timer
+    }
+
+    private func stopPolling() {
+        pollTimer?.invalidate()
+        pollTimer = nil
+    }
 }
 
 struct SetupView: View {
     @Bindable var model: SetupModel
     var actions: SetupActions
+    var solid = false
+
+    /// The window extends under the title bar, so the dots sit below the traffic lights (about 28 pt tall) with a gap.
+    static let dotsTopInset: CGFloat = 36
+
+    private static let brand = Color(red: 0.19, green: 0.36, blue: 0.34)
 
     private var step: SetupStep { model.readiness.step }
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack {
-                Text("MOUTHTYPE / GET STARTED")
-                Spacer()
-                Text(step == .ready ? "READY" : "STEP \(step.rawValue) OF 4")
-                    .accessibilityIdentifier("setup-progress")
-            }
-            .font(.custom("JetBrainsMono-Medium", size: 10)).foregroundStyle(.secondary)
-            .padding(.horizontal, 32).padding(.top, 28)
+            SetupStepDots(dots: step.dots).padding(.top, SetupView.dotsTopInset)
             ScrollView {
-                VStack(spacing: 20) {
-                    Image(systemName: symbol).font(.system(size: 28))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 68, height: 68)
-                        .background(Color(red: 0.19, green: 0.36, blue: 0.34).opacity(0.08), in: RoundedRectangle(cornerRadius: 18))
-                        .accessibilityHidden(true)
-                    Text(title).font(.custom("InstrumentSerif-Regular", size: 42))
+                VStack(spacing: 12) {
+                    SetupLips().padding(.bottom, 6)
+                    Text(title).font(.custom("InstrumentSerif-Regular", size: 30))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                     Text(detail).foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
-                    controls
+                    controls.padding(.top, 4)
                     if step == .ready {
                         Text("Change your shortcut or recording behavior in Settings. Fast and Thorough use Basic until their cleanup model is ready.")
                             .font(.callout).foregroundStyle(.secondary)
@@ -80,30 +161,44 @@ struct SetupView: View {
                     }
                 }
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 480, minHeight: 360)
-                .padding(32).frame(maxWidth: .infinity)
+                .frame(maxWidth: 400)
+                .padding(.horizontal, 40).padding(.vertical, 12)
+                .frame(maxWidth: .infinity, minHeight: 330)
                 .accessibilityIdentifier("setup-card")
                 .id(step)
             }.defaultScrollAnchor(.top)
-            VStack(spacing: 14) {
-                Divider()
-                HStack {
-                    Button("Refresh status", action: actions.refresh).accessibilityIdentifier("setup-refresh")
-                    Spacer()
-                    if step == .ready {
-                        Button("Done", action: actions.done)
-                            .keyboardShortcut(.defaultAction).accessibilityIdentifier("setup-done")
-                    } else {
-                        Button("Set up later", action: actions.done).accessibilityIdentifier("setup-done")
-                    }
+            HStack {
+                if step == .ready {
+                    Button("Done", action: actions.done)
+                        .keyboardShortcut(.defaultAction).accessibilityIdentifier("setup-done")
+                } else {
+                    Button("Set up later", action: actions.done).buttonStyle(.link)
+                        .foregroundStyle(.secondary).accessibilityIdentifier("setup-done")
                 }
-                Text("Reopen setup from Settings → General.").font(.callout).foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }.padding(.horizontal, 32).padding(.bottom, 22)
+                Spacer()
+                footerSteps.accessibilityIdentifier("setup-progress")
+            }
+            .font(.callout).padding(.horizontal, 20).padding(.bottom, 16)
         }
+        .frame(width: SetupWindow.contentSize.width, height: SetupWindow.contentSize.height)
+        .ignoresSafeArea()
         .font(.custom("InstrumentSans-Regular", size: 14))
-        .tint(Color(red: 0.19, green: 0.36, blue: 0.34))
-        .background(Color(nsColor: .textBackgroundColor))
+        .tint(Self.brand)
+        .background { if solid { Color(nsColor: .windowBackgroundColor) } }
+    }
+
+    /// One Text so the names wrap onto a second line at narrow widths instead of truncating.
+    private var footerSteps: some View {
+        let line = SetupStep.footerNames.enumerated().reduce(Text("")) { text, entry in
+            let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? .primary : .secondary)
+            return entry.offset == 0 ? name : text + Text(" · ").foregroundColor(.secondary) + name
+        }
+        return line
+        .font(.custom("JetBrainsMono-Medium", size: 10)).tracking(1)
+        .multilineTextAlignment(.trailing)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
     }
 
     private var title: String {
@@ -116,21 +211,11 @@ struct SetupView: View {
         }
     }
 
-    private var symbol: String {
-        switch step {
-        case .microphone: "mic"
-        case .accessibility: "hand.raised"
-        case .speech: "waveform"
-        case .shortcut: "keyboard"
-        case .ready: "checkmark"
-        }
-    }
-
     private var detail: String {
         switch step {
         case .microphone:
             switch model.diagnostics.microphoneStatus {
-            case .notDetermined: "Allow microphone access so Mouthtype can hear you while you dictate."
+            case .notDetermined: "Allow microphone access so Mouthtype can hear you while you dictate. Audio stays on this Mac."
             case .denied, .restricted: "Microphone access is not allowed. Enable Mouthtype in System Settings, then return here."
             case .authorized:
                 if model.capturePreparing { "Preparing your microphone…" }
@@ -182,5 +267,40 @@ struct SetupView: View {
     private func action(_ title: String, identifier: String, perform: @escaping () -> Void) -> some View {
         Button(title, action: perform).buttonStyle(.borderedProminent).controlSize(.large)
             .keyboardShortcut(.defaultAction).accessibilityIdentifier(identifier)
+    }
+}
+
+struct SetupStepDots: View {
+    var dots: [SetupDot]
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(dots.enumerated()), id: \.offset) { _, dot in
+                Capsule().fill(fill(dot)).frame(width: dot == .active ? 18 : 5, height: 5)
+            }
+        }
+        .accessibilityHidden(true)
+    }
+
+    private func fill(_ dot: SetupDot) -> Color {
+        switch dot {
+        case .active: Color(red: 0.19, green: 0.36, blue: 0.34)
+        case .done: Color(red: 0.19, green: 0.36, blue: 0.34).opacity(0.5)
+        case .pending: Color.primary.opacity(0.18)
+        }
+    }
+}
+
+struct SetupLips: View {
+    static let size = CGSize(width: 36, height: 22)
+    static let scale: CGFloat = 1.5
+
+    var body: some View {
+        if let url = Bundle.module.url(forResource: "lips-36x22", withExtension: "png", subdirectory: "Settings"),
+           let sprite = NSImage(contentsOf: url) {
+            Image(nsImage: sprite).resizable().interpolation(.none).antialiased(false)
+                .frame(width: Self.size.width * Self.scale, height: Self.size.height * Self.scale)
+                .accessibilityHidden(true)
+        }
     }
 }

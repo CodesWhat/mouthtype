@@ -33,6 +33,9 @@ struct DeliveryCard: Equatable, Sendable {
         /// A question about the dictionary rather than a report on a delivery.
         var isOffer: Bool { self == .rememberSpelling || self == .forgetSpelling }
 
+        /// A card that asks the user something, so a skin can mark it with a question accent.
+        var isQuestion: Bool { isOffer || self == .recoverOffer }
+
         /// A card that asks or reports something good rather than a failure, so it wears the quiet ink, not the error red.
         var isQuiet: Bool { isOffer || self == .recoverOffer || self == .recovered }
     }
@@ -52,6 +55,23 @@ struct DeliveryCard: Equatable, Sendable {
     var actions: [CardAction]
     /// Seconds the card stays up on its own, shown as a countdown; nil for a card that waits to be dismissed.
     var countdown: TimeInterval?
+
+    /// What the pill says under this card, so it adds to the header instead of repeating it: the header's detail line
+    /// when it has one, else that the transcript is safe, else nothing.
+    var pillMessage: PillMessage? {
+        let lines = header.split(separator: "\n", omittingEmptySubsequences: true)
+        let text: String
+        if lines.count > 1 {
+            text = String(lines[1])
+        } else if transcript != nil {
+            text = Self.textIsSafe
+        } else {
+            return nil
+        }
+        return PillMessage(text, isError: !kind.isQuiet)
+    }
+
+    static let textIsSafe = "Your text is safe"
 
     static func secure(_ text: String) -> DeliveryCard {
         DeliveryCard(kind: .secure, header: "Secure field, not pasted", transcript: text, actions: [.copy], countdown: nil)
