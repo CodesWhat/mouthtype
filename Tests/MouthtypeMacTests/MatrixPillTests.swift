@@ -347,4 +347,60 @@ import Testing
         #expect(skin.messageLineFrames == before)
         #expect(skin.messageViewport == CGRect(x: 0, y: 0, width: skin.capsuleRect.width, height: skin.capsuleRect.height))
     }
+
+    @Test func theUnlitGridIsBuiltOnceAndOnlyMovesWithTheCapsule() throws {
+        let skin = try view(.matrix, scale: .large)
+        let ghost = skin.meterLayers.ghost
+        let path = try #require(ghost.path)
+        #expect(path.boundingBox.width == 38 * 2 && path.boundingBox.height == 20 * 2)
+        skin.showRecording(locked: false)
+        skin.showFractions([0.9, 0.2, 0.5, 0.1, 0.7, 0.3, 0.8, 0.4, 0.6, 0.05])
+        skin.showMessage(PillMessage("Mouthtype is busy", detail: "Try again in a moment"), overRecording: false)
+        skin.showRecording(locked: true)
+        #expect(ghost.path === path)
+        #expect(ghost.position.x == MatrixPillLayout.Metrics.large.meterX)
+        #expect(ghost.position.y == skin.capsuleRect.height / 2)
+    }
+
+    @Test(arguments: [PillSkinKind.matrix, .minimal])
+    func theGlowFollowsTheLitShapesWithAShadowPath(kind: PillSkinKind) throws {
+        let skin = try view(kind)
+        skin.showRecording(locked: false)
+        skin.showFractions([0.9, 0.2, 0.5, 0.1, 0.7, 0.3, 0.8, 0.4, 0.6, 0.05])
+        let layers = skin.meterLayers
+        #expect(layers.lit.shadowPath != nil && layers.lit.shadowPath == layers.lit.path)
+        #expect(layers.idle.shadowPath != nil && layers.idle.shadowPath == layers.idle.path)
+    }
+
+    @Test(arguments: [PillSkinKind.matrix, .minimal])
+    func theLampFollowsReduceMotionAsItChanges(kind: PillSkinKind) throws {
+        let skin = try view(kind, reduceMotion: false)
+        skin.showRecording(locked: false)
+        #expect(skin.lampMotion == .breathing)
+        skin.reduceMotionOverride = true
+        skin.reduceMotionMayHaveChanged()
+        #expect(skin.lampMotion == .steady && skin.lampAnimation == nil)
+        skin.reduceMotionOverride = false
+        skin.reduceMotionMayHaveChanged()
+        #expect(skin.lampMotion == .breathing && skin.lampAnimation != nil)
+    }
+
+    @Test func theSystemNotificationReachesTheLamp() async throws {
+        let skin = try view(.matrix, reduceMotion: false)
+        skin.showRecording(locked: false)
+        skin.reduceMotionOverride = true
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
+        for _ in 0..<100 where skin.lampMotion != .steady { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(skin.lampMotion == .steady && skin.lampAnimation == nil)
+    }
+
+    @Test(arguments: [PillSkinKind.matrix, .minimal])
+    func anAppearanceChangeLeavesAWidthSpringRunning(kind: PillSkinKind) throws {
+        let skin = try view(kind, dark: true, reduceMotion: false)
+        skin.showMessage(PillMessage("Mouthtype is busy", detail: "Try again in a moment"), overRecording: false)
+        let spring = try #require(skin.widthAnimation)
+        skin.appearance = NSAppearance(named: .aqua)
+        #expect(skin.widthAnimation === spring)
+        #expect(skin.messageLines.count == 2)
+    }
 }

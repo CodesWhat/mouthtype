@@ -101,6 +101,9 @@ class SquirclePillView: NSView, PillSkinView {
     private(set) var lampMotion = LampMotion.steady
     /// Replaces the system Reduce Motion setting; tests set it.
     var reduceMotionOverride: Bool?
+    private var reduceMotionObserver: NSObjectProtocol?
+    /// The Reduce Motion value the lamp was last set up for.
+    private var lampReducedMotion = false
 
     var messageLines: [ClassicPillLayout.MessageLine] { block.lines }
     var messageSize: CGSize { CGSize(width: block.width, height: block.height) }
@@ -120,6 +123,9 @@ class SquirclePillView: NSView, PillSkinView {
     var showsRecLabel: Bool { recLabel.opacity > 0.5 }
     var clockString: String { clockText }
     var lampOpacity: Float { lamp.opacity }
+    var meterLayers: (ghost: CAShapeLayer, lit: CAShapeLayer, idle: CAShapeLayer) { (ghost, lit, idle) }
+    /// The spring on the body, nil when it is not moving.
+    var widthAnimation: CAAnimation? { bodyShape.mask.animation(forKey: "path") }
     var capsuleRect: CGRect { capsule(width: width, height: height) }
 
     var controlFrames: [PillControl: CGRect] {
@@ -183,6 +189,7 @@ class SquirclePillView: NSView, PillSkinView {
         lips.minificationFilter = .nearest
         lips.opacity = 0
         content.addSublayer(lips)
+        if flavor == .matrix { ghost.path = Self.ghostPath(metrics: metrics) }
         meterGroup.addSublayer(ghost)
         meterGroup.addSublayer(idle)
         meterGroup.addSublayer(lit)
@@ -222,9 +229,22 @@ class SquirclePillView: NSView, PillSkinView {
         applyPalette()
         applyScale()
         relayout()
+        reduceMotionObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.reduceMotionMayHaveChanged() } }
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
+
+    isolated deinit {
+        if let reduceMotionObserver { NSWorkspace.shared.notificationCenter.removeObserver(reduceMotionObserver) }
+    }
+
+    /// Reduce Motion was switched in System Settings: the lamp stops or starts at once instead of at the next state.
+    func reduceMotionMayHaveChanged() {
+        guard reduceMotion != lampReducedMotion else { return }
+        updateLampMotion()
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -254,7 +274,9 @@ class SquirclePillView: NSView, PillSkinView {
         let next = SquirclePalette.resolve(flavor, dark: isDark)
         palette = next
         applyPalette()
-        relayout()
+        // Only colours change with the appearance, so the capsule is left where it is, mid-spring if it is moving.
+        layoutLabels()
+        layoutText()
     }
 
     // MARK: Colours and fonts
@@ -463,7 +485,7 @@ class SquirclePillView: NSView, PillSkinView {
     private func rebuildMeter() {
         let midY = height / 2
         let x = metrics.meterX
-        let litPath = CGMutablePath(), idlePath = CGMutablePath(), ghostPath = CGMutablePath()
+        let litPath = CGMutablePath(), idlePath = CGMutablePath()
         if isBars {
             for (i, n) in halfRows.enumerated() {
                 let frame = MatrixPillLayout.barFrame(index: i, halfRows: n, x: x, midY: midY, metrics: metrics)
@@ -473,9 +495,6 @@ class SquirclePillView: NSView, PillSkinView {
         } else {
             let middle = (MatrixPillLayout.rows - 1) / 2
             for column in 0..<MatrixPillLayout.columns {
-                for row in 0..<MatrixPillLayout.rows {
-                    ghostPath.addEllipse(in: MatrixPillLayout.dotFrame(column: column, row: row, x: x, midY: midY, metrics: metrics))
-                }
                 let n = halfRows[column]
                 if let rows = MatrixPillLayout.litRows(halfRows: n) {
                     for row in rows {
@@ -487,10 +506,25 @@ class SquirclePillView: NSView, PillSkinView {
             }
         }
         PillMotion.withoutActions {
-            ghost.path = ghostPath
+            // The unlit grid never changes, so its path is built once at the origin and the layer moves with the capsule.
+            ghost.position = CGPoint(x: x, y: midY)
             lit.path = litPath
             idle.path = idlePath
+            // A shadow path spares the glow an offscreen pass to find the shape's edge on every redraw.
+            lit.shadowPath = litPath
+            idle.shadowPath = idlePath
         }
+    }
+
+    /// The 13 x 7 grid of unlit dots with the grid's left edge at 0 and its middle at 0.
+    private static func ghostPath(metrics: MatrixPillLayout.Metrics) -> CGPath {
+        let path = CGMutablePath()
+        for column in 0..<MatrixPillLayout.columns {
+            for row in 0..<MatrixPillLayout.rows {
+                path.addEllipse(in: MatrixPillLayout.dotFrame(column: column, row: row, x: 0, midY: 0, metrics: metrics))
+            }
+        }
+        return path
     }
 
     private func applyHalfRows(_ next: [Int]) {
@@ -601,6 +635,7 @@ class SquirclePillView: NSView, PillSkinView {
     /// The lamp breathes between 78% and 100% on a 2 s cycle while a hold recording runs, pulses while processing and
     /// flashes on an error; under Reduce Motion it stays steady.
     private func updateLampMotion() {
+        lampReducedMotion = reduceMotion
         PillMotion.withoutActions { lamp.removeAnimation(forKey: "motion") }
         applyLampColour()
         let wanted: LampMotion
