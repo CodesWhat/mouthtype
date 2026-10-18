@@ -65,9 +65,9 @@ import MouthtypeCore
         var selected: [PillSkinKind] = []
         let model = SettingsModel(defaults: defaults, onSkinChanged: { selected.append($0) })
         model.setSkin(.hifi)
-        model.setHiFiSize(.large)
+        model.setPillSize(.large)
         #expect(PillSkinPreference.current(defaults) == .hifi)
-        #expect(HiFiPillSizePreference.current(defaults) == .large)
+        #expect(PillSizePreference.current(defaults) == .large && model.pillSize == .large)
         #expect(selected == [.hifi, .hifi])
         model.setSounds(false)
         #expect(!SoundPreference.isEnabled(defaults))

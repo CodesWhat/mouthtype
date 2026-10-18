@@ -356,7 +356,7 @@ struct SettingsView: View {
         VStack(alignment: .leading, spacing: 25) {
             heading("Appearance / Floating pill", "Clean by default. Personal by choice.", "The same Mouthtype underneath. A different little machine when you want one.")
             VStack(spacing: 17) {
-                if let image = SettingsPillImage.make(skin: model.skin, size: model.hiFiSize) {
+                if let image = SettingsPillImage.make(skin: model.skin, size: model.pillSize) {
                     Image(nsImage: image).interpolation(.none).accessibilityLabel("\(model.skin.title) floating pill preview")
                         .frame(height: 95)
                 }
@@ -365,12 +365,10 @@ struct SettingsView: View {
             Picker("Pill style", selection: Binding(get: { model.skin.rawValue }, set: { if let skin = PillSkinKind(rawValue: $0) { model.setSkin(skin) } })) {
                 ForEach(PillSkinKind.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
             }.pickerStyle(.segmented)
-            if model.skin == .hifi {
-                settingRow("Hi-Fi size", "Applies the next time the pill appears.") {
-                    Picker("Hi-Fi size", selection: Binding(get: { model.hiFiSize.rawValue }, set: { if let size = HiFiPillSize(rawValue: $0) { model.setHiFiSize(size) } })) {
-                        ForEach(HiFiPillSize.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
-                    }.labelsHidden().frame(width: 150)
-                }
+            settingRow("Pill size", "Automatic picks Large on wide screens. Applies the next time the pill appears.") {
+                Picker("Pill size", selection: Binding(get: { model.pillSize.rawValue }, set: { if let size = PillSize(rawValue: $0) { model.setPillSize(size) } })) {
+                    ForEach(PillSize.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
+                }.labelsHidden().frame(width: 150)
             }
             settingRow(model.fontOverrides.enabled ? "Base text font" : "Text font", "Used by the Classic pill and delivery cards.") {
                 Picker("Text font", selection: Binding(get: { model.font.title }, set: { name in if let font = TextFontChoice.standard.first(where: { $0.title == name }) { model.setFont(font) } })) {
@@ -397,11 +395,13 @@ struct SettingsView: View {
 }
 
 @MainActor enum SettingsPillImage {
-    static func make(skin: PillSkinKind, size: HiFiPillSize) -> NSImage? {
+    /// `.automatic` previews as Standard: the preview cannot know which screen the pill will land on.
+    static func make(skin: PillSkinKind, size: PillSize) -> NSImage? {
         let frame = NSRect(x: 0, y: 0, width: 360, height: 110)
+        let scale = size.resolved(visibleWidth: 0)
         let view: any PillSkinView
-        if skin == .hifi, let assets = try? PillAssets.loadHiFi() { view = HiFiPillView(frame: frame, assets: assets, size: size) }
-        else { view = ClassicPillView(frame: frame) }
+        if skin == .hifi, let assets = try? PillAssets.loadHiFi() { view = HiFiPillView(frame: frame, assets: assets, size: scale) }
+        else { view = ClassicPillView(frame: frame, size: scale) }
         view.appear(reduceMotion: true)
         view.showRecording(locked: true)
         view.showFractions([0.2, 0.4, 0.6, 0.8, 0.5, 0.35, 0.65, 0.3, 0.2, 0.1])

@@ -44,8 +44,8 @@ final class HiFiPillView: NSView, PillSkinView {
     /// How far the current message has to scroll, 0 when it sits centred.
     private(set) var messageScrollDistance = 0
 
-    init(frame: NSRect, assets: PillAssets, size: HiFiPillSize = .standard) {
-        artScale = size.scale
+    init(frame: NSRect, assets: PillAssets, size: PillScale = .standard) {
+        artScale = size.factor
         self.assets = assets
         layout = assets.layout
         super.init(frame: frame)

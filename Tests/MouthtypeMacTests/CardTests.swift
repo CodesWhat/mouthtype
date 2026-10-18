@@ -79,10 +79,10 @@ private final class FakeClipboard: ClipboardWriting {
             let face = CGRect(origin: .zero, size: f.size)
             let regions = [f.dismiss, f.header] + f.buttons + [f.transcript].compactMap { $0 }
             for region in regions { #expect(face.contains(region)) }
-            #expect(f.dismiss.width == 20 && f.dismiss.height == 20 && f.dismiss.maxX == C.width - C.insets.side)
+            #expect(f.dismiss.width == 24 && f.dismiss.height == 24 && f.dismiss.maxX == C.width - C.insets.side)
             for (i, a) in regions.enumerated() { for b in regions[(i + 1)...] { #expect(!a.intersects(b)) } }
             #expect(f.buttons.allSatisfy { $0.height >= 26 && $0.width >= 64 })
-            #expect(f.dot.midY == C.insets.top + C.rowHeight / 2)
+            #expect(f.dot.midY == C.insets.top + C.rowHeight / 2 && f.dismiss.midY == f.dot.midY)
         }
     }
 

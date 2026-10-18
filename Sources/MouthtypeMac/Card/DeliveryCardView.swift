@@ -50,7 +50,7 @@ class CardControlView: NSView {
     }
 }
 
-/// The 20 pt round dismiss control.
+/// The 24 pt round dismiss control.
 @MainActor
 final class CardDismissView: CardControlView {
     override func draw(_ dirtyRect: NSRect) {

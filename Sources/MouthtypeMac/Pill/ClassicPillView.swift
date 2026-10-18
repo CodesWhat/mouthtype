@@ -42,15 +42,19 @@ final class ClassicPillView: NSView, PillSkinView {
     private var lineLayers: [CATextLayer] = []
     private let discs: [PillControl: Disc] = [.cancel: Disc(), .stop: Disc()]
 
+    /// The pill size this view is drawn at; a size change builds a new view.
+    let pillScale: PillScale
+    private let metrics: ClassicPillLayout.Metrics
+    private var k: CGFloat { metrics.factor }
     private var scale: CGFloat = 2
     private var mode = ClassicPillLayout.Mode.hold
-    private var width = ClassicPillLayout.dotWidth
-    private var height = ClassicPillLayout.height
+    private var width: CGFloat
+    private var height: CGFloat
     private var presented = false
     private(set) var typography = Typography.current()
     private var message: PillMessage?
     private var messageOverRecording = false
-    private var block = ClassicPillLayout.MessageBlock(width: 0, height: ClassicPillLayout.height, lines: [])
+    private var block: ClassicPillLayout.MessageBlock
     private var heights: [CGFloat]
     private var hovered: PillControl?
     private var pressed: PillControl?
@@ -63,11 +67,16 @@ final class ClassicPillView: NSView, PillSkinView {
 
     var controlFrames: [PillControl: CGRect] {
         guard isLocked, mode == .locked else { return [:] }
-        return ClassicPillLayout.controlFrames(capsule: capsule(width: width))
+        return ClassicPillLayout.controlFrames(capsule: capsule(width: width), metrics: metrics)
     }
 
-    override init(frame: NSRect) {
-        heights = [CGFloat](repeating: ClassicPillLayout.barMetrics(scale: 2).width, count: BarModel.barCount)
+    init(frame: NSRect, size: PillScale = .standard) {
+        pillScale = size
+        metrics = ClassicPillLayout.Metrics(size)
+        width = metrics.dotWidth
+        height = metrics.height
+        block = ClassicPillLayout.MessageBlock(width: 0, height: metrics.height, lines: [])
+        heights = [CGFloat](repeating: ClassicPillLayout.barMetrics(scale: 2, metrics: metrics).width, count: BarModel.barCount)
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = .clear
@@ -77,7 +86,7 @@ final class ClassicPillView: NSView, PillSkinView {
         container.opacity = 0
         layer?.addSublayer(container)
 
-        for (shadow, opacity, radius, drop) in [(ambient, Float(0.50), CGFloat(6), CGFloat(4)), (contact, 0.35, 1, 0.8)] {
+        for (shadow, opacity, radius, drop) in [(ambient, Float(0.50), 6 * k, 4 * k), (contact, 0.35, 1 * k, 0.8 * k)] {
             shadow.fillColor = nil
             shadow.shadowColor = NSColor.black.cgColor
             shadow.shadowOpacity = opacity
@@ -89,7 +98,7 @@ final class ClassicPillView: NSView, PillSkinView {
         container.addSublayer(body)
         rim.fillColor = nil
         rim.strokeColor = Self.stroke.cgColor
-        rim.lineWidth = 1
+        rim.lineWidth = k
         container.addSublayer(rim)
 
         container.addSublayer(barsLayer)
@@ -103,13 +112,13 @@ final class ClassicPillView: NSView, PillSkinView {
 
         for (control, disc) in discs {
             let isStop = control == .stop
-            disc.group.bounds = CGRect(origin: .zero, size: CGSize(width: ClassicPillLayout.controlDiameter, height: ClassicPillLayout.controlDiameter))
+            disc.group.bounds = CGRect(origin: .zero, size: CGSize(width: metrics.controlDiameter, height: metrics.controlDiameter))
             disc.group.opacity = 0
             disc.disc.path = CGPath(ellipseIn: disc.group.bounds, transform: nil)
-            disc.glyph.path = Self.glyphPath(stop: isStop, in: disc.group.bounds)
+            disc.glyph.path = Self.glyphPath(stop: isStop, in: disc.group.bounds, k: k)
             disc.glyph.fillColor = isStop ? Self.fill.cgColor : nil
             disc.glyph.strokeColor = isStop ? nil : NSColor(hex: 0xFCFCFB).cgColor
-            disc.glyph.lineWidth = 1.5
+            disc.glyph.lineWidth = 1.5 * k
             disc.glyph.lineCap = .round
             disc.group.addSublayer(disc.disc)
             disc.group.addSublayer(disc.glyph)
@@ -161,7 +170,7 @@ final class ClassicPillView: NSView, PillSkinView {
 
     private func capsulePath(_ rect: CGRect, inset: CGFloat = 0) -> CGPath {
         let r = rect.insetBy(dx: inset, dy: inset)
-        let radius = min(ClassicPillLayout.cornerRadius - inset, r.height / 2)
+        let radius = min(metrics.cornerRadius - inset, r.height / 2)
         return CGPath(roundedRect: r, cornerWidth: radius, cornerHeight: radius, transform: nil)
     }
 
@@ -172,7 +181,8 @@ final class ClassicPillView: NSView, PillSkinView {
         layoutText()
     }
 
-    private func place(width newWidth: CGFloat, height newHeight: CGFloat = ClassicPillLayout.height, timing: Timing) {
+    private func place(width newWidth: CGFloat, height newHeight: CGFloat? = nil, timing: Timing) {
+        let newHeight = newHeight ?? metrics.height
         width = newWidth
         height = newHeight
         let rect = capsule(width: newWidth, height: newHeight)
@@ -180,9 +190,9 @@ final class ClassicPillView: NSView, PillSkinView {
         set(body, "path", path, timing)
         set(ambient, "shadowPath", path, timing)
         set(contact, "shadowPath", path, timing)
-        set(rim, "path", capsulePath(rect, inset: 0.5), timing)
+        set(rim, "path", capsulePath(rect, inset: 0.5 * k), timing)
         // Controls travel with the capsule's ends while hidden too, so they fade in where they will sit.
-        let frames = ClassicPillLayout.controlFrames(capsule: rect)
+        let frames = ClassicPillLayout.controlFrames(capsule: rect, metrics: metrics)
         for (control, disc) in discs {
             guard let frame = frames[control] else { continue }
             set(disc.group, "position", NSValue(point: CGPoint(x: frame.midX, y: frame.midY)), timing)
@@ -191,7 +201,7 @@ final class ClassicPillView: NSView, PillSkinView {
 
     private func layoutBars() {
         let rect = capsule(width: width)
-        let frames = ClassicPillLayout.barFrames(capsule: rect, heights: heights, scale: scale)
+        let frames = ClassicPillLayout.barFrames(capsule: rect, heights: heights, scale: scale, metrics: metrics)
         withoutActions {
             for (bar, frame) in zip(bars, frames) {
                 bar.frame = frame
@@ -223,7 +233,7 @@ final class ClassicPillView: NSView, PillSkinView {
                     continue
                 }
                 let line = block.lines[index]
-                let font = typography.font(line.isDetail ? .pillDetail : .pillMessage)
+                let font = typography.font(line.isDetail ? .pillDetail : .pillMessage, scale: k)
                 let color = line.isDetail ? Self.ink.withAlphaComponent(Self.detailAlpha) : (isError ? Self.errorInk : Self.ink)
                 let descent = -font.descender
                 // Cap-height centred on the line's middle, which reads as centred for sentence-case text.
@@ -231,24 +241,24 @@ final class ClassicPillView: NSView, PillSkinView {
                 layer.isHidden = false
                 layer.string = NSAttributedString(string: line.text, attributes: [.font: font, .foregroundColor: color])
                 layer.frame = CGRect(
-                    x: rect.minX + ClassicPillLayout.messagePadding,
+                    x: rect.minX + metrics.messagePadding,
                     y: ClassicPillLayout.snap(baseline - descent, scale: scale),
-                    width: rect.width - 2 * ClassicPillLayout.messagePadding, height: Typography.lineHeight(font)
+                    width: rect.width - 2 * metrics.messagePadding, height: Typography.lineHeight(font)
                 )
             }
         }
     }
 
-    private static func glyphPath(stop: Bool, in bounds: CGRect) -> CGPath {
+    private static func glyphPath(stop: Bool, in bounds: CGRect, k: CGFloat) -> CGPath {
         let c = CGPoint(x: bounds.midX, y: bounds.midY)
         if stop {
-            let side: CGFloat = 7
+            let side: CGFloat = 7 * k
             return CGPath(
                 roundedRect: CGRect(x: c.x - side / 2, y: c.y - side / 2, width: side, height: side),
-                cornerWidth: 1.5, cornerHeight: 1.5, transform: nil
+                cornerWidth: 1.5 * k, cornerHeight: 1.5 * k, transform: nil
             )
         }
-        let h: CGFloat = 3.1
+        let h: CGFloat = 3.1 * k
         let path = CGMutablePath()
         path.move(to: CGPoint(x: c.x - h, y: c.y - h))
         path.addLine(to: CGPoint(x: c.x + h, y: c.y + h))
@@ -323,7 +333,8 @@ final class ClassicPillView: NSView, PillSkinView {
         let fadeIn: Timing = presented ? .ease(reduceMotion ? 0.15 : 0.12, delay: reduceMotion ? 0 : 0.07) : .none
         let fadeOut: Timing = presented ? .ease(reduceMotion ? 0.15 : 0.05) : .none
         place(
-            width: ClassicPillLayout.capsuleWidth(new, scale: scale), height: ClassicPillLayout.capsuleHeight(new),
+            width: ClassicPillLayout.capsuleWidth(new, scale: scale, metrics: metrics),
+            height: ClassicPillLayout.capsuleHeight(new, metrics: metrics),
             timing: moving ? .spring : .none
         )
 
@@ -361,11 +372,11 @@ final class ClassicPillView: NSView, PillSkinView {
         messageOverRecording = overRecording
         block = ClassicPillLayout.messageBlock(
             headline: message.headline, detail: message.detail,
-            headlineLineHeight: Typography.lineHeight(typography.font(.pillMessage)),
-            detailLineHeight: Typography.lineHeight(typography.font(.pillDetail)), scale: scale
+            headlineLineHeight: Typography.lineHeight(typography.font(.pillMessage, scale: k)),
+            detailLineHeight: Typography.lineHeight(typography.font(.pillDetail, scale: k)), scale: scale, metrics: metrics
         ) { text, isDetail in
             NSAttributedString(
-                string: text, attributes: [.font: self.typography.font(isDetail ? .pillDetail : .pillMessage)]
+                string: text, attributes: [.font: self.typography.font(isDetail ? .pillDetail : .pillMessage, scale: self.k)]
             ).size().width
         }
         apply(.message(width: block.width, height: block.height))
@@ -381,7 +392,7 @@ final class ClassicPillView: NSView, PillSkinView {
     func showFractions(_ fractions: [Float]) {
         guard mode == .hold || mode == .locked else { return }
         let next = (0..<BarModel.barCount).map {
-            ClassicPillLayout.barHeight(fraction: $0 < fractions.count ? fractions[$0] : 0, scale: scale)
+            ClassicPillLayout.barHeight(fraction: $0 < fractions.count ? fractions[$0] : 0, scale: scale, metrics: metrics)
         }
         guard next != heights else { return }
         heights = next
@@ -391,7 +402,7 @@ final class ClassicPillView: NSView, PillSkinView {
     func updateProcessing(time: TimeInterval) {
         guard mode == .processing else { return }
         let next = ClassicPillLayout.processingFractions(time: time, count: BarModel.barCount)
-            .map { ClassicPillLayout.barHeight(fraction: $0, scale: scale) }
+            .map { ClassicPillLayout.barHeight(fraction: $0, scale: scale, metrics: metrics) }
         guard next != heights else { return }
         heights = next
         layoutBars()
@@ -437,12 +448,12 @@ final class ClassicPillView: NSView, PillSkinView {
         presented = true
         withoutActions {
             container.opacity = 0
-            container.transform = reduceMotion ? CATransform3DIdentity : pillTransform(scale: Self.appearScale, drop: Self.travel)
+            container.transform = reduceMotion ? CATransform3DIdentity : pillTransform(scale: Self.appearScale, drop: Self.travel * k)
             barsLayer.opacity = 0
             textGroup.opacity = 0
             discs.values.forEach { $0.group.opacity = 0 }
         }
-        place(width: ClassicPillLayout.dotWidth, timing: .none)
+        place(width: metrics.dotWidth, timing: .none)
         let timing: Timing = .ease(reduceMotion ? 0.15 : 0.26)
         set(container, "opacity", Float(1), timing)
         set(container, "transform", CATransform3DIdentity, reduceMotion ? .none : timing)
@@ -456,7 +467,7 @@ final class ClassicPillView: NSView, PillSkinView {
         let duration: TimeInterval = reduceMotion ? 0.12 : 0.16
         set(container, "opacity", Float(0), .easeIn(duration))
         if !reduceMotion {
-            set(container, "transform", pillTransform(scale: Self.appearScale, drop: Self.travel), .easeIn(duration))
+            set(container, "transform", pillTransform(scale: Self.appearScale, drop: Self.travel * k), .easeIn(duration))
         }
         CATransaction.commit()
     }

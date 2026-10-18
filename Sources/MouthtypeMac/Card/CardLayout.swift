@@ -7,7 +7,8 @@ enum CardLayout {
     static let width: CGFloat = 224
     static let insets = (top: CGFloat(11), side: CGFloat(12), bottom: CGFloat(12))
     static let dot: CGFloat = 6
-    static let dismissSize: CGFloat = 20
+    /// The pill's own minimum click target.
+    static let dismissSize: CGFloat = 24
     static let headerGap: CGFloat = 7
     static let rowHeight: CGFloat = 20
     static let transcriptTop: CGFloat = 8
@@ -70,7 +71,8 @@ enum CardLayout {
             x: textX, y: y + (headerHeight - ceil(input.headerTextHeight)) / 2,
             width: headerTextWidth, height: ceil(input.headerTextHeight)
         )
-        let dismiss = CGRect(x: right - dismissSize, y: y, width: dismissSize, height: dismissSize)
+        // Centred on the first line like the dot, so the taller control reaches into the padding, not the content.
+        let dismiss = CGRect(x: right - dismissSize, y: y + firstLine / 2 - dismissSize / 2, width: dismissSize, height: dismissSize)
         y += headerHeight
 
         var transcript: CGRect?
