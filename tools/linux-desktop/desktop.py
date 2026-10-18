@@ -693,7 +693,10 @@ class SpeechEngine:
 class CleanupEngine:
     """A resident llama.cpp server behind the proof worker, loaded once and stopped with the service."""
 
-    def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300):
+    RETRY_SECONDS = (30, 120, 480, 1800)
+    ABSENT_RECHECK_SECONDS = 30
+
+    def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic):
         if (not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict) or
                 not isinstance(settings.get('server'), str) or settings.get('prompt', 's1') not in ('s1', 'shared')):
             raise ValueError('Invalid cleanup engine configuration')
@@ -710,10 +713,28 @@ class CleanupEngine:
         self.shutdown = threading.Event()
         self.warming = None
         self.warm_guard = threading.Lock()
-        present = all(Path(item['path']).is_file() for item in settings['artifacts'].values())
-        self.state = 'idle' if present else 'absent'
+        self.clock = clock
+        # A failed load retries from clean() on a growing delay; a reload of the config builds a fresh engine.
+        self.failures, self.retry_at = 0, 0.0
+        self.artifacts_checked = clock()
+        self.state = 'idle' if self._artifacts_present() else 'absent'
         self.error = None
         self.load_ms = None
+
+    def _artifacts_present(self):
+        return all(Path(item['path']).is_file() for item in self.settings['artifacts'].values())
+
+    def _recover(self):
+        """Called from clean() while not ready. Starts a background load when one is due; never waits."""
+        if self.state == 'idle':
+            self.warm()
+        elif self.state == 'failed' and self.clock() >= self.retry_at:
+            self.warm()
+        elif self.state == 'absent' and self.clock() - self.artifacts_checked >= self.ABSENT_RECHECK_SECONDS:
+            self.artifacts_checked = self.clock()
+            if self._artifacts_present():
+                self.state = 'idle'
+                self.warm()
 
     def status(self):
         return {'state': self.state, 'error': self.error, 'load_ms': self.load_ms,
@@ -734,6 +755,7 @@ class CleanupEngine:
         self.load_ms = int((time.monotonic() - started) * 1000)
         self.state = 'ready'
         self.error = None
+        self.failures, self.retry_at = 0, 0.0
 
     def warm(self):
         """Load in the background so the first take does not pay the cold start."""
@@ -763,6 +785,8 @@ class CleanupEngine:
 
     def _fail(self, error):
         self.state, self.error = 'failed', type(error).__name__
+        self.retry_at = self.clock() + self.RETRY_SECONDS[min(self.failures, len(self.RETRY_SECONDS) - 1)]
+        self.failures += 1
         worker, self.worker = self.worker, None
         if worker:
             worker.close()
@@ -772,8 +796,7 @@ class CleanupEngine:
 
         A cold server never blocks a take: it loads in the background and this take keeps its basic text."""
         if self.worker is None or self.state != 'ready':
-            if self.state == 'idle':
-                self.warm()
+            self._recover()
             return None
         end = time.monotonic() + seconds
         while not self.lock.acquire(timeout=.05):
