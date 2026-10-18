@@ -20,7 +20,6 @@ enum SettingsTheme {
     static let headerHeight: CGFloat = 46
     static let rowMinHeight: CGFloat = 36
     static let rowLabelWidth: CGFloat = 220
-    static let popupMaxWidth: CGFloat = 220
 }
 
 private extension NSAppearance {
@@ -51,7 +50,7 @@ enum SettingsFont {
 
 /// One row of a grouped form: title and optional detail on the left, controls on the right. Text wraps, never truncates.
 /// The label column keeps at least `rowLabelWidth`; when the controls don't fit beside it they wrap below the label.
-/// Callers keep buttons at their intrinsic size with `.fixedSize()` and cap popups with `.frame(maxWidth: SettingsTheme.popupMaxWidth)`.
+/// Callers keep buttons and popups at their intrinsic size with `.fixedSize()`; nothing is elided, the row grows or wraps instead.
 struct SettingsRow<Controls: View>: View {
     let title: String
     var detail: String?
@@ -78,7 +77,7 @@ struct SettingsRow<Controls: View>: View {
             VStack(alignment: .leading, spacing: 6) {
                 label.frame(maxWidth: .infinity, alignment: .leading)
                 controlRow
-            }.padding(.vertical, 2)
+            }
         }
         .frame(minHeight: SettingsTheme.rowMinHeight - 8)
     }

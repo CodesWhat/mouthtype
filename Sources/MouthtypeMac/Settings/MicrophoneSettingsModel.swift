@@ -32,7 +32,7 @@ enum MicrophoneChoice: Hashable {
             return "\(preferred.name) is unavailable. Reconnect it or choose another input."
         }
         if inputs.isEmpty { return "No microphone found. Connect one, then refresh inputs." }
-        if let preferred { return "Next dictation uses \(preferred.name). Your Mac’s system input stays unchanged." }
+        if let preferred { return "Next dictation uses this microphone. Your system input is unchanged." }
         return "Next dictation follows System Default" + (systemDefaultName.map { " (\($0))." } ?? ".")
     }
 

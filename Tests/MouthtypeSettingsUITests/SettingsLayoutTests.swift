@@ -181,6 +181,11 @@ import MouthtypeCore
         }
         #expect(document.frame.width <= scroll.contentView.bounds.width + 1)
         #expect(textsAreUntruncated(in: view).isEmpty, "\(textsAreUntruncated(in: view))")
+        let popups = descendants(of: view).compactMap { $0 as? NSPopUpButton }
+        let mic = try #require(popups.first { $0.itemTitles.contains(Self.longMic) && $0.titleOfSelectedItem == Self.longMic })
+        let titleWidth = (Self.longMic as NSString).size(withAttributes: [.font: mic.font ?? .systemFont(ofSize: 13)]).width
+        #expect(mic.intrinsicContentSize.width >= titleWidth, "popup \(mic.intrinsicContentSize.width) < title \(titleWidth)")
+        #expect(mic.bounds.width >= mic.intrinsicContentSize.width - 1, "popup laid out at \(mic.bounds.width), needs \(mic.intrinsicContentSize.width)")
         if let refresh = descendants(of: view).compactMap({ $0 as? NSButton }).first(where: { $0.title == "Refresh inputs" }) {
             #expect(refresh.bounds.width >= refresh.intrinsicContentSize.width - 1)
         }

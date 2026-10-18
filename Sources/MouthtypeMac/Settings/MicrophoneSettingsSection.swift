@@ -19,7 +19,7 @@ struct MicrophoneSettingsSection: View {
                     if model.choice == .invalidPreference {
                         Text("Choose an input").tag(MicrophoneChoice.invalidPreference).disabled(true)
                     }
-                }.labelsHidden().frame(maxWidth: SettingsTheme.popupMaxWidth).accessibilityIdentifier("settings-microphone")
+                }.labelsHidden().fixedSize().accessibilityIdentifier("settings-microphone")
                 Button("Refresh inputs", action: model.refresh).fixedSize().accessibilityIdentifier("settings-microphone-refresh")
             }
             if model.choice == .priorityList, let priority = model.priority {
