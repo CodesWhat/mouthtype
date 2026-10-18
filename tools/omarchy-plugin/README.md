@@ -1,6 +1,6 @@
 # Mouthtype for Omarchy
 
-This bar widget controls the locally installed Mouthtype Linux alpha.8 client. It uses the Mac application's menu structure and status glyphs where the Linux client has matching functionality.
+This bar widget controls the locally installed Mouthtype Linux client. It uses the Mac application's menu structure and status glyphs where the Linux client has matching functionality.
 
 Open the Mouthtype glyph on the right side of the Omarchy bar. The menu can start, stop, or cancel dictation; show and copy recent transcripts; retry saved audio; transcribe one audio file; and configure Basic cleanup, recording length, notifications, delivery, sounds, login startup, and dictation shortcuts.
 
