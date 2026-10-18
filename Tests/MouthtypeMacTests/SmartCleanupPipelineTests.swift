@@ -268,6 +268,33 @@ private struct Rules: VocabularyProviding {
         #expect(cleaner.calls == 0 && cleaned.text == det && cleaned.cleanup.level == "basic" && cleaned.cleanup.outcome == "ok")
     }
 
+    @Test(arguments: [CleanupLevel.light, .medium], [false, true])
+    func unavailableModelMatchesBasicWithJoinedSpellingsAndPhrases(level: CleanupLevel, overlappingPhrase: Bool) async {
+        let cleaner = ScriptedCleaner(returning: "must not run")
+        let rules = [DictionaryRule(heard: "mouth type", written: "Mouthtype")]
+        let snippets = overlappingPhrase ? [Snippet(trigger: "mouth type", expansion: "{clipboard} {date}")] : []
+        let (pipeline, _) = pipeline(cleaner, level: level, rules: rules, ready: false, snippets: snippets)
+        var inputs = pipeline.cleanupInputs()
+        inputs.now = Date(timeIntervalSince1970: 1_791_763_200)
+        var basicInputs = inputs
+        basicInputs.settings.level = .basic
+        let transcribed = TranscribedDictation(text: "the mouth type build is green", rawText: "the mouth type build is green", asrDoneMs: 0, words: [])
+        let basic = await pipeline.clean(transcribed, inputs: basicInputs, context: nil, clipboard: "unchanged {date}")
+        let fallback = await pipeline.clean(transcribed, inputs: inputs, context: nil, clipboard: "unchanged {date}")
+        #expect(fallback.text == basic.text)
+        #expect(fallback.edits == basic.edits)
+        #expect(fallback.cleanup.level == "basic" && fallback.cleanup.cleanerID == "deterministic")
+        #expect(fallback.cleanup.outcome == "ok")
+        #expect(cleaner.calls == 0)
+        if overlappingPhrase {
+            #expect(fallback.text.contains("unchanged {date}"))
+            #expect(fallback.edits.contains { $0.stage == "snippet" })
+        } else {
+            #expect(fallback.text.contains("Mouthtype"))
+            #expect(fallback.edits.contains { $0.stage == "dictionary" })
+        }
+    }
+
     @Test func mediumIsRecordedAsMedium() async {
         let cleaner = ScriptedCleaner(returning: "Let's grab coffee at 2.")
         let (pipeline, _) = pipeline(cleaner, level: .medium)
