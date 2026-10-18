@@ -132,20 +132,23 @@ public final class TextInserter {
         guard !text.isEmpty else {
             return DeliveryResult(method: .none, outcome: .unknown, focusMoved: false, target: nil, finalText: "")
         }
+        var now = focus.snapshot()
+        var secureInput = focus.isSecureInputEnabled
+        let moved = startFocus?.hasChanged(to: now) ?? false
+        if DeliveryDecision.decide(now: now, secureInput: secureInput) == .discardSecure {
+            now.isSecure = now.isSecure || secureInput
+            return DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: moved, target: now, finalText: "")
+        }
         guard !deliveryActive else {
             return DeliveryResult(method: .none, outcome: .failed("Another paste is still in progress"),
                                   focusMoved: false, target: nil, finalText: text)
         }
         deliveryActive = true
         defer { deliveryActive = false }
-        var now = focus.snapshot()
         if let restrictedToPID, now.pid != restrictedToPID {
             Log.app.error("self-test focus moved; no paste or clipboard write")
             return DeliveryResult(method: .none, outcome: .failed("self-test focus moved"), focusMoved: true, target: nil, finalText: "")
         }
-        var secureInput = focus.isSecureInputEnabled
-        let moved = startFocus?.hasChanged(to: now) ?? false
-
         let previous = clipboard.pasteGeneration
         if DeliveryDecision.decide(now: now, secureInput: secureInput) != .discardSecure,
            clipboard.holdsPaste(previous) {
