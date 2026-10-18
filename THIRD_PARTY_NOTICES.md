@@ -1,6 +1,6 @@
 # Third-party notices
 
-Mouthtype is licensed under GPL-3.0. Parts of it are adapted from the project below.
+Mouthtype is licensed under GPL-3.0. Parts of it are adapted from the projects below. Swift package dependencies, such as Sparkle, FluidAudio and WhisperKit, are pinned in `Package.resolved` and keep their own upstream licenses. Speech and Gemma cleanup models are downloaded on request and carry their publishers' terms; only the S1-mini model is recorded below.
 
 ## Parrot
 
@@ -185,6 +185,7 @@ The correction learner (`src/utils/correctionLearner.js`) is ported to Swift: th
 similarity test with its 0.65 ratio, and the common-word filter. Files adapted from OpenWhispr:
 
 - `Sources/MouthtypeCore/Corrections/CorrectionLearner.swift` and `Tests/MouthtypeCoreTests/CorrectionLearnerTests.swift`
+- `Sources/MouthtypeMac/Insertion/PasteKeyResolver.swift`
 
 ```
 MIT License
