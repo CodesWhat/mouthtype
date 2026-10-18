@@ -27,8 +27,8 @@ final class ClassicPillView: NSView, PillSkinView {
     private static let easeOutCubic = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
     private static let easeInCubic = CAMediaTimingFunction(controlPoints: 0.55, 0.055, 0.675, 0.19)
     /// How far the pill rises as it appears and drops as it leaves, and the scale it grows from.
-    private static let travel: CGFloat = 5
-    private static let appearScale: CGFloat = 0.9
+    static let travel: CGFloat = 5
+    static let appearScale: CGFloat = 0.9
 
     private struct Disc {
         let group = CALayer()

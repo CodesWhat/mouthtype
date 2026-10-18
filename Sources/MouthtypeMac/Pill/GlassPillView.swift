@@ -76,6 +76,7 @@ final class GlassPillView: NSView, PillSkinView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = .clear
+        glass.wantsLayer = true
         glass.alphaValue = 0
         glass.isHidden = true
         addSubview(glass)
@@ -131,16 +132,36 @@ final class GlassPillView: NSView, PillSkinView {
     private func placeGlass(_ rect: CGRect, animated: Bool) {
         bodyRect = rect
         glass.cornerRadius = min(rect.height, ClassicPillLayout.Metrics(classic.pillScale).height) / 2
-        guard animated else {
+        guard let layer = glass.layer else {
             glass.frame = rect
             return
         }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.165
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            glass.animator().frame = rect
+        PillMotion.withoutActions { glass.frame = rect }
+        guard animated else {
+            layer.removeAnimation(forKey: "bounds")
+            layer.removeAnimation(forKey: "position")
+            return
         }
+        // The body's own spring, so the material grows with the capsule instead of trailing it.
+        let anchor = layer.anchorPoint
+        PillMotion.set(layer, "bounds", NSValue(rect: CGRect(origin: .zero, size: rect.size)), .spring)
+        PillMotion.set(
+            layer, "position",
+            NSValue(point: CGPoint(x: rect.minX + anchor.x * rect.width, y: rect.minY + anchor.y * rect.height)), .spring
+        )
     }
+
+    /// Scale about the glass's middle plus a drop, as the Classic container does for the capsule. A layer scales about
+    /// its anchor point, so the shift between the anchor and the middle is added back.
+    private func glassTransform(scale s: CGFloat, drop: CGFloat) -> NSValue {
+        guard let layer = glass.layer else { return NSValue(caTransform3D: CATransform3DIdentity) }
+        let size = layer.bounds.size
+        let dx = (1 - s) * (0.5 - layer.anchorPoint.x) * size.width
+        let dy = (1 - s) * (0.5 - layer.anchorPoint.y) * size.height - drop
+        return NSValue(caTransform3D: CATransform3DScale(CATransform3DMakeTranslation(dx, dy, 0), s, s, 1))
+    }
+
+    var glassLayer: CALayer? { glass.layer }
 
     // MARK: PillSkinView
 
@@ -158,6 +179,13 @@ final class GlassPillView: NSView, PillSkinView {
     func appear(reduceMotion: Bool) {
         refreshBackdrop()
         classic.appear(reduceMotion: reduceMotion)
+        if let layer = glass.layer {
+            let identity = NSValue(caTransform3D: CATransform3DIdentity)
+            PillMotion.withoutActions {
+                layer.transform = reduceMotion ? identity.caTransform3DValue : glassTransform(scale: ClassicPillView.appearScale, drop: ClassicPillView.travel * classic.pillScale.factor).caTransform3DValue
+            }
+            PillMotion.set(layer, "transform", identity, reduceMotion ? .none : .ease(0.26))
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = reduceMotion ? 0.15 : 0.26
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
@@ -184,6 +212,10 @@ final class GlassPillView: NSView, PillSkinView {
     }
 
     func disappear(reduceMotion: Bool, completion: @escaping @MainActor () -> Void) {
+        if !reduceMotion, let layer = glass.layer {
+            let drop = ClassicPillView.travel * classic.pillScale.factor
+            PillMotion.set(layer, "transform", glassTransform(scale: ClassicPillView.appearScale, drop: drop), .easeIn(0.16))
+        }
         NSAnimationContext.runAnimationGroup { context in
             context.duration = reduceMotion ? 0.12 : 0.16
             context.timingFunction = CAMediaTimingFunction(controlPoints: 0.55, 0.055, 0.675, 0.19)

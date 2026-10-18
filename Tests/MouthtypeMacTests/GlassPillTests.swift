@@ -246,3 +246,64 @@ private final class SamplerProbe: @unchecked Sendable {
         }
     }
 }
+
+@MainActor
+@Suite struct GlassPillMotionTests {
+    private func glassView() -> GlassPillView {
+        _ = NSApplication.shared
+        let environment = GlassPillEnvironment(
+            materialAvailable: { true }, reduceTransparency: { false }, backdrop: { _ in .init(luminance: 0.1, spread: 0.02) }
+        )
+        return GlassPillView(frame: NSRect(origin: .zero, size: PillGeometry.panelSize), size: .standard, environment: environment)
+    }
+
+    private func transform(_ animation: CAAnimation?) -> CATransform3D? {
+        ((animation as? CABasicAnimation)?.fromValue as? NSValue)?.caTransform3DValue
+    }
+
+    @Test func theGlassGrowsFromNinetyPercentAndRisesLikeTheCapsule() throws {
+        let view = glassView()
+        view.appear(reduceMotion: false)
+        let from = try #require(transform(view.glassLayer?.animation(forKey: "transform")))
+        #expect(abs(from.m11 - ClassicPillView.appearScale) < 0.001)
+        #expect(abs(from.m22 - ClassicPillView.appearScale) < 0.001)
+        // Scaling about the middle and dropping 5 pt leaves the middle 5 pt low.
+        let layer = try #require(view.glassLayer)
+        let size = layer.bounds.size
+        let middle = CGPoint(x: (0.5 - layer.anchorPoint.x) * size.width, y: (0.5 - layer.anchorPoint.y) * size.height)
+        let moved = CGPoint(
+            x: from.m11 * middle.x + from.m41, y: from.m22 * middle.y + from.m42
+        )
+        #expect(abs(moved.x - middle.x) < 0.001 && abs((middle.y - moved.y) - ClassicPillView.travel) < 0.001)
+        #expect(CATransform3DIsIdentity(layer.transform))
+    }
+
+    @Test func reduceMotionOnlyFades() {
+        let view = glassView()
+        view.appear(reduceMotion: true)
+        #expect(view.glassLayer?.animation(forKey: "transform") == nil)
+        #expect(CATransform3DIsIdentity(view.glassLayer?.transform ?? CATransform3DMakeScale(0, 0, 1)))
+    }
+
+    @Test func theGlassShrinksAndDropsOnTheWayOut() throws {
+        let view = glassView()
+        view.appear(reduceMotion: false)
+        view.disappear(reduceMotion: false) {}
+        let layer = try #require(view.glassLayer)
+        let animation = layer.animation(forKey: "transform") as? CABasicAnimation
+        #expect(abs(((animation?.toValue as? NSValue)?.caTransform3DValue.m11 ?? 0) - ClassicPillView.appearScale) < 0.001)
+        #expect(abs(layer.transform.m11 - ClassicPillView.appearScale) < 0.001)
+    }
+
+    @Test(.enabled(if: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion))
+    func widthChangesUseTheBodySpring() {
+        let view = glassView()
+        view.appear(reduceMotion: false)
+        view.showRecording(locked: false)
+        for key in ["bounds", "position"] {
+            let spring = view.glassLayer?.animation(forKey: key) as? CASpringAnimation
+            #expect(spring != nil)
+            #expect(spring?.stiffness == 331 && spring?.damping == 36.4 && spring?.mass == 1)
+        }
+    }
+}
