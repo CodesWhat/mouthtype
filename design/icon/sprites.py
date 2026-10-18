@@ -39,36 +39,46 @@ LIPS64 = sym([
     "........kkkkkkkkkk",
 ])[1:]  # the first row is blank padding
 
-# 21 x 17, hand-drawn for the 32 pixel tile, a one pixel stem cursor
+# 25 x 19, for the 32 pixel tile, a one pixel stem cursor with 3 px serifs
 LIPS32 = symc([
-    "....kkkk...",
-    "..kkrrrkkk.",
-    ".krrrrrrrrr",
-    "krrrrrrrrrr",
-    "krrrrkkkkkk",
-    "krrkkkkkwww",
-    "krkkkkkkkkw",
-    "kkkkkkkkkkw",
-    "krkkkkkkkkw",
-    "krrkkkkkwww",
-    "krrrrkkkkkk",
-    "krrrrrrrrrr",
-    "krrrrrrpprr",
-    ".krrrrrrrrr",
-    "..kkrrrrrRR",
-    "....kkRRRRR",
-    "......kkkkk",
+    ".....kkkk....",
+    "...kkrrrrkkk.",
+    "..krrrrpprrrr",
+    ".krrrrrrrrrrr",
+    "krrrrrrrrrrrr",
+    "krrrrrkkkkkkk",
+    "krrrkkkkkkkww",
+    "krrkkkkkkkkkw",
+    "krkkkkkkkkkkw",
+    "kkkkkkkkkkkkw",
+    "krkkkkkkkkkkw",
+    "krrkkkkkkkkkw",
+    "krrrkkkkkkkww",
+    "krrrrrkkkkkkk",
+    "krrrrrrrrrrrr",
+    ".krrrrrrrpprr",
+    "..kkrrrrrrRRR",
+    "....kkrrRRRRR",
+    "......kkkkkkk",
 ])
 
-# 9 x 9, for the 16 pixel tile: the cursor keeps its serifs, the rest is the bare minimum of lips
-LIPS16 = symc([
-    "..kk.",
-    ".krrr",
-    "krrrr",
-    "kkkww",
-    "kkkkw",
-    "kkkww",
-    "krrrr",
-    ".krrr",
-    "..kkk",
+# 12 x 11, for the 16 pixel tile: two pixel stem, cupid's bow kept
+LIPS16 = sym([
+    "..kkk.",
+    ".krrrk",
+    "krrrrr",
+    "krrkkk",
+    "kkkkww",
+    "kkkkkw",
+    "kkkkww",
+    "krrkkk",
+    "krrrrr",
+    ".krrrR",
+    "..kkkk",
 ])
+
+
+def mono(rows):
+    """The one colour lips for the Clear and Tinted appearances: the red body only, so the mouth opening and
+    the cursor are knocked out (transparent) and the system supplies the colour."""
+    return ["".join("W" if ch in "rpR" else "." for ch in row) for row in rows]
