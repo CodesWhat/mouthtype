@@ -246,6 +246,23 @@ class FileTranscriptionTests(unittest.TestCase):
         self.engine.gate.set()
         self.wait()
 
+    def test_failed_import_keeps_the_previous_result_until_forgotten(self):
+        self.start()
+        self.wait()
+        finished = self.files.status()['id']
+        text = imports.result_text(self.root / 'imports')
+        for prober in (probe_error('unsupported_format'), probe_ok):
+            self.files.probe = prober
+            if prober is probe_ok:
+                self.files.decoder = lambda *args, **kwargs: (_ for _ in ()).throw(FileError('invalid_audio'))
+            self.assertTrue(self.start()['accepted'])
+            self.wait()
+            self.assertEqual(self.files.status()['state'], 'failed')
+            self.assertTrue((self.root / 'imports' / finished / 'transcript.txt').is_file())
+            self.assertEqual(imports.result_text(self.root / 'imports'), text)
+        self.files.forget()
+        self.assertEqual(list((self.root / 'imports').iterdir()), [])
+
     def test_startup_adopts_finished_result_and_removes_interrupted_jobs(self):
         self.start()
         self.wait()
