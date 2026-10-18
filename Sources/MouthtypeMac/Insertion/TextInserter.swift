@@ -26,6 +26,8 @@ public final class TextInserter {
     private let observeBoundary: @MainActor (PasteBoundaryDiagnostic) -> Void
     private let restrictedToPID: pid_t?
     private var deliveryActive = false
+    private var closing = false
+    private var termination: Task<Void, Never>?
     private var batchGeneration = 0
     private var lastText: String?
     private var lastPaste: LastPaste?
@@ -128,6 +130,27 @@ public final class TextInserter {
         clipboard.currentString()
     }
 
+    func prepareForTermination() async {
+        if let termination { await termination.value; return }
+        closing = true
+        batchGeneration += 1
+        cancelVerification()
+        let work = Task {
+            let clock = ContinuousClock()
+            let deadline = clock.now.advanced(by: .seconds(PasteboardSession.receiptCap))
+            for _ in 0..<400 {
+                guard deliveryActive, clock.now < deadline else { break }
+                do { try await sleep(0.02) } catch { break }
+            }
+            if !deliveryActive, clipboard.holdsPaste(clipboard.pasteGeneration) {
+                _ = await waitForPreviousPaste(clipboard.pasteGeneration, deadline: deadline)
+            }
+            clipboard.restoreForTermination()
+        }
+        termination = work
+        await work.value
+    }
+
     /// Pastes `text` into whatever has focus now. `startFocus` only decides `focusMoved`.
     ///
     /// Automatic pastes wait for the preceding clipboard lease; long pastes also wait between parts.
@@ -135,6 +158,10 @@ public final class TextInserter {
     public func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult {
         guard !text.isEmpty else {
             return DeliveryResult(method: .none, outcome: .unknown, focusMoved: false, target: nil, finalText: "")
+        }
+        guard !closing else {
+            return DeliveryResult(method: .none, outcome: .failed("Mouthtype is quitting"),
+                                  focusMoved: false, target: nil, finalText: text)
         }
         guard !deliveryActive else {
             return DeliveryResult(method: .none, outcome: .failed("Another paste is still in progress"),
@@ -274,10 +301,10 @@ public final class TextInserter {
         }
     }
 
-    private func waitForPreviousPaste(_ lease: Int) async -> Bool {
+    private func waitForPreviousPaste(_ lease: Int, deadline suppliedDeadline: ContinuousClock.Instant? = nil) async -> Bool {
         let generation = batchGeneration
         let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(PasteboardSession.receiptCap))
+        let deadline = suppliedDeadline ?? clock.now.advanced(by: .seconds(PasteboardSession.receiptCap))
         func mayContinue() -> Bool {
             !Task.isCancelled && batchGeneration == generation && clock.now < deadline
                 && (clipboard.holdsPaste(lease) || clipboard.wasRestored(lease))
@@ -661,6 +688,15 @@ final class PasteboardSession {
         receipts = nil
         pasteboard.write(text, markers: Self.concealedMarkers)
         ourChangeCount = pasteboard.changeCount
+    }
+
+    func restoreForTermination() {
+        holdingRestore = false
+        restore(ifGeneration: generation)
+        saved = nil
+        generation += 1
+        receipts = nil
+        restoredGeneration = nil
     }
 
     private func restore(ifGeneration expected: Int, receiptCount expectedCount: Int? = nil) {

@@ -195,6 +195,89 @@ private struct Rig {
 
 @MainActor
 @Suite struct TextInserterTests {
+    @Test func terminationWaitsForAnUnreadPasteThenRestoresAndInvalidatesCallbacks() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        let original = PasteboardSnapshot(items: [[text("original"),
+            PasteboardRepresentation(type: "public.png", data: Data([0, 1, 2]))]])
+        rig.pasteboard.contents = original
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var waits = 0
+        rig.pauses.observe = { delay in
+            if delay == 0.02 {
+                waits += 1
+                #expect(rig.pasteboard.publishedText == "first")
+            }
+        }
+        await rig.inserter.prepareForTermination()
+        #expect(waits > 0 && waits <= 400)
+        #expect(rig.pasteboard.contents == original)
+        let restoredCount = rig.pasteboard.changeCount
+        rig.pasteboard.read()
+        await hop()
+        rig.pending.runAll()
+        #expect(rig.pasteboard.changeCount == restoredCount)
+        let blocked = await rig.inserter.deliver("late", startFocus: nil)
+        #expect(blocked.method == .none && blocked.finalText == "late")
+        #expect(rig.poster.posts == 1)
+    }
+
+    @Test func terminationWaitsForReceiptAndQuietBeforeRestoring() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original")]])
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var read = false, settled = false
+        rig.pauses.observe = { delay in
+            if delay == 0.02, !read { read = true; rig.pasteboard.read() }
+            if delay == PasteboardSession.receiptSettle {
+                settled = true
+                #expect(rig.pasteboard.publishedText == "first")
+            }
+        }
+        await rig.inserter.prepareForTermination()
+        #expect(read && settled && rig.pasteboard.publishedText == "original")
+        #expect(rig.poster.posts == 1)
+    }
+
+    @Test(arguments: [false, true])
+    func terminationPreservesANewerExternalOrExplicitCopy(explicit: Bool) async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original")]])
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var copied = false
+        rig.pauses.observe = { delay in
+            if delay == 0.02, !copied {
+                copied = true
+                if explicit { _ = rig.inserter.copyLast() }
+                else { rig.pasteboard.externalCopy("newer") }
+            }
+        }
+        await rig.inserter.prepareForTermination()
+        #expect(copied && rig.pasteboard.publishedText == (explicit ? "first" : "newer"))
+        let count = rig.pasteboard.changeCount
+        rig.pending.runAll()
+        #expect(rig.pasteboard.changeCount == count)
+    }
+
+    @Test func terminationRetainsTheEarlyReaderFallbackWindow() async {
+        let rig = Rig(chunks: true)
+        defer { rig.poster.onPost = nil; rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original")]])
+        rig.poster.onPost = { rig.pasteboard.read() }
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var fallback = false
+        rig.pauses.observe = { delay in
+            if delay == PasteboardSession.unobservedDelay {
+                fallback = true
+                #expect(rig.pasteboard.publishedText == "first")
+            }
+        }
+        await rig.inserter.prepareForTermination()
+        #expect(fallback && rig.pasteboard.publishedText == "original")
+    }
+
     @Test func ordinaryPastesWaitForPreviousConsumption() async {
         let rig = Rig(chunks: true)
         defer { rig.poster.onPost = nil; rig.pauses.observe = nil; rig.inserter.cancelVerification() }
