@@ -24,15 +24,36 @@ import Testing
         return nil
     }
 
-    @Test func rendersEveryStyleInLightAndDark() throws {
+    @Test func rendersEveryStyleOverBothSwatchesInBothAppearances() throws {
         for skin in PillSkinKind.allCases {
             for dark in [false, true] {
-                let (model, defaults, name) = model(skin: skin, wallpaper: dark ? .dark : .light)
-                defer { defaults.removePersistentDomain(forName: name) }
-                let bitmap = try SettingsRender.render(model: model, actions: SettingsActions(), dark: dark)
-                #expect(bitmap.pixelsWide >= 900 && bitmap.pixelsHigh >= 620)
-                try SettingsRender.save(bitmap, name: "appearance-\(skin.rawValue)-\(dark ? "dark" : "light")")
+                for swatch in PreviewWallpaper.allCases {
+                    let (model, defaults, name) = model(skin: skin, wallpaper: swatch)
+                    defer { defaults.removePersistentDomain(forName: name) }
+                    let bitmap = try SettingsRender.render(model: model, actions: SettingsActions(), dark: dark)
+                    #expect(bitmap.pixelsWide >= 900 && bitmap.pixelsHigh >= 620)
+                    try SettingsRender.save(bitmap, name: "appearance-\(skin.rawValue)-\(dark ? "dark" : "light")-swatch-\(swatch.rawValue)")
+                }
             }
+        }
+    }
+
+    @Test func rendersTheHiFiErrorInEachReadoutColour() throws {
+        FontRegistry.registerBundledFonts()
+        for readout in PillReadoutColour.allCases {
+            let canvas = PreviewFit.canvas
+            let height = PillSkinKind.hifi.pillHeight + 2 * PillGeometry.verticalMargin
+            let view = try #require(try PillSkinFactory.make(.hifi, frame: NSRect(x: 0, y: 0, width: canvas.width, height: height), scale: .standard, readout: readout))
+            view.appear(reduceMotion: true)
+            view.showMessage(PillMessage("Mic unavailable", isError: true), overRecording: false)
+            let context = try #require(CGContext(data: nil, width: Int(canvas.width * 2), height: Int(height * 2), bitsPerComponent: 8, bytesPerRow: 0,
+                                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            context.setFillColor(NSColor(hex: 0x1D2436).cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: canvas.width * 2, height: height * 2))
+            context.scaleBy(x: 2, y: 2)
+            view.renderOffscreen(in: context)
+            let bitmap = NSBitmapImageRep(cgImage: try #require(context.makeImage()))
+            try SettingsRender.save(bitmap, name: "appearance-hifi-error-\(readout.rawValue)")
         }
     }
 
