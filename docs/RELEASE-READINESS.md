@@ -1,6 +1,6 @@
 # Mac 0.1.0 release readiness
 
-Phase3 freezes the beta.1 feature set and targets rc.1/build11 before stable0.1.0. A release candidate is not a declaration that every stable gate has passed. The repository remains private; published app/source/feed assets are verified independently.
+Phase3 froze the beta.1 feature set. The rc.1/build11 candidate was followed by rc.2/build12, which adds the visual refresh and default-on update checks, before stable0.1.0. The new interface has automated and offscreen rendering coverage only; it adds no physical acceptance. A release candidate is not a declaration that every stable gate has passed. The repository remains private; published app/source/feed assets are verified independently.
 
 ## Evidence and remaining gates
 

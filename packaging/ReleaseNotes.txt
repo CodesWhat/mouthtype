@@ -1,4 +1,18 @@
-Mouthtype 0.1.0-rc.1
+Mouthtype 0.1.0-rc.2
+
+RC.2 is mostly a visual refresh. Recognition, cleanup and how text is pasted are unchanged; the pill and delivery cards look and animate differently, and update checks now default on.
+
+The menu bar icon is now a pair of lips that stays closed when idle and opens with your voice while recording. Reduce Motion holds a single frame. The app icon has new art, larger lips and Icon Composer layers, so Dark, Clear and Tinted appearances render. The first-run setup is a glass window with step dots, and Settings has a redesigned layout with a glass sidebar. Both use a solid background when Reduce Transparency is on.
+
+Pill size is Automatic, Standard or Large and applies to every style. Automatic picks Large on screens at least 2000 pt wide. Pill style now offers Classic, Hi-Fi, Glass, Matrix and Minimal. Classic stays the default. Glass uses the system glass material and falls back to a solid body only for Reduce Transparency or when the material is unavailable. Matrix and Minimal are compact styles. Delivery cards are drawn for each style and scale with pill size, and Hi-Fi has its own pixel-art card window. Hi-Fi also has a readout colour: Amber, Cool white or Red. Appearance shows a live preview of the pill over a Desktop, Light or Dark swatch.
+
+Update checks are now on by default and no longer ask first. Turn them off in Settings → General. Anyone who already answered the earlier prompt keeps that choice. You still choose when to download and install; automatic installation stays off.
+
+The corresponding source also includes experimental Linux file transcription work. Linux remains source-only and is not a supported release.
+
+Not yet verified for this build: fresh installation, behavior in third-party apps, physical-device acceptance of the new interface, and actual update installation and relaunch over an older copy.
+
+Earlier in rc.1:
 
 RC.1 fixes audio quieting restoration when Core Audio reports the app’s own mute after observation starts. Observed unmute/remute or volume changes still relinquish restoration. Native output checks cover the built-in speakers; other hardware remains unverified.
 

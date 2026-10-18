@@ -14,7 +14,7 @@ Natural speech in, clean text out.
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.1.0-rc.1, a release candidate. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
+The Mac app is at 0.1.0-rc.2, a release candidate. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
 
 ## Install
 
