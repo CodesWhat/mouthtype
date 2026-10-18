@@ -8,6 +8,7 @@ struct SettingsView: View {
     @Bindable var model: SettingsModel
     var actions = SettingsActions()
     var solid = true
+    @State var previewWidth: CGFloat = 0
 
     var body: some View {
         HStack(spacing: 0) {
