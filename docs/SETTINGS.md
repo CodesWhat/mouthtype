@@ -62,4 +62,4 @@ A device that was already muted is left alone. Mouthtype never changes volume. A
 
 Core Audio exposes property notifications, not the identity of the person or app making a change, or an atomic compare-and-set. Mouthtype registers its change listener after its own mute write and restores only if no later change was observed and the original device is still muted. Same-value writes and changes inside the registration/restore windows cannot be attributed exactly. A crash or force-quit cannot run normal restoration; check macOS output mute if that happens. This option does not pause media players or prevent call apps from hearing the microphone. Physical device behavior still needs coordinated testing.
 
-Development additions: [website tone, selected-text cleanup and microphone priorities](WRITING-TOOLS.md). These are not in alpha.8.
+Alpha.9 adds [website tone, selected-text cleanup and microphone priorities](WRITING-TOOLS.md).

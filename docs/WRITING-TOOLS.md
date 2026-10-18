@@ -1,6 +1,6 @@
 # Writing tools and microphone priorities
 
-These changes are on the development branch and are not included in alpha.8.
+Available starting in 0.1.0-alpha.9. Browser/device coverage and remaining physical acceptance limits are described below.
 
 ## Website tone
 
