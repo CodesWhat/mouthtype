@@ -54,6 +54,8 @@ public final class PillController {
     /// Bumped by every state change, so a message timer or a hide completion only acts on its own state.
     private var generation = 0
     private var pressedControl: PillControl?
+    /// True while the message on screen is the one held under a card, which stays until the card goes.
+    private(set) var cardHeld = false
 
     public init(level: @escaping @MainActor () -> LevelReading, defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -206,6 +208,20 @@ public final class PillController {
         presentMessage(message, overRecording: false, duration: duration) { [weak self] in self?.hide() }
     }
 
+    /// The line under a delivery card: the message stays up, click-through, until `hideCardMessage` or another state
+    /// takes over.
+    func showCardMessage(_ message: PillMessage) {
+        enter(.message(message))
+        cardHeld = true
+        recordingStart = nil
+        presentMessage(message, overRecording: false, duration: nil) {}
+    }
+
+    /// Takes the pill down if it is still showing the card's line, and leaves anything newer alone.
+    func hideCardMessage() {
+        if cardHeld { hide() }
+    }
+
     func showMessage(_ text: String, isError: Bool = false, duration: TimeInterval = 2.5) {
         showMessage(PillMessage(text, isError: isError), duration: duration)
     }
@@ -214,6 +230,7 @@ public final class PillController {
         previewView.update("")
         guard state != .hidden else { return }
         generation += 1
+        cardHeld = false
         state = .hidden
         recordingStart = nil
         stopLink()
@@ -244,14 +261,15 @@ public final class PillController {
 
     /// Shows `message`, and runs `after` once it has been up for `duration`, or for as long as it takes to scroll through.
     private func presentMessage(
-        _ message: PillMessage, overRecording: Bool, duration: TimeInterval,
+        _ message: PillMessage, overRecording: Bool, duration: TimeInterval?,
         then after: @escaping @MainActor () -> Void
     ) {
         skin.showMessage(message, overRecording: overRecording)
         messageStart = CACurrentMediaTime()
         let distance = skin.messageScrollDistance
-        let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance) + 0.3) : duration
         if distance > 0 || recordingStart != nil { startLink() } else { stopLink() }
+        guard let duration else { return }
+        let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance) + 0.3) : duration
         let shown = generation
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(shownFor))
@@ -263,6 +281,7 @@ public final class PillController {
     /// Moves to `next`, placing and showing the panel unless it is already up.
     private func enter(_ next: State) {
         generation += 1
+        cardHeld = false
         let wasShown = isShown
         state = next
         if next != .recording && next != .handsFree { previewView.update("") }

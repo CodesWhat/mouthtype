@@ -127,6 +127,20 @@ private final class FakeClipboard: ClipboardWriting {
         for _ in 0..<20 { await Task.yield() }
     }
 
+    @Test func theListenerHearsEachCardAndWhenItGoes() {
+        let (presenter, _, _, _) = rig()
+        var changes: [DeliveryCard?] = []
+        presenter.onCardChange = { changes.append($0) }
+        presenter.present(.secure("hi"))
+        presenter.present(.nowhere("hi"))
+        presenter.dismiss()
+        presenter.dismiss()
+        #expect(changes == [.secure("hi"), .nowhere("hi"), nil])
+        presenter.present(.cancelled())
+        presenter.userDismissed()
+        #expect(changes.count == 5 && changes.last! == nil)
+    }
+
     @Test func copyConfirmsInPlaceThenTheCardLeaves() async {
         let (presenter, surface, clipboard, clock) = rig()
         presenter.present(.pasteFailed("hello there"))

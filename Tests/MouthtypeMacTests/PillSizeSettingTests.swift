@@ -117,6 +117,23 @@ import Testing
         #expect(try #require(pill.skin as? HiFiPillView).pillSize == CGSize(width: 292, height: 64))
     }
 
+    @Test func theCardMessageIsHeldClickThroughAndOnlyTheCardTakesItDown() {
+        let pill = PillController(level: { .silence }, defaults: defaults())
+        let message = PillMessage("Your text is safe", isError: true)
+        pill.showCardMessage(message)
+        #expect(pill.state == .message(message) && pill.cardHeld && pill.panel.ignoresMouseEvents)
+        pill.showCardMessage(PillMessage("The field didn't change", isError: true))
+        #expect(pill.state == .message(PillMessage("The field didn't change", isError: true)))
+        pill.hideCardMessage()
+        #expect(pill.state == .hidden && !pill.cardHeld)
+        // Something newer on the pill is not the card's to take down.
+        pill.showCardMessage(message)
+        pill.showProcessing()
+        pill.hideCardMessage()
+        #expect(pill.state == .processing)
+        pill.hide()
+    }
+
     // MARK: Classic geometry
 
     @Test func classicLargeIsTwiceTheStandardGeometry() {
