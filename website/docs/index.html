@@ -67,10 +67,14 @@
           <nav class="docs-nav" aria-label="On this page">
             <a href="#builds">Find your build</a
             ><a href="#shortcuts">Shortcuts</a
+            ><a href="#fn-key">Fn key and guard</a
             ><a href="#recording-options">Microphone and live words</a
             ><a href="#file-transcription">Audio files</a
             ><a href="#cleanup">Cleanup and tone</a
             ><a href="#spellings-phrases">Spellings and phrases</a
+            ><a href="#recent-stats">Recent dictations and stats</a
+            ><a href="#learned-corrections">Learned corrections</a
+            ><a href="#advanced-writing">Advanced writing</a
             ><a href="#recovery">Paste and recovery</a
             ><a href="#updates">Downloads and updates</a
             ><a href="#local-data">Local data</a
@@ -141,6 +145,26 @@
                   takes precedence.
                 </p>
               </details>
+            </section>
+            <section id="fn-key">
+              <h2>What the Fn remap does.</h2>
+              <p>
+                While Mouthtype runs with the default <kbd>Fn</kbd> shortcut, it
+                remaps Fn at the keyboard level so a hold can start recording.
+                That also hides the emoji picker, and Fn navigation combinations
+                keep working. It’s the <strong>Remap Fn to hide the emoji picker</strong>
+                toggle in Settings → Diagnostics, also in the menu, and it’s on
+                by default.
+              </p>
+              <p>
+                A small helper, <code>mouthtype-fn-guard</code>, sits beside the
+                app and watches it. If Mouthtype quits or crashes without
+                restoring the key, the helper removes only Mouthtype’s mapping
+                and leaves any other key mappings you set. Choosing a different
+                dictation shortcut restores Fn’s normal behavior. Settings →
+                Diagnostics shows Fn remapping status and any Globe key
+                conflict.
+              </p>
             </section>
             <section id="recording-options">
               <h2>Choose what listens.</h2>
@@ -281,6 +305,39 @@
                 Save or cancel a draft before switching entries. If a file is
                 unreadable or changes outside the editor, keep your draft and
                 follow the repair guidance rather than overwriting the original.
+              </p>
+            </section>
+            <section id="recent-stats">
+              <h2>Recent dictations and stats.</h2>
+              <p>
+                The menu keeps your latest takes in a collapsed
+                <strong>Recent Dictations</strong> submenu, which only appears
+                when there are takes. Choosing an item copies its full text.
+                Takes from secure fields are not listed. <strong>Stats</strong>
+                lives inside Recent. File transcription doesn’t add to either.
+              </p>
+            </section>
+            <section id="learned-corrections">
+              <h2>Corrections Mouthtype can learn.</h2>
+              <p>
+                When you fix a dictated word in the field, Mouthtype can offer
+                <strong>Remember this spelling?</strong> Accepting it saves a
+                spelling rule locally, the same kind you can add by hand in
+                Saved spellings. Turn this off with
+                <strong>Learn from my corrections</strong> in Settings → Writing
+                → Advanced writing.
+              </p>
+            </section>
+            <section id="advanced-writing">
+              <h2>Advanced writing switches.</h2>
+              <p>
+                Advanced writing in Settings → Writing holds the finer tone
+                controls: <strong>Learn from my corrections</strong>,
+                <strong>Lowercase sentence starts</strong>,
+                <strong>Drop final full stop</strong> and raw dictionary
+                editing. Changing these can show Custom as your default tone.
+                Raw file actions open your Mac’s default editor and keep
+                unreadable originals. Cleanup Off bypasses Lowercase sentence starts and Drop final full stop; Learn from my corrections still applies.
               </p>
             </section>
             <section id="recovery">

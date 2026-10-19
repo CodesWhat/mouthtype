@@ -25,7 +25,7 @@ Ordinary delivery waits for a previous owned clipboard read before replacing it.
 
 Saved Recordings loads when opened and keeps older audio accessible through pages. Recording starts before detailed Accessibility context lookup, while delivery keeps its focus checks. An incomplete cleanup-model cache can be repaired with Download. Basic fallback honors saved spellings and the spoken commands/lists choice. The empty microphone priority list keeps System Default fallback enabled until an input is added.
 
-Synthetic recognition checks cover clean/noisy speech and a repeated 19-minute clip; see [measurements and their limits](benchmarks/2026-10-18-daily-use.md). Those checks do not establish physical microphone, sleep, Bluetooth or end-to-end delivery acceptance.
+Synthetic recognition checks cover clean/noisy speech and a repeated 19-minute clip. The measurements are in the repository and are not published on the website. Those checks do not establish physical microphone, sleep, Bluetooth or end-to-end delivery acceptance.
 
 ## Shortcuts and Settings
 
@@ -43,7 +43,7 @@ In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. 
 
 ## Clean selected text
 
-Select text in an accessible editable field, then choose **Clean Selected Text…**. Review or edit the deterministic Basic preview, then explicitly choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. Unsupported or changed selections keep **Copy result** available. Password fields are excluded. There is no AI rewrite, automatic paste or retry. Check the original field after Accept. See [writing tools](WRITING-TOOLS.md) for browser, device and selection limits.
+Select text in an accessible editable field, then choose **Clean Selected Text…**. Review or edit the deterministic Basic preview, then explicitly choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. Unsupported or changed selections keep **Copy result** available. Password fields are excluded. There is no AI rewrite, automatic paste or retry. Check the original field after Accept. See [writing tools](https://mouthtype.app/docs/#cleanup) for browser, device and selection limits.
 
 ## Transcribe an audio file
 
@@ -67,7 +67,7 @@ The built-in output passed ten actual quiet/restore cycles after reproducing the
 
 Private native pasteboard checks preserve rich/multiple items through a promise read and restoration, and retain a newer copy during shutdown. They emit no keyboard events and never use the general clipboard. A disposable copy of existing saved data opens through the production store with unchanged schema and value digests; a WAL fixture verifies committed rows are included. These checks do not establish fresh-install permissions or normal updater installation/relaunch.
 
-TextEdit and Chrome each passed two physical ordered takes on beta.1; provisional live words and one final insertion were observed. That is historical evidence for unchanged delivery code, not a new RC hardware matrix. Fresh installation, normal updater installation/relaunch, Settings keyboard/VoiceOver and additional supported hardware remain unverified. The maintainer ended the manual QA loop; no manual handoff is pending. See [release readiness](RELEASE-READINESS.md) for the scoped evidence and remaining gates.
+TextEdit and Chrome each passed two physical ordered takes on beta.1; provisional live words and one final insertion were observed. That is historical evidence for unchanged delivery code, not a new RC hardware matrix. Fresh installation, normal updater installation/relaunch, Settings keyboard/VoiceOver and additional supported hardware remain unverified. The maintainer ended the manual QA loop; no manual handoff is pending.
 
 ## What has been checked
 
@@ -96,7 +96,7 @@ Synthetic audio, process/IPC, real headless Wayland components and remote speech
 
 ## Local data and removal
 
-History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely. In **Settings → General → Saved audio**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch to completed Mouthtype recordings only; unfinished recordings and recovery audio are exempt. Text and timings stay. No age limit still has a size limit. Removed audio cannot be restored. See [saved audio](AUDIO-RETENTION.md). The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it. Quit Mouthtype before removing the app. Delete the data folder only if you intend to erase it.
+History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely. In **Settings → General → Saved audio**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch to completed Mouthtype recordings only; unfinished recordings and recovery audio are exempt. Text and timings stay. No age limit still has a size limit. Removed audio cannot be restored. See [saved audio](https://mouthtype.app/docs/#local-data). The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it. Quit Mouthtype before removing the app. Delete the data folder only if you intend to erase it.
 
 ## Report a problem
 

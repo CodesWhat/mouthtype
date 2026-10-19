@@ -1,6 +1,6 @@
 # Third-party notices
 
-Mouthtype is licensed under GPL-3.0. Parts of it are adapted from the projects below. Swift package dependencies, such as Sparkle, FluidAudio and WhisperKit, are pinned in `Package.resolved` and keep their own upstream licenses. Speech and Gemma cleanup models are downloaded on request and carry their publishers' terms; only the S1-mini model is recorded below.
+Mouthtype is licensed under GPL-3.0. Parts of it are adapted from the projects below. Swift package dependencies, such as Sparkle, FluidAudio and WhisperKit, are pinned in `Package.resolved` and keep their own upstream licenses. The speech and cleanup models are downloaded on request and carry their publishers' terms. Each dependency and model is listed below with its license and the canonical text.
 
 ## Parrot
 
@@ -210,3 +210,52 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
+
+## Swift package dependencies
+
+None of these are modified. Versions are the ones pinned in `Package.resolved`. Each license text is the `LICENSE` file at
+the upstream repository linked below, and Apache License 2.0 is at https://www.apache.org/licenses/LICENSE-2.0.
+
+| Package | Version | License | Copyright | Source |
+| --- | --- | --- | --- | --- |
+| Sparkle | 2.10.0 | MIT, plus the bundled-component notices in its `LICENSE` | Andy Matuschak, Elgato Systems GmbH, Kornel Lesiński and others, as listed in that file | https://github.com/sparkle-project/Sparkle |
+| FluidAudio | 0.17.7 | Apache License 2.0 | per upstream `LICENSE` and `NOTICE` | https://github.com/FluidInference/FluidAudio |
+| WhisperKit | 1.1.1 | MIT | Copyright (c) 2024 argmax, inc. | https://github.com/argmaxinc/WhisperKit |
+| mlx-swift-lm | 3.32.3 | MIT | Copyright (c) 2024 ml-explore | https://github.com/ml-explore/mlx-swift-lm |
+| mlx-swift | 0.32.3 | MIT | Copyright (c) 2023 ml-explore | https://github.com/ml-explore/mlx-swift |
+| swift-huggingface | 1.0.0 | Apache License 2.0 | per upstream `LICENSE` | https://github.com/huggingface/swift-huggingface |
+| swift-transformers | 1.3.5 | Apache License 2.0 | per upstream `LICENSE` | https://github.com/huggingface/swift-transformers |
+| swift-jinja | 2.5.1 | Apache License 2.0 | per upstream `LICENSE` | https://github.com/huggingface/swift-jinja |
+| GRDB.swift | 7.11.1 | MIT | Copyright (C) 2015-2025 Gwendal Roué | https://github.com/groue/GRDB.swift |
+| EventSource | 1.5.1 | MIT | Copyright 2025 Mattt | https://github.com/mattt/EventSource |
+| yyjson | 0.12.0 | MIT | Copyright (c) 2020 YaoYuan | https://github.com/ibireme/yyjson |
+| swift-argument-parser | 1.8.2 | Apache License 2.0 with Runtime Library Exception | Apple Inc. and the project authors, per source headers | https://github.com/apple/swift-argument-parser |
+| swift-asn1 | 1.7.3 | Apache License 2.0 | Apple Inc. and the project authors, per source headers | https://github.com/apple/swift-asn1 |
+| swift-collections | 1.7.2 | Apache License 2.0 with Runtime Library Exception | Apple Inc. and the project authors, per source headers | https://github.com/apple/swift-collections |
+| swift-crypto | 4.5.2 | Apache License 2.0 | Apple Inc. and the project authors, per source headers | https://github.com/apple/swift-crypto |
+| swift-numerics | 1.1.1 | Apache License 2.0 with Runtime Library Exception | Apple Inc. and the project authors, per source headers | https://github.com/apple/swift-numerics |
+| swift-syntax | 603.0.2 | Apache License 2.0 with Runtime Library Exception | Apple Inc. and the project authors, per source headers | https://github.com/swiftlang/swift-syntax |
+
+swift-syntax is a build-time dependency of other packages and is not part of the shipped app. The Sparkle framework is
+embedded in `Mouthtype.app/Contents/Frameworks`, and its `LICENSE` file is the authority for the components it bundles.
+
+## Models
+
+No model is bundled with Mouthtype. Each is downloaded on request from Hugging Face and runs on the Mac. The license
+named is the one on the model's Hugging Face card; follow the link for the full text and any use restrictions.
+
+| Model | Used for | License | Card |
+| --- | --- | --- | --- |
+| Parakeet TDT 0.6B v3 (NVIDIA; Core ML conversion by FluidInference) | Speech recognition | CC BY 4.0 | https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3 and https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml |
+| Parakeet TDT 0.6B v2 (NVIDIA; Core ML conversion by FluidInference) | Speech recognition, English | CC BY 4.0 | https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2 and https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v2-coreml |
+| Silero VAD (Core ML conversion by FluidInference) | Speech detection | MIT | https://huggingface.co/FluidInference/silero-vad-coreml |
+| Whisper large-v3 turbo and small.en (OpenAI; Core ML builds by argmax) | Alternative speech recognition | MIT | https://huggingface.co/argmaxinc/whisperkit-coreml |
+| S1-mini (Superwhisper) | Fast cleanup | Apache License 2.0 plus a naming clause, see the S1-mini section above | https://huggingface.co/superwhisper/s1-mini |
+| Gemma 4 E4B it, MLX 4-bit (Google; conversion by mlx-community) | Thorough cleanup | Apache License 2.0, https://ai.google.dev/gemma/docs/gemma_4_license | https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit and https://huggingface.co/google/gemma-4-e4b-it |
+
+CC BY 4.0 requires attribution: the Parakeet models are by NVIDIA, licensed under
+https://creativecommons.org/licenses/by/4.0/. The Core ML conversions are by FluidInference and are not endorsed by NVIDIA.
+
+The catalog also lists optional cleanup models for benchmarking (Gemma 4 E2B, Qwen3 4B Instruct 2507, Llama 3.2 3B
+Instruct, Phi-4-mini Instruct, all MLX 4-bit from `mlx-community`). They are not offered in the app, and each keeps the
+license on its Hugging Face card.

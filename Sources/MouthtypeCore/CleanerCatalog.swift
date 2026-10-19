@@ -42,7 +42,7 @@ public enum CleanerCatalog {
             repo: "mlx-community/gemma-4-e2b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: nil),
         MLXCleaner.Spec(
             id: "gemma-4-e4b-it-4bit", displayName: "Gemma 4 E4B it (MLX 4-bit)",
-            repo: "mlx-community/gemma-4-e4b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: "Gemma Terms of Use",
+            repo: "mlx-community/gemma-4-e4b-it-4bit", quantization: "4-bit", promptFormat: .shared, license: "Apache License 2.0",
             downloadSizeMB: 5150),
         MLXCleaner.Spec(
             id: "qwen3-4b-instruct-2507-4bit", displayName: "Qwen3 4B Instruct 2507 (MLX 4-bit)",
