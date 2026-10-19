@@ -105,7 +105,7 @@ public final class PillController {
         host.onPress = { [weak self] control in self?.press(control) }
         host.onActivate = { [weak self] control in self?.onControl?(control) }
         install(skin)
-        GlassBackdropCache.shared.startObserving()
+        GlassBackdropCache.shared.startObserving(defaults: defaults)
         host.addSubview(previewView)
         _ = NotificationCenter.default.addObserver(
             forName: Typography.didChange, object: nil, queue: .main
