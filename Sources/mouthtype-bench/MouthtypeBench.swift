@@ -43,7 +43,7 @@ struct Run: AsyncParsableCommand {
     @Option(help: "Corpus directory of audio files with same-basename .txt references.") var corpus: String = Corpus.defaultDirectory
     @Option(help: "Timed runs per clip.") var runs: Int = 5
     @Option(help: "Report output directory.") var out: String = "docs/benchmarks"
-    @Option(help: "Comma-separated names to bias recognition toward, for engines that support it (Whisper).") var boostTerms: String?
+    @Option(help: "Comma-separated names to bias recognition toward, for engines that support it (Parakeet, Whisper).") var boostTerms: String?
 
     private static let warmups = 1
     private static let coldTimeout: TimeInterval = 20 * 60

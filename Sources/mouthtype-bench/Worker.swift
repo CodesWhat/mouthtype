@@ -12,7 +12,7 @@ struct EngineWorker: AsyncParsableCommand {
     @Option var runs: Int = 5
     @Option var warmups: Int = 1
     @Option var result: String
-    @Option(help: "Comma-separated names to bias recognition toward. Only engines that support it use them.") var boostTerms: String?
+    @Option(help: "Comma-separated names to bias recognition toward. Parakeet and Whisper use them.") var boostTerms: String?
     @Flag(help: "Use the English hint enabled by the Mac app.") var englishHint = false
 
     func run() async throws {
@@ -29,6 +29,7 @@ struct EngineWorker: AsyncParsableCommand {
             }
             if let boostTerms, let biasing = transcriber as? any VocabularyBiasing {
                 await biasing.setVocabularyBias(VocabularyBias(terms: boostTerms.split(separator: ",").map(String.init)))
+                if let parakeet = transcriber as? ParakeetEngine { _ = await parakeet.awaitVocabularyBoost() }
             }
             if mode == "full" {
                 let outcome = try await Self.benchmark(transcriber, corpus: URL(fileURLWithPath: corpus), runs: runs, warmups: warmups)
