@@ -240,14 +240,15 @@ import Testing
         var events: [GestureEvent] = []
         for sample in [
             flags(63, Self.fn, at: 0), flags(63, 0, at: 100), flags(63, Self.fn, at: 200), flags(63, 0, at: 300),
-            key(.keyDown, 0, at: 400), key(.keyDown, 53, at: 500),
+            key(.keyDown, 0, at: 400), key(.keyDown, 53, at: 500), key(.keyUp, 53, at: 600),
+            flags(63, Self.fn, at: 2000), flags(63, 0, at: 3000),
         ] {
             mapper.lockedRecording = engine.isLocked
             guard let mapped = mapper.map(sample, otherKeysHeld: { false }) else { continue }
             let now = Date(timeIntervalSinceReferenceDate: Double(mapped.timestampNanos) / 1000)
             if let event = engine.process(mapped.keyEvent, now: now) { events.append(event) }
         }
-        #expect(events == [.pressed, .discarded(.tooShort), .pressed, .locked(.doubleTap), .cancelled(.escape)])
+        #expect(events == [.pressed, .discarded(.tooShort), .pressed, .locked(.doubleTap), .cancelled(.escape), .pressed, .released])
     }
 }
 
