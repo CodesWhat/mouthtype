@@ -10,14 +10,17 @@ import MouthtypeCore
     private let refreshDiagnostics: () -> Void
     private let actions: SettingsActions
     private let reduceTransparency: () -> Bool
+    private let fullKeyboardAccess: @MainActor () -> Bool
     private let notifications: NotificationCenter
     private nonisolated(unsafe) var transparencyObserver: NSObjectProtocol?
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
     init(model: SettingsModel, actions: SettingsActions = SettingsActions(),
          reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+         fullKeyboardAccess: @escaping @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess,
          notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
         self.model = model
+        self.fullKeyboardAccess = fullKeyboardAccess
         self.actions = actions
         self.reduceTransparency = reduceTransparency
         self.notifications = notifications
@@ -46,7 +49,7 @@ import MouthtypeCore
     private func applyContent() {
         guard let window else { return }
         let solid = reduceTransparency()
-        let hosting = NSHostingView(rootView: SettingsView(model: model, actions: actions, solid: solid))
+        let hosting = NSHostingView(rootView: SettingsView(model: model, actions: actions, solid: solid, fullKeyboardAccess: fullKeyboardAccess))
         hosting.sizingOptions = []
         if solid {
             window.backgroundColor = .windowBackgroundColor
