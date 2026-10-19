@@ -347,8 +347,17 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         pill.showMessage(inserter.copyLast() ? "Copied" : "Nothing to copy yet")
     }
 
-    private func refreshGlobeCheck() {
-        let check = GlobeKeyCheck.current()
+    /// Fn-key presence comes from an IOHIDManager enumeration, so the 2 s setup poll reuses the last full check's answer.
+    private var cachedFnKeyPresent: Bool?
+
+    private func refreshGlobeCheck(log: Bool = true, reuseFnPresence: Bool = false) {
+        let check: GlobeKeyCheck
+        if reuseFnPresence, let cached = cachedFnKeyPresent {
+            check = GlobeKeyCheck.current(fnKeyPresent: cached)
+        } else {
+            check = GlobeKeyCheck.current()
+            cachedFnKeyPresent = check.fnKeyPresent
+        }
         // With the remap on the system never sees the Globe key, so its action can't conflict.
         systemSection.update(globe: remapCoordinator.isActive ? nil : check)
         systemSection.update(remapChecked: remapCoordinator.menuChecked)
@@ -356,6 +365,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         diagnostics.globe = remapCoordinator.isActive ? nil : check
         diagnostics.remapChecked = remapCoordinator.menuChecked
         diagnostics.shortcut = ShortcutSettings.load()
+        guard log else { return }
         Log.permissions.info("globe key action \(String(describing: check.action), privacy: .public), fn key present \(check.fnKeyPresent, privacy: .public), conflict \(check.hasConflict, privacy: .public)")
     }
 
@@ -382,9 +392,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// The setup poll refreshes only what `SetupReadiness` reads. Engine state and microphone preparation are observed
-    /// directly, and the Globe conflict is rechecked on the full refresh when the window becomes key.
+    /// directly. The Globe conflict is rechecked here too, since the user can change it in System Settings while setup is open.
     private func refreshSetupReadiness() {
         _ = accessibility.tick()
+        refreshGlobeCheck(log: false, reuseFnPresence: true)
         diagnostics.microphoneStatus = MicrophoneAccess.status
         diagnostics.accessibilityGranted = accessibility.isGranted
         diagnostics.hotkeyHealth = hotkeyService?.health ?? .off
@@ -422,6 +433,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         var engineFailed = false
         if case .failed = engineHost.state { engineFailed = true }
         if let pinned = StatusIcon.pinned(in: CommandLine.arguments) {
+            menuBar.isPinned = true
             menuBar.setIcon(pinned)
             return
         }

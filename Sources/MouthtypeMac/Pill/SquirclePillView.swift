@@ -1006,6 +1006,9 @@ class SquirclePillView: NSView, PillSkinView {
         let duration: TimeInterval = reduceMotion ? 0.12 : 0.16
         fadeOut = (CACurrentMediaTime(), duration, fadingOutOpacity() ?? Float(container.opacity))
         presented = false
+        // A repeating lamp animation would keep the render server animating a pill nobody can see.
+        PillMotion.withoutActions { lamp.removeAnimation(forKey: "motion") }
+        lampMotion = .steady
         CATransaction.begin()
         CATransaction.setCompletionBlock { MainActor.assumeIsolated { completion() } }
         PillMotion.set(container, "opacity", Float(0), .easeIn(duration))

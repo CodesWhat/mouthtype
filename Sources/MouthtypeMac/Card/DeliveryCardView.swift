@@ -174,7 +174,9 @@ final class DeliveryCardView: NSView {
     /// The face size, without the shadow margin.
     var faceSize: CGSize { showsHiFi ? hifi?.faceSize ?? .zero : frames?.size ?? .zero }
     /// True while the Hi-Fi window is the card's body.
-    var showsHiFi: Bool { style == .hifi && hifi != nil && !embedded }
+    var showsHiFi: Bool { style == .hifi && hifi != nil && !embedded && hifiCanDraw }
+    /// False when the current card has text the pixel face can't draw: that delivery wears the Classic card.
+    private(set) var hifiCanDraw = true
     /// True while the system glass material is the card's body.
     var showsMaterial: Bool { !glass.isHidden }
     var showsDot: Bool { !dot.isHidden }
@@ -323,6 +325,7 @@ final class DeliveryCardView: NSView {
         if isNewCard { countdownStart = new.card.countdown == nil ? nil : (sharedStart ?? CACurrentMediaTime()) }
         let card = new.card
         let k = self.k
+        hifiCanDraw = hifi.map { HiFiCardView.canRender(new.card, assets: $0.assets) } ?? true
         header.isHidden = showsHiFi
         dismiss.isHidden = showsHiFi
         hifi?.isHidden = !showsHiFi

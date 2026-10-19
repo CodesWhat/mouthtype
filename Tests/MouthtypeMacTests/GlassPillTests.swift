@@ -295,9 +295,9 @@ private final class SamplerProbe: @unchecked Sendable {
         #expect(abs(layer.transform.m11 - ClassicPillView.appearScale) < 0.001)
     }
 
-    @Test(.enabled(if: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion))
-    func widthChangesUseTheBodySpring() {
+    @Test func widthChangesUseTheBodySpring() {
         let view = glassView()
+        view.reduceMotionOverride = false
         view.appear(reduceMotion: false)
         view.showRecording(locked: false)
         for key in ["bounds", "position"] {

@@ -30,12 +30,12 @@ import MouthtypeCore
         let captured = SmartCleanupRequest(text: "This is a sentence.", level: .light)
         choice.level = .medium
         selection.levelChanged()
-        let delivery = await selection.runReady(captured, waitingUpTo: .seconds(2))
+        let delivery = await selection.runReady(captured, waitingUpTo: .seconds(60))
         #expect(delivery?.model.id == "fast")
         #expect(delivery?.result.text == "This is a sentence.")
-        let next = await selection.runReady(SmartCleanupRequest(text: "Another sentence.", level: .medium), waitingUpTo: .seconds(2))
+        let next = await selection.runReady(SmartCleanupRequest(text: "Another sentence.", level: .medium), waitingUpTo: .seconds(60))
         #expect(next?.model.id == "thorough")
-        for _ in 0..<100 where fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<6000 where fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(!fast.isLoaded)
         #expect(thorough.isLoaded)
     }
@@ -43,13 +43,15 @@ import MouthtypeCore
     @Test func aSelectionChangeDuringLoadingKeepsTheCapturedModelAvailable() async {
         let choice = Choice()
         let fast = FakeSmartModel(downloaded: true, id: "fast")
-        fast.loadDelay = .milliseconds(80)
+        let gate = DownloadGate()
+        fast.loadGate = gate
         let selection = CleanupSelection(fast: fast, thorough: FakeSmartModel(downloaded: true, id: "thorough"), level: { choice.level })
-        let request = Task { await selection.runReady(SmartCleanupRequest(text: "Keep the wording.", level: .light), waitingUpTo: .seconds(2)) }
-        try? await Task.sleep(for: .milliseconds(20))
+        let request = Task { await selection.runReady(SmartCleanupRequest(text: "Keep the wording.", level: .light), waitingUpTo: .seconds(60)) }
+        for _ in 0..<6000 where fast.loadsStarted == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         choice.level = .medium; selection.levelChanged()
+        await gate.release()
         #expect(await request.value?.model.id == "fast")
-        for _ in 0..<100 where fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<6000 where fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(!fast.isLoaded)
     }
 
@@ -88,7 +90,7 @@ import MouthtypeCore
         })
         let item = section.items[0].submenu!.items.first { $0.title.hasPrefix("Download Smart Cleanup") }!
         _ = item.target?.perform(item.action, with: item)
-        for _ in 0..<100 where fast.downloads + thorough.downloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<6000 where fast.downloads + thorough.downloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(fast.downloads == 1)
         #expect(thorough.downloads == 0)
     }

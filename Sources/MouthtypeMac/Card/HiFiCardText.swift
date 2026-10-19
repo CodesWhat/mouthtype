@@ -17,13 +17,31 @@ enum HiFiCardText {
         "\u{2026}": "...", "\u{2192}": "->", "\u{00A0}": " ", "\t": " ",
     ]
 
-    /// Typographic marks reduced to the face's ASCII, diacritics folded, caps, and `?` for what the face can't draw.
-    static func display(_ text: String, metrics: BitmapFont.Metrics) -> String {
+    /// The title-bar ear's code point: in the face, but private use, so typed text never draws it.
+    static let ear: Character = "\u{E001}"
+
+    /// Line endings as `\n`, typographic marks reduced to the face's ASCII (the arrow stays when the face has it),
+    /// diacritics folded, and caps. Characters the face can't draw are left as they are.
+    private static func normalized(_ text: String, metrics: BitmapFont.Metrics) -> String {
         let known = Set(metrics.chars)
         var swapped = ""
-        for character in text { swapped += swaps[character] ?? String(character) }
-        let folded = swapped.folding(options: [.diacriticInsensitive, .widthInsensitive], locale: nil).uppercased()
-        return String(folded.map { known.contains($0) || $0 == "\n" ? $0 : "?" })
+        for character in text.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n") {
+            swapped += known.contains(character) ? String(character) : swaps[character] ?? String(character)
+        }
+        return swapped.folding(options: [.diacriticInsensitive, .widthInsensitive], locale: nil).uppercased()
+    }
+
+    /// `text` made fit for the face: `normalized`, and `?` for anything it still can't draw. Check `canDraw` first
+    /// when the text has to be shown faithfully.
+    static func display(_ text: String, metrics: BitmapFont.Metrics) -> String {
+        let known = Set(metrics.chars)
+        return String(normalized(text, metrics: metrics).map { known.contains($0) || $0 == "\n" ? $0 : "?" })
+    }
+
+    /// Whether the face can draw all of `text` once normalized, so nothing would turn into `?`.
+    static func canDraw(_ text: String, metrics: BitmapFont.Metrics) -> Bool {
+        let known = Set(metrics.chars)
+        return normalized(text, metrics: metrics).allSatisfy { ($0 != ear && known.contains($0)) || $0 == "\n" }
     }
 
     private struct Cell {

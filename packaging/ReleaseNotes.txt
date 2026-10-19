@@ -1,4 +1,20 @@
-Mouthtype 0.1.0-rc.2
+Mouthtype 0.1.0-rc.3
+
+RC.3 fixes what the rc.2 reviews found. Recognition, cleanup and how text is pasted are unchanged.
+
+Pill and cards: a take that finishes while an earlier card is up no longer hides that card's "Your text is safe" line, and the processing pill comes back when that line goes while a take is still being worked on. The recording pill no longer sticks after a card arrives mid-recording. Cards sit above a message pill with a detail line instead of overlapping it. Long Classic messages scroll instead of growing past the screen; with Reduce Motion they jump to the end instead. Large message text is the same size in every font, and the Appearance preview readout scales with Large.
+
+Glass: the glass pill no longer renders smoked on the first press after changing style or size in Settings, and an older wallpaper measurement can't replace a newer one.
+
+Hi-Fi card: text the pixel font can't draw, such as non-Latin scripts, emoji and most symbols, shows on the Classic card instead of as question marks. Windows line endings display correctly. The close button is smaller and easier to hit, the title bar has the ear icon, arrows draw as arrows, and an open card follows readout colour changes.
+
+Menu bar and setup: the menu bar icon retries if its image fails to load, and setup notices a Globe key conflict change within a couple of seconds.
+
+The in-app Read Me is renamed and its links work outside the repository. The docs add a spoken commands reference, third-party notices list each dependency and model license, and the Gemma 4 cleanup model is listed under Apache License 2.0.
+
+Not yet verified for this build: fresh installation, behavior in third-party apps, physical-device acceptance, and update installation and relaunch over an older copy.
+
+Earlier in rc.2:
 
 RC.2 is mostly a visual refresh. Recognition, cleanup and how text is pasted are unchanged; the pill and delivery cards look and animate differently, and update checks now default on.
 
@@ -32,6 +48,6 @@ Microphone readiness now follows the actual capture result, so setup reflects su
 
 Includes single-file WAV/AIFF/M4A transcription, remembered microphone selection, optional Quiet other audio and optional Live words. Quieting and provisional words remain off by default; the completed take is inserted once. Imported audio is preserved and its raw result is exported only by explicit Copy or Save Text.
 
-The corresponding source includes an experimental Linux daemon/CLI and local Arch test-package builder, with saved spellings, phrase replacements and optional deterministic basic cleanup. Cleanup is off by default and does not add a model. Recovery-only delivery remains the default; automatic typing refuses multiline/control-bearing results and keeps the full transcript recoverable. There is no Linux GUI or supported Linux desktop release. Physical Arch/Omarchy, Hyprland and microphone acceptance remains open.
+The corresponding source includes an experimental Linux daemon/CLI and local Arch test-package builder, with saved spellings, phrase replacements and optional deterministic basic cleanup. Cleanup is off by default and does not add a model. Recovery-only delivery remains the default; automatic typing refuses multiline/control-bearing results and keeps the full transcript recoverable. The source also includes an experimental Omarchy bar plugin with a floating pill; there is no supported Linux desktop release. Physical Arch/Omarchy, Hyprland and microphone acceptance remains open.
 
 Requires Apple Silicon and macOS 26 or later. This is a release candidate; review text before sending. Microphone changes, supported output hardware, provisional display, real file-recognition quality, fresh installation and actual update installation/relaunch still need coordinated testing.

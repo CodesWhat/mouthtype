@@ -115,6 +115,8 @@ protocol DictationPill: AnyObject {
     func showCardMessage(_ message: PillMessage)
     /// Takes the pill down only if it is still showing the card's line.
     func hideCardMessage()
+    /// True while the pill is showing a card's line.
+    var cardHeld: Bool { get }
     func hide()
 }
 
@@ -122,6 +124,7 @@ extension DictationPill {
     func showPreview(_ text: String) {}
     func showCardMessage(_ message: PillMessage) {}
     func hideCardMessage() {}
+    var cardHeld: Bool { false }
     func showMessage(_ text: String, duration: TimeInterval) {
         showMessage(PillMessage(text), duration: duration)
     }

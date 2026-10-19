@@ -232,6 +232,8 @@ protocol PillSkinView: NSView {
     var messageScrollDistance: Int { get }
     /// Drawn frames of the controls in this view's coordinates; empty unless a locked recording is showing.
     var controlFrames: [PillControl: CGRect] { get }
+    /// The capsule the current message is laid out in, zero for a skin whose pill doesn't change size with its text.
+    var messageSize: CGSize { get }
 
     func showRecording(locked: Bool)
     func beginProcessing()
@@ -267,6 +269,8 @@ protocol PillSkinView: NSView {
 }
 
 extension PillSkinView {
+    var messageSize: CGSize { .zero }
+
     func renderOffscreen(in context: CGContext) { layer?.render(in: context) }
 
     var growsIntoCard: Bool { false }

@@ -1,6 +1,6 @@
 # Writing tools and microphone priorities
 
-Available starting in 0.1.0-alpha.9. Browser/device coverage and remaining physical acceptance limits are described below.
+Browser/device coverage and remaining physical acceptance limits are described below.
 
 ## Website tone
 

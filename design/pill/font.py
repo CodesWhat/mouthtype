@@ -78,6 +78,10 @@ F5 = _mk({
     "|": "..#../..#../..#../..#../..#../..#../..#..",
     "$": "..#../.####/#.#../.###./..#.#/####./..#..",
     "█": "#####/#####/#####/#####/#####/#####/#####",
+    # the right arrow the card draws between a heard word and its correction
+    "→": "...../..#../...#./#####/...#./..#../.....",
+    # the card's title-bar ear, on a private-use code point so no typed text can reach it
+    "\ue001": ".###./#...#/#.#.#/#.#.#/#.##./.#.../.#...",
 }, 5, 7)
 
 F3 = _mk({

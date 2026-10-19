@@ -23,7 +23,7 @@ import Foundation
 /// as a line above, and a full stop that ends a lead-in announcing a count ("three things.", "the following.")
 /// becomes a colon. Lines that already start with `- ` or `N. ` are left alone.
 ///
-/// Misses: a first marker after a comma ("I have three things, first, ..."); a list whose first item is "first
+/// Misses: a list whose first item is "first
 /// of all" spelled any other way; bare letters; and prose that happens to count ("First, thanks. Second, I'm
 /// late.") reads as a list.
 public struct CountedLists: Sendable {
