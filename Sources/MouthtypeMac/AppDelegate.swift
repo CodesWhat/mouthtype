@@ -167,6 +167,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         cards.onDismiss = { [weak presenter] in presenter?.userDismissed() }
         cardController = cards
         cardPresenter = presenter
+        ProfanityRemover.prewarm()
         var pipeline = DictationPipeline(
             store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
         )

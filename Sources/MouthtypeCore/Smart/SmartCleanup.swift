@@ -32,11 +32,13 @@ public struct SmartCleanupRequest: Sendable {
     public var snippets: [Snippet]
     public var context: InsertionContext?
     public var appName: String?
+    /// Phrases swearing removal must leave alone after the model, such as snippet triggers the caller expands itself.
+    public var protectedPhrases: [String]
 
     public init(
         text: String, level: CleanupLevel, style: StyleOptions = .formal,
         destination: S1MiniControls.Destination = .general, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
-        context: InsertionContext? = nil, appName: String? = nil
+        context: InsertionContext? = nil, appName: String? = nil, protectedPhrases: [String] = []
     ) {
         self.text = text
         self.level = level
@@ -46,6 +48,7 @@ public struct SmartCleanupRequest: Sendable {
         self.snippets = snippets
         self.context = context
         self.appName = appName
+        self.protectedPhrases = protectedPhrases
     }
 }
 
@@ -191,7 +194,8 @@ public actor SmartCleanup {
         guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
 
         let context = CleanupContext(vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
-            level: request.level, before: request.context?.before, after: request.context?.after)
+            level: request.level, before: request.context?.before, after: request.context?.after,
+            omitProfanity: request.style == .formal)
         let joining = NameJoining.candidates(in: request.text,
             spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
         let text = CorrectionCommas.apply(request.text)
@@ -291,7 +295,9 @@ public actor SmartCleanup {
             whitespace: true, style: request.style
         )
         let rules = request.dictionary.filter { !$0.isJoinedSpelling || !deferredNames.contains($0.written) }
-        return TextPipeline().run(TextPipelineInput(text: text, dictionary: rules, context: request.context, options: options))
+        return TextPipeline().run(TextPipelineInput(
+            text: text, dictionary: rules, context: request.context, options: options,
+            protectedPhrases: request.protectedPhrases + request.dictionary.map(\.heard)))
     }
 
     /// Whether `task` finished before `deadline`. The watcher on the task is not a child of this call, so a task
