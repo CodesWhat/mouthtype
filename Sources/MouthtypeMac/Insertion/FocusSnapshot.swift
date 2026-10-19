@@ -276,7 +276,7 @@ final class AccessibilityFocusReader: FocusReading {
 
     /// Secure only when the element says so. An element that cannot be read is not treated as secure, or every app
     /// without Accessibility support would lose its dictation.
-    private func isSecure(_ element: AXUIElement, subrole: String?) -> Bool {
+    func isSecure(_ element: AXUIElement, subrole: String?) -> Bool {
         if subrole == kAXSecureTextFieldSubrole as String { return true }
         var protected: CFTypeRef?
         let attribute = NSAccessibility.Attribute.containsProtectedContent.rawValue as CFString
