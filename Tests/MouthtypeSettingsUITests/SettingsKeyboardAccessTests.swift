@@ -63,6 +63,7 @@ import Testing
     @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {
         #expect(SettingsPage.general.moved(by: 1) == .writing)
         #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
-        #expect(SettingsPage.general.moved(by: -1) == .general)
+        #expect(SettingsPage.general.moved(by: -1) == .home)
+        #expect(SettingsPage.home.moved(by: -1) == .home)
     }
 }
