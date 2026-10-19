@@ -1,4 +1,12 @@
-Mouthtype 0.1.0-rc.4
+Mouthtype 0.1.0
+
+The first stable release of Mouthtype for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
+
+Since rc.4: if you quit Mouthtype in the middle of a take, the next launch offers to recover it. The docs now say plainly that Tab doesn't reach Settings controls yet; arrow keys move through the sidebar, and a fix is planned for 0.2.
+
+Not verified on a device for this release: fresh installation, Bluetooth and USB microphones, and VoiceOver.
+
+Earlier in rc.4:
 
 RC.4 fixes what the rc.3 reviews found. Recognition and cleanup are unchanged.
 
@@ -11,8 +19,6 @@ Menu: Check for Updates, How to Use and About have icons that match Quit.
 Long takes start transcribing sooner, Mouthtype stops watching very large fields for corrections, and removing old recordings no longer leaves stale entries when one file can't be deleted. Cleanup model downloads are pinned to exact versions.
 
 The docs add troubleshooting and known limits.
-
-Not yet verified for this build: fresh installation, Bluetooth and USB microphones, and VoiceOver.
 
 Earlier in rc.3:
 
