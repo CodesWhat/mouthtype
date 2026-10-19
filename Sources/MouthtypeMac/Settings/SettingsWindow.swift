@@ -112,6 +112,10 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         let index = pages.firstIndex(of: self) ?? 0
         return pages[min(max(index + offset, 0), pages.count - 1)]
     }
+    /// Arrow keys step from the focused sidebar row when there is one, else from the selected page.
+    static func arrowTarget(focused: SettingsPage?, selected: SettingsPage, offset: Int) -> SettingsPage {
+        (focused ?? selected).moved(by: offset)
+    }
     var icon: String {
         switch self { case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
     }

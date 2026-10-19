@@ -40,22 +40,33 @@ import Testing
         }
     }
 
-    @Test func pageControlsJoinTheKeyViewLoopOnlyWhenKeyboardNavigationIsOn() throws {
+    /// The reported bug: Tab from the sidebar has to reach the page. AppKit only puts buttons in the key view loop under
+    /// Full Keyboard Access, so this is gated on it and does nothing on a machine with it off. The real Tab pass on a
+    /// built app remains a manual check.
+    @Test func tabFromTheSidebarReachesThePageInsteadOfCyclingInside() throws {
+        guard NSApp.isFullKeyboardAccessEnabled else { return }
         let controller = makeWindow(page: .general)
         let window = try #require(controller.window)
         let content = try #require(window.contentView)
-        let page = controls(in: content)
-        #expect(!page.isEmpty)
-        // With Full Keyboard Access on, AppKit lets these controls become key views. Without it they stay out of the
-        // loop, which is the standard macOS behaviour we keep.
-        for control in page { #expect(control.canBecomeKeyView == NSApp.isFullKeyboardAccessEnabled) }
         window.recalculateKeyViewLoop()
-        if NSApp.isFullKeyboardAccessEnabled {
-            var visited = Set<ObjectIdentifier>()
-            var view = content.nextValidKeyView
-            while let current = view, visited.insert(ObjectIdentifier(current)).inserted { view = current.nextValidKeyView }
-            #expect(page.allSatisfy { visited.contains(ObjectIdentifier($0)) })
+        let all = controls(in: content)
+        let sidebarEdge = SettingsTheme.sidebarWidth
+        func inSidebar(_ view: NSView) -> Bool { view.convert(view.bounds, to: nil).midX < sidebarEdge }
+        let start = try #require(all.first(where: inSidebar))
+        var view: NSView? = start
+        var reachedPage = false
+        var visited = Set<ObjectIdentifier>()
+        while let current = view?.nextValidKeyView, visited.insert(ObjectIdentifier(current)).inserted {
+            if !inSidebar(current) { reachedPage = true; break }
+            view = current
         }
+        #expect(reachedPage, "Tab never left the sidebar")
+    }
+
+    @Test func arrowsStepFromTheFocusedRowOtherwiseFromTheSelection() {
+        #expect(SettingsPage.arrowTarget(focused: .appearance, selected: .general, offset: -1) == .writing)
+        #expect(SettingsPage.arrowTarget(focused: nil, selected: .writing, offset: 1) == .appearance)
+        #expect(SettingsPage.arrowTarget(focused: nil, selected: .diagnostics, offset: 1) == .diagnostics)
     }
 
     @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {

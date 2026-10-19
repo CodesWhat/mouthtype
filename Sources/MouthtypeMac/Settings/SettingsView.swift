@@ -65,8 +65,10 @@ struct SettingsView: View {
                         .focused($sidebarFocus, equals: page)
                 }
             }
-            // Arrows bubble up from whichever row has focus and move both the selection and the focus. The rows are the
-            // focus stops; the container isn't, so Tab walks on into the page instead of cycling inside the sidebar.
+            // Arrows bubble up from the focused row (Full Keyboard Access on) and move both selection and focus. With it off,
+            // plain buttons never take focus, so the list itself is the focus target and arrows step from the selection.
+            // With it on the list stays out of the loop, so Tab walks on into the page instead of cycling in the sidebar.
+            .focusable(!SettingsView.fullKeyboardAccess).focusEffectDisabled()
             .onKeyPress(.upArrow) { moveSidebar(by: -1) }
             .onKeyPress(.downArrow) { moveSidebar(by: 1) }
             Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
@@ -86,12 +88,13 @@ struct SettingsView: View {
     }
 
     private func moveSidebar(by offset: Int) -> KeyPress.Result {
-        let target = model.page.moved(by: offset)
-        guard sidebarFocus != nil else { return .ignored }
+        let target = SettingsPage.arrowTarget(focused: sidebarFocus, selected: model.page, offset: offset)
         model.page = target
-        sidebarFocus = target
+        if sidebarFocus != nil { sidebarFocus = target }
         return .handled
     }
+
+    static var fullKeyboardAccess: Bool { NSApp?.isFullKeyboardAccessEnabled ?? false }
 
     private func linkRow(_ link: SettingsSidebarLink) -> some View {
         sidebarRow(link.title, icon: link.icon, selected: false, id: link.accessibilityID) { actions.perform(link) }
