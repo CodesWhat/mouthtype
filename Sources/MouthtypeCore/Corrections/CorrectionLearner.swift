@@ -91,21 +91,17 @@ public enum CorrectionLearner {
 
     static func words(in text: String) -> [Word] {
         text.split(whereSeparator: \.isWhitespace).compactMap { piece in
-            let trimmed = Substring(piece).drop(while: { !isWordCharacter($0) }).reversed().drop(while: { !isWordCharacter($0) }).reversed()
+            let trimmed = Substring(piece).drop(while: { !TextScan.isWordChar($0) }).reversed().drop(while: { !TextScan.isWordChar($0) }).reversed()
             guard !trimmed.isEmpty else { return nil }
             let surface = String(trimmed)
             return Word(surface: surface, key: normalise(surface))
         }
     }
 
-    private static func isWordCharacter(_ character: Character) -> Bool {
-        character.isLetter || character.isNumber || character == "_"
-    }
-
     static func normalise(_ text: String) -> String {
         text.lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
             .split(whereSeparator: \.isWhitespace).map { piece in
-                String(Substring(piece).drop(while: { !isWordCharacter($0) }).reversed().drop(while: { !isWordCharacter($0) }).reversed())
+                String(Substring(piece).drop(while: { !TextScan.isWordChar($0) }).reversed().drop(while: { !TextScan.isWordChar($0) }).reversed())
             }.filter { !$0.isEmpty }.joined(separator: " ")
     }
 
@@ -224,28 +220,13 @@ public enum CorrectionLearner {
     static func similar(_ a: String, _ b: String) -> Bool {
         let left = squash(a), right = squash(b)
         guard !left.isEmpty, !right.isEmpty else { return false }
-        let ratio = Double(editDistance(left, right)) / Double(max(left.count, right.count))
+        let ratio = Double(TextMetrics.editDistance(left, right)) / Double(max(left.count, right.count))
         if ratio <= maxDistanceRatio { return true }
         return left.count >= 3 && right.count >= 3 && soundex(left) == soundex(right) && soundex(left) != nil
     }
 
     private static func squash(_ text: String) -> [Character] {
         Array(text.lowercased().folding(options: .diacriticInsensitive, locale: nil).filter { $0.isLetter || $0.isNumber })
-    }
-
-    static func editDistance(_ a: [Character], _ b: [Character]) -> Int {
-        if a.isEmpty { return b.count }
-        if b.isEmpty { return a.count }
-        var previous = Array(0...b.count)
-        var current = previous
-        for i in 1...a.count {
-            current[0] = i
-            for j in 1...b.count {
-                current[j] = a[i - 1] == b[j - 1] ? previous[j - 1] : 1 + min(previous[j - 1], previous[j], current[j - 1])
-            }
-            swap(&previous, &current)
-        }
-        return previous[b.count]
     }
 
     /// The classic Soundex code of a lowercase word, nil when it doesn't start with a letter.
