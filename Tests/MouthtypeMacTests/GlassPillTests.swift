@@ -307,3 +307,19 @@ private final class SamplerProbe: @unchecked Sendable {
         }
     }
 }
+
+@MainActor
+@Suite struct GlassWallpaperPlaceholderTests {
+    @Test func theSystemPlaceholderIsRejected() {
+        #expect(GlassBackdropCache.usableWallpaper(URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop.heic")) == nil)
+        #expect(GlassBackdropCache.usableWallpaper(URL(fileURLWithPath: "/System/Library/CoreServices/DefaultDesktop-Dark.heic")) == nil)
+    }
+
+    @Test func realPicturesAreAccepted() {
+        for path in ["/Users/scott/Pictures/lake.jpg", "/System/Library/Desktop Pictures/Sequoia.heic",
+                     "/System/Library/CoreServices/Other.heic", "/Users/scott/DefaultDesktop.heic"] {
+            let url = URL(fileURLWithPath: path)
+            #expect(GlassBackdropCache.usableWallpaper(url) == url, "\(path)")
+        }
+    }
+}
