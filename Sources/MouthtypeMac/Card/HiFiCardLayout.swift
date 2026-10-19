@@ -9,7 +9,8 @@ enum HiFiCardLayout {
 
     static let ledSize = 4
     static let closeSize = 10
-    /// The title-bar ear is a 5x7 glyph of the readout face, set between the LED and the title.
+    /// The title-bar ear is a 5x7 glyph of the readout face, at the plate's far left, with the title right after it.
+    /// The status LED sits after the title text.
     static let earWidth = 5
     static let earHeight = 7
     static let earGap = 2
@@ -60,9 +61,10 @@ enum HiFiCardLayout {
     static func buttonWidth(label: Int, _ m: HiFiCardSpec.Metrics) -> Int { max(m.button.minW, label + 2 * m.button.padX) }
 
     static func make(_ input: Input, _ m: HiFiCardSpec.Metrics) -> Frames {
-        let plate = Rect(x: m.plate.x, y: m.plate.y, w: 2 * m.plate.padX + ledSize + m.plate.ledGap + earWidth + earGap + input.titleWidth, h: m.plate.h)
-        let led = Rect(x: plate.x + m.plate.padX, y: plate.y + (plate.h - ledSize) / 2, w: ledSize, h: ledSize)
-        let ear = Rect(x: led.x + ledSize + m.plate.ledGap, y: plate.y + (plate.h - earHeight) / 2, w: earWidth, h: earHeight)
+        let plate = Rect(x: m.plate.x, y: m.plate.y, w: 2 * m.plate.padX + earWidth + earGap + input.titleWidth + m.plate.ledGap + ledSize, h: m.plate.h)
+        let ear = Rect(x: plate.x + m.plate.padX, y: plate.y + (plate.h - earHeight) / 2, w: earWidth, h: earHeight)
+        let titleX = ear.x + earWidth + earGap
+        let led = Rect(x: titleX + input.titleWidth + m.plate.ledGap, y: plate.y + (plate.h - ledSize) / 2, w: ledSize, h: ledSize)
         let closeX = width - m.close.right - closeSize
         let close = Rect(x: closeX, y: m.close.y, w: closeSize, h: closeSize)
         let closeHit = Self.closeHit(m)
@@ -103,7 +105,7 @@ enum HiFiCardLayout {
         let height = y + m.bottomPad + frameBottom
         return Frames(
             width: width, height: height, plate: plate, led: led, ear: ear,
-            titleOrigin: CGPoint(x: ear.x + earWidth + earGap, y: plate.y + (plate.h - 5) / 2),
+            titleOrigin: CGPoint(x: titleX, y: plate.y + (plate.h - 5) / 2),
             close: close, closeHit: closeHit, vfd: vfd, textOrigin: CGPoint(x: textX, y: textY), visibleLines: visible,
             bar: bar, buttons: buttons
         )

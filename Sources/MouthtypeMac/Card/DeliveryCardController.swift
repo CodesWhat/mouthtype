@@ -98,6 +98,7 @@ final class DeliveryCardController: CardSurface {
                 self.render(state)
             }
         }
+        // Same as above: the observer holds self weakly and lives as long as the app does.
         _ = NotificationCenter.default.addObserver(
             forName: UserDefaults.didChangeNotification, object: nil, queue: .main
         ) { [weak self] _ in

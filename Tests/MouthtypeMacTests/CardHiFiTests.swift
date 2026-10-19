@@ -296,7 +296,10 @@ private func pixelCount(_ image: CGImage?, hex: String) -> Int {
         let frames = try #require(pair.frames)
         #expect(frames.ear.x >= frames.plate.x && frames.ear.x + frames.ear.w <= frames.plate.x + frames.plate.w)
         #expect(frames.ear.y >= frames.plate.y && frames.ear.y + frames.ear.h <= frames.plate.y + frames.plate.h)
-        #expect(Int(frames.titleOrigin.x) >= frames.ear.x + frames.ear.w)
+        // Far left: the ear first, the title right after it, then the LED after the title text.
+        let titleWidth = try #require(HiFiCardAssets.shared).font3.metrics.width(of: pair.title)
+        #expect(frames.ear.x == frames.plate.x + (try #require(HiFiCardAssets.shared)).metrics.plate.padX && Int(frames.titleOrigin.x) == frames.ear.x + frames.ear.w + HiFiCardLayout.earGap)
+        #expect(frames.led.x == Int(frames.titleOrigin.x) + titleWidth + (try #require(HiFiCardAssets.shared)).metrics.plate.ledGap && frames.led.x + frames.led.w <= frames.plate.x + frames.plate.w)
     }
 
     // MARK: Fallback
