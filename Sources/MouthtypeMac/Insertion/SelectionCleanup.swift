@@ -94,6 +94,8 @@ enum SelectionCleanupError: Error { case unavailable }
     var canAccept: Bool {
         captured != nil && !submitted && !isTransforming && !result.isEmpty && result.utf16.count <= 16_000
     }
+    /// The preview can be edited once a result exists and nothing is generating, so a late result can't overwrite edits.
+    var isEditable: Bool { captured != nil && !submitted && !isTransforming }
     var canRetry: Bool { captured != nil && transform != nil && !submitted && !isTransforming }
     /// Why the AI transforms are disabled, or nil when they can run.
     var transformUnavailableReason: String? {
@@ -201,6 +203,10 @@ enum SelectionCleanupError: Error { case unavailable }
         case let .failure(error):
             if let cleaner = error as? CleanerError, case let .unavailable(reason) = cleaner {
                 message = reason
+            } else if let cleaner = error as? CleanerError, cleaner == .outputTruncated || cleaner == .outputTooLong {
+                message = cleaner == .outputTruncated
+                    ? "\(kind.title) ran past the model's length limit, so the result was cut off and can't be used. Try a shorter selection, or cancel."
+                    : "\(kind.title) returned far more text than the selection, so the result can't be used. Retry, or cancel."
             } else {
                 message = "\(kind.title) failed. Retry, or cancel."
             }
@@ -209,6 +215,14 @@ enum SelectionCleanupError: Error { case unavailable }
     }
 
     private static let basicMessage = "Basic cleanup preview. Review it before accepting. Names and numbers aren’t rewritten."
+
+    /// Cleanup and the model both trim their output, so put the selection's own leading and trailing whitespace back.
+    /// Without it a selection ending in a space or newline would run into whatever follows it.
+    static func restoringBoundaryWhitespace(of original: String, in result: String) -> String {
+        let leading = original.prefix(while: \.isWhitespace)
+        let trailing = original.reversed().prefix(while: \.isWhitespace).reversed()
+        return leading + result.trimmingCharacters(in: .whitespacesAndNewlines) + String(trailing)
+    }
 
     private static func basicCleanup(_ text: String) -> String {
         let options = TextPipelineOptions(fillers: true, spokenCommands: true, selfCorrection: false, countedLists: false,
@@ -223,7 +237,8 @@ enum SelectionCleanupError: Error { case unavailable }
             acceptanceErrorPresented = true
             return
         }
-        guard editor.replace(captured, with: result) else {
+        let replacement = Self.restoringBoundaryWhitespace(of: captured.text, in: result)
+        guard editor.replace(captured, with: replacement) else {
             message = "The selection changed or the app refused replacement. Select the original text again and reopen Clean Selected Text, or copy the result."
             acceptanceErrorPresented = true
             return

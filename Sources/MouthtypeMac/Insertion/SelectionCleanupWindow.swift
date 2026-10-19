@@ -58,7 +58,7 @@ private struct SelectionCleanupView: View {
                 .frame(height: textHeight(model.original, width: 576, minimum: 22,
                                          maximum: max(22, min(120, (maximumContentHeight - 240) / 3))))
             Text("Preview").font(.callout).foregroundStyle(.secondary)
-            TextEditor(text: $model.result).font(.body).disabled(!model.hasPreview || model.submitted)
+            TextEditor(text: $model.result).font(.body).disabled(!model.isEditable)
                 .frame(height: textHeight(model.result, width: 552, minimum: 44,
                                          maximum: max(44, min(240, (maximumContentHeight - 240) * 2 / 3 - 12))))
                 .padding(6)

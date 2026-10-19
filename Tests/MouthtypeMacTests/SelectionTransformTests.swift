@@ -18,10 +18,12 @@ import MouthtypeCore
 @MainActor private final class FakeTransformer: SelectionTransforming {
     var reason: String?
     var output = "He and I go."
+    var error: Error?
     var calls: [(TextTransform, String)] = []
     var transformUnavailableReason: String? { reason }
     func transform(_ transform: TextTransform, text: String) async throws -> String {
         calls.append((transform, text))
+        if let error { throw error }
         return output
     }
 }
@@ -126,5 +128,60 @@ import MouthtypeCore
         model.prepare(transform: .shorter)
         await settle(model)
         #expect(model.result.isEmpty && !model.canAccept && model.message.contains("nothing"))
+    }
+
+    @Test(arguments: [
+        ("hello there. ", "Hello there.", "Hello there. "),
+        ("  indented\n", "Indented.", "  Indented.\n"),
+        ("tail one\n\n", "Tail one.", "Tail one.\n\n"),
+        ("no edges", "No edges.", "No edges."),
+    ])
+    func acceptKeepsTheSelectionsBoundaryWhitespace(original: String, output: String, expected: String) async {
+        let editor = TransformEditor()
+        editor.selected = SelectedText(pid: 7, element: nil, range: NSRange(location: 40, length: original.utf16.count), text: original)
+        let transformer = FakeTransformer()
+        transformer.output = output
+        let model = SelectionCleanupModel(editor: editor, transformer: transformer)
+        model.prepare(transform: .fixGrammar)
+        await settle(model)
+        model.accept()
+        #expect(editor.replaced == [expected])
+    }
+
+    @Test func aPartialParagraphSelectionKeepsTheBreakBeforeTheNextSentence() async {
+        let editor = TransformEditor()
+        editor.selected = SelectedText(pid: 7, element: nil, range: NSRange(location: 10, length: 13), text: "hello there. ")
+        let model = SelectionCleanupModel(editor: editor)
+        model.prepare()
+        model.accept()
+        #expect(editor.replaced.count == 1 && editor.replaced[0].hasSuffix(" ") && !editor.replaced[0].hasPrefix(" "))
+    }
+
+    @Test func thePreviewIsNotEditableWhileTransforming() async {
+        let model = SelectionCleanupModel(editor: TransformEditor(), transformer: FakeTransformer())
+        #expect(!model.isEditable)
+        model.prepare(transform: .fixGrammar)
+        #expect(model.isTransforming && !model.isEditable)
+        await settle(model)
+        #expect(model.isEditable)
+        model.retry()
+        #expect(!model.isEditable)
+        await settle(model)
+        model.accept()
+        #expect(model.submitted && !model.isEditable)
+    }
+
+    @Test(arguments: [CleanerError.outputTruncated, CleanerError.outputTooLong])
+    func aTruncatedOrRunawayGenerationShowsAMessageAndKeepsAcceptDisabled(error: CleanerError) async {
+        let editor = TransformEditor()
+        let transformer = FakeTransformer()
+        transformer.error = error
+        let model = SelectionCleanupModel(editor: editor, transformer: transformer)
+        model.prepare(transform: .shorter)
+        await settle(model)
+        #expect(model.result.isEmpty && !model.canAccept)
+        #expect(model.message.contains(error == .outputTruncated ? "length limit" : "far more text"))
+        model.accept()
+        #expect(editor.replaced.isEmpty && !model.submitted)
     }
 }
