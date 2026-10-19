@@ -24,15 +24,48 @@ import Testing
         ("Okay. Fuck. Next one.", "Okay. Next one."),
         ("Okay. Fuck.", "Okay."),
         ("That was a shitty day.", "That was a day."),
-        ("He is a motherfucker.", "He is a."),
-        ("Quit the bullshit and go.", "Quit the and go."),
         ("Damn it, I lost it.", "I lost it."),
+        ("I lost it, dammit.", "I lost it."),
         ("Goddamn, that is good.", "That is good."),
-        ("Don't be an asshole.", "Don't be an."),
-        ("Stop being a bitch about it.", "Stop being a about it."),
-        ("This is some crap.", "This is some."),
-        ("It was fucking shit, honestly.", "It was honestly."),
+        ("It was fucking shit, honestly.", "It was shit, honestly."),
+        ("I drove a goddamn car.", "I drove a car."),
+        ("That is damn good.", "That is good."),
+        ("Fuck!!", ""),
+        ("Fuck;", ""),
+        ("Shit... I forgot.", "I forgot."),
+        ("Okay. Shit!! Next one.", "Okay. Next one."),
+        ("Fuck?! I forgot.", "I forgot."),
     ]
+
+    /// Nouns and objects stay; the model levels smooth those over.
+    static let nounsKept = [
+        "Don't be an asshole.", "He is a motherfucker.", "Quit the bullshit and go.", "Stop being a bitch about it.",
+        "This is some crap.", "Talk shit all day.", "It is a piece of shit.", "My shit is gone.", "Damn it all.",
+        "Such a bitch.", "Fuck off.",
+    ]
+
+    @Test func keepsNounsAndObjects() {
+        for text in Self.nounsKept {
+            #expect(strip(text) == text, "\(text.debugDescription)")
+        }
+    }
+
+    @Test func capitalisationRepairSkipsSavedSpellingsAndIdentifiers() {
+        #expect(strip("Fuck, npm is broken.", protected: ["npm"]) == "npm is broken.")
+        #expect(strip("Fuck, foo.py is missing.") == "foo.py is missing.")
+        #expect(strip("Shit, build_2 failed.") == "build_2 failed.")
+        #expect(strip("Shit, a/b failed.") == "a/b failed.")
+        #expect(strip("Fuck, iPhone is broken.") == "iPhone is broken.")
+        #expect(strip("Fuck, the build is broken.") == "The build is broken.")
+    }
+
+    @Test func protectedPhrasesAreNeverCut() {
+        let remover = ProfanityRemover(protectedPhrases: ["holy shit", "brain fuck", "damn good coffee"])
+        #expect(remover.apply("Holy shit, this is fucking broken.").text == "Holy shit, this is broken.")
+        #expect(remover.apply("Deploy brain fuck.").text == "Deploy brain fuck.")
+        #expect(remover.apply("I want damn good coffee.").text == "I want damn good coffee.")
+        #expect(remover.apply("Fuck, I want damn good coffee.").text == "I want damn good coffee.")
+    }
 
     @Test func removesAndRepairs() {
         for c in Self.removals {
@@ -139,11 +172,31 @@ import Testing
 
     @Test func theGuardSeesCleanedInput() async {
         // Basic already removed the swearing, so the model returning it unchanged does not trip the word-drop guard.
-        let basic = TextPipeline().run(TextPipelineInput(text: "fuck shit damn crap fucking hell"))
-        #expect(basic.text.lowercased().contains("fuck") == false)
+        let basic = TextPipeline().run(TextPipelineInput(text: "Fuck, tell Alice that this is fucking late, damn it."))
+        #expect(basic.text == "Tell Alice that this is late.")
         let cleaner = FakeCleaner { text, _ in text }
+        cleaner.usesNativeControls = false
         let result = await SmartCleanup(cleaner: cleaner).run(
-            SmartCleanupRequest(text: "Tell Alice to message me today.", level: .medium, style: .formal))
+            SmartCleanupRequest(text: basic.text, level: .medium, style: .formal))
         #expect(result.outcome == .ok)
+        #expect(result.text == basic.text)
+    }
+
+    @Test func theModelsReplacementForANounIsNotUndone() async {
+        let cleaner = FakeCleaner(returning: "Please do not be a jerk to Alice about the late delivery today.")
+        cleaner.usesNativeControls = false
+        let result = await SmartCleanup(cleaner: cleaner).run(
+            SmartCleanupRequest(text: "Please do not be an asshole to Alice about the late delivery today.", level: .medium, style: .formal))
+        #expect(result.text == "Please do not be a jerk to Alice about the late delivery today.", "\(result.outcome) \(result.rejection ?? "")")
+    }
+
+    @Test func protectedPhrasesSurviveAfterTheModel() async {
+        let cleaner = FakeCleaner(returning: "Deploy brain fuck today, it is fucking late.")
+        cleaner.usesNativeControls = false
+        let result = await SmartCleanup(cleaner: cleaner).run(
+            SmartCleanupRequest(text: "Deploy brain fuck today, it is late.", level: .medium, style: .formal,
+                                dictionary: [DictionaryRule(heard: "brain fuck", written: "Brainfuck")]))
+        #expect(result.text.contains("Brainfuck") || result.text.contains("brain fuck"))
+        #expect(!result.text.contains("fucking"))
     }
 }

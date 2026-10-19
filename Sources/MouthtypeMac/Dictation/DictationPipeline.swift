@@ -244,17 +244,29 @@ struct DictationPipeline: Sendable {
         let spoken = phrases.matchingTriggers(in: transcribed.text)
         var options = settings.pipelineOptions
         options.snippets = false
+        // Swearing removal must not cut into a saved spelling's heard form (even one waiting for the model to join it)
+        // or a snippet trigger heard in the text.
+        let protectedPhrases = inputs.dictionary.map(\.heard) + (settings.pipelineOptions.snippets ? inputs.snippets.map(\.trigger) : [])
+
+        /// A take delivered as heard still loses its swearing.
+        func asHeard(_ text: String) -> TextPipelineResult {
+            guard options.profanity, options.style == .formal else { return TextPipelineResult(text: text) }
+            var only = TextPipelineOptions.none
+            only.profanity = true
+            only.style = options.style
+            return textPipeline.run(TextPipelineInput(text: text, options: only, protectedPhrases: protectedPhrases))
+        }
 
         func deterministic(_ dictionary: [DictionaryRule], startedAt start: ContinuousClock.Instant)
             -> (result: TextPipelineResult, expanded: StageResult, expected: [String], ms: Double) {
             var result = textPipeline.run(TextPipelineInput(
                 text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
-                now: inputs.now, clipboard: clipboard, options: options
+                now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases
             ))
             // Cleanup may remove a filler or format a number that is part of a saved trigger.
             // Keep the spoken trigger intact rather than silently losing its replacement.
             if !spoken.isEmpty, phrases.matchingTriggers(in: result.text) != spoken {
-                result = TextPipelineResult(text: transcribed.text)
+                result = asHeard(transcribed.text)
             }
             let expanded = phrases.apply(result.text)
             let expected = phrases.matchingTriggers(in: result.text)
@@ -272,7 +284,8 @@ struct DictationPipeline: Sendable {
         if ms > Self.cleanupBudgetMs {
             Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the guarded text")
             record.outcome = "timeout"
-            return CleanedDictation(text: transcribed.text, edits: transcribed.guardEdits, cleanup: record)
+            let heard = asHeard(transcribed.text)
+            return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
         }
         for note in result.notes { Log.app.info("cleanup note: \(note, privacy: .public)") }
         let edits = transcribed.guardEdits + result.edits
@@ -284,7 +297,8 @@ struct DictationPipeline: Sendable {
         }
         guard let delivery = await smart.runReady(SmartCleanupRequest(
             text: result.text, level: level, style: settings.style, destination: destination,
-            dictionary: inputs.dictionary, snippets: [], context: context, appName: appName
+            dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
+            protectedPhrases: protectedPhrases
         ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
             if dictionary.count != inputs.dictionary.count {
                 let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
@@ -293,7 +307,8 @@ struct DictationPipeline: Sendable {
                 if totalMs > Self.cleanupBudgetMs {
                     Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
                     record.outcome = "timeout"
-                    return CleanedDictation(text: transcribed.text, edits: transcribed.guardEdits, cleanup: record)
+                    let heard = asHeard(transcribed.text)
+                    return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
                 }
                 return CleanedDictation(text: fallback.expanded.text,
                     edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)

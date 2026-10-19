@@ -380,4 +380,81 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         #expect(styles.resolveLevel(bundleID: "com.apple.Notes") == nil)
         #expect(pipeline.cleanupInputs(level: styles.resolveLevel(bundleID: "com.apple.Notes")).settings.level == .medium)
     }
+
+    // MARK: Formal tone drops swearing
+
+    private final class Seen: @unchecked Sendable {
+        private let lock = NSLock()
+        private var inputs: [String] = []
+        func record(_ text: String) { lock.withLock { inputs.append(text) } }
+        var all: [String] { lock.withLock { inputs } }
+    }
+
+    @Test(arguments: [CleanupLevel.basic, .light, .medium])
+    func formalKeepsTheWordsOfASavedSpellingBeforeTheModel(level: CleanupLevel) async {
+        let seen = Seen()
+        let cleaner = ScriptedCleaner { text, _ in seen.record(text); return text }
+        let rules = [DictionaryRule(heard: "brain fuck", written: "Brainfuck")]
+        let (pipeline, _) = pipeline(cleaner, level: level, rules: rules)
+        let cleaned = await clean(pipeline, text: "Deploy brain fuck.")
+        #expect(cleaned.text.lowercased().replacingOccurrences(of: " ", with: "") == "deploybrainfuck.")
+        #expect(cleaned.text.contains("Brainfuck") || cleaned.text.contains("brain fuck"))
+        for input in seen.all { #expect(input.contains("brain fuck") || input.contains("Brainfuck")) }
+    }
+
+    @Test(arguments: [CleanupLevel.basic, .light, .medium])
+    func formalKeepsASnippetTriggerAndStillDropsOtherSwearing(level: CleanupLevel) async {
+        let cleaner = ScriptedCleaner { text, _ in text }
+        let (pipeline, _) = pipeline(cleaner, level: level, snippets: [Snippet(trigger: "holy shit", expansion: "Oh dear")])
+        let cleaned = await clean(pipeline, text: "holy shit this is fucking broken")
+        #expect(cleaned.text == "Oh dear this is broken")
+    }
+
+    @Test(arguments: [CleanupLevel.basic, .light, .medium])
+    func aTriggerTheCleanupWouldBreakStillExpandsAndSwearingStillGoes(level: CleanupLevel) async {
+        let cleaner = ScriptedCleaner { text, _ in text }
+        let (pipeline, _) = pipeline(cleaner, level: level, snippets: [Snippet(trigger: "um holy shit", expansion: "Oh dear")])
+        let cleaned = await clean(pipeline, text: "um holy shit this is fucking broken")
+        #expect(cleaned.text == "Oh dear this is broken")
+    }
+
+    @Test func aRejectedModelOutputStillLeavesNoSwearing() async {
+        let (pipeline, _) = pipeline(ScriptedCleaner(returning: "Paris."))
+        let cleaned = await clean(pipeline, text: "what's the capital of fucking France")
+        #expect(cleaned.text == "What's the capital of France" && cleaned.cleanup.outcome == "guard-rejected")
+    }
+
+    @Test func aModelThatBringsSwearingBackLosesItAgain() async {
+        let cleaner = ScriptedCleaner(returning: "What's the capital of fucking France?")
+        let (pipeline, _) = pipeline(cleaner)
+        let cleaned = await clean(pipeline, text: "what's the capital of France")
+        #expect(cleaned.text == "What's the capital of France?" && cleaned.cleanup.outcome == "ok")
+    }
+
+    @Test func aModelReplacementForANounSurvives() async {
+        let cleaner = ScriptedCleaner(returning: "Please do not be a jerk to Alice about the late delivery today.")
+        let (pipeline, _) = pipeline(cleaner)
+        let cleaned = await clean(pipeline, text: "please do not be an asshole to Alice about the late delivery today")
+        #expect(cleaned.text == "Please do not be a jerk to Alice about the late delivery today.")
+    }
+
+    @Test(arguments: [CleanupLevel.basic, .light])
+    func capitalisationRepairLeavesSavedSpellingsAndIdentifiersAlone(level: CleanupLevel) async {
+        let rules = [DictionaryRule(heard: "npm", written: "npm")]
+        let (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: level, rules: rules)
+        #expect(await clean(pipeline, text: "Fuck, npm is broken.").text == "npm is broken.")
+        // The sentence-start blend stage treats a bare file name as it does without the swearing; the swear pass adds nothing.
+        let plain = await clean(pipeline, text: "foo.py is missing.")
+        let out = await clean(pipeline, text: "Fuck, foo.py is missing.")
+        #expect(out.text == plain.text)
+        #expect(!out.edits.contains { $0.stage == "filler" && $0.toText == "Foo" })
+    }
+
+    @Test(arguments: [CleanupLevel.basic, .light])
+    func punctuationAroundARemovedExclamationGoesWithIt(level: CleanupLevel) async {
+        let (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: level)
+        #expect(await clean(pipeline, text: "Shit... I forgot the keys today.").text == "I forgot the keys today.")
+        #expect(await clean(pipeline, text: "Fuck!!").text == "")
+        #expect(await clean(pipeline, text: "Fuck;").text == "")
+    }
 }

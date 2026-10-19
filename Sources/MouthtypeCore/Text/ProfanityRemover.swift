@@ -1,17 +1,24 @@
 import Foundation
 
-/// Removes swearing for the Formal tone, and tidies the punctuation and capitalisation it leaves behind.
+/// Removes swearing used as an exclamation or for emphasis for the Formal tone, and tidies the punctuation and
+/// capitalisation it leaves behind.
 ///
 /// A short, conservative list of whole words, matched case-insensitively and never inside another word
-/// ("assess", "class", "Scunthorpe", "shell" are untouched). "hell" alone and "pissed off" are left out because
-/// they are often ordinary speech; "the hell" and "the fuck" go as phrases ("what the fuck is this" becomes
-/// "what is this"). "damn it" goes as a phrase too.
+/// ("assess", "class", "Scunthorpe", "shell" are untouched). Only uses that can go without breaking the sentence are
+/// removed; the model levels smooth over the rest.
 ///
-/// - A swear word that opens a sentence goes with its comma ("Shit, I forgot" becomes "I forgot"), and the next
-///   word is capitalised. A sentence that was only the swear word ("Fuck.") disappears.
-/// - Mid-sentence, the word goes with the comma in front of it ("I forgot, shit." becomes "I forgot.") or the
-///   comma after it.
-/// - Words in `protectedWords` (saved spellings and snippet text) are never removed.
+/// - Removed: a swear word that opens a sentence or sits between commas as an exclamation ("Shit, I forgot", "Well,
+///   fuck, I forgot", "I forgot, shit."), an intensifier directly before the word it modifies ("fucking great",
+///   "goddamn car", "damn good"), and the phrases "the fuck", "the hell" ("what the fuck is this" becomes "what is
+///   this"), "damn it" and "dammit".
+/// - Kept: a swear word that is a noun or the object of a verb ("be an asshole", "talk shit", "piece of shit",
+///   "my shit"). Removing those would leave a broken sentence.
+/// - "hell" alone and "pissed off" are left out because they are often ordinary speech.
+/// - An exclamation takes all the punctuation attached to it ("Fuck!!", "Shit..."), and the next word is
+///   capitalised unless it is a saved spelling or looks like an identifier. A sentence that was only the swear word
+///   disappears.
+/// - Words in `protectedWords` (saved spellings and snippet text) and text matching `protectedPhrases` (saved
+///   spelling heard forms, snippet triggers) are never removed.
 /// - Not touched: URL, path, email or hyphenated tokens that happen to contain a listed word.
 ///
 /// English only. Edits are logged under the `filler` stage name, the store's vocabulary has no separate one.
@@ -30,17 +37,31 @@ public struct ProfanityRemover: Sendable {
     /// Words that only count after "the", as in "what the fuck".
     static let afterThe: Set<String> = ["fuck", "hell"]
     private static let damnWords: Set<String> = ["damn", "damned", "goddamn", "goddamned"]
+    /// Always an exclamation, wherever they appear.
+    private static let standalone: Set<String> = ["dammit", "goddamnit"]
+    /// Words that are exclamations when they open a sentence or sit between commas, with punctuation after them.
+    private static let interjections: Set<String> = [
+        "fuck", "fucking", "motherfucking", "shit", "bullshit", "crap", "damn", "damned", "goddamn", "goddamned",
+    ]
+    /// Words that are intensifiers when they come directly before the word they modify.
+    private static let intensifiers: Set<String> = [
+        "fucking", "motherfucking", "shitty", "crappy", "damn", "damned", "goddamn", "goddamned",
+    ]
 
     private let protectedWords: Set<String>
+    private let writtenForms: Set<String>
+    private let protectedPhrases: [String]
 
-    public init(protectedWords: Set<String> = []) {
+    public init(protectedWords: Set<String> = [], protectedPhrases: [String] = []) {
         self.protectedWords = Set(protectedWords.map { $0.lowercased() })
+        self.writtenForms = protectedWords
+        self.protectedPhrases = protectedPhrases
     }
 
     public func apply(_ text: String) -> StageResult {
         let chars = Array(text)
         guard !chars.isEmpty else { return StageResult(text: text) }
-        var scan = Scan(chars: chars, protectedWords: protectedWords)
+        var scan = Scan(chars: chars, protectedWords: protectedWords, writtenForms: writtenForms, protectedPhrases: protectedPhrases)
         scan.run()
         return SpanRewriter.apply(scan.spans, to: chars, stage: Self.stageName)
     }
@@ -55,16 +76,25 @@ public struct ProfanityRemover: Sendable {
         let n: Int
         let words: [ScanWord]
         let protectedWords: Set<String>
+        let writtenForms: Set<String>
+        var inProtectedPhrase: [Bool]
         var removed: [Bool]
         var spans: [TextSpan] = []
         var lastCutEnd = 0
 
-        init(chars: [Character], protectedWords: Set<String>) {
+        init(chars: [Character], protectedWords: Set<String>, writtenForms: Set<String>, protectedPhrases: [String]) {
             self.chars = chars
             self.n = chars.count
-            self.words = TextScan.words(chars, TextScan.lowered(chars))
+            let lower = TextScan.lowered(chars)
+            self.words = TextScan.words(chars, lower)
             self.protectedWords = protectedWords
+            self.writtenForms = writtenForms
             self.removed = [Bool](repeating: false, count: chars.count)
+            var covered = [Bool](repeating: false, count: chars.count)
+            for hit in PhraseMatcher(patterns: protectedPhrases).matches(chars, lower: lower) {
+                for i in hit.range { covered[i] = true }
+            }
+            self.inProtectedPhrase = covered
         }
 
         mutating func run() {
@@ -77,8 +107,12 @@ public struct ProfanityRemover: Sendable {
 
         func isProfane(_ k: Int) -> Bool {
             let w = words[k]
-            guard ProfanityRemover.words.contains(w.lower), !protectedWords.contains(w.lower) else { return false }
+            guard ProfanityRemover.words.contains(w.lower), !protectedWords.contains(w.lower), !isProtected(w) else { return false }
             return !insideToken(w)
+        }
+
+        func isProtected(_ w: ScanWord) -> Bool {
+            (w.start..<w.end).contains { inProtectedPhrase[$0] }
         }
 
         /// Next to a path, URL, email, identifier or hyphen, where the word is part of something else.
@@ -99,42 +133,85 @@ public struct ProfanityRemover: Sendable {
 
         func isTheHell(_ k: Int) -> Bool {
             guard k > 0, ProfanityRemover.afterThe.contains(words[k].lower), words[k - 1].lower == "the", !protectedWords.contains(words[k].lower),
-                  !insideToken(words[k]), !insideToken(words[k - 1]),
+                  !isProtected(words[k]), !isProtected(words[k - 1]), !insideToken(words[k]), !insideToken(words[k - 1]),
                   chars[words[k - 1].end..<words[k].start].allSatisfy(TextScan.isSpace),
                   words[k].start > words[k - 1].end else { return false }
             return true
         }
 
+        func adjacent(_ k: Int) -> Bool {
+            k + 1 < words.count && words[k].end < words[k + 1].start && TextScan.onlySpaces(chars, words[k].end, words[k + 1].start)
+        }
+
+        func isPunctuation(_ c: Character) -> Bool { ",.!?\u{2026};:".contains(c) }
+
+        /// A word that can only be an exclamation or an intensifier here: it is not a noun or the object of a verb.
         func findUnits() -> [Unit] {
             var units: [Unit] = []
+            func add(_ first: Int, _ last: Int) {
+                if let previous = units.last, previous.last >= first { return }
+                units.append(Unit(first: first, last: last))
+            }
             var k = 0
             while k < words.count {
-                var first = k
                 if isTheHell(k) {
-                    first = k - 1
-                } else if !isProfane(k) {
+                    add(k - 1, k)
                     k += 1
                     continue
                 }
-                var last = k
-                // Absorb adjacent swear words ("fucking shit") and the "it" of "damn it".
-                while last + 1 < words.count, TextScan.onlySpaces(chars, words[last].end, words[last + 1].start),
-                      words[last].end < words[last + 1].start, isProfane(last + 1) {
-                    last += 1
+                guard isProfane(k) else { k += 1; continue }
+                let lower = words[k].lower
+                if ProfanityRemover.standalone.contains(lower) {
+                    add(k, k)
+                    k += 1
+                    continue
                 }
-                if ProfanityRemover.damnWords.contains(words[last].lower), last + 1 < words.count,
-                   words[last + 1].lower == "it", TextScan.onlySpaces(chars, words[last].end, words[last + 1].start),
-                   words[last].end < words[last + 1].start {
-                    let after = words[last + 1].end
-                    if after >= n || ",.!?\u{2026};:".contains(chars[after]) || chars[after].isWhitespace && isClauseEnd(after) {
-                        last += 1
-                    }
+                if ProfanityRemover.damnWords.contains(lower), adjacent(k), words[k + 1].lower == "it" {
+                    // "damn it" goes as a phrase at the end of a clause; "damn it all" is left alone.
+                    let after = words[k + 1].end
+                    if after >= n || isPunctuation(chars[after]) || isClauseEnd(after) { add(k, k + 1) }
+                    k += 2
+                    continue
                 }
-                if let previous = units.last, previous.last >= first { k = last + 1; continue }
-                units.append(Unit(first: first, last: last))
-                k = last + 1
+                if let last = interjectionEnd(from: k) {
+                    add(k, last)
+                    k = last + 1
+                    continue
+                }
+                if let last = intensifierEnd(from: k) {
+                    add(k, last)
+                    k = last + 1
+                    continue
+                }
+                k += 1
             }
             return units
+        }
+
+        /// The last word of an exclamation starting at `k`, when it opens a sentence or follows a comma and is closed
+        /// by punctuation or the end of the text ("Shit,", "Fuck!!", "fucking shit.").
+        func interjectionEnd(from k: Int) -> Int? {
+            guard ProfanityRemover.interjections.contains(words[k].lower) else { return nil }
+            var last = k
+            while adjacent(last), isProfane(last + 1), ProfanityRemover.interjections.contains(words[last + 1].lower) { last += 1 }
+            let s = words[k].start, e = words[last].end
+            var j = s - 1
+            while j >= 0, TextScan.isSpace(chars[j]) { j -= 1 }
+            guard j >= 0 && chars[j] == "," || sentenceStart(before: s) else { return nil }
+            guard e >= n || isPunctuation(chars[e]) || isClauseEnd(e) else { return nil }
+            return last
+        }
+
+        /// The last word of a run of intensifiers directly before the word they modify ("fucking great").
+        func intensifierEnd(from k: Int) -> Int? {
+            func modifies(_ i: Int) -> Bool {
+                isProfane(i) && ProfanityRemover.intensifiers.contains(words[i].lower) && adjacent(i)
+                    && !(ProfanityRemover.damnWords.contains(words[i].lower) && words[i + 1].lower == "it")
+            }
+            guard modifies(k) else { return nil }
+            var last = k
+            while last + 1 < words.count, adjacent(last), modifies(last + 1) { last += 1 }
+            return last
         }
 
         func isClauseEnd(_ i: Int) -> Bool {
@@ -168,16 +245,27 @@ public struct ProfanityRemover: Sendable {
             return j
         }
 
+        /// Whether the word after a removed exclamation keeps its case: a saved spelling, or something that looks like
+        /// an identifier (a digit, underscore, dot, slash or @ inside it).
+        func keepsCase(_ w: ScanWord) -> Bool {
+            if isProtected(w) || writtenForms.contains(String(chars[w.start..<w.end])) { return true }
+            if chars[w.start..<w.end].contains(where: { $0.isNumber || $0 == "_" }) { return true }
+            if w.end + 1 < n, "./\\@".contains(chars[w.end]), TextScan.isWordChar(chars[w.end + 1]) { return true }
+            return false
+        }
+
         mutating func remove(_ unit: Unit, nextUnitStarts: Set<Int>) {
             let s = words[unit.first].start, e = words[unit.last].end
             var post: Character?
-            if e < n, ",.!?\u{2026};:".contains(chars[e]) { post = chars[e] }
+            var punctEnd = e
+            while punctEnd < n, isPunctuation(chars[punctEnd]) { punctEnd += 1 }
+            if punctEnd > e { post = chars[e] }
             var j = s - 1
             while j >= 0, TextScan.isSpace(chars[j]) || removed[j] { j -= 1 }
             let hasPre = j >= 0 && chars[j] == ","
             let preIdx = j
             let atStart = !hasPre && sentenceStart(before: s)
-            let afterWord = post == nil ? e : e + 1
+            let afterWord = punctEnd
             let afterSpaces = skipSpaces(from: afterWord)
             let atEnd = afterSpaces >= n || chars[afterSpaces].isNewline
 
@@ -188,16 +276,11 @@ public struct ProfanityRemover: Sendable {
             }
 
             if atStart {
-                // The swear word, its comma or closing mark, and the space after it.
-                if post == ";" || post == ":" {
-                    let cutStart = atEnd ? trailingBack() : s
-                    add(core: s..<e, cut: cutStart..<(atEnd ? e : skipSpaces(from: e)))
-                    return
-                }
+                // The swear word, all the punctuation attached to it, and the space after it.
                 let cutStart = atEnd ? trailingBack() : s
                 add(core: s..<afterWord, cut: cutStart..<(atEnd ? afterWord : afterSpaces))
                 if !atEnd, afterSpaces < n, let next = words.firstIndex(where: { $0.start == afterSpaces }),
-                   !nextUnitStarts.contains(next), let up = TextScan.capitalized(chars, words[next]) {
+                   !nextUnitStarts.contains(next), !keepsCase(words[next]), let up = TextScan.capitalized(chars, words[next]) {
                     spans.append(TextSpan(range: words[next].start..<words[next].end, replacement: up))
                     lastCutEnd = max(lastCutEnd, words[next].end)
                 }

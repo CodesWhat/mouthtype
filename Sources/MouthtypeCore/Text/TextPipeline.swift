@@ -64,6 +64,9 @@ public struct TextPipelineInput: Sendable {
     public var now: Date
     public var clipboard: String?
     public var options: TextPipelineOptions
+    /// Phrases the profanity stage must not cut into, on top of the dictionary and snippets given here. For rules a
+    /// caller holds back from this run (joined spellings waiting for the model, snippet triggers expanded later).
+    public var protectedPhrases: [String]
 
     public init(
         text: String,
@@ -72,7 +75,8 @@ public struct TextPipelineInput: Sendable {
         context: InsertionContext? = nil,
         now: Date = Date(),
         clipboard: String? = nil,
-        options: TextPipelineOptions = .all
+        options: TextPipelineOptions = .all,
+        protectedPhrases: [String] = []
     ) {
         self.text = text
         self.dictionary = dictionary
@@ -81,6 +85,7 @@ public struct TextPipelineInput: Sendable {
         self.now = now
         self.clipboard = clipboard
         self.options = options
+        self.protectedPhrases = protectedPhrases
     }
 }
 
@@ -198,7 +203,10 @@ public struct TextPipeline: Sendable {
             var protected = Set<String>()
             if options.dictionary { protected.formUnion(StyleStage.words(of: input.dictionary.map(\.written))) }
             if options.snippets { protected.formUnion(StyleStage.words(of: input.snippets.map(\.expansion))) }
-            let stage = ProfanityRemover(protectedWords: protected)
+            var phrases = input.protectedPhrases
+            if options.dictionary { phrases += input.dictionary.flatMap { [$0.heard, $0.written] } }
+            if options.snippets { phrases += input.snippets.flatMap { [$0.trigger, $0.expansion] } }
+            let stage = ProfanityRemover(protectedWords: protected, protectedPhrases: phrases)
             run(ProfanityRemover.stageName) { stage.apply($0) }
         }
         if options.blend {
