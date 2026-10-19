@@ -230,8 +230,21 @@ extension GlassBackdropCache {
         (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? NSNumber)?.intValue ?? 0
     }
 
+    /// The wallpaper file for a screen, or nil when there is no picture to measure. A live or extension wallpaper (an
+    /// Aerial, NeptuneOne) makes macOS answer with a placeholder that isn't on screen, which counts as no picture.
+    static func usableWallpaper(for screen: NSScreen) -> URL? {
+        NSWorkspace.shared.desktopImageURL(for: screen).flatMap(usableWallpaper)
+    }
+
+    /// Rejects the system's `DefaultDesktop*` placeholder in `/System/Library/CoreServices/`; any other URL passes.
+    static func usableWallpaper(_ url: URL) -> URL? {
+        let isPlaceholder = url.deletingLastPathComponent().standardizedFileURL.path == "/System/Library/CoreServices"
+            && url.lastPathComponent.hasPrefix("DefaultDesktop")
+        return isPlaceholder ? nil : url
+    }
+
     func lookup(screen: NSScreen, region: CGRect) -> Lookup {
-        guard let file = NSWorkspace.shared.desktopImageURL(for: screen) else { return .ready(nil) }
+        guard let file = Self.usableWallpaper(for: screen) else { return .ready(nil) }
         return lookup(screen: Self.screenID(screen), file: file, screenFrame: screen.frame, region: region)
     }
 
@@ -242,7 +255,7 @@ extension GlassBackdropCache {
         guard PillSkinPreference.current(defaults) == .glass else { return }
         let size = PillSizePreference.current(defaults)
         for screen in NSScreen.screens {
-            guard let file = NSWorkspace.shared.desktopImageURL(for: screen) else { continue }
+            guard let file = Self.usableWallpaper(for: screen) else { continue }
             let region = Self.heldRegion(frame: screen.frame, visibleFrame: screen.visibleFrame, backing: screen.backingScaleFactor, size: size)
             prewarm(screen: Self.screenID(screen), file: file, screenFrame: screen.frame, region: region)
         }

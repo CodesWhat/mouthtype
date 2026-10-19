@@ -21,7 +21,7 @@ import Testing
             for wallpaper in PreviewWallpaper.allCases {
                 // The window's own appearance is the opposite of the swatch.
                 let host = NSWindow(contentRect: NSRect(origin: .zero, size: PreviewFit.canvas), styleMask: [.titled], backing: .buffered, defer: true)
-                host.appearance = wallpaper == .desktop ? NSAppearance(named: .aqua) : (wallpaper == .dark ? PreviewWallpaper.light : .dark).appearance
+                host.appearance = (wallpaper == .dark ? PreviewWallpaper.light : .dark).appearance
                 let stage = PillPreviewStage(frame: NSRect(origin: .zero, size: PreviewFit.canvas))
                 host.contentView?.addSubview(stage)
                 stage.configure(kind: kind, scale: .standard, readout: .amber, wallpaper: wallpaper)
@@ -39,9 +39,7 @@ import Testing
     @Test func glassFollowsTheSwatchAppearance() throws {
         for wallpaper in PreviewWallpaper.allCases {
             let skin = try #require(configured(.glass, wallpaper: wallpaper).skin)
-            // Desktop follows the system, as the real pill does.
-            let expected = wallpaper == .desktop ? isDark(NSApplication.shared.effectiveAppearance) : wallpaper == .dark
-            #expect(isDark(skin.effectiveAppearance) == expected)
+            #expect(isDark(skin.effectiveAppearance) == (wallpaper == .dark))
         }
     }
 
