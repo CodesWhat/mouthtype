@@ -133,11 +133,9 @@ struct DictationPipeline: Sendable {
             return true
         }
         let capture = await recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs)
-        guard capture.durable else { return false }
-        guard store != nil, session.rowOpen else { return true }
-        return await write(session, "finish") { store in
-            try await store.finish(session.id, status: .failed, errorMessage: DictationRecovery.interruptedMessage)
-        }
+        // The row stays `recorded` on purpose: the next launch's scan only offers unfinished rows, and it ends
+        // the row as failed ("interrupted") itself once it has offered it.
+        return capture.durable
     }
 
     func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {

@@ -562,7 +562,7 @@ final class DictationController {
 
     private func continueProcessing(_ session: DictationSession) async -> Bool {
         guard shuttingDown else { return true }
-        await pipeline.finish(session, .failed, errorMessage: DictationRecovery.interruptedMessage)
+        // Left unfinished so the next launch's scan offers the take; its audio was archived at capture time.
         return false
     }
 

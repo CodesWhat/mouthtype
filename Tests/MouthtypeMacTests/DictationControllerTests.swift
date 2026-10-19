@@ -2036,7 +2036,7 @@ private final class SlowCapture: DictationCapturing {
         #expect(rig.pill.messages.last?.detail == "No audio could be recovered")
     }
 
-    @Test(arguments: ["archive", "recordCapture", "finish"])
+    @Test(arguments: ["archive", "recordCapture"])
     func terminationRefusesFailedPreservationAndRetriesTheRetainedAudioWithoutStoppingTwice(failure: String) async {
         let archive = RetryArchive()
         let rig = Rig(archive: archive)
@@ -2052,7 +2052,7 @@ private final class SlowCapture: DictationCapturing {
         #expect(await rig.controller.prepareForTermination())
         #expect(archive.attempts == 2)
         #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
-        #expect(rig.store.finishes.last?.0 == .failed)
+        #expect(rig.store.finishes.isEmpty)
     }
 
     @Test func terminationPreservesTheWholeActiveTakeBeforeTheFirstPartialFlush() async throws {
@@ -2067,8 +2067,8 @@ private final class SlowCapture: DictationCapturing {
         #expect(await rig.controller.prepareForTermination())
         #expect(try archive.read(id: id).count == capturedTone().samples.count)
         let row = try #require(try store.dictation(id: id))
-        #expect(row.status == .failed && row.audioPath == archive.url(for: id).path)
-        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(-1)).map(\.id) == [id])
+        #expect(row.status == .recorded && row.audioPath == archive.url(for: id).path)
+        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(60)).map(\.id) == [id])
         #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
         #expect(!rig.log.contains("engine.transcribe") && rig.inserter.delivered.isEmpty)
         #expect(rig.log.contains("audio.restore"))
@@ -2076,6 +2076,26 @@ private final class SlowCapture: DictationCapturing {
         await rig.controller.handle(.pressed(at: keyDown + 1))
         #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
         #expect(rig.clock.sleeperCount == 0)
+    }
+
+    @Test func aTakeCutOffByQuitIsOfferedByTheNextLaunchScanAndThenEnded() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-quit-relaunch-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("history.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let rig = Rig(archive: archive, quietAudio: true, storeWriter: TranscriptStoreWriter(store: store))
+        await rig.controller.handle(.pressed(at: keyDown))
+        let id = try #require(try store.unfinished(from: .distantPast, before: .distantFuture).first?.id)
+        #expect(await rig.controller.prepareForTermination())
+
+        let relaunch = FakeClock.wall.addingTimeInterval(60)
+        let scan = try DictationRecovery.scan(store: store, archive: archive, now: relaunch, launchedAt: relaunch)
+
+        #expect(scan.newest?.id == id && scan.olderCount == 0 && scan.lostCount == 0)
+        let row = try #require(try store.dictation(id: id))
+        #expect(row.status == .failed && row.errorMessage == DictationRecovery.interruptedMessage)
+        let again = try DictationRecovery.scan(store: store, archive: archive, now: relaunch, launchedAt: relaunch)
+        #expect(again.newest == nil)
     }
 
     @Test(arguments: ["archive", "recordCapture"])
@@ -2183,10 +2203,10 @@ private final class SlowCapture: DictationCapturing {
         await rig.controller.handle(.pressed(at: keyUp + 3))
         #expect(await rig.controller.prepareForTermination())
         let beforeRestart = try store.unfinished(from: .distantPast, before: .distantFuture)
-        #expect(beforeRestart.count == 2 && beforeRestart.allSatisfy { $0.audioPath != nil })
+        #expect(beforeRestart.count == 3 && beforeRestart.allSatisfy { $0.audioPath != nil })
         rig.engine.releaseHeld()
         await rig.controller.waitForProcessing()
-        let saved = try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(-1))
+        let saved = try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(60))
         #expect(saved.count == 3)
         for item in saved { #expect(try archive.read(id: item.id).count == capturedTone().samples.count) }
         #expect(rig.engine.samplesSeen.count == 1 && rig.inserter.delivered.isEmpty)
@@ -2204,7 +2224,7 @@ private final class SlowCapture: DictationCapturing {
         rig.engine.releaseHeld()
         await rig.controller.waitForProcessing()
         #expect(rig.inserter.delivered.isEmpty)
-        #expect(rig.store.finishes.last?.0 == .failed)
+        #expect(rig.store.finishes.isEmpty)
     }
 
     @Test func terminationDuringCaptureStartupWaitsForRegistrationAndKeepsTheTail() async throws {
