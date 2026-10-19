@@ -137,10 +137,13 @@ enum ClassicPillLayout {
 
     /// Breaks a message at its logical point: the headline on its own line or lines, the detail under it. A part wraps
     /// onto further lines only where it is wider than the cap, at a word boundary, and a single word wider than the
-    /// cap breaks between characters. Nothing is cut off. `measure` gives a string's width in the part's real font.
+    /// cap breaks between characters. Nothing is cut off. `measure` gives a string's width in the part's real font. The
+    /// capsule grows taller for wrapped lines up to `maxHeight`; past that it stays that tall and `overflow` says how far
+    /// the text has to scroll.
     static func messageBlock(
         headline: String, detail: String?, headlineLineHeight: CGFloat, detailLineHeight: CGFloat,
-        scale: CGFloat, metrics m: Metrics = .standard, measure: (String, _ isDetail: Bool) -> CGFloat
+        scale: CGFloat, metrics m: Metrics = .standard, maxHeight: CGFloat = .greatestFiniteMagnitude,
+        measure: (String, _ isDetail: Bool) -> CGFloat
     ) -> MessageBlock {
         let available = m.messageCap - 2 * m.messagePadding
         let head = wrap(headline, width: available) { measure($0, false) }
@@ -151,9 +154,14 @@ enum ClassicPillLayout {
         let stack = head.count * Int(headlineLineHeight.rounded()) + tail.count * Int(detailLineHeight.rounded())
         let gap = tail.isEmpty ? 0 : m.detailGap
         let block = CGFloat(stack) + gap
-        let height = head.count + tail.count == 1
+        let wanted = head.count + tail.count == 1
             ? m.height
             : max(m.height, evenCeil(block + 2 * m.messageVerticalPadding, scale: scale))
+        let cap = maxHeight.isFinite && maxHeight < .greatestFiniteMagnitude
+            ? max(m.height, 2 * (maxHeight * scale / 2).rounded(.down) / scale)
+            : wanted
+        let height = min(wanted, cap)
+        let overflow = wanted > height ? max(0, block - (height - 2 * m.messageVerticalPadding)) : 0
         var lines: [MessageLine] = []
         var y = -block / 2
         for text in head {
@@ -165,7 +173,7 @@ enum ClassicPillLayout {
             lines.append(MessageLine(text: text, isDetail: true, centerOffset: y + detailLineHeight / 2, height: detailLineHeight))
             y += detailLineHeight
         }
-        return MessageBlock(width: width, height: height, lines: lines)
+        return MessageBlock(width: width, height: height, lines: lines, overflow: overflow)
     }
 
     /// Greedy word wrap to `width`; an over-wide word is split between characters.

@@ -120,7 +120,7 @@ public final class PillController {
 
     /// The live preview readout sits centred over the pill, one pill height higher at the large size.
     private static func previewFrame(panelSize: CGSize, scale: PillScale) -> NSRect {
-        let width = ClassicPillLayout.messageCap
+        let width = ClassicPillLayout.messageCap * scale.factor
         return NSRect(
             x: ((panelSize.width - width) / 2).rounded(.down), y: 94 + ClassicPillLayout.height * (scale.factor - 1),
             width: width, height: 100
@@ -360,11 +360,15 @@ public final class PillController {
         guard let origin = PillPlacement.origin(
             pointer: pointer, screens: placements, panelSize: size, pillPadding: Self.pillPadding
         ) else { return nil }
+        // A message with a detail line (or wrapped onto more) makes the capsule taller than its resting height, and the
+        // card has to clear that.
+        var pillHeight = skinKind.pillHeight * scale.factor
+        if isShown, !isGrown, case .message = state { pillHeight = max(pillHeight, skin.messageSize.height) }
         let maxFace = screen.visibleFrame.maxY - origin.y.rounded(.down) - Self.pillPadding - Self.cardRowHeight * scale.factor
             - CardLayout.shadowMargin * scale.factor
         return .init(
             midX: origin.x.rounded(.down) + size.width / 2,
-            top: origin.y.rounded(.down) + Self.pillPadding + skinKind.pillHeight * scale.factor,
+            top: origin.y.rounded(.down) + Self.pillPadding + pillHeight,
             visible: screen.visibleFrame, style: skinKind.cardStyle, scale: scale, maxFaceHeight: maxFace, readout: readout, merger: self
         )
     }

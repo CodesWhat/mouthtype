@@ -125,6 +125,9 @@ struct Typography: Sendable {
             effective = .custom(family)
         } else { effective = baseChoice }
         var spec = Self.spec(role, systema: baseChoice == .systema)
+        // The large pill's message face is the Systema design scaled, 28 pt, whatever face is in use; scaling a fallback's
+        // smaller standard size would leave it at 24 pt in a pill drawn for 28.
+        if scale > 1, role == .pillMessage { spec.size = Self.spec(role, systema: true).size }
         spec.size *= scale
         let base: NSFont
         switch effective {
