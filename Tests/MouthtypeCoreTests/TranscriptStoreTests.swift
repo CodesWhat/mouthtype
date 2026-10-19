@@ -358,9 +358,4 @@ import Testing
         #expect(try store.stats(now: Self.noon, timeZone: Self.utc).wordsToday == 3)
         #expect(try store.dictation(id: stale)?.status == .started)
     }
-
-    @Test func wordCountSplitsOnWhitespace() {
-        #expect(TranscriptStore.wordCount("  one  two\nthree\tfour ") == 4)
-        #expect(TranscriptStore.wordCount("") == 0)
-    }
 }

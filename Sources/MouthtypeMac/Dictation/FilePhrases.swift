@@ -64,7 +64,7 @@ final class FilePhrases: Sendable {
     }
 
     static func triggerKey(_ text: String) -> String {
-        text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+        PhraseKey.normalized(text)
     }
 
     private static func validate(_ entries: [Snippet]) throws -> [Snippet] {

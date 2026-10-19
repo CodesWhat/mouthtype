@@ -83,7 +83,7 @@ enum PipelineSelfTest {
             let lastEnd = words.last?.end ?? 0
             let text = transcribed?.rawText ?? ""
             let line = "pipeline selftest transcript=\"\(text)\" cleaned=\"\(cleanedText.replacingOccurrences(of: "\n", with: "\\n"))\""
-                + " words=\(TranscriptStore.wordCount(text))"
+                + " words=\(TextMetrics.wordCount(text))"
                 + " timings=\(words.count) monotonic=\(monotonic) lastEndS=\(String(format: "%.2f", lastEnd))"
                 + " clipS=\(String(format: "%.2f", audioMs / 1000)) asrMs=\(transcribed?.asrDoneMs.description ?? "none")"
                 + " voicedMs=\(Int(features.voicedMs.rounded())) db=\(databaseURL.path) archive=\(archive.directory.path)"

@@ -59,10 +59,6 @@ struct BarModel {
         history.removeAll()
     }
 
-    mutating func resetAdaptation() {
-        adapter = MeterAdapter()
-    }
-
     /// Advances `dt` seconds with the current input and returns each column's smoothed fraction, 0...1.
     mutating func step(reading: LevelReading, dt: TimeInterval) -> [Float] {
         let dt = dt.isFinite ? max(0, dt) : 0
