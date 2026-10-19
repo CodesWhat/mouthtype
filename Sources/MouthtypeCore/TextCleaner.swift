@@ -11,9 +11,12 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     public var before: String?
     public var after: String?
     public var correctionsOnly: Bool
+    /// An explicit selected-text edit. Only the shared-prompt models run it.
+    public var transform: TextTransform?
 
     public init(vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
-                level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false) {
+                level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false,
+                transform: TextTransform? = nil) {
         self.vocabulary = vocabulary
         self.appName = appName
         self.s1Controls = s1Controls
@@ -27,6 +30,7 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
             return bounded.allSatisfy(\.isWhitespace) ? nil : bounded
         }
         self.correctionsOnly = correctionsOnly
+        self.transform = transform
     }
 }
 

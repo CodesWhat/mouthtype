@@ -242,6 +242,14 @@ final class CleanerHost: CleanupModelManaging {
         await smart.run(request)
     }
 
+    /// Runs one explicit selected-text transform once the model is ready.
+    func transform(_ kind: TextTransform, text: String, waitingUpTo limit: Duration) async throws -> String {
+        guard await readiness(waitingUpTo: limit) != nil else {
+            throw CleanerError.unavailable(reason: "\(modelName) isn't loaded yet. Try again in a moment.")
+        }
+        return try await model.clean(text, context: CleanupContext(transform: kind))
+    }
+
     nonisolated func recordingStarted() {
         Task { @MainActor in
             if self.level().needsModel { self.ensureLoaded() }

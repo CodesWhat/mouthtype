@@ -104,6 +104,10 @@ public actor MLXCleaner: MeasuredCleaner {
         let messages: [Chat.Message]
         var additionalContext: [String: any Sendable]?
         switch spec.promptFormat {
+        case .shared where context.transform != nil:
+            messages = [.system(context.transform!.systemPrompt()), .user(TextTransform.userMessage(transcript))]
+        case .s1Mini where context.transform != nil:
+            throw CleanerError.unavailable(reason: "\(displayName) can't run text transforms.")
         case .shared:
             messages = [.system(CleanupPrompt.system(for: context)), .user(CleanupPrompt.user(transcript, context: context))]
         case .s1Mini:
@@ -149,7 +153,7 @@ public actor MLXCleaner: MeasuredCleaner {
         }
         let total = (clock.now - start).seconds
         return CleanupResult(
-            text: CleanupPrompt.sanitize(text),
+            text: context.transform == nil ? CleanupPrompt.sanitize(text) : TextTransform.sanitize(text),
             firstOutputSeconds: firstOutput ?? total,
             totalSeconds: total,
             outputTokens: info?.generationTokenCount,
