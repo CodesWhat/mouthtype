@@ -16,6 +16,32 @@ private final class BiasRecordingEngine: DictationEngine {
     }
 }
 
+@MainActor
+private final class BoostedEngine: DictationEngine {
+    var readiness: EngineReadiness { .ready }
+    func transcribe(samples: [Float]) async throws -> Transcription {
+        Transcription(
+            text: "hi Maya", words: [WordTiming(word: "hi", start: 0, end: 0.2, confidence: 1), WordTiming(word: "Maya", start: 0.2, end: 0.6, confidence: 1)],
+            processingSeconds: 0, engineID: "boosted", boostTermsApplied: ["Maya"]
+        )
+    }
+}
+
+private final class RecordingStore: DictationStoring, @unchecked Sendable {
+    private let lock = NSLock()
+    private var saved: TranscriptionRecord?
+    var transcription: TranscriptionRecord? { lock.withLock { saved } }
+    func begin(_ start: DictationStart) async throws {}
+    func recordCapture(_ id: String, _ record: CaptureRecord) async throws {}
+    func recordTranscription(_ id: String, _ record: TranscriptionRecord) async throws { lock.withLock { saved = record } }
+    func recordInsertion(_ id: String, _ record: InsertionRecord) async throws {}
+    func recordInsertVerdict(_ id: String, outcome: String, pasteReceiptMs: Int?) async throws {}
+    func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {}
+    func reopen(_ id: String) async throws {}
+    func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {}
+    func appendEdits(_ id: String, _ edits: [EditOp]) async throws {}
+}
+
 private struct SavedRules: VocabularyProviding {
     var rules: [DictionaryRule]
     func dictionary() -> [DictionaryRule] { rules }
@@ -57,6 +83,20 @@ private struct SavedRules: VocabularyProviding {
 
     @Test func nothingSavedMeansNoBiasEvenWhenOn() async throws {
         #expect(try await run(enabled: true, rules: []) == nil)
+    }
+
+    @Test func pipelineUsesTheRescoredTextAndRecordsTheAppliedTerms() async throws {
+        let store = RecordingStore()
+        var pipeline = DictationPipeline(store: store, archive: nil, engine: BoostedEngine(), clock: SystemDictationClock())
+        pipeline.boostSavedWords = { true }
+        let clock = SystemDictationClock()
+        let session = DictationSession(id: "t", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        let result = try #require(try await pipeline.transcribe(audio(), session: session, voicedMs: 1000))
+        #expect(result.text == "hi Maya")
+        #expect(result.words.map(\.word) == ["hi", "Maya"])
+        let record = try #require(store.transcription)
+        #expect(record.boostTerms == ["Maya"])
+        #expect(record.transcription.text == "hi Maya")
     }
 
     @Test func settingDefaultsOff() {

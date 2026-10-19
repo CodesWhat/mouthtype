@@ -192,7 +192,8 @@ struct DictationPipeline: Sendable {
         let onset = shifted.words.first.map { Int(((audio.firstSampleMs ?? 0) + $0.start * 1000).rounded()) }
         await write(session, "recordTranscription") { store in
             try await store.recordTranscription(session.id, TranscriptionRecord(
-                transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset
+                transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset,
+                boostTerms: transcription.boostTermsApplied
             ))
         }
         let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: settings().enabled)
