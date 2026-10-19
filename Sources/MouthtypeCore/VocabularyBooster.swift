@@ -147,8 +147,10 @@ actor VocabularyBooster {
             return nil
         }
         guard let rescore = outcome, rescore.wasModified else { return nil }
-        let boosted = rescore.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !boosted.isEmpty, boosted != text else { return nil }
+        let rebuilt = rescore.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !rebuilt.isEmpty else { return nil }
+        let boosted = Self.restoringPunctuation(original: text, boosted: rebuilt)
+        guard boosted != text else { return nil }
         return BoostedText(text: boosted, appliedTerms: rescore.appliedTerms)
     }
 
@@ -215,55 +217,87 @@ private final class Once<T: Sendable>: Sendable {
 }
 
 extension VocabularyBooster {
+    /// One stretch of an alignment between the original words and the rescored words.
+    enum Run: Equatable {
+        case same(old: Int, new: Int)
+        case changed(old: Range<Int>, new: Range<Int>)
+    }
+
+    /// Longest-common-subsequence alignment of two word lists, as shared words and the changed stretches between them.
+    static func align(_ old: [String], _ new: [String]) -> [Run] {
+        let rows = old.count, cols = new.count
+        var table = [[Int]](repeating: [Int](repeating: 0, count: cols + 1), count: rows + 1)
+        for r in stride(from: rows - 1, through: 0, by: -1) {
+            for c in stride(from: cols - 1, through: 0, by: -1) {
+                table[r][c] = old[r] == new[c] ? table[r + 1][c + 1] + 1 : max(table[r + 1][c], table[r][c + 1])
+            }
+        }
+        var runs: [Run] = []
+        var r = 0, c = 0
+        while r < rows || c < cols {
+            if r < rows, c < cols, old[r] == new[c] {
+                runs.append(.same(old: r, new: c))
+                r += 1
+                c += 1
+                continue
+            }
+            let (startOld, startNew) = (r, c)
+            while r < rows || c < cols {
+                if r < rows, c < cols, old[r] == new[c] { break }
+                if c >= cols || (r < rows && table[r + 1][c] >= table[r][c + 1]) { r += 1 } else { c += 1 }
+            }
+            runs.append(.changed(old: startOld..<r, new: startNew..<c))
+        }
+        return runs
+    }
+
+    /// The rescorer rebuilds its text from word timings and can drop the punctuation attached to a word it replaced
+    /// ("next to fluid audio." came back as "FluidAudio"). Gives a replaced run back the punctuation its last word
+    /// ended with, and the opening punctuation its first word began with, when the new words carry none.
+    static func restoringPunctuation(original: String, boosted: String) -> String {
+        let old = original.split(whereSeparator: \.isWhitespace).map(String.init)
+        var new = boosted.split(whereSeparator: \.isWhitespace).map(String.init)
+        for case let .changed(oldRange, newRange) in align(old, new) where !oldRange.isEmpty && !newRange.isEmpty {
+            let tail = old[oldRange.upperBound - 1].reversed().prefix { !$0.isLetter && !$0.isNumber }
+            let last = newRange.upperBound - 1
+            if !tail.isEmpty, let end = new[last].last, end.isLetter || end.isNumber {
+                new[last] += String(tail.reversed())
+            }
+            let head = old[oldRange.lowerBound].prefix { !$0.isLetter && !$0.isNumber }
+            if !head.isEmpty, let start = new[newRange.lowerBound].first, start.isLetter || start.isNumber {
+                new[newRange.lowerBound] = String(head) + new[newRange.lowerBound]
+            }
+        }
+        return new.joined(separator: " ")
+    }
+
     /// Re-times `words` to `text` after a replacement. Words that survive keep their own times. A changed run
     /// takes the span of the words it replaced, shared evenly among its new words, with the lowest confidence
     /// of the originals. A run that replaces nothing (pure insertion) is placed zero-width after the word before it.
     static func realign(_ words: [WordTiming], to text: String) -> [WordTiming] {
         let new = text.split(whereSeparator: \.isWhitespace).map(String.init)
         guard !words.isEmpty, !new.isEmpty else { return [] }
-        let rows = words.count, cols = new.count
-        var table = [[Int]](repeating: [Int](repeating: 0, count: cols + 1), count: rows + 1)
-        for r in stride(from: rows - 1, through: 0, by: -1) {
-            for c in stride(from: cols - 1, through: 0, by: -1) {
-                table[r][c] = words[r].word == new[c] ? table[r + 1][c + 1] + 1 : max(table[r + 1][c], table[r][c + 1])
-            }
-        }
         var result: [WordTiming] = []
-        var r = 0, c = 0
-        while r < rows || c < cols {
-            if r < rows, c < cols, words[r].word == new[c] {
-                result.append(words[r])
-                r += 1
-                c += 1
-                continue
-            }
-            // A changed run: advance both sides to the next shared word (or the end).
-            var oldRun: [WordTiming] = []
-            var newRun: [String] = []
-            while r < rows || c < cols {
-                if r < rows, c < cols, words[r].word == new[c] { break }
-                let takeOld = c >= cols || (r < rows && table[r + 1][c] >= table[r][c + 1])
-                if takeOld {
-                    oldRun.append(words[r])
-                    r += 1
-                } else {
-                    newRun.append(new[c])
-                    c += 1
+        for run in align(words.map(\.word), new) {
+            switch run {
+            case let .same(old, _):
+                result.append(words[old])
+            case let .changed(oldRange, newRange):
+                guard !newRange.isEmpty else { continue }
+                let replaced = Array(words[oldRange])
+                guard let first = replaced.first, let last = replaced.last else {
+                    let at = result.last?.end ?? 0
+                    result.append(contentsOf: newRange.map { WordTiming(word: new[$0], start: at, end: at, confidence: 0) })
+                    continue
                 }
-            }
-            guard !newRun.isEmpty else { continue }
-            if let first = oldRun.first, let last = oldRun.last {
-                let step = (last.end - first.start) / Double(newRun.count)
-                let confidence = oldRun.map(\.confidence).min() ?? first.confidence
-                for (offset, word) in newRun.enumerated() {
+                let step = (last.end - first.start) / Double(newRange.count)
+                let confidence = replaced.map(\.confidence).min() ?? first.confidence
+                for (offset, index) in newRange.enumerated() {
                     result.append(WordTiming(
-                        word: word, start: first.start + step * Double(offset),
+                        word: new[index], start: first.start + step * Double(offset),
                         end: first.start + step * Double(offset + 1), confidence: confidence
                     ))
                 }
-            } else {
-                let at = result.last?.end ?? 0
-                result.append(contentsOf: newRun.map { WordTiming(word: $0, start: at, end: at, confidence: 0) })
             }
         }
         return result

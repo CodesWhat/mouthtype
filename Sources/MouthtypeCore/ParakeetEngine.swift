@@ -48,6 +48,13 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
         await booster.setBias(bias)
     }
 
+    /// Resolves once the boost model for the current vocabulary is ready or has failed. True when it is ready.
+    /// The app never waits on this; the bench does, so a timed run starts with the model loaded.
+    public func awaitVocabularyBoost() async -> Bool {
+        await booster.waitUntilSettled()
+        return await booster.isReady
+    }
+
     public func prepare() async throws {
         _ = try await prepareMeasured()
     }

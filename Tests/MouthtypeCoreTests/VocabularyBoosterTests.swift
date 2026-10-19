@@ -138,7 +138,7 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(context.terms.map(\.text) == ["Sockguard", "Maya"])
         #expect(context.terms[0].aliases == ["sock guard"])
         #expect(context.terms[1].aliases == nil)
-        #expect(FluidVocabularyRescorer.rescorerConfig.spotterRescueEnabled == false)
+        #expect(FluidVocabularyRescorer.rescorerConfig(tuning: .standard).spotterRescueEnabled == false)
     }
 }
 
@@ -174,6 +174,13 @@ private let maya = VocabularyBias(terms: ["Maya"])
         let out = VocabularyBooster.realign(words, to: "Maya and Siobhan")
         #expect(out[1] == words[1])
         #expect(out[0].start == 0 && out[0].end == 0.3 && out[2].start == 0.5 && out[2].end == 1)
+    }
+
+    @Test func punctuationOnAReplacedWordIsGivenBack() {
+        #expect(VocabularyBooster.restoringPunctuation(original: "Next to fluid audio.", boosted: "Next to FluidAudio") == "Next to FluidAudio.")
+        #expect(VocabularyBooster.restoringPunctuation(original: "Hi, (sock guard), then ok?", boosted: "Hi, Sockguard then ok?") == "Hi, (Sockguard), then ok?")
+        #expect(VocabularyBooster.restoringPunctuation(original: "I met Maia.", boosted: "I met Maya.") == "I met Maya.")
+        #expect(VocabularyBooster.restoringPunctuation(original: "Hello there.", boosted: "Hello there.") == "Hello there.")
     }
 
     @Test func noTimingsInMeansNoneOut() {

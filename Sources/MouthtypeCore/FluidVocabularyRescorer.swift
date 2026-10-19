@@ -1,23 +1,63 @@
 import FluidAudio
 import Foundation
+import Synchronization
+
+/// How strict the rescorer is. The defaults are the ones the app ships; the bench sets `current` to sweep them.
+public struct VocabularyBoostTuning: Sendable, Equatable {
+    /// Lowest string similarity between a spoken word and a saved spelling for a replacement. FluidAudio's own
+    /// default is 0.52, which replaced ordinary words with saved names in 14 of 50 test clips; 0.70 replaced none
+    /// at 10, 50 and 200 terms. See docs/evals/vocabulary-boosting-2026-10.md.
+    public var minSimilarity: Float
+    public var minCombinedConfidence: Float
+    /// Terms with fewer CTC tokens than this get a smaller boost; 1 turns the taper off.
+    public var shortTermTaperPivot: Int
+    public var minTermLength: Int
+
+    public init(
+        minSimilarity: Float = 0.70,
+        minCombinedConfidence: Float = ContextBiasingConstants.defaultMinCombinedConfidence,
+        shortTermTaperPivot: Int = 1,
+        minTermLength: Int = 3
+    ) {
+        self.minSimilarity = minSimilarity
+        self.minCombinedConfidence = minCombinedConfidence
+        self.shortTermTaperPivot = shortTermTaperPivot
+        self.minTermLength = minTermLength
+    }
+
+    public static let standard = VocabularyBoostTuning()
+
+    private static let state = Mutex(VocabularyBoostTuning.standard)
+
+    /// Read when a session is built. Only the bench writes it.
+    public static var current: VocabularyBoostTuning {
+        get { state.withLock { $0 } }
+        set { state.withLock { $0 = newValue } }
+    }
+}
 
 /// FluidAudio's CTC keyword spotter plus constrained rescorer, behind `VocabularyRescoring`.
 struct FluidVocabularyRescorer: VocabularyRescoring {
     let session: VocabularyBoostingSession
 
     /// Terms as FluidAudio vocabulary entries: the written form is the text, saved heard forms are aliases.
-    static func context(for bias: VocabularyBias) -> CustomVocabularyContext {
-        CustomVocabularyContext(terms: bias.entries.map {
-            CustomVocabularyTerm(text: $0.text, aliases: $0.aliases.isEmpty ? nil : $0.aliases)
-        })
+    static func context(for bias: VocabularyBias, tuning: VocabularyBoostTuning = .current) -> CustomVocabularyContext {
+        CustomVocabularyContext(
+            terms: bias.entries.map { CustomVocabularyTerm(text: $0.text, aliases: $0.aliases.isEmpty ? nil : $0.aliases) },
+            minSimilarity: tuning.minSimilarity,
+            minCombinedConfidence: tuning.minCombinedConfidence,
+            minTermLength: tuning.minTermLength
+        )
     }
 
     /// The spotter-anchored acoustic rescue is off: upstream measured far fewer short-term false positives without it.
-    static let rescorerConfig = VocabularyRescorer.Config(spotterRescueEnabled: false)
+    static func rescorerConfig(tuning: VocabularyBoostTuning = .current) -> VocabularyRescorer.Config {
+        VocabularyRescorer.Config(shortTermCbwTaperPivot: tuning.shortTermTaperPivot, spotterRescueEnabled: false)
+    }
 
     static func make(bias: VocabularyBias, models: CtcModels) async throws -> FluidVocabularyRescorer {
         FluidVocabularyRescorer(session: try await VocabularyBoostingSession(
-            vocabulary: context(for: bias), ctcModels: models, config: rescorerConfig
+            vocabulary: context(for: bias), ctcModels: models, config: rescorerConfig()
         ))
     }
 
