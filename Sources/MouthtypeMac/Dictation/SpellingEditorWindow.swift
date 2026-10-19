@@ -94,7 +94,7 @@ struct SpellingEditorView: View {
                                 Text(rule.heard).fontWeight(.medium)
                                 Text("→ " + rule.written).font(.callout).foregroundStyle(.secondary)
                                 if OrdinaryWords.warning(for: rule) != nil {
-                                    Label("Everyday word", systemImage: "exclamationmark.triangle")
+                                    Label(rule.heard.contains(where: \.isWhitespace) ? "Everyday phrase" : "Everyday word", systemImage: "exclamationmark.triangle")
                                         .font(.caption).foregroundStyle(.orange)
                                 }
                             }

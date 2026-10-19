@@ -46,8 +46,7 @@ public enum OrdinaryWords {
     }
 
     private static func isOrdinaryWord(_ word: String) -> Bool {
-        if word.count == 1 { return true }
-        return words.contains(word)
+        words.contains(word)
     }
 
     private static let words: Set<String> = Set(list.split(whereSeparator: \.isWhitespace).map(String.init))

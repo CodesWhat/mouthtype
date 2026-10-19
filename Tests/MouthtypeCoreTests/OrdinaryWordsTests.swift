@@ -9,7 +9,7 @@ import Testing
     }
 
     @Test func namesAndCoinedWordsAreNot() {
-        for word in ["shivon", "praya", "sockguard", "nguyen", "win nguyen", "hove", "jim", "sam", "dan", "S3", "C++", "win32", "c#", "node.js", "e-mail", "a_b", "", "  "] {
+        for word in ["shivon", "praya", "sockguard", "nguyen", "win nguyen", "hove", "jim", "sam", "dan", "S3", "C++", "win32", "c#", "node.js", "e-mail", "a_b", "", "  ", "J", "J P", "'"] {
             #expect(!OrdinaryWords.isOrdinary(word), "\(word)")
         }
     }
