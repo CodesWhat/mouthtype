@@ -124,6 +124,7 @@ import Testing
             let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
             #expect(sidebar.count == SettingsPage.allCases.count + 3, "\(page): \(sidebar.count) sidebar Tab stops")
             #expect(stops.dropFirst(sidebar.count).contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth }, "\(page): Tab never reaches a page control")
+            try expectTabReachesPageControl(window, sidebarStops: sidebar.count, "\(page)")
         }
     }
 
@@ -134,6 +135,59 @@ import Testing
         let stops = try tabOrder(window)
         #expect(stops.contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth })
         #expect(stops.filter { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }.count == SettingsPage.allCases.count + 4)
+        try expectTabReachesPageControl(window, sidebarStops: SettingsPage.allCases.count + 4, "keyboard navigation off")
+    }
+
+    /// Every view `nextKeyView` links from the first proxy, in order, until the loop closes.
+    private func keyViewChain(_ window: NSWindow) throws -> [NSView] {
+        var proxies: [NSView] = []
+        func collect(_ view: NSView) {
+            if String(describing: type(of: view)) == "KeyViewProxy" { proxies.append(view) }
+            view.subviews.forEach(collect)
+        }
+        collect(try #require(window.contentView))
+        var chain: [NSView] = []
+        var seen = Set<ObjectIdentifier>()
+        var view = proxies.first { $0.superview === window.contentView }
+        while let current = view, seen.insert(ObjectIdentifier(current)).inserted { chain.append(current); view = current.nextKeyView }
+        return chain
+    }
+
+    /// Hosted offscreen, `canBecomeKeyView` is false for every view in the loop (even the page popups) and `selectNextKeyView` stays put,
+    /// because AppKit only treats views as valid key views once the app is active with a key window. So Tab can't be driven for real here.
+    /// The strongest check that works is walking the published `nextKeyView` links: from the first sidebar stop, a page control (a view that
+    /// accepts first responder, right of the sidebar) must be reached before the sidebar rows repeat, and `previousKeyView` must mirror it.
+    private func expectTabReachesPageControl(_ window: NSWindow, sidebarStops: Int, _ label: String) throws {
+        let chain = try keyViewChain(window)
+        let pageControl = chain.firstIndex { $0.acceptsFirstResponder && $0.convert($0.bounds, to: nil).minX >= SettingsTheme.sidebarWidth }
+        let index = try #require(pageControl, "\(label): no page control in the key view chain")
+        let before = chain.prefix(index).filter { String(describing: type(of: $0)) == "KeyViewProxy" && $0.convert($0.bounds, to: nil).minX < SettingsTheme.sidebarWidth }
+        #expect(before.count == sidebarStops, "\(label): \(before.count) sidebar stops precede the first page control, expected \(sidebarStops)")
+        for (current, next) in zip(chain, chain.dropFirst()) {
+            #expect(next.previousKeyView === current, "\(label): previousKeyView of \(type(of: next)) does not mirror nextKeyView")
+        }
+    }
+
+    private func press(_ key: UInt32, keyCode: UInt16, in window: NSWindow) throws {
+        let characters = String(UnicodeScalar(key)!)
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function], timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
+        window.sendEvent(event)
+        for _ in 0..<3 { while let e = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(e) } }
+    }
+
+    /// With Keyboard navigation off the list is the focus target and the arrow handlers drive selection. Real key events go through the
+    /// window, so deleting `onKeyPress` (or the list's focus) leaves the page where it was and fails this.
+    @Test func arrowKeysMoveSidebarSelectionWithKeyboardNavigationOff() throws {
+        let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: false)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        try press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
+        #expect(controller.model.page == .appearance)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .general)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .general)
     }
 
     @Test func arrowsStepFromTheFocusedRowOtherwiseFromTheSelection() {
