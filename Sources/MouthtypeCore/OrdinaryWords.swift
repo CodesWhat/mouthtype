@@ -6,8 +6,9 @@ import Foundation
 public enum OrdinaryWords {
     /// True when every word of `heard` is ordinary. Blank text is not ordinary.
     public static func isOrdinary(_ heard: String) -> Bool {
-        let words = heard.split(whereSeparator: \.isWhitespace).map(normalise).filter { !$0.isEmpty }
-        return !words.isEmpty && words.allSatisfy(isOrdinaryWord)
+        let parts = heard.split(whereSeparator: \.isWhitespace)
+        guard !parts.isEmpty, parts.allSatisfy(isPlainWord) else { return false }
+        return parts.map(normalise).allSatisfy(isOrdinaryWord)
     }
 
     /// Plain-language warning for a rule, or nil when the heard form is safe. Boost-only rules (heard equals
@@ -22,12 +23,19 @@ public enum OrdinaryWords {
         guard !heard.isEmpty, !written.isEmpty, isOrdinary(heard) else { return nil }
         let rule = DictionaryRule(heard: heard, written: written)
         guard !rule.allowsSpellingHints else { return nil }
-        return "\u{2018}\(heard)\u{2019} is an everyday word, so every \u{2018}\(heard)\u{2019} you say becomes \(written)."
+        let noun = heard.contains(" ") ? "an everyday phrase" : "an everyday word"
+        return "\u{2018}\(heard)\u{2019} is \(noun), so every \u{2018}\(heard)\u{2019} you say becomes \(written)."
     }
 
     /// True when the rule's heard form should not act as a boost alias.
+    /// A starred rule keeps its alias: starring means the user insists on it.
     static func suppressesAlias(_ rule: DictionaryRule) -> Bool {
-        warning(for: rule) != nil
+        !rule.starred && warning(for: rule) != nil
+    }
+
+    /// Only letters and apostrophes. Digits or symbols (S3, C++, win32, node.js) mark an identifier, never plain speech.
+    private static func isPlainWord(_ raw: Substring) -> Bool {
+        raw.unicodeScalars.allSatisfy { CharacterSet.letters.contains($0) || $0 == "'" || $0 == "\u{2019}" }
     }
 
     private static func normalise(_ raw: Substring) -> String {
@@ -59,8 +67,8 @@ public enum OrdinaryWords {
     idea ideas question questions answer answers problem problems reason reasons result results story stories fact facts case cases issue issues program system systems government law power matter side kind kinds sort type types form forms level order rule rules lot lots bit piece pieces space story research information data game games team music movie film picture photo video voice sound sounds news email message messages phone phones computer computers screen page pages site website app apps file files folder text line lines list lists code
     one two three four five six seven eight nine ten eleven twelve twenty thirty forty fifty hundred thousand million first second third zero half double
     monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september october november december
-    will bill mark bob jack jim tom sue ray rob pat sam max dan don jean joy grace hope faith art rose lily violet daisy ivy amber summer autumn winter spring dawn eve gene frank chase drew grant miles carter hunter mason cooper
-    hove hover hovers cat cats dog dogs bird birds fish horse horses cow pig animal animals
+    will bill mark jack ray rob pat joy grace hope faith art rose lily violet daisy ivy amber summer autumn winter spring dawn eve gene frank chase drew grant miles hunter
+    hover hovers cat cats dog dogs bird birds fish horse horses cow pig animal animals
     casino bank card cards price cost costs pay tax buy shop store market sale deal trade
     ahead along apart aside away downtown upstairs downstairs
     able accept account across act action activity add address agree air alone amount animal apply area arm arrive art attack attention available avoid bar base beautiful beat beyond bill bit blood board boat bottom box brain bring camera care carry catch cause center century chance character charge choice choose church color common community compare complete condition contain control copy correct couple court cover cross crowd culture current customer danger date deep degree develop difference difficult direction discuss doctor dollar draw dream dress drop dry due during edge effect effort end energy enjoy enter entire environment event exactly example exist experience explain express extra fact fair fear field fight figure fill final finally finger finish flow fly focus force forget forward front future garden general girl glass goal ground guess guy hair half hang hate health heavy help history hole hospital hotel idea image imagine interest involve island join kill kitchen knowledge language laugh lay lie lift limit listen literally machine mean measure member mention middle mile mouth movement nature nearly neck notice object office officer onto opportunity option outside paint pair park particular party past pattern perfect perhaps period pick plan plant plate pool popular position pressure pretty prevent process produce product project proper protect prove quality quiet race raise range rate reach record reduce refer region relate remove repeat represent respond rest return rich ride ring rise risk rock role roll round safe scene science season seat section seem sense serious service several shape sheet shoot shot shoulder sign similar single sir size skin slightly smile soft soldier somewhat sort source speed spirit sport spot spread square staff stage standard step stick stock stone store strange stuff subject success suddenly suffer summer supply support surface surprise sweet swim system tell term thin thus tie tired title tone tool top total touch track train travel trip trouble truck trust truth twice unit usually value various view visit wait wake war wear wide wish wonder worry wrong yard

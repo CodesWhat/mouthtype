@@ -9,7 +9,7 @@ import Testing
     }
 
     @Test func namesAndCoinedWordsAreNot() {
-        for word in ["shivon", "praya", "sockguard", "nguyen", "win nguyen", "", "  "] {
+        for word in ["shivon", "praya", "sockguard", "nguyen", "win nguyen", "hove", "jim", "sam", "dan", "S3", "C++", "win32", "c#", "node.js", "e-mail", "a_b", "", "  "] {
             #expect(!OrdinaryWords.isOrdinary(word), "\(word)")
         }
     }
@@ -33,5 +33,22 @@ import Testing
         #expect(bias.terms == ["Nguyen", "Siobhan"])
         #expect(bias.entries[0].aliases.isEmpty)
         #expect(bias.entries[1].aliases == ["shivon"])
+    }
+
+    @Test func commonNameWordsStayOrdinary() {
+        for word in ["will", "mark", "bill", "rose"] {
+            #expect(OrdinaryWords.isOrdinary(word), "\(word)")
+        }
+    }
+
+    @Test func starredRuleKeepsItsAliasButStillWarns() {
+        let rule = DictionaryRule(heard: "win", written: "Nguyen", starred: true)
+        #expect(OrdinaryWords.warning(for: rule) != nil)
+        #expect(VocabularyBias.collect(from: [rule]).entries[0].aliases == ["win"])
+    }
+
+    @Test func multiWordCopyCallsItAPhrase() {
+        let text = OrdinaryWords.warning(for: DictionaryRule(heard: "win win", written: "Nguyen"))
+        #expect(text == "\u{2018}win win\u{2019} is an everyday phrase, so every \u{2018}win win\u{2019} you say becomes Nguyen.")
     }
 }
