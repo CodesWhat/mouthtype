@@ -62,18 +62,21 @@ cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # actool's own AppIcon.icns output is discarded. Needs Xcode's actool; without it the .icns alone ships.
 if xcrun --find actool >/dev/null 2>&1; then
     ICON_OUT="$(mktemp -d)"
+    trap 'rm -rf "$ICON_OUT"' EXIT
     xcrun actool "$PWD/design/icon/AppIcon.icon" --compile "$ICON_OUT" \
         --output-format human-readable-text --notices --warnings --errors \
         --output-partial-info-plist "$ICON_OUT/icon-info.plist" \
         --app-icon AppIcon --include-all-app-icons --enable-on-demand-resources NO \
         --development-region en --target-device mac --minimum-deployment-target 26.0 --platform macosx
     cp "$ICON_OUT/Assets.car" "$APP/Contents/Resources/Assets.car"
+    test -s "$APP/Contents/Resources/Assets.car" || { echo "actool produced no Assets.car" >&2; exit 1; }
     rm -rf "$ICON_OUT"
+    trap - EXIT
 else
     echo "! actool not found; shipping the .icns icon only (no Dark, Clear or Tinted appearances)."
 fi
 cp LICENSE "$APP/Contents/Resources/LICENSE"
-cp docs/ALPHA.md "$APP/Contents/Resources/Read Me.txt"
+cp docs/READ-ME.md "$APP/Contents/Resources/Read Me.txt"
 plutil -replace CFBundleShortVersionString -string "$SHORT_VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$BUILD_VERSION" "$APP/Contents/Info.plist"
 plutil -insert MouthtypeDisplayVersion -string "$VERSION" "$APP/Contents/Info.plist"
