@@ -82,6 +82,7 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         pipeline.settings = { settings }
         pipeline.vocabulary = Rules(rules: rules, phrases: snippets)
         pipeline.smart = smart
+        pipeline.cleanupBudget = 10_000
         return (pipeline, smart)
     }
 
