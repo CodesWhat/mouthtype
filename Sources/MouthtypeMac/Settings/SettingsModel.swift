@@ -14,7 +14,7 @@ import UniformTypeIdentifiers
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
     var page = SettingsPage.general
-    var previewWallpaper = PreviewWallpaper.desktop
+    var previewWallpaper = PreviewWallpaper.dark
     var previewStatus: PreviewStatus?
     var websiteDomain = ""
     var websiteTone = StylePreset.formal
