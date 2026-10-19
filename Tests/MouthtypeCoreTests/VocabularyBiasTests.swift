@@ -18,18 +18,34 @@ import WhisperKit
         #expect(bias.terms == ["Maya", "Ana Lopez"])
     }
 
-    @Test func termCountIsCapped() {
-        let terms = (0..<200).map { "Name\($0)" }
-        #expect(VocabularyBias(terms: terms).terms.count == VocabularyBias.maxTerms)
-        #expect(VocabularyBias(terms: terms).terms.first == "Name0")
+    @Test func termCountIsCappedAtTwoHundredWithNoCharacterCap() {
+        let terms = (0..<300).map { "Name\($0)" }
+        let bias = VocabularyBias(terms: terms)
+        #expect(bias.terms.count == VocabularyBias.maxTerms && VocabularyBias.maxTerms == 200)
+        #expect(bias.terms.first == "Name0" && bias.terms.last == "Name199")
+        let long = String(repeating: "x", count: 500)
+        #expect(VocabularyBias(terms: [long, "Short"]).terms == [long, "Short"])
     }
 
-    @Test func characterBudgetIsCappedAndNeverCutsATermShort() {
-        let bias = VocabularyBias(terms: ["aaaa", "bbbb", "cccc"], maxTerms: 10, maxCharacters: 10)
-        #expect(bias.terms == ["aaaa", "bbbb"])
-        #expect(bias.promptText.count <= 10)
-        let long = VocabularyBias(terms: [String(repeating: "x", count: 500), "Short"])
-        #expect(long.terms == ["Short"])
+    @Test func heardFormsBecomeDistinctAliasesOfTheWrittenSpelling() {
+        let bias = VocabularyBias.collect(from: [
+            DictionaryRule(heard: "sock guard", written: "Sockguard"),
+            DictionaryRule(heard: "sockguard", written: "Sockguard"),
+            DictionaryRule(heard: "Sock Guard", written: "Sockguard"),
+            DictionaryRule(heard: "maya", written: "Maya"),
+        ])
+        #expect(bias.entries == [
+            VocabularyBias.Term(text: "Sockguard", aliases: ["sock guard"]),
+            VocabularyBias.Term(text: "Maya", aliases: []),
+        ])
+    }
+
+    @Test func duplicatesAfterTheCapStillMergeAliases() {
+        let bias = VocabularyBias(entries: [
+            VocabularyBias.Term(text: "A", aliases: ["x"]), VocabularyBias.Term(text: "B"),
+            VocabularyBias.Term(text: "a", aliases: ["y"]),
+        ], maxTerms: 2)
+        #expect(bias.entries == [VocabularyBias.Term(text: "A", aliases: ["x", "y"]), VocabularyBias.Term(text: "B")])
     }
 
     @Test func emptyBiasProducesNoPrompt() {
