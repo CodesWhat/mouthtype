@@ -55,6 +55,8 @@ Model downloads and optional update checks use the network. Dictation and cleanu
 ## Documentation
 
 - [Install, update and remove](docs/READ-ME.md)
+- [Troubleshooting](docs/TROUBLESHOOTING.md)
+- [Known limits for 0.1.0](docs/KNOWN-LIMITS.md)
 - [Settings, tone rules and input selection](docs/SETTINGS.md)
 - [Usage and cleanup reference](docs/USAGE.md)
 - [Spoken commands and counted lists](docs/SPOKEN-COMMANDS.md)
