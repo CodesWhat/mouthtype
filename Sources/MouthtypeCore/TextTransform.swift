@@ -48,12 +48,56 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
         "<text>\n\(text)\n</text>"
     }
 
-    /// Strips wrapper tags and surrounding whitespace that some models echo back.
-    public static func sanitize(_ output: String) -> String {
-        var text = output
-        for tag in ["<text>", "</text>"] {
-            text = text.replacingOccurrences(of: tag, with: "")
+    /// Trims the output and peels framing the model added around the whole of it: a preamble line, a code fence,
+    /// wrapping quotes or an outer `<text>` or `<transcript>` wrapper. A layer is only removed when `input` didn't
+    /// have it, and markup inside the text is never touched.
+    public static func sanitize(_ output: String, input: String = "") -> String {
+        let source = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        var text = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        for _ in 0..<4 {
+            let next = unwrapOnce(text, source: source).trimmingCharacters(in: .whitespacesAndNewlines)
+            if next == text { break }
+            text = next
         }
-        return CleanupPrompt.sanitize(text)
+        return text
+    }
+
+    private static func unwrapOnce(_ text: String, source: String) -> String {
+        if let inner = unfenced(text, source: source) { return inner }
+        for tag in ["text", "transcript"] {
+            if let inner = enclosed(text, source: source, open: "<\(tag)>", close: "</\(tag)>") { return inner }
+        }
+        for (open, close) in [("\"", "\""), ("\u{201C}", "\u{201D}")] {
+            if let inner = enclosed(text, source: source, open: open, close: close) { return inner }
+        }
+        return withoutPreamble(text, source: source)
+    }
+
+    /// The text between `open` and `close` when they wrap all of it, and the input didn't start or end with them.
+    private static func enclosed(_ text: String, source: String, open: String, close: String) -> String? {
+        guard text.count >= open.count + close.count, text.hasPrefix(open), text.hasSuffix(close),
+              !source.hasPrefix(open), !source.hasSuffix(close) else { return nil }
+        let inner = String(text.dropFirst(open.count).dropLast(close.count))
+        guard !inner.contains(open), !inner.contains(close) else { return nil }
+        return inner
+    }
+
+    private static func unfenced(_ text: String, source: String) -> String? {
+        guard text.hasPrefix("```"), text.hasSuffix("```"), !source.hasPrefix("```"), !source.hasSuffix("```") else { return nil }
+        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        guard lines.count >= 3, lines[lines.count - 1].trimmingCharacters(in: .whitespaces) == "```",
+              lines[0].range(of: #"^```[A-Za-z0-9_+.-]*$"#, options: .regularExpression) != nil else { return nil }
+        let inner = lines[1..<(lines.count - 1)].joined(separator: "\n")
+        return inner.contains("```") ? nil : inner
+    }
+
+    private static let preamble =
+        #"^(?:(?:sure|certainly|of course|okay|ok)[,!.]?\s+)?(?:here(?:'s|’s| is| are)\b[^\n:]{0,80}|(?:the )?(?:corrected|edited|revised|rewritten|updated) (?:text|version)):[ \t]*(?:\n\s*|\s+)"#
+
+    private static func withoutPreamble(_ text: String, source: String) -> String {
+        guard let range = text.range(of: preamble, options: [.regularExpression, .caseInsensitive]) else { return text }
+        let lead = text[range].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !source.lowercased().hasPrefix(lead), range.upperBound < text.endIndex else { return text }
+        return String(text[range.upperBound...])
     }
 }
