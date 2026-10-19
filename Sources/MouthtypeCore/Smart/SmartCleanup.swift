@@ -191,7 +191,8 @@ public actor SmartCleanup {
         guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
 
         let context = CleanupContext(vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
-            level: request.level, before: request.context?.before, after: request.context?.after)
+            level: request.level, before: request.context?.before, after: request.context?.after,
+            omitProfanity: request.style == .formal)
         let joining = NameJoining.candidates(in: request.text,
             spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
         let text = CorrectionCommas.apply(request.text)

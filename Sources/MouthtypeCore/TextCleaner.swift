@@ -13,10 +13,12 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     public var correctionsOnly: Bool
     /// An explicit selected-text edit. Only the shared-prompt models run it.
     public var transform: TextTransform?
+    /// The Formal tone: the shared prompt asks the model to leave swearing out.
+    public var omitProfanity: Bool
 
     public init(vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
                 level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false,
-                transform: TextTransform? = nil) {
+                transform: TextTransform? = nil, omitProfanity: Bool = false) {
         self.vocabulary = vocabulary
         self.appName = appName
         self.s1Controls = s1Controls
@@ -31,6 +33,7 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
         }
         self.correctionsOnly = correctionsOnly
         self.transform = transform
+        self.omitProfanity = omitProfanity
     }
 }
 

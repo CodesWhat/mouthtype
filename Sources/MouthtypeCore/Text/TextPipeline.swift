@@ -14,7 +14,9 @@ public struct TextPipelineOptions: Sendable, Equatable {
     public var snippets: Bool
     public var blend: Bool
     public var whitespace: Bool
-    /// The tone pass. `.formal` changes nothing.
+    /// Swearing is removed when the tone is Formal. Other tones leave it as spoken.
+    public var profanity: Bool
+    /// The tone pass. `.formal` changes nothing here (see `profanity` for what Formal does remove).
     public var style: StyleOptions
 
     public init(
@@ -28,6 +30,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
         snippets: Bool = true,
         blend: Bool = true,
         whitespace: Bool = true,
+        profanity: Bool = true,
         style: StyleOptions = .formal
     ) {
         self.fillers = fillers
@@ -40,13 +43,14 @@ public struct TextPipelineOptions: Sendable, Equatable {
         self.snippets = snippets
         self.blend = blend
         self.whitespace = whitespace
+        self.profanity = profanity
         self.style = style
     }
 
     public static let all = TextPipelineOptions()
     public static let none = TextPipelineOptions(
         fillers: false, spokenCommands: false, selfCorrection: false, countedLists: false, notation: false, numbers: false, dictionary: false,
-        snippets: false, blend: false, whitespace: false
+        snippets: false, blend: false, whitespace: false, profanity: false
     )
 
     var anyEnabled: Bool { self != .none }
@@ -100,7 +104,7 @@ public struct TextPipelineResult: Sendable, Equatable {
 
 /// The deterministic cleanup pass: no model, a few milliseconds, every change logged.
 ///
-/// Stages run in this fixed order: fillers, spoken commands, self-corrections, counted lists, notation, numbers, dictionary, snippets, blend, style, whitespace.
+/// Stages run in this fixed order: fillers, spoken commands, self-corrections, counted lists, notation, numbers, dictionary, snippets, profanity (Formal only), blend, style, whitespace.
 /// Style edits are logged under the `blend` stage name, the store's vocabulary has no separate one.
 /// Each is its own small type and takes the previous stage's output; the edit `position` is a Character offset
 /// into the text as it entered that stage.
@@ -189,6 +193,13 @@ public struct TextPipeline: Sendable {
                 snippets: input.snippets, now: input.now, clipboard: input.clipboard, dateFormatter: dateFormatter
             )
             run(SnippetExpander.stageName) { expander.apply($0) }
+        }
+        if options.profanity, options.style == .formal {
+            var protected = Set<String>()
+            if options.dictionary { protected.formUnion(StyleStage.words(of: input.dictionary.map(\.written))) }
+            if options.snippets { protected.formUnion(StyleStage.words(of: input.snippets.map(\.expansion))) }
+            let stage = ProfanityRemover(protectedWords: protected)
+            run(ProfanityRemover.stageName) { stage.apply($0) }
         }
         if options.blend {
             var protected = Set<String>()
