@@ -43,6 +43,7 @@ struct Run: AsyncParsableCommand {
     @Option(help: "Corpus directory of audio files with same-basename .txt references.") var corpus: String = Corpus.defaultDirectory
     @Option(help: "Timed runs per clip.") var runs: Int = 5
     @Option(help: "Report output directory.") var out: String = "docs/benchmarks"
+    @Option(help: "Comma-separated names to bias recognition toward, for engines that support it (Whisper).") var boostTerms: String?
 
     private static let warmups = 1
     private static let coldTimeout: TimeInterval = 20 * 60
@@ -123,7 +124,7 @@ struct Run: AsyncParsableCommand {
         let arguments = [
             "engine-worker", id, "--mode", mode, "--corpus", corpus,
             "--runs", String(runs), "--warmups", String(Self.warmups), "--result", resultURL.path,
-        ]
+        ] + (boostTerms.map { ["--boost-terms", $0] } ?? [])
         do {
             let outcome = try await runChild(executable: executable, arguments: arguments, logURL: logURL, timeout: timeout)
             if outcome.timedOut {

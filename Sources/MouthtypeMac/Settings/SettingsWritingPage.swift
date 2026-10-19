@@ -32,6 +32,9 @@ extension SettingsView {
             SettingsRow(title: "Learn from my corrections") {
                 Toggle("Learn from my corrections", isOn: Binding(get: { model.learnCorrections }, set: model.setLearnCorrections)).labelsHidden().toggleStyle(.switch)
             }
+            SettingsRow(title: "Boost my saved words while recognising", detail: "Gives the speech model your saved spellings as a hint. Only Whisper engines use it; the default Parakeet engine ignores it.") {
+                Toggle("Boost my saved words while recognising", isOn: Binding(get: { model.boostSavedWords }, set: model.setBoostSavedWords)).labelsHidden().toggleStyle(.switch)
+            }
             SettingsRow(title: "Lowercase sentence starts") {
                 Toggle("Lowercase sentence starts", isOn: Binding(get: { model.cleanup.style.capitalisation == .lowercase }, set: model.setLowercaseStarts))
                     .labelsHidden().toggleStyle(.switch).disabled(!model.cleanup.enabled)

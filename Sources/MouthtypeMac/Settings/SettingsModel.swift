@@ -34,6 +34,7 @@ import UniformTypeIdentifiers
     private(set) var loginState: NSControl.StateValue = .off
     private(set) var shortcut = "Fn"
     private(set) var learnCorrections = true
+    private(set) var boostSavedWords = false
     private(set) var chunkedTerminals: Set<String> = []
     private(set) var appStyles = AppCleanupStyles()
     private(set) var appStylesError: String?
@@ -89,6 +90,7 @@ import UniformTypeIdentifiers
         escapeShortcut = savedShortcut?.keyCode == 53
         loginState = loginItem.menuState
         learnCorrections = CorrectionSettings.isEnabled(defaults)
+        boostSavedWords = VocabularyBoostSetting.isEnabled(defaults)
         chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
         do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil }
         catch { appStylesError = error.localizedDescription }
@@ -177,6 +179,11 @@ import UniformTypeIdentifiers
     func setLearnCorrections(_ enabled: Bool) {
         CorrectionSettings.set(enabled, in: defaults)
         learnCorrections = enabled
+    }
+
+    func setBoostSavedWords(_ enabled: Bool) {
+        VocabularyBoostSetting.set(enabled, in: defaults)
+        boostSavedWords = enabled
     }
 
     func setAudioRetentionAge(_ value: AudioRetentionAge) {
