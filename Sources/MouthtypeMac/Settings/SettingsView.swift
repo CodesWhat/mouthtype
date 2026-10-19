@@ -21,6 +21,7 @@ struct SettingsView: View {
                 header
                 SettingsForm {
                     switch model.page {
+                    case .home: HomePage(model: model.home)
                     case .general: general
                     case .writing: writing
                     case .appearance: appearance
@@ -63,24 +64,26 @@ struct SettingsView: View {
                 }
                 Text("mouthtype").font(SettingsFont.serif(SettingsFont.wordmark))
             }.padding(.horizontal, 10).padding(.top, 52).padding(.bottom, 22)
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(SettingsPage.allCases) { page in
-                    sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.page = page }
-                        .focused($sidebarFocus, equals: page)
-                }
-            }
             // Arrows bubble up from the focused row (Full Keyboard Access on) and move both selection and focus. With it off,
             // plain buttons never take focus, so the list itself is the focus target and arrows step from the selection.
             // With it on the list stays out of the loop, so Tab walks on into the page instead of cycling in the sidebar.
             // The flag is re-read each time the window becomes key, so toggling Keyboard navigation applies on the next focus.
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) { sidebarPageRow(.home) }
+                Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(SettingsSidebarLink.words) { link in linkRow(link) }
+                }
+                Text("SETTINGS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
+                    .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8).accessibilityAddTraits(.isHeader)
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(SettingsPage.settingsPages) { page in sidebarPageRow(page) }
+                }
+            }
             .focusable(SettingsView.sidebarListFocusable(fullKeyboardAccess: keyboardNavigation ?? fullKeyboardAccess())).focusEffectDisabled()
             .onKeyPress(.upArrow) { moveSidebar(by: -1) }
             .onKeyPress(.downArrow) { moveSidebar(by: 1) }
-            Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
-                .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
-            VStack(alignment: .leading, spacing: 2) {
-                ForEach(SettingsSidebarLink.words) { link in linkRow(link) }
-            }
             Spacer(minLength: 12)
             linkRow(.setUp)
             Text("ON YOUR MAC · \(AppInfo.version)").font(SettingsFont.mono(SettingsFont.footer)).tracking(1).lineSpacing(4)
@@ -90,6 +93,11 @@ struct SettingsView: View {
             .focusSection()
             .background { if solid { Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.04)) } }
             .overlay(alignment: .trailing) { if solid { Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1) } }
+    }
+
+    private func sidebarPageRow(_ page: SettingsPage) -> some View {
+        sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.page = page }
+            .focused($sidebarFocus, equals: page)
     }
 
     private func moveSidebar(by offset: Int) -> KeyPress.Result {

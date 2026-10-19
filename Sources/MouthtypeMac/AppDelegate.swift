@@ -194,7 +194,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let menuBar = MenuBarController()
         pill.onLevel = { [weak menuBar] level in menuBar?.setLevel(level) }
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
-        let settingsSection = SettingsMenuSection { [weak self] in self?.settingsWindow.present() }
+        settingsWindow.model.home.store = store
+        let settingsSection = SettingsMenuSection(
+            open: { [weak self] in self?.settingsWindow.present(page: .general) },
+            openHome: { [weak self] in self?.settingsWindow.present(page: .home) })
         menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in
             guard let self else { return }
             if self.diagnostics.microphoneStatus != .authorized || !self.diagnostics.accessibilityGranted { self.showSetup() }
@@ -215,7 +218,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
             menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
-            recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
+            let home = settingsWindow.model.home
+            home.saved = { [weak recovery] in try await recovery?.loadSavedRecordings() ?? [] }
+            home.canRecover = recovery.canRecover
+            home.recoverTake = { [weak recovery] item in recovery?.offerSaved(item) }
+            recovery.onFinished = { [weak menuBar] in
+                menuBar?.refresh()
+                Task { @MainActor in await home.reload() }
+            }
         }
         dictation.canStartRecording = { [weak self] in self?.isTerminating != true && self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
         menuBar.add(section: history, startsGroup: false)

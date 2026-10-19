@@ -13,6 +13,7 @@ import UniformTypeIdentifiers
     private var capsLockShortcut = false
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
+    let home: HomeLogModel
     var page = SettingsPage.general
     var previewWallpaper = PreviewWallpaper.desktop
     var previewStatus: PreviewStatus?
@@ -43,7 +44,9 @@ import UniformTypeIdentifiers
          onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
          onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
          microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
-         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in }) {
+         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+         home: HomeLogModel = HomeLogModel()) {
+        self.home = home
         self.defaults = defaults
         self.microphone = microphone ?? MicrophoneSettingsModel(defaults: defaults, onChanged: onMicrophoneChanged)
         self.loginItem = loginItem
