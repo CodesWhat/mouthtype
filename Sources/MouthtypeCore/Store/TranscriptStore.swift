@@ -148,7 +148,7 @@ public final class TranscriptStore: Sendable {
             ("asr_confidence", t.confidence.map { Double($0) }), ("language", record.language),
             ("word_timings_json", timings), ("boost_terms_applied_json", boost),
             ("asr_done_ms", record.asrDoneMs), ("speech_onset_ms", record.speechOnsetMs),
-            ("raw_text", record.rawText), ("words_raw", Self.wordCount(record.rawText)),
+            ("raw_text", record.rawText), ("words_raw", TextMetrics.wordCount(record.rawText)),
         ])
     }
 
@@ -157,7 +157,7 @@ public final class TranscriptStore: Sendable {
         var columns: [(String, (any DatabaseValueConvertible)?)] = [
             ("status", DictationStatus.inserted),
             ("final_text", record.finalText), ("det_text", record.detText),
-            ("words_final", Self.wordCount(record.finalText)), ("chars_final", record.finalText.count),
+            ("words_final", TextMetrics.wordCount(record.finalText)), ("chars_final", record.finalText.count),
             ("cleaner_id", cleanup?.cleanerID), ("cleaner_rev", cleanup?.cleanerRev),
             ("cleanup_level", cleanup?.level), ("style", cleanup?.style), ("cleanup_ms", cleanup?.ms),
             ("cleanup_outcome", cleanup?.outcome), ("prompt_sha", cleanup?.promptSha),
@@ -381,10 +381,6 @@ public final class TranscriptStore: Sendable {
 
     static let wpmSampleSize = 100
     static let wpmMaxAudioMs = 400_000
-
-    public static func wordCount(_ text: String) -> Int {
-        text.split(whereSeparator: \.isWhitespace).count
-    }
 
     // MARK: Internals
 

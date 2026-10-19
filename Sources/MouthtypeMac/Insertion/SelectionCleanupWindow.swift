@@ -85,8 +85,7 @@ private struct SelectionCleanupView: View {
     }
 
     private func copyResult() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(model.result, forType: .string)
+        SystemClipboard().write(model.result)
     }
 
     private func textHeight(_ text: String, width: CGFloat, minimum: CGFloat, maximum: CGFloat) -> CGFloat {

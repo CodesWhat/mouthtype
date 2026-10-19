@@ -464,6 +464,8 @@ struct HotKeyProcessorTests {
                 ScenarioStep(time: 0.3, key: nil, modifiers: [], expectedOutput: nil, expectedIsMatched: true),
                 // Now locked - press ESC
                 ScenarioStep(time: 1.0, key: .escape, modifiers: [], expectedOutput: .cancel, expectedIsMatched: false),
+                // Esc's own release never reaches the processor, so the next press must still start a take
+                ScenarioStep(time: 1.5, key: nil, modifiers: [.option], expectedOutput: .startRecording, expectedIsMatched: true),
             ]
         )
     }

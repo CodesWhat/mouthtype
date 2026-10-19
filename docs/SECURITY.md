@@ -29,8 +29,10 @@ As observed on October 17, 2026, GitHub returned HTTP 403 for both ruleset and c
 ## Remaining assurance work
 
 - Verify the first scheduled Dependabot processing and private posture report after the configuration reaches the default branch. Triage each error or finding, especially review, CI and protection detection.
+- MLX cleanup models are pinned to exact Hugging Face commits in `CleanerCatalog`, so a changed upstream repo isn't picked up by a fresh download. Parakeet (FluidAudio resolves `main`) and WhisperKit downloads are still unpinned, and pinning them is open.
 - Establish automated Swift advisory coverage for the actual resolved packages and model supply chain. Until then, review upstream advisories and package changes before release; npm auditing doesn't cover them.
 - Add a native Mac CI lane that actually compiles and runs meaningful Swift tests on the supported Apple Silicon/macOS toolchain. Existing Linux gesture tests and local Mac acceptance don't establish hosted Mac CI coverage.
+  There's deliberately no macOS CI lane for now because of runner cost (macOS minutes bill at 10x on this private repo). `swift test` runs by hand before each release.
 - Add dependency inventory/SBOM and build provenance only with exact source and artifact identity, then verify them. These aren't currently published guarantees.
 - Keep physical installation, updates, permissions, microphone routing and destination-app acceptance in the release checks. Static scanner results don't replace them.
 

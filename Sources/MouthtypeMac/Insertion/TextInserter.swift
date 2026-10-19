@@ -635,7 +635,16 @@ final class PasteboardSession {
     /// Chord to first read of the current paste, in ms; nil until something read it.
     var firstReceiptMs: Int? { receipts?.firstReceiptMs }
 
-    func currentString() -> String? { pasteboard.currentString() }
+    /// The user's clipboard text. While a restore is pending and nothing else has written, the live pasteboard holds
+    /// our own paste, so the saved snapshot is the truth; a write by anyone else wins, as it does in `restore`.
+    func currentString() -> String? {
+        if let saved, pasteboard.changeCount == ourChangeCount {
+            let plain = NSPasteboard.PasteboardType.string.rawValue
+            guard let data = saved.items.first?.first(where: { $0.type == plain })?.data else { return nil }
+            return String(data: data, encoding: .utf8)
+        }
+        return pasteboard.currentString()
+    }
 
     /// False when the paste event could not be posted; the clipboard then still holds `text` and no restore is scheduled.
     func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?) -> Bool {

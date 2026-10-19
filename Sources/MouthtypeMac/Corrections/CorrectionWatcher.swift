@@ -180,6 +180,10 @@ final class CorrectionWatcher: CorrectionObserving {
             trace("not watching: field value unreadable")
             return
         }
+        guard first.count <= CorrectionLearner.maxFieldCharacters else {
+            trace("not watching: field too large")
+            return
+        }
         let now = clock.now()
         nextID += 1
         watch = Watch(
@@ -235,6 +239,7 @@ final class CorrectionWatcher: CorrectionObserving {
             return
         }
         w.failures = 0
+        guard value.count <= CorrectionLearner.maxFieldCharacters else { return stop("field too large") }
         let typed = input()
         if typed != w.lastInput {
             w.lastInput = typed
