@@ -311,7 +311,8 @@ public final class PillController {
         let distance = skin.messageScrollDistance
         if distance > 0 || recordingStart != nil || isGrown { startLink() } else { stopLink() }
         guard let duration else { return }
-        let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance) + 0.3) : duration
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance, reduceMotion: reduce) + 0.3) : duration
         let shown = generation
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(shownFor))
@@ -598,10 +599,11 @@ public final class PillController {
         case .message:
             let distance = skin.messageScrollDistance
             let elapsed = now - messageStart
-            if distance > 0 { skin.setMessageOffset(Marquee.offset(distance: distance, at: elapsed)) }
+            let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            if distance > 0 { skin.setMessageOffset(Marquee.offset(distance: distance, at: elapsed, reduceMotion: reduce)) }
             updateChrome(now: now)
             if isGrown { updateInteractivity(pointer: NSEvent.mouseLocation) }
-            if recordingStart == nil, !isGrown, distance == 0 || elapsed > Marquee.duration(distance: distance) { stopLink() }
+            if recordingStart == nil, !isGrown, distance == 0 || elapsed > Marquee.duration(distance: distance, reduceMotion: reduce) { stopLink() }
         case .hidden:
             if isGrown { updateInteractivity(pointer: NSEvent.mouseLocation) } else { stopLink() }
         }

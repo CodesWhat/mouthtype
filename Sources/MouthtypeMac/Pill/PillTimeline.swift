@@ -30,12 +30,14 @@ enum Marquee {
         textWidth <= windowWidth ? .centered(offset: (windowWidth - textWidth) / 2) : .scrolling(distance: textWidth - windowWidth)
     }
 
-    static func duration(distance: Int) -> TimeInterval {
-        hold + Double(distance) / pixelsPerSecond + hold
+    /// Under Reduce Motion the text doesn't travel: it is held, then shown at its end.
+    static func duration(distance: Int, reduceMotion: Bool = false) -> TimeInterval {
+        reduceMotion ? 2 * hold : hold + Double(distance) / pixelsPerSecond + hold
     }
 
     /// Horizontal offset of the text at `time`, 0 at the start down to `-distance` at the end.
-    static func offset(distance: Int, at time: TimeInterval) -> Int {
+    static func offset(distance: Int, at time: TimeInterval, reduceMotion: Bool = false) -> Int {
+        if reduceMotion { return time < hold ? 0 : -distance }
         let travelled = Int(max(0, time - hold) * pixelsPerSecond)
         return -min(distance, travelled)
     }

@@ -117,3 +117,12 @@ private let longDetail = Array(repeating: "The speech engine stopped part way th
         }
     }
 }
+
+@Suite struct MarqueeReduceMotionTests {
+    @Test func reduceMotionHoldsThenJumpsToTheEnd() {
+        #expect(Marquee.offset(distance: 90, at: 0.3, reduceMotion: true) == 0)
+        #expect(Marquee.offset(distance: 90, at: Marquee.hold + 0.01, reduceMotion: true) == -90)
+        #expect(Marquee.duration(distance: 90, reduceMotion: true) == 2 * Marquee.hold)
+        #expect(Marquee.offset(distance: 90, at: Marquee.hold + 1) == -30)
+    }
+}
