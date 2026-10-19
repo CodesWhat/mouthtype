@@ -84,6 +84,7 @@ import MouthtypeCore
         selection.releasePrewarm(for: "a")
         selection.releasePrewarm(for: "a")
         await settle()
+        for _ in 0..<600 where thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(!thorough.isLoaded)
     }
 
