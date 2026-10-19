@@ -1,4 +1,20 @@
-Mouthtype 0.1.0-rc.3
+Mouthtype 0.1.0-rc.4
+
+RC.4 fixes what the rc.3 reviews found. Recognition and cleanup are unchanged.
+
+Dictation: pressing Esc to cancel a hands-free take no longer swallows the next Fn press. Undo on a card now works while an earlier take is still processing. If cleanup times out, the fallback text no longer brings back tags like [MUSIC]. A {clipboard} phrase now inserts what you copied, not your previous dictation.
+
+Settings: arrow keys move through the sidebar even with macOS Keyboard navigation off, and with it on Tab moves from the sidebar into the page.
+
+Menu: Check for Updates, How to Use and About have icons that match Quit.
+
+Long takes start transcribing sooner, Mouthtype stops watching very large fields for corrections, and removing old recordings no longer leaves stale entries when one file can't be deleted. Cleanup model downloads are pinned to exact versions.
+
+The docs add troubleshooting and known limits.
+
+Not yet verified for this build: fresh installation, Bluetooth and USB microphones, and VoiceOver.
+
+Earlier in rc.3:
 
 RC.3 fixes what the rc.2 reviews found. Recognition, cleanup and how text is pasted are unchanged.
 
@@ -11,8 +27,6 @@ Hi-Fi card: text the pixel font can't draw, such as non-Latin scripts, emoji and
 Menu bar and setup: the menu bar icon retries if its image fails to load, and setup notices a Globe key conflict change within a couple of seconds.
 
 The in-app Read Me is renamed and its links work outside the repository. The docs add a spoken commands reference, third-party notices list each dependency and model license, and the Gemma 4 cleanup model is listed under Apache License 2.0.
-
-Not yet verified for this build: fresh installation, behavior in third-party apps, physical-device acceptance, and update installation and relaunch over an older copy.
 
 Earlier in rc.2:
 
