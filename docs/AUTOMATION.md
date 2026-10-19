@@ -2,6 +2,8 @@
 
 Mouthtype has a small local automation surface: a `mouthtype://` URL scheme and a thin `mouthtype` command that wraps it. It's for Shortcuts, Raycast, scripts and keyboard launchers on your own Mac. There's no network listener, no accounts and no MCP server.
 
+The scheme comes from `CFBundleURLTypes` in the built app. An app bundle built before this change has to be rebuilt and launched once so LaunchServices registers `mouthtype://`.
+
 ## Turn it on
 
 Verbs that record, copy or insert are off until you opt in, because any web page can open a `mouthtype://` link. Opening a Settings page works without it.
@@ -10,7 +12,7 @@ Verbs that record, copy or insert are off until you opt in, because any web page
 defaults write com.codeswhat.mouthtype automationEnabled -bool true
 ```
 
-Turn it off with `defaults delete com.codeswhat.mouthtype automationEnabled`. A refused URL does nothing and is logged.
+Turn it off with `defaults delete com.codeswhat.mouthtype automationEnabled`. A refused URL does nothing, shows "Automation is off" in the pill and is logged (Console, subsystem `com.codeswhat.mouthtype`, category `app`).
 
 ## URLs
 
@@ -24,7 +26,7 @@ Turn it off with `defaults delete com.codeswhat.mouthtype automationEnabled`. A 
 | `mouthtype://paste-last` | Pastes the last delivered text. | Paste Last in the menu |
 | `mouthtype://open?page=<page>` | Shows a page: `home`, `settings`, `general`, `writing`, `appearance` or `diagnostics`. No page means Settings. | Settings in the menu |
 
-Every verb goes through the same code as the menu and hotkeys, so the busy, permission, engine-readiness and secure-field checks still apply. Pasting still refuses secure fields and changed destinations. `stop` and `cancel` only act on a hands-free recording, same as the menu. `home` opens Settings until the Home page lands.
+Every verb goes through the same code as the menu and hotkeys, so the busy, permission, engine-readiness and secure-field checks still apply. Pasting still refuses secure fields and changed destinations. `stop` and `cancel` only act on a hands-free recording, same as the menu. While you're holding the dictation key, `start` and `toggle` do nothing, and two starts fired together begin one recording. `home` opens Settings until the Home page lands.
 
 Anything else is ignored and logged: unknown verbs, unknown pages, extra path segments, other schemes. Parameters other than `page` are dropped. URLs can't return a value, so there's no `status` yet.
 

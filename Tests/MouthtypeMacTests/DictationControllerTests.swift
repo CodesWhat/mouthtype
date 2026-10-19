@@ -30,6 +30,7 @@ private final class FakeCapture: DictationCapturing {
     var keyDownAtNanos: UInt64?
     var onInterrupted: (@MainActor () -> Void)?
     var duringStart: (@MainActor () async -> Void)?
+    var duringStop: (@MainActor () async -> Void)?
     /// How many samples of the recording in progress `partialSamples` can hand over.
     var available = 0
 
@@ -59,6 +60,7 @@ private final class FakeCapture: DictationCapturing {
 
     func stop() async throws -> CapturedAudio {
         log.add("capture.stop")
+        await duringStop?()
         if let stopError { throw stopError }
         return audios.isEmpty ? audio : audios.removeFirst()
     }
@@ -1642,6 +1644,68 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.cards.presented.map(\.kind) == [.cancelled])
         #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
         #expect(rig.lockEnded.count == 1)
+    }
+
+    // MARK: Automation
+
+    @Test func automationStartLocksHandsFree() async {
+        let rig = Rig()
+        await rig.controller.startHandsFree()
+        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree)
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
+    }
+
+    @Test func twoAutomationStartsBeginOneSession() async {
+        let rig = Rig()
+        // A recording just stopped, so the next press waits on the capture's stop. That wait is the window two URLs race in.
+        await rig.lockIn()
+        rig.capture.duringStop = { await rig.settle() }
+        rig.controller.stopHandsFree()
+        let before = rig.log.all.filter { $0 == "capture.start" }.count
+        async let first: Void = rig.controller.startHandsFree()
+        async let second: Void = rig.controller.startHandsFree()
+        _ = await (first, second)
+        await rig.settle()
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == before + 1)
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+    }
+
+    @Test func automationStartIsRefusedWhenBusyLoadingOrFailed() async {
+        let busy = Rig()
+        busy.controller.canStartRecording = { false }
+        await busy.controller.startHandsFree()
+        #expect(busy.controller.phase == .idle && !busy.log.contains("capture.start"))
+        #expect(busy.pill.messages.map(\.headline) == ["Mouthtype is busy"])
+
+        let loading = Rig()
+        loading.engine.readiness = .loading
+        await loading.controller.startHandsFree()
+        #expect(loading.controller.phase == .idle && !loading.log.contains("capture.start"))
+
+        let failed = Rig()
+        failed.engine.readiness = .failed
+        await failed.controller.startHandsFree()
+        #expect(failed.controller.phase == .idle && !failed.log.contains("capture.start"))
+    }
+
+    @Test func automationToggleStopsAHandsFreeRecordingAndStartsWhenIdle() async {
+        let rig = Rig()
+        await rig.controller.toggleHandsFree()
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+        await rig.controller.toggleHandsFree()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+    }
+
+    @Test func automationStartAndToggleLeaveAHeldKeyRecordingAlone() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        let before = rig.log.all
+        await rig.controller.startHandsFree()
+        await rig.controller.toggleHandsFree()
+        #expect(rig.log.all == before)
+        #expect(rig.controller.phase == .recording && !rig.controller.isHandsFree)
     }
 
     @Test func menuStopAndCancelActLikeTheKeyAndEscape() async {

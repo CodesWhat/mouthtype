@@ -269,7 +269,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func application(_ application: NSApplication, open urls: [URL]) {
         guard !isTerminating else { return }
         let router = automationRouter()
-        for url in urls { router.handle(url) }
+        for url in urls {
+            if case .disabled = router.handle(url) {
+                pill?.showMessage(PillMessage("Automation is off", detail: "See the automation docs"), duration: 3)
+            }
+        }
     }
 
     private func automationRouter() -> AutomationRouter {

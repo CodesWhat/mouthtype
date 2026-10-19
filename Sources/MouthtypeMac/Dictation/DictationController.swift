@@ -55,6 +55,8 @@ final class DictationController {
     @ObservationIgnored weak var corrections: (any CorrectionObserving)?
     @ObservationIgnored private var session: DictationSession?
     @ObservationIgnored private var captureStarting = false
+    /// True while a URL-driven start is between its guard and the recording. Hotkey events are serialized by `consume`; URL tasks aren't.
+    @ObservationIgnored var automationStartInFlight = false
     @ObservationIgnored private var shuttingDown = false
     @ObservationIgnored private var termination: Task<Bool, Never>?
     @ObservationIgnored private var captureFinalizations = 0
