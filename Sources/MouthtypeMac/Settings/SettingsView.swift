@@ -8,7 +8,11 @@ struct SettingsView: View {
     @Bindable var model: SettingsModel
     var actions = SettingsActions()
     var solid = true
+    /// Reads the system Keyboard navigation setting. Injectable so tests can force either path.
+    var fullKeyboardAccess: @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess
+    @State private var keyboardNavigation: Bool?
     @State var previewWidth: CGFloat = 0
+    @FocusState private var sidebarFocus: SettingsPage?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -26,12 +30,14 @@ struct SettingsView: View {
                     }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Color(nsColor: .windowBackgroundColor))
+                .focusSection()
         }
         .font(SettingsFont.sans(SettingsFont.body))
         .foregroundStyle(.primary)
         .tint(SettingsTheme.control)
         .ignoresSafeArea()
         .frame(minWidth: SettingsTheme.minimumSize.width, minHeight: SettingsTheme.minimumSize.height)
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }
     }
 
@@ -60,11 +66,16 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(SettingsPage.allCases) { page in
                     sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.page = page }
+                        .focused($sidebarFocus, equals: page)
                 }
             }
-            .focusable().focusEffectDisabled()
-            .onKeyPress(.upArrow) { model.page = model.page.moved(by: -1); return .handled }
-            .onKeyPress(.downArrow) { model.page = model.page.moved(by: 1); return .handled }
+            // Arrows bubble up from the focused row (Full Keyboard Access on) and move both selection and focus. With it off,
+            // plain buttons never take focus, so the list itself is the focus target and arrows step from the selection.
+            // With it on the list stays out of the loop, so Tab walks on into the page instead of cycling in the sidebar.
+            // The flag is re-read each time the window becomes key, so toggling Keyboard navigation applies on the next focus.
+            .focusable(SettingsView.sidebarListFocusable(fullKeyboardAccess: keyboardNavigation ?? fullKeyboardAccess())).focusEffectDisabled()
+            .onKeyPress(.upArrow) { moveSidebar(by: -1) }
+            .onKeyPress(.downArrow) { moveSidebar(by: 1) }
             Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
                 .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
             VStack(alignment: .leading, spacing: 2) {
@@ -76,9 +87,22 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 18)
         }.padding(.horizontal, 10).frame(maxHeight: .infinity, alignment: .topLeading)
+            .focusSection()
             .background { if solid { Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.04)) } }
             .overlay(alignment: .trailing) { if solid { Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1) } }
     }
+
+    private func moveSidebar(by offset: Int) -> KeyPress.Result {
+        let target = SettingsPage.arrowTarget(focused: sidebarFocus, selected: model.page, offset: offset)
+        model.page = target
+        if sidebarFocus != nil { sidebarFocus = target }
+        return .handled
+    }
+
+    /// With Full Keyboard Access the rows are Tab stops themselves, so the list must not also be one or Tab cycles in the sidebar.
+    static func sidebarListFocusable(fullKeyboardAccess: Bool) -> Bool { !fullKeyboardAccess }
+
+    @MainActor static func systemFullKeyboardAccess() -> Bool { NSApp?.isFullKeyboardAccessEnabled ?? false }
 
     private func linkRow(_ link: SettingsSidebarLink) -> some View {
         sidebarRow(link.title, icon: link.icon, selected: false, id: link.accessibilityID) { actions.perform(link) }

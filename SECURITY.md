@@ -4,7 +4,7 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.1.0-rc.3 | Supported through the next verified Mac prerelease |
+| 0.1.0-rc.4 | Supported through the next verified Mac prerelease |
 | 0.1.0-beta.x, 0.1.0-alpha.x and superseded Mac prereleases | Upgrade to the latest published prerelease |
 | Experimental Linux source | Development only; no supported desktop release |
 

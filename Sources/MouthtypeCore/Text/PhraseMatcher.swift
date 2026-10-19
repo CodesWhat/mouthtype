@@ -30,7 +30,7 @@ struct PhraseMatcher: Sendable {
         var seen = Set<String>()
         var built: [Character: [Pattern]] = [:]
         for (index, raw) in patterns.enumerated() {
-            let collapsed = raw.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            let collapsed = PhraseKey.collapsed(raw)
             guard !collapsed.isEmpty else { continue }
             let chars = TextScan.lowered(Array(collapsed))
             guard seen.insert(String(chars)).inserted else { continue }

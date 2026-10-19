@@ -25,6 +25,7 @@ extension MenuSection {
     override init() {
         super.init()
         menu.delegate = self
+        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
         menu.autoenablesItems = false
         for (item, action) in [(stopItem, #selector(stop)), (cancelItem, #selector(cancel)), (aboutItem, #selector(about))] {
             item.target = self

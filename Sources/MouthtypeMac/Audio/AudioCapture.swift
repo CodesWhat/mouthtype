@@ -217,10 +217,3 @@ public actor AudioCapture {
         Log.capture.info("\(line, privacy: .public)")
     }
 }
-
-func computeRMS<C: Collection>(_ samples: C) -> Float where C.Element == Float {
-    guard !samples.isEmpty else { return 0 }
-    var sum: Double = 0
-    for s in samples { sum += Double(s * s) }
-    return Float((sum / Double(samples.count)).squareRoot())
-}

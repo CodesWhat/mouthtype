@@ -10,19 +10,22 @@ import MouthtypeCore
     private let refreshDiagnostics: () -> Void
     private let actions: SettingsActions
     private let reduceTransparency: () -> Bool
+    private let fullKeyboardAccess: @MainActor () -> Bool
     private let notifications: NotificationCenter
     private nonisolated(unsafe) var transparencyObserver: NSObjectProtocol?
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
     init(model: SettingsModel, actions: SettingsActions = SettingsActions(),
          reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+         fullKeyboardAccess: @escaping @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess,
          notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
         self.model = model
+        self.fullKeyboardAccess = fullKeyboardAccess
         self.actions = actions
         self.reduceTransparency = reduceTransparency
         self.notifications = notifications
         refreshDiagnostics = actions.refreshDiagnostics
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+        let window = SettingsNSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Mouthtype Settings"
         window.titlebarAppearsTransparent = true
@@ -46,7 +49,7 @@ import MouthtypeCore
     private func applyContent() {
         guard let window else { return }
         let solid = reduceTransparency()
-        let hosting = NSHostingView(rootView: SettingsView(model: model, actions: actions, solid: solid))
+        let hosting = NSHostingView(rootView: SettingsView(model: model, actions: actions, solid: solid, fullKeyboardAccess: fullKeyboardAccess))
         hosting.sizingOptions = []
         if solid {
             window.backgroundColor = .windowBackgroundColor
@@ -90,6 +93,18 @@ import MouthtypeCore
     }
 }
 
+/// The Settings window. The app runs without a main menu, so nothing supplies Cmd-W; handle it here.
+final class SettingsNSWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.type == .keyDown, flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
+            performClose(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+}
+
 enum SettingsPage: String, CaseIterable, Identifiable {
     case general, writing, appearance, diagnostics
     var id: String { rawValue }
@@ -99,6 +114,10 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         let pages = Self.allCases
         let index = pages.firstIndex(of: self) ?? 0
         return pages[min(max(index + offset, 0), pages.count - 1)]
+    }
+    /// Arrow keys step from the focused sidebar row when there is one, else from the selected page.
+    static func arrowTarget(focused: SettingsPage?, selected: SettingsPage, offset: Int) -> SettingsPage {
+        (focused ?? selected).moved(by: offset)
     }
     var icon: String {
         switch self { case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }

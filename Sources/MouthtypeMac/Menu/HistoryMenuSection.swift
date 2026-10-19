@@ -19,10 +19,7 @@ final class HistoryMenuSection: NSObject, MenuSection {
 
     init(store: TranscriptStore?, now: @escaping @MainActor () -> Date = { Date() },
          onError: @escaping @MainActor (String?) -> Void = { _ in },
-         copy: @escaping @MainActor (String) -> Void = { text in
-             NSPasteboard.general.clearContents()
-             NSPasteboard.general.setString(text, forType: .string)
-         }) {
+         copy: @escaping @MainActor (String) -> Void = { SystemClipboard().write($0) }) {
         self.store = store
         self.now = now
         self.onError = onError
