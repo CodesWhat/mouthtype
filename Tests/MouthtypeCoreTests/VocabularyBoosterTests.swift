@@ -19,6 +19,21 @@ private struct FakeRescorer: VocabularyRescoring {
     }
 }
 
+/// Blocks until `released` is bumped, and does not notice cancellation, like FluidAudio's synchronous scoring.
+private struct BlockingRescorer: VocabularyRescoring {
+    let invocations: Counter
+    let released: Counter
+    func rescore(text: String, tokenTimings: [TokenTiming], samples: [Float]) async -> VocabularyRescore? {
+        _ = invocations.next()
+        while released.count == 0 {
+            await withCheckedContinuation { continuation in
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.005) { continuation.resume() }
+            }
+        }
+        return VocabularyRescore(text: "hi Maya", wasModified: true, appliedTerms: ["Maya"])
+    }
+}
+
 private struct Boom: Error, LocalizedError { var errorDescription: String? { "no network" } }
 
 private let timings = [TokenTiming(token: "\u{2581}hi", tokenId: 1, startTime: 0, endTime: 0.2, confidence: 0.9)]
@@ -110,6 +125,26 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(await b.isReady)
     }
 
+    @Test func timedOutRescoringIsNotStackedUntilItFinishes() async {
+        let invocations = Counter()
+        let released = Counter()
+        let rescorer = BlockingRescorer(invocations: invocations, released: released)
+        let b = VocabularyBooster(timeout: .milliseconds(50), prepare: { _, _ in rescorer }, report: { _ in })
+        await b.setBias(maya)
+        await b.waitUntilSettled()
+        #expect(await b.boost(text: "hi Maia", tokenTimings: timings, samples: samples) == nil)
+        #expect(invocations.count == 1)
+        #expect(await b.boost(text: "hi Maia", tokenTimings: timings, samples: samples) == nil)
+        #expect(invocations.count == 1)
+        _ = released.next()
+        // The abandoned work clears the marker once it actually returns.
+        for _ in 0..<200 where invocations.count == 1 {
+            if await b.boost(text: "hi Maia", tokenTimings: timings, samples: samples) != nil { break }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(invocations.count == 2)
+    }
+
     @Test func rescoringPastTheLimitKeepsTheUnboostedText() async {
         let b = booster(delay: .seconds(5), timeout: .milliseconds(50))
         await b.setBias(maya)
@@ -183,7 +218,33 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(VocabularyBooster.restoringPunctuation(original: "Hello there.", boosted: "Hello there.") == "Hello there.")
     }
 
+    @Test func adjacentReplacementsKeepTheirOwnPunctuation() {
+        #expect(VocabularyBooster.restoringPunctuation(original: "Meet Jon, Sara.", boosted: "Meet John Sarah.") == "Meet John, Sarah.")
+        #expect(VocabularyBooster.restoringPunctuation(original: "Meet Jon, Sara.", boosted: "Meet John Sarah") == "Meet John, Sarah.")
+        #expect(VocabularyBooster.restoringPunctuation(original: "Jon. Sara called.", boosted: "John Sarah called.") == "John. Sarah called.")
+    }
+
     @Test func noTimingsInMeansNoneOut() {
         #expect(VocabularyBooster.realign([], to: "hi").isEmpty)
+    }
+}
+
+@Suite struct ModelStoreTests {
+    @Test func aLoadFinishingAfterReleaseIsNotCached() async throws {
+        let gate = Counter()
+        let loads = Counter()
+        let store = ModelStore<Int>(loader: { _ in
+            let n = loads.next()
+            while gate.count == 0 { try await Task.sleep(for: .milliseconds(5)) }
+            return n
+        })
+        let inFlight = Task { try await store.load(report: { _ in }) }
+        while loads.count == 0 { try await Task.sleep(for: .milliseconds(5)) }
+        await store.release()
+        _ = gate.next()
+        #expect(try await inFlight.value == 1)
+        #expect(await store.isLoaded == false)
+        #expect(try await store.load(report: { _ in }) == 2)
+        #expect(await store.isLoaded)
     }
 }

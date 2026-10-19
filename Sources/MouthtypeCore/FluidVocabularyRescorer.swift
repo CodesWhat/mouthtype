@@ -70,18 +70,41 @@ struct FluidVocabularyRescorer: VocabularyRescoring {
     }
 }
 
-/// Holds the loaded CTC model so a vocabulary change rebuilds only the session, not the 100 MB model.
-actor CtcModelStore {
-    private var models: CtcModels?
+/// Holds a loaded model so a vocabulary change rebuilds only the session, not the 100 MB model.
+actor ModelStore<Model: Sendable> {
+    private let loader: @Sendable (@Sendable (VocabularyBoostStatus) -> Void) async throws -> Model
+    private var models: Model?
+    /// Bumped by `release()`, so a load that was in flight across one doesn't leave the model resident.
+    private var releases = 0
 
-    func load(report: @Sendable (VocabularyBoostStatus) -> Void) async throws -> CtcModels {
+    init(loader: @escaping @Sendable (@Sendable (VocabularyBoostStatus) -> Void) async throws -> Model) {
+        self.loader = loader
+    }
+
+    func load(report: @escaping @Sendable (VocabularyBoostStatus) -> Void) async throws -> Model {
         if let models { return models }
-        let directory = CtcModels.defaultCacheDirectory(for: .ctc110m)
-        report(CtcModels.modelsExist(at: directory) ? .preparing : .downloading(fraction: nil))
-        let loaded = try await CtcModels.downloadAndLoad(variant: .ctc110m)
-        models = loaded
+        let generation = releases
+        let loaded = try await loader(report)
+        if generation == releases, !Task.isCancelled { models = loaded }
         return loaded
     }
 
-    func release() { models = nil }
+    func release() {
+        releases += 1
+        models = nil
+    }
+
+    var isLoaded: Bool { models != nil }
+}
+
+typealias CtcModelStore = ModelStore<CtcModels>
+
+extension ModelStore where Model == CtcModels {
+    init() {
+        self.init(loader: { report in
+            let directory = CtcModels.defaultCacheDirectory(for: .ctc110m)
+            report(CtcModels.modelsExist(at: directory) ? .preparing : .downloading(fraction: nil))
+            return try await CtcModels.downloadAndLoad(variant: .ctc110m)
+        })
+    }
 }

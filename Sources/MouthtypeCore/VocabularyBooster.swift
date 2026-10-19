@@ -92,6 +92,9 @@ actor VocabularyBooster {
     private var building: Task<Void, Never>?
     private var failedAt: ContinuousClock.Instant?
     private var generation = 0
+    /// True while a rescoring call is still running, including one its caller already gave up on. FluidAudio's
+    /// scoring is synchronous and cancelling the task does not stop it, so a new take must not stack another on top.
+    private var rescoring = false
     /// How many sessions were built, for tests and the log.
     private(set) var sessionsBuilt = 0
 
@@ -141,7 +144,16 @@ actor VocabularyBooster {
     /// The rescored text, or nil to keep the unboosted one: not ready, nothing changed, timed out, or the rescorer had nothing.
     func boost(text: String, tokenTimings: [TokenTiming], samples: [Float]) async -> BoostedText? {
         guard let session, !tokenTimings.isEmpty, !samples.isEmpty else { return nil }
-        let outcome = await Self.withTimeout(timeout) { await session.rescore(text: text, tokenTimings: tokenTimings, samples: samples) }
+        guard !rescoring else {
+            Self.log.warning("an earlier vocabulary rescoring is still running; using the plain transcript")
+            return nil
+        }
+        rescoring = true
+        let outcome = await Self.withTimeout(timeout) { [weak self] in
+            let result = await session.rescore(text: text, tokenTimings: tokenTimings, samples: samples)
+            await self?.rescoringFinished()
+            return result
+        }
         guard let outcome else {
             Self.log.warning("vocabulary rescoring passed \(self.timeout.description, privacy: .public); using the plain transcript")
             return nil
@@ -153,6 +165,8 @@ actor VocabularyBooster {
         guard boosted != text else { return nil }
         return BoostedText(text: boosted, appliedTerms: rescore.appliedTerms)
     }
+
+    private func rescoringFinished() { rescoring = false }
 
     private func start(_ bias: VocabularyBias, generation: Int) {
         report(.preparing)
@@ -258,14 +272,27 @@ extension VocabularyBooster {
         let old = original.split(whereSeparator: \.isWhitespace).map(String.init)
         var new = boosted.split(whereSeparator: \.isWhitespace).map(String.init)
         for case let .changed(oldRange, newRange) in align(old, new) where !oldRange.isEmpty && !newRange.isEmpty {
-            let tail = old[oldRange.upperBound - 1].reversed().prefix { !$0.isLetter && !$0.isNumber }
-            let last = newRange.upperBound - 1
-            if !tail.isEmpty, let end = new[last].last, end.isLetter || end.isNumber {
-                new[last] += String(tail.reversed())
+            // Adjacent replacements share one changed span. When it replaces word for word, each pair keeps its own punctuation.
+            func restoreTail(_ o: Int, _ n: Int) {
+                let tail = old[o].reversed().prefix { !$0.isLetter && !$0.isNumber }
+                if !tail.isEmpty, let end = new[n].last, end.isLetter || end.isNumber {
+                    new[n] += String(tail.reversed())
+                }
             }
-            let head = old[oldRange.lowerBound].prefix { !$0.isLetter && !$0.isNumber }
-            if !head.isEmpty, let start = new[newRange.lowerBound].first, start.isLetter || start.isNumber {
-                new[newRange.lowerBound] = String(head) + new[newRange.lowerBound]
+            func restoreHead(_ o: Int, _ n: Int) {
+                let head = old[o].prefix { !$0.isLetter && !$0.isNumber }
+                if !head.isEmpty, let start = new[n].first, start.isLetter || start.isNumber {
+                    new[n] = String(head) + new[n]
+                }
+            }
+            if oldRange.count == newRange.count {
+                for (o, n) in zip(oldRange, newRange) {
+                    restoreTail(o, n)
+                    restoreHead(o, n)
+                }
+            } else {
+                restoreTail(oldRange.upperBound - 1, newRange.upperBound - 1)
+                restoreHead(oldRange.lowerBound, newRange.lowerBound)
             }
         }
         return new.joined(separator: " ")
