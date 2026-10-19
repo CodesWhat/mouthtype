@@ -30,7 +30,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             info: Bundle.main.infoDictionary ?? [:]) ? SparkleDriver() : nil,
         activity: { [weak self] in .resolve(phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true,
             transcribingFile: self?.fileTranscriptionModel.isBusy == true, editingSelection: self?.selectionCleanupModel.hasPreview == true) })
-    private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), busy: { [weak self] in
+    private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), transformer: cleanerHost, busy: { [weak self] in
         guard let self else { return true }
         return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
     }, changed: { [weak self] in self?.appUpdater.refreshActivity() })
@@ -202,7 +202,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
-        menuBar.add(section: SelectionCleanupMenuSection { [weak self] in self?.selectionCleanupWindow.present() }, startsGroup: false)
+        menuBar.add(section: SelectionCleanupMenuSection(
+            open: { [weak self] in self?.selectionCleanupWindow.present() },
+            openTransform: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
+            unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.fileTranscriptionWindow.present() }, startsGroup: false)
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost] in

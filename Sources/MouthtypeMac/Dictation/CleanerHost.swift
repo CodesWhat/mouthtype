@@ -225,21 +225,33 @@ final class CleanerHost: CleanupModelManaging {
         let clock = ContinuousClock()
         let deadline = clock.now + limit
         if state == .unloaded { ensureLoaded() }
-        while true {
+        while !Task.isCancelled {
             switch state {
             case .ready:
                 return SmartCleanerInfo(id: model.id, revision: model.revision)
             case .loading:
                 guard clock.now < deadline else { return nil }
-                try? await Task.sleep(for: .milliseconds(20))
+                do { try await Task.sleep(for: .milliseconds(20)) } catch { return nil }
             default:
                 return nil
             }
         }
+        return nil
     }
 
     nonisolated func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
         await smart.run(request)
+    }
+
+    /// Runs one explicit selected-text transform once the model is ready.
+    func transform(_ kind: TextTransform, text: String, waitingUpTo limit: Duration) async throws -> String {
+        let ready = await readiness(waitingUpTo: limit)
+        try Task.checkCancellation()
+        guard ready != nil else {
+            throw CleanerError.unavailable(reason: "\(modelName) isn't loaded yet. Try again in a moment.")
+        }
+        // Through SmartCleanup so unload, dictation cleanup and a re-requested transform all wait for this generation.
+        return try await smart.transform(kind, text: text)
     }
 
     nonisolated func recordingStarted() {
