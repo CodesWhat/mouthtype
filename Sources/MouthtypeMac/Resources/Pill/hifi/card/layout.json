@@ -69,8 +69,8 @@
   "close": {
    "right": 6,
    "y": 1,
-   "hitW": 16,
-   "hitH": 13
+   "hitW": 24,
+   "hitH": 24
   },
   "vfd": {
    "gapTop": 3,

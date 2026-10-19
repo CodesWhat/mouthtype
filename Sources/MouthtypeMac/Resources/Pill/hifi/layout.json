@@ -451,7 +451,7 @@
    "cellWidth": 5,
    "cellHeight": 7,
    "gap": 1,
-   "chars": " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:;-+=/%!?'\"()[]<>*_#@&^~|$█",
+   "chars": " ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:;-+=/%!?'\"()[]<>*_#@&^~|$█→",
    "advances": {}
   },
   "f3": {
