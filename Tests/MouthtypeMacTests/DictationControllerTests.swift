@@ -641,6 +641,55 @@ private struct Rig {
         #expect(off.store.insertion?.cleanup?.outcome == "skipped")
     }
 
+    @Test func appRuleLevelOffSkipsCleanupForThatTakeOnly() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: nil, level: .off)
+        let configured = styles
+        let rig = Rig(appStyles: { configured })
+        rig.engine.result.text = messy
+        await rig.dictate()
+        #expect(rig.inserter.delivered == [messy])
+        #expect(rig.store.insertion?.cleanup?.level == "off" && rig.store.insertion?.cleanup?.outcome == "skipped")
+        let plain = Rig()
+        plain.engine.result.text = messy
+        await plain.dictate()
+        #expect(plain.inserter.delivered == [cleaned])
+    }
+
+    @Test func appRuleLevelTurnsCleanupOnWhenTheGlobalLevelIsOff() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: nil, level: .basic)
+        let configured = styles
+        var settings = CleanupSettings()
+        settings.level = .off
+        let rig = Rig(settings: settings, appStyles: { configured })
+        rig.engine.result.text = messy
+        await rig.dictate()
+        #expect(rig.inserter.delivered == [cleaned])
+        #expect(rig.store.insertion?.cleanup?.level == "basic")
+    }
+
+    @Test func websiteRuleLevelBeatsTheAppRuleLevel() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: nil, level: .basic)
+        try styles.setWebsite(domain: "slack.com", style: nil, level: .off)
+        let configured = styles
+        let rig = Rig(appStyles: { configured })
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "work.slack.com"
+        rig.engine.result.text = messy
+        await rig.dictate()
+        #expect(rig.inserter.delivered == [messy])
+        #expect(rig.store.insertion?.cleanup?.outcome == "skipped")
+        let app = Rig(appStyles: { configured })
+        app.inserter.focus.bundleID = "com.google.Chrome"
+        app.inserter.website = "example.org"
+        app.engine.result.text = messy
+        await app.dictate()
+        #expect(app.inserter.delivered == [cleaned])
+        #expect(app.store.insertion?.cleanup?.level == "basic")
+    }
+
     @Test func theCleanedTextIsDeliveredAndStored() async throws {
         let rig = Rig()
         rig.engine.result.text = messy

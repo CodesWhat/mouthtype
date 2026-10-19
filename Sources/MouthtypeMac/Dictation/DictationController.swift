@@ -265,11 +265,12 @@ final class DictationController {
         var startFocus = inserter.snapshotApplication()
         let appStyles = pipeline.appStyles()
         let cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, fallback: pipeline.settings().style)
+        let cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID)
         // The last release's capture stop finishes first; the audio unit takes one recording at a time.
         _ = try? await stopping?.value
         var current = DictationSession(
             id: UUID().uuidString, startedAt: clock.date(atNanos: nanos), keyDownAt: nanos, startFocus: startFocus,
-            cleanupStyle: cleanupStyle
+            cleanupStyle: cleanupStyle, cleanupLevel: cleanupLevel
         )
         phase = .recording
         captureStarting = true
@@ -293,8 +294,10 @@ final class DictationController {
             pill.showRecording()
             pipeline.smart?.recordingStarted()
             if !appStyles.websites.isEmpty {
+                let websiteHost = inserter.websiteHost(for: startFocus)
                 current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID,
-                    websiteHost: inserter.websiteHost(for: startFocus), fallback: cleanupStyle)
+                    websiteHost: websiteHost, fallback: cleanupStyle)
+                current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
             }
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
@@ -526,7 +529,7 @@ final class DictationController {
         }
 
         guard await continueProcessing(session) else { return }
-        let inputs = pipeline.cleanupInputs(style: session.cleanupStyle)
+        let inputs = pipeline.cleanupInputs(style: session.cleanupStyle, level: session.cleanupLevel)
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)

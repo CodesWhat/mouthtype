@@ -31,7 +31,7 @@ Existing alpha.1–3 installations need one manual download to get the built-in 
 | --- | --- |
 | Hold or hands-free dictation | Hold Fn, double-tap Fn, or use Fn+Space. Recording behavior and shortcuts are configurable. |
 | Local cleanup | Basic formatting works without a cleanup model. Fast (the default level) and Thorough use optional local models and preserve wording. Until the selected model finishes downloading, dictations use Basic. |
-| Writing rules | Choose Formal, Casual or Very casual, with per-app and website tone rules. |
+| Writing rules | Choose Formal, Casual or Very casual, with per-app and website rules for tone and cleanup level. |
 | Saved spellings and phrases | Keep exact local spelling rules and reusable text, including multiline phrases. |
 | Microphone selection | Follow System Default, choose a named input, or opt into an ordered priority list. |
 | Recovery | Copy or retry saved text after a failed paste. Interrupted audio remains recoverable. |

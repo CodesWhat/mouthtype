@@ -8,6 +8,8 @@ struct DictationSession: Sendable {
     var keyDownAt: UInt64 // host nanoseconds (`HostClock`)
     var startFocus: FocusSnapshot?
     var cleanupStyle: StyleOptions?
+    /// A rule's cleanup level; nil uses the global one.
+    var cleanupLevel: CleanupLevel?
     /// False when the store is missing or `begin` failed; later writes are then skipped.
     var rowOpen = false
 }
@@ -191,7 +193,7 @@ struct DictationPipeline: Sendable {
                 transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset
             ))
         }
-        let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: settings().enabled)
+        let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)
         guard !guarded.isEmpty else {
             if !guarded.edits.isEmpty { await write(session, "appendEdits") { try await $0.appendEdits(session.id, guarded.edits) } }
             await finish(session, .empty)
@@ -208,9 +210,10 @@ struct DictationPipeline: Sendable {
         return styles.resolve(bundleID: bundleID, websiteHost: websiteHost, fallback: settings().style)
     }
 
-    func cleanupInputs(style: StyleOptions? = nil) -> CleanupInputs {
+    func cleanupInputs(style: StyleOptions? = nil, level: CleanupLevel? = nil) -> CleanupInputs {
         var chosen = settings()
         if let style { chosen.style = style }
+        if let level { chosen.level = level }
         return CleanupInputs(settings: chosen, dictionary: vocabulary.dictionary(), snippets: vocabulary.snippets(), now: clock.now())
     }
 

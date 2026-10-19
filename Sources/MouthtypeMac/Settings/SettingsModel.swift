@@ -17,7 +17,8 @@ import UniformTypeIdentifiers
     var previewWallpaper = PreviewWallpaper.desktop
     var previewStatus: PreviewStatus?
     var websiteDomain = ""
-    var websiteTone = StylePreset.formal
+    var websiteTone: StylePreset? = .formal
+    var websiteLevel: CleanupLevel?
     private(set) var cleanup: CleanupSettings
     private(set) var livePreview = false
     private(set) var audioRetention = AudioRetentionPolicy()
@@ -125,12 +126,38 @@ import UniformTypeIdentifiers
         } catch { appStylesError = error.localizedDescription }
     }
 
-    func setAppStyle(bundleID: String, appName: String, tone: StylePreset) {
-        updateAppStyles { try $0.set(bundleID: bundleID, appName: appName, style: tone.options) }
+    /// Setting the tone keeps the rule's cleanup level; nil is "Use default" and drops the rule once neither is set.
+    func setAppStyle(bundleID: String, appName: String, tone: StylePreset?) {
+        updateAppStyles {
+            let level = $0.entries.first { $0.bundleID == bundleID }?.level
+            try $0.set(bundleID: bundleID, appName: appName, style: tone?.options, level: level)
+        }
     }
 
-    func setWebsiteStyle(domain: String, tone: StylePreset) {
-        updateAppStyles { try $0.setWebsite(domain: domain, style: tone.options) }
+    func setAppCleanupLevel(bundleID: String, appName: String, level: CleanupLevel?) {
+        updateAppStyles {
+            let style = $0.entries.first { $0.bundleID == bundleID }?.style
+            try $0.set(bundleID: bundleID, appName: appName, style: style, level: level)
+        }
+    }
+
+    func setWebsiteStyle(domain: String, tone: StylePreset?) {
+        updateAppStyles {
+            let level = $0.websiteRule(domain: domain)?.level
+            try $0.setWebsite(domain: domain, style: tone?.options, level: level)
+        }
+    }
+
+    /// The add form sets tone and level together, replacing any rule already on that domain.
+    func addWebsiteRule(domain: String, tone: StylePreset?, level: CleanupLevel?) {
+        updateAppStyles { try $0.setWebsite(domain: domain, style: tone?.options, level: level) }
+    }
+
+    func setWebsiteCleanupLevel(domain: String, level: CleanupLevel?) {
+        updateAppStyles {
+            let style = $0.websiteRule(domain: domain)?.style
+            try $0.setWebsite(domain: domain, style: style, level: level)
+        }
     }
     func removeWebsiteStyle(domain: String) { updateAppStyles { $0.removeWebsite(domain: domain) } }
 

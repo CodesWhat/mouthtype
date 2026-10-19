@@ -333,4 +333,51 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         let cleaned = await clean(pipeline)
         #expect(cleaned.cleanup.level == "medium" && cleaned.cleanup.outcome == "ok")
     }
+
+    private func ruleInputs(_ pipeline: DictationPipeline, bundleID: String, level: CleanupLevel?) throws -> CleanupInputs {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: bundleID, appName: "App", style: nil, level: level)
+        let configured = styles
+        var pipeline = pipeline
+        pipeline.appStyles = { configured }
+        return pipeline.cleanupInputs(level: pipeline.appStyles().resolveLevel(bundleID: bundleID))
+    }
+
+    @Test func aRuleSetToOffSkipsTheModelWhileTheGlobalLevelStaysOn() async throws {
+        let cleaner = ScriptedCleaner(returning: "x")
+        let (pipeline, _) = pipeline(cleaner, level: .light)
+        let inputs = try ruleInputs(pipeline, bundleID: "com.apple.Terminal", level: .off)
+        let transcribed = TranscribedDictation(text: raw, rawText: raw, asrDoneMs: 0, words: [])
+        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: nil, clipboard: nil)
+        #expect(cleaner.calls == 0 && cleaned.text == raw)
+        #expect(cleaned.cleanup.level == "off" && cleaned.cleanup.outcome == "skipped")
+        #expect(pipeline.cleanupInputs().settings.level == .light)
+    }
+
+    @Test func aRuleCanTurnTheModelOnWhileTheGlobalLevelIsOff() async throws {
+        let cleaner = ScriptedCleaner(returning: "Let's grab coffee at 2.")
+        let (pipeline, _) = pipeline(cleaner, level: .off)
+        let inputs = try ruleInputs(pipeline, bundleID: "com.apple.Notes", level: .medium)
+        let transcribed = TranscribedDictation(text: raw, rawText: raw, asrDoneMs: 0, words: [])
+        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: nil, clipboard: nil)
+        #expect(cleaner.calls == 1 && cleaned.cleanup.level == "medium" && cleaned.cleanup.outcome == "ok")
+    }
+
+    @Test func aRuleLevelWhoseModelIsMissingFallsBackToBasicLikeTheGlobalSetting() async throws {
+        let cleaner = ScriptedCleaner(returning: "x")
+        let (pipeline, _) = pipeline(cleaner, level: .basic, ready: false)
+        let inputs = try ruleInputs(pipeline, bundleID: "com.apple.Notes", level: .light)
+        let transcribed = TranscribedDictation(text: raw, rawText: raw, asrDoneMs: 0, words: [])
+        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: nil, clipboard: nil)
+        #expect(cleaner.calls == 0 && cleaned.text == det)
+        #expect(cleaned.cleanup.level == "basic" && cleaned.cleanup.cleanerID == "deterministic" && cleaned.cleanup.outcome == "ok")
+    }
+
+    @Test func noRuleLevelKeepsTheGlobalLevel() throws {
+        let (pipeline, _) = pipeline(ScriptedCleaner(returning: "x"), level: .medium)
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: StylePreset.casual.options)
+        #expect(styles.resolveLevel(bundleID: "com.apple.Notes") == nil)
+        #expect(pipeline.cleanupInputs(level: styles.resolveLevel(bundleID: "com.apple.Notes")).settings.level == .medium)
+    }
 }

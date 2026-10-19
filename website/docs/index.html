@@ -247,12 +247,15 @@
               </p>
               <p>
                 Settings → General contains Level; Writing contains Tone and
-                per-app and website rules. Rules start empty. A matching website
-                domain includes subdomains; the most specific domain wins before
-                app/default tone. Safari, Chrome, Edge and Brave are eligible when
+                per-app and website rules. Each rule can set a tone, a cleanup
+                level or both, and a rule can turn cleanup on for one app or
+                site even when the default is Off. Rules start empty. A matching
+                website domain includes subdomains; the most specific domain
+                wins before the app rule and the default. Safari, Chrome, Edge and Brave are eligible when
                 the focused window exposes an HTTP/HTTPS document URL through
                 Accessibility. Missing URL support falls back to app/default.
-                URLs are not retained; the chosen tone stays with the take.
+                URLs are not retained; the chosen tone and cleanup level stay
+                with the take.
               </p>
               <p>
                 <strong>Clean Selected Text…</strong> opens an editable Basic

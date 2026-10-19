@@ -14,7 +14,7 @@ For a larger pill in any style, choose **Settings → Appearance → Pill size �
 
 Install Xcode with Swift 6.2, then run `bash scripts/run-app.sh`. The script builds and opens a signed app bundle. A Developer ID identity keeps permission grants stable between builds; without one, builds use ad-hoc signing.
 
-The app includes a native **Settings…** window with General, Writing, Appearance and Diagnostics panes, including per-app tone rules. See [settings](SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and wait for dictation, recovery and file transcription to finish.
+The app includes a native **Settings…** window with General, Writing, Appearance and Diagnostics panes, including per-app tone and cleanup rules. See [settings](SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and wait for dictation, recovery and file transcription to finish.
 
 **Settings → General → Recording behavior** offers **Hold to talk** (the default) or **Press to toggle**. Toggle starts recording with one press and stops with the next; releasing the shortcut keeps recording. This preserves your chosen key or combination. Escape cancels, except when Escape itself is your dictation key; use the pill or menu to cancel then.
 
