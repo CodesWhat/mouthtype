@@ -1140,6 +1140,29 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.log.all.filter { $0 == "card.dismiss" }.count == dismissals)
     }
 
+    @Test func undoWorksWhileAnEarlierDictationIsStillProcessing() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        rig.engine.texts = ["First one.", "Second one."]
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.pressed(at: keyUp + 1))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        #expect(rig.controller.phase == .processing)
+
+        let undo = Task { await rig.controller.undoCancel() }
+        await rig.settle()
+        // Queued behind the first take: nothing reopened or delivered yet, and the audio is no longer pending.
+        #expect(rig.inserter.delivered.isEmpty && rig.store.reopens == 0)
+
+        rig.engine.releaseHeld()
+        await undo.value
+        await rig.controller.waitForProcessing()
+        #expect(rig.store.reopens == 1)
+        #expect(rig.inserter.delivered == ["First one.", "Second one."])
+    }
+
     @Test func undoDeliversToACardWhenThePasteCannotLand() async {
         let rig = Rig()
         rig.inserter.result = DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: true, target: nil, finalText: "")
