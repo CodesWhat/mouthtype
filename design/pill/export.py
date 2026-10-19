@@ -189,7 +189,7 @@ def hexcolor(c):
 
 # ---- delivery card window: 9-slice sprites, 1x. Slices are (left, top, right, bottom) and tile, never smooth-scale.
 FRAME = (40, 40, (4, 13, 4, 4))     # brushed metal window with a title bar 13 px tall (grips, then a divider)
-CLOSE = (10, 10)                   # title-bar close button
+CLOSE = (9, 9)                     # title-bar close button
 BUTTON = (12, 12, (3, 3, 3, 3))    # bevelled grey cap; the label is drawn live
 VFD = (12, 12, (3, 3, 3, 3))       # sunk amber-display bezel; the glass is drawn live
 
@@ -220,7 +220,7 @@ def card_frame():
     return cv
 
 
-CLOSE_X = ["#...#", ".#.#.", "..#..", ".#.#.", "#...#"]
+CLOSE_X = ["#.#", ".#.", "#.#"]
 
 
 def card_close(pressed):
@@ -233,7 +233,7 @@ def card_close(pressed):
     else:
         cv.rect(1, 1, w - 2, h - 2, P["cap"])
         cv.bevel(1, 1, w - 2, h - 2, P["cap_hi"], P["cap_lo"])
-    ox = 3 if pressed else 2
+    ox = 4 if pressed else 3
     for j, row in enumerate(CLOSE_X):
         for i, ch in enumerate(row):
             if ch == "#":
@@ -300,7 +300,7 @@ def export_card():
         "metrics": {
             "titleBar": 13, "margin": 6,
             "plate": {"x": 6, "y": 2, "h": 9, "padX": 4, "ledGap": 3},
-            "close": {"right": 6, "y": 1, "hitW": 24, "hitH": 24},
+            "close": {"right": 6, "y": 2, "hitW": 24, "hitH": 24},
             "vfd": {"gapTop": 3, "ring": 3, "padX": 3, "padY": 3, "lineGap": 2,
                     "barGap": 3, "barH": 2, "barSegW": 3, "barSegGap": 1},
             "button": {"h": 17, "minW": 36, "padX": 8, "gap": 4, "gapTop": 5, "labelPressedDy": 1},

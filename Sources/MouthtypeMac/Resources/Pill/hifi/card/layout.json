@@ -14,13 +14,13 @@
   },
   "close_up": {
    "file": "close_up.png",
-   "w": 10,
-   "h": 10
+   "w": 9,
+   "h": 9
   },
   "close_down": {
    "file": "close_down.png",
-   "w": 10,
-   "h": 10
+   "w": 9,
+   "h": 9
   },
   "button_up": {
    "file": "button_up.png",
@@ -68,7 +68,7 @@
   },
   "close": {
    "right": 6,
-   "y": 1,
+   "y": 2,
    "hitW": 24,
    "hitH": 24
   },

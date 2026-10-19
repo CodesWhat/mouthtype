@@ -8,12 +8,12 @@ enum HiFiCardLayout {
     typealias Rect = PillLayout.Rect
 
     static let ledSize = 4
-    static let closeSize = 10
+    static let closeSize = 9
     /// The title-bar ear is a 5x7 glyph of the readout face, at the plate's far left, with the title right after it.
     /// The status LED sits after the title text.
     static let earWidth = 5
     static let earHeight = 7
-    static let earGap = 2
+    static let earGap = 4
     static let frameBottom = 4
 
     static var width: Int { Int(CardLayout.width) }
