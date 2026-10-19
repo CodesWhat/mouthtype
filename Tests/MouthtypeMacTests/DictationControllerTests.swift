@@ -737,6 +737,16 @@ private struct Rig {
         #expect(rig.store.insertion?.detText == messy)
     }
 
+    @Test func slowCleanupStillDropsTheGuardedTag() async throws {
+        let rig = Rig(textPipeline: TextPipeline(numberFormatter: SlowNumbers()))
+        rig.engine.result.text = "[MUSIC] ship it"
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["ship it"])
+        #expect(rig.store.insertion?.cleanup?.outcome == "timeout")
+        #expect(rig.store.transcription?.rawText == "[MUSIC] ship it")
+        #expect(rig.store.insertion?.detText == "ship it")
+    }
+
     @Test func aDictationOfOnlyFillersEndsAsEmpty() async {
         let rig = Rig()
         rig.engine.result.text = "um uh"
