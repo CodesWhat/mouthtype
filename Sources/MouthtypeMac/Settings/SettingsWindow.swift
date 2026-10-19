@@ -22,7 +22,7 @@ import MouthtypeCore
         self.reduceTransparency = reduceTransparency
         self.notifications = notifications
         refreshDiagnostics = actions.refreshDiagnostics
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+        let window = SettingsNSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Mouthtype Settings"
         window.titlebarAppearsTransparent = true
@@ -87,6 +87,18 @@ import MouthtypeCore
         startObservingTransparency()
         refreshDiagnostics()
         model.refresh()
+    }
+}
+
+/// The Settings window. The app runs without a main menu, so nothing supplies Cmd-W; handle it here.
+final class SettingsNSWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.type == .keyDown, flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
+            performClose(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }
 

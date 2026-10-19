@@ -9,6 +9,7 @@ struct SettingsView: View {
     var actions = SettingsActions()
     var solid = true
     @State var previewWidth: CGFloat = 0
+    @FocusState private var sidebarFocus: SettingsPage?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -26,6 +27,7 @@ struct SettingsView: View {
                     }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Color(nsColor: .windowBackgroundColor))
+                .focusSection()
         }
         .font(SettingsFont.sans(SettingsFont.body))
         .foregroundStyle(.primary)
@@ -60,11 +62,13 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(SettingsPage.allCases) { page in
                     sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.page = page }
+                        .focused($sidebarFocus, equals: page)
                 }
             }
-            .focusable().focusEffectDisabled()
-            .onKeyPress(.upArrow) { model.page = model.page.moved(by: -1); return .handled }
-            .onKeyPress(.downArrow) { model.page = model.page.moved(by: 1); return .handled }
+            // Arrows bubble up from whichever row has focus and move both the selection and the focus. The rows are the
+            // focus stops; the container isn't, so Tab walks on into the page instead of cycling inside the sidebar.
+            .onKeyPress(.upArrow) { moveSidebar(by: -1) }
+            .onKeyPress(.downArrow) { moveSidebar(by: 1) }
             Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
                 .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
             VStack(alignment: .leading, spacing: 2) {
@@ -76,8 +80,17 @@ struct SettingsView: View {
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 18)
         }.padding(.horizontal, 10).frame(maxHeight: .infinity, alignment: .topLeading)
+            .focusSection()
             .background { if solid { Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.04)) } }
             .overlay(alignment: .trailing) { if solid { Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1) } }
+    }
+
+    private func moveSidebar(by offset: Int) -> KeyPress.Result {
+        let target = model.page.moved(by: offset)
+        guard sidebarFocus != nil else { return .ignored }
+        model.page = target
+        sidebarFocus = target
+        return .handled
     }
 
     private func linkRow(_ link: SettingsSidebarLink) -> some View {
