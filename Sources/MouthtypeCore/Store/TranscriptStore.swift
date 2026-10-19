@@ -8,7 +8,7 @@ public enum TranscriptStoreError: Error, Equatable {
 }
 
 public final class TranscriptStore: Sendable {
-    private let pool: DatabasePool
+    let pool: DatabasePool
 
     public static func defaultURL() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
