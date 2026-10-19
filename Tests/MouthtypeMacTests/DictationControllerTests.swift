@@ -127,6 +127,16 @@ private final class FakeEngine: DictationEngine {
     }
 }
 
+private final class SpySmart: SmartCleaning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _levels: [CleanupLevel] = []
+    var levels: [CleanupLevel] { lock.withLock { _levels } }
+    func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? { nil }
+    func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult { fatalError("not used") }
+    func recordingStarted() {}
+    func recordingStarted(level: CleanupLevel) { lock.withLock { _levels.append(level) } }
+}
+
 private final class FakeStore: DictationStoring, @unchecked Sendable {
     let log: CallLog
     private let lock = NSLock()
@@ -490,7 +500,8 @@ private struct Rig {
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
         quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false,
-        audioRetention: AudioRetentionPolicy = AudioRetentionPolicy(), storeWriter: (any DictationStoring)? = nil
+        audioRetention: AudioRetentionPolicy = AudioRetentionPolicy(), storeWriter: (any DictationStoring)? = nil,
+        smart: (any SmartCleaning)? = nil
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -507,6 +518,7 @@ private struct Rig {
         )
         pipeline.settings = { settings }
         pipeline.appStyles = appStyles
+        pipeline.smart = smart
         pipeline.vocabulary = vocabulary
         pipeline.textPipeline = textPipeline
         pipeline.audioRetention = { audioRetention }
@@ -667,6 +679,39 @@ private struct Rig {
         await rig.dictate()
         #expect(rig.inserter.delivered == [cleaned])
         #expect(rig.store.insertion?.cleanup?.level == "basic")
+    }
+
+    @Test func recordingStartPrewarmsFromTheRulesLevelNotTheGlobalOne() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: nil, level: .medium)
+        let configured = styles
+        var settings = CleanupSettings()
+        settings.level = .off
+        let spy = SpySmart()
+        let rig = Rig(settings: settings, appStyles: { configured }, smart: spy)
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(spy.levels == [.medium])
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+
+        let plain = SpySmart()
+        let other = Rig(settings: settings, appStyles: { configured }, smart: plain)
+        other.inserter.focus = FocusSnapshot(pid: 9, bundleID: "org.example.other", appName: "Other")
+        await other.controller.handle(.pressed(at: keyDown))
+        #expect(plain.levels == [.off])
+    }
+
+    @Test func recordingStartPrewarmsAgainWhenTheWebsiteRuleNeedsAModel() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: nil, level: .basic)
+        try styles.setWebsite(domain: "slack.com", style: nil, level: .medium)
+        let configured = styles
+        let spy = SpySmart()
+        let rig = Rig(appStyles: { configured }, smart: spy)
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "work.slack.com"
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(spy.levels == [.basic, .medium])
     }
 
     @Test func websiteRuleLevelBeatsTheAppRuleLevel() async throws {

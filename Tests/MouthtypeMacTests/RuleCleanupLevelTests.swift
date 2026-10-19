@@ -122,4 +122,17 @@ import MouthtypeCore
         #expect(model.appStyles.websites.isEmpty)
         #expect(try AppCleanupStyles.load(d).websites.isEmpty)
     }
+
+    @Test func enablesCleanupWhenAnyRuleSetsALevelAboveOff() throws {
+        var styles = AppCleanupStyles()
+        #expect(!styles.enablesCleanup)
+        try styles.set(bundleID: chrome, appName: "Chrome", style: StylePreset.casual.options, level: nil)
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: nil, level: .off)
+        #expect(!styles.enablesCleanup)
+        try styles.setWebsite(domain: "slack.com", style: nil, level: .basic)
+        #expect(styles.enablesCleanup)
+        styles.removeWebsite(domain: "slack.com")
+        try styles.set(bundleID: chrome, appName: "Chrome", style: nil, level: .medium)
+        #expect(styles.enablesCleanup)
+    }
 }

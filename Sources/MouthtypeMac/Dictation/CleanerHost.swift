@@ -23,6 +23,8 @@ protocol SmartCleaning: Sendable {
     func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult
     /// A recording began: load the model now so the first cleanup doesn't wait for it.
     func recordingStarted()
+    /// The same, for a take whose rules resolve to `level` rather than the global one.
+    func recordingStarted(level: CleanupLevel)
     func runReady(_ request: SmartCleanupRequest, waitingUpTo limit: Duration) async -> ReadyCleanup?
 }
 
@@ -32,6 +34,8 @@ struct ReadyCleanup: Sendable {
 }
 
 extension SmartCleaning {
+    func recordingStarted(level: CleanupLevel) { recordingStarted() }
+
     func runReady(_ request: SmartCleanupRequest, waitingUpTo limit: Duration) async -> ReadyCleanup? {
         guard let model = await readiness(waitingUpTo: limit) else { return nil }
         return ReadyCleanup(model: model, result: await run(request))

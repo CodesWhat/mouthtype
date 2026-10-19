@@ -183,6 +183,11 @@ struct AppCleanupStyles: Equatable, Sendable {
             ?? entries.first { $0.bundleID == bundleID }?.style ?? fallback
     }
 
+    /// Whether any app or website rule sets a level above Off, so cleanup can run for it even when the global level is Off.
+    var enablesCleanup: Bool {
+        entries.contains { $0.level.map { $0 != .off } ?? false } || websites.contains { $0.level.map { $0 != .off } ?? false }
+    }
+
     /// Nil means no rule sets a level, so the global level stands.
     func resolveLevel(bundleID: String?, websiteHost: String? = nil) -> CleanupLevel? {
         websiteRule(websiteHost: websiteHost, bundleID: bundleID)?.level ?? entries.first { $0.bundleID == bundleID }?.level

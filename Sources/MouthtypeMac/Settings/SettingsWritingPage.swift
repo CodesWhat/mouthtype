@@ -11,7 +11,7 @@ extension SettingsView {
                 }.pickerStyle(.radioGroup).horizontalRadioGroupLayout().labelsHidden().fixedSize()
                     .accessibilityIdentifier("settings-default-tone")
             }
-        }.disabled(!model.cleanup.enabled)
+        }.disabled(!sharedControlsEnabled)
         appStyles
         websiteStyles
         SettingsGroup(eyebrow: "CLEANUP DETAILS") {
@@ -24,9 +24,9 @@ extension SettingsView {
             SettingsRow(title: "Format numbers") {
                 Toggle("Format numbers", isOn: Binding(get: { model.cleanup.numbers }, set: model.setNumbers)).labelsHidden().toggleStyle(.switch)
             }
-        }.disabled(!model.cleanup.enabled)
+        }.disabled(!sharedControlsEnabled)
         SettingsGroup(eyebrow: "ADVANCED WRITING",
-            footer: model.cleanup.enabled
+            footer: sharedControlsEnabled
                 ? "More formal doesn’t mean different words. Your saved spellings and phrases are available from the sidebar."
                 : "Cleanup is Off. Your dictation keeps its original wording and style; these options apply when cleanup is enabled.") {
             SettingsRow(title: "Learn from my corrections") {
@@ -34,11 +34,11 @@ extension SettingsView {
             }
             SettingsRow(title: "Lowercase sentence starts") {
                 Toggle("Lowercase sentence starts", isOn: Binding(get: { model.cleanup.style.capitalisation == .lowercase }, set: model.setLowercaseStarts))
-                    .labelsHidden().toggleStyle(.switch).disabled(!model.cleanup.enabled)
+                    .labelsHidden().toggleStyle(.switch).disabled(!sharedControlsEnabled)
             }
             SettingsRow(title: "Drop final full stop", detail: "These tone details may show Custom as your default tone.") {
                 Toggle("Drop final full stop", isOn: Binding(get: { model.cleanup.style.endingPunctuation == .dropFinalFullStop }, set: model.setDropFinalStop))
-                    .labelsHidden().toggleStyle(.switch).disabled(!model.cleanup.enabled)
+                    .labelsHidden().toggleStyle(.switch).disabled(!sharedControlsEnabled)
             }
             SettingsRow(title: "Dictionary file", detail: actions.diagnostics?.dictionaryError) {
                 Button("Edit dictionary file…", action: actions.editDictionary)
@@ -55,6 +55,10 @@ extension SettingsView {
             SettingsNote(text: "Applies to that terminal app’s windows. Mouthtype can’t identify the program running inside it.")
         }
     }
+
+    /// Fillers, spoken commands, numbers and tone still apply to a take a rule turns cleanup on for, so they stay
+    /// editable while the global level is Off.
+    private var sharedControlsEnabled: Bool { model.cleanup.enabled || model.appStyles.enablesCleanup }
 
     private var toneSummary: String {
         var parts: [String] = []

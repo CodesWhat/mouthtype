@@ -22,9 +22,11 @@ final class CleanupSelection: CleanupModelManaging {
     private let fast: CleanerHost
     private let thorough: CleanerHost
     private let demand: CleanupDemand
+    private let prewarmHold: Duration
 
     init(fast: any SmartModel, thorough: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-         budget: (@Sendable (Int) -> Duration)? = nil) {
+         budget: (@Sendable (Int) -> Duration)? = nil, prewarmHold: Duration = .seconds(120)) {
+        self.prewarmHold = prewarmHold
         let demand = CleanupDemand(level: level)
         self.demand = demand
         self.fast = CleanerHost(model: fast, level: { demand.wanted(.light) }, budget: budget)
@@ -47,6 +49,20 @@ final class CleanupSelection: CleanupModelManaging {
     func startDownload() { selected.startDownload() }
     func cancelDownload() { selected.cancelDownload() }
     nonisolated func recordingStarted() { Task { @MainActor in self.selected.recordingStarted() } }
+
+    /// A rule can ask for a model level while the global one is Off or Basic. Hold demand for that model while the
+    /// take is recorded and transcribed, or the host unloads it the moment its load finishes and it never settles.
+    nonisolated func recordingStarted(level: CleanupLevel) {
+        Task { @MainActor in
+            guard level.needsModel else { self.selected.recordingStarted(); return }
+            let light = level == .light
+            if light { self.demand.fastRequests += 1 } else { self.demand.thoroughRequests += 1 }
+            self.host(for: level).levelChanged()
+            try? await Task.sleep(for: self.prewarmHold)
+            if light { self.demand.fastRequests -= 1 } else { self.demand.thoroughRequests -= 1 }
+            self.levelChanged()
+        }
+    }
     func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? {
         await selected.readiness(waitingUpTo: limit)
     }

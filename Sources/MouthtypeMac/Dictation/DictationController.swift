@@ -292,12 +292,16 @@ final class DictationController {
             sounds.playStart()
             beginQuietAfterStartCue()
             pill.showRecording()
-            pipeline.smart?.recordingStarted()
+            let globalLevel = pipeline.settings().level
+            pipeline.smart?.recordingStarted(level: cleanupLevel ?? globalLevel)
             if !appStyles.websites.isEmpty {
                 let websiteHost = inserter.websiteHost(for: startFocus)
                 current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID,
                     websiteHost: websiteHost, fallback: cleanupStyle)
                 current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
+                if current.cleanupLevel != cleanupLevel, let level = current.cleanupLevel {
+                    pipeline.smart?.recordingStarted(level: level)
+                }
             }
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)

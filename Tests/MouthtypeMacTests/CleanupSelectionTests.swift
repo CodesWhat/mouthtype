@@ -55,6 +55,31 @@ import MouthtypeCore
         #expect(!fast.isLoaded)
     }
 
+    @Test func aRuleLevelPrewarmsTheModelAndHoldsItWhileTheGlobalLevelIsOff() async {
+        let thorough = FakeSmartModel(downloaded: true, id: "thorough")
+        thorough.loadDelay = .milliseconds(150)
+        let selection = CleanupSelection(
+            fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off }, prewarmHold: .seconds(60))
+        selection.start()
+        selection.recordingStarted(level: .medium)
+        for _ in 0..<600 where !thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        try? await Task.sleep(for: .milliseconds(200))
+        #expect(thorough.isLoaded)
+        #expect(thorough.unloads == 0)
+    }
+
+    @Test func thePrewarmHoldReleasesAfterItsWindow() async {
+        let thorough = FakeSmartModel(downloaded: true, id: "thorough")
+        let selection = CleanupSelection(
+            fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off }, prewarmHold: .milliseconds(100))
+        selection.start()
+        selection.recordingStarted(level: .medium)
+        for _ in 0..<600 where thorough.loads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<600 where thorough.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(thorough.unloads == 1)
+        #expect(!thorough.isLoaded)
+    }
+
     @Test func unavailableFastDoesNotDownloadOrUseThorough() async {
         let fast = FakeSmartModel(downloaded: false, id: "fast", name: "Fast model")
         let thorough = FakeSmartModel(downloaded: true, id: "thorough", name: "Thorough model")
