@@ -1,4 +1,4 @@
-# Mouthtype 0.1.0-rc.2
+# Mouthtype 0.1.0-rc.3
 
 Release candidate for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
 
@@ -12,6 +12,10 @@ Release candidate for Apple Silicon Macs running macOS 26 or later. This is an e
 6. Click a blank TextEdit document. Hold Fn, say a sentence, then release. Wait for text to appear. Dictate another sentence without clicking or typing between takes. Confirm one insertion per take and a space between them.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
+
+## What changed in rc.3
+
+RC.3 fixes what the rc.2 reviews found. The processing pill always shows while a take is being worked on, and a card's "Your text is safe" line comes back when it finishes. Long Classic messages scroll. The Hi-Fi card falls back to the Classic card for text its pixel font can't draw, and its close button is easier to hit. Glass no longer renders smoked on the first press after a Settings change. Existing users who never chose a pill size get Automatic, which draws at twice the Standard size on screens at least 2000 pt wide. Recognition, cleanup and delivery are unchanged.
 
 ## What changed in rc.2
 
