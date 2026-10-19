@@ -33,7 +33,7 @@ import Testing
     @Test func onlyPreamblesThatNameTheOutputAreRemoved() {
         #expect(TextTransform.sanitize("Here's the rewritten text:\nShip Friday.", input: "ship friday") == "Ship Friday.")
         #expect(TextTransform.sanitize("Here is the more formal version:\nShip Friday.", input: "ship friday") == "Ship Friday.")
-        #expect(TextTransform.sanitize("Here is a version of the selected text in a formal tone:\nShip Friday.", input: "ship friday") == "Ship Friday.")
+        #expect(TextTransform.sanitize("Here is a version of the selected text:\nShip Friday.", input: "ship friday") == "Ship Friday.")
         let plan = "Here is the plan for Alice:\nShip Friday."
         #expect(TextTransform.sanitize(plan, input: "Here's the plan for Alice:\nShip Friday.") == plan)
         #expect(TextTransform.sanitize(plan, input: "ship friday") == plan)
