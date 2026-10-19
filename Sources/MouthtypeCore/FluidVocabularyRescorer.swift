@@ -66,7 +66,10 @@ struct FluidVocabularyRescorer: VocabularyRescoring {
         var seen = Set<String>()
         let applied = output.replacements.filter(\.shouldReplace).compactMap(\.replacementWord)
             .filter { seen.insert($0.lowercased()).inserted }
-        return VocabularyRescore(text: output.text, wasModified: output.wasModified, appliedTerms: applied)
+        let replaced = output.replacements.filter(\.shouldReplace).compactMap { result in
+            result.replacementWord.map { VocabularyRescore.Replacement(heard: result.originalWord, term: $0) }
+        }
+        return VocabularyRescore(text: output.text, wasModified: output.wasModified, appliedTerms: applied, replacements: replaced)
     }
 }
 

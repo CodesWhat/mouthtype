@@ -47,14 +47,22 @@ public enum VocabularyBoostStatusCenter {
 
 /// What a rescoring pass decided. Text is only trusted when `wasModified`.
 struct VocabularyRescore: Sendable, Equatable {
+    /// One replacement the rescorer made: the words it heard and the saved spelling it put in their place.
+    struct Replacement: Sendable, Equatable {
+        var heard: String
+        var term: String
+    }
+
     var text: String
     var wasModified: Bool
     var appliedTerms: [String]
+    var replacements: [Replacement]
 
-    init(text: String, wasModified: Bool, appliedTerms: [String]) {
+    init(text: String, wasModified: Bool, appliedTerms: [String], replacements: [Replacement] = []) {
         self.text = text
         self.wasModified = wasModified
         self.appliedTerms = appliedTerms
+        self.replacements = replacements
     }
 }
 
@@ -161,7 +169,8 @@ actor VocabularyBooster {
         guard let rescore = outcome, rescore.wasModified else { return nil }
         let rebuilt = rescore.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !rebuilt.isEmpty else { return nil }
-        let boosted = Self.restoringPunctuation(original: text, boosted: rebuilt)
+        let known = Self.knownTerms(bias: bias, replacements: rescore.replacements)
+        let boosted = Self.restoringPunctuation(original: text, boosted: rebuilt, known: known)
         guard boosted != text else { return nil }
         return BoostedText(text: boosted, appliedTerms: rescore.appliedTerms)
     }
@@ -265,37 +274,149 @@ extension VocabularyBooster {
         return runs
     }
 
-    /// The rescorer rebuilds its text from word timings and can drop the punctuation attached to a word it replaced
-    /// ("next to fluid audio." came back as "FluidAudio"). Gives a replaced run back the punctuation its last word
-    /// ended with, and the opening punctuation its first word began with, when the new words carry none.
-    static func restoringPunctuation(original: String, boosted: String) -> String {
-        let old = original.split(whereSeparator: \.isWhitespace).map(String.init)
-        var new = boosted.split(whereSeparator: \.isWhitespace).map(String.init)
-        for case let .changed(oldRange, newRange) in align(old, new) where !oldRange.isEmpty && !newRange.isEmpty {
-            // Adjacent replacements share one changed span. When it replaces word for word, each pair keeps its own punctuation.
-            func restoreTail(_ o: Int, _ n: Int) {
-                let tail = old[o].reversed().prefix { !$0.isLetter && !$0.isNumber }
-                if !tail.isEmpty, let end = new[n].last, end.isLetter || end.isNumber {
-                    new[n] += String(tail.reversed())
+    /// A saved spelling and the spoken forms it replaces, as normalized word lists.
+    struct KnownTerm: Equatable {
+        var words: [String]
+        var spoken: [[String]]
+    }
+
+    /// Lowercased letters and digits only, so "Guard)," and "guard" compare equal.
+    static func normalizedWord(_ word: String) -> String {
+        String(word.lowercased().filter { $0.isLetter || $0.isNumber })
+    }
+
+    static func normalizedWords(_ text: String) -> [String] {
+        text.split(whereSeparator: \.isWhitespace).map { normalizedWord(String($0)) }.filter { !$0.isEmpty }
+    }
+
+    /// The vocabulary's spellings with their saved heard forms, plus what the rescorer actually replaced this take.
+    static func knownTerms(bias: VocabularyBias?, replacements: [VocabularyRescore.Replacement]) -> [KnownTerm] {
+        var order: [[String]] = []
+        var spoken: [[String]: [[String]]] = [:]
+        func add(_ term: String, heard: [String]) {
+            let words = normalizedWords(term)
+            guard !words.isEmpty else { return }
+            if spoken[words] == nil { order.append(words) }
+            for form in heard {
+                let formWords = normalizedWords(form)
+                if !formWords.isEmpty, !(spoken[words] ?? []).contains(formWords) { spoken[words, default: []].append(formWords) }
+            }
+            if spoken[words] == nil { spoken[words] = [] }
+        }
+        for entry in bias?.entries ?? [] { add(entry.text, heard: entry.aliases) }
+        for replacement in replacements { add(replacement.term, heard: [replacement.heard]) }
+        return order.map { KnownTerm(words: $0, spoken: spoken[$0] ?? []) }
+    }
+
+    private static func isWordChar(_ character: Character?) -> Bool {
+        character.map { $0.isLetter || $0.isNumber } ?? false
+    }
+
+    /// One piece of a changed span of rescored words: a saved term of one or more words, or a single other word.
+    private struct Segment {
+        var range: Range<Int>
+        var term: KnownTerm?
+    }
+
+    /// Cuts the rescored words of a changed span into saved terms (longest first) and single leftover words.
+    /// A term never spans a word that has punctuation after it, so a comma cannot end up inside a name.
+    private static func segment(_ words: [String], range: Range<Int>, known: [KnownTerm]) -> [Segment] {
+        let byLength = known.sorted { $0.words.count > $1.words.count }
+        var segments: [Segment] = []
+        var at = range.lowerBound
+        while at < range.upperBound {
+            let match = byLength.first { term in
+                let end = at + term.words.count
+                guard end <= range.upperBound else { return false }
+                return (0..<term.words.count).allSatisfy { k in
+                    normalizedWord(words[at + k]) == term.words[k]
+                        && (k == term.words.count - 1 || isWordChar(words[at + k].last))
                 }
             }
-            func restoreHead(_ o: Int, _ n: Int) {
-                let head = old[o].prefix { !$0.isLetter && !$0.isNumber }
-                if !head.isEmpty, let start = new[n].first, start.isLetter || start.isNumber {
-                    new[n] = String(head) + new[n]
-                }
+            let length = match?.words.count ?? 1
+            segments.append(Segment(range: at..<(at + length), term: match))
+            at += length
+        }
+        return segments
+    }
+
+    /// How many original words each segment replaced, or nil when that can't be settled. Terms are matched to the
+    /// original words through their spoken forms; with no spoken form to go on, a span that is one segment, or has
+    /// one original word per segment, is still unambiguous.
+    private static func partition(_ segments: [Segment], over old: [String]) -> [Int]? {
+        var found: [[Int]] = []
+        var current: [Int] = []
+        func walk(_ index: Int, _ position: Int) {
+            guard found.count < 2 else { return }
+            if index == segments.count {
+                if position == old.count { found.append(current) }
+                return
             }
-            if oldRange.count == newRange.count {
-                for (o, n) in zip(oldRange, newRange) {
-                    restoreTail(o, n)
-                    restoreHead(o, n)
+            let lengths: [Int]
+            if let term = segments[index].term {
+                lengths = Set(term.spoken.map(\.count)).sorted().filter { length in
+                    position + length <= old.count
+                        && term.spoken.contains { $0.count == length && Array(old[position..<(position + length)]) == $0 }
                 }
             } else {
-                restoreTail(oldRange.upperBound - 1, newRange.upperBound - 1)
-                restoreHead(oldRange.lowerBound, newRange.lowerBound)
+                lengths = [1]
+            }
+            for length in lengths where position + length <= old.count {
+                current.append(length)
+                walk(index + 1, position + length)
+                current.removeLast()
             }
         }
-        return new.joined(separator: " ")
+        walk(0, 0)
+        if found.count == 1 { return found[0] }
+        if !found.isEmpty { return nil }
+        if segments.count == 1 { return [old.count] }
+        if segments.count == old.count { return [Int](repeating: 1, count: segments.count) }
+        return nil
+    }
+
+    /// The rescorer rebuilds its text from word timings and can drop the punctuation attached to a word it replaced
+    /// ("next to fluid audio." came back as "FluidAudio"). Each changed span is cut into saved terms and the original
+    /// words are matched to them; a term takes the opening punctuation of its first original word and the closing
+    /// punctuation of its last, and punctuation on words inside it is dropped. A span that can't be matched
+    /// unambiguously keeps its original words, so punctuation never lands inside a name.
+    static func restoringPunctuation(original: String, boosted: String, known: [KnownTerm] = []) -> String {
+        let old = original.split(whereSeparator: \.isWhitespace).map(String.init)
+        let new = boosted.split(whereSeparator: \.isWhitespace).map(String.init)
+        let oldNormalized = old.map(normalizedWord)
+        var result: [String] = []
+        for run in align(old, new) {
+            switch run {
+            case let .same(_, n):
+                result.append(new[n])
+            case let .changed(oldRange, newRange):
+                guard !oldRange.isEmpty, !newRange.isEmpty else {
+                    result.append(contentsOf: newRange.map { new[$0] })
+                    continue
+                }
+                let segments = segment(new, range: newRange, known: known)
+                guard let counts = partition(segments, over: Array(oldNormalized[oldRange])) else {
+                    result.append(contentsOf: oldRange.map { old[$0] })
+                    continue
+                }
+                var position = oldRange.lowerBound
+                for (piece, count) in zip(segments, counts) {
+                    var words = piece.range.map { new[$0] }
+                    let first = old[position], last = old[position + count - 1]
+                    position += count
+                    let head = first.prefix { !$0.isLetter && !$0.isNumber }
+                    if !head.isEmpty, isWordChar(words[0].first) {
+                        words[0] = String(head) + words[0]
+                    }
+                    let tail = last.reversed().prefix { !$0.isLetter && !$0.isNumber }
+                    if !tail.isEmpty, isWordChar(words[words.count - 1].last) {
+                        words[words.count - 1] += String(tail.reversed())
+                    }
+                    result.append(contentsOf: words)
+                }
+            }
+        }
+        return result.joined(separator: " ")
     }
 
     /// Re-times `words` to `text` after a replacement. Words that survive keep their own times. A changed run

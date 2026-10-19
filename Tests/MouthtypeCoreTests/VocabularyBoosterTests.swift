@@ -224,6 +224,61 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(VocabularyBooster.restoringPunctuation(original: "Jon. Sara called.", boosted: "John Sarah called.") == "John. Sarah called.")
     }
 
+    private var multiWordVocabulary: [VocabularyBooster.KnownTerm] {
+        VocabularyBooster.knownTerms(
+            bias: VocabularyBias(entries: [
+                .init(text: "Sockguard", aliases: ["sock guard"]),
+                .init(text: "Open AI", aliases: ["openai"]),
+                .init(text: "FluidAudio", aliases: ["fluid audio"]),
+            ]),
+            replacements: []
+        )
+    }
+
+    @Test func commaBetweenTwoMultiWordTermsStaysOutsideThem() {
+        let out = VocabularyBooster.restoringPunctuation(
+            original: "Try sock guard, openai.", boosted: "Try Sockguard Open AI", known: multiWordVocabulary
+        )
+        #expect(out == "Try Sockguard, Open AI.")
+    }
+
+    @Test func commaBeforeAMultiWordOriginalIsKept() {
+        let out = VocabularyBooster.restoringPunctuation(
+            original: "Meet Jon, fluid audio.", boosted: "Meet John FluidAudio", known: multiWordVocabulary
+        )
+        #expect(out == "Meet John, FluidAudio.")
+    }
+
+    @Test func singleWordReplacementsStillWorkWithAVocabulary() {
+        let known = multiWordVocabulary
+        #expect(VocabularyBooster.restoringPunctuation(original: "Meet Jon, Sara.", boosted: "Meet John Sarah", known: known) == "Meet John, Sarah.")
+        #expect(VocabularyBooster.restoringPunctuation(original: "Jon. Sara called.", boosted: "John Sarah called.", known: known) == "John. Sarah called.")
+    }
+
+    @Test func manyOriginalWordsCollapsingToOneTermDropInnerPunctuation() {
+        #expect(VocabularyBooster.restoringPunctuation(original: "Hi sock, guard. Ok", boosted: "Hi Sockguard Ok") == "Hi Sockguard. Ok")
+        #expect(VocabularyBooster.restoringPunctuation(original: "Hi (fluid, audio), ok", boosted: "Hi FluidAudio ok", known: multiWordVocabulary) == "Hi (FluidAudio), ok")
+    }
+
+    @Test func rescorerReplacementsTeachTheMatching() {
+        let known = VocabularyBooster.knownTerms(bias: nil, replacements: [
+            .init(heard: "sock guard", term: "Sockguard"), .init(heard: "openai", term: "Open AI"),
+        ])
+        #expect(VocabularyBooster.restoringPunctuation(original: "Try sock guard, openai.", boosted: "Try Sockguard Open AI", known: known) == "Try Sockguard, Open AI.")
+    }
+
+    @Test func anAmbiguousSpanKeepsTheOriginalWords() {
+        let known = VocabularyBooster.knownTerms(
+            bias: VocabularyBias(entries: [
+                .init(text: "Xray", aliases: ["foo bar", "foo"]),
+                .init(text: "Yankee", aliases: ["baz", "bar baz"]),
+            ]),
+            replacements: []
+        )
+        let out = VocabularyBooster.restoringPunctuation(original: "See foo bar, baz.", boosted: "See Xray Yankee", known: known)
+        #expect(out == "See foo bar, baz.")
+    }
+
     @Test func noTimingsInMeansNoneOut() {
         #expect(VocabularyBooster.realign([], to: "hi").isEmpty)
     }
