@@ -59,6 +59,8 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     var downloadGate: DownloadGate?
     var cleanGate: DownloadGate?
     var unloadGate: DownloadGate?
+    var loadGate: DownloadGate?
+    private(set) var loadsStarted = 0
 
     init(downloaded: Bool, id: String = "fake-model", name: String = "Fake") {
         _downloaded = downloaded; self.id = id; displayName = name
@@ -84,7 +86,9 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     }
 
     func load() async throws {
+        lock.withLock { loadsStarted += 1 }
         try await Task.sleep(for: loadDelay)
+        await loadGate?.wait()
         if let loadError { throw loadError }
         lock.withLock {
             loads += 1
@@ -234,10 +238,13 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     }
 
     @Test func aLoadInProgressIsWaitedForUpToTheLimit() async {
-        let (host, _, _) = host(downloaded: true) { $0.loadDelay = .milliseconds(120) }
+        let gate = DownloadGate()
+        let (host, _, _) = host(downloaded: true) { $0.loadGate = gate }
         host.start()
         #expect(await host.readiness(waitingUpTo: .milliseconds(20)) == nil)
-        #expect(await host.readiness(waitingUpTo: .seconds(2)) != nil)
+        Task { try? await Task.sleep(for: .milliseconds(50)); await gate.release() }
+        // The limit is generous because it only bounds a hang; the release above is what ends the wait.
+        #expect(await host.readiness(waitingUpTo: .seconds(60)) != nil)
     }
 
     @Test func aFailedLoadIsPublishedAndRetriedOnTheNextLevelChange() async {
