@@ -146,13 +146,19 @@ final class AccessibilityFocusReader: FocusReading {
     /// The character before the insertion point, for `Spacing`. Reads the selected range, then the text just before
     /// it. Ranges count UTF-16 units, so two are read and the last character kept: one alone could be half an emoji.
     /// Falls back to the whole value for apps without `AXStringForRange`. Never call on a secure field.
+    /// The selected range, or nil when the element reports none or a negative one. Callers bound the element first.
+    static func selectedRange(_ ref: AXUIElement) -> NSRange? {
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+        var range = CFRange()
+        guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
+        return NSRange(location: range.location, length: range.length)
+    }
+
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor {
         let ref = bounded(element.ref)
-        var rangeValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
-              let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return .unknown }
-        var range = CFRange()
-        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range), range.location >= 0 else { return .unknown }
+        guard let range = Self.selectedRange(ref) else { return .unknown }
         // Terminals such as Ghostty report position 0 wherever the cursor is, so 0 is the start only in an empty field.
         if range.location == 0 { return characterCount(ref) == 0 ? .start : .unknown }
 
@@ -182,11 +188,7 @@ final class AccessibilityFocusReader: FocusReading {
     /// Never call on a secure field. A terminal that reports position 0 wherever the cursor is gives nil.
     func insertionContext(of element: FocusedElement) -> InsertionContext? {
         let ref = bounded(element.ref)
-        var rangeValue: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
-              let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() else { return nil }
-        var range = CFRange()
-        guard AXValueGetValue(rangeValue as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
+        guard let range = Self.selectedRange(ref) else { return nil }
         let count = characterCount(ref)
         if range.location == 0 {
             return count == 0 ? InsertionContext(before: "", after: "") : nil
@@ -204,16 +206,7 @@ final class AccessibilityFocusReader: FocusReading {
 
     func readField(of element: FocusedElement) -> FieldReading {
         let ref = bounded(element.ref)
-        var selection: NSRange?
-        var rangeValue: CFTypeRef?
-        if AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &rangeValue) == .success,
-           let rangeValue, CFGetTypeID(rangeValue) == AXValueGetTypeID() {
-            var range = CFRange()
-            if AXValueGetValue(rangeValue as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 {
-                selection = NSRange(location: range.location, length: range.length)
-            }
-        }
-        return FieldReading(value: stringValue(ref, kAXValueAttribute), length: characterCount(ref), selection: selection)
+        return FieldReading(value: stringValue(ref, kAXValueAttribute), length: characterCount(ref), selection: Self.selectedRange(ref))
     }
 
     /// The frontmost app, its focused element and whether that is secure: the few reads a correction watch repeats.

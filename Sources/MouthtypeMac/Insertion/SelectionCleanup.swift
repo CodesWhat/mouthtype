@@ -60,12 +60,7 @@ enum SelectionCleanupError: Error { case unavailable }
 
     private static func selectedRange(_ element: FocusedElement) -> NSRange? {
         AXUIElementSetMessagingTimeout(element.ref, AccessibilityFocusReader.messagingTimeout)
-        var value: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(element.ref, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
-        var range = CFRange()
-        guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
-        return NSRange(location: range.location, length: range.length)
+        return AccessibilityFocusReader.selectedRange(element.ref)
     }
 
     private static func selectedText(_ element: FocusedElement) -> String? {
