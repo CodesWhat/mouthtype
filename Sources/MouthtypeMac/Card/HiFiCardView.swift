@@ -52,10 +52,12 @@ final class HiFiButtonView: CardControlView {
     }
 }
 
-/// The title bar's pixel close button, in a hit area taller than the art so it is easy to land on.
+/// The title bar's pixel close button, in a hit area (at least 24 pt square) larger than the art so it is easy to land on.
 @MainActor
 final class HiFiCloseView: CardControlView {
     var assets: HiFiCardAssets?
+    /// Where the art sits in the hit area, in art pixels from its top-left.
+    var artOrigin = (x: 0, y: 0)
 
     override var isFlipped: Bool { false }
 
@@ -63,7 +65,7 @@ final class HiFiCloseView: CardControlView {
         guard let assets else { return nil }
         let m = assets.metrics
         guard let canvas = HiFiCanvas(width: m.close.hitW, height: m.close.hitH) else { return nil }
-        canvas.draw(isPressed ? assets.closeDown : assets.closeUp, x: (m.close.hitW - HiFiCardLayout.closeSize) / 2, y: m.close.y)
+        canvas.draw(isPressed ? assets.closeDown : assets.closeUp, x: artOrigin.x, y: artOrigin.y)
         return canvas.makeImage()
     }
 
@@ -155,6 +157,17 @@ final class HiFiCardView: NSView {
 
     // MARK: Render
 
+    /// Whether the pixel face can show all of `card`'s text as written. When it can't (other scripts, symbols), the
+    /// delivery draws on the Classic card instead, so the user's text is never turned into `?`.
+    static func canRender(_ card: DeliveryCard, assets: HiFiCardAssets) -> Bool {
+        let lines = card.header.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+        var texts = Array(lines.dropFirst())
+        if let transcript = card.transcript { texts.append(transcript) }
+        if let pair = card.pair { texts += [pair.heard, pair.corrected] }
+        return HiFiCardText.canDraw(lines.first ?? "", metrics: assets.font3.metrics)
+            && texts.allSatisfy { HiFiCardText.canDraw($0, metrics: assets.font5.metrics) }
+    }
+
     /// The labels a button can show, the current one first, then the others it may change to (for sizing).
     static func labels(for action: CardAction, in state: CardViewState, remaining: TimeInterval?) -> [String] {
         if state.copied && action == .copy { return ["Copied"] }
@@ -219,6 +232,7 @@ final class HiFiCardView: NSView {
         setFrameSize(size)
 
         close.k = k
+        close.artOrigin = (layout.close.x - layout.closeHit.x, layout.close.y - layout.closeHit.y)
         close.frame = viewRect(layout.closeHit)
         close.needsDisplay = true
 
@@ -321,6 +335,9 @@ final class HiFiCardView: NSView {
         if let led = assets.pill.sprites["led_on"], let tinted = HiFiCanvas.tinted(led, accentColor(for: kind)) {
             canvas.draw(tinted, x: frames.led.x, y: frames.led.y)
             canvas.fill(frames.led.x + 1, frames.led.y + 1, 1, 1, HiFiCanvas.mix(accentHex(kind), "#ffffff", 0.55))
+        }
+        if let ear = assets.font5.image(for: String(HiFiCardText.ear), color: PillLayout.color(hex: c.engraveHi)) {
+            canvas.draw(ear, x: frames.ear.x, y: frames.ear.y)
         }
         let titleInk = isFailure ? p.error : c.engraveHi
         if let text = assets.font3.image(for: title, color: PillLayout.color(hex: titleInk)) {

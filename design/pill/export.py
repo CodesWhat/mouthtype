@@ -300,7 +300,7 @@ def export_card():
         "metrics": {
             "titleBar": 13, "margin": 6,
             "plate": {"x": 6, "y": 2, "h": 9, "padX": 4, "ledGap": 3},
-            "close": {"right": 6, "y": 1, "hitW": 16, "hitH": 13},
+            "close": {"right": 6, "y": 1, "hitW": 24, "hitH": 24},
             "vfd": {"gapTop": 3, "ring": 3, "padX": 3, "padY": 3, "lineGap": 2,
                     "barGap": 3, "barH": 2, "barSegW": 3, "barSegGap": 1},
             "button": {"h": 17, "minW": 36, "padX": 8, "gap": 4, "gapTop": 5, "labelPressedDy": 1},

@@ -9,6 +9,10 @@ enum HiFiCardLayout {
 
     static let ledSize = 4
     static let closeSize = 10
+    /// The title-bar ear is a 5x7 glyph of the readout face, set between the LED and the title.
+    static let earWidth = 5
+    static let earHeight = 7
+    static let earGap = 2
     static let frameBottom = 4
 
     static var width: Int { Int(CardLayout.width) }
@@ -26,6 +30,7 @@ enum HiFiCardLayout {
         var width: Int, height: Int
         var plate: Rect
         var led: Rect
+        var ear: Rect
         var titleOrigin: CGPoint
         var close: Rect
         var closeHit: Rect
@@ -36,10 +41,15 @@ enum HiFiCardLayout {
         var buttons: [Rect]
     }
 
+    /// The close button's hit area: centred on the art, pulled in so it stays inside the card.
+    static func closeHit(_ m: HiFiCardSpec.Metrics) -> Rect {
+        let x = min(width - m.close.right - closeSize - (m.close.hitW - closeSize) / 2, width - m.close.hitW)
+        return Rect(x: x, y: 0, w: m.close.hitW, h: m.close.hitH)
+    }
+
     /// The widest title that fits between the plate's start and the close button.
     static func titleMaxWidth(_ m: HiFiCardSpec.Metrics) -> Int {
-        let closeHitX = width - m.close.right - closeSize - (m.close.hitW - closeSize) / 2
-        return closeHitX - 2 - m.plate.x - 2 * m.plate.padX - ledSize - m.plate.ledGap
+        closeHit(m).x - 2 - m.plate.x - 2 * m.plate.padX - ledSize - m.plate.ledGap - earWidth - earGap
     }
 
     /// The width a line of VFD text can use.
@@ -50,11 +60,12 @@ enum HiFiCardLayout {
     static func buttonWidth(label: Int, _ m: HiFiCardSpec.Metrics) -> Int { max(m.button.minW, label + 2 * m.button.padX) }
 
     static func make(_ input: Input, _ m: HiFiCardSpec.Metrics) -> Frames {
-        let plate = Rect(x: m.plate.x, y: m.plate.y, w: 2 * m.plate.padX + ledSize + m.plate.ledGap + input.titleWidth, h: m.plate.h)
+        let plate = Rect(x: m.plate.x, y: m.plate.y, w: 2 * m.plate.padX + ledSize + m.plate.ledGap + earWidth + earGap + input.titleWidth, h: m.plate.h)
         let led = Rect(x: plate.x + m.plate.padX, y: plate.y + (plate.h - ledSize) / 2, w: ledSize, h: ledSize)
+        let ear = Rect(x: led.x + ledSize + m.plate.ledGap, y: plate.y + (plate.h - earHeight) / 2, w: earWidth, h: earHeight)
         let closeX = width - m.close.right - closeSize
         let close = Rect(x: closeX, y: m.close.y, w: closeSize, h: closeSize)
-        let closeHit = Rect(x: closeX - (m.close.hitW - closeSize) / 2, y: 0, w: m.close.hitW, h: m.close.hitH)
+        let closeHit = Self.closeHit(m)
 
         var y = m.titleBar + m.vfd.gapTop
         var vfd: Rect?
@@ -91,8 +102,8 @@ enum HiFiCardLayout {
         }
         let height = y + m.bottomPad + frameBottom
         return Frames(
-            width: width, height: height, plate: plate, led: led,
-            titleOrigin: CGPoint(x: led.x + ledSize + m.plate.ledGap, y: plate.y + (plate.h - 5) / 2),
+            width: width, height: height, plate: plate, led: led, ear: ear,
+            titleOrigin: CGPoint(x: ear.x + earWidth + earGap, y: plate.y + (plate.h - 5) / 2),
             close: close, closeHit: closeHit, vfd: vfd, textOrigin: CGPoint(x: textX, y: textY), visibleLines: visible,
             bar: bar, buttons: buttons
         )

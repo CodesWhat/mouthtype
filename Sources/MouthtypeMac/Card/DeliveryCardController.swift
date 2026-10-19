@@ -45,6 +45,10 @@ final class DeliveryCardController: CardSurface {
     /// The same card drawn for a pill that folds it in.
     let mergedView: DeliveryCardView
     var anchor: @MainActor () -> Anchor? = { nil }
+    /// Where the readout colour setting is read when it changes under an open card.
+    var defaults = UserDefaults.standard
+    /// The colour the setting changed to while this card was up; the pill's anchor only learns it when it next shows.
+    private var readoutOverride: PillReadoutColour?
     var onAction: (@MainActor (CardAction) -> Void)? {
         didSet {
             view.onAction = onAction
@@ -94,6 +98,20 @@ final class DeliveryCardController: CardSurface {
                 self.render(state)
             }
         }
+        _ = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshReadoutColour() }
+        }
+    }
+
+    /// Redraws an open Hi-Fi card when the readout colour setting has changed since it was drawn.
+    func refreshReadoutColour() {
+        guard shown, !isMerged, let state = current, view.style == .hifi else { return }
+        let colour = PillReadoutPreference.current(defaults)
+        guard colour != view.hifiReadout else { return }
+        readoutOverride = colour
+        render(state)
     }
 
     func render(_ state: CardViewState?) {
@@ -168,7 +186,7 @@ final class DeliveryCardController: CardSurface {
         }
         let isNew = current?.card != state.card || !shown
         current = state
-        view.configure(style: style, scale: scale, embedded: false, readout: anchor?.readout ?? .default)
+        view.configure(style: style, scale: scale, embedded: false, readout: readoutOverride ?? anchor?.readout ?? .default)
         let size = view.render(state, typography: Typography.current(), countdownStart: countdownStart(for: state.card))
         if let anchor {
             panel.setFrame(
@@ -197,6 +215,7 @@ final class DeliveryCardController: CardSurface {
         shown = false
         current = nil
         countdown = nil
+        readoutOverride = nil
         ticker?.cancel()
         ticker = nil
         if isMerged {
