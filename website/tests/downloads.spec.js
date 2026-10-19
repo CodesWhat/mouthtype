@@ -30,13 +30,13 @@ for (const width of [1440, 320]) {
     await download.click();
     await expect(page).toHaveURL(/\/download\/?$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Mouthtype for Mac.");
-    await expect(page.locator("main")).toContainText("0.1.0-rc.2");
+    await expect(page.locator("main")).toContainText("0.1.0-rc.3");
     await expect(page.getByRole("link", { name: "Source code (GPL-3.0)", exact: false })).toHaveAttribute("href", "/source");
     const starts = [];
     page.on("download", (item) => starts.push(item));
     await page.route("**/download/file", (route) => route.fulfill({
       status: 200,
-      headers: { "content-type": "application/zip", "content-disposition": 'attachment; filename="Mouthtype-0.1.0-rc.2-macos-arm64.zip"' },
+      headers: { "content-type": "application/zip", "content-disposition": 'attachment; filename="Mouthtype-0.1.0-rc.3-macos-arm64.zip"' },
       body: "Download timing fixture, not a Mouthtype distribution.",
     }));
     await expect(page.getByRole("status")).toContainText("5 seconds");
@@ -44,7 +44,7 @@ for (const width of [1440, 320]) {
     expect(starts).toHaveLength(0);
     const result = page.waitForEvent("download");
     await page.clock.runFor(1);
-    expect((await result).suggestedFilename()).toBe("Mouthtype-0.1.0-rc.2-macos-arm64.zip");
+    expect((await result).suggestedFilename()).toBe("Mouthtype-0.1.0-rc.3-macos-arm64.zip");
     await page.clock.runFor(10000);
     expect(starts).toHaveLength(1);
     await expect(page.getByRole("status")).toContainText("requested");
@@ -57,7 +57,7 @@ for (const width of [1440, 320]) {
   });
 }
 
-test("installation and update help cover rc.2 and the manual first upgrade", async ({
+test("installation and update help cover rc.3 and the manual first upgrade", async ({
   page,
 }) => {
   await page.goto("/start/");
@@ -70,7 +70,7 @@ test("installation and update help cover rc.2 and the manual first upgrade", asy
   await expect(page.locator("#install")).not.toContainText(
     "person who invited you",
   );
-  await expect(page.locator("#install")).toContainText("0.1.0-rc.2");
+  await expect(page.locator("#install")).toContainText("0.1.0-rc.3");
   await expect(page.locator("#your-build")).toContainText(
     "General, Writing, Appearance and Diagnostics",
   );
