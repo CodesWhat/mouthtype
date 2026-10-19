@@ -45,6 +45,9 @@ import MouthtypeCore
         let model = SettingsModel(defaults: defaults, microphone: microphone)
         model.setLevel(.basic)
         model.setWebsiteStyle(domain: "slack.com", tone: .formal)
+        model.setWebsiteCleanupLevel(domain: "slack.com", level: .medium)
+        model.setAppCleanupLevel(bundleID: "com.apple.Terminal", appName: "Terminal", level: .off)
+        #expect(model.appStyles.websites.first?.level == .medium && model.appStyles.entries.first?.level == .off)
         let controller = SettingsWindow(model: model, reduceTransparency: { true })
         for page in [SettingsPage.general, .writing] {
             model.page = page
