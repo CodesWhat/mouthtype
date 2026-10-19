@@ -1,4 +1,5 @@
 import AppKit
+import MouthtypeCore
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -92,6 +93,10 @@ struct SpellingEditorView: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(rule.heard).fontWeight(.medium)
                                 Text("→ " + rule.written).font(.callout).foregroundStyle(.secondary)
+                                if OrdinaryWords.warning(for: rule) != nil {
+                                    Label("Everyday word", systemImage: "exclamationmark.triangle")
+                                        .font(.caption).foregroundStyle(.orange)
+                                }
                             }
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(12)
@@ -145,6 +150,12 @@ struct SpellingEditorView: View {
             }
             if let message = editor.importMessage {
                 Label(message, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
+                    .padding(.horizontal, 24).padding(.bottom, 12)
+            }
+            if let warning = editor.everydayWarning {
+                Label(warning, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    .font(.callout).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("spelling-everyday-warning")
                     .padding(.horizontal, 24).padding(.bottom, 12)
             }
             if let error = editor.error ?? editor.validationMessage {

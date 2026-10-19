@@ -52,11 +52,12 @@ public struct VocabularyBias: Sendable, Equatable {
     public var promptText: String { terms.joined(separator: ", ") }
 
     /// The spellings the user wants written: starred rules first, then the rest in saved order. Heard forms
-    /// of rules sharing a written spelling become that term's aliases.
+    /// of rules sharing a written spelling become that term's aliases, except everyday words, which would
+    /// boost the written spelling whenever that ordinary word is said. The written spelling still boosts.
     public static func collect(from rules: [DictionaryRule]) -> VocabularyBias {
         let usable = rules.filter { !$0.heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
         let ordered = usable.filter(\.starred) + usable.filter { !$0.starred }
-        return VocabularyBias(entries: ordered.map { Term(text: $0.written, aliases: [$0.heard]) })
+        return VocabularyBias(entries: ordered.map { Term(text: $0.written, aliases: OrdinaryWords.suppressesAlias($0) ? [] : [$0.heard]) })
     }
 
     private static func normalise(_ raw: String) -> String {
