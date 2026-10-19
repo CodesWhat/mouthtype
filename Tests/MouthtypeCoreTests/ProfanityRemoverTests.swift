@@ -23,7 +23,6 @@ import Testing
         ("Fuck.", ""),
         ("Okay. Fuck. Next one.", "Okay. Next one."),
         ("Okay. Fuck.", "Okay."),
-        ("That was a shitty day.", "That was a day."),
         ("Damn it, I lost it.", "I lost it."),
         ("I lost it, dammit.", "I lost it."),
         ("Goddamn, that is good.", "That is good."),
@@ -35,13 +34,17 @@ import Testing
         ("Shit... I forgot.", "I forgot."),
         ("Okay. Shit!! Next one.", "Okay. Next one."),
         ("Fuck?! I forgot.", "I forgot."),
+        ("This goddamn car is slow.", "This car is slow."),
+        ("Damn good coffee.", "Good coffee."),
+        ("It broke and, fuck, it stayed broken.", "It broke and it stayed broken."),
     ]
 
     /// Nouns and objects stay; the model levels smooth those over.
     static let nounsKept = [
         "Don't be an asshole.", "He is a motherfucker.", "Quit the bullshit and go.", "Stop being a bitch about it.",
         "This is some crap.", "Talk shit all day.", "It is a piece of shit.", "My shit is gone.", "Damn it all.",
-        "Such a bitch.", "Fuck off.",
+        "Such a bitch.", "Fuck off.", "Stop fucking around.", "I feel crappy today.", "We are damned if we do.",
+        "That was a shitty day.", "Stop fucking up the build.",
     ]
 
     @Test func keepsNounsAndObjects() {
@@ -65,6 +68,24 @@ import Testing
         #expect(remover.apply("Deploy brain fuck.").text == "Deploy brain fuck.")
         #expect(remover.apply("I want damn good coffee.").text == "I want damn good coffee.")
         #expect(remover.apply("Fuck, I want damn good coffee.").text == "I want damn good coffee.")
+    }
+
+    @Test func intensifiersGoOnlyWhenTheNextWordIsModified() {
+        #expect(strip("It is fucking great") == "It is great")
+        #expect(strip("fucking great") == "Great")
+        #expect(strip("this goddamn car") == "this car")
+        #expect(strip("I want damn good coffee") == "I want good coffee")
+        #expect(strip("damn good coffee") == "Good coffee")
+    }
+
+    @Test func overlappingProtectedPhrasesAllKeepTheirCover() {
+        let remover = ProfanityRemover(protectedPhrases: ["oh my", "my damn project"])
+        #expect(remover.apply("Oh my damn project is late.").text == "Oh my damn project is late.")
+    }
+
+    @Test func aProtectedWordKeepsTheDamnItPhrase() {
+        #expect(strip("Damn IT.", protected: ["IT"]) == "Damn IT.")
+        #expect(strip("Damn it.") == "")
     }
 
     @Test func removesAndRepairs() {

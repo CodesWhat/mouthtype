@@ -67,6 +67,9 @@ public struct TextPipelineInput: Sendable {
     /// Phrases the profanity stage must not cut into, on top of the dictionary and snippets given here. For rules a
     /// caller holds back from this run (joined spellings waiting for the model, snippet triggers expanded later).
     public var protectedPhrases: [String]
+    /// Words the profanity stage leaves alone and whose case a removal keeps, on top of the dictionary and snippets
+    /// given here (written spellings and snippet text of rules this run does not apply).
+    public var protectedWords: [String]
 
     public init(
         text: String,
@@ -76,7 +79,8 @@ public struct TextPipelineInput: Sendable {
         now: Date = Date(),
         clipboard: String? = nil,
         options: TextPipelineOptions = .all,
-        protectedPhrases: [String] = []
+        protectedPhrases: [String] = [],
+        protectedWords: [String] = []
     ) {
         self.text = text
         self.dictionary = dictionary
@@ -86,6 +90,7 @@ public struct TextPipelineInput: Sendable {
         self.clipboard = clipboard
         self.options = options
         self.protectedPhrases = protectedPhrases
+        self.protectedWords = protectedWords
     }
 }
 
@@ -200,7 +205,7 @@ public struct TextPipeline: Sendable {
             run(SnippetExpander.stageName) { expander.apply($0) }
         }
         if options.profanity, options.style == .formal {
-            var protected = Set<String>()
+            var protected = StyleStage.words(of: input.protectedWords)
             if options.dictionary { protected.formUnion(StyleStage.words(of: input.dictionary.map(\.written))) }
             if options.snippets { protected.formUnion(StyleStage.words(of: input.snippets.map(\.expansion))) }
             var phrases = input.protectedPhrases

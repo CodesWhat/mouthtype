@@ -1,16 +1,18 @@
 import Foundation
+import NaturalLanguage
 
 /// Removes swearing used as an exclamation or for emphasis for the Formal tone, and tidies the punctuation and
 /// capitalisation it leaves behind.
 ///
 /// A short, conservative list of whole words, matched case-insensitively and never inside another word
 /// ("assess", "class", "Scunthorpe", "shell" are untouched). Only uses that can go without breaking the sentence are
-/// removed; the model levels smooth over the rest.
+/// removed; Thorough's model handles the rest.
 ///
 /// - Removed: a swear word that opens a sentence or sits between commas as an exclamation ("Shit, I forgot", "Well,
 ///   fuck, I forgot", "I forgot, shit."), an intensifier directly before the word it modifies ("fucking great",
 ///   "goddamn car", "damn good"), and the phrases "the fuck", "the hell" ("what the fuck is this" becomes "what is
-///   this"), "damn it" and "dammit".
+///   this"), "damn it" and "dammit". An intensifier goes only when the part-of-speech tagger says the next word is
+///   an adjective, adverb or noun, so "stop fucking around" keeps its verb. Adjective-only forms ("shitty", "crappy", "damned") stay for the model.
 /// - Kept: a swear word that is a noun or the object of a verb ("be an asshole", "talk shit", "piece of shit",
 ///   "my shit"). Removing those would leave a broken sentence.
 /// - "hell" alone and "pissed off" are left out because they are often ordinary speech.
@@ -44,9 +46,28 @@ public struct ProfanityRemover: Sendable {
         "fuck", "fucking", "motherfucking", "shit", "bullshit", "crap", "damn", "damned", "goddamn", "goddamned",
     ]
     /// Words that are intensifiers when they come directly before the word they modify.
-    private static let intensifiers: Set<String> = [
-        "fucking", "motherfucking", "shitty", "crappy", "damn", "damned", "goddamn", "goddamned",
+    private static let intensifiers: Set<String> = ["fucking", "motherfucking", "damn", "goddamn"]
+
+    /// Verbs after which "fucking" is the verb itself ("stop fucking around").
+    private static let gerundTriggers: Set<String> = [
+        "stop", "stopped", "stopping", "quit", "quitting", "keep", "keeps", "kept", "keeping", "start", "started", "starting",
     ]
+    /// Copulas and auxiliaries, after which an intensifier can stand before a verb form ("is fucking broken").
+    private static let auxiliaries: Set<String> = [
+        "is", "are", "was", "were", "am", "be", "been", "being", "has", "have", "had", "will", "would", "can", "could",
+        "should", "might", "must", "did", "does", "do", "'s", "'re", "'m",
+    ]
+
+    /// Loads the tagger's language model off the dictation path, so the first intensifier doesn't spend the cleanup
+    /// time budget on it.
+    public static func prewarm() {
+        Task.detached(priority: .utility) {
+            let probe = "Warm up."
+            let tagger = NLTagger(tagSchemes: [.lexicalClass])
+            tagger.string = probe
+            _ = tagger.tag(at: probe.startIndex, unit: .word, scheme: .lexicalClass)
+        }
+    }
 
     private let protectedWords: Set<String>
     private let writtenForms: Set<String>
@@ -66,6 +87,27 @@ public struct ProfanityRemover: Sendable {
         return SpanRewriter.apply(scan.spans, to: chars, stage: Self.stageName)
     }
 
+    /// Part-of-speech tags for the characters of a text, computed only when an intensifier needs one.
+    private final class LexicalClasses {
+        private let text: String
+        private let indices: [String.Index]
+        private lazy var tagger: NLTagger = {
+            let tagger = NLTagger(tagSchemes: [.lexicalClass])
+            tagger.string = text
+            return tagger
+        }()
+
+        init(_ chars: [Character]) {
+            text = String(chars)
+            indices = Array(text.indices)
+        }
+
+        func lexicalClass(at offset: Int) -> NLTag? {
+            guard offset < indices.count else { return nil }
+            return tagger.tag(at: indices[offset], unit: .word, scheme: .lexicalClass).0
+        }
+    }
+
     private struct Unit {
         var first: Int
         var last: Int
@@ -77,6 +119,7 @@ public struct ProfanityRemover: Sendable {
         let words: [ScanWord]
         let protectedWords: Set<String>
         let writtenForms: Set<String>
+        let tags: LexicalClasses
         var inProtectedPhrase: [Bool]
         var removed: [Bool]
         var spans: [TextSpan] = []
@@ -89,10 +132,14 @@ public struct ProfanityRemover: Sendable {
             self.words = TextScan.words(chars, lower)
             self.protectedWords = protectedWords
             self.writtenForms = writtenForms
+            self.tags = LexicalClasses(chars)
             self.removed = [Bool](repeating: false, count: chars.count)
             var covered = [Bool](repeating: false, count: chars.count)
-            for hit in PhraseMatcher(patterns: protectedPhrases).matches(chars, lower: lower) {
-                for i in hit.range { covered[i] = true }
+            // Each phrase on its own, so overlapping phrases ("oh my", "my damn project") all keep their cover.
+            for phrase in Set(protectedPhrases) {
+                for hit in PhraseMatcher(patterns: [phrase]).matches(chars, lower: lower) {
+                    for i in hit.range { covered[i] = true }
+                }
             }
             self.inProtectedPhrase = covered
         }
@@ -167,9 +214,11 @@ public struct ProfanityRemover: Sendable {
                     continue
                 }
                 if ProfanityRemover.damnWords.contains(lower), adjacent(k), words[k + 1].lower == "it" {
-                    // "damn it" goes as a phrase at the end of a clause; "damn it all" is left alone.
+                    // "damn it" goes as a phrase at the end of a clause; "damn it all" is left alone. A protected "it"
+                    // (a saved spelling) keeps the whole phrase.
                     let after = words[k + 1].end
-                    if after >= n || isPunctuation(chars[after]) || isClauseEnd(after) { add(k, k + 1) }
+                    let itIsProtected = isProtected(words[k + 1]) || protectedWords.contains("it")
+                    if !itIsProtected, after >= n || isPunctuation(chars[after]) || isClauseEnd(after) { add(k, k + 1) }
                     k += 2
                     continue
                 }
@@ -208,10 +257,27 @@ public struct ProfanityRemover: Sendable {
                 isProfane(i) && ProfanityRemover.intensifiers.contains(words[i].lower) && adjacent(i)
                     && !(ProfanityRemover.damnWords.contains(words[i].lower) && words[i + 1].lower == "it")
             }
-            guard modifies(k) else { return nil }
+            guard modifies(k), modifiesNext(k) else { return nil }
             var last = k
-            while last + 1 < words.count, adjacent(last), modifies(last + 1) { last += 1 }
+            while last + 1 < words.count, adjacent(last), modifies(last + 1), modifiesNext(last + 1) { last += 1 }
             return last
+        }
+
+        /// Whether the swear word at `k` only emphasises the word after it, judged from that word's part of speech
+        /// (the tagger reads the swear word itself as a verb far too often to ask it). A noun, adjective or adverb
+        /// follows an intensifier; a preposition, particle or pronoun means it is the verb ("stop fucking around",
+        /// "fucking it up"), and so does a verb that comes right after "stop", "keep", "quit" or "start". A verb
+        /// follows an intensifier only after a copula or auxiliary ("is fucking broken"). With no tag the word stays.
+        func modifiesNext(_ k: Int) -> Bool {
+            guard k + 1 < words.count, let next = tags.lexicalClass(at: words[k + 1].start) else { return false }
+            let previous = k > 0 && adjacent(k - 1) ? words[k - 1].lower : nil
+            if let previous, ProfanityRemover.gerundTriggers.contains(previous) { return false }
+            switch next {
+            case .adjective, .adverb, .interjection: return true
+            case .noun: return true
+            case .verb: return previous.map(ProfanityRemover.auxiliaries.contains) ?? false
+            default: return false
+            }
         }
 
         func isClauseEnd(_ i: Int) -> Bool {
@@ -254,6 +320,13 @@ public struct ProfanityRemover: Sendable {
             return false
         }
 
+        /// Whether the word right before the comma at `comma` is a conjunction, so the comma is only there for the
+        /// exclamation that follows.
+        func followsConjunction(commaAt comma: Int) -> Bool {
+            guard let word = words.last(where: { $0.end == comma }) else { return false }
+            return ["and", "but", "so", "or", "because", "that", "if", "then", "when", "while"].contains(word.lower)
+        }
+
         mutating func remove(_ unit: Unit, nextUnitStarts: Set<Int>) {
             let s = words[unit.first].start, e = words[unit.last].end
             var post: Character?
@@ -284,6 +357,9 @@ public struct ProfanityRemover: Sendable {
                     spans.append(TextSpan(range: words[next].start..<words[next].end, replacement: up))
                     lastCutEnd = max(lastCutEnd, words[next].end)
                 }
+            } else if hasPre, preIdx >= lastCutEnd, post == ",", followsConjunction(commaAt: preIdx) {
+                // "and, fuck, it broke" leaves "and it broke": both commas only set off the exclamation.
+                add(core: preIdx..<afterWord, cut: preIdx..<afterWord)
             } else if hasPre, preIdx >= lastCutEnd, post == "," || post == nil && atEnd || post.map({ ".!?\u{2026}".contains($0) }) == true {
                 // "well, fuck, so" leaves "well, so"; "forgot, shit." leaves "forgot.".
                 add(core: preIdx..<e, cut: preIdx..<e)

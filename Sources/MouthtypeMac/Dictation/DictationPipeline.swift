@@ -69,6 +69,7 @@ struct DictationPipeline: Sendable {
 
     /// Cleanup slower than this is thrown away and the guarded text (after TranscriptGuard, before cleanup) goes out.
     static let cleanupBudgetMs = 50.0
+    var cleanupBudget = Self.cleanupBudgetMs
 
     func begin(_ session: DictationSession, target: DictationTarget) async -> Bool {
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -246,7 +247,11 @@ struct DictationPipeline: Sendable {
         options.snippets = false
         // Swearing removal must not cut into a saved spelling's heard form (even one waiting for the model to join it)
         // or a snippet trigger heard in the text.
-        let protectedPhrases = inputs.dictionary.map(\.heard) + (settings.pipelineOptions.snippets ? inputs.snippets.map(\.trigger) : [])
+        // The same goes for written spellings and snippet text, which the fallback passes run without the dictionary.
+        let snippetsOn = settings.pipelineOptions.snippets
+        let protectedPhrases = inputs.dictionary.flatMap { [$0.heard, $0.written] }
+            + (snippetsOn ? inputs.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
+        let protectedWords = inputs.dictionary.map(\.written) + (snippetsOn ? inputs.snippets.map(\.expansion) : [])
 
         /// A take delivered as heard still loses its swearing.
         func asHeard(_ text: String) -> TextPipelineResult {
@@ -254,14 +259,15 @@ struct DictationPipeline: Sendable {
             var only = TextPipelineOptions.none
             only.profanity = true
             only.style = options.style
-            return textPipeline.run(TextPipelineInput(text: text, options: only, protectedPhrases: protectedPhrases))
+            return textPipeline.run(TextPipelineInput(text: text, options: only, protectedPhrases: protectedPhrases, protectedWords: protectedWords))
         }
 
         func deterministic(_ dictionary: [DictionaryRule], startedAt start: ContinuousClock.Instant)
             -> (result: TextPipelineResult, expanded: StageResult, expected: [String], ms: Double) {
             var result = textPipeline.run(TextPipelineInput(
                 text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
-                now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases
+                now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases,
+                protectedWords: protectedWords
             ))
             // Cleanup may remove a filler or format a number that is part of a saved trigger.
             // Keep the spoken trigger intact rather than silently losing its replacement.
@@ -281,7 +287,7 @@ struct DictationPipeline: Sendable {
             cleanerID: Self.cleanerID, level: CleanupLevel.basic.rawValue, style: settings.styleName,
             ms: Int(ms.rounded()), outcome: "ok"
         )
-        if ms > Self.cleanupBudgetMs {
+        if ms > cleanupBudget {
             Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the guarded text")
             record.outcome = "timeout"
             let heard = asHeard(transcribed.text)
@@ -304,7 +310,7 @@ struct DictationPipeline: Sendable {
                 let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
                 let totalMs = ms + fallback.ms
                 record.ms = Int(totalMs.rounded())
-                if totalMs > Self.cleanupBudgetMs {
+                if totalMs > cleanupBudget {
                     Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
                     record.outcome = "timeout"
                     let heard = asHeard(transcribed.text)

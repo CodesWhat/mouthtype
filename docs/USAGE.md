@@ -42,7 +42,7 @@ RC.1 also waits for the preceding ordinary paste’s clipboard read before repla
 
 Open **Settings → General → Cleanup** to choose the cleanup path: Off keeps the recognized text, Basic applies local formatting rules, Fast adds S1-mini and Thorough uses Gemma. Both model modes preserve wording; they differ in speed and model capability, independently of Tone. Existing saved Light settings become Fast, and Medium becomes Thorough; Off, Basic and tone settings stay as saved.
 
-**Tone** is a separate writing-style choice. **Formal** keeps sentence capitalization and punctuation, and removes swear words used as exclamations or emphasis at Basic, Fast and Thorough (Off bypasses cleanup). Fast and Thorough also smooth over the rest. **Casual** keeps sentence capitalization and drops the final full stop. **Very Casual** also relaxes sentence capitalization while protecting names and technical spellings. Questions still keep their question marks. These presets don't add enthusiasm or rewrite your personality.
+**Tone** is a separate writing-style choice. **Formal** keeps sentence capitalization and punctuation, and removes swear words used as exclamations or emphasis at Basic, Fast and Thorough (Off bypasses cleanup). Thorough also swaps a swear noun for a plain word; Basic and Fast only remove exclamations and emphasis. **Casual** keeps sentence capitalization and drops the final full stop. **Very Casual** also relaxes sentence capitalization while protecting names and technical spellings. Questions still keep their question marks. These presets don't add enthusiasm or rewrite your personality.
 
 ## Microphone, live words and files
 

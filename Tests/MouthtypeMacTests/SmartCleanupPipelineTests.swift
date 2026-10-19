@@ -457,4 +457,21 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         #expect(await clean(pipeline, text: "Fuck!!").text == "")
         #expect(await clean(pipeline, text: "Fuck;").text == "")
     }
+
+    @Test func theTimeoutTakeKeepsSavedSpellingsWhileDroppingSwearing() async {
+        let rules = [DictionaryRule(heard: "en pee em", written: "npm")]
+        var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic, rules: rules)
+        pipeline.cleanupBudget = -1
+        let cleaned = await clean(pipeline, text: "um hello. Fuck, npm failed.")
+        #expect(cleaned.cleanup.outcome == "timeout")
+        #expect(cleaned.text == "um hello. npm failed.")
+    }
+
+    @Test func theBasicFallbackKeepsSavedSpellingsWhileDroppingSwearing() async {
+        let rules = [DictionaryRule(heard: "en pee em", written: "npm"), DictionaryRule(heard: "mouth type", written: "Mouthtype")]
+        let (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .light, rules: rules, ready: false)
+        let cleaned = await clean(pipeline, text: "um hello. Fuck, npm failed.")
+        #expect(cleaned.text.hasSuffix("npm failed."))
+        #expect(!cleaned.text.contains("Npm") && !cleaned.text.lowercased().contains("fuck"))
+    }
 }
