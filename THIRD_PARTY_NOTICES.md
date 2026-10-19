@@ -251,7 +251,7 @@ named is the one on the model's Hugging Face card; follow the link for the full 
 | Silero VAD (Core ML conversion by FluidInference) | Speech detection | MIT | https://huggingface.co/FluidInference/silero-vad-coreml |
 | Whisper large-v3 turbo and small.en (OpenAI; Core ML builds by argmax) | Alternative speech recognition | MIT | https://huggingface.co/argmaxinc/whisperkit-coreml |
 | S1-mini (Superwhisper) | Fast cleanup | Apache License 2.0 plus a naming clause, see the S1-mini section above | https://huggingface.co/superwhisper/s1-mini |
-| Gemma 4 E4B it, MLX 4-bit (Google; conversion by mlx-community) | Thorough cleanup | Recorded in the catalog as "Gemma Terms of Use". The conversion's card says `gemma`; Google's upstream card says Apache 2.0 and links https://ai.google.dev/gemma/docs/gemma_4_license | https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit and https://huggingface.co/google/gemma-4-e4b-it |
+| Gemma 4 E4B it, MLX 4-bit (Google; conversion by mlx-community) | Thorough cleanup | Apache License 2.0, https://ai.google.dev/gemma/docs/gemma_4_license | https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit and https://huggingface.co/google/gemma-4-e4b-it |
 
 CC BY 4.0 requires attribution: the Parakeet models are by NVIDIA, licensed under
 https://creativecommons.org/licenses/by/4.0/. The Core ML conversions are by FluidInference and are not endorsed by NVIDIA.

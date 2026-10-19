@@ -1,6 +1,6 @@
 # Spoken commands and counted lists
 
-Turn on **Settings → Writing → Spoken commands and lists** to say punctuation, line breaks and lists instead of typing them. The same switch covers counted lists. This page lists what exists today; nothing else is a command.
+**Settings → Writing → Spoken commands and lists** controls this and is on by default. You can say punctuation, line breaks and lists instead of typing them. The one switch drives both the commands and counted lists. This page lists what exists today; nothing else is a command.
 
 Commands run in the text rules of the cleanup pass, so Cleanup Off bypasses them. Mouthtype only treats a phrase as a command when the surrounding words say it is one. Ordinary speech like "the period ended" or "a new line of products" stays as written. Check the result when a command word is also a real word.
 
@@ -52,18 +52,20 @@ These are commands unless a determiner or possessive sits right before them ("a 
 
 You don't need a command to get a numbered list. If you count out loud, Mouthtype turns the run into `1.`, `2.`, `3.` lines. A run needs at least two markers, in order from the first with no gaps, and the first has to start a clause. Use one marker style throughout a run:
 
-- Cardinals followed by a comma or colon: "one, ... two, ... three, ...", up to ten.
+- Cardinals followed by a comma or colon: "one, ... two, ... three, ...", up to ten. A bare cardinal after a comma ("three things, one call the bank, two email Priya") counts when there are three or more markers or the lead-in announces a count.
+- Digits: "1, ... 2, ...", up to 12, with a comma or colon after each.
 - Ordinals: "first, second, third" or "firstly, secondly", up to tenth, and "first of all". "Lastly", "finally" or "last," closes a run that already has two ordinals and takes the next number.
 - Prefixed numbers: "number one", "step one", "point one", "option one", and "option a, option b" with a comma or colon after the letter.
 - Parenthesized markers: "(a), (b)" and "(1), (2)".
 
 Each item goes on its own line as `N. Item`, with the first word capitalized and a trailing comma or semicolon dropped. The last item ends with its sentence, and text after it moves to a new line. Text before the first marker stays as a line above. A full stop ending a lead-in that announces a count ("three things.") becomes a colon. Lines that already start with `- ` or `1. ` are left alone.
 
+A first marker after a comma works when the lead-in announces a count: "I have three things, first, call the bank. Second, email Priya." becomes "I have three things:" followed by `1. Call the bank.` and `2. Email Priya.`
+
 Counting that is just counting stays as it is. "One, two, three apples" has no item text, and "number one is the price" or "came second" read as sentences.
 
 ## Known misses
 
-- A first marker after a comma ("I have three things, first, ...") isn't read as a list.
 - Bare letters ("a, b, c") aren't markers without the word "option".
 - Prose that happens to count ("First, thanks. Second, I'm late.") reads as a list.
 - A list item that really contains "next" as prose can be split.

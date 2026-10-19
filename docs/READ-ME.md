@@ -25,7 +25,7 @@ Ordinary delivery waits for a previous owned clipboard read before replacing it.
 
 Saved Recordings loads when opened and keeps older audio accessible through pages. Recording starts before detailed Accessibility context lookup, while delivery keeps its focus checks. An incomplete cleanup-model cache can be repaired with Download. Basic fallback honors saved spellings and the spoken commands/lists choice. The empty microphone priority list keeps System Default fallback enabled until an input is added.
 
-Synthetic recognition checks cover clean/noisy speech and a repeated 19-minute clip; see [measurements and their limits](https://github.com/CodesWhat/mouthtype/blob/main/docs/benchmarks/2026-10-18-daily-use.md). Those checks do not establish physical microphone, sleep, Bluetooth or end-to-end delivery acceptance.
+Synthetic recognition checks cover clean/noisy speech and a repeated 19-minute clip. The measurements are in the repository and are not published on the website. Those checks do not establish physical microphone, sleep, Bluetooth or end-to-end delivery acceptance.
 
 ## Shortcuts and Settings
 
@@ -67,7 +67,7 @@ The built-in output passed ten actual quiet/restore cycles after reproducing the
 
 Private native pasteboard checks preserve rich/multiple items through a promise read and restoration, and retain a newer copy during shutdown. They emit no keyboard events and never use the general clipboard. A disposable copy of existing saved data opens through the production store with unchanged schema and value digests; a WAL fixture verifies committed rows are included. These checks do not establish fresh-install permissions or normal updater installation/relaunch.
 
-TextEdit and Chrome each passed two physical ordered takes on beta.1; provisional live words and one final insertion were observed. That is historical evidence for unchanged delivery code, not a new RC hardware matrix. Fresh installation, normal updater installation/relaunch, Settings keyboard/VoiceOver and additional supported hardware remain unverified. The maintainer ended the manual QA loop; no manual handoff is pending. See [release readiness](https://github.com/CodesWhat/mouthtype/blob/main/docs/RELEASE-READINESS.md) for the scoped evidence and remaining gates.
+TextEdit and Chrome each passed two physical ordered takes on beta.1; provisional live words and one final insertion were observed. That is historical evidence for unchanged delivery code, not a new RC hardware matrix. Fresh installation, normal updater installation/relaunch, Settings keyboard/VoiceOver and additional supported hardware remain unverified. The maintainer ended the manual QA loop; no manual handoff is pending.
 
 ## What has been checked
 

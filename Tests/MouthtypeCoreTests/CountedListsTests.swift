@@ -141,6 +141,11 @@ import Testing
         #expect(CountedLists().apply(text).edits.isEmpty)
     }
 
+    @Test func aFirstMarkerAfterACommaStartsAListWhenTheLeadInAnnouncesACount() {
+        let text = "I have three things, first, call the bank. Second, email Priya."
+        #expect(stage(text) == "I have three things:\n1. Call the bank.\n2. Email Priya.")
+    }
+
     @Test func existingListLinesAreLeftAlone() {
         let text = "Plan:\n1. First milk\n2. Second eggs\nDone."
         #expect(stage(text) == text)
