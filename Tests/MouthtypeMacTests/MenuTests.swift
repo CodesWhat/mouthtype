@@ -149,6 +149,32 @@ private final class FakeLoginService: LoginItemService {
         #expect(gate.next(icon: .processing, level: 0.3, reduceMotion: false, now: 1.081) == "processing")
     }
 
+    @Test func aGlyphThatCannotLoadIsNotCommittedAndRetries() {
+        var gate = StatusGlyphGate()
+        #expect(gate.next(icon: .idle, level: 0, reduceMotion: false, now: 0, canShow: { _ in false }) == nil)
+        #expect(gate.file == nil)
+        #expect(gate.next(icon: .idle, level: 0, reduceMotion: false, now: 0.01, canShow: { _ in true }) == "idle")
+    }
+
+    @Test func levelUpdatesDoNotOverrideTheProcessingGlyph() {
+        let bar = MenuBarController()
+        bar.setIcon(.recording)
+        bar.setIcon(.processing)
+        #expect(bar.currentGlyphFile == "processing")
+        bar.setLevel(0.9)
+        #expect(bar.currentGlyphFile == "processing")
+    }
+
+    @Test func aPinnedRecordingGlyphStaysStatic() {
+        let bar = MenuBarController()
+        bar.isPinned = true
+        bar.setIcon(.recording)
+        let pinned = bar.currentGlyphFile
+        #expect(pinned == "recording1")
+        bar.setLevel(0.9)
+        #expect(bar.currentGlyphFile == pinned)
+    }
+
     @Test func phaseMapsToTheIconWhenEverythingWorks() {
         func icon(_ phase: DictationController.Phase) -> StatusIcon {
             StatusIcon.resolve(phase: phase, engineFailed: false, microphoneAllowed: true, accessibilityGranted: true)

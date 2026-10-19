@@ -86,13 +86,38 @@ extension MenuSection {
     public override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         super.init()
+        reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        accessibilityObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                self.applyGlyph()
+            }
+        }
         setIcon(.idle)
         statusItem.menu = daily.menu
+    }
+
+    deinit {
+        if let accessibilityObserver { NSWorkspace.shared.notificationCenter.removeObserver(accessibilityObserver) }
     }
 
     private var icon = StatusIcon.idle
     private var level: Float = 0
     private var gate = StatusGlyphGate()
+    private var reduceMotion = false
+    private nonisolated(unsafe) var accessibilityObserver: NSObjectProtocol?
+    private let images: [String: NSImage] = Dictionary(
+        uniqueKeysWithValues: (StatusIcon.allCases.filter { $0 != .recording }.map(\.glyphName) + StatusIcon.recordingFiles)
+            .compactMap { name in StatusIcon.loadImage(named: name).map { (name, $0) } })
+
+    /// `--status-icon recording` pins a static recording glyph for screenshots, so the level doesn't animate it.
+    var isPinned = false
+
+    /// The glyph file currently committed to the status item.
+    var currentGlyphFile: String? { gate.file }
 
     func setIcon(_ icon: StatusIcon) {
         if icon != .recording { level = 0 }
@@ -103,13 +128,14 @@ extension MenuSection {
     /// The pill's smoothed meter level, 0...1. Only the recording icon follows it.
     func setLevel(_ level: Float) {
         self.level = level
-        if icon == .recording { applyGlyph() }
+        if icon == .recording, !isPinned { applyGlyph() }
     }
 
     private func applyGlyph() {
-        let reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        guard let file = gate.next(icon: icon, level: level, reduceMotion: reduceMotion, now: ProcessInfo.processInfo.systemUptime),
-              let image = StatusIcon.loadImage(named: file) else { return }
+        guard let file = gate.next(
+            icon: icon, level: level, reduceMotion: reduceMotion || isPinned,
+            now: ProcessInfo.processInfo.systemUptime, canShow: { images[$0] != nil }),
+              let image = images[file] else { return }
         statusItem.button?.image = image
     }
     func setHandsFree(_ active: Bool) { daily.setHandsFree(active) }

@@ -42,6 +42,11 @@ public struct GlobeKeyCheck: Equatable, Sendable {
         GlobeKeyCheck(action: action(forUsageType: readUsageType()), fnKeyPresent: fnKeyLikelyPresent())
     }
 
+    /// Re-reads only the preference, for callers that cached `fnKeyLikelyPresent()` (it enumerates HID devices).
+    public static func current(fnKeyPresent: Bool) -> GlobeKeyCheck {
+        GlobeKeyCheck(action: action(forUsageType: readUsageType()), fnKeyPresent: fnKeyPresent)
+    }
+
     static func readUsageType() -> Int? {
         guard let value = CFPreferencesCopyAppValue("AppleFnUsageType" as CFString, "com.apple.HIToolbox" as CFString) else { return nil }
         if let number = value as? NSNumber { return number.intValue }
