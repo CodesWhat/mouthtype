@@ -8,6 +8,7 @@ import AppKit
     init(updater: AppUpdater) {
         self.updater = updater
         super.init()
+        item.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
         item.target = self
         item.action = #selector(check)
         refresh()
