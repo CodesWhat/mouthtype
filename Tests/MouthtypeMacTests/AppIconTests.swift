@@ -79,6 +79,19 @@ import Testing
             #expect(try pixelSize(of: url) == [1024, 1024], "\(file)")
         }
         #expect(json["fill-specializations"] != nil, "the Dark appearance needs its own tile fill")
+
+        // Tinted shows only the mono lips: the coloured lips hide under tinted, the mono ones hide everywhere else.
+        func hiddenSpecializations(_ name: String) throws -> [[String: Any]] {
+            let layer = try #require(layers.first { $0["name"] as? String == name }, "\(name) layer")
+            return try #require(layer["hidden-specializations"] as? [[String: Any]], "\(name) hidden-specializations")
+        }
+        func value(_ specs: [[String: Any]], appearance: String?) -> Bool? {
+            specs.first { $0["appearance"] as? String == appearance }?["value"] as? Bool
+        }
+        let colour = try hiddenSpecializations("lips")
+        #expect(value(colour, appearance: nil) == false && value(colour, appearance: "tinted") == true)
+        let mono = try hiddenSpecializations("lips-mono")
+        #expect(value(mono, appearance: nil) == true && value(mono, appearance: "tinted") == false)
     }
 
     @Test func theMonoLipsKnockOutTheMouthAndCursor() throws {
