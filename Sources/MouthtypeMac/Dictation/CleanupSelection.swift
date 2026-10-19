@@ -22,11 +22,11 @@ final class CleanupSelection: CleanupModelManaging {
     private let fast: CleanerHost
     private let thorough: CleanerHost
     private let demand: CleanupDemand
-    private let prewarmHold: Duration
+    /// The level each take is holding a model for, from its recording start until its cleanup ends.
+    private var holds: [String: CleanupLevel] = [:]
 
     init(fast: any SmartModel, thorough: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-         budget: (@Sendable (Int) -> Duration)? = nil, prewarmHold: Duration = .seconds(120)) {
-        self.prewarmHold = prewarmHold
+         budget: (@Sendable (Int) -> Duration)? = nil) {
         let demand = CleanupDemand(level: level)
         self.demand = demand
         self.fast = CleanerHost(model: fast, level: { demand.wanted(.light) }, budget: budget)
@@ -44,25 +44,46 @@ final class CleanupSelection: CleanupModelManaging {
     var downloadSizeMB: Int { selected.downloadSizeMB }
     var downloadTarget: any CleanupModelManaging { selected }
 
+    func unloadThoroughForMemoryPressure() { thorough.unloadForMemoryPressure() }
     func start() { fast.start(); thorough.start() }
     func levelChanged() { fast.levelChanged(); thorough.levelChanged() }
     func startDownload() { selected.startDownload() }
     func cancelDownload() { selected.cancelDownload() }
     nonisolated func recordingStarted() { Task { @MainActor in self.selected.recordingStarted() } }
 
-    /// A rule can ask for a model level while the global one is Off or Basic. Hold demand for that model while the
-    /// take is recorded and transcribed, or the host unloads it the moment its load finishes and it never settles.
-    nonisolated func recordingStarted(level: CleanupLevel) {
+    /// A rule can ask for a model level while the global one is Off or Basic. Hold demand for that model for the
+    /// take, from recording start until `releasePrewarm(for:)`, or the host unloads it the moment its load finishes.
+    /// A second call for the same take (the website rule resolving) replaces its hold rather than adding one.
+    nonisolated func recordingStarted(level: CleanupLevel, take: String) {
         Task { @MainActor in
-            guard level.needsModel else { self.selected.recordingStarted(); return }
-            let light = level == .light
-            if light { self.demand.fastRequests += 1 } else { self.demand.thoroughRequests += 1 }
+            let previous = self.holds.removeValue(forKey: take)
+            if let previous { self.adjust(previous, by: -1) }
+            guard level.needsModel else {
+                if let previous, previous != level { self.host(for: previous).demandDropped() }
+                self.selected.recordingStarted()
+                return
+            }
+            self.holds[take] = level
+            self.adjust(level, by: 1)
             self.host(for: level).levelChanged()
-            try? await Task.sleep(for: self.prewarmHold)
-            if light { self.demand.fastRequests -= 1 } else { self.demand.thoroughRequests -= 1 }
-            self.levelChanged()
+            if let previous, previous != level { self.host(for: previous).demandDropped() }
         }
     }
+
+    /// The take's cleanup finished or the take ended another way. Drops its demand and unloads the model only when
+    /// nothing else wants it; it never loads one, so a model memory pressure unloaded stays unloaded.
+    nonisolated func releasePrewarm(for take: String) {
+        Task { @MainActor in
+            guard let level = self.holds.removeValue(forKey: take) else { return }
+            self.adjust(level, by: -1)
+            self.host(for: level).demandDropped()
+        }
+    }
+
+    private func adjust(_ level: CleanupLevel, by delta: Int) {
+        if level == .light { demand.fastRequests += delta } else { demand.thoroughRequests += delta }
+    }
+
     func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? {
         await selected.readiness(waitingUpTo: limit)
     }

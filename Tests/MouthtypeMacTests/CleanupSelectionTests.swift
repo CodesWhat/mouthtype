@@ -55,28 +55,69 @@ import MouthtypeCore
         #expect(!fast.isLoaded)
     }
 
-    @Test func aRuleLevelPrewarmsTheModelAndHoldsItWhileTheGlobalLevelIsOff() async {
+    private func settle() async { try? await Task.sleep(for: .milliseconds(300)) }
+
+    @Test func aRuleLevelPrewarmsTheModelAndHoldsItForTheTake() async {
         let thorough = FakeSmartModel(downloaded: true, id: "thorough")
         thorough.loadDelay = .milliseconds(150)
         let selection = CleanupSelection(
-            fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off }, prewarmHold: .seconds(60))
+            fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off })
         selection.start()
-        selection.recordingStarted(level: .medium)
+        selection.recordingStarted(level: .medium, take: "a")
         for _ in 0..<600 where !thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
-        try? await Task.sleep(for: .milliseconds(200))
+        // Well past the old 120 s window's worth of settling: nothing but the take's end releases it.
+        await settle()
         #expect(thorough.isLoaded)
         #expect(thorough.unloads == 0)
-    }
-
-    @Test func thePrewarmHoldReleasesAfterItsWindow() async {
-        let thorough = FakeSmartModel(downloaded: true, id: "thorough")
-        let selection = CleanupSelection(
-            fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off }, prewarmHold: .milliseconds(100))
-        selection.start()
-        selection.recordingStarted(level: .medium)
-        for _ in 0..<600 where thorough.loads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        selection.releasePrewarm(for: "a")
         for _ in 0..<600 where thorough.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(thorough.unloads == 1)
+        #expect(!thorough.isLoaded)
+    }
+
+    @Test func releasingATakeThatNeverLoadedLeavesNothingBehind() async {
+        let thorough = FakeSmartModel(downloaded: true, id: "thorough")
+        let selection = CleanupSelection(fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off })
+        selection.start()
+        selection.releasePrewarm(for: "unknown")
+        selection.recordingStarted(level: .medium, take: "a")
+        selection.releasePrewarm(for: "a")
+        selection.releasePrewarm(for: "a")
+        await settle()
+        #expect(!thorough.isLoaded)
+    }
+
+    @Test func aWebsiteRuleReplacesTheTakesHoldInsteadOfAddingOne() async {
+        let fast = FakeSmartModel(downloaded: true, id: "fast")
+        let thorough = FakeSmartModel(downloaded: true, id: "thorough")
+        let selection = CleanupSelection(fast: fast, thorough: thorough, level: { .off })
+        selection.start()
+        selection.recordingStarted(level: .light, take: "a")
+        for _ in 0..<600 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        selection.recordingStarted(level: .medium, take: "a")
+        for _ in 0..<600 where fast.isLoaded || !thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(!fast.isLoaded)
+        #expect(thorough.isLoaded)
+        selection.releasePrewarm(for: "a")
+        for _ in 0..<600 where thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(!thorough.isLoaded)
+        #expect(fast.loads == 1)
+    }
+
+    @Test func releasingAfterAMemoryPressureUnloadDoesNotReload() async {
+        let thorough = FakeSmartModel(downloaded: true, id: "thorough")
+        let host = CleanupSelection(fast: FakeSmartModel(downloaded: true, id: "fast"), thorough: thorough, level: { .off })
+        host.start()
+        host.recordingStarted(level: .medium, take: "a")
+        for _ in 0..<600 where !thorough.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        let unloadedByPressure = thorough.unloads
+        // Stand-in for memory pressure: the host drops the model while the take still holds it.
+        host.unloadThoroughForMemoryPressure()
+        for _ in 0..<600 where thorough.unloads == unloadedByPressure { try? await Task.sleep(for: .milliseconds(10)) }
+        let loads = thorough.loads
+        host.releasePrewarm(for: "a")
+        await settle()
+        #expect(thorough.loads == loads)
         #expect(!thorough.isLoaded)
     }
 

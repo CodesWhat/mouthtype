@@ -185,6 +185,7 @@ final class DictationController {
                 catch { await capture.cancel() }
                 audioQuiet?.end()
                 await saving?.value
+                releasePrewarm(current)
                 if audio?.samples.isEmpty != false, let partial = await pipeline.recoverPartial(current) { audio = partial }
                 if let audio {
                     terminationCapture = (current, audio, self.clock.milliseconds(from: current.keyDownAt, to: self.clock.nowNanos()))
@@ -293,14 +294,14 @@ final class DictationController {
             beginQuietAfterStartCue()
             pill.showRecording()
             let globalLevel = pipeline.settings().level
-            pipeline.smart?.recordingStarted(level: cleanupLevel ?? globalLevel)
+            pipeline.smart?.recordingStarted(level: cleanupLevel ?? globalLevel, take: current.id)
             if !appStyles.websites.isEmpty {
                 let websiteHost = inserter.websiteHost(for: startFocus)
                 current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID,
                     websiteHost: websiteHost, fallback: cleanupStyle)
                 current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
                 if current.cleanupLevel != cleanupLevel, let level = current.cleanupLevel {
-                    pipeline.smart?.recordingStarted(level: level)
+                    pipeline.smart?.recordingStarted(level: level, take: current.id)
                 }
             }
         }
@@ -525,7 +526,10 @@ final class DictationController {
 
     /// Everything after the audio is on disk, shared by a normal release, an Undo and a saved recording.
     private func transcribeAndDeliver(_ audio: CapturedAudio, features: AudioFeatures, session: DictationSession) async throws {
-        defer { if !shuttingDown { unsavedQueuedAudio[session.id] = nil } }
+        defer {
+            releasePrewarm(session)
+            if !shuttingDown { unsavedQueuedAudio[session.id] = nil }
+        }
         guard await continueProcessing(session) else { return }
         guard let transcribed = try await pipeline.transcribe(audio, session: session, voicedMs: features.voicedMs) else {
             hidePill()
@@ -539,6 +543,7 @@ final class DictationController {
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
         let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination,
                                            appName: session.startFocus?.appName)
+        releasePrewarm(session)
         guard !cleaned.text.isEmpty else {
             await pipeline.finishEmpty(cleaned, session: session)
             hidePill()
@@ -565,6 +570,11 @@ final class DictationController {
             verifying?.wrappedUp = true
             if let arrived = verifying?.arrived { verificationEnded(arrived) }
         }
+    }
+
+    /// The take is done with the cleanup model, however it ended. Dropping the hold never reloads anything.
+    private func releasePrewarm(_ session: DictationSession) {
+        pipeline.smart?.releasePrewarm(for: session.id)
     }
 
     private func continueProcessing(_ session: DictationSession) async -> Bool {
@@ -605,6 +615,7 @@ final class DictationController {
         audioQuiet?.end()
         await saving?.value
         pipeline.discardPartial(current)
+        releasePrewarm(current)
         await pipeline.finish(current, .tooShort)
         pill.hide()
         finished()
@@ -628,6 +639,7 @@ final class DictationController {
         await saving?.value
         pipeline.discardPartial(current)
         let cancelledAt = clock.nowNanos()
+        releasePrewarm(current)
         await pipeline.finish(current, .cancelled)
         pill.hide()
         if let kept {
@@ -721,6 +733,7 @@ final class DictationController {
         }
         sounds.playError()
         pill.hide()
+        releasePrewarm(current)
         guard let audio = salvaged, !audio.samples.isEmpty else {
             await pipeline.finish(current, .failed, errorMessage: "microphone disconnected")
             pill.showMessage(PillMessage("Microphone disconnected", detail: "No audio could be recovered", isError: true), duration: 3)
@@ -773,6 +786,7 @@ final class DictationController {
         await capture.cancel()
         await saving?.value
         pipeline.discardPartial(session)
+        releasePrewarm(session)
         await pipeline.finish(session, .failed, errorMessage: String(describing: error))
         sounds.playError()
         pill.showMessage(Self.pillMessage(for: error), duration: 3)
@@ -783,6 +797,7 @@ final class DictationController {
     /// left alone, and so is the pill.
     private func failJob(_ session: DictationSession, _ error: Error) async {
         Log.app.error("dictation failed: \(String(describing: error), privacy: .public)")
+        releasePrewarm(session)
         await pipeline.finish(session, .failed, errorMessage: String(describing: error))
         sounds.playError()
         if phase != .recording { pill.showMessage(Self.pillMessage(for: error), duration: 3) }

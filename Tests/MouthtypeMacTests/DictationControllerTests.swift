@@ -131,10 +131,15 @@ private final class SpySmart: SmartCleaning, @unchecked Sendable {
     private let lock = NSLock()
     private var _levels: [CleanupLevel] = []
     var levels: [CleanupLevel] { lock.withLock { _levels } }
+    private var _takes: [String] = []
+    private var _released: [String] = []
+    var takes: [String] { lock.withLock { _takes } }
+    var released: [String] { lock.withLock { _released } }
     func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? { nil }
     func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult { fatalError("not used") }
     func recordingStarted() {}
-    func recordingStarted(level: CleanupLevel) { lock.withLock { _levels.append(level) } }
+    func recordingStarted(level: CleanupLevel, take: String) { lock.withLock { _levels.append(level); _takes.append(take) } }
+    func releasePrewarm(for take: String) { lock.withLock { _released.append(take) } }
 }
 
 private final class FakeStore: DictationStoring, @unchecked Sendable {
@@ -712,6 +717,24 @@ private struct Rig {
         rig.inserter.website = "work.slack.com"
         await rig.controller.handle(.pressed(at: keyDown))
         #expect(spy.levels == [.basic, .medium])
+        #expect(Set(spy.takes).count == 1)
+    }
+
+    @Test func theTakesPrewarmHoldEndsWithTheTakeOnEveryExit() async throws {
+        let cancelSpy = SpySmart()
+        let cancelRig = Rig(smart: cancelSpy)
+        await cancelRig.controller.handle(.pressed(at: keyDown))
+        #expect(cancelSpy.released.isEmpty)
+        await cancelRig.controller.handle(.cancelled(reason: .escape))
+        #expect(cancelSpy.released == cancelSpy.takes)
+        #expect(cancelSpy.released.count == 1)
+
+        let deliverSpy = SpySmart()
+        let deliverRig = Rig(smart: deliverSpy)
+        await deliverRig.controller.handle(.pressed(at: keyDown))
+        await deliverRig.controller.handle(.released(at: keyUp))
+        await deliverRig.controller.waitForProcessing()
+        #expect(deliverSpy.released.contains(deliverSpy.takes[0]))
     }
 
     @Test func websiteRuleLevelBeatsTheAppRuleLevel() async throws {
