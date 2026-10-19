@@ -47,6 +47,8 @@ final class DictationController {
     @ObservationIgnored private let audioQuiet: (any RecordingAudioQuieting)?
     @ObservationIgnored private let clock: any DictationClock
     @ObservationIgnored private let cards: any DictationCards
+    /// True while the card on screen has a line on the pill, which the pill keeps until the card goes.
+    @ObservationIgnored private var cardMessageHeld = false
     /// Told when a paste lands and when the next dictation starts, so edits to the pasted text can be learned from.
     @ObservationIgnored weak var corrections: (any CorrectionObserving)?
     @ObservationIgnored private var session: DictationSession?
@@ -123,6 +125,7 @@ final class DictationController {
         }
         cards.onCardChange = { [weak self] card in
             guard let self else { return }
+            self.cardMessageHeld = card?.pillMessage != nil
             // A card raised during a recording (the limit warning) must not take the recording's pill.
             if let message = card?.pillMessage, self.phase != .recording {
                 self.pill.showCardMessage(message)
@@ -492,11 +495,13 @@ final class DictationController {
 
     /// The processing pill, unless a newer recording has the pill.
     private func showProcessing() {
-        if phase != .recording { pill.showProcessing() }
+        if phase != .recording, !cardMessageHeld { pill.showProcessing() }
     }
 
+    /// Not while a card's line is on the pill: a queued job with no card of its own must not take down an earlier card's
+    /// "Your text is safe", which stays until its card goes.
     private func hidePill() {
-        if phase != .recording { pill.hide() }
+        if phase != .recording, !cardMessageHeld { pill.hide() }
     }
 
     private func captureForProcessing(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> AudioFeatures {

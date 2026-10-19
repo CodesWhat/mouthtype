@@ -810,6 +810,20 @@ private struct Rig {
         #expect(rig.pill.cardMessage == nil)
     }
 
+    @Test func aQueuedJobWithNoCardLeavesAnEarlierCardsPillUp() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        rig.engine.texts = [""]
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        rig.cards.present(.secure("earlier"))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        #expect(rig.pill.cardMessage?.headline == DeliveryCard.textIsSafe)
+        #expect(!rig.log.contains("pill.hide"))
+    }
+
     @Test func aCardWithNoDetailLeavesThePillHidden() async {
         let rig = Rig()
         rig.cards.present(.cancelled())
