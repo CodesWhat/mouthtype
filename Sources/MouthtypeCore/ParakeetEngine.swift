@@ -1,7 +1,7 @@
 import FluidAudio
 import Foundation
 
-public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPreview {
+public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPreview, VocabularyBiasing {
     static let v3ID = "parakeet-tdt-v3"
     static let v3DisplayName = "Parakeet TDT 0.6B v3 (multilingual)"
     static let v2ID = "parakeet-tdt-v2"
@@ -18,6 +18,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     private var previewManager: AsrManager?
     private let inference = ParakeetInferenceGate()
     private var speechDetector: VadManager?
+    private let booster: VocabularyBooster
 
     init(version: AsrModelVersion, language: Language? = nil) {
         self.version = version
@@ -31,6 +32,27 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
             displayName = Self.v3DisplayName
         }
         modelDirectory = AsrModels.defaultCacheDirectory(for: version)
+        let ctc = CtcModelStore()
+        booster = VocabularyBooster(
+            prepare: { bias, report in
+                let models = try await ctc.load(report: report)
+                return try await FluidVocabularyRescorer.make(bias: bias, models: models)
+            },
+            release: { await ctc.release() }
+        )
+    }
+
+    /// Opt-in. A non-empty bias downloads and loads the small CTC model in the background and boosts later takes
+    /// once it is ready; nil releases it. A failure leaves recognition unboosted.
+    public func setVocabularyBias(_ bias: VocabularyBias?) async {
+        await booster.setBias(bias)
+    }
+
+    /// Resolves once the boost model for the current vocabulary is ready or has failed. True when it is ready.
+    /// The app never waits on this; the bench does, so a timed run starts with the model loaded.
+    public func awaitVocabularyBoost() async -> Bool {
+        await booster.waitUntilSettled()
+        return await booster.isReady
     }
 
     public func prepare() async throws {
@@ -158,17 +180,27 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
         }
         var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
         let result = try await manager.transcribe(samples, decoderState: &state, language: version == .v3 ? language : nil)
-        let elapsed = (clock.now - start).seconds
         let units = (result.tokenTimings ?? []).map {
             SubwordUnit(text: $0.token, start: $0.startTime, end: $0.endTime, confidence: $0.confidence)
         }
+        var text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        var words = WordAssembly.assemble(units)
+        var applied: [String]?
+        if let timings = result.tokenTimings,
+           let boosted = await booster.boost(text: result.text, tokenTimings: timings, samples: samples) {
+            // Replaced spans take the times of the words they replaced; untouched words keep theirs.
+            text = boosted.text
+            words = VocabularyBooster.realign(words, to: boosted.text)
+            applied = boosted.appliedTerms
+        }
         return Transcription(
-            text: result.text.trimmingCharacters(in: .whitespacesAndNewlines),
-            words: WordAssembly.assemble(units),
+            text: text,
+            words: words,
             confidence: result.confidence,
-            processingSeconds: elapsed,
+            processingSeconds: (clock.now - start).seconds,
             engineID: id,
-            modelRevision: version == .v2 ? Repo.parakeetV2.rawValue : Repo.parakeetV3.rawValue
+            modelRevision: version == .v2 ? Repo.parakeetV2.rawValue : Repo.parakeetV3.rawValue,
+            boostTermsApplied: applied
         )
     }
 }
