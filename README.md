@@ -23,7 +23,7 @@ The Mac app is at 0.1.0-rc.2, a release candidate. It supports **Apple Silicon a
 3. Grant Microphone and Accessibility access when prompted. The speech model and a small speech detector download on first launch.
 4. Click an ordinary text field, hold **Fn**, speak, then release.
 
-Existing alpha.1–3 installations need one manual download to get the built-in updater. Builds after alpha.3 offer **Check for Updates…** and optional automatic checking. See the [install and upgrade notes](docs/ALPHA.md) before replacing an existing app.
+Existing alpha.1–3 installations need one manual download to get the built-in updater. Builds after alpha.3 offer **Check for Updates…** and optional automatic checking. See the [install and upgrade notes](docs/READ-ME.md) before replacing an existing app.
 
 ## What it does
 
@@ -54,9 +54,10 @@ Model downloads and optional update checks use the network. Dictation and cleanu
 
 ## Documentation
 
-- [Install, update and remove](docs/ALPHA.md)
+- [Install, update and remove](docs/READ-ME.md)
 - [Settings, tone rules and input selection](docs/SETTINGS.md)
 - [Usage and cleanup reference](docs/USAGE.md)
+- [Spoken commands and counted lists](docs/SPOKEN-COMMANDS.md)
 - [Saved audio and retention](docs/AUDIO-RETENTION.md)
 - [File transcription](docs/FILE-TRANSCRIPTION.md)
 - [Website development](website/README.md)
