@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
     private let onSkinChanged: @MainActor (PillSkinKind) -> Void
     private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
+    private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
     private var capsLockShortcut = false
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
@@ -35,6 +36,8 @@ import UniformTypeIdentifiers
     private(set) var loginState: NSControl.StateValue = .off
     private(set) var shortcut = "Fn"
     private(set) var learnCorrections = true
+    private(set) var boostSavedWords = false
+    private(set) var boostStatus = VocabularyBoostStatusCenter.current
     private(set) var chunkedTerminals: Set<String> = []
     private(set) var appStyles = AppCleanupStyles()
     private(set) var appStylesError: String?
@@ -44,7 +47,8 @@ import UniformTypeIdentifiers
          onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
          onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
          microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
-         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in }) {
+         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+         onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in }) {
         self.defaults = defaults
         self.microphone = microphone ?? MicrophoneSettingsModel(defaults: defaults, onChanged: onMicrophoneChanged)
         self.loginItem = loginItem
@@ -52,6 +56,7 @@ import UniformTypeIdentifiers
         self.onSkinChanged = onSkinChanged
         self.onRecordingModeChanged = onRecordingModeChanged
         self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
+        self.onBoostSavedWordsChanged = onBoostSavedWordsChanged
         recordingMode = RecordingModePreference.current(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
@@ -62,6 +67,9 @@ import UniformTypeIdentifiers
         font = TextFontPreference.current(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
         refresh()
+        NotificationCenter.default.addObserver(forName: .vocabularyBoostStatusChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.boostStatus = VocabularyBoostStatusCenter.current }
+        }
     }
 
     func setLivePreview(_ enabled: Bool) {
@@ -90,6 +98,7 @@ import UniformTypeIdentifiers
         escapeShortcut = savedShortcut?.keyCode == 53
         loginState = loginItem.menuState
         learnCorrections = CorrectionSettings.isEnabled(defaults)
+        boostSavedWords = VocabularyBoostSetting.isEnabled(defaults)
         chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
         do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil }
         catch { appStylesError = error.localizedDescription }
@@ -204,6 +213,12 @@ import UniformTypeIdentifiers
     func setLearnCorrections(_ enabled: Bool) {
         CorrectionSettings.set(enabled, in: defaults)
         learnCorrections = enabled
+    }
+
+    func setBoostSavedWords(_ enabled: Bool) {
+        VocabularyBoostSetting.set(enabled, in: defaults)
+        boostSavedWords = enabled
+        onBoostSavedWordsChanged(enabled)
     }
 
     func setAudioRetentionAge(_ value: AudioRetentionAge) {

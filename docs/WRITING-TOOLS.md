@@ -25,3 +25,11 @@ Select text in an accessible editable field, then choose **Clean Selected Textâ€
 **Accept** requests replacement of that exact original selection through Accessibility. The app, field, selection range and selected text must still match. Password fields and secure input are excluded. Unsupported or changed selections keep the result available through **Copy result**. There is no automatic clipboard paste, key event, retry or fallback to a different field. One accepted request disables another submission. API acceptance is reported as a replacement request, not verified insertion.
 
 The limit is 16,000 UTF-16 units. Original and preview text stay in memory until the panel closes; they are not added to dictation history or written to disk. Pending update installation waits until the preview is closed. Dictation, recovery, file jobs and update installation block preparation/acceptance while active. Automated/offscreen checks do not replace coordinated real-app replacement testing.
+
+## AI transforms for selected text
+
+Choose **Transform Selected Text** in Mouthtype's menu, or **Transform** in the Clean Selected Text preview, then pick Fix grammar, Make shorter, Make more formal or Make more casual. The local Thorough cleanup model (Gemma 4 E4B) runs the one instruction on your selection. Nothing leaves the Mac and there is no free-form prompt.
+
+The result opens in the same editable preview. **Accept** uses the same guarded replacement as Basic cleanup (app, field, range and text must still match), **Retry** reruns the transform, **Cancel** drops it. There is no automatic paste and no whole-field replacement. After Accept, press Cmd-Z in the original app to undo, or use **Copy original**. Whether Cmd-Z restores the text depends on the target app, since the edit goes through Accessibility.
+
+Without the downloaded Thorough model the transforms are disabled and the menu says why. Download it in Settings. S1-mini does not run transforms.

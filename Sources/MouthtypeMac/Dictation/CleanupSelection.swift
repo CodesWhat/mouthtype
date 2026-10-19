@@ -103,3 +103,19 @@ final class CleanupSelection: CleanupModelManaging {
         return await host.runReady(request, waitingUpTo: limit)
     }
 }
+
+/// Explicit selected-text transforms run on the Thorough model. S1-mini only normalizes transcripts.
+extension CleanupSelection: SelectionTransforming {
+    var transformUnavailableReason: String? { TransformAvailability.reason(for: thorough.state, modelName: thorough.modelName) }
+
+    func transform(_ transform: TextTransform, text: String) async throws -> String {
+        if let reason = transformUnavailableReason { throw CleanerError.unavailable(reason: reason) }
+        demand.thoroughRequests += 1
+        defer {
+            demand.thoroughRequests -= 1
+            levelChanged()
+        }
+        thorough.levelChanged()
+        return try await thorough.transform(transform, text: text, waitingUpTo: .seconds(60))
+    }
+}

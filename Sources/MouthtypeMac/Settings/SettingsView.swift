@@ -73,7 +73,7 @@ struct SettingsView: View {
             // plain buttons never take focus, so the list itself is the focus target and arrows step from the selection.
             // With it on the list stays out of the loop, so Tab walks on into the page instead of cycling in the sidebar.
             // The flag is re-read each time the window becomes key, so toggling Keyboard navigation applies on the next focus.
-            .focusable(SettingsView.sidebarListFocusable(fullKeyboardAccess: keyboardNavigation ?? fullKeyboardAccess())).focusEffectDisabled()
+            .modifier(SidebarListFocus(focusable: SettingsView.sidebarListFocusable(fullKeyboardAccess: keyboardNavigation ?? fullKeyboardAccess())))
             .onKeyPress(.upArrow) { moveSidebar(by: -1) }
             .onKeyPress(.downArrow) { moveSidebar(by: 1) }
             Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
@@ -118,6 +118,16 @@ struct SettingsView: View {
                 .background { if selected { RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.1)) } }
         }.buttonStyle(.plain).accessibilityIdentifier(id)
             .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// Makes the sidebar list a focus target only when `focusable`, with its focus ring suppressed (arrows drive selection there). When not
+/// focusable the rows are the focus targets and keep their system focus effect, the only cue for where focus is. Passing `false` to `.focusable(_:)` is not the same as leaving it
+/// off: it disables focus for every descendant, so under Full Keyboard Access the rows lost their own Tab stops.
+private struct SidebarListFocus: ViewModifier {
+    let focusable: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if focusable { content.focusable().focusEffectDisabled() } else { content }
     }
 }
 

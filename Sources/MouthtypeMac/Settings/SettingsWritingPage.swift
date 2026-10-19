@@ -32,6 +32,9 @@ extension SettingsView {
             SettingsRow(title: "Learn from my corrections") {
                 Toggle("Learn from my corrections", isOn: Binding(get: { model.learnCorrections }, set: model.setLearnCorrections)).labelsHidden().toggleStyle(.switch)
             }
+            SettingsRow(title: "Boost my saved words while recognising", detail: boostDetail) {
+                Toggle("Boost my saved words while recognising", isOn: Binding(get: { model.boostSavedWords }, set: model.setBoostSavedWords)).labelsHidden().toggleStyle(.switch)
+            }
             SettingsRow(title: "Lowercase sentence starts") {
                 Toggle("Lowercase sentence starts", isOn: Binding(get: { model.cleanup.style.capitalisation == .lowercase }, set: model.setLowercaseStarts))
                     .labelsHidden().toggleStyle(.switch).disabled(!sharedControlsEnabled)
@@ -59,6 +62,13 @@ extension SettingsView {
     /// Fillers, spoken commands, numbers and tone still apply to a take a rule turns cleanup on for, so they stay
     /// editable while the global level is Off.
     private var sharedControlsEnabled: Bool { model.cleanup.enabled || model.appStyles.enablesCleanup }
+
+    private var boostDetail: String {
+        var text = "Favours your saved spellings while recognising. The first time, it downloads an extra speech model of about 100 MB. Dictation works without it until it is ready."
+        let status = model.boostStatus.text
+        if model.boostSavedWords, !status.isEmpty { text += " " + status + "." }
+        return text
+    }
 
     private var toneSummary: String {
         var parts: [String] = []

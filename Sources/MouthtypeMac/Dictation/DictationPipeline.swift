@@ -57,6 +57,7 @@ struct DictationPipeline: Sendable {
 
     var audioRetention: @Sendable () -> AudioRetentionPolicy = { AudioRetentionPreference.load() }
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
+    var boostSavedWords: @Sendable () -> Bool = { VocabularyBoostSetting.isEnabled() }
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
     var appStyles: @Sendable () -> AppCleanupStyles = { (try? AppCleanupStyles.load()) ?? AppCleanupStyles() }
     var textPipeline = TextPipeline()
@@ -175,6 +176,9 @@ struct DictationPipeline: Sendable {
             return nil
         }
         let trimmed = SilenceTrimmer.trim(audio.samples)
+        await engine.setVocabularyBias(
+            VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary())
+        )
         let transcription = try await engine.transcribe(samples: trimmed.samples)
         let asrDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
 
@@ -190,7 +194,8 @@ struct DictationPipeline: Sendable {
         let onset = shifted.words.first.map { Int(((audio.firstSampleMs ?? 0) + $0.start * 1000).rounded()) }
         await write(session, "recordTranscription") { store in
             try await store.recordTranscription(session.id, TranscriptionRecord(
-                transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset
+                transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset,
+                boostTerms: transcription.boostTermsApplied
             ))
         }
         let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)
