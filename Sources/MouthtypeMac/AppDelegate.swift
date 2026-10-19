@@ -266,6 +266,34 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         appUpdater.start()
     }
 
+    public func application(_ application: NSApplication, open urls: [URL]) {
+        guard !isTerminating else { return }
+        let router = automationRouter()
+        for url in urls { router.handle(url) }
+    }
+
+    private func automationRouter() -> AutomationRouter {
+        AutomationRouter(actions: AutomationActions(
+            startDictation: { [weak self] in
+                guard let dictation = self?.dictation else { return }
+                Task { await dictation.startHandsFree() }
+            },
+            stopDictation: { [weak self] in self?.dictation?.stopHandsFree() },
+            toggleDictation: { [weak self] in
+                guard let dictation = self?.dictation else { return }
+                Task { await dictation.toggleHandsFree() }
+            },
+            cancelDictation: { [weak self] in
+                guard let dictation = self?.dictation else { return }
+                Task { await dictation.cancelHandsFree() }
+            },
+            copyLast: { [weak self] in self?.copyLast() },
+            pasteLast: { [weak self] in self?.pasteLast() },
+            // Home has no window yet, so it opens Settings until it does.
+            open: { [weak self] page in self?.settingsWindow.present(page: SettingsPage(rawValue: page.rawValue)) }
+        ))
+    }
+
     public func applicationDidBecomeActive(_ notification: Notification) {
         guard menuBar != nil else { return }
         refreshDiagnostics()
