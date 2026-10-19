@@ -285,18 +285,28 @@ private final class FakePill: DictationPill {
         self.log = log
     }
 
-    func showRecording() { log.add("pill.recording") }
+    func showRecording() {
+        cardMessage = nil
+        log.add("pill.recording")
+    }
     func showHandsFree() { log.add("pill.handsFree") }
     func showHandsFreeNotice(_ text: String, duration: TimeInterval) {
         notices.append(text)
         log.add("pill.notice:\(text)")
     }
-    func showProcessing() { log.add("pill.processing") }
+    func showProcessing() {
+        cardMessage = nil
+        log.add("pill.processing")
+    }
     func showMessage(_ message: PillMessage, duration: TimeInterval) {
+        cardMessage = nil
         messages.append(message)
         log.add("pill.message:\(message.headline)")
     }
-    func hide() { log.add("pill.hide") }
+    func hide() {
+        cardMessage = nil
+        log.add("pill.hide")
+    }
     var cardMessage: PillMessage?
     func showCardMessage(_ message: PillMessage) {
         cardMessage = message
@@ -307,6 +317,7 @@ private final class FakePill: DictationPill {
         cardMessage = nil
         cardHides += 1
     }
+    var cardHeld: Bool { cardMessage != nil }
 }
 
 @MainActor
@@ -810,7 +821,9 @@ private struct Rig {
         #expect(rig.pill.cardMessage == nil)
     }
 
-    @Test func aQueuedJobWithNoCardLeavesAnEarlierCardsPillUp() async {
+    private func lastPill(_ rig: Rig) -> String? { rig.log.all.last(where: { $0.hasPrefix("pill.") }) }
+
+    @Test func aJobEndingWithNoCardPutsAnEarlierCardsLineBack() async {
         let rig = Rig()
         rig.engine.holds = 1
         rig.engine.texts = [""]
@@ -822,6 +835,56 @@ private struct Rig {
         await rig.controller.waitForProcessing()
         #expect(rig.pill.cardMessage?.headline == DeliveryCard.textIsSafe)
         #expect(!rig.log.contains("pill.hide"))
+    }
+
+    @Test func aQueuedJobShowsProcessingOverAnEarlierCardsLine() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        rig.engine.texts = ["First one.", "Second one."]
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        rig.cards.present(.secure("earlier"))
+        #expect(rig.pill.cardMessage != nil)
+        await rig.controller.handle(.pressed(at: keyUp + 1))
+        await rig.controller.handle(.released(at: keyUp + 2))
+        #expect(lastPill(rig) == "pill.processing")
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+    }
+
+    @Test func dismissingTheCardMidJobLeavesProcessingOnThePill() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        rig.cards.present(.secure("earlier"))
+        rig.cards.dismiss()
+        #expect(lastPill(rig) == "pill.processing")
+        #expect(!rig.log.contains("pill.hide"))
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+    }
+
+    @Test func aCardFromAnEarlierJobMidRecordingDoesNotStickTheRecordingPill() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        rig.engine.texts = ["First one.", "Second one."]
+        rig.inserter.result = DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: false, target: nil, finalText: "")
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.pressed(at: keyUp + 1))
+        #expect(rig.controller.phase == .recording)
+        rig.engine.releaseHeld()
+        await rig.controller.waitForProcessing()
+        // The card arrived mid-recording, so its line stayed off the recording pill.
+        #expect(rig.cards.presented.count == 1 && lastPill(rig) == "pill.recording")
+        await rig.controller.handle(.released(at: keyUp + 2))
+        await rig.controller.waitForProcessing()
+        #expect(rig.controller.phase == .idle)
+        #expect(lastPill(rig) != "pill.recording" && lastPill(rig) != "pill.processing")
     }
 
     @Test func aCardWithNoDetailLeavesThePillHidden() async {
