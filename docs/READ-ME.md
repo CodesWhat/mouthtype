@@ -15,7 +15,7 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 ## What changed in rc.4
 
-RC.4 fixes what the rc.3 reviews found. Pressing Esc to cancel a hands-free take no longer swallows the next Fn press, undo on a card works while an earlier take is still processing, and a {clipboard} phrase inserts what you copied. Settings sidebar keyboard navigation works with macOS Keyboard navigation on or off. Recognition and cleanup are unchanged. The docs add troubleshooting and known limits.
+RC.4 fixes what the rc.3 reviews found. Pressing Esc to cancel a hands-free take no longer swallows the next Fn press, undo on a card works while an earlier take is still processing, and a {clipboard} phrase inserts what you copied. Arrow keys move through the Settings sidebar with macOS Keyboard navigation on or off. Recognition and cleanup are unchanged. The docs add troubleshooting and known limits.
 
 ## What changed in rc.3
 
