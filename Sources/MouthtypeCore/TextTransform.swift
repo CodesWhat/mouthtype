@@ -91,8 +91,10 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
         return inner.contains("```") ? nil : inner
     }
 
+    /// Only framing that names the output ("Here's the rewritten text:", "Here is a more formal version of the selected text:").
+    /// "Here is the plan for Alice:" is content, so anything past the closed noun set stays.
     private static let preamble =
-        #"^(?:(?:sure|certainly|of course|okay|ok)[,!.]?\s+)?(?:here(?:'s|’s| is| are)\b[^\n:]{0,80}|(?:the )?(?:corrected|edited|revised|rewritten|updated) (?:text|version)):[ \t]*(?:\n\s*|\s+)"#
+        #"^(?:(?:sure|certainly|of course|okay|ok)[,!.]?\s+)?(?:here(?:'s|’s| is| are)[ \t]+(?:(?:the|a|an|your)[ \t]+)?(?:[a-z-]+[ \t]+){0,3}(?:text|version|rewrite|result|output|translation|summary|draft|revision|edit)(?:[ \t]+(?:(?:of|for)[ \t]+(?:your|the)[ \t]+(?:selected[ \t]+)?(?:text|selection)|(?:in|with)[ \t]+(?:an?[ \t]+)?[a-z-]+[ \t]+tone))?|(?:the )?(?:corrected|edited|revised|rewritten|updated) (?:text|version)):[ \t]*(?:\n\s*|\s+)"#
 
     private static func withoutPreamble(_ text: String, source: String) -> String {
         guard let range = text.range(of: preamble, options: [.regularExpression, .caseInsensitive]) else { return text }
