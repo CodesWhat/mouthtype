@@ -154,8 +154,9 @@ import Testing
         for (role, size) in [(TextRole.pillMessage, CGFloat(28)), (.pillDetail, 22)] {
             let standard = typography.font(role)
             let large = typography.font(role, scale: 2)
-            #expect(large.pointSize == 2 * standard.pointSize)
-            if typography.effectiveChoice == .systema { #expect(large.pointSize == size) }
+            // The large message face is the Systema design scaled in every font, so only the detail is a plain 2x elsewhere.
+            if role == .pillDetail || typography.effectiveChoice == .systema { #expect(large.pointSize == 2 * standard.pointSize) }
+            #expect(large.pointSize == size)
         }
     }
 

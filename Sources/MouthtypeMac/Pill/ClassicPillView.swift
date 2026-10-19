@@ -44,6 +44,8 @@ final class ClassicPillView: NSView, PillSkinView {
     private let specular = CAGradientLayer()
     private let barsLayer = CALayer()
     private let bars = (0..<BarModel.barCount).map { _ in CAShapeLayer() }
+    /// Clips the message to the room inside the capsule, so a message too tall for the panel scrolls rather than spills.
+    private let textClip = CALayer()
     private let textGroup = CALayer()
     private var lineLayers: [CATextLayer] = []
     private let discs: [PillControl: Disc] = [.cancel: Disc(), .stop: Disc()]
@@ -63,6 +65,8 @@ final class ClassicPillView: NSView, PillSkinView {
     private var message: PillMessage?
     private var messageOverRecording = false
     private var block: ClassicPillLayout.MessageBlock
+    /// How far the text has scrolled up, 0 at the start and `block.overflow` at the end.
+    private var messageScroll: CGFloat = 0
     private var heights: [CGFloat]
     private var hovered: PillControl?
     private var pressed: PillControl?
@@ -78,7 +82,8 @@ final class ClassicPillView: NSView, PillSkinView {
     var messageLines: [ClassicPillLayout.MessageLine] { block.lines }
     var messageSize: CGSize { CGSize(width: block.width, height: block.height) }
 
-    var messageScrollDistance: Int { 0 }
+    /// How far a message too tall for the panel has to scroll, 0 when it all fits.
+    var messageScrollDistance: Int { Int(block.overflow.rounded(.up)) }
 
     var controlFrames: [PillControl: CGRect] {
         guard isLocked, mode == .locked else { return [:] }
@@ -123,7 +128,10 @@ final class ClassicPillView: NSView, PillSkinView {
         }
 
         textGroup.opacity = 0
-        container.addSublayer(textGroup)
+        textClip.anchorPoint = .zero
+        textClip.masksToBounds = true
+        textClip.addSublayer(textGroup)
+        container.addSublayer(textClip)
 
         for (control, disc) in discs {
             let isStop = control == .stop
@@ -211,7 +219,7 @@ final class ClassicPillView: NSView, PillSkinView {
     }
 
     private var allLayers: [CALayer] {
-        [ambient, contact, body, rim, specular, textGroup] + lineLayers + bars + discs.values.flatMap { [$0.group, $0.disc, $0.glyph] }
+        [ambient, contact, body, rim, specular, textClip, textGroup] + lineLayers + bars + discs.values.flatMap { [$0.group, $0.disc, $0.glyph] }
     }
 
     private func capsule(width: CGFloat, height: CGFloat? = nil) -> CGRect {
@@ -287,6 +295,12 @@ final class ClassicPillView: NSView, PillSkinView {
         }
         let isError = message?.isError == true
         withoutActions {
+            // A capped message starts with its first line at the top of the room and scrolls up from there.
+            let pad = block.overflow > 0 ? metrics.messageVerticalPadding : 0
+            let viewport = CGRect(x: rect.minX, y: rect.minY + pad, width: rect.width, height: max(0, rect.height - 2 * pad))
+            textClip.bounds = viewport
+            textClip.position = viewport.origin
+            textGroup.position = CGPoint(x: 0, y: messageScroll - block.overflow / 2)
             for (index, layer) in lineLayers.enumerated() {
                 guard index < block.lines.count else {
                     layer.isHidden = true
@@ -340,7 +354,9 @@ final class ClassicPillView: NSView, PillSkinView {
 
     // MARK: Animation plumbing
 
-    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+    /// Replaces the system Reduce Motion setting; tests set it.
+    var reduceMotionOverride: Bool?
+    private var reduceMotion: Bool { reduceMotionOverride ?? NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
     private func withoutActions(_ body: () -> Void) {
         CATransaction.begin()
@@ -430,10 +446,12 @@ final class ClassicPillView: NSView, PillSkinView {
         if !overRecording { isLocked = false }
         self.message = message
         messageOverRecording = overRecording
+        messageScroll = 0
         block = ClassicPillLayout.messageBlock(
             headline: message.headline, detail: message.detail,
             headlineLineHeight: Typography.lineHeight(typography.font(.pillMessage, scale: k)),
-            detailLineHeight: Typography.lineHeight(typography.font(.pillDetail, scale: k)), scale: scale, metrics: metrics
+            detailLineHeight: Typography.lineHeight(typography.font(.pillDetail, scale: k)), scale: scale, metrics: metrics,
+            maxHeight: PillGeometry.maxPillSize.height * k
         ) { text, isDetail in
             NSAttributedString(
                 string: text, attributes: [.font: self.typography.font(isDetail ? .pillDetail : .pillMessage, scale: self.k)]
@@ -469,7 +487,13 @@ final class ClassicPillView: NSView, PillSkinView {
     }
 
     func setElapsed(_ seconds: TimeInterval?) {}
-    func setMessageOffset(_ offset: Int) {}
+    /// `offset` runs from 0 to `-messageScrollDistance`, as for the marquee, and here moves the text up.
+    func setMessageOffset(_ offset: Int) {
+        let next = min(block.overflow, max(0, CGFloat(-offset)))
+        guard next != messageScroll else { return }
+        messageScroll = next
+        withoutActions { textGroup.position = CGPoint(x: 0, y: messageScroll - block.overflow / 2) }
+    }
 
     // MARK: Controls
 

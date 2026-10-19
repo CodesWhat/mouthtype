@@ -63,6 +63,11 @@ final class GlassPillView: NSView, PillSkinView {
         Self.heldBodyRegion(bounds: bounds.size, size: classic.pillScale, backing: window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
     }
 
+    /// Replaces the system Reduce Motion setting for the body's own motion; tests set it.
+    var reduceMotionOverride: Bool? {
+        get { classic.reduceMotionOverride }
+        set { classic.reduceMotionOverride = newValue }
+    }
     var pillScale: PillScale { classic.pillScale }
     var capsuleWidth: CGFloat { classic.capsuleWidth }
     /// True while the system material is showing, false on the solid Classic body.

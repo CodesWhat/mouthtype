@@ -160,7 +160,12 @@ final class GlassBackdropCache {
     private let modificationDate: (URL) -> Date?
     private var entries: [Int: (key: Key, backdrop: GlassPillPolicy.Backdrop?)] = [:]
     private var inFlight: [Int: Key] = [:]
+    /// The newest key asked for on each screen. A result for any other key is stale and is dropped, so a slow
+    /// measurement of an old picture or region can't overwrite the answer for the current one.
+    private var latest: [Int: Key] = [:]
     private var observing = false
+    /// The settings the system-wide prewarm reads, replaced by the pill's own when it starts observing.
+    private var settings: UserDefaults = .standard
 
     init(
         measure: @escaping Measure = GlassBackdropSampler.measure,
@@ -178,6 +183,7 @@ final class GlassBackdropCache {
     /// background measurement and answers `.pending`. Never decodes on the calling thread.
     func lookup(screen: Int, file: URL, screenFrame: CGRect, region: CGRect) -> Lookup {
         let key = key(file: file, region: region)
+        latest[screen] = key
         if let entry = entries[screen], entry.key == key { return .ready(entry.backdrop) }
         prewarm(screen: screen, file: file, screenFrame: screenFrame, region: region)
         return .pending
@@ -188,6 +194,7 @@ final class GlassBackdropCache {
     @discardableResult
     func prewarm(screen: Int, file: URL, screenFrame: CGRect, region: CGRect) -> Task<Void, Never>? {
         let key = key(file: file, region: region)
+        latest[screen] = key
         if entries[screen]?.key == key || inFlight[screen] == key { return nil }
         inFlight[screen] = key
         let measure = measure
@@ -201,6 +208,7 @@ final class GlassBackdropCache {
     /// suspends instead of blocking. This is the same measurement `lookup` stores, for a caller that can wait for it.
     func resolve(screen: Int, file: URL, screenFrame: CGRect, region: CGRect) async -> GlassPillPolicy.Backdrop? {
         let key = key(file: file, region: region)
+        latest[screen] = key
         if let entry = entries[screen], entry.key == key { return entry.backdrop }
         let measure = measure
         let result = await Task.detached(priority: .userInitiated) { measure(file, screenFrame, region) }.value
@@ -210,6 +218,7 @@ final class GlassBackdropCache {
 
     private func finish(screen: Int, key: Key, backdrop: GlassPillPolicy.Backdrop?) {
         if inFlight[screen] == key { inFlight[screen] = nil }
+        guard latest[screen] == key else { return }
         entries[screen] = (key, backdrop)
     }
 }
@@ -228,7 +237,8 @@ extension GlassBackdropCache {
 
     /// Measures the wallpaper behind the held pill on every screen, at the size the pill will have there, so the first
     /// hotkey press finds the answer waiting. Only while Glass is the chosen look.
-    func prewarmAll(defaults: UserDefaults = .standard) {
+    func prewarmAll(defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? settings
         guard PillSkinPreference.current(defaults) == .glass else { return }
         let size = PillSizePreference.current(defaults)
         for screen in NSScreen.screens {
@@ -248,14 +258,25 @@ extension GlassBackdropCache {
             screens: [PillPlacement.Screen(frame: frame, visibleFrame: visibleFrame)],
             panelSize: panel, pillPadding: PillGeometry.verticalMargin
         ) ?? frame.origin
-        return GlassPillView.heldBodyRegion(bounds: panel, size: scale, backing: backing).offsetBy(dx: origin.x, dy: origin.y)
+        // The pill's panel is placed on whole points (rounded down), so the region has to be too, or the key never matches.
+        let placed = CGPoint(x: origin.x.rounded(.down), y: origin.y.rounded(.down))
+        return GlassPillView.heldBodyRegion(bounds: panel, size: scale, backing: backing).offsetBy(dx: placed.x, dy: placed.y)
     }
 
     /// Prewarms now and again whenever the desktop could have changed: a Space switch (each Space can have its own
     /// picture), a display change, or the system's desktop notification. A picture swapped without any of those is
     /// caught by the modification time on the next lookup, which then answers pending and measures for the press after.
-    func startObserving() {
-        guard !observing else { return }
+    private struct Look: Equatable {
+        var skin: PillSkinKind
+        var size: PillSize
+    }
+
+    func startObserving(defaults: UserDefaults = .standard) {
+        settings = defaults
+        guard !observing else {
+            prewarmAll()
+            return
+        }
         observing = true
         let refresh: @Sendable (Notification) -> Void = { _ in
             Task { @MainActor in GlassBackdropCache.shared.prewarmAll() }
@@ -269,6 +290,15 @@ extension GlassBackdropCache {
         DistributedNotificationCenter.default().addObserver(
             forName: Notification.Name("com.apple.desktop"), object: nil, queue: .main, using: refresh
         )
+        // A look or size change in Settings moves the region the next press samples, so measure it before that press.
+        var lastLook = Look(skin: PillSkinPreference.current(defaults), size: PillSizePreference.current(defaults))
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { note in
+            // Any write to the defaults posts this, so only a changed look is worth measuring for.
+            let look = Look(skin: PillSkinPreference.current(defaults), size: PillSizePreference.current(defaults))
+            guard look != lastLook else { return }
+            lastLook = look
+            refresh(note)
+        }
         prewarmAll()
     }
 }

@@ -105,7 +105,7 @@ public final class PillController {
         host.onPress = { [weak self] control in self?.press(control) }
         host.onActivate = { [weak self] control in self?.onControl?(control) }
         install(skin)
-        GlassBackdropCache.shared.startObserving()
+        GlassBackdropCache.shared.startObserving(defaults: defaults)
         host.addSubview(previewView)
         _ = NotificationCenter.default.addObserver(
             forName: Typography.didChange, object: nil, queue: .main
@@ -120,7 +120,7 @@ public final class PillController {
 
     /// The live preview readout sits centred over the pill, one pill height higher at the large size.
     private static func previewFrame(panelSize: CGSize, scale: PillScale) -> NSRect {
-        let width = ClassicPillLayout.messageCap
+        let width = ClassicPillLayout.messageCap * scale.factor
         return NSRect(
             x: ((panelSize.width - width) / 2).rounded(.down), y: 94 + ClassicPillLayout.height * (scale.factor - 1),
             width: width, height: 100
@@ -311,7 +311,8 @@ public final class PillController {
         let distance = skin.messageScrollDistance
         if distance > 0 || recordingStart != nil || isGrown { startLink() } else { stopLink() }
         guard let duration else { return }
-        let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance) + 0.3) : duration
+        let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        let shownFor = distance > 0 ? max(duration, Marquee.duration(distance: distance, reduceMotion: reduce) + 0.3) : duration
         let shown = generation
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(shownFor))
@@ -360,11 +361,15 @@ public final class PillController {
         guard let origin = PillPlacement.origin(
             pointer: pointer, screens: placements, panelSize: size, pillPadding: Self.pillPadding
         ) else { return nil }
+        // A message with a detail line (or wrapped onto more) makes the capsule taller than its resting height, and the
+        // card has to clear that.
+        var pillHeight = skinKind.pillHeight * scale.factor
+        if isShown, !isGrown, case .message = state { pillHeight = max(pillHeight, skin.messageSize.height) }
         let maxFace = screen.visibleFrame.maxY - origin.y.rounded(.down) - Self.pillPadding - Self.cardRowHeight * scale.factor
             - CardLayout.shadowMargin * scale.factor
         return .init(
             midX: origin.x.rounded(.down) + size.width / 2,
-            top: origin.y.rounded(.down) + Self.pillPadding + skinKind.pillHeight * scale.factor,
+            top: origin.y.rounded(.down) + Self.pillPadding + pillHeight,
             visible: screen.visibleFrame, style: skinKind.cardStyle, scale: scale, maxFaceHeight: maxFace, readout: readout, merger: self
         )
     }
@@ -594,10 +599,11 @@ public final class PillController {
         case .message:
             let distance = skin.messageScrollDistance
             let elapsed = now - messageStart
-            if distance > 0 { skin.setMessageOffset(Marquee.offset(distance: distance, at: elapsed)) }
+            let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+            if distance > 0 { skin.setMessageOffset(Marquee.offset(distance: distance, at: elapsed, reduceMotion: reduce)) }
             updateChrome(now: now)
             if isGrown { updateInteractivity(pointer: NSEvent.mouseLocation) }
-            if recordingStart == nil, !isGrown, distance == 0 || elapsed > Marquee.duration(distance: distance) { stopLink() }
+            if recordingStart == nil, !isGrown, distance == 0 || elapsed > Marquee.duration(distance: distance, reduceMotion: reduce) { stopLink() }
         case .hidden:
             if isGrown { updateInteractivity(pointer: NSEvent.mouseLocation) } else { stopLink() }
         }
