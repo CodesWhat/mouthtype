@@ -168,6 +168,25 @@ import Testing
         }
     }
 
+    private final class Stop: NSView {
+        override var canBecomeKeyView: Bool { true }
+        override var acceptsFirstResponder: Bool { true }
+    }
+
+    /// Shift-Tab steps back through the forward Tab order and wraps, because the hosted controls only link forward.
+    @Test func shiftTabStepsBackThroughTheForwardTabOrder() {
+        let root = NSView()
+        let stops = (0..<4).map { _ in Stop() }
+        stops.forEach(root.addSubview)
+        root.nextKeyView = stops[0]
+        for (current, next) in zip(stops, stops.dropFirst()) { current.nextKeyView = next }
+        stops[3].nextKeyView = root
+        #expect(SettingsKeyLoop.order(in: root).count == 4)
+        #expect(SettingsKeyLoop.previous(of: stops[2], in: root) === stops[1])
+        #expect(SettingsKeyLoop.previous(of: stops[0], in: root) === stops[3])
+        #expect(SettingsKeyLoop.previous(of: NSView(), in: root) == nil)
+    }
+
     private func press(_ key: UInt32, keyCode: UInt16, in window: NSWindow) throws {
         let characters = String(UnicodeScalar(key)!)
         let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function], timestamp: 0,

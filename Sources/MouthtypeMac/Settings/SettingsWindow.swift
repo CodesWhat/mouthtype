@@ -103,6 +103,34 @@ final class SettingsNSWindow: NSWindow {
         }
         return super.performKeyEquivalent(with: event)
     }
+
+    /// Shift-Tab. SwiftUI links the hosted controls forward only, so AppKit's own backward walk skips from a page control to the
+    /// end of the window. Step back through the forward Tab order instead, which is the order Tab already follows.
+    override func selectKeyView(preceding view: NSView) {
+        guard let previous = SettingsKeyLoop.previous(of: view, in: contentView) else { return super.selectKeyView(preceding: view) }
+        makeFirstResponder(previous)
+    }
+}
+
+/// The Settings window's Tab order, walked forward from the content view.
+@MainActor enum SettingsKeyLoop {
+    static func order(in root: NSView?) -> [NSView] {
+        guard let root else { return [] }
+        var views: [NSView] = []
+        var current = root.nextValidKeyView
+        while let view = current, view !== root, !views.contains(where: { $0 === view }) {
+            views.append(view)
+            current = view.nextValidKeyView
+        }
+        return views
+    }
+
+    /// The control before `view` in Tab order, wrapping from the first to the last. Nil when `view` is not in the loop.
+    static func previous(of view: NSView, in root: NSView?) -> NSView? {
+        let order = order(in: root)
+        guard let index = order.firstIndex(where: { $0 === view }), !order.isEmpty else { return nil }
+        return order[(index - 1 + order.count) % order.count]
+    }
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable {
