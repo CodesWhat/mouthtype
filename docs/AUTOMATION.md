@@ -1,0 +1,64 @@
+# Automation
+
+Mouthtype has a small local automation surface: a `mouthtype://` URL scheme and a thin `mouthtype` command that wraps it. It's for Shortcuts, Raycast, scripts and keyboard launchers on your own Mac. There's no network listener, no accounts and no MCP server.
+
+## Turn it on
+
+Verbs that record, copy or insert are off until you opt in, because any web page can open a `mouthtype://` link. Opening a Settings page works without it.
+
+```sh
+defaults write com.codeswhat.mouthtype automationEnabled -bool true
+```
+
+Turn it off with `defaults delete com.codeswhat.mouthtype automationEnabled`. A refused URL does nothing and is logged.
+
+## URLs
+
+| URL | What it does | Same as |
+| --- | --- | --- |
+| `mouthtype://start` | Starts a hands-free recording. Ignored if one is running. | The toggle shortcut, first press |
+| `mouthtype://stop` | Stops a hands-free recording and delivers it. | Stop Dictation in the menu |
+| `mouthtype://toggle` | Stops a hands-free recording, or starts one when idle. | The toggle shortcut |
+| `mouthtype://cancel` | Cancels a hands-free recording. | Cancel Dictation in the menu |
+| `mouthtype://copy-last` | Copies the last delivered text. | Copy Last in the menu |
+| `mouthtype://paste-last` | Pastes the last delivered text. | Paste Last in the menu |
+| `mouthtype://open?page=<page>` | Shows a page: `home`, `settings`, `general`, `writing`, `appearance` or `diagnostics`. No page means Settings. | Settings in the menu |
+
+Every verb goes through the same code as the menu and hotkeys, so the busy, permission, engine-readiness and secure-field checks still apply. Pasting still refuses secure fields and changed destinations. `stop` and `cancel` only act on a hands-free recording, same as the menu. `home` opens Settings until the Home page lands.
+
+Anything else is ignored and logged: unknown verbs, unknown pages, extra path segments, other schemes. Parameters other than `page` are dropped. URLs can't return a value, so there's no `status` yet.
+
+## Command line
+
+`scripts/mouthtype` is a shell wrapper around `open -g mouthtype://...`. A SwiftPM executable would add a build target and a signing step to forward a string to LaunchServices, and `open` already launches the app if it isn't running.
+
+```sh
+ln -s "$PWD/scripts/mouthtype" /usr/local/bin/mouthtype
+mouthtype toggle
+mouthtype paste-last
+mouthtype open appearance
+```
+
+## Shortcuts
+
+Add an "Open URLs" action and set it to `mouthtype://toggle`. Use one shortcut per verb and give each a keyboard shortcut or put it in the menu bar.
+
+## Raycast
+
+A script command, saved as `mouthtype-toggle.sh` in your script directory:
+
+```sh
+#!/bin/bash
+# @raycast.schemaVersion 1
+# @raycast.title Toggle Mouthtype Dictation
+# @raycast.mode silent
+# @raycast.packageName Mouthtype
+
+open -g "mouthtype://toggle"
+```
+
+Or use Raycast's "Open URL" quicklink with `mouthtype://paste-last`.
+
+## Privacy
+
+Nothing leaves the Mac. The URL carries a verb and at most a page name, never text or audio. Recordings started this way show the normal pill and play the normal cues.
