@@ -72,7 +72,8 @@ public struct AudioArchive: Sendable {
 
     /// Deletes files older than `cutoff`, then the oldest of the rest until the total fits `maxTotalBytes`.
     /// When supplied, only `eligibleIDs` are counted or removed; crash partials are always excluded.
-    /// Returns the ids removed so the caller can null `audio_path`.
+    /// A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids actually removed
+    /// so the caller can null `audio_path`; throws only when a delete failed and none succeeded.
     public func purge(olderThan cutoff: Date, maxTotalBytes: Int = defaultMaxTotalBytes, eligibleIDs: Set<String>? = nil) throws -> [String] {
         let manager = FileManager.default
         guard manager.fileExists(atPath: directory.path) else { return [] }
@@ -88,12 +89,22 @@ public struct AudioArchive: Sendable {
         files.sort { $0.date < $1.date }
 
         var removed: [String] = []
+        var firstError: Error?
         var total = files.reduce(0) { $0 + $1.size }
         for file in files where file.date < cutoff || total > maxTotalBytes {
-            try manager.removeItem(at: file.url)
+            do {
+                try manager.removeItem(at: file.url)
+            } catch {
+                // Still on disk: skip it and retry next sweep. Already gone counts as removed.
+                if manager.fileExists(atPath: file.url.path) {
+                    firstError = firstError ?? error
+                    continue
+                }
+            }
             removed.append(file.id)
             total -= file.size
         }
+        if removed.isEmpty, let firstError { throw firstError }
         return removed
     }
 
@@ -122,12 +133,10 @@ public struct AudioArchive: Sendable {
     }
 
     private static func pcm(_ samples: [Float]) -> Data {
-        var data = Data(capacity: samples.count * 2)
-        for s in samples {
-            let clamped = max(-1, min(1, s))
-            data.append(le16(UInt16(bitPattern: Int16(clamped * 32767))))
+        let buffer = samples.map { s -> Int16 in
+            Int16(max(-1, min(1, s)) * 32767).littleEndian
         }
-        return data
+        return buffer.withUnsafeBufferPointer { Data(buffer: $0) }
     }
 
     static func samples(fromWAV data: Data) throws -> [Float] {

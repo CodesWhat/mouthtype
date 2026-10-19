@@ -64,9 +64,9 @@ for (const [path, heading] of pages) {
   });
 }
 
-test("start describes the current release candidate features", async ({ page }) => {
+test("start describes the current release features", async ({ page }) => {
   await page.goto("/start/");
-  await expect(page.locator("main")).toContainText("0.1.0-rc.3");
+  await expect(page.locator("main")).toContainText("0.1.0");
   await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
@@ -100,7 +100,7 @@ test("reference help covers everyday tasks with explicit build labels", async ({
   ]) {
     await expect(page.locator(`#${id}`)).toBeVisible();
   }
-  await expect(page.locator("#builds")).toContainText("rc.3");
+  await expect(page.locator("#builds")).toContainText("0.1.0");
   await expect(page.locator("#builds")).toContainText("Settings");
   await expect(page.locator("#builds")).not.toContainText("reference describes alpha.5");
   await expect(page.locator("#recording-options")).toContainText("Live words");
@@ -137,7 +137,7 @@ test("comparison pages cite official sources and keep the tradeoffs visible", as
   await page.goto("/compare/wispr-flow/");
   await expect(page.locator("main")).toContainText("cloud");
   await expect(page.locator("main")).toContainText("Windows");
-  await expect(page.locator("main")).toContainText("release candidate");
+  await expect(page.locator("main")).toContainText("first stable release");
   await expect(
     page.locator('main a[href^="https://docs.wisprflow.ai/"]'),
   ).not.toHaveCount(0);

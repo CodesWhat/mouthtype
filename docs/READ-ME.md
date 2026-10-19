@@ -1,6 +1,6 @@
-# Mouthtype 0.1.0-rc.3
+# Mouthtype 0.1.0
 
-Release candidate for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
+The first stable release of Mouthtype, for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
 
 ## Install
 
@@ -12,6 +12,14 @@ Release candidate for Apple Silicon Macs running macOS 26 or later. This is an e
 6. Click a blank TextEdit document. Hold Fn, say a sentence, then release. Wait for text to appear. Dictate another sentence without clicking or typing between takes. Confirm one insertion per take and a space between them.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
+
+## What changed in 0.1.0
+
+Since rc.4, a take cut off by quitting Mouthtype is offered for recovery on the next launch. The docs now say plainly that Tab doesn't reach Settings controls yet; arrow keys move through the sidebar, and a fix is planned for 0.2.
+
+## What changed in rc.4
+
+RC.4 fixes what the rc.3 reviews found. Pressing Esc to cancel a hands-free take no longer swallows the next Fn press, undo on a card works while an earlier take is still processing, and a {clipboard} phrase inserts what you copied. Arrow keys move through the Settings sidebar with macOS Keyboard navigation on or off. Recognition and cleanup are unchanged. The docs add troubleshooting and known limits.
 
 ## What changed in rc.3
 
@@ -59,7 +67,7 @@ Imports do not apply cleanup, saved spellings or phrases, paste automatically, o
 
 ## Updates
 
-Alpha.1 through alpha.3 do not contain an updater. Download the current Mac prerelease once from the website and replace the old app to get it.
+Alpha.1 through alpha.3 do not contain an updater. Download the current Mac release once from the website and replace the old app to get it.
 
 Use **Check for Updates…** in Mouthtype’s menu to check manually. Automatic update checks are on by default without a prompt; you can turn them off in General. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
 
@@ -80,6 +88,8 @@ Automated checks cover shortcut activation, release ordering, modifier-only comb
 Earlier physical native checks covered microphone dictation, consecutive-take spacing, Paste Last, Escape without late insertion, and force-quit recovery through Recover then Copy without automatic pasting. Scott also completed four actual Orca stop/resume takes with one insertion and boundary spaces. These earlier checks are historical evidence; current-build fresh installation, physical toggle/custom-key dictation, update installation and broad app coverage still need tester confirmation. Unknown delivery status is not proof that text failed to land.
 
 ## Known limitations
+
+For fixes to common problems and the full list of what 0.1.0 doesn't cover, see https://mouthtype.app/docs/#troubleshooting and https://mouthtype.app/docs/#known-limits.
 
 - Names and context-dependent recognition can be wrong. A real example was testing recognized as dusting across takes. Check text before sending. Mouthtype does not read previous chat messages to resolve it.
 - Broader browser/terminal/Electron behavior, clipboard restoration, microphone removal, silence, stop-cue counts and explicit Undo need more live coverage. Orca’s false-failure warning behavior is not fully verified.

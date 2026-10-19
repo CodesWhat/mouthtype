@@ -82,6 +82,21 @@ import Testing
         #expect(Set(CleanerCatalog.ids).count == CleanerCatalog.ids.count)
     }
 
+    @Test func everyMLXModelIsPinnedToACommit() {
+        for id in CleanerCatalog.ids {
+            guard let spec = CleanerCatalog.mlxSpec(id: id) else { continue }
+            #expect(HubDownloader.isCommitHash(spec.revision), "\(id) must pin a 40-hex revision, got \(spec.revision)")
+        }
+        #expect(CleanerCatalog.ids.contains { CleanerCatalog.mlxSpec(id: $0) != nil })
+    }
+
+    @Test func commitHashDetectionRejectsRefsAndShortHashes() {
+        #expect(!HubDownloader.isCommitHash("main"))
+        #expect(!HubDownloader.isCommitHash("238767527555cb75a0"))
+        #expect(!HubDownloader.isCommitHash(String(repeating: "g", count: 40)))
+        #expect(HubDownloader.isCommitHash(String(repeating: "a", count: 40)))
+    }
+
     @Test func promptIncludesVocabularyAndApp() {
         let context = CleanupContext(vocabulary: ["Kubernetes", "Helm"], appName: "Slack")
         let prompt = CleanupPrompt.system(for: context)

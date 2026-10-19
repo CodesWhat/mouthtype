@@ -121,7 +121,7 @@ import Testing
         #expect(!CorrectionLearner.similar("bank", "store"))
         #expect(CorrectionLearner.soundex(Array("robert")) == "R163" && CorrectionLearner.soundex(Array("rupert")) == "R163")
         #expect(CorrectionLearner.soundex(Array("tymczak")) == "T522")
-        #expect(CorrectionLearner.editDistance(Array("kitten"), Array("sitting")) == 3)
+        #expect(TextMetrics.editDistance(Array("kitten"), Array("sitting")) == 3)
     }
 
     @Test func aHugeFieldIsRefusedRatherThanStalling() {

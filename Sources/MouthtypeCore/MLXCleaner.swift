@@ -16,6 +16,8 @@ public actor MLXCleaner: MeasuredCleaner {
         public let id: String
         public let displayName: String
         public let repo: String
+        /// Exact 40-hex Hugging Face commit this model is pinned to, never a moving ref like main.
+        public let revision: String
         public let quantization: String
         public let promptFormat: PromptFormat
         public let license: String?
@@ -44,16 +46,23 @@ public actor MLXCleaner: MeasuredCleaner {
         modelDirectory = HubDownloader.cacheDirectory(for: spec.repo)
     }
 
-    public nonisolated var isDownloaded: Bool { HubDownloader.isCached(id: spec.repo) }
+    public nonisolated var isDownloaded: Bool { HubDownloader.isCached(id: spec.repo, revision: spec.revision) }
 
     /// The commit of the cached snapshot.
-    public nonisolated var revision: String? { HubDownloader.cachedRevision(id: spec.repo) }
+    public nonisolated var revision: String? { HubDownloader.cachedRevision(id: spec.repo, revision: spec.revision) }
 
     public var isLoaded: Bool { container != nil }
 
+    /// The registry configuration for the repo, with its revision set to the pinned commit.
+    private var pinnedConfiguration: ModelConfiguration {
+        var configuration = LLMModelFactory.shared.configuration(id: spec.repo)
+        configuration.id = .id(spec.repo, revision: spec.revision)
+        return configuration
+    }
+
     /// Fetches the snapshot from Hugging Face. A partial download resumes where it stopped.
     public func download(progress: @escaping @Sendable (Double) -> Void) async throws {
-        let configuration = LLMModelFactory.shared.configuration(id: spec.repo)
+        let configuration = pinnedConfiguration
         _ = try await resolve(
             configuration: configuration, from: downloadSource, useLatest: true,
             progressHandler: { progress($0.fractionCompleted) })
@@ -63,7 +72,7 @@ public actor MLXCleaner: MeasuredCleaner {
     public func load() async throws {
         if container != nil { return }
         let downloader = HubDownloader(offline: true)
-        let configuration = LLMModelFactory.shared.configuration(id: spec.repo)
+        let configuration = pinnedConfiguration
         container = try await LLMModelFactory.shared.loadContainer(
             from: downloader, using: TransformersTokenizerLoader(), configuration: configuration)
     }
@@ -79,9 +88,9 @@ public actor MLXCleaner: MeasuredCleaner {
             return PrepareTimings(downloadSeconds: 0, loadSeconds: 0, downloaded: false)
         }
         let clock = ContinuousClock()
-        let alreadyPresent = HubDownloader.isCached(id: spec.repo)
+        let alreadyPresent = HubDownloader.isCached(id: spec.repo, revision: spec.revision)
         let downloader = HubDownloader()
-        let configuration = LLMModelFactory.shared.configuration(id: spec.repo)
+        let configuration = pinnedConfiguration
 
         let downloadTime = try await clock.measure {
             _ = try await resolve(configuration: configuration, from: downloader, useLatest: false, progressHandler: { _ in })

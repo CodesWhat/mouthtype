@@ -64,7 +64,7 @@ struct DictationPipeline: Sendable {
         Log.cleaner.info("\(message, privacy: .public)")
     }
 
-    /// Cleanup slower than this is thrown away and the raw text goes out.
+    /// Cleanup slower than this is thrown away and the guarded text (after TranscriptGuard, before cleanup) goes out.
     static let cleanupBudgetMs = 50.0
 
     func begin(_ session: DictationSession, target: DictationTarget) async -> Bool {
@@ -133,11 +133,9 @@ struct DictationPipeline: Sendable {
             return true
         }
         let capture = await recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs)
-        guard capture.durable else { return false }
-        guard store != nil, session.rowOpen else { return true }
-        return await write(session, "finish") { store in
-            try await store.finish(session.id, status: .failed, errorMessage: DictationRecovery.interruptedMessage)
-        }
+        // The row stays `recorded` on purpose: the next launch's scan only offers unfinished rows, and it ends
+        // the row as failed ("interrupted") itself once it has offered it.
+        return capture.durable
     }
 
     func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
@@ -217,7 +215,7 @@ struct DictationPipeline: Sendable {
     }
 
     /// The cleanup. The deterministic pass cannot lose a dictation: past the time budget, or when it leaves nothing
-    /// for text that had words, the raw text is delivered instead. At light and medium the local model then works on
+    /// for text that had words, the guarded text is delivered instead. At light and medium the local model then works on
     /// its output, and anything it does wrong delivers the deterministic text. `context` and `clipboard` are used
     /// here and dropped.
     func clean(
@@ -264,9 +262,9 @@ struct DictationPipeline: Sendable {
             ms: Int(ms.rounded()), outcome: "ok"
         )
         if ms > Self.cleanupBudgetMs {
-            Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the raw text")
+            Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the guarded text")
             record.outcome = "timeout"
-            return CleanedDictation(text: transcribed.rawText, edits: transcribed.guardEdits, cleanup: record)
+            return CleanedDictation(text: transcribed.text, edits: transcribed.guardEdits, cleanup: record)
         }
         for note in result.notes { Log.app.info("cleanup note: \(note, privacy: .public)") }
         let edits = transcribed.guardEdits + result.edits
@@ -285,9 +283,9 @@ struct DictationPipeline: Sendable {
                 let totalMs = ms + fallback.ms
                 record.ms = Int(totalMs.rounded())
                 if totalMs > Self.cleanupBudgetMs {
-                    Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the raw text")
+                    Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
                     record.outcome = "timeout"
-                    return CleanedDictation(text: transcribed.rawText, edits: transcribed.guardEdits, cleanup: record)
+                    return CleanedDictation(text: transcribed.text, edits: transcribed.guardEdits, cleanup: record)
                 }
                 return CleanedDictation(text: fallback.expanded.text,
                     edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)

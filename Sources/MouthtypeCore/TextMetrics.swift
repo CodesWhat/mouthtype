@@ -53,7 +53,7 @@ public enum TextMetrics {
         return Double(counts.edits) / Double(counts.referenceWords)
     }
 
-    private static func editDistance(_ a: [String], _ b: [String]) -> Int {
+    static func editDistance<T: Equatable>(_ a: [T], _ b: [T]) -> Int {
         if a.isEmpty { return b.count }
         if b.isEmpty { return a.count }
         var previous = Array(0...b.count)

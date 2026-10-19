@@ -562,7 +562,7 @@ final class DictationController {
 
     private func continueProcessing(_ session: DictationSession) async -> Bool {
         guard shuttingDown else { return true }
-        await pipeline.finish(session, .failed, errorMessage: DictationRecovery.interruptedMessage)
+        // Left unfinished so the next launch's scan offers the take; its audio was archived at capture time.
         return false
     }
 
@@ -660,13 +660,15 @@ final class DictationController {
         cards.dismiss()
     }
 
-    /// The card's Undo: runs the normal pipeline on the kept audio and delivers wherever focus is now.
+    /// The card's Undo: runs the normal pipeline on the kept audio and delivers wherever focus is now. While an earlier
+    /// take is still processing it queues behind it, so the two paste in spoken order.
     func undoCancel() async {
-        guard !shuttingDown, phase == .idle, canStartRecording(), let pending = undo else { return }
+        guard !shuttingDown, phase != .recording, canStartRecording(), let pending = undo else { return }
         pending.timer.cancel()
         undo = nil
         captureFinalizations += 1
-        enqueue { [self] _ in
+        enqueue { [self] previous in
+            await previous?.value
             await pipeline.reopen(pending.session)
             showProcessing()
             do {
