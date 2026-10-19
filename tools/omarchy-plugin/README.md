@@ -2,7 +2,7 @@
 
 This bar widget controls the locally installed Mouthtype Linux client. It uses the Mac application's menu structure and status glyphs where the Linux client has matching functionality.
 
-Open the Mouthtype glyph on the right side of the Omarchy bar. The menu can start, stop, or cancel dictation; show and copy recent transcripts; retry saved audio; transcribe one audio file; and configure Basic cleanup, recording length, notifications, delivery, sounds, login startup, and dictation shortcuts.
+Open the Mouthtype glyph on the right side of the Omarchy bar. The menu can start, stop, or cancel dictation; show, copy and forget recent transcripts; manage **Dictation History** (count against the limit, forget by age or keep the newest, the limit itself, and how long completed audio is kept); retry saved audio; transcribe one audio file; and configure Basic cleanup, recording length, notifications, delivery, sounds, login startup, and dictation shortcuts.
 
 **Transcribe Audio File…** opens the desktop file chooser for one WAV, AIFF or M4A file of up to 10 minutes and 512 MB, then shows preparation, transcription and cancellation states with the full raw result. **Copy** puts it on the clipboard and **Save Text…** writes a UTF-8 text file through the desktop save dialog; neither runs automatically, cleanup and saved spellings are not applied, and the result is kept out of Recent Dictations. The client refuses to save the transcript over the original audio file. The menu shows this item only when the installed client reports the capability, and the client needs the distro `ffmpeg` package.
 

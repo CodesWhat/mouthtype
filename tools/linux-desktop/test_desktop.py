@@ -1,3 +1,4 @@
+import os
 import json
 import subprocess
 import sys
@@ -350,7 +351,7 @@ class RecoveryTests(unittest.TestCase):
             root = Path(temp)
             for number in range(50):
                 (root / str(number)).mkdir()
-            session = Session(Capture(), Engine(), Delivery(), root)
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=50)
             try:
                 self.assertEqual(session.command('start')['error'], 'recovery_full')
                 self.assertEqual(session.capture.starts, 0)
@@ -961,3 +962,109 @@ class WatchStreamTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             self.assertEqual(watch(Path(temp) / 'missing.sock', output), 0)
         self.assertEqual(json.loads(output.getvalue())['event'], 'disconnected')
+
+
+class RetentionTests(unittest.TestCase):
+    def take(self, root, name, *, age_days=0, audio_bytes=3200, transcript=True):
+        path = root / (name * 32)
+        path.mkdir(mode=0o700)
+        (path / 'recording.wav').write_bytes(b'\0' * audio_bytes)
+        if transcript:
+            (path / 'transcript.txt').write_text('text')
+        stamp = time.time() - age_days * 86400
+        os.utime(path / 'recording.wav', (stamp, stamp))
+        return path
+
+    def test_cap_is_configurable_and_reported(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in 'abc':
+                self.take(root, name)
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=3)
+            try:
+                status = session.command('start')
+                self.assertEqual((status['error'], status['takes'], status['maximum_takes']), ('recovery_full', 3, 3))
+                self.assertEqual(session.capture.starts, 0)
+            finally:
+                session.close()
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=4)
+            try:
+                self.assertEqual(session.command('start')['state'], 'recording')
+            finally:
+                session.close()
+
+    def test_completed_audio_past_age_or_size_is_removed_but_text_and_recovery_audio_stay(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old = self.take(root, 'a', age_days=100)
+            fresh = self.take(root, 'b', age_days=1)
+            recovery_only = self.take(root, 'c', age_days=400, transcript=False)
+            big = [self.take(root, chr(ord('d') + i), age_days=10 + i, audio_bytes=1024 * 1024) for i in range(3)]
+            session = Session(Capture(), Engine(), Delivery(), root, audio_days=90, audio_megabytes=3)
+            try:
+                removed = session.retire_completed_audio()
+            finally:
+                session.close()
+            self.assertFalse((old / 'recording.wav').exists())
+            self.assertTrue((old / 'transcript.txt').exists())
+            self.assertTrue((fresh / 'recording.wav').exists())
+            self.assertTrue((recovery_only / 'recording.wav').exists())
+            # Three 1 MiB completed WAVs over a 3 MiB limit: the oldest goes.
+            self.assertFalse((big[2] / 'recording.wav').exists())
+            self.assertTrue((big[0] / 'recording.wav').exists() and (big[1] / 'recording.wav').exists())
+            self.assertEqual(removed, 2)
+
+    def test_retention_runs_after_a_take_without_touching_the_new_one(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old = self.take(root, 'a', age_days=100)
+            session = Session(Capture(), Engine(), Delivery(), root, audio_days=90)
+            try:
+                session.command('start')
+                session.command('stop')
+                session.wait()
+                self.assertFalse((old / 'recording.wav').exists())
+                self.assertTrue((session.take / 'recording.wav').exists())
+            finally:
+                session.close()
+
+    def test_history_keep_forgets_everything_but_the_newest_takes_after_each_dictation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            olds = [self.take(root, chr(ord('a') + i), age_days=10 - i) for i in range(6)]
+            session = Session(Capture(), Engine(), Delivery(), root, history_keep=5)
+            try:
+                self.assertEqual(session.prune_history(), 1)
+                self.assertFalse(olds[0].exists())
+                self.assertTrue(all(path.exists() for path in olds[1:]))
+                session.command('start')
+                session.command('stop')
+                session.wait()
+                remaining = sorted(p.name for p in root.iterdir())
+                self.assertEqual(len(remaining), 5)
+                self.assertIn(session.take.name, remaining)
+                self.assertFalse(olds[1].exists())
+                self.assertEqual((session.take / 'transcript.txt').read_text(), session.engine.text)
+                self.assertEqual(session.command('status')['history_keep'], 5)
+            finally:
+                session.close()
+            off = Session(Capture(), Engine(), Delivery(), root)
+            try:
+                self.assertEqual(off.prune_history(), 0)
+                self.assertEqual(len(list(root.iterdir())), 5)
+            finally:
+                off.close()
+
+    def test_configuration_bounds(self):
+        from desktop import validate_config
+        base = {'engine_config': '/local/engines.json'}
+        config = validate_config(base)
+        self.assertEqual((config['maximum_recovery_takes'], config['audio_retention_days'], config['audio_retention_megabytes'], config['history_keep']), (200, 90, 2048, None))
+        self.assertEqual(validate_config({**base, 'history_keep': 5})['history_keep'], 5)
+        with self.assertRaises(ValueError):
+            validate_config({**base, 'history_keep': 0})
+        validate_config({**base, 'audio_retention_days': None, 'audio_retention_megabytes': None, 'maximum_recovery_takes': 500})
+        for change in ({'maximum_recovery_takes': 0}, {'maximum_recovery_takes': 5001}, {'audio_retention_days': 'forever'},
+                       {'audio_retention_megabytes': -1}):
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                validate_config({**base, **change})
