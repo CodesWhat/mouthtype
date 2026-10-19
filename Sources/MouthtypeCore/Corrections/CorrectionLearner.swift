@@ -44,7 +44,7 @@ public enum CorrectionLearner {
     /// Largest alignment table (dictated words times field words) worth filling; a bigger field gives up.
     static let maxCells = 12_000_000
     /// A field longer than this is a document, not a message; reading it word by word isn't worth the wait.
-    static let maxFieldCharacters = 400_000
+    public static let maxFieldCharacters = 400_000
 
     public static func proposals(pasted: String, field: String) -> [CorrectionProposal] {
         analyse(pasted: pasted, field: field).proposals

@@ -1085,6 +1085,14 @@ private struct Rig {
         #expect(AccessibilityFocusReader().ownerPID(of: focused) == pid)
     }
 
+    @Test func theRealSecureFieldDetectorReadsSubroleAndDefaultsToNotSecure() {
+        let element = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        let reader = AccessibilityFocusReader()
+        #expect(reader.isSecure(element, subrole: kAXSecureTextFieldSubrole as String))
+        #expect(!reader.isSecure(element, subrole: "AXTextField"))
+        #expect(!reader.isSecure(element, subrole: nil))
+    }
+
     @Test func boundaryDiagnosticsDoNotRunForSecureOrRefusedTargets() async {
         var diagnostics: [String] = []
         let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
