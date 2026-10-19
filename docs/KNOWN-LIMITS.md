@@ -18,7 +18,7 @@ What 0.1.0 doesn't promise. Most of it is evidence the maintainer didn't collect
 
 ## Keyboard access
 
-- **Settings controls are reachable with Tab only when macOS Keyboard navigation is on.** Turn it on in System Settings → Keyboard. With it off, macOS skips most controls when you press Tab.
+- **Tab doesn't reach Settings controls yet.** In Settings, arrow keys move through the sidebar, but Tab doesn't get to the page controls, even with macOS Keyboard navigation on. Use the mouse or trackpad for Settings controls. A fix is planned for 0.2.
 
 ## Recognition and cleanup
 
