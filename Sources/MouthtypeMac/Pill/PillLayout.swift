@@ -78,14 +78,6 @@ struct PillLayout: Decodable, Sendable {
             blue: CGFloat(value & 0xFF) / 255, alpha: 1
         )
     }
-
-    func tierColor(_ tier: String) -> CGColor {
-        switch tier {
-        case "hot": Self.color(hex: colors.segmentHot)
-        case "peak": Self.color(hex: colors.segmentPeak)
-        default: Self.color(hex: colors.segmentNormal)
-        }
-    }
 }
 
 /// A decoded skin: the layout, the static chassis, the state sprites and the font atlases.
