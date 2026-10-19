@@ -1,6 +1,6 @@
-# Mouthtype 0.1.0-rc.4
+# Mouthtype 0.1.0
 
-Release candidate for Apple Silicon Macs running macOS 26 or later. This is an early test build. Recognition, first installation and behavior in individual apps still need feedback.
+The first stable release of Mouthtype, for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
 
 ## Install
 
@@ -13,9 +13,13 @@ Release candidate for Apple Silicon Macs running macOS 26 or later. This is an e
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
 
+## What changed in 0.1.0
+
+Since rc.4, a take cut off by quitting Mouthtype is offered for recovery on the next launch. The docs now say plainly that Tab doesn't reach Settings controls yet; arrow keys move through the sidebar, and a fix is planned for 0.2.
+
 ## What changed in rc.4
 
-RC.4 fixes what the rc.3 reviews found. Pressing Esc to cancel a hands-free take no longer swallows the next Fn press, undo on a card works while an earlier take is still processing, and a {clipboard} phrase inserts what you copied. Settings sidebar keyboard navigation works with macOS Keyboard navigation on or off. Recognition and cleanup are unchanged. The docs add troubleshooting and known limits.
+RC.4 fixes what the rc.3 reviews found. Pressing Esc to cancel a hands-free take no longer swallows the next Fn press, undo on a card works while an earlier take is still processing, and a {clipboard} phrase inserts what you copied. Arrow keys move through the Settings sidebar with macOS Keyboard navigation on or off. Recognition and cleanup are unchanged. The docs add troubleshooting and known limits.
 
 ## What changed in rc.3
 
@@ -63,7 +67,7 @@ Imports do not apply cleanup, saved spellings or phrases, paste automatically, o
 
 ## Updates
 
-Alpha.1 through alpha.3 do not contain an updater. Download the current Mac prerelease once from the website and replace the old app to get it.
+Alpha.1 through alpha.3 do not contain an updater. Download the current Mac release once from the website and replace the old app to get it.
 
 Use **Check for Updates…** in Mouthtype’s menu to check manually. Automatic update checks are on by default without a prompt; you can turn them off in General. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
 

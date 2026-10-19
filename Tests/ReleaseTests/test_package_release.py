@@ -64,6 +64,13 @@ class ReleaseGuardsTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'tag'):
             release.verify_source(self.root, '0.1.0-alpha.1')
 
+    def test_stable_version_without_prerelease_suffix_is_accepted(self):
+        (self.root / 'packaging').mkdir()
+        metadata = {'MouthtypeDisplayVersion': '0.1.0', 'CFBundleShortVersionString': '0.1.0', 'CFBundleVersion': '15'}
+        with (self.root / 'packaging/Version.plist').open('wb') as file:
+            plistlib.dump(metadata, file)
+        self.assertEqual(release.release_metadata(self.root)['MouthtypeDisplayVersion'], '0.1.0')
+
     def test_invalid_or_inconsistent_bundle_metadata_is_rejected(self):
         (self.root / 'packaging').mkdir()
         metadata = {'MouthtypeDisplayVersion': '0.1.0-alpha.1', 'CFBundleShortVersionString': '0.1.0', 'CFBundleVersion': '1'}
