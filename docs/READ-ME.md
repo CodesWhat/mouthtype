@@ -15,7 +15,7 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 ## What changed in rc.3
 
-RC.3 fixes what the rc.2 reviews found. The processing pill always shows while a take is being worked on, and a card's "Your text is safe" line comes back when it finishes. Long Classic messages scroll. The Hi-Fi card falls back to the Classic card for text its pixel font can't draw, and its close button is easier to hit. Glass no longer renders smoked on the first press after a Settings change. Existing users who never chose a pill size get Automatic, which draws at twice the Standard size on screens at least 2000 pt wide. Recognition, cleanup and delivery are unchanged.
+RC.3 fixes what the rc.2 reviews found. The processing pill stays up while a take is being worked on, and a card's "Your text is safe" line comes back when it finishes. Long Classic messages scroll. The Hi-Fi card falls back to the Classic card for text its pixel font can't draw, and its close button is easier to hit. Glass no longer renders smoked on the first press after changing style or size in Settings. Recognition, cleanup and delivery are unchanged.
 
 ## What changed in rc.2
 
