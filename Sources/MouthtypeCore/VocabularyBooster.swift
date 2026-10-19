@@ -344,30 +344,39 @@ extension VocabularyBooster {
     /// original words through their spoken forms; with no spoken form to go on, a span that is one segment, or has
     /// one original word per segment, is still unambiguous.
     private static func partition(_ segments: [Segment], over old: [String]) -> [Int]? {
-        var found: [[Int]] = []
-        var current: [Int] = []
-        func walk(_ index: Int, _ position: Int) {
-            guard found.count < 2 else { return }
-            if index == segments.count {
-                if position == old.count { found.append(current) }
-                return
-            }
-            let lengths: [Int]
-            if let term = segments[index].term {
-                lengths = Set(term.spoken.map(\.count)).sorted().filter { length in
-                    position + length <= old.count
-                        && term.spoken.contains { $0.count == length && Array(old[position..<(position + length)]) == $0 }
-                }
-            } else {
-                lengths = [1]
-            }
-            for length in lengths where position + length <= old.count {
-                current.append(length)
-                walk(index + 1, position + length)
-                current.removeLast()
+        // Spans this large are never real speech; keep the original words rather than risk a slow search.
+        guard segments.count <= 64, old.count <= 64 else { return nil }
+        let total = old.count
+        func lengths(_ index: Int, _ position: Int) -> [Int] {
+            guard let term = segments[index].term else { return position + 1 <= total ? [1] : [] }
+            return Set(term.spoken.map(\.count)).sorted().filter { length in
+                position + length <= total
+                    && term.spoken.contains { $0.count == length && Array(old[position..<(position + length)]) == $0 }
             }
         }
-        walk(0, 0)
+        // ways[i][p]: how many ways segments i... cover old[p...] exactly, saturating at 2 (none, one, many).
+        var ways = [[Int]](repeating: [Int](repeating: 0, count: total + 1), count: segments.count + 1)
+        ways[segments.count][total] = 1
+        for index in stride(from: segments.count - 1, through: 0, by: -1) {
+            for position in 0...total {
+                var count = 0
+                for length in lengths(index, position) { count = min(2, count + ways[index + 1][position + length]) }
+                ways[index][position] = count
+            }
+        }
+        var found: [[Int]] = []
+        if ways[0][0] == 1 {
+            var current: [Int] = []
+            var position = 0
+            for index in 0..<segments.count {
+                guard let length = lengths(index, position).first(where: { ways[index + 1][position + $0] > 0 }) else { break }
+                current.append(length)
+                position += length
+            }
+            found = [current]
+        } else if ways[0][0] > 1 {
+            found = [[], []]
+        }
         if found.count == 1 { return found[0] }
         if !found.isEmpty { return nil }
         if segments.count == 1 { return [old.count] }

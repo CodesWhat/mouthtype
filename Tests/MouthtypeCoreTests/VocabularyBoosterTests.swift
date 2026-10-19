@@ -255,6 +255,21 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(VocabularyBooster.restoringPunctuation(original: "Jon. Sara called.", boosted: "John Sarah called.", known: known) == "John. Sarah called.")
     }
 
+    @Test func repeatedAliasesFinishQuicklyWithTheUniquePartition() {
+        let known = VocabularyBooster.knownTerms(
+            bias: VocabularyBias(entries: [.init(text: "GoGo", aliases: ["go", "go go"])]), replacements: []
+        )
+        let original = Array(repeating: "go", count: 60).joined(separator: " ")
+        let boosted = Array(repeating: "GoGo", count: 30).joined(separator: " ")
+        let clock = ContinuousClock()
+        var out = ""
+        let elapsed = clock.measure {
+            out = VocabularyBooster.restoringPunctuation(original: original, boosted: boosted, known: known)
+        }
+        #expect(elapsed < .milliseconds(500))
+        #expect(out == boosted)
+    }
+
     @Test func manyOriginalWordsCollapsingToOneTermDropInnerPunctuation() {
         #expect(VocabularyBooster.restoringPunctuation(original: "Hi sock, guard. Ok", boosted: "Hi Sockguard Ok") == "Hi Sockguard. Ok")
         #expect(VocabularyBooster.restoringPunctuation(original: "Hi (fluid, audio), ok", boosted: "Hi FluidAudio ok", known: multiWordVocabulary) == "Hi (FluidAudio), ok")
