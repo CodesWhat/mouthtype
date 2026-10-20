@@ -104,6 +104,15 @@ import MouthtypeCore
     /// Closing with an unsaved spelling or phrase draft asks first, as the separate editor windows did.
     func windowShouldClose(_ sender: NSWindow) -> Bool { model.resolveDraft(.closing) }
 
+    /// Quit never reaches windowShouldClose, so the app asks here. With an unsaved draft the window comes forward on its page first.
+    func resolveDraftForQuit() -> Bool {
+        guard model.unsavedDraft != nil else { return true }
+        if window?.isMiniaturized == true { window?.deminiaturize(nil) }
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        return model.resolveDraft(.quitting)
+    }
+
     private func reloadHome() {
         let home = model.home
         if model.page == .home {

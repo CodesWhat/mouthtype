@@ -302,6 +302,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
+        guard settingsWindow.resolveDraftForQuit() else { return .terminateCancel }
         guard appUpdater.allowsTermination else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in

@@ -92,7 +92,7 @@ import UniformTypeIdentifiers
         }
     }
 
-    enum DraftExit { case leaving, closing }
+    enum DraftExit { case leaving, closing, quitting }
     enum DraftKind { case spelling, phrase }
 
     /// The draft on the current page that has unsaved edits, if any.
@@ -127,7 +127,11 @@ import UniformTypeIdentifiers
     static func askToDiscard(_ exit: DraftExit, _ kind: DraftKind) -> Bool {
         let alert = NSAlert()
         alert.messageText = kind == .spelling ? "Discard this unsaved spelling?" : "Discard this unsaved phrase?"
-        alert.informativeText = exit == .closing ? "Save it before closing, or discard the draft." : "Save it before leaving this page, or discard the draft."
+        switch exit {
+        case .closing: alert.informativeText = "Save it before closing, or discard the draft."
+        case .quitting: alert.informativeText = "Save it before quitting, or discard the draft."
+        case .leaving: alert.informativeText = "Save it before leaving this page, or discard the draft."
+        }
         alert.addButton(withTitle: "Keep Editing")
         alert.addButton(withTitle: "Discard")
         return alert.runModal() == .alertSecondButtonReturn

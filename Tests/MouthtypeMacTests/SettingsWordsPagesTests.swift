@@ -77,6 +77,26 @@ import MouthtypeCore
         #expect(exits == [.closing])
     }
 
+    @Test func quitAsksAboutADirtyDraftAndKeepEditingCancelsIt() throws {
+        let f = try fixture()
+        defer { f.cleanup() }
+        let window = SettingsWindow(model: f.model, reduceTransparency: { true })
+        defer { window.close() }
+        var exits: [SettingsModel.DraftExit] = []
+        var answer = false
+        f.model.confirmDiscard = { exit, _ in exits.append(exit); return answer }
+        f.model.page = .savedSpellings
+        #expect(window.resolveDraftForQuit())
+        #expect(exits.isEmpty)
+        f.spellings.newSpelling()
+        f.spellings.heard = "mouth type"
+        #expect(!window.resolveDraftForQuit())
+        #expect(exits == [.quitting] && f.spellings.isDirty && f.model.page == .savedSpellings)
+        answer = true
+        #expect(window.resolveDraftForQuit())
+        #expect(!f.spellings.isDirty)
+    }
+
     @Test func aDraftOnAnotherPageDoesNotBlockLeavingThisOne() throws {
         let f = try fixture()
         defer { f.cleanup() }
