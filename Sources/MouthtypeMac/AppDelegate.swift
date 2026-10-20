@@ -47,6 +47,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }, activityChanged: { [weak self] in
             self?.appUpdater.refreshActivity()
             self?.menuBar?.refresh()
+            self?.settingsWindow.model.home.refreshRecoverability()
         }, copy: { SystemClipboard().write($0) })
     private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
     private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
@@ -233,6 +234,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             home.recoverTake = { [weak recovery] item in recovery?.offerSaved(item) }
             recovery.onFinished = { [weak menuBar] in
                 menuBar?.refresh()
+                home.refreshRecoverability()
                 Task { @MainActor in await home.reload() }
             }
         }
@@ -247,7 +249,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { _ = await self.prepareCapture() }
         }
         historySection = history
-        dictation.onAttemptFinished = { [weak menuBar] in menuBar?.refresh() }
+        dictation.onAttemptFinished = { [weak menuBar, weak home = settingsWindow.model.home] in menuBar?.refresh(); home?.refreshRecoverability() }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
         dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
         menuBar.onStopDictation = { [weak dictation] in dictation?.stopHandsFree() }

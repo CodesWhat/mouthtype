@@ -2,15 +2,16 @@ import AppKit
 import ObjectiveC
 import SwiftUI
 import Testing
+@testable import MouthtypeCore
 @testable import MouthtypeMac
 
 /// Builds the real Settings window offscreen and checks the keyboard path from the sidebar into each page.
 @MainActor @Suite struct SettingsKeyboardAccessTests {
-    private func makeWindow(page: SettingsPage, fullKeyboardAccess: Bool = false) -> SettingsWindow {
+    private func makeWindow(page: SettingsPage, fullKeyboardAccess: Bool = false, home: HomeLogModel = HomeLogModel()) -> SettingsWindow {
         let name = "SettingsKeyboardTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
-        let model = SettingsModel(defaults: defaults)
+        let model = SettingsModel(defaults: defaults, home: home)
         model.page = page
         let controller = SettingsWindow(model: model, reduceTransparency: { true }, fullKeyboardAccess: { fullKeyboardAccess })
         controller.window?.contentView?.layoutSubtreeIfNeeded()
@@ -58,11 +59,11 @@ import Testing
 
     /// Orders the real window front and pumps AppKit's event queue. SwiftUI builds its key view proxies once the window is on screen; whether macOS
     /// lets a test process become the active app depends on the desktop session, so the window is not required to be key.
-    private func keyWindow(page: SettingsPage, fullKeyboardAccess: Bool) throws -> (SettingsWindow, SettingsNSWindow) {
+    private func keyWindow(page: SettingsPage, fullKeyboardAccess: Bool, home: HomeLogModel = HomeLogModel()) throws -> (SettingsWindow, SettingsNSWindow) {
         _ = NSApplication.shared
         Self.installSystemFullKeyboardAccessOverride
         Self.forcedSystemFullKeyboardAccess = fullKeyboardAccess
-        let controller = makeWindow(page: page, fullKeyboardAccess: fullKeyboardAccess)
+        let controller = makeWindow(page: page, fullKeyboardAccess: fullKeyboardAccess, home: home)
         let window = try #require(controller.window as? SettingsNSWindow)
         NSApp.setActivationPolicy(.regular)
         NSApp.finishLaunching()
@@ -125,6 +126,34 @@ import Testing
             #expect(sidebar.count == SettingsPage.allCases.count + 3, "\(page): \(sidebar.count) sidebar Tab stops")
             #expect(stops.dropFirst(sidebar.count).contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth }, "\(page): Tab never reaches a page control")
             try expectTabReachesPageControl(window, sidebarStops: sidebar.count, "\(page)")
+        }
+    }
+
+    /// Home's Copy and Recover buttons are plain buttons, so they are proxies in the loop. Tab must walk the sidebar rows (Home included)
+    /// and then reach every row button in order, and `previousKeyView` must mirror it so Shift-Tab steps back through the same stops.
+    @Test func tabReachesHomeRowButtonsAfterTheSidebarAndShiftTabMirrorsIt() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-home-keys-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite"))
+        var firstID = ""
+        for (index, text) in ["first take", "second take"].enumerated() {
+            let id = try store.begin(DictationStart(startedAt: Date().addingTimeInterval(Double(-index) * 60), target: DictationTarget()))
+            try store.recordInsertion(id, InsertionRecord(finalText: text))
+            if index == 0 { firstID = id }
+        }
+        let home = HomeLogModel(store: store, canRecover: { true })
+        await home.loadText()
+        home.attach([RecoverableDictation(id: firstID, startedAt: Date(), audioURL: URL(fileURLWithPath: "/tmp/a.wav"), seconds: 3, isPartial: false)])
+        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true, home: home)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let stops = try tabOrder(window)
+        let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
+        #expect(sidebar.count == SettingsPage.allCases.count + 3)
+        let pageStops = stops.dropFirst(sidebar.count).filter { $0.isProxy && $0.x >= SettingsTheme.sidebarWidth }
+        #expect(pageStops.count == 3, "Home: \(pageStops.count) button stops, expected Copy, Recover, Copy")
+        let chain = try keyViewChain(window)
+        for (current, next) in zip(chain, chain.dropFirst()) {
+            #expect(next.previousKeyView === current, "previousKeyView of \(type(of: next)) does not mirror nextKeyView")
         }
     }
 
@@ -221,7 +250,9 @@ import Testing
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .general)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
-        #expect(controller.model.page == .general)
+        #expect(controller.model.page == .home)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .home)
     }
 
     @Test func arrowsStepFromTheFocusedRowOtherwiseFromTheSelection() {

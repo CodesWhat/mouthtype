@@ -7,6 +7,13 @@ public enum TranscriptStoreError: Error, Equatable {
     case notCancelled(DictationStatus)
 }
 
+/// Stops a `TranscriptStore.observeRecentTakes` observation when cancelled or released.
+public final class TakesObservation: @unchecked Sendable {
+    private let cancellable: AnyDatabaseCancellable
+    fileprivate init(_ cancellable: AnyDatabaseCancellable) { self.cancellable = cancellable }
+    public func cancel() { cancellable.cancel() }
+}
+
 public final class TranscriptStore: Sendable {
     private let pool: DatabasePool
 
@@ -325,6 +332,28 @@ public final class TranscriptStore: Sendable {
                 SELECT * FROM dictation WHERE final_text IS NOT NULL ORDER BY started_at DESC LIMIT ?
                 """, arguments: [limit])
         }
+    }
+
+    /// The newest takes with usable text, secure-field rows excluded, filtered in SQL so the limit is the row count.
+    public func recentTakes(limit: Int) throws -> [DictationRecord] {
+        try pool.read { db in try Self.fetchRecentTakes(db, limit: limit) }
+    }
+
+    private static func fetchRecentTakes(_ db: Database, limit: Int) throws -> [DictationRecord] {
+        try DictationRecord.fetchAll(db, sql: """
+            SELECT * FROM dictation
+            WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0
+            ORDER BY started_at DESC LIMIT ?
+            """, arguments: [limit])
+    }
+
+    /// Calls `onChange` on the main queue now and again whenever the dictation table changes: a new take, a status
+    /// change, or audio saved, expired or purged. Reads happen off the main thread.
+    public func observeRecentTakes(limit: Int, onError: @escaping @Sendable (Error) -> Void,
+                                   onChange: @escaping @Sendable ([DictationRecord]) -> Void) -> TakesObservation {
+        let observation = ValueObservation.tracking { db in try Self.fetchRecentTakes(db, limit: limit) }
+        let cancellable = observation.start(in: pool, scheduling: .async(onQueue: .main), onError: onError, onChange: onChange)
+        return TakesObservation(cancellable)
     }
 
     public func lastTranscript() throws -> String? {

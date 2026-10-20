@@ -38,7 +38,7 @@ struct HomeTakeRow: View {
                 }
                 if take.recoverable != nil {
                     Button("Recover") { model.recover(take) }
-                        .disabled(!model.canRecover())
+                        .disabled(!model.recoverEnabled)
                         .accessibilityIdentifier("home-recover-" + take.id)
                 }
             }.controlSize(.small).fixedSize()
