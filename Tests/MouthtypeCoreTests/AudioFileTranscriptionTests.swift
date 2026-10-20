@@ -34,6 +34,23 @@ private actor FileEngine: Transcriber {
     }
 }
 
+private actor Order {
+    private(set) var events: [String] = []
+    func add(_ event: String) { events.append(event) }
+}
+
+private actor OrderedEngine: Transcriber {
+    nonisolated let id = "ordered"
+    nonisolated let displayName = "Ordered"
+    let order: Order
+    init(order: Order) { self.order = order }
+    func prepare() async throws {}
+    func transcribe(samples: [Float]) async throws -> Transcription {
+        await order.add("transcribe")
+        return Transcription(text: "hi", processingSeconds: 0.01, engineID: id)
+    }
+}
+
 @Suite struct AudioFileTranscriptionTests {
     private let source = URL(fileURLWithPath: "/not-opened-by-fake/audio.wav")
     private func entered(_ gate: FileGate) async { for _ in 0..<200 where await !gate.entered { await Task.yield() } }
@@ -45,6 +62,29 @@ private actor FileEngine: Transcriber {
         #expect(result.transcription.text == "Émilie 世界 👋")
         #expect(result.durationSeconds == 2)
         #expect(await engine.calls == 1)
+    }
+
+    @Test func importSetsItsOwnBiasBeforeTheEngineHearsTheAudio() async throws {
+        let order = Order()
+        let job = AudioFileTranscription(
+            decoder: FileDecoder(), engine: OrderedEngine(order: order), beforeTranscribing: { await order.add("bias") }
+        )
+        _ = try await job.run(source)
+        #expect(await order.events == ["bias", "transcribe"])
+    }
+
+    @Test func canceledDecodeNeverSetsABias() async {
+        let gate = FileGate()
+        let order = Order()
+        let job = AudioFileTranscription(
+            decoder: FileDecoder(gate: gate), engine: OrderedEngine(order: order), beforeTranscribing: { await order.add("bias") }
+        )
+        let task = Task { try await job.run(source) }
+        await entered(gate)
+        await job.cancel()
+        await gate.release()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(await order.events.isEmpty)
     }
 
     @Test func canceledDecodeNeverReachesEngine() async {
