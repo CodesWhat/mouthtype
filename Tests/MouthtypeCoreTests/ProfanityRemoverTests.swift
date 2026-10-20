@@ -92,7 +92,24 @@ import Testing
         ("They screwed it up.", "They screwed it up."),
         ("Don't fuck it up.", "Don't mess it up."),
         ("Stop fucking it up.", "Stop messing it up."),
-        ("We're fucked.", "We're ruined."),
+        ("We're fucked.", "We're messed up."),
+        ("Don't fuck with it.", "Don't mess with it."),
+        ("Fuck me, that hurt.", "That hurt."),
+        ("I fucked her.", "I slept with her."),
+        ("He fucked Sarah.", "He slept with Sarah."),
+        ("They fucked us over.", "They cheated us."),
+        ("They fucked over the team.", "They cheated the team."),
+        ("You bitch about work.", "You complain about work."),
+        ("You shit on everything.", "You dump on everything."),
+        ("You bitch!", "You jerk!"),
+        ("Stop bitchin' about it.", "Stop complaining about it."),
+        ("She keeps bitchin'.", "She keeps complaining."),
+        ("That's bitchin'.", "That's great."),
+        ("That is a fucking unique idea.", "That is a unique idea."),
+        ("He has a fucking MBA.", "He has an MBA."),
+        ("It was a fucking UFO.", "It was a UFO."),
+        ("It was a fucking FBI agent.", "It was an FBI agent."),
+        ("An asshole wrote 'an jerk'.", "A jerk wrote 'an jerk'."),
         ("That is a pissed off look.", "That is an annoyed look."),
         ("He is a pissed off guy.", "He is an annoyed guy."),
         ("She was a bit pissed off.", "She was a bit annoyed."),
@@ -128,10 +145,10 @@ import Testing
     }
 
     @Test func vowelSoundHeuristic() {
-        for word in ["annoyed", "idiot", "hour", "honest", "honor", "umbrella", "unimportant", "egg"] {
+        for word in ["annoyed", "idiot", "hour", "honest", "honor", "umbrella", "unimportant", "unanswered", "egg"] {
             #expect(ProfanityRemover.startsWithVowelSound(word), "\(word)")
         }
-        for word in ["jerk", "university", "unit", "one", "euro", "user", "bad", "hat"] {
+        for word in ["jerk", "university", "unit", "one", "once", "euro", "user", "usual", "utility", "ubiquitous", "unanimous", "bad", "hat"] {
             #expect(!ProfanityRemover.startsWithVowelSound(word), "\(word)")
         }
     }
