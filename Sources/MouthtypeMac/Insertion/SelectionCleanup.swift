@@ -10,12 +10,21 @@ struct SelectedText: Equatable {
     var text: String
 }
 
-enum SelectionCleanupError: Error { case unavailable }
+enum SelectionCleanupError: Error { case unavailable, timedOut }
 
 @MainActor protocol SelectionEditing {
     func capture() throws -> SelectedText
+    /// A capture that gives up once `budget` seconds have passed, for callers that can't block (the menu).
+    func capture(budget: TimeInterval) throws -> SelectedText
     func replace(_ original: SelectedText, with replacement: String) -> Bool
 }
+
+extension SelectionEditing {
+    func capture(budget: TimeInterval) throws -> SelectedText { try capture() }
+}
+
+/// What the menu-open capture found.
+enum MenuCapture: Equatable { case ready, unavailable, timedOut }
 
 @MainActor final class AccessibilitySelectionEditor: SelectionEditing {
     private let focus: any FocusReading
@@ -36,15 +45,24 @@ enum SelectionCleanupError: Error { case unavailable }
         self.writeText = writeText
     }
 
+    func capture(budget: TimeInterval) throws -> SelectedText {
+        AccessibilityFocusReader.deadline = Date().addingTimeInterval(budget)
+        defer { AccessibilityFocusReader.deadline = nil }
+        return try capture()
+    }
+
     func capture() throws -> SelectedText {
         let snapshot = focus.snapshot()
+        if AccessibilityFocusReader.deadlinePassed { throw SelectionCleanupError.timedOut }
         guard !snapshot.isSecure, !focus.isSecureInputEnabled,
               let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
               let element = snapshot.element,
               ["AXTextField", "AXTextArea", "AXComboBox"].contains(snapshot.role ?? "") else {
             throw SelectionCleanupError.unavailable
         }
-        guard let range = readRange(element), range.location >= 0, (1...16_000).contains(range.length),
+        let range = readRange(element)
+        if AccessibilityFocusReader.deadlinePassed { throw SelectionCleanupError.timedOut }
+        guard let range, range.location >= 0, (1...16_000).contains(range.length),
               let text = readText(element), !text.isEmpty, text.utf16.count == range.length else {
             throw SelectionCleanupError.unavailable
         }
@@ -59,7 +77,7 @@ enum SelectionCleanupError: Error { case unavailable }
     }
 
     private static func selectedRange(_ element: FocusedElement) -> NSRange? {
-        AXUIElementSetMessagingTimeout(element.ref, AccessibilityFocusReader.messagingTimeout)
+        AXUIElementSetMessagingTimeout(element.ref, AccessibilityFocusReader.callTimeout())
         return AccessibilityFocusReader.selectedRange(element.ref)
     }
 
@@ -125,9 +143,17 @@ enum SelectionCleanupError: Error { case unavailable }
     @ObservationIgnored private var menuSelection: SelectedText?
 
     /// Reads the selection as the menu opens, so the menu can enable its items and a phrase can be checked against it.
-    func captureForMenu() -> Bool {
-        menuSelection = try? editor.capture()
-        return menuSelection != nil
+    /// Time-boxed: the AX calls each get a shrinking timeout, and a capture that still ran past `budget` is discarded.
+    func captureForMenu(budget: TimeInterval = 0.15) -> MenuCapture {
+        let start = ContinuousClock.now
+        menuSelection = nil
+        let selection: SelectedText
+        do { selection = try editor.capture(budget: budget) }
+        catch SelectionCleanupError.timedOut { return .timedOut }
+        catch { return .unavailable }
+        if start.duration(to: .now) > .seconds(budget) { return .timedOut }
+        menuSelection = selection
+        return .ready
     }
 
     /// Captures the selection and previews either Basic cleanup or, when `requested` is set, an AI transform.

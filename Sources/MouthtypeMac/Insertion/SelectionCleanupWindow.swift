@@ -119,37 +119,47 @@ private struct SelectionCleanupView: View {
 
 /// The Clean Up Selection submenu: Clean Up (the focused app's tone), the three tones, the saved phrases, and a way
 /// into the Transforms page. The actions need a readable selection, so they disable when there is none.
-@MainActor final class SelectionCleanupMenuSection: NSObject, MenuSection {
+@MainActor final class SelectionCleanupMenuSection: NSObject, MenuSection, NSMenuDelegate {
     static let title = "Clean Up Selection"
     private let cleanUp: () -> Void
     private let applyTone: (StylePreset) -> Void
     private let insertPhrase: (Snippet) -> Void
     private let editTransforms: () -> Void
     private let phrases: () -> [Snippet]
-    private let canAct: () -> Bool
+    private let capture: () -> MenuCapture
     private let parent = NSMenuItem(title: SelectionCleanupMenuSection.title, action: nil, keyEquivalent: "")
     private let submenu = NSMenu(title: SelectionCleanupMenuSection.title)
     var items: [NSMenuItem] { [parent] }
 
     init(cleanUp: @escaping () -> Void, applyTone: @escaping (StylePreset) -> Void,
          insertPhrase: @escaping (Snippet) -> Void, editTransforms: @escaping () -> Void,
-         phrases: @escaping () -> [Snippet] = { [] }, canAct: @escaping () -> Bool = { true }) {
+         phrases: @escaping () -> [Snippet] = { [] }, capture: @escaping () -> MenuCapture = { .ready }) {
         self.cleanUp = cleanUp
         self.applyTone = applyTone
         self.insertPhrase = insertPhrase
         self.editTransforms = editTransforms
         self.phrases = phrases
-        self.canAct = canAct
+        self.capture = capture
         super.init()
         submenu.autoenablesItems = false
+        submenu.delegate = self
         parent.submenu = submenu
-        refresh()
+        rebuild(.ready)
     }
 
-    /// Rebuilt on every open so the phrase list and the enabled state are current.
-    func refresh() {
-        let enabled = canAct()
+    /// The selection is read only when this submenu opens, never when the top-level menu refreshes, so a slow app
+    /// can't hold up Settings, Stop Dictation or Quit.
+    func menuNeedsUpdate(_ menu: NSMenu) { rebuild(capture()) }
+
+    private func rebuild(_ state: MenuCapture) {
+        let enabled = state == .ready
         submenu.removeAllItems()
+        if state == .timedOut {
+            let note = NSMenuItem(title: "Couldn’t read the selection", action: nil, keyEquivalent: "")
+            note.isEnabled = false
+            submenu.addItem(note)
+            submenu.addItem(.separator())
+        }
         func add(_ title: String, _ action: Selector, enabled: Bool, object: Any? = nil, tip: String? = nil) {
             let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
             item.target = self

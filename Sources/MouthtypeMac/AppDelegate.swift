@@ -234,9 +234,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             insertPhrase: { [weak self] in self?.insertPhraseOverSelection($0) },
             editTransforms: { [weak self] in self?.settingsWindow.present(page: .phrases) },
             phrases: { [weak self] in self?.phrases.snippets() ?? [] },
-            canAct: { [weak self] in
-                guard let self else { return false }
-                return AXIsProcessTrusted() && self.selectionCleanupModel.captureForMenu()
+            capture: { [weak self] in
+                guard let self, AXIsProcessTrusted() else { return .unavailable }
+                return self.selectionCleanupModel.captureForMenu()
             }))
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(page: .transcribeFile) }, startsGroup: false)
         if let recovery {

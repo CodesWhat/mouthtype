@@ -97,6 +97,13 @@ extension FocusReading {
 final class AccessibilityFocusReader: FocusReading {
     /// Upper bound on each Accessibility call, so a hung app cannot stall the main thread (and with it the hotkey tap).
     nonisolated static let messagingTimeout: Float = 0.25
+    /// Set while a time-boxed read runs (the menu capture). Each call's timeout shrinks to what's left, so the reads together stay near the budget.
+    static var deadline: Date?
+    static var deadlinePassed: Bool { deadline.map { $0.timeIntervalSinceNow <= 0 } ?? false }
+    static func callTimeout() -> Float {
+        guard let deadline else { return messagingTimeout }
+        return max(0.005, min(messagingTimeout, Float(deadline.timeIntervalSinceNow)))
+    }
 
     var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
 
@@ -246,7 +253,7 @@ final class AccessibilityFocusReader: FocusReading {
 
     @discardableResult
     private func bounded(_ element: AXUIElement) -> AXUIElement {
-        AXUIElementSetMessagingTimeout(element, Self.messagingTimeout)
+        AXUIElementSetMessagingTimeout(element, Self.callTimeout())
         return element
     }
 

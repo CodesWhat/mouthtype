@@ -171,12 +171,12 @@ import MouthtypeCore
 
     @Test func cleanUpSelectionSubmenuListsToneAndPhraseChoices() throws {
         var tones: [StylePreset] = [], phrases: [String] = [], edited = 0, cleaned = 0
-        var enabled = true
+        var state = MenuCapture.ready
         let section = SelectionCleanupMenuSection(
             cleanUp: { cleaned += 1 }, applyTone: { tones.append($0) }, insertPhrase: { phrases.append($0.trigger) },
             editTransforms: { edited += 1 },
             phrases: { [Snippet(trigger: "Sign-off", expansion: "Best,\nScott"), Snippet(trigger: "Meeting Link", expansion: "https://x.test")] },
-            canAct: { enabled })
+            capture: { state })
         let menu = try #require(section.items.first?.submenu)
         #expect(section.items.first?.title == "Clean Up Selection")
         #expect(menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
@@ -185,9 +185,45 @@ import MouthtypeCore
         #expect(menu.items.allSatisfy { $0.image == nil })
         for item in menu.items where !item.isSeparatorItem { _ = item.target?.perform(item.action, with: item) }
         #expect(cleaned == 1 && edited == 1 && tones == [.formal, .casual, .veryCasual] && phrases == ["Sign-off", "Meeting Link"])
-        enabled = false
-        section.refresh()
+        state = .unavailable
+        section.menuNeedsUpdate(menu)
         let disabled = menu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title)
         #expect(disabled == ["Edit Transforms…"])
+    }
+
+    @Test func topLevelMenuNeverCapturesAndSubmenuCapturesOncePerOpen() throws {
+        var captures = 0
+        let section = SelectionCleanupMenuSection(
+            cleanUp: {}, applyTone: { _ in }, insertPhrase: { _ in }, editTransforms: {},
+            capture: { captures += 1; return .ready })
+        let daily = DailyMenu()
+        daily.add(section: SettingsMenuSection {})
+        daily.add(section: section)
+        daily.refresh()
+        daily.menuNeedsUpdate(daily.menu)
+        #expect(captures == 0)
+        let submenu = try #require(section.items.first?.submenu)
+        section.menuNeedsUpdate(submenu)
+        #expect(captures == 1)
+        #expect(submenu.items.first { $0.title == "Clean Up" }?.isEnabled == true)
+    }
+
+    @Test func slowReaderDisablesItemsWithinTheBudget() throws {
+        final class SlowEditor: SelectionEditing {
+            func capture() throws -> SelectedText {
+                Thread.sleep(forTimeInterval: 0.2)
+                return SelectedText(pid: 1, element: nil, range: NSRange(location: 0, length: 2), text: "hi")
+            }
+            func replace(_ original: SelectedText, with replacement: String) -> Bool { false }
+        }
+        let model = SelectionCleanupModel(editor: SlowEditor())
+        let section = SelectionCleanupMenuSection(
+            cleanUp: {}, applyTone: { _ in }, insertPhrase: { _ in }, editTransforms: {},
+            capture: { model.captureForMenu(budget: 0.05) })
+        let submenu = try #require(section.items.first?.submenu)
+        section.menuNeedsUpdate(submenu)
+        #expect(submenu.items.first?.title == "Couldn’t read the selection")
+        #expect(submenu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title) == ["Edit Transforms…"])
+        #expect(model.insert(phrase: Snippet(trigger: "x", expansion: "y")) == .unavailable)
     }
 }
