@@ -302,8 +302,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
-        guard settingsWindow.resolveDraftForQuit() else { return .terminateCancel }
-        guard appUpdater.allowsTermination else { return .terminateCancel }
+        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
             await dictation?.prepareForTermination() ?? true
@@ -321,6 +320,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         })
         return .terminateLater
+    }
+
+    static func mayQuit(allowsTermination: Bool, resolveDraft: () -> Bool) -> Bool {
+        allowsTermination && resolveDraft()
     }
 
     public func applicationWillTerminate(_ notification: Notification) {

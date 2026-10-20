@@ -97,6 +97,21 @@ import MouthtypeCore
         #expect(!f.spellings.isDirty)
     }
 
+    @Test func refusedQuitNeverAsksAboutTheDraft() throws {
+        let f = try fixture()
+        defer { f.cleanup() }
+        f.model.confirmDiscard = { _, _ in Issue.record("asked before quit was certain"); return true }
+        f.model.page = .savedSpellings
+        f.spellings.newSpelling()
+        f.spellings.heard = "mouth type"
+        let window = SettingsWindow(model: f.model, reduceTransparency: { true })
+        defer { window.close() }
+        #expect(!AppDelegate.mayQuit(allowsTermination: false, resolveDraft: { window.resolveDraftForQuit() }))
+        #expect(f.spellings.isDirty)
+        f.model.confirmDiscard = { _, _ in true }
+        #expect(AppDelegate.mayQuit(allowsTermination: true, resolveDraft: { window.resolveDraftForQuit() }))
+    }
+
     @Test func aDraftOnAnotherPageDoesNotBlockLeavingThisOne() throws {
         let f = try fixture()
         defer { f.cleanup() }
