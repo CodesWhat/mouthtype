@@ -60,6 +60,8 @@ final class DictationController {
     @ObservationIgnored private var startReserved = false
     /// The last queued URL command. Each one waits for the one before, so a stop or cancel lands after the start it follows.
     @ObservationIgnored var automationTail: Task<Void, Never>?
+    /// How long a queued URL command waits for the one before it. A start that never returns must not hold up a later stop.
+    @ObservationIgnored var automationWaitLimit: @MainActor () async throws -> Void = { try await Task.sleep(for: .seconds(10)) }
     /// Fired when an automation start has become a hands-free recording, so the hotkey side can adopt the lock.
     @ObservationIgnored var onAutomationLock: (@MainActor () -> Void)?
     @ObservationIgnored private var shuttingDown = false
@@ -382,9 +384,10 @@ final class DictationController {
     }
 
     /// Shows a line for a URL command or a copy, without taking a live recording's pill. A hands-free recording shows it
-    /// over the pill and comes back; a held-key recording keeps its pill and the line is dropped.
+    /// over the pill and comes back; a held-key recording keeps its pill and the line is dropped. While the capture is
+    /// still coming up there is no recording on screen yet, so the line shows normally.
     func showNotice(_ message: PillMessage, duration: TimeInterval = 2.5) {
-        guard phase == .recording else {
+        guard phase == .recording, !captureStarting else {
             pill.showMessage(message, duration: duration)
             return
         }

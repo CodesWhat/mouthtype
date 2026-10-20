@@ -11,7 +11,7 @@ extension DictationController {
     func enqueueAutomation(_ step: DictationAutomationStep) {
         let previous = automationTail
         automationTail = Task { [self] in
-            await previous?.value
+            if let previous { await waitForPreviousAutomation(previous) }
             switch step {
             case .start: await startHandsFree()
             case .stop: stopHandsFree()
@@ -21,11 +21,40 @@ extension DictationController {
         }
     }
 
+    /// Waits for the previous queued command, or gives up when `automationWaitLimit` fires first. The previous task keeps
+    /// running; this command just stops standing behind it.
+    private func waitForPreviousAutomation(_ previous: Task<Void, Never>) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            var resumed = false
+            var timer: Task<Void, Never>?
+            let finish: @MainActor (Bool) -> Void = { timedOut in
+                guard !resumed else { return }
+                resumed = true
+                timer?.cancel()
+                if timedOut { Log.app.info("automation: previous command still running, not waiting for it") }
+                continuation.resume()
+            }
+            Task { @MainActor in
+                await previous.value
+                finish(false)
+            }
+            timer = Task { @MainActor [automationWaitLimit] in
+                do { try await automationWaitLimit() } catch { return }
+                finish(true)
+            }
+        }
+    }
+
     /// Starts a hands-free recording the way the toggle shortcut does: a press, then the lock. Does nothing while
     /// recording or while another start is under way, and the press path still refuses when the app is busy,
     /// quitting or the engine isn't ready.
     func startHandsFree() async {
-        guard phase != .recording, !isStartReserved else { return }
+        guard !isStartReserved else {
+            Log.app.info("automation start dropped: another start is in flight")
+            showNotice(PillMessage("Already starting", detail: "A recording is coming up"))
+            return
+        }
+        guard phase != .recording else { return }
         await handle(.pressed(at: DispatchTime.now().uptimeNanoseconds))
         guard phase == .recording else { return }
         await handle(.locked(at: DispatchTime.now().uptimeNanoseconds, trigger: .toggle))

@@ -1869,6 +1869,49 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.inserter.delivered.isEmpty)
     }
 
+    @Test(.timeLimit(.minutes(1))) func aStartDroppedForAnInFlightStartShowsANotice() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        rig.controller.enqueueAutomation(.start)
+        await rig.settle()
+        #expect(rig.controller.isStartReserved)
+        await rig.controller.startHandsFree()
+        #expect(rig.pill.messages.map(\.headline) == ["Already starting"])
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
+        gate.open()
+        await rig.controller.automationTail?.value
+
+        // A start that finds a finished recording is still silent.
+        await rig.controller.startHandsFree()
+        #expect(rig.pill.messages.map(\.headline) == ["Already starting"])
+    }
+
+    @Test(.timeLimit(.minutes(1))) func aStopQueuedBehindAHungStartRunsOnceTheWaitLimitFires() async {
+        let rig = Rig()
+        let hung = StartGate()
+        let limit = StartGate()
+        rig.capture.duringStart = { await hung.wait() }
+        rig.controller.automationWaitLimit = { await limit.wait() }
+        rig.controller.enqueueAutomation(.start)
+        rig.controller.enqueueAutomation(.stop)
+        let stopTask = rig.controller.automationTail
+        await rig.settle()
+        // Still waiting: the limit has not fired and the start has not returned.
+        var stopRan = false
+        let watcher = Task { @MainActor in await stopTask?.value; stopRan = true }
+        await rig.settle()
+        #expect(!stopRan)
+        limit.open()
+        await watcher.value
+        #expect(stopRan)
+        // The start is still hung; letting it go finishes it normally.
+        #expect(rig.controller.isStartReserved)
+        hung.open()
+        await rig.settle()
+        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree)
+    }
+
     @Test func aURLStartAndAKeyPressDuringACaptureStopBeginOneSession() async {
         for urlFirst in [true, false] {
             let rig = Rig()

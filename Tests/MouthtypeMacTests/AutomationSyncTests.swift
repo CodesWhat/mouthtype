@@ -93,7 +93,7 @@ import MouthtypeCore
 
     @Test(arguments: [
         [], ["bogus"], ["Start"], ["start", "now"], ["stop", "extra"], ["copy-last", "x"],
-        ["open", "nowhere"], ["open", "General"], ["open", "settings", "extra"], ["open", "page=general"],
+        ["open", "nowhere"], ["open", "transcribeFile"], ["open", "savedSpellings"], ["open", "General"], ["open", "settings", "extra"], ["open", "page=general"],
         ["--help", "start"], ["-x"], [""],
     ])
     func refusesBadInputWithUsageOnStderr(arguments: [String]) throws {
@@ -110,5 +110,6 @@ import MouthtypeCore
         #expect(result.err.isEmpty)
         #expect(result.out.hasPrefix("usage: mouthtype"))
         for verb in AutomationCommand.verbs { #expect(result.out.contains(verb)) }
+        for page in AutomationPage.allCases { #expect(result.out.contains(page.rawValue)) }
     }
 }
