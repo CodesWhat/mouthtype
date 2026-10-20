@@ -5,15 +5,19 @@ import UniformTypeIdentifiers
 
 @MainActor final class SpellingEditorWindow: NSWindowController, NSWindowDelegate {
     let editor: SpellingEditor
+    let suggestions: SpellingSuggestionsModel
 
     init(store: FileVocabulary) {
         editor = SpellingEditor(store: store)
+        suggestions = SpellingSuggestionsModel(vocabulary: store)
+        suggestions.onRulesChanged = { [editor] in editor.reload() }
+        editor.onLibraryChanged = { [suggestions] in suggestions.libraryChanged() }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 550),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Saved Spellings"
         window.minSize = NSSize(width: 760, height: 500)
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: SpellingEditorView(editor: editor))
+        window.contentView = NSHostingView(rootView: SpellingEditorView(editor: editor, suggestions: suggestions))
         super.init(window: window)
         window.delegate = self
         window.center()
@@ -23,9 +27,14 @@ import UniformTypeIdentifiers
 
     func present() {
         editor.reload()
+        suggestions.activate()
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        suggestions.deactivate()
     }
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
@@ -43,6 +52,8 @@ import UniformTypeIdentifiers
 
 struct SpellingEditorView: View {
     @Bindable var editor: SpellingEditor
+    var suggestions: SpellingSuggestionsModel
+    var expandFirstSuggestion = false
     @State private var confirmDelete = false
 
     var body: some View {
@@ -51,6 +62,8 @@ struct SpellingEditorView: View {
                 Text("Saved spellings").font(.custom("InstrumentSerif-Regular", size: 34))
                 Text("Keep names and terms spelled the way you want.").foregroundStyle(.secondary)
             }.padding(24)
+            Divider()
+            SpellingSuggestionsSection(model: suggestions, editor: editor, expandFirst: expandFirstSuggestion)
             Divider()
             HStack(alignment: .top, spacing: 0) {
                 library.frame(width: 240)

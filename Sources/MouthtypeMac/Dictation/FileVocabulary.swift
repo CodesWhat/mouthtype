@@ -101,11 +101,14 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         case failed(String)
         case invalid(String)
         case changed
+        /// The library changed after a removal, so putting the entry back at its old spot could misplace it.
+        case staleUndo
 
         var errorDescription: String? {
             switch self {
             case let .malformed(message): "The spelling library could not be read: \(message). Fix dictionary.json and reload it."
             case let .failed(message), let .invalid(message): message
+            case .staleUndo: "Your saved spellings changed, so this can't be undone."
             case .changed: "This spelling changed outside the editor. Reload the library before saving or deleting it."
             }
         }
@@ -191,10 +194,70 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         try write(Self.render(entries))
     }
 
-    func remove(_ rule: DictionaryRule) throws {
+    /// An entry taken out of the file: the raw JSON object and the index it had, so it can be put back exactly.
+    struct RemovedEntry: Equatable, Sendable {
+        var rule: DictionaryRule
+        var index: Int
+        var json: Data
+        /// The file's contents right after the removal, so a restore can tell the library hasn't moved since.
+        var contentsAfter: Data?
+    }
+
+    /// Takes out the entry equal to `rule` (heard, written and starred). Throws `.changed` when no entry matches.
+    @discardableResult
+    func remove(_ rule: DictionaryRule) throws -> RemovedEntry {
+        try removeAll([rule])[0]
+    }
+
+    /// Takes out every entry equal to one of `rules` (heard, written and starred) in ONE write. Throws `.changed`
+    /// without writing when any of them isn't there exactly. Returns the removed entries in file order.
+    @discardableResult
+    func removeAll(_ rules: [DictionaryRule]) throws -> [RemovedEntry] {
         var entries = try managedEntries()
-        guard let index = entries.firstIndex(where: { Self.rule($0) == rule }) else { throw WriteError.changed }
-        entries.remove(at: index)
+        var indices = Set<Int>()
+        for rule in rules {
+            guard let index = entries.firstIndex(where: { Self.rule($0) == rule }) else { throw WriteError.changed }
+            indices.insert(index)
+        }
+        var removed: [RemovedEntry] = []
+        for index in indices.sorted() {
+            do {
+                let json = try JSONSerialization.data(withJSONObject: entries[index], options: [.sortedKeys, .withoutEscapingSlashes])
+                removed.append(RemovedEntry(rule: Self.rule(entries[index]), index: index, json: json))
+            } catch { throw WriteError.failed(error.localizedDescription) }
+        }
+        for index in indices.sorted(by: >) { entries.remove(at: index) }
+        try write(Self.render(entries))
+        let after = try libraryContents()
+        return removed.map { var entry = $0; entry.contentsAfter = after; return entry }
+    }
+
+    /// Puts a removed entry back at its old index, extra keys and all. See `restore(_ removed: [RemovedEntry])`.
+    func restore(_ removed: RemovedEntry) throws {
+        try restore([removed])
+    }
+
+    /// Puts removed entries back at their old indices (or the end when the list is now shorter) in one write. Skips
+    /// the new-entry validation, since they were already in the library. Throws `.staleUndo` when the file isn't
+    /// what the removal left, and `.invalid` when a heard phrase has been taken since.
+    func restore(_ removed: [RemovedEntry]) throws {
+        guard let first = removed.first else { return }
+        if let expected = first.contentsAfter, try libraryContents() != expected { throw WriteError.staleUndo }
+        var entries = try managedEntries()
+        var taken = Set(entries.map { Self.heardKey(Self.rule($0).heard) })
+        var restored: [(index: Int, entry: [String: Any])] = []
+        for item in removed {
+            guard let entry = try JSONSerialization.jsonObject(with: item.json) as? [String: Any] else {
+                throw WriteError.failed("The removed spelling could not be read back.")
+            }
+            guard taken.insert(Self.heardKey(Self.rule(entry).heard)).inserted else {
+                throw WriteError.invalid("A spelling for this heard phrase already exists.")
+            }
+            restored.append((item.index, entry))
+        }
+        for item in restored.sorted(by: { $0.index < $1.index }) {
+            entries.insert(item.entry, at: min(max(item.index, 0), entries.count))
+        }
         try write(Self.render(entries))
     }
 

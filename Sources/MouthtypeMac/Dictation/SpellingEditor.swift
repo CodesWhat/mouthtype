@@ -15,6 +15,8 @@ import Observation
     private(set) var importError: String?
     private(set) var importMessage: String?
     var showingImport = false
+    /// Called after a save, delete or import changed the library file.
+    @ObservationIgnored var onLibraryChanged: @MainActor () -> Void = {}
     var canImport: Bool { !isDirty && !loadFailed && importError == nil && importPreview?.canImport == true }
 
     func previewImport(data: Data, fileName: String) {
@@ -57,6 +59,7 @@ import Observation
             let count = preview.additions.count
             cancelImport()
             reload()
+            onLibraryChanged()
             importMessage = "Imported \(count) spelling\(count == 1 ? "" : "s")."
         } catch FileVocabulary.WriteError.changed {
             importError = "The spelling library changed after this preview. Cancel and choose the CSV again."
@@ -112,6 +115,7 @@ import Observation
             try store.save(original: original, rule: rule)
             setDraft(rule)
             reload()
+            onLibraryChanged()
         } catch { self.error = error.localizedDescription }
     }
 
@@ -121,6 +125,7 @@ import Observation
             try store.remove(original)
             setDraft(nil)
             reload()
+            onLibraryChanged()
         } catch { self.error = error.localizedDescription }
     }
 
