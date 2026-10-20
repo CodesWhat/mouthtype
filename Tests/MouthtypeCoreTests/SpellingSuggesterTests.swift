@@ -304,4 +304,17 @@ private struct SplitMix64: RandomNumberGenerator {
         #expect(PhoneticKey.classKey("priya") == PhoneticKey.classKey("praya"))
         #expect(PhoneticKey.classKey("win") != PhoneticKey.classKey("siobhan"))
     }
+
+    @Test func cancelledRunReturnsEarlyWithNothing() async {
+        let takes = [take("a", raw: "Shaban took a minute"), take("b", raw: "then Shaban called back")] + filler(300)
+        let expected = SpellingSuggester.suggest(takes: takes, rules: rules)
+        #expect(!expected.isEmpty)
+        let task = Task { () -> [SpellingSuggestion] in
+            while !Task.isCancelled { await Task.yield() }
+            return SpellingSuggester.suggest(takes: takes, rules: rules)
+        }
+        task.cancel()
+        #expect(await task.value.isEmpty)
+    }
+
 }
