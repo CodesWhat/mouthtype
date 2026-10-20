@@ -3,7 +3,7 @@ import Testing
 @testable import MouthtypeMac
 
 /// Writes each skin's delivery card at each size and appearance to PNG files when `MOUTHTYPE_CARD_PREVIEWS` names a
-/// directory: a paste-failed card with its transcript, a question, the Undo countdown, and for Matrix and Minimal the
+/// directory: a paste-failed card with its transcript, a question, the Undo countdown, a recovered (good news) card, and for Matrix and Minimal the
 /// grown pill. Everything renders offscreen. The real glass material doesn't, so Glass shows a flat tint in its place,
 /// which approximates the material and is not it.
 @MainActor
@@ -11,13 +11,14 @@ import Testing
     private static let backing: CGFloat = 2
 
     private enum Scene: String, CaseIterable {
-        case failed, question, undo
+        case failed, question, undo, recovered
 
         var card: DeliveryCard {
             switch self {
             case .failed: .pasteFailed("Send the mockups to Sean before Friday and copy the design channel.")
             case .question: .rememberSpelling(SpellingPair(heard: "Shawn", corrected: "Sean"))
             case .undo: .cancelled()
+            case .recovered: .recovered("Send the mockups to Sean before Friday.")
             }
         }
     }

@@ -165,13 +165,57 @@ private final class CardRig {
         #expect(CardPalette.resolve(style: .matrix, dark: true).ink == hex(0xF4F3E8))
     }
 
+    @Test func minimalCardWearsTheAppLimeOnlyOnItsPrimaryButton() throws {
+        for dark in [false, true] {
+            let palette = CardPalette.resolve(style: .minimal, dark: dark)
+            // The lime is the app's: the same values DesignPalette resolves for the matching appearance.
+            let appearance = try #require(NSAppearance(named: dark ? .darkAqua : .aqua))
+            var accent = NSColor.clear, onAccent = NSColor.clear
+            appearance.performAsCurrentDrawingAppearance {
+                accent = DesignPalette.NS.accent.usingColorSpace(.sRGB) ?? .clear
+                onAccent = DesignPalette.NS.onAccent.usingColorSpace(.sRGB) ?? .clear
+            }
+            #expect(palette.primaryFill == accent && palette.primaryText == onAccent)
+            // Nothing else on the card is lime or the old teal: the status colours and secondary controls are ink or neutral.
+            for colour in [palette.ink, palette.body, palette.emphasis, palette.quiet, palette.question, palette.secondaryText, palette.dismissGlyph] {
+                #expect(colour != palette.primaryFill && colour != hex(0x315B54))
+            }
+            for kind in [DeliveryCard.Kind.recovered, .rememberSpelling, .recoverOffer, .cancelled] {
+                #expect(palette.accent(for: kind) != hex(0x315B54) && palette.accent(for: kind) != palette.primaryFill)
+            }
+        }
+    }
+
+    @Test func limeButtonsKeepTheirContrast() {
+        func luminance(_ colour: NSColor) -> Double {
+            let c = colour.usingColorSpace(.sRGB) ?? colour
+            let channels = [c.redComponent, c.greenComponent, c.blueComponent].map { Double($0) }
+                .map { $0 <= 0.03928 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+            return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
+        }
+        func ratio(_ a: NSColor, _ b: NSColor) -> Double {
+            let (x, y) = (luminance(a), luminance(b))
+            return (max(x, y) + 0.05) / (min(x, y) + 0.05)
+        }
+        for dark in [false, true] {
+            let palette = CardPalette.resolve(style: .minimal, dark: dark)
+            // Label on the button: text contrast.
+            #expect(ratio(palette.primaryText, palette.primaryFill) >= 4.5)
+            // The status colour against the card body: the readout holds 3:1 for non-text marks.
+            let body = dark ? SquirclePalette.darkBody.bottom : SquirclePalette.lightBody.bottom
+            #expect(ratio(palette.quiet, body) >= 3 && ratio(palette.warn, body) >= 3)
+            // The lime fill on the card keeps the 3:1 an interactive shape needs on the light body.
+            if !dark { #expect(ratio(palette.primaryFill, SquirclePalette.lightBody.top) >= 2.5) }
+        }
+    }
+
     @Test func minimalLightAndDarkFollowTheSpec() {
         let light = CardPalette.resolve(style: .minimal, dark: false)
-        #expect(light.ink == hex(0x1D1D1F) && light.warn == hex(0xD70015) && light.quiet == hex(0x315B54))
-        #expect(light.accent(for: .recovered) == hex(0x315B54) && light.accent(for: .pasteFailed) == hex(0xD70015))
-        #expect(light.primaryFill == hex(0x1D1D1F))
+        #expect(light.ink == hex(0x1D1D1F) && light.warn == hex(0xD70015) && light.quiet == hex(0x1D1D1F))
+        #expect(light.accent(for: .recovered) == hex(0x1D1D1F) && light.accent(for: .pasteFailed) == hex(0xD70015))
+        #expect(light.primaryFill == hex(0x76A11A) && light.primaryText == hex(0x1D1D1F))
         let dark = CardPalette.resolve(style: .minimal, dark: true)
-        #expect(dark.ink == hex(0xF4F3E8) && dark.primaryFill == hex(0xF4F3E8))
+        #expect(dark.ink == hex(0xF4F3E8) && dark.primaryFill == hex(0xA6CD52) && dark.primaryText == hex(0x1F1F21))
         #expect(SquirclePalette.lightBody.top == hex(0xFBFBFC))
     }
 }
