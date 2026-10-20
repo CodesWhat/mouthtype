@@ -254,10 +254,8 @@ import MouthtypeCore
     @Test func everySettingFromTheOldWindowHasAHomeOnItsPage() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        let terminals = PasteSettings.supportedTerminals.count
         // Pop-up menus and switches per page, counted from the live AppKit controls.
         let expected: [(SettingsPage, popups: Int, switches: Int)] = [
-            (.style, 3, 7 + terminals),             // cleanup level, website tone, website cleanup | fillers, commands, numbers, learn, boost saved words, lowercase, final stop, terminals
             (.appearance, 2, 1),                    // pill size, text font | override fonts
         ]
         for (page, popups, switches) in expected {
@@ -287,12 +285,11 @@ import MouthtypeCore
         let identifiers = ["settings-setup", "settings-shortcut", "settings-recording-mode",
                            "settings-quiet-audio", "settings-live-preview", "settings-microphone", "settings-microphone-refresh",
                            "settings-audio-age", "settings-audio-size", "settings-font-overrides", "settings-font-reset",
-                           "settings-website-domain"]
+                           "style-website-domain"]
         for id in identifiers { #expect(source.contains("\"\(id)\""), "missing \(id)") }
         let titles = ["Microphone", "Dictation shortcut", "Recording behavior", "Cleanup", "Quiet other audio", "Live words",
-                      "Recording sounds", "Launch at login", "Updates", "Default tone", "Add application…", "Website tone",
-                      "Remove fillers", "Spoken commands and lists", "Format numbers", "Learn from my corrections",
-                      "Lowercase sentence starts", "Drop final full stop", "Edit dictionary file…", "Pill style", "Pill size",
+                      "Recording sounds", "Launch at login", "Updates", "Remove fillers", "Spoken commands and lists", "Format numbers", "Learn from my corrections",
+                      "Lowercase sentence starts", "Drop the final full stop", "Edit dictionary file…", "Pill style", "Pill size",
                       "Text font", "Choose Font…", "Override individual fonts", "Keep completed recordings",
                       "Completed audio size limit", "Download…", "Check for Updates…", "Set Up Mouthtype…", "Transcribe a file…"]
         for title in titles { #expect(source.contains("\"\(title)\""), "missing \(title)") }

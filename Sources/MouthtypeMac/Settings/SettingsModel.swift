@@ -255,7 +255,7 @@ import UniformTypeIdentifiers
         recordingModeError = nil
     }
 
-    private func updateAppStyles(_ change: (inout AppCleanupStyles) throws -> Void) {
+    func updateAppStyles(_ change: (inout AppCleanupStyles) throws -> Void) {
         do {
             var current = try AppCleanupStyles.load(defaults)
             try change(&current)
