@@ -233,11 +233,11 @@ private final class FakeInserter: DictationInserting {
     var startFocusSeen: FocusSnapshot?
     var focus = FocusSnapshot(pid: 7, bundleID: "com.apple.Notes", appName: "Notes", role: "AXTextArea")
     var website: String?
-    /// How long the fake page-URL read blocks, to stand in for a hung browser.
-    var websiteDelay: TimeInterval = 0
+    /// When set, the fake page-URL read blocks on it, to stand in for a hung browser. The test signals it to let the read finish.
+    var websiteGate: DispatchSemaphore?
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
-        let value = website, delay = websiteDelay, log = log
-        return { log.add("inserter.website"); if delay > 0 { Thread.sleep(forTimeInterval: delay) }; return value }
+        let value = website, gate = websiteGate, log = log
+        return { log.add("inserter.website"); _ = gate?.wait(timeout: .now() + 30); return value }
     }
     var context: InsertionContext?
     var clipboard: String?
@@ -658,16 +658,17 @@ private struct Rig {
         rig.controller.websiteBudget = 0.05
         rig.inserter.focus.bundleID = "com.google.Chrome"
         rig.inserter.website = "work.slack.com"
-        rig.inserter.websiteDelay = 0.6
+        let gate = DispatchSemaphore(value: 0)
+        rig.inserter.websiteGate = gate
         rig.engine.result.text = "See Maya Friday."
-        let started = Date()
         await rig.dictate()
-        // The hung read costs the take about its budget, not the read's full delay, and the app rule answers.
-        #expect(Date().timeIntervalSince(started) < 0.55)
+        // The hung read is abandoned at its budget and the app rule answers.
         #expect(rig.store.insertion?.cleanup?.style == "veryCasual")
+        gate.signal()
 
         // A later take with a fast read gets its own site, not the abandoned read's.
-        rig.inserter.websiteDelay = 0
+        rig.inserter.websiteGate = nil
+        rig.controller.websiteBudget = 5
         rig.inserter.website = "work.slack.com"
         await rig.dictate()
         #expect(rig.store.insertion?.cleanup?.style == "casual")
