@@ -13,6 +13,10 @@ The first stable release of Mouthtype, for Apple Silicon Macs running macOS 26 o
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
 
+## What changed since 0.1.0
+
+Pill style adds Ring: a round pill with spokes around a circle that follow your voice and a centre dot that swells with it. It follows the light or dark appearance and comes in Standard and Large. Under Reduce Motion it holds still and shows the level as one filled arc.
+
 ## What changed in 0.1.0
 
 Since rc.4, a take cut off by quitting Mouthtype is offered for recovery on the next launch. The docs now say plainly that Tab doesn't reach Settings controls yet; arrow keys move through the sidebar, and a fix is planned for 0.2.

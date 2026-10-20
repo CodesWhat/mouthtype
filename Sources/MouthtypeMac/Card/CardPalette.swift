@@ -24,6 +24,7 @@ extension PillSkinKind {
         case .glass: .glass
         case .matrix: .matrix
         case .minimal: .minimal
+        case .ring: .classic
         }
     }
 }

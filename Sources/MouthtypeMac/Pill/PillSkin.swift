@@ -6,7 +6,7 @@ enum PillControl: Hashable, Sendable {
 }
 
 enum PillSkinKind: String, CaseIterable, Sendable {
-    case classic, glass, matrix, minimal, hifi
+    case classic, glass, matrix, minimal, hifi, ring
 
     static let `default` = PillSkinKind.classic
 
@@ -17,6 +17,7 @@ enum PillSkinKind: String, CaseIterable, Sendable {
         case .matrix: "Matrix"
         case .minimal: "Minimal"
         case .hifi: "Hi-Fi"
+        case .ring: "Ring"
         }
     }
 
@@ -26,6 +27,7 @@ enum PillSkinKind: String, CaseIterable, Sendable {
         case .classic, .glass: ClassicPillLayout.height
         case .matrix, .minimal: MatrixPillLayout.height
         case .hifi: HiFiPillView.artSize.height
+        case .ring: RingPillLayout.diameter
         }
     }
 }
@@ -41,6 +43,7 @@ enum PillSkinFactory {
         case .matrix: return MatrixPillView(frame: frame, size: scale)
         case .minimal: return MinimalPillView(frame: frame, size: scale)
         case .hifi: return HiFiPillView(frame: frame, assets: try PillAssets.loadHiFi(), size: scale, readout: readout)
+        case .ring: return RingPillView(frame: frame, size: scale)
         }
     }
 }

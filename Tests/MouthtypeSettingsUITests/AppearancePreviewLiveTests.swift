@@ -72,6 +72,22 @@ import Testing
         }
     }
 
+    @Test func ringSpokesFollowTheStageLevelInARealWindow() throws {
+        try onscreen {
+            let (stage, window) = try shownStage(.ring)
+            defer { stage.shutDown(); window.orderOut(nil); window.close() }
+            let ring = try #require(stage.skin as? RingPillView)
+            #expect(stage.isAnimating && !stage.showsSnapshot)
+            var seen = Set<[Float]>()
+            for _ in 0..<8 {
+                spin(0.1)
+                seen.insert(ring.spokeLevels)
+            }
+            #expect(seen.count > 2, "spokes keep moving with the preview level")
+            #expect(ring.spokeLevels.max() ?? 0 > 0 && ring.level > 0)
+        }
+    }
+
     @Test func matrixLampBreathesWhileTheStageRuns() throws {
         try onscreen {
             let (stage, window) = try shownStage(.matrix)

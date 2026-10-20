@@ -20,6 +20,8 @@ import Testing
         #expect(makePillController().skin is ClassicPillView)
         #expect(makePillController(skin: .hifi).skin is HiFiPillView)
         #expect(makePillController(skin: .hifi).skinKind == .hifi)
+        #expect(makePillController(skin: .ring).skin is RingPillView)
+        #expect(makePillController(skin: .ring).skinKind == .ring)
     }
 
     @Test func aSkinThatFailsToLoadFallsBackToClassic() {
@@ -58,8 +60,8 @@ import Testing
             #expect(PillSkinPreference.current(defaults) == kind)
             #expect(defaults.string(forKey: "pillSkin") == kind.rawValue)
         }
-        #expect(PillSkinKind.allCases == [.classic, .glass, .matrix, .minimal, .hifi])
-        #expect(PillSkinKind.allCases.map(\.rawValue) == ["classic", "glass", "matrix", "minimal", "hifi"])
+        #expect(PillSkinKind.allCases == [.classic, .glass, .matrix, .minimal, .hifi, .ring])
+        #expect(PillSkinKind.allCases.map(\.rawValue) == ["classic", "glass", "matrix", "minimal", "hifi", "ring"])
         #expect(PillSkinKind.default == .classic)
     }
 

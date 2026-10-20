@@ -64,6 +64,17 @@ import Testing
         #expect(bigger.midX == normal.midX)
     }
 
+    @Test func ringCardClearsTheLargerRing() throws {
+        let standard = controller(size: "standard", skin: "ring")
+        let large = controller(size: "large", skin: "ring")
+        #expect(standard.skin is RingPillView && large.skin is RingPillView)
+        let normal = try #require(standard.cardAnchor())
+        let bigger = try #require(large.cardAnchor())
+        #expect(bigger.top - normal.top == 40)
+        #expect(bigger.midX == normal.midX)
+        #expect(large.panel.frame.size == PillGeometry.panelSize(for: .large))
+    }
+
     @Test func unknownSavedSizesFallBackToAutomatic() {
         for value in ["", "huge", "2", "Large"] {
             let preferences = defaults()
