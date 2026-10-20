@@ -2,40 +2,72 @@ import AppKit
 import SwiftUI
 import MouthtypeCore
 
+extension PillSize {
+    /// The size the preview draws: Automatic previews as Standard, because the preview cannot know which screen the pill lands on.
+    var previewTitle: String { self == .large ? "Large" : "Standard" }
+}
+
+extension PillSkinKind {
+    /// Whether the delivery cards and pill messages draw with the user's text font. Hi-Fi keeps its own bitmap type, so the
+    /// font rows are hidden for it. Matrix draws its pill messages in the text font, and Minimal's pill uses the system font but
+    /// its delivery cards still use the text font, so both keep the rows.
+    var usesTextFont: Bool { self != .hifi }
+
+    /// Hi-Fi is the only style with a readout colour.
+    var hasReadoutColour: Bool { self == .hifi }
+
+    /// What the Text font row says it applies to.
+    var textFontDetail: String {
+        self == .minimal ? "Used by the delivery cards." : "Used by the pill\u{2019}s messages and the delivery cards."
+    }
+}
+
 extension SettingsView {
     @ViewBuilder var appearance: some View {
-        SettingsGroup(eyebrow: "FLOATING PILL") {
-            appearancePreview
-            SettingsRow(title: "Pill style") {
-                Picker("Pill style", selection: Binding(get: { model.skin.rawValue }, set: { if let skin = PillSkinKind(rawValue: $0) { model.setSkin(skin) } })) {
-                    ForEach(PillSkinKind.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
-                }.labelsHidden().pickerStyle(.segmented).fixedSize().accessibilityIdentifier("settings-pill-style")
+        appearancePreview
+        AppearanceStylePicker(selection: model.skin, onSelect: model.setSkin)
+        DesignCard {
+            DesignRow(title: "Pill size", detail: "Automatic picks Large on wide screens. Applies the next time the pill appears.") {
+                DesignSegmented(title: "Pill size", selection: Binding(get: { model.pillSize }, set: { model.setPillSize($0) }),
+                                choices: PillSize.allCases.map { DesignChoice($0.title, $0) })
+                    .accessibilityIdentifier("settings-pill-size")
             }
-            SettingsRow(title: "Pill size", detail: "Automatic picks Large on wide screens. Applies the next time the pill appears.") {
-                Picker("Pill size", selection: Binding(get: { model.pillSize.rawValue }, set: { if let size = PillSize(rawValue: $0) { model.setPillSize(size) } })) {
-                    ForEach(PillSize.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
-                }.labelsHidden().fixedSize().accessibilityIdentifier("settings-pill-size")
-            }
-            if model.skin == .hifi {
-                SettingsRow(title: "Readout colour", detail: "The Hi-Fi meter, timer and message text.") {
-                    Circle().fill(Color(cgColor: PillLayout.color(hex: model.readoutColour.swatchHex))).frame(width: 9, height: 9)
-                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.25), lineWidth: 0.5)).accessibilityHidden(true)
-                    Picker("Readout colour", selection: Binding(get: { model.readoutColour.rawValue }, set: { if let colour = PillReadoutColour(rawValue: $0) { model.setReadoutColour(colour) } })) {
-                        ForEach(PillReadoutColour.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
-                    }.labelsHidden().fixedSize().accessibilityIdentifier("settings-readout-colour")
+            if model.skin.hasReadoutColour {
+                DesignRow(title: "Readout colour", detail: "The meter, timer and message text on the chassis.") {
+                    DesignSegmented(title: "Readout colour", selection: Binding(get: { model.readoutColour }, set: { model.setReadoutColour($0) }),
+                                    choices: PillReadoutColour.allCases.map {
+                                        DesignChoice($0.title, $0, dot: Color(cgColor: PillLayout.color(hex: $0.swatchHex)))
+                                    })
+                        .accessibilityIdentifier("settings-readout-colour")
                 }
             }
-        }
-        SettingsGroup(eyebrow: "TEXT") {
-            SettingsRow(title: model.fontOverrides.enabled ? "Base text font" : "Text font", detail: "Used by the Classic pill and delivery cards.") {
-                Picker("Text font", selection: Binding(get: { model.font.title }, set: { name in if let font = TextFontChoice.standard.first(where: { $0.title == name }) { model.setFont(font) } })) {
-                    ForEach(TextFontChoice.standard, id: \.title) { Text($0.title).tag($0.title) }
-                    if case .custom = model.font { Text(model.font.title).tag(model.font.title) }
-                }.labelsHidden().fixedSize()
-                Button("Choose Font…", action: actions.chooseFont)
+            if model.skin.usesTextFont {
+                textFontRow
+                FontOverridesSection(model: model).rows
             }
         }
-        FontOverridesSection(model: model)
+        if !model.skin.usesTextFont {
+            Text("Hi-Fi keeps its own bitmap type, so the text font settings only show for the other styles.")
+                .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
+                .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
+        } else if model.fontOverrides.enabled {
+            Text("Switching overrides off keeps your choices. Hi-Fi\u{2019}s bitmap readouts keep their own artwork.")
+                .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
+                .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
+        }
+    }
+
+    private var textFontRow: some View {
+        let standard = TextFontChoice.standard.map { DesignChoice($0.title, $0.title) }
+        var choices = standard
+        if case .custom = model.font { choices.append(DesignChoice(model.font.title, model.font.title)) }
+        return DesignRow(title: model.fontOverrides.enabled ? "Base text font" : "Text font", detail: model.skin.textFontDetail) {
+            DesignPopup(title: "Text font", selection: Binding(get: { model.font.title }, set: { name in
+                if let font = TextFontChoice.standard.first(where: { $0.title == name }) { model.setFont(font) }
+            }), choices: choices).accessibilityIdentifier("settings-text-font")
+            Button("Choose Font…", action: actions.chooseFont).buttonStyle(.designSecondary)
+                .accessibilityLabel("Choose a font").accessibilityIdentifier("settings-choose-font")
+        }
     }
 }
 
@@ -48,15 +80,16 @@ extension SettingsView {
                     PillPreviewStageView(kind: model.skin, size: model.pillSize, readout: model.readoutColour, wallpaper: model.previewWallpaper,
                                          onStatus: { status in DispatchQueue.main.async { if model.previewStatus != status { model.previewStatus = status } } })
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    Text("\(model.skin.title) · live preview".uppercased()).font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1)
-                        .foregroundStyle(model.previewWallpaper.captionColor).padding(.bottom, 6).accessibilityHidden(true)
+                    Text("\(model.skin.title) \u{00B7} live preview \u{00B7} \(model.pillSize.previewTitle) size".uppercased())
+                        .font(DesignFont.mono(DesignFont.eyebrow)).tracking(DesignFont.eyebrowTracking)
+                        .foregroundStyle(model.previewWallpaper.captionColor).padding(.bottom, 10).accessibilityHidden(true)
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
-                .overlay(alignment: .topTrailing) { wallpaperPicker.padding(8) }
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.12), lineWidth: 0.5))
+                .overlay(alignment: .topTrailing) { wallpaperPicker.padding(10) }
+                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(DesignPalette.hair2, lineWidth: 1))
                 .preference(key: PreviewWidthKey.self, value: proxy.size.width)
-            }.frame(height: 156)
+            }.frame(height: 190)
             VStack(alignment: .leading, spacing: 2) {
                 Text(PreviewFit.caption(size: model.pillSize, scale: PreviewFit.scale(availableWidth: previewWidth)))
                     .accessibilityIdentifier("settings-pill-size-caption")
@@ -64,18 +97,35 @@ extension SettingsView {
                     Text(line).accessibilityIdentifier("settings-glass-caption")
                 }
             }
-            .font(SettingsFont.sans(SettingsFont.detail)).foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+            .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+            .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4)
         }
         .onPreferenceChange(PreviewWidthKey.self) { previewWidth = $0 }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("\(model.skin.title) floating pill preview")
     }
 
+    /// Light and Dark swatch buttons, drawn on the swatch itself so they stay readable over either one.
     private var wallpaperPicker: some View {
-        Picker("Preview background", selection: $model.previewWallpaper) {
-            ForEach(PreviewWallpaper.allCases) { Text($0.title).tag($0) }
-        }.labelsHidden().pickerStyle(.segmented).fixedSize().accessibilityIdentifier("settings-preview-wallpaper")
+        let dark = model.previewWallpaper == .dark
+        let ink: Color = dark ? .white : .black
+        return HStack(spacing: 0) {
+            ForEach(PreviewWallpaper.allCases) { wallpaper in
+                let selected = wallpaper == model.previewWallpaper
+                Button { model.previewWallpaper = wallpaper } label: {
+                    Text(wallpaper.title).font(DesignFont.sans(DesignFont.caption, .medium)).fixedSize()
+                        .foregroundStyle(ink.opacity(selected ? 1 : 0.7))
+                        .padding(.horizontal, 10).frame(minHeight: 24)
+                        .background { if selected { RoundedRectangle(cornerRadius: 6).fill(ink.opacity(0.22)) } }
+                        .contentShape(RoundedRectangle(cornerRadius: 6))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(wallpaper.title) preview background").accessibilityAddTraits(selected ? .isSelected : [])
+            }
+        }
+        .padding(2).background(RoundedRectangle(cornerRadius: 8).fill(ink.opacity(0.12)))
+        .accessibilityElement(children: .contain).accessibilityLabel("Preview background")
+        .accessibilityIdentifier("settings-preview-wallpaper")
     }
 }
 

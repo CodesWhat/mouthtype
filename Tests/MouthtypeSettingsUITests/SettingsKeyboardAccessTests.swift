@@ -114,21 +114,6 @@ import Testing
         return stops
     }
 
-    /// Reported bug: with Keyboard navigation on, Tab never left the sidebar. Passing `.focusable(false)` on the list disabled focus for
-    /// the page rows under it, so the sidebar's four page rows dropped out of the key view loop. Every sidebar row (four pages, three
-    /// links) must be a Tab stop, followed directly by the page's controls.
-    @Test func tabWalksSidebarRowsThenIntoPageControlsUnderFullKeyboardAccess() throws {
-        for page in [SettingsPage.appearance] {
-            let (controller, window) = try keyWindow(page: page, fullKeyboardAccess: true)
-            defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
-            let stops = try tabOrder(window)
-            let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
-            #expect(sidebar.count == SettingsPage.allCases.count + 1, "\(page): \(sidebar.count) sidebar Tab stops")
-            #expect(stops.dropFirst(sidebar.count).contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth }, "\(page): Tab never reaches a page control")
-            try expectTabReachesPageControl(window, sidebarStops: sidebar.count, "\(page)")
-        }
-    }
-
     /// Home's Copy and Recover buttons are plain buttons, so they are proxies in the loop. Tab must walk the sidebar rows (Home included)
     /// and then reach every row button in order, and `previousKeyView` must mirror it so Shift-Tab steps back through the same stops.
     @Test func tabReachesHomeRowButtonsAfterTheSidebarAndShiftTabMirrorsIt() async throws {

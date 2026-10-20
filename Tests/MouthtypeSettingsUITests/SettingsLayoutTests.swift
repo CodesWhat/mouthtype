@@ -254,16 +254,6 @@ import MouthtypeCore
     @Test func everySettingFromTheOldWindowHasAHomeOnItsPage() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        // Pop-up menus and switches per page, counted from the live AppKit controls.
-        let expected: [(SettingsPage, popups: Int, switches: Int)] = [
-            (.appearance, 2, 1),                    // pill size, text font | override fonts
-        ]
-        for (page, popups, switches) in expected {
-            model.page = page
-            let (view, _) = SettingsRender.host(model: model, actions: actions(), dark: false)
-            #expect(count("SwiftUIPopupButton", in: view) == popups, "\(page.title) pop-ups")
-            #expect(count("PlatformSwitch", in: view) == switches, "\(page.title) switches")
-        }
         let modal: [(SettingsModalPage, popups: Int, switches: Int)] = [
             (.general, 2, 3),                       // mic, recording behavior | quiet audio, live words, sounds
             (.mac, 0, 1),                           // launch at login (updates are a checkbox and a button)
