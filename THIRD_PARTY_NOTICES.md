@@ -153,8 +153,8 @@ Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/
 Copyright (c) 2019 Gerrit Halfmann (https://github.com/halfmage/pixelarticons)
 
 - Licence: MIT, `Sources/MouthtypeMac/Resources/Fonts/MIT-Pixelarticons.txt`
-- Source: https://github.com/halfmage/pixelarticons, v2.4.2, `svg/{home,chart,book-open,arrows-horizontal,text-start-a,picture-in-picture,settings-cog}.svg`
-- Used for: the seven sidebar icons in `Sources/MouthtypeMac/Resources/Settings/Icons/`, rasterised unchanged to 16, 32 and 64 px template PNGs
+- Source: https://github.com/halfmage/pixelarticons, v2.4.2, `svg/{home,chart,book-open,arrows-horizontal,a-arrow-up,picture-in-picture,settings-cog}.svg`
+- Used for: the seven sidebar icons in `Sources/MouthtypeMac/Resources/Settings/Icons/`, rasterised unchanged at one grid pixel per point to 24, 48 and 96 px template PNGs
 
 ## S1-mini by Superwhisper
 

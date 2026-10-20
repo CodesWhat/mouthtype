@@ -321,17 +321,22 @@ enum DesignNavIcon {
     case symbol(String)
 }
 
-/// A navigation row: icon, title, selected on the sel tint. Sidebar rows are 36 pt; the Settings modal nav uses 34.
+/// A navigation row: icon, title, selected on the sel tint. Sidebar rows are 40 pt around a 24 pt pixel icon (8 pt above and below); the Settings modal nav uses 34 with a 16 pt symbol.
 struct DesignNavRow: View {
     let title: String
     let icon: DesignNavIcon
     var selected = false
-    var height: CGFloat = 36
+    var height: CGFloat = 40
     let action: () -> Void
+
+    /// The 24 pt pixel icon gets 12 pt before its label; the 16 pt symbol keeps 10.
+    private var iconSpacing: CGFloat {
+        if case .pixel = icon { 12 } else { 10 }
+    }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 10) {
+            HStack(spacing: iconSpacing) {
                 switch icon {
                 case .pixel(let pixel): DesignIconView(icon: pixel)
                 case .symbol(let name):
@@ -345,7 +350,7 @@ struct DesignNavRow: View {
             .background { if selected { RoundedRectangle(cornerRadius: 8).fill(DesignPalette.sel) } }
             .overlay(alignment: .leading) {
                 // The one place the accent marks "you are here": a thin bar on the selected row.
-                if selected { Capsule().fill(DesignPalette.accent).frame(width: 3, height: 16).padding(.leading, 1).accessibilityHidden(true) }
+                if selected { Capsule().fill(DesignPalette.accent).frame(width: 3, height: 20).padding(.leading, 1).accessibilityHidden(true) }
             }
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
