@@ -191,10 +191,39 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         try write(Self.render(entries))
     }
 
-    func remove(_ rule: DictionaryRule) throws {
+    /// An entry taken out of the file: the raw JSON object and the index it had, so it can be put back exactly.
+    struct RemovedEntry: Equatable, Sendable {
+        var rule: DictionaryRule
+        var index: Int
+        var json: Data
+    }
+
+    /// Takes out the entry equal to `rule` (heard, written and starred). Throws `.changed` when no entry matches.
+    @discardableResult
+    func remove(_ rule: DictionaryRule) throws -> RemovedEntry {
         var entries = try managedEntries()
         guard let index = entries.firstIndex(where: { Self.rule($0) == rule }) else { throw WriteError.changed }
+        let json: Data
+        do { json = try JSONSerialization.data(withJSONObject: entries[index], options: [.sortedKeys, .withoutEscapingSlashes]) }
+        catch { throw WriteError.failed(error.localizedDescription) }
         entries.remove(at: index)
+        try write(Self.render(entries))
+        return RemovedEntry(rule: rule, index: index, json: json)
+    }
+
+    /// Puts a removed entry back at its old index (or the end when the list is now shorter), extra keys and all.
+    /// Skips the new-entry validation, since the entry was already in the library. Throws `.invalid` when its heard
+    /// phrase has been taken since.
+    func restore(_ removed: RemovedEntry) throws {
+        guard let entry = try JSONSerialization.jsonObject(with: removed.json) as? [String: Any] else {
+            throw WriteError.failed("The removed spelling could not be read back.")
+        }
+        var entries = try managedEntries()
+        let key = Self.heardKey(Self.rule(entry).heard)
+        guard !entries.contains(where: { Self.heardKey(Self.rule($0).heard) == key }) else {
+            throw WriteError.invalid("A spelling for this heard phrase already exists.")
+        }
+        entries.insert(entry, at: min(max(removed.index, 0), entries.count))
         try write(Self.render(entries))
     }
 

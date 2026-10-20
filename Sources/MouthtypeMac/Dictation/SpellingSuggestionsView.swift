@@ -29,7 +29,7 @@ struct SpellingSuggestionsSection: View {
             if let undo = model.undo {
                 HStack(spacing: 8) {
                     Label(undo.message, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
-                    Button("Undo") { model.undoLast() }.buttonStyle(.link)
+                    Button("Undo") { model.undoLast() }.buttonStyle(.link).disabled(editor.isDirty || editor.loadFailed)
                         .accessibilityLabel("Undo: \(undo.message)").accessibilityIdentifier("spelling-suggestion-undo")
                 }
             }

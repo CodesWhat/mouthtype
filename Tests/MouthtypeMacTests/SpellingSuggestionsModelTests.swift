@@ -195,10 +195,126 @@ import Testing
         try await Task.sleep(for: .milliseconds(700))
         #expect(!model.suggestions.isEmpty)
     }
+
+    @Test func removeRefusesARuleTheUserChangedAndRefreshes() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        try seed(f.store)
+        let model = model(f)
+        await model.reload()
+        let hazard = try #require(model.suggestions.first { $0.kind == .removeHazard && $0.heardForms == ["win"] })
+        try f.vocabulary.save(original: DictionaryRule(heard: "win", written: "Nguyen"), rule: DictionaryRule(heard: "win", written: "Winn"))
+        model.remove(hazard)
+        #expect(model.error == "That spelling changed. Refreshing suggestions.")
+        #expect(try f.vocabulary.allRules().contains(DictionaryRule(heard: "win", written: "Winn")))
+        #expect(model.undo == nil)
+    }
+
+    @Test func undoRestoresTheOriginalEntryExactly() async throws {
+        let f = try fixture(rules: [])
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let long = String(repeating: "y", count: 200)
+        try """
+        [{"heard":"win","written":"Nguyen","extra":7},{"heard":"mid","written":"\(long)"},{"heard":"last","written":"Last"}]
+        """.write(to: f.vocabulary.url, atomically: true, encoding: .utf8)
+        let model = model(f)
+        let hazard = SpellingSuggestion(written: "Nguyen", heardForms: ["win"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3)
+        model.remove(hazard)
+        #expect(try f.vocabulary.allRules().map(\.heard) == ["mid", "last"])
+        model.undoLast()
+        #expect(try f.vocabulary.allRules().map(\.heard) == ["win", "mid", "last"])
+        let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: f.vocabulary.url)) as? [[String: Any]])
+        #expect(entries[0]["extra"] as? Int == 7)
+
+        let longHazard = SpellingSuggestion(written: long, heardForms: ["mid"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3)
+        model.remove(longHazard)
+        model.undoLast()
+        #expect(try f.vocabulary.allRules().map(\.written) == ["Nguyen", long, "Last"])
+    }
+
+    @Test func undoOfAddLeavesAChangedRuleAlone() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let model = model(f)
+        let suggestion = SpellingSuggestion(written: "Siobhan", heardForms: ["shaban"], kind: .misheardVariant, evidence: [], count: 3, confidence: 0.8)
+        model.add(suggestion)
+        try f.vocabulary.save(original: DictionaryRule(heard: "shaban", written: "Siobhan"), rule: DictionaryRule(heard: "shaban", written: "Shavon"))
+        model.undoLast()
+        #expect(model.error != nil)
+        #expect(model.undo == nil)
+        #expect(try f.vocabulary.allRules().contains(DictionaryRule(heard: "shaban", written: "Shavon")))
+    }
+
+    @Test func corruptDismissalCountsAreDroppedAndNeverOverflow() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-dismiss-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("dismissed-suggestions.json")
+        try #"{"version":1,"counts":{"a":9223372036854775807,"b":-4,"c":5,"d":1000001}}"#.write(to: url, atomically: true, encoding: .utf8)
+        let loaded = DismissedSuggestions.load(from: url)
+        #expect(loaded.counts == ["c": 5])
+        let probe = SpellingSuggestion(written: "x", heardForms: [], kind: .casing, evidence: [], count: 5, confidence: 0.9)
+        let huge = DismissedSuggestions(counts: [probe.id: Int.max])
+        #expect(huge.hides(probe))
+    }
+
+    @Test func deactivateCancelsTheRunningComputation() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        try seed(f.store)
+        let model = model(f)
+        let probe = CancelProbe()
+        model.fetchRecent = { _, _ in
+            probe.started()
+            for _ in 0..<500 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
+            probe.finished(cancelled: Task.isCancelled)
+            return []
+        }
+        model.activate()
+        for _ in 0..<100 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(probe.didStart)
+        model.deactivate()
+        for _ in 0..<100 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(probe.cancelled == true)
+    }
+
+    @Test func reopeningCancelsThePreviousComputation() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        try seed(f.store)
+        let model = model(f)
+        let probe = CancelProbe()
+        let calls = Calls()
+        model.fetchRecent = { store, limit in
+            if calls.next() {
+                probe.started()
+                for _ in 0..<500 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
+                probe.finished(cancelled: Task.isCancelled)
+                return []
+            }
+            return try store.recentTakes(limit: limit)
+        }
+        model.activate()
+        for _ in 0..<100 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
+        await model.reload()
+        for _ in 0..<100 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(probe.cancelled == true)
+        #expect(!model.suggestions.isEmpty)
+    }
 }
 
 private final class Calls: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
     func next() -> Bool { lock.lock(); defer { lock.unlock() }; count += 1; return count == 1 }
+}
+
+private final class CancelProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _started = false
+    private var _cancelled: Bool?
+    var didStart: Bool { lock.lock(); defer { lock.unlock() }; return _started }
+    var cancelled: Bool? { lock.lock(); defer { lock.unlock() }; return _cancelled }
+    func started() { lock.lock(); _started = true; lock.unlock() }
+    func finished(cancelled: Bool) { lock.lock(); _cancelled = cancelled; lock.unlock() }
 }

@@ -301,8 +301,13 @@ private struct Run {
 
     mutating func execute(limit: Int) -> [SpellingSuggestion] {
         guard limit > 0 else { return [] }
-        rawWords = takes.map { tokenize($0.rawText) }
-        finalWords = takes.map { tokenize($0.finalText) }
+        rawWords.reserveCapacity(takes.count)
+        finalWords.reserveCapacity(takes.count)
+        for (i, take) in takes.enumerated() {
+            if i & 63 == 0, Task.isCancelled { return [] }
+            rawWords.append(tokenize(take.rawText))
+            finalWords.append(tokenize(take.finalText))
+        }
 
         let savedHeard = Set(rules.map { Self.norm($0.heard) }.filter { !$0.isEmpty })
         var targets: [Target] = []
@@ -337,6 +342,7 @@ private struct Run {
         // Brand tokens the finals keep using (CodesWhat, GitHub) are joined-compound targets too.
         var finalForms: [String: [String: Int]] = [:]
         for (ti, words) in finalWords.enumerated() {
+            if ti & 63 == 0, Task.isCancelled { return [] }
             for w in words where w.text.count >= 3 && w.text.allSatisfy(\.isLetter) {
                 if w.text == w.lower { lowerTakes[w.lower, default: []].insert(ti); continue }
                 let capitalOnlyAtStart = w.startsSentence && w.text == w.lower.capitalized
@@ -354,6 +360,7 @@ private struct Run {
         }
 
         for (ti, words) in rawWords.enumerated() {
+            if ti & 63 == 0, Task.isCancelled { return [] }
             for (wi, w) in words.enumerated() {
                 let capMid = !w.startsSentence && w.text != w.lower && w.text.first?.isUppercase == true
                 if w.text == w.lower { lowerTakes[w.lower, default: []].insert(ti) }
@@ -379,10 +386,14 @@ private struct Run {
             }
         }
 
+        if Task.isCancelled { return [] }
         misheardAndCasing(unigrams: unigrams, targets: targets, savedHeard: savedHeard, finalForms: finalForms)
+        if Task.isCancelled { return [] }
         joined(phraseHits: phraseHits, targets: targets, savedHeard: savedHeard)
+        if Task.isCancelled { return [] }
         fromCorrections(savedHeard: savedHeard)
         hazards(unigrams: unigrams, usageHits: usageHits)
+        if Task.isCancelled { return [] }
         return ranked(limit: limit)
     }
 
@@ -403,7 +414,10 @@ private struct Run {
         var keyCache: [String: String] = [:]
         let correctionPairs = Set(corrections.map { "\(Self.norm($0.heard))|\($0.corrected.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())" })
 
+        var tick = 0
         for (token, hits) in unigrams {
+            tick &+= 1
+            if tick & 255 == 0, Task.isCancelled { return }
             guard token.count >= 4, token.allSatisfy(\.isLetter), !savedHeard.contains(token), !OrdinaryWords.isOrdinary(token) else { continue }
             if writtenLower.contains(token) { continue }
             let key = keyCache[token] ?? PhoneticKey.classKey(token)
@@ -476,7 +490,10 @@ private struct Run {
             byLength[t.compact.count, default: []].append(t)
             byClass[t.classKey, default: []].append(t)
         }
+        var tick = 0
         for (phrase, hits) in phraseHits where phrase.contains(" ") && !savedHeard.contains(phrase) {
+            tick &+= 1
+            if tick & 255 == 0, Task.isCancelled { return }
             let compact = phrase.replacingOccurrences(of: " ", with: "")
             var best: (Target, Int)?
             let phraseKey = PhoneticKey.classKey(compact)

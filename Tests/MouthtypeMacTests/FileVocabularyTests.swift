@@ -205,4 +205,40 @@ import MouthtypeCore
         let learn = try #require(titles.firstIndex(of: "Learn from My Corrections"))
         #expect(abs(learn - (try #require(titles.firstIndex(of: "Edit Dictionary\u{2026}")))) == 1)
     }
+
+    @Test func removeThenRestorePutsTheExactEntryBackAtItsIndex() throws {
+        let dir = directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("dictionary.json")
+        let long = String(repeating: "x", count: 200)
+        try write("""
+        [
+          {"heard":"one","written":"One"},
+          {"heard":"two","written":"\(long)","starred":true,"note":{"a":[1,2]}},
+          {"heard":"three","written":"Three"}
+        ]
+        """, to: url)
+        let vocabulary = FileVocabulary(url: url)
+        let rule = DictionaryRule(heard: "two", written: long, starred: true)
+        let removed = try vocabulary.remove(rule)
+        #expect(removed.index == 1)
+        #expect(try vocabulary.allRules().map(\.heard) == ["one", "three"])
+        try vocabulary.restore(removed)
+        #expect(try vocabulary.allRules() == [DictionaryRule(heard: "one", written: "One"), rule, DictionaryRule(heard: "three", written: "Three")])
+        let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [[String: Any]])
+        #expect((entries[1]["note"] as? [String: Any])?["a"] as? [Int] == [1, 2])
+    }
+
+    @Test func removeRejectsAChangedRuleAndRestoreRejectsATakenHeardPhrase() throws {
+        let dir = directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let vocabulary = FileVocabulary(url: dir.appendingPathComponent("dictionary.json"))
+        try vocabulary.save(heard: "win", written: "Win2")
+        #expect(throws: FileVocabulary.WriteError.changed) { try vocabulary.remove(DictionaryRule(heard: "win", written: "Nguyen")) }
+        let removed = try vocabulary.remove(DictionaryRule(heard: "win", written: "Win2"))
+        try vocabulary.save(heard: "win", written: "Other")
+        #expect(throws: FileVocabulary.WriteError.invalid("A spelling for this heard phrase already exists.")) { try vocabulary.restore(removed) }
+        #expect(try vocabulary.allRules() == [DictionaryRule(heard: "win", written: "Other")])
+    }
+
 }

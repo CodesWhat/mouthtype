@@ -33,6 +33,20 @@ import MouthtypeCore
         #expect(try store.allRules().isEmpty)
     }
 
+    @Test func saveAndDeleteTellTheSuggestionsTheLibraryChanged() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let editor = SpellingEditor(store: store)
+        var changes = 0
+        editor.onLibraryChanged = { changes += 1 }
+        editor.heard = "mouth type"
+        editor.written = "Mouthtype"
+        editor.save()
+        #expect(changes == 1)
+        editor.delete()
+        #expect(changes == 2)
+    }
+
     @Test func everydayHeardFormWarnsButStillSaves() throws {
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }

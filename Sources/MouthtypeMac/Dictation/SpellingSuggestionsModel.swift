@@ -16,10 +16,14 @@ struct DismissedSuggestions: Codable, Equatable {
 
     static func load(from url: URL) -> DismissedSuggestions {
         guard let data = try? Data(contentsOf: url),
-              let saved = try? JSONDecoder().decode(DismissedSuggestions.self, from: data),
+              var saved = try? JSONDecoder().decode(DismissedSuggestions.self, from: data),
               saved.version == currentVersion else { return DismissedSuggestions() }
+        saved.counts = saved.counts.filter { countRange.contains($0.value) }
         return saved
     }
+
+    /// Counts outside this range can only come from a damaged file, so those entries are dropped on load.
+    static let countRange = 0...1_000_000
 
     func write(to url: URL) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -28,7 +32,10 @@ struct DismissedSuggestions: Codable, Equatable {
 
     func hides(_ suggestion: SpellingSuggestion) -> Bool {
         guard let seen = counts[suggestion.id] else { return false }
-        return suggestion.count < max(seen * 2, seen + 1)
+        let doubled = seen.multipliedReportingOverflow(by: 2)
+        let next = seen.addingReportingOverflow(1)
+        let threshold = max(doubled.overflow ? Int.max : doubled.partialValue, next.overflow ? Int.max : next.partialValue)
+        return suggestion.count < threshold
     }
 }
 
@@ -40,7 +47,7 @@ struct DismissedSuggestions: Codable, Equatable {
 
     /// What the last Add or Remove did, so Undo can put it back.
     struct Undo: Equatable {
-        enum Action: Equatable { case added([DictionaryRule]), removed(DictionaryRule) }
+        enum Action: Equatable { case added([DictionaryRule]), removed(FileVocabulary.RemovedEntry) }
         var message: String
         var action: Action
     }
@@ -59,6 +66,7 @@ struct DismissedSuggestions: Codable, Equatable {
     @ObservationIgnored private(set) var isActive = false
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private var computeTask: Task<[SpellingSuggestion]?, Never>?
     @ObservationIgnored private var undoTask: Task<Void, Never>?
 
     private(set) var suggestions: [SpellingSuggestion] = []
@@ -75,6 +83,7 @@ struct DismissedSuggestions: Codable, Equatable {
 
     isolated deinit {
         reloadTask?.cancel()
+        computeTask?.cancel()
         undoTask?.cancel()
     }
 
@@ -94,6 +103,8 @@ struct DismissedSuggestions: Codable, Equatable {
         generation += 1
         reloadTask?.cancel()
         reloadTask = nil
+        computeTask?.cancel()
+        computeTask = nil
         clearUndo()
     }
 
@@ -111,10 +122,14 @@ struct DismissedSuggestions: Codable, Equatable {
         let fetch = fetchRecent
         let vocabulary = vocabulary
         let limit = Self.takeLimit
-        let found = await Task.detached { () -> [SpellingSuggestion]? in
-            guard let records = try? fetch(store, limit), let rules = try? vocabulary.allRules() else { return nil }
-            return SpellingSuggester.suggest(takes: Self.takes(from: records), rules: rules)
-        }.value
+        computeTask?.cancel()
+        let work = Task.detached { () -> [SpellingSuggestion]? in
+            guard let records = try? fetch(store, limit), let rules = try? vocabulary.allRules(), !Task.isCancelled else { return nil }
+            let found = SpellingSuggester.suggest(takes: Self.takes(from: records), rules: rules)
+            return Task.isCancelled ? nil : found
+        }
+        computeTask = work
+        let found = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
         guard mine == generation, !Task.isCancelled, let found else { return }
         all = found
         publish()
@@ -143,29 +158,29 @@ struct DismissedSuggestions: Codable, Equatable {
         var added: [DictionaryRule] = []
         do {
             for heard in suggestion.heardForms {
-                let rule = DictionaryRule(heard: heard, written: suggestion.written)
+                let rule = DictionaryRule(heard: heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
+                    written: suggestion.written.trimmingCharacters(in: .whitespacesAndNewlines))
                 try vocabulary.save(original: nil, rule: rule)
                 added.append(rule)
             }
         } catch {
-            for rule in added { try? vocabulary.remove(rule) }
+            for rule in added { _ = try? vocabulary.remove(rule) }
             self.error = error.localizedDescription
             return
         }
         finish(Undo(message: "Added \(suggestion.written).", action: .added(added)), dropping: suggestion)
     }
 
+    /// Removes exactly the rule the suggestion was computed from (heard and written). A rule the user has since
+    /// changed is left alone and the suggestions are refreshed.
     func remove(_ suggestion: SpellingSuggestion) {
         guard suggestion.kind == .removeHazard, let heard = suggestion.heardForms.first else { return }
         do {
-            let key = FileVocabulary.heardKey(heard)
-            guard let rule = try vocabulary.allRules().first(where: { FileVocabulary.heardKey($0.heard) == key }) else {
-                error = "That spelling is already gone."
-                startReload()
-                return
-            }
-            try vocabulary.remove(rule)
-            finish(Undo(message: "Removed \(rule.heard).", action: .removed(rule)), dropping: suggestion)
+            let removed = try vocabulary.remove(DictionaryRule(heard: heard, written: suggestion.written))
+            finish(Undo(message: "Removed \(heard).", action: .removed(removed)), dropping: suggestion)
+        } catch FileVocabulary.WriteError.changed {
+            error = "That spelling changed. Refreshing suggestions."
+            startReload()
         } catch { self.error = error.localizedDescription }
     }
 
@@ -175,9 +190,15 @@ struct DismissedSuggestions: Codable, Equatable {
             switch undo.action {
             case .added(let rules):
                 let current = try vocabulary.allRules()
-                for rule in rules where current.contains(rule) { try vocabulary.remove(rule) }
-            case .removed(let rule):
-                try vocabulary.save(original: nil, rule: rule)
+                guard rules.allSatisfy({ current.contains($0) }) else {
+                    clearUndo()
+                    error = "That spelling changed, so Undo left it alone. Refreshing suggestions."
+                    startReload()
+                    return
+                }
+                for rule in rules { try vocabulary.remove(rule) }
+            case .removed(let entry):
+                try vocabulary.restore(entry)
             }
             clearUndo()
             error = nil
