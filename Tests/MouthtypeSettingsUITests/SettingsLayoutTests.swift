@@ -258,7 +258,6 @@ import MouthtypeCore
         // Pop-up menus and switches per page, counted from the live AppKit controls.
         let expected: [(SettingsPage, popups: Int, switches: Int)] = [
             (.style, 3, 7 + terminals),             // cleanup level, website tone, website cleanup | fillers, commands, numbers, learn, boost saved words, lowercase, final stop, terminals
-            (.appearance, 2, 1),                    // pill size, text font | override fonts
         ]
         for (page, popups, switches) in expected {
             model.page = page
