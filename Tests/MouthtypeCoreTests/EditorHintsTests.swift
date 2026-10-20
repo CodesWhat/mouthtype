@@ -57,11 +57,30 @@ import Testing
         #expect(EditorHints.term("Mouthtype") != nil)
     }
 
-    @Test func compoundsOfEverydayWordsAreNotTerms() {
-        for name in ["getUser", "setValue", "itemList", "isOpen", "get_user_list", "getUserItemList"] {
+    @Test func everydayCompoundsAreRejectedUnlessFromTheCursor() throws {
+        for name in ["getUser", "setValue", "itemList", "isOpen", "get_user_list", "getUserItemList", "viewDidLoad"] {
             #expect(EditorHints.term(name) == nil, "\(name) should be rejected")
+            #expect(EditorHints.term(name, allowEverydayCompound: true) != nil, "\(name) should be allowed")
         }
         #expect(EditorHints.term("getUserRescorer")?.aliases == ["get user rescorer"])
+        #expect(try #require(EditorHints.term("viewDidLoad", allowEverydayCompound: true)).aliases == ["view did load"])
+        #expect(EditorHints.term("value", allowEverydayCompound: true) == nil)
+        #expect(EditorHints.term("item", allowEverydayCompound: true) == nil)
+    }
+
+    @Test func cursorKeepsEverydayCompoundsButTitleAndFilesDropThem() {
+        let cursor = EditorHints.terms(cursor: ["viewDidLoad", "getUser"], title: [], files: [])
+        #expect(cursor.map(\.text) == ["viewDidLoad", "getUser"])
+        let others = EditorHints.terms(cursor: [], title: ["viewDidLoad", "value"], files: ["getUser", "item", "setValue"])
+        #expect(others.isEmpty)
+    }
+
+    @Test func everydayCompoundsFromTheCursorAreSubCapped() {
+        let everyday = ["get", "set", "add", "find", "make"].flatMap { verb in ["User", "Value", "Item"].map { verb + $0 } }
+        let named = ["cursorQuillAlpha", "cursorQuillBeta"]
+        let terms = EditorHints.terms(cursor: everyday + named, title: [], files: [])
+        #expect(terms.count - named.count == EditorHints.maxEverydayCompoundTerms)
+        #expect(terms.map(\.text).suffix(2) == named)
     }
 
     @Test func rejectsNonNameShapes() {

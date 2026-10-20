@@ -7,6 +7,9 @@ public enum EditorHints {
     public static let maxTerms = 40
     /// Most of those that may come from the cursor window, so the title and files always have room.
     public static let maxCursorTerms = 20
+    /// Most of the cursor terms that may be compounds of only everyday words (`viewDidLoad`, `getUser`), so they
+    /// can't flood the boost.
+    public static let maxEverydayCompoundTerms = 10
     /// Shorter names are dropped: they sit too close to ordinary words for the boost to be safe.
     public static let minLength = 4
     public static let maxLength = 64
@@ -153,11 +156,12 @@ public enum EditorHints {
 
     // MARK: Terms
 
-    /// One candidate as a boost term, or nil when it is too short, too long, not name-shaped, an everyday word, or a
-    /// compound made only of everyday words ("getUser", "itemList"). The rescorer joins adjacent spoken words, so even
-    /// without an alias such a term would rewrite plain speech like "get user". A compound with any other word gets
-    /// its spoken form as an alias.
-    public static func term(_ raw: String) -> VocabularyBias.Term? {
+    /// One candidate as a boost term, or nil when it is too short, too long, not name-shaped, or an everyday word.
+    /// A compound made only of everyday words ("getUser", "viewDidLoad") is nil too, unless `allowEverydayCompound`
+    /// is set, which only the cursor window does: the rescorer joins adjacent spoken words, so such a term would
+    /// rewrite plain speech like "get user" unless the name is literally on screen at the cursor. A compound gets its
+    /// spoken form as an alias.
+    public static func term(_ raw: String, allowEverydayCompound: Bool = false) -> VocabularyBias.Term? {
         let text = raw.trimmingCharacters(in: CharacterSet(charactersIn: "_-."))
         guard text.count >= minLength, text.count <= maxLength,
               text.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }),
@@ -167,7 +171,7 @@ public enum EditorHints {
         if words.count == 1 {
             return isEveryday(text.lowercased()) ? nil : VocabularyBias.Term(text: text)
         }
-        if words.allSatisfy(isEveryday) { return nil }
+        if !allowEverydayCompound, words.allSatisfy(isEveryday) { return nil }
         return VocabularyBias.Term(text: text, aliases: [words.joined(separator: " ")])
     }
 
@@ -176,16 +180,21 @@ public enum EditorHints {
     public static func terms(cursor: [String], title: [String], files: [String]) -> [VocabularyBias.Term] {
         var seen = Set<String>()
         var result: [VocabularyBias.Term] = []
-        func take(_ candidates: [String], limit: Int) {
+        func take(_ candidates: [String], limit: Int, fromCursor: Bool = false) {
             var taken = 0
+            var everydayCompounds = 0
             for candidate in candidates {
                 guard result.count < maxTerms, taken < limit else { return }
-                guard let term = term(candidate), seen.insert(term.text.lowercased()).inserted else { continue }
+                guard let term = term(candidate, allowEverydayCompound: fromCursor) else { continue }
+                let everyday = fromCursor && spokenWords(term.text).allSatisfy(isEveryday)
+                if everyday, everydayCompounds >= maxEverydayCompoundTerms { continue }
+                guard seen.insert(term.text.lowercased()).inserted else { continue }
+                if everyday { everydayCompounds += 1 }
                 result.append(term)
                 taken += 1
             }
         }
-        take(cursor, limit: maxCursorTerms)
+        take(cursor, limit: maxCursorTerms, fromCursor: true)
         take(title, limit: maxTerms)
         take(files, limit: maxTerms)
         return result
