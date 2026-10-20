@@ -21,7 +21,9 @@ final class SystemWordChecker: @unchecked Sendable {
     }
 
     private static func check(_ word: String) -> Bool {
-        let range = NSSpellChecker.shared.checkSpelling(of: word, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
-        return range.location == NSNotFound
+        let checker = NSSpellChecker.shared
+        let range = checker.checkSpelling(of: word, startingAt: 0, language: "en", wrap: false, inSpellDocumentWithTag: 0, wordCount: nil)
+        // Words the user taught macOS (Learn Spelling) pass the spell check but are names to us, not ordinary English.
+        return range.location == NSNotFound && !checker.hasLearnedWord(word)
     }
 }

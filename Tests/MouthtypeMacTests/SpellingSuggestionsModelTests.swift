@@ -38,7 +38,15 @@ import Testing
     }
 
     private func model(_ f: Fixture) -> SpellingSuggestionsModel {
-        SpellingSuggestionsModel(vocabulary: f.vocabulary, store: f.store, dismissedURL: f.dismissedURL)
+        let model = SpellingSuggestionsModel(vocabulary: f.vocabulary, store: f.store, dismissedURL: f.dismissedURL)
+        model.isKnownWord = { _ in false }
+        return model
+    }
+
+    @Test func systemWordCheckerSmokeTest() {
+        let checker = SystemWordChecker()
+        #expect(checker.isKnown("candy"))
+        #expect(!checker.isKnown("xqzvbr"))
     }
 
     @Test func loadsSuggestionsAndHazardsFromRecentTakes() async throws {
@@ -76,6 +84,7 @@ import Testing
         await withTakes.reload()
         #expect(withTakes.suggestions.isEmpty)
         let noStore = SpellingSuggestionsModel(vocabulary: f.vocabulary, store: nil, dismissedURL: f.dismissedURL)
+        noStore.isKnownWord = { _ in false }
         await noStore.reload()
         #expect(noStore.suggestions.isEmpty)
     }
