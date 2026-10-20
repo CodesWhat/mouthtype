@@ -157,7 +157,8 @@ import MouthtypeCore
         #expect(try AppCleanupStyles.load(defaults).entries.count == 2)
         model.removeAppStyle(bundleID: "com.apple.MobileSMS")
         #expect(model.appStyles.entries.map(\.appName) == ["Slack"])
-        #expect(model.appStyles.resolve(bundleID: "com.apple.MobileSMS", fallback: .formal) == .formal)
+        #expect(model.appStyles.resolve(bundleID: "com.apple.MobileSMS", fallback: .formal) == StylePreset.casual.options)
+        #expect(model.appStyles.resolve(bundleID: "org.example.Unlisted", fallback: .formal) == .formal)
     }
 
     @Test func malformedAppStylesCannotBeOverwrittenFromSettings() {

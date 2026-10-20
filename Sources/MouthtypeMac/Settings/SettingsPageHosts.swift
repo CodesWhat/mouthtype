@@ -22,9 +22,8 @@ extension SettingsView {
         case .transforms:
             DesignPage(title: page.headline, summary: page.summary) { PhrasesPage(model: model) }
         case .style:
-            DesignPage(title: page.headline, summary: page.summary) {
-                generalCleanup
-                writing
+            DesignPage(title: page.headline, summary: "A tone for each kind of writing, and the apps that count as each kind.") {
+                styleContent
             }
         case .appearance:
             DesignPage(title: page.headline, summary: page.summary) { appearance }

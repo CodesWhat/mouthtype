@@ -118,7 +118,7 @@ import Testing
     /// the page rows under it, so the sidebar's four page rows dropped out of the key view loop. Every sidebar row (four pages, three
     /// links) must be a Tab stop, followed directly by the page's controls.
     @Test func tabWalksSidebarRowsThenIntoPageControlsUnderFullKeyboardAccess() throws {
-        for page in [SettingsPage.style, .appearance] {
+        for page in [SettingsPage.appearance] {
             let (controller, window) = try keyWindow(page: page, fullKeyboardAccess: true)
             defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
             let stops = try tabOrder(window)
@@ -157,9 +157,19 @@ import Testing
         }
     }
 
+    /// The Style page is built from buttons, so its tabs, tone cards and rows are proxy stops after the sidebar.
+    @Test func tabReachesStyleTabsAndToneCardsAfterTheSidebar() throws {
+        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let stops = try tabOrder(window)
+        let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
+        #expect(sidebar.count == SettingsPage.allCases.count + 1)
+        #expect(stops.dropFirst(sidebar.count).filter { $0.isProxy && $0.x >= SettingsTheme.sidebarWidth }.count >= 8)
+    }
+
     /// With Keyboard navigation off the list is itself the focus target, ahead of the rows, and Tab still continues into the page.
     @Test func tabLoopStillReachesPageControlsWithKeyboardNavigationOff() throws {
-        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: false)
+        let (controller, window) = try keyWindow(page: .appearance, fullKeyboardAccess: false)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
         #expect(stops.contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth })
