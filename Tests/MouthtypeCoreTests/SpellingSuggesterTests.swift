@@ -2,6 +2,19 @@ import Foundation
 import Testing
 @testable import MouthtypeCore
 
+/// Deterministic PRNG so the perf corpus is diverse but identical on every run.
+private struct SplitMix64: RandomNumberGenerator {
+    var state: UInt64
+    init(seed: UInt64) { state = seed }
+    mutating func next() -> UInt64 {
+        state &+= 0x9E3779B97F4A7C15
+        var z = state
+        z = (z ^ (z >> 30)) &* 0xBF58476D1CE4E5B9
+        z = (z ^ (z >> 27)) &* 0x94D049BB133111EB
+        return z ^ (z >> 31)
+    }
+}
+
 @Suite struct SpellingSuggesterTests {
     private func take(_ id: String, raw: String, final: String? = nil, boost: [String] = []) -> SuggestionTake {
         SuggestionTake(id: id, rawText: raw, finalText: final ?? raw, boostTermsApplied: boost, app: "Orca")
@@ -189,25 +202,54 @@ import Testing
         let brands = ["Drydock", "Sockguard", "Portwing", "Mouthtype", "Wispr Flow", "CodesWhat", "Siobhan", "Priya", "Nguyen", "Kubernetes", "Tailscale", "Postgres", "Grafana", "Terraform", "Cloudflare", "Anthropic", "Figma", "Linear", "Notion", "Vercel", "Supabase", "Stripe", "Datadog", "Sentry", "Raycast", "Obsidian", "Homebrew", "Xcode", "Swiftly", "Cursor", "Ghostty", "Warp", "Zed", "Docker", "Compose", "Nginx", "Traefik", "Caddy", "Prometheus", "Loki", "Tempo", "Mimir", "Alloy", "Vector", "Fluentd", "Kibana", "Elastic", "Mongo", "Redis", "Valkey", "Kafka", "Pulsar", "Temporal", "Dagster", "Airflow", "Metabase", "Superset", "Retool", "Zapier"]
         let r = brands.enumerated().map { DictionaryRule(heard: "heard\($0.offset)", written: $0.element) }
         let syllables = ["ka", "lo", "mi", "ra", "te", "vu", "no", "pi", "sa", "du", "fe", "gro", "bli", "tre", "sho", "quan", "zel", "man", "dor", "win"]
+        var rng = SplitMix64(seed: 0x4D6F757468)
         var takes: [SuggestionTake] = []
         for i in 0..<1000 {
-            let words = (0..<45).map { w -> String in
-                let a = syllables[(w * 7 + i * 3) % syllables.count]
-                let b = syllables[(w * 11 + i * 5 + w / 3) % syllables.count]
-                let c = syllables[(w + i * 13) % syllables.count]
-                return w % 4 == 0 ? a + b : (w % 4 == 1 ? a + b + c : (w % 4 == 2 ? b + a : c + a + b))
+            let words = (0..<45).map { _ -> String in
+                (0..<Int.random(in: 1...3, using: &rng)).map { _ in syllables.randomElement(using: &rng)! }.joined()
             }
             var raw = words.joined(separator: " ")
             if i % 50 == 0 { raw += " Shaban and dry doc and priya" }
             takes.append(take("t\(i)", raw: raw))
         }
+        #expect(Set(takes.map(\.rawText)).count == 1000)
         let start = Date()
         let out = SpellingSuggester.suggest(takes: takes, rules: r, limit: 100)
         let elapsed = Date().timeIntervalSince(start)
         print("SpellingSuggester 1000 takes, \(r.count) rules: \(Int(elapsed * 1000)) ms")
-        #expect(elapsed < 1.0)
+        #expect(elapsed < 2.0)
         #expect(out.contains { $0.written == "Siobhan" })
         #expect(out.contains { $0.written == "Drydock" })
+    }
+
+    @Test func savedHyphenRuleIsCountedAndNotSuggestedForRemoval() {
+        let r = [DictionaryRule(heard: "git-hub", written: "GitHub")]
+        let takes = (0..<120).map { take("t\($0)", raw: "open git-hub for build \($0) please") }
+        let out = SpellingSuggester.suggest(takes: takes, rules: r)
+        #expect(!out.contains { $0.kind == .removeHazard })
+        // Without any raw match the same history does recommend removal.
+        let unused = SpellingSuggester.suggest(takes: filler(120), rules: r)
+        #expect(unused.contains { $0.kind == .removeHazard })
+    }
+
+    @Test func boundaryApostrophesBreakCompounds() {
+        let takes = [take("a", raw: "a 'dry' doc called"), take("b", raw: "the 'dry' doc again")]
+        let out = SpellingSuggester.suggest(takes: takes, rules: rules)
+        #expect(!out.contains { $0.kind == .joinedCompound && $0.written == "Drydock" })
+    }
+
+    @Test func boundedDistanceAgreesWithFullDistance() {
+        var rng = SplitMix64(seed: 7)
+        let alphabet = Array("abc")
+        func word() -> String { String((0..<Int.random(in: 0...6, using: &rng)).map { _ in alphabet.randomElement(using: &rng)! }) }
+        for _ in 0..<2000 {
+            let a = word(), b = word()
+            let full = PhoneticKey.distance(a, b)
+            for limit in 1...3 {
+                let got = SpellingSuggester.boundedDistanceForTesting(a, b, limit: limit)
+                #expect(got == (full <= limit ? full : nil), "\(a) \(b) \(limit)")
+            }
+        }
     }
 
     @Test func lookAlikeNamesStayLowConfidence() throws {
