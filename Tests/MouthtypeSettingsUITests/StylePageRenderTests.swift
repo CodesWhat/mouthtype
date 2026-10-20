@@ -99,14 +99,19 @@ import MouthtypeCore
         #expect(model.appStyles.resolveLevel(bundleID: "org.example.Chat") == .basic)
     }
 
-    @Test func advancedWritingSwitchesAreStillOnThePage() throws {
+    @Test func writingSwitchesLiveOnAdvancedAndNotOnStyle() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let source = try String(contentsOf: root.appendingPathComponent("Sources/MouthtypeMac/Settings/StyleAdvancedSection.swift"), encoding: .utf8)
+        let settings = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
+        let advanced = try String(contentsOf: settings.appendingPathComponent("SettingsAdvancedPage.swift"), encoding: .utf8)
         for title in ["Remove fillers", "Spoken commands and lists", "Format numbers", "Lowercase sentence starts", "Drop the final full stop",
-                      "Learn from my corrections", "Boost my saved words while recognising", "Dictionary file", "Edit dictionary file…"] {
-            #expect(source.contains("\"\(title)\""), "missing \(title)")
+                      "Learn from my corrections", "Edit dictionary file…"] {
+            #expect(advanced.contains("\"\(title)\""), "missing \(title)")
         }
-        #expect(source.contains("PasteSettings.supportedTerminals"))
+        #expect(advanced.contains("PasteSettings.supportedTerminals"))
+        for file in ["StylePage", "StyleCleanupTab", "StyleRows", "SettingsWritingPage"] {
+            let style = try String(contentsOf: settings.appendingPathComponent("\(file).swift"), encoding: .utf8)
+            #expect(!style.contains("setFillers") && !style.contains("setLearnCorrections") && !style.contains("setChunks"), "\(file) still holds an Advanced switch")
+        }
     }
 
     @Test func nothingOnThePageIsTruncated() throws {
