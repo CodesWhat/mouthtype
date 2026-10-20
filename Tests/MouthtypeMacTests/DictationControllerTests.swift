@@ -1838,6 +1838,31 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(idle.pill.messages.map(\.headline) == ["Copied"])
     }
 
+    @Test(arguments: [true, false])
+    func aNoticeAfterTheCaptureIsLiveKeepsTheRecordingPillWhileHistoryStarts(handsFree: Bool) async {
+        let rig = Rig()
+        let gate = StartGate()
+        let reached = StartGate()
+        rig.store.duringBegin = {
+            reached.open()
+            await gate.wait()
+        }
+        let start = Task { @MainActor in
+            if handsFree { await rig.controller.startHandsFree() } else { await rig.controller.handle(.pressed(at: keyDown)) }
+        }
+        await reached.wait()
+        // Capture is running and the recording pill is up; only the history row is still pending.
+        #expect(rig.log.contains("pill.recording"))
+        rig.controller.showNotice(PillMessage("Automation is off"))
+        #expect(rig.pill.messages.isEmpty && rig.pill.notices.isEmpty)
+        #expect(!rig.log.contains("pill.hide"))
+        gate.open()
+        await start.value
+        await rig.settle()
+        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree == handsFree)
+        #expect(rig.pill.messages.isEmpty)
+    }
+
     @Test func aStopQueuedBehindAStartingRecordingStopsIt() async {
         let rig = Rig()
         let gate = StartGate()
@@ -1887,29 +1912,54 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.pill.messages.map(\.headline) == ["Already starting"])
     }
 
-    @Test(.timeLimit(.minutes(1))) func aStopQueuedBehindAHungStartRunsOnceTheWaitLimitFires() async {
+    @Test(.timeLimit(.minutes(1)), arguments: [DictationAutomationStep.stop, .cancel])
+    func aStopQueuedBehindAHungStartEndsTheCaptureOnceTheStartComesUp(step: DictationAutomationStep) async {
         let rig = Rig()
         let hung = StartGate()
         let limit = StartGate()
         rig.capture.duringStart = { await hung.wait() }
         rig.controller.automationWaitLimit = { await limit.wait() }
         rig.controller.enqueueAutomation(.start)
-        rig.controller.enqueueAutomation(.stop)
-        let stopTask = rig.controller.automationTail
+        let startTask = rig.controller.automationTail
+        rig.controller.enqueueAutomation(step)
+        let endTask = rig.controller.automationTail
         await rig.settle()
         // Still waiting: the limit has not fired and the start has not returned.
-        var stopRan = false
-        let watcher = Task { @MainActor in await stopTask?.value; stopRan = true }
+        var endRan = false
+        let watcher = Task { @MainActor in await endTask?.value; endRan = true }
         await rig.settle()
-        #expect(!stopRan)
+        #expect(!endRan)
         limit.open()
         await watcher.value
-        #expect(stopRan)
-        // The start is still hung; letting it go finishes it normally.
+        #expect(endRan)
+        // The start is still hung; letting it go must end the capture rather than lock it on.
         #expect(rig.controller.isStartReserved)
         hung.open()
+        await startTask?.value
+        await rig.controller.waitForProcessing()
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
+        if step == .stop {
+            #expect(rig.inserter.delivered == ["Hello world."])
+            #expect(rig.log.contains("capture.stop"))
+        } else {
+            #expect(rig.store.finishes.map(\.0) == [.cancelled])
+            #expect(rig.inserter.delivered.isEmpty)
+        }
+    }
+
+    @Test func aFailedAutomationStartDropsAStopThatReachedIt() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        rig.capture.startError = CaptureError.noInputDevice
+        let start = Task { @MainActor in await rig.controller.startHandsFree() }
         await rig.settle()
-        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree)
+        rig.controller.stopHandsFree()
+        #expect(rig.controller.pendingAutomationEnd == .stop)
+        gate.open()
+        await start.value
+        #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
     }
 
     @Test func aURLStartAndAKeyPressDuringACaptureStopBeginOneSession() async {

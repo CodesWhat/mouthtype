@@ -43,7 +43,7 @@ mouthtype open appearance
 
 `mouthtype --help` prints the usage and exits 0. Any bad verb, bad page or extra argument prints the usage to stderr and exits 64 without opening anything.
 
-URL commands run in the order they arrive, so `start` followed by `stop` stops the recording the start is still bringing up. A command waits at most 10 seconds for the one before it, so a start that never returns can't hold up a later `stop` or `cancel` forever. A recording started this way stops with the dictation key and cancels with Esc, like one started from the keyboard.
+URL commands run in the order they arrive, so `start` followed by `stop` stops the recording the start is still bringing up. A command waits at most 10 seconds for the one before it, so a start that never returns can't hold up a later `stop` or `cancel` forever. A `stop` or `cancel` that stops waiting this way is remembered by the start and applied the moment the recording comes up: `stop` ends and transcribes it, `cancel` discards it, and it is never left locked on. A recording started this way stops with the dictation key and cancels with Esc, like one started from the keyboard.
 
 ## Shortcuts
 

@@ -5,6 +5,11 @@ enum DictationAutomationStep: Equatable {
     case start, stop, toggle, cancel
 }
 
+/// A stop or cancel that arrived while an automation start was still coming up.
+enum AutomationEnd: Equatable {
+    case stop, cancel
+}
+
 extension DictationController {
     /// Queues a URL command behind the ones before it. A start suspends while the capture comes up, and a stop or
     /// cancel that follows it has to see that recording, not run ahead and find nothing to stop.
@@ -55,8 +60,25 @@ extension DictationController {
             return
         }
         guard phase != .recording else { return }
+        automationStartPending = true
+        pendingAutomationEnd = nil
+        defer {
+            automationStartPending = false
+            pendingAutomationEnd = nil
+        }
         await handle(.pressed(at: DispatchTime.now().uptimeNanoseconds))
         guard phase == .recording else { return }
+        // A stop or cancel that gave up waiting on this start ends the recording as it comes up instead of locking it on.
+        if let end = pendingAutomationEnd {
+            pendingAutomationEnd = nil
+            automationStartPending = false
+            switch end {
+            case .stop: await handle(.released(at: DispatchTime.now().uptimeNanoseconds))
+            case .cancel: await handle(.cancelled(reason: .escape))
+            }
+            return
+        }
+        automationStartPending = false
         await handle(.locked(at: DispatchTime.now().uptimeNanoseconds, trigger: .toggle))
         if isHandsFree { onAutomationLock?() }
     }
