@@ -83,6 +83,51 @@ private struct SplitMix64: RandomNumberGenerator {
         #expect(s.count >= 3)
     }
 
+    private func titled(_ word: String) -> [SuggestionTake] {
+        let cap = word.prefix(1).uppercased() + word.dropFirst()
+        return [
+            take("a", raw: "i read \(word) every day", final: "I read \(cap) every day"),
+            take("b", raw: "moved off \(word) last week", final: "Moved off \(cap) last week"),
+            take("c", raw: "the \(word) export is broken", final: "The \(cap) export is broken"),
+        ]
+    }
+
+    @Test func ordinaryEnglishWordsAreNotSuggestedAsCapitalised() {
+        let english: @Sendable (String) -> Bool = { ["candy", "press", "peer", "lure"].contains($0) }
+        for word in ["candy", "press", "peer", "lure"] {
+            #expect(SpellingSuggester.suggest(takes: titled(word), rules: [], isKnownWord: english).isEmpty, "\(word)")
+        }
+    }
+
+    @Test func unknownWordsStillGetTitleCase() throws {
+        let english: @Sendable (String) -> Bool = { ["candy", "press"].contains($0) }
+        for word in ["feedly", "tailscale"] {
+            let s = try #require(SpellingSuggester.suggest(takes: titled(word), rules: [], isKnownWord: english).first { $0.kind == .casing })
+            #expect(s.heardForms == [word])
+        }
+    }
+
+    @Test func innerCapitalBrandIsAllowedEvenWhenLowercaseIsAWord() throws {
+        let takes = [
+            take("a", raw: "push it to github", final: "Push it to GitHub"),
+            take("b", raw: "open github now", final: "Open GitHub now"),
+        ]
+        let s = try #require(SpellingSuggester.suggest(takes: takes, rules: [], isKnownWord: { _ in true }).first { $0.kind == .casing })
+        #expect(s.written == "GitHub")
+    }
+
+    @Test func savedCapitalisedFormIsAllowedEvenWhenLowercaseIsAWord() throws {
+        let takes = [take("a", raw: "email priya about the invoice", final: "Email priya about the invoice")]
+        let s = try #require(SpellingSuggester.suggest(takes: takes, rules: rules, isKnownWord: { _ in true }).first { $0.kind == .casing })
+        #expect(s.written == "Priya")
+    }
+
+    @Test func knownWordsAreNotSuggestedAsHeardForms() {
+        let takes = [take("a", raw: "ask Shaban about it", boost: ["Siobhan"]), take("b", raw: "then Shaban called")]
+        #expect(SpellingSuggester.suggest(takes: takes, rules: rules).contains { $0.written == "Siobhan" })
+        #expect(!SpellingSuggester.suggest(takes: takes, rules: rules, isKnownWord: { $0 == "shaban" }).contains { $0.written == "Siobhan" })
+    }
+
     @Test func sentenceStartCapitalisationAloneIsNotABrand() {
         let takes = [
             take("a", raw: "later we left", final: "Later we left"),
