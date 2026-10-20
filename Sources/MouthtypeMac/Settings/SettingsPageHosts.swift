@@ -18,7 +18,7 @@ extension SettingsView {
                 StatsHostPage(model: model.stats)
             }
         case .dictionary:
-            wordsPage(page) { SavedSpellingsPage(model: model) }
+            SavedSpellingsPage(model: model)
         case .transforms:
             wordsPage(page) { PhrasesPage(model: model) }
         case .style:

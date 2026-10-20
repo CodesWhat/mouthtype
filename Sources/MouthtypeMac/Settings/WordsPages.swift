@@ -1,14 +1,22 @@
 import SwiftUI
 
-/// The Saved spellings page. The editor fills the content area and the whole page scrolls when the window is too short for it.
+/// The Dictionary page: serif header, then suggestions, the saved words, and New word as a sheet. It scrolls as one page.
 struct SavedSpellingsPage: View {
     var model: SettingsModel
 
     var body: some View {
         if let editor = model.spellings, let suggestions = model.spellingSuggestions {
-            WordsPageScroll { SpellingEditorView(editor: editor, suggestions: suggestions) }
+            DesignPage(title: "Your names, spelled right.",
+                summary: "Teach Mouthtype the words it keeps mishearing. Save a spelling once and it sticks.") {
+                SpellingEditorView(editor: editor, suggestions: suggestions)
+            }
         } else {
-            SettingsForm { SettingsGroup(eyebrow: "SAVED SPELLINGS") { SettingsNote(text: "Saved spellings are unavailable.") } }
+            DesignPage(title: "Your names, spelled right.") {
+                DesignSection(eyebrow: "Saved spellings") {
+                    Text("Saved spellings are unavailable.").font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
+                        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
         }
     }
 }

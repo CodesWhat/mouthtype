@@ -141,7 +141,7 @@ import MouthtypeCore
 
         model.page = .dictionary
         spellings.newSpelling()
-        spellings.heard = "mouth type"
+        spellings.heardInput = "mouth type"
         #expect(router.handle(url("mouthtype://open?page=appearance")) == .performed(.open(.appearance)))
         #expect(model.page == .dictionary && spellings.isDirty && asked == 1)
 
