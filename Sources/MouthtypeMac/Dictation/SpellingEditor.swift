@@ -5,9 +5,15 @@ import Observation
 @MainActor @Observable final class SpellingEditor {
     private let store: FileVocabulary
     private(set) var items: [DictionaryRule] = []
-    private(set) var original: DictionaryRule?
-    var heard = ""
+    /// The word being edited as saved, empty for a new word. A word is every rule that writes the same spelling.
+    private(set) var original: [DictionaryRule] = []
+    /// True while the New word / Edit word sheet is up.
+    private(set) var isEditing = false
+    /// Heard forms already added to the draft. Whatever is still typed in `heardInput` counts as one more.
+    var heardForms: [String] = []
+    var heardInput = ""
     var written = ""
+    var starred = false
     private(set) var error: String?
     private(set) var loadFailed = false
     private(set) var importPreview: SpellingImportPreview?
@@ -66,10 +72,40 @@ import Observation
         } catch { importError = error.localizedDescription }
     }
 
-    var isDirty: Bool { heard != (original?.heard ?? "") || written != (original?.written ?? "") }
-    var validationMessage: String? { isDirty ? FileVocabulary.validationMessage(heard: heard, written: written) : nil }
+    /// The saved words, one per spelling, in the order their first rule appears in the library.
+    var words: [SpellingWord] {
+        var order: [String] = []
+        var grouped: [String: [DictionaryRule]] = [:]
+        for rule in items {
+            if grouped[rule.written] == nil { order.append(rule.written) }
+            grouped[rule.written, default: []].append(rule)
+        }
+        return order.map { SpellingWord(written: $0, rules: grouped[$0] ?? []) }
+    }
+
+    /// The heard forms that would be saved: the added ones plus what is typed, or the spelling itself when none is given,
+    /// which fixes capitalisation only (the same as a CSV with a name column).
+    var effectiveHeardForms: [String] {
+        var forms = heardForms
+        if let typed = Self.normalized(heardInput), !forms.contains(where: { Self.sameForm($0, typed) }) { forms.append(typed) }
+        if forms.isEmpty, let name = Self.normalized(written) { forms = [name] }
+        return forms
+    }
+
+    var isDirty: Bool {
+        let saved = original.map(\.heard)
+        return written != (original.first?.written ?? "") || starred != (original.first?.starred ?? false)
+            || !heardInput.isEmpty || heardForms != saved
+    }
+    var validationMessage: String? {
+        guard isDirty else { return nil }
+        if Self.normalized(written) == nil { return FileVocabulary.validationMessage(heard: "x", written: written) }
+        return effectiveHeardForms.lazy.compactMap { FileVocabulary.validationMessage(heard: $0, written: self.written) }.first
+    }
     /// Not a blocker: the rule saves as written, the user just learns it will rewrite an everyday word.
-    var everydayWarning: String? { OrdinaryWords.warning(heard: heard, written: written) }
+    var everydayWarning: String? {
+        effectiveHeardForms.lazy.compactMap { OrdinaryWords.warning(heard: $0, written: self.written) }.first
+    }
     var canSave: Bool { !loadFailed && isDirty && validationMessage == nil }
 
     init(store: FileVocabulary) {
@@ -83,55 +119,106 @@ import Observation
             items = try store.allRules()
             loadFailed = false
             error = nil
-            if let original { setDraft(items.first { FileVocabulary.heardKey($0.heard) == FileVocabulary.heardKey(original.heard) }) }
+            if !original.isEmpty {
+                let keys = Set(original.map { FileVocabulary.heardKey($0.heard) })
+                let match = items.first { keys.contains(FileVocabulary.heardKey($0.heard)) }
+                setDraft(match.map { found in items.filter { $0.written == found.written } } ?? [], editing: isEditing && match != nil)
+            }
         } catch {
             self.error = error.localizedDescription
             loadFailed = true
         }
     }
 
-    func select(_ rule: DictionaryRule) {
-        guard !isDirty else { return }
-        setDraft(rule)
-        if !loadFailed { error = nil }
+    /// Opens a saved word in the sheet.
+    func select(_ word: SpellingWord) {
+        guard !isDirty, !loadFailed else { return }
+        setDraft(word.rules, editing: true)
+        error = nil
     }
 
     func newSpelling() {
         guard !isDirty, !loadFailed else { return }
-        setDraft(nil)
+        setDraft([], editing: true)
         error = nil
     }
 
+    /// Adds what is typed as a heard form. Blank and repeated phrases are ignored.
+    func commitHeardInput() {
+        guard let typed = Self.normalized(heardInput) else { heardInput = ""; return }
+        if !heardForms.contains(where: { Self.sameForm($0, typed) }) { heardForms.append(typed) }
+        heardInput = ""
+    }
+
+    func removeHeardForm(_ form: String) { heardForms.removeAll { $0 == form } }
+
+    /// Closes the sheet and drops the draft.
     func cancel() {
-        setDraft(original)
+        setDraft(original, editing: false)
         if !loadFailed { error = nil }
     }
 
     func save() {
         guard canSave else { return }
+        let name = written.trimmingCharacters(in: .whitespacesAndNewlines)
+        let rules = effectiveHeardForms.map { DictionaryRule(heard: $0, written: name, starred: starred) }
         do {
-            let rule = DictionaryRule(heard: heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
-                written: written.trimmingCharacters(in: .whitespacesAndNewlines), starred: original?.starred ?? false)
-            try store.save(original: original, rule: rule)
-            setDraft(rule)
+            try store.saveWord(original: original, rules: rules)
+            setDraft(rules, editing: false)
             reload()
             onLibraryChanged()
         } catch { self.error = error.localizedDescription }
     }
 
     func delete() {
-        guard !isDirty, !loadFailed, let original else { return }
+        guard !isDirty, !loadFailed, !original.isEmpty else { return }
         do {
-            try store.remove(original)
-            setDraft(nil)
+            try store.removeAll(original)
+            setDraft([], editing: false)
             reload()
             onLibraryChanged()
         } catch { self.error = error.localizedDescription }
     }
 
-    private func setDraft(_ rule: DictionaryRule?) {
-        original = rule
-        heard = rule?.heard ?? ""
-        written = rule?.written ?? ""
+    /// The star beside a word: favour it while recognising. Saves straight away, so it waits for a clean page.
+    func toggleStar(_ word: SpellingWord) {
+        guard !isDirty, !loadFailed else { return }
+        do {
+            try store.saveWord(original: word.rules, rules: word.rules.map { DictionaryRule(heard: $0.heard, written: $0.written, starred: !word.starred) })
+            error = nil
+            reload()
+            onLibraryChanged()
+        } catch { self.error = error.localizedDescription }
     }
+
+    private func setDraft(_ rules: [DictionaryRule], editing: Bool) {
+        original = rules
+        isEditing = editing
+        heardForms = rules.map(\.heard)
+        heardInput = ""
+        written = rules.first?.written ?? ""
+        starred = rules.first?.starred ?? false
+    }
+
+    private static func normalized(_ text: String) -> String? {
+        let value = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        return value.isEmpty ? nil : value
+    }
+
+    private static func sameForm(_ a: String, _ b: String) -> Bool {
+        FileVocabulary.heardKey(a) == FileVocabulary.heardKey(b)
+    }
+}
+
+/// One saved spelling and the heard forms that lead to it.
+struct SpellingWord: Identifiable, Equatable {
+    let written: String
+    let rules: [DictionaryRule]
+    var id: String { written }
+    var heardForms: [String] { rules.map(\.heard) }
+    /// Favoured while recognising. A word counts as favoured only when all its rules are.
+    var starred: Bool { !rules.isEmpty && rules.allSatisfy(\.starred) }
+    /// Everyday-word warning for the first heard form that needs one.
+    var warning: String? { rules.lazy.compactMap { OrdinaryWords.warning(for: $0) }.first }
+    var hasEverydayPhrase: Bool { rules.contains { OrdinaryWords.warning(for: $0) != nil && $0.heard.contains(where: \.isWhitespace) } }
 }

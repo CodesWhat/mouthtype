@@ -39,9 +39,9 @@ import MouthtypeCore
         f.model.confirmDiscard = { exit, kind in asked.append((exit, kind)); return false }
         f.model.page = .dictionary
         f.spellings.newSpelling()
-        f.spellings.heard = "mouth type"
+        f.spellings.heardInput = "mouth type"
         #expect(!f.model.select(.style))
-        #expect(f.model.page == .dictionary && f.spellings.heard == "mouth type" && f.spellings.isDirty)
+        #expect(f.model.page == .dictionary && f.spellings.heardInput == "mouth type" && f.spellings.isDirty)
         #expect(asked.count == 1 && asked[0].0 == .leaving && asked[0].1 == .spelling)
     }
 
@@ -89,7 +89,7 @@ import MouthtypeCore
         #expect(window.resolveDraftForQuit())
         #expect(exits.isEmpty)
         f.spellings.newSpelling()
-        f.spellings.heard = "mouth type"
+        f.spellings.heardInput = "mouth type"
         #expect(!window.resolveDraftForQuit())
         #expect(exits == [.quitting] && f.spellings.isDirty && f.model.page == .dictionary)
         answer = true
@@ -103,7 +103,7 @@ import MouthtypeCore
         f.model.confirmDiscard = { _, _ in Issue.record("asked before quit was certain"); return true }
         f.model.page = .dictionary
         f.spellings.newSpelling()
-        f.spellings.heard = "mouth type"
+        f.spellings.heardInput = "mouth type"
         let window = SettingsWindow(model: f.model, reduceTransparency: { true })
         defer { window.close() }
         #expect(!AppDelegate.mayQuit(allowsTermination: false, resolveDraft: { window.resolveDraftForQuit() }))
@@ -118,7 +118,7 @@ import MouthtypeCore
         f.model.confirmDiscard = { _, _ in Issue.record("asked"); return false }
         f.model.page = .transforms
         f.spellings.newSpelling()
-        f.spellings.heard = "left behind"
+        f.spellings.heardInput = "left behind"
         #expect(f.model.select(.style))
     }
 
@@ -147,7 +147,7 @@ import MouthtypeCore
         f.model.page = .dictionary
         f.model.syncWords()
         f.spellings.newSpelling()
-        f.spellings.heard = "mouth type"
+        f.spellings.heardInput = "mouth type"
         f.spellings.written = "Mouthtype"
         f.spellings.save()
         #expect(f.spellings.items.map(\.heard) == ["mouth type"])

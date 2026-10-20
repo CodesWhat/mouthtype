@@ -17,20 +17,119 @@ import MouthtypeCore
         defer { try? FileManager.default.removeItem(at: dir) }
         let editor = SpellingEditor(store: store)
         #expect(editor.items.isEmpty && !editor.isDirty && !editor.canSave)
-        editor.heard = "  mouth   type "
+        editor.heardInput = "  mouth   type "
         editor.written = "Mouthtype"
         #expect(editor.canSave && editor.isDirty)
         editor.save()
         #expect(editor.items == [DictionaryRule(heard: "mouth type", written: "Mouthtype")])
-        #expect(editor.original == editor.items.first && !editor.isDirty)
-        editor.heard = "different draft"
+        #expect(editor.original == editor.items && !editor.isDirty)
+        editor.heardInput = "different draft"
         editor.cancel()
-        #expect(editor.heard == "mouth type")
-        editor.heard = "mouth typing"
+        #expect(editor.heardInput.isEmpty && editor.heardForms == ["mouth type"])
+        editor.removeHeardForm("mouth type")
+        editor.heardInput = "mouth typing"
         editor.save()
         #expect(try store.allRules().map(\.heard) == ["mouth typing"])
         editor.delete()
         #expect(try store.allRules().isEmpty)
+    }
+
+    @Test func aWordGroupsItsHeardFormsAndSavesThemInOneEdit() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save(heard: "shawn", written: "Sean")
+        try store.save(heard: "mouth type", written: "Mouthtype")
+        try store.save(heard: "shaun", written: "Sean")
+        let editor = SpellingEditor(store: store)
+        #expect(editor.words.map(\.written) == ["Sean", "Mouthtype"])
+        #expect(editor.words.first?.heardForms == ["shawn", "shaun"])
+        editor.select(try #require(editor.words.first))
+        #expect(editor.isEditing && !editor.isDirty)
+        editor.removeHeardForm("shawn")
+        editor.heardInput = "  shorn "
+        editor.starred = true
+        #expect(editor.isDirty && editor.canSave)
+        editor.save()
+        #expect(!editor.isEditing && !editor.isDirty)
+        #expect(try store.allRules() == [
+            DictionaryRule(heard: "mouth type", written: "Mouthtype"),
+            DictionaryRule(heard: "shaun", written: "Sean", starred: true),
+            DictionaryRule(heard: "shorn", written: "Sean", starred: true)])
+    }
+
+    @Test func newWordWithoutAHeardFormFixesTheWrittenFormOnly() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let editor = SpellingEditor(store: store)
+        editor.newSpelling()
+        #expect(editor.isEditing && !editor.isDirty && !editor.canSave)
+        editor.written = "Nguyen"
+        #expect(editor.canSave)
+        editor.heardInput = "win"
+        editor.commitHeardInput()
+        editor.heardInput = "WIN"
+        editor.commitHeardInput()
+        #expect(editor.heardForms == ["win"])
+        editor.removeHeardForm("win")
+        editor.save()
+        #expect(try store.allRules() == [DictionaryRule(heard: "Nguyen", written: "Nguyen")])
+    }
+
+    @Test func cancelClosesTheSheetAndDropsTheDraft() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save(heard: "mouth type", written: "Mouthtype")
+        let editor = SpellingEditor(store: store)
+        editor.select(try #require(editor.words.first))
+        editor.heardInput = "mouse type"
+        editor.written = "Other"
+        editor.cancel()
+        #expect(!editor.isEditing && !editor.isDirty && editor.heardInput.isEmpty)
+        #expect(try store.allRules() == [DictionaryRule(heard: "mouth type", written: "Mouthtype")])
+    }
+
+    @Test func starTogglesEveryRuleOfAWordAndKeepsOrder() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save(heard: "shawn", written: "Sean")
+        try store.save(heard: "mouth type", written: "Mouthtype")
+        try store.save(heard: "shaun", written: "Sean")
+        let editor = SpellingEditor(store: store)
+        var changes = 0
+        editor.onLibraryChanged = { changes += 1 }
+        let sean = try #require(editor.words.first)
+        #expect(!sean.starred)
+        editor.toggleStar(sean)
+        #expect(editor.words.first?.starred == true && editor.words.last?.starred == false && changes == 1)
+        #expect(try store.allRules().map(\.heard) == ["shawn", "mouth type", "shaun"])
+        editor.toggleStar(try #require(editor.words.first))
+        #expect(editor.words.first?.starred == false)
+    }
+
+    @Test func savingAWordThatChangedOnDiskReportsAnErrorAndKeepsTheDraft() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save(heard: "shawn", written: "Sean")
+        let editor = SpellingEditor(store: store)
+        editor.select(try #require(editor.words.first))
+        try store.save(heard: "shawn", written: "Shaun")
+        editor.heardInput = "shaun"
+        editor.save()
+        #expect(editor.error != nil && editor.isDirty && editor.isEditing)
+        #expect(try store.allRules() == [DictionaryRule(heard: "shawn", written: "Shaun")])
+    }
+
+    @Test func aHeardFormAnotherWordOwnsIsRejected() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try store.save(heard: "shawn", written: "Sean")
+        let editor = SpellingEditor(store: store)
+        editor.newSpelling()
+        editor.written = "Shawn"
+        editor.heardInput = "SHAWN"
+        editor.save()
+        #expect(editor.error != nil && editor.isDirty)
+        #expect(try store.allRules().count == 1)
     }
 
     @Test func saveAndDeleteTellTheSuggestionsTheLibraryChanged() throws {
@@ -39,7 +138,7 @@ import MouthtypeCore
         let editor = SpellingEditor(store: store)
         var changes = 0
         editor.onLibraryChanged = { changes += 1 }
-        editor.heard = "mouth type"
+        editor.heardInput = "mouth type"
         editor.written = "Mouthtype"
         editor.save()
         #expect(changes == 1)
@@ -51,11 +150,11 @@ import MouthtypeCore
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }
         let editor = SpellingEditor(store: store)
-        editor.heard = "win"
+        editor.heardInput = "win"
         editor.written = "Nguyen"
         #expect(editor.everydayWarning?.contains("everyday word") == true)
         #expect(editor.canSave)
-        editor.heard = "shivon"
+        editor.heardInput = "shivon"
         #expect(editor.everydayWarning == nil)
     }
 
@@ -64,7 +163,7 @@ import MouthtypeCore
         defer { try? FileManager.default.removeItem(at: dir) }
         try store.save(heard: "mouth type", written: "Mouthtype")
         let editor = SpellingEditor(store: store)
-        let first = try #require(editor.items.first)
+        let first = try #require(editor.words.first)
         editor.select(first)
         editor.written = "My draft"
         editor.newSpelling()
@@ -96,7 +195,7 @@ import MouthtypeCore
         defer { try? FileManager.default.removeItem(at: dir) }
         try store.save(heard: "mouth type", written: "Mouthtype")
         let editor = SpellingEditor(store: store)
-        editor.heard = "MOUTH TYPE"
+        editor.heardInput = "MOUTH TYPE"
         editor.written = "Other"
         editor.save()
         #expect(editor.error != nil && editor.isDirty && editor.written == "Other")
@@ -122,7 +221,7 @@ import MouthtypeCore
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }
         let editor = SpellingEditor(store: store)
-        editor.heard = "geoff"
+        editor.heardInput = "geoff"
         editor.written = "Jeff"
         editor.save()
         let result = TextPipeline().run(TextPipelineInput(text: "the meeting is with geoff and geoffrey", dictionary: store.dictionary()))
@@ -139,7 +238,7 @@ import MouthtypeCore
         try store.save(heard: "mouth type", written: "Mouthtype")
         try store.save(heard: "super whisper", written: "Superwhisper")
         let editor = SpellingEditor(store: store)
-        editor.select(try #require(editor.items.first))
+        editor.select(try #require(editor.words.first))
         FontRegistry.registerBundledFonts()
         let view = NSHostingView(rootView: SpellingEditorView(editor: editor, suggestions: SpellingSuggestionsModel(vocabulary: store)))
         for (label, size) in [("", NSSize(width: 900, height: 550)), (".small", NSSize(width: 760, height: 500))] {
@@ -155,7 +254,7 @@ import MouthtypeCore
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }
         let editor = SpellingEditor(store: store)
-        editor.heard = "  " + String(repeating: "x", count: 128) + "  "
+        editor.heardInput = "  " + String(repeating: "x", count: 128) + "  "
         editor.written = "  " + String(repeating: "Y", count: 128) + "  "
         #expect(editor.canSave && editor.validationMessage == nil)
         editor.save()
