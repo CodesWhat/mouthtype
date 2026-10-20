@@ -7,10 +7,16 @@ import MouthtypeCore
 private final class EditorEngine: DictationEngine {
     var readiness: EngineReadiness { .ready }
     var seen: [VocabularyBias?] = []
+    /// The settle budget passed with each bias.
+    var budgets: [Duration?] = []
     private var current: VocabularyBias?
     let applied: [String]?
     init(applied: [String]? = nil) { self.applied = applied }
     func setVocabularyBias(_ bias: VocabularyBias?) async { current = bias }
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        budgets.append(settleWithin)
+        current = bias
+    }
     func transcribe(samples: [Float]) async throws -> Transcription {
         seen.append(current)
         return Transcription(text: "hi Maya applyTheme", processingSeconds: 0, engineID: "editor", boostTermsApplied: applied)
@@ -357,5 +363,26 @@ private struct FakeSource: BoundedTextSource {
         _ = try await pipeline.transcribe(audio(), session: session, voicedMs: 1000)
         #expect(engine.seen.first??.terms == ["Maya"])
         #expect(try #require(store.transcription).boostTerms == ["Maya"])
+    }
+
+    @Test func editorTermsAskTheEngineToSettleAndSavedWordsDoNot() async throws {
+        let clock = SystemDictationClock()
+        let rules = Rules(rules: [DictionaryRule(heard: "maya", written: "Maya")])
+
+        let saved = EditorEngine()
+        var plain = DictationPipeline(store: CapturingStore(), archive: nil, engine: saved, clock: clock)
+        plain.vocabulary = rules
+        plain.boostSavedWords = { true }
+        _ = try await plain.transcribe(audio(), session: DictationSession(id: "t", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true), voicedMs: 1000)
+        #expect(saved.budgets == [nil])
+
+        let hinted = EditorEngine()
+        var withHints = DictationPipeline(store: CapturingStore(), archive: nil, engine: hinted, clock: clock)
+        withHints.vocabulary = rules
+        withHints.boostSavedWords = { true }
+        var session = DictationSession(id: "t", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        session.editorHints = Task { [VocabularyBias.Term(text: "applyTheme")] }
+        _ = try await withHints.transcribe(audio(), session: session, voicedMs: 1000)
+        #expect(hinted.budgets == [VocabularyBias.editorSettle])
     }
 }

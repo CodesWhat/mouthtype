@@ -183,8 +183,10 @@ struct DictationPipeline: Sendable {
         let trimmed = SilenceTrimmer.trim(audio.samples)
         let rules = vocabulary.dictionary()
         let editorTerms = await session.editorHints?.value ?? []
+        // Only a take with editor names waits for the model rebuild they cause. Saved words alone build in the background.
         await engine.setVocabularyBias(
-            VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: rules, editorTerms: editorTerms)
+            VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: rules, editorTerms: editorTerms),
+            settleWithin: editorTerms.isEmpty ? nil : VocabularyBias.editorSettle
         )
         var transcription = try await engine.transcribe(samples: trimmed.samples)
         // Editor names help this take and nothing else: they never reach the stored record.

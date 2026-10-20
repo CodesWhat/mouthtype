@@ -145,6 +145,45 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(invocations.count == 2)
     }
 
+    /// A booster whose build blocks until `gate` is bumped.
+    private func gatedBooster(gate: Counter, started: Counter) -> VocabularyBooster {
+        VocabularyBooster(prepare: { _, _ in
+            _ = started.next()
+            while gate.count == 0 {
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.005) { continuation.resume() }
+                }
+            }
+            return FakeRescorer(result: nil)
+        }, report: { _ in })
+    }
+
+    @Test func setBiasWithoutABudgetReturnsWhileTheBuildIsStillGated() async {
+        let gate = Counter()
+        let b = gatedBooster(gate: gate, started: Counter())
+        await b.setBias(maya)
+        #expect(await b.isReady == false)
+        _ = gate.next()
+        await b.waitUntilSettled()
+        #expect(await b.isReady)
+    }
+
+    @Test func setBiasWithABudgetWaitsForAFastBuild() async {
+        let b = booster()
+        await b.setBias(maya, settleWithin: .seconds(5))
+        #expect(await b.isReady)
+    }
+
+    @Test func setBiasWithABudgetGivesUpOnASlowBuildAndLeavesItRunning() async {
+        let gate = Counter()
+        let b = gatedBooster(gate: gate, started: Counter())
+        await b.setBias(maya, settleWithin: .milliseconds(50))
+        #expect(await b.isReady == false)
+        _ = gate.next()
+        await b.waitUntilSettled()
+        #expect(await b.isReady)
+    }
+
     @Test func rescoringPastTheLimitKeepsTheUnboostedText() async {
         let b = booster(delay: .seconds(5), timeout: .milliseconds(50))
         await b.setBias(maya)

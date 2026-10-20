@@ -75,4 +75,18 @@ public struct VocabularyBias: Sendable, Equatable {
 public protocol VocabularyBiasing: Transcriber {
     /// Applies to later `transcribe` calls. Nil or empty clears it.
     func setVocabularyBias(_ bias: VocabularyBias?) async
+    /// As above, but a changed vocabulary may also wait up to `settleWithin` for the engine to be ready for it.
+    /// Nil never waits. Engines with nothing to wait on ignore the budget.
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async
+}
+
+public extension VocabularyBiasing {
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        await setVocabularyBias(bias)
+    }
+}
+
+public extension VocabularyBias {
+    /// How long a take whose terms include the editor's waits for the boost model to rebuild.
+    static let editorSettle: Duration = .milliseconds(400)
 }

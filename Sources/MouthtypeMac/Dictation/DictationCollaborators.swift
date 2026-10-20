@@ -39,12 +39,17 @@ protocol DictationEngine: AnyObject, Sendable {
     func transcribe(samples: [Float]) async throws -> Transcription
     func preview(samples: [Float]) async throws -> String?
     func setVocabularyBias(_ bias: VocabularyBias?) async
+    /// `settleWithin` is how long a changed vocabulary may hold the call for the engine's model. Nil never waits.
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async
 }
 
 extension DictationEngine {
     func preview(samples: [Float]) async throws -> String? { nil }
     /// Engines without a recognition-time hook ignore the bias.
     func setVocabularyBias(_ bias: VocabularyBias?) async {}
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        await setVocabularyBias(bias)
+    }
 }
 
 /// Every write is async so a real store keeps its blocking database calls off the main actor.
@@ -206,6 +211,11 @@ final class HostEngine: DictationEngine {
     func setVocabularyBias(_ bias: VocabularyBias?) async {
         guard let biasing = host.engine as? any VocabularyBiasing else { return }
         await biasing.setVocabularyBias(bias)
+    }
+
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        guard let biasing = host.engine as? any VocabularyBiasing else { return }
+        await biasing.setVocabularyBias(bias, settleWithin: settleWithin)
     }
 
     func preview(samples: [Float]) async throws -> String? {

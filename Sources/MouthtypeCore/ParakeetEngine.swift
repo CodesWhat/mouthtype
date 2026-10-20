@@ -45,7 +45,13 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     /// Opt-in. A non-empty bias downloads and loads the small CTC model in the background and boosts later takes
     /// once it is ready; nil releases it. A failure leaves recognition unboosted.
     public func setVocabularyBias(_ bias: VocabularyBias?) async {
-        await booster.setBias(bias, settleWithin: .milliseconds(400))
+        await setVocabularyBias(bias, settleWithin: nil)
+    }
+
+    /// With `settleWithin`, a changed vocabulary also waits up to that long for its model, so the take it is set for
+    /// is boosted. Without one the build runs fully in the background.
+    public func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        await booster.setBias(bias, settleWithin: settleWithin)
     }
 
     /// Resolves once the boost model for the current vocabulary is ready or has failed. True when it is ready.
