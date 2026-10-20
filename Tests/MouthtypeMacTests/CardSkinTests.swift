@@ -201,6 +201,12 @@ private final class CardRig {
             let palette = CardPalette.resolve(style: .minimal, dark: dark)
             // Label on the button: text contrast.
             #expect(ratio(palette.primaryText, palette.primaryFill) >= 4.5)
+            // And in every state the button draws: rest, hover, pressed, with the same blending the button uses.
+            let rest = palette.primaryFill(hovered: false, pressed: false)
+            for (hovered, pressed) in [(false, false), (true, false), (false, true)] {
+                #expect(ratio(palette.primaryText, palette.primaryFill(hovered: hovered, pressed: pressed)) >= 4.5)
+            }
+            #expect(luminance(palette.primaryFill(hovered: false, pressed: true)) > luminance(rest))
             // The status colour against the card body: the readout holds 3:1 for non-text marks.
             let body = dark ? SquirclePalette.darkBody.bottom : SquirclePalette.lightBody.bottom
             #expect(ratio(palette.quiet, body) >= 3 && ratio(palette.warn, body) >= 3)

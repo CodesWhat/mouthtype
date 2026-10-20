@@ -79,6 +79,18 @@ struct CardPalette {
     static let classicWarn = NSColor(hex: 0xFF453A)
     /// The app's v1-pass lime (`DesignPalette.NS.accent` and `onAccent`) for a card's one primary action. The card resolves its own
     /// appearance, so these are fixed per appearance rather than the adaptive colours.
+    /// Minimal's lime takes dark ink, so hover and press lighten it (more contrast) where the other skins darken on press.
+    var primaryLightens = false
+
+    /// The primary button's fill for a state, as the button draws it.
+    func primaryFill(hovered: Bool, pressed: Bool) -> NSColor {
+        if primaryLightens {
+            return primaryFill.blended(withFraction: pressed ? 0.40 : hovered ? 0.25 : 0, of: .white) ?? primaryFill
+        }
+        return pressed ? primaryFill.blended(withFraction: 0.18, of: .black) ?? primaryFill
+            : hovered ? primaryFill.blended(withFraction: 0.5, of: .white) ?? primaryFill : primaryFill
+    }
+
     static func lime(dark: Bool) -> NSColor { NSColor(hex: dark ? 0xA6CD52 : 0x76A11A) }
     static func onLime(dark: Bool) -> NSColor { NSColor(hex: dark ? 0x1F1F21 : 0x1D1D1F) }
 
@@ -142,7 +154,8 @@ struct CardPalette {
                 squircleControls: true, chips: false, showsDot: false,
                 bodyFill: nil, border: nil, shadowFill: .clear,
                 rowShade: dark ? NSColor.black.withAlphaComponent(0.25) : NSColor.black.withAlphaComponent(0.04),
-                rowRule: dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.08)
+                rowRule: dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.08),
+                primaryLightens: flavor == .minimal
             )
         }
     }
