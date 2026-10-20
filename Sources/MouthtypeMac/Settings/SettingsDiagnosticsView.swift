@@ -1,6 +1,8 @@
 import SwiftUI
 import MouthtypeCore
 
+/// The Settings modal's Health page, the old Diagnostics: set up, local models, permissions, dictation input and any library problems.
+/// Remap Fn and saved-audio retention moved to Advanced.
 struct SettingsDiagnosticsView: View {
     @Bindable var state: SettingsDiagnostics
     @Bindable var model: SettingsModel
@@ -8,9 +10,15 @@ struct SettingsDiagnosticsView: View {
 
     var body: some View {
         Group {
-            SettingsGroup(eyebrow: "LOCAL MODELS") {
+            DesignSection(eyebrow: "SET UP") {
+                DesignRow(title: "Set Up Mouthtype", detail: "Walk through the microphone, Accessibility and shortcut steps again.") {
+                    Button("Set Up Mouthtype…") { model.closeSettings(); actions.openSetup() }
+                        .buttonStyle(.designSecondary).fixedSize().accessibilityIdentifier("settings-setup")
+                }
+            }
+            DesignSection(eyebrow: "LOCAL MODELS") {
                 row("Speech recognition", state.engineStatus) {
-                    if state.engineFailed { Button("Retry model", action: actions.retrySpeech) }
+                    if state.engineFailed { Button("Retry model", action: actions.retrySpeech).buttonStyle(.designSecondary).fixedSize() }
                 }
                 if let cleaner = actions.cleaner {
                     row("Cleanup", cleanupStatus(cleaner)
@@ -20,54 +28,56 @@ struct SettingsDiagnosticsView: View {
                             Button("Download…") {
                                 let target = cleaner.downloadTarget
                                 if CleanupMenuSection.askToDownload(name: target.modelName, sizeMB: target.downloadSizeMB) { target.startDownload() }
-                            }
-                        case .downloading: Button("Cancel download") { cleaner.cancelDownload() }
+                            }.buttonStyle(.designSecondary).fixedSize()
+                        case .downloading: Button("Cancel download") { cleaner.cancelDownload() }.buttonStyle(.designSecondary).fixedSize()
                         default: EmptyView()
                         }
                     }
                 }
             }
-            SettingsGroup(eyebrow: "PERMISSIONS") {
+            DesignSection(eyebrow: "PERMISSIONS") {
                 row("Microphone", MicrophoneAccess.statusText(for: state.microphoneStatus)) {
-                    Button("Microphone Settings…", action: actions.openMicSettings)
+                    Button("Microphone Settings…", action: actions.openMicSettings).buttonStyle(.designSecondary).fixedSize()
                 }
                 row("Accessibility", AccessibilityAccess.statusText(granted: state.accessibilityGranted)) {
-                    Button("Accessibility Settings…", action: actions.openAccessibilitySettings)
+                    Button("Accessibility Settings…", action: actions.openAccessibilitySettings).buttonStyle(.designSecondary).fixedSize()
                 }
             }
-            SettingsGroup(eyebrow: "DICTATION INPUT") {
-                row("Shortcut listener", state.inputDescription) { Button("Change shortcut…", action: actions.changeShortcut) }
+            DesignSection(eyebrow: "DICTATION INPUT") {
+                row("Shortcut listener", state.inputDescription) {
+                    Button("Change shortcut…", action: actions.changeShortcut).buttonStyle(.designSecondary).fixedSize()
+                }
                 row("How dictation works", model.recordingInstructions) { EmptyView() }
                 if state.hotkeyHealth == .secureInputOn {
-                    SettingsNote(text: "Leave the password or other secure field to use dictation. Mouthtype won’t bypass Secure Input.")
-                }
-                SettingsRow(title: "Remap Fn to hide the emoji picker",
-                    detail: state.canRemapFn ? nil : "Your custom shortcut is active. Fn keeps its system behavior.") {
-                    Toggle("Remap Fn to hide the emoji picker", isOn: Binding(get: { state.remapChecked }, set: { _ in actions.toggleRemap() }))
-                        .labelsHidden().toggleStyle(.switch).disabled(!state.canRemapFn)
+                    ModalCardNote(text: "Leave the password or other secure field to use dictation. Mouthtype won\u{2019}t bypass Secure Input.")
                 }
                 if state.canRemapFn, !state.remapChecked, let globe = state.globe, globe.hasConflict {
-                    row("Globe key", globe.menuText ?? "Keyboard action conflicts with Fn.") {
-                        Button("Keyboard Settings…", action: actions.openKeyboardSettings)
+                    row("Globe key", (globe.menuText ?? "Keyboard action conflicts with Fn.") + " Remap Fn, under Advanced options, hides the emoji picker instead.") {
+                        Button("Keyboard Settings…", action: actions.openKeyboardSettings).buttonStyle(.designSecondary).fixedSize()
                     }
                 }
             }
             if state.dictionaryError != nil || state.phrasesError != nil || state.historyError != nil {
-                SettingsGroup(eyebrow: "LOCAL LIBRARIES") {
-                    if let error = state.dictionaryError { row("Saved spellings", error) { Button("Edit dictionary…", action: actions.editDictionary) } }
-                    if let error = state.phrasesError { row("Phrase replacements", error) { Button("Edit phrases file…", action: actions.editPhrasesFile) } }
-                    if let error = state.historyError { SettingsNote(text: "Recent dictations: " + error) }
+                DesignSection(eyebrow: "LOCAL LIBRARIES") {
+                    if let error = state.dictionaryError {
+                        row("Saved spellings", error) { Button("Edit dictionary…", action: actions.editDictionary).buttonStyle(.designSecondary).fixedSize() }
+                    }
+                    if let error = state.phrasesError {
+                        row("Phrase replacements", error) { Button("Edit phrases file…", action: actions.editPhrasesFile).buttonStyle(.designSecondary).fixedSize() }
+                    }
+                    if let error = state.historyError { ModalCardNote(text: "Recent dictations: " + error) }
                 }
             }
-            AudioRetentionSection(model: model)
-            SettingsGroup(eyebrow: "STATUS") {
-                SettingsRow(title: "Refresh status") { Button("Refresh status", action: actions.refreshDiagnostics) }
+            DesignSection(eyebrow: "STATUS") {
+                DesignRow(title: "Refresh status") {
+                    Button("Refresh status", action: actions.refreshDiagnostics).buttonStyle(.designSecondary).fixedSize()
+                }
             }
         }
     }
 
     private func row<Controls: View>(_ title: String, _ detail: String, @ViewBuilder controls: @escaping () -> Controls) -> some View {
-        SettingsRow(title: title, detail: detail, controls: controls)
+        DesignRow(title: title, detail: detail, controls: controls)
     }
     private func ready(_ cleaner: any CleanupModelManaging) -> Bool { if case .ready = cleaner.state { true } else { false } }
     private func cleanupStatus(_ cleaner: any CleanupModelManaging) -> String {
