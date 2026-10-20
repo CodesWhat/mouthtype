@@ -76,6 +76,99 @@ import Testing
         #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
     }
 
+    /// Verb forms, split phrasal verbs and the article before whatever replaced the swear word.
+    static let verbsAndArticles: [(input: String, expected: String)] = [
+        ("I shit you not.", "I kid you not."),
+        ("She bitches about work.", "She complains about work."),
+        ("They bitched about it all day.", "They complained about it all day."),
+        ("Stop bitching about it.", "Stop complaining about it."),
+        ("I hate to bitch.", "I hate to complain."),
+        ("He shits on everything.", "He dumps on everything."),
+        ("Stop shitting on the plan.", "Stop dumping on the plan."),
+        ("Those bitches are loud.", "Those jerks are loud."),
+        ("I don't give a shit.", "I don't give a hoot."),
+        ("I fucked it up.", "I messed it up."),
+        ("He fucked the whole thing up.", "He messed the whole thing up."),
+        ("They screwed it up.", "They screwed it up."),
+        ("Don't fuck it up.", "Don't mess it up."),
+        ("Stop fucking it up.", "Stop messing it up."),
+        ("We're fucked.", "We're ruined."),
+        ("That is a pissed off look.", "That is an annoyed look."),
+        ("He is a pissed off guy.", "He is an annoyed guy."),
+        ("She was a bit pissed off.", "She was a bit annoyed."),
+        ("I was a fucking idiot.", "I was an idiot."),
+        ("He is an asshole.", "He is a jerk."),
+        ("He is a fucking annoying guy.", "He is an annoying guy."),
+        ("That is a fucking university.", "That is a university."),
+        ("It took a fucking hour.", "It took an hour."),
+        ("It was a shitty idea.", "It was a bad idea."),
+        ("A pissed off customer called.", "An annoyed customer called."),
+        ("That damned asshole.", "That jerk."),
+        ("Damned asshole.", "Jerk."),
+        ("Kick his ass.", "Kick his butt."),
+        ("That bitchin' car.", "That great car."),
+        ("Bitchin' idea.", "Great idea."),
+    ]
+
+    @Test(arguments: verbsAndArticles)
+    func handlesVerbsPhrasalVerbsAndArticles(_ pair: (input: String, expected: String)) {
+        #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
+    }
+
+    @Test func leavesTheSpeakersOwnArticlesAlone() {
+        for text in ["A apple a day.", "He is an hour late.", "A university, an hour, an honest man."] {
+            #expect(strip(text) == text, "\(text.debugDescription)")
+        }
+        #expect(strip("A fucking apple a day.") == "An apple a day.")
+    }
+
+    @Test func articleRepairKeepsCapitalisation() {
+        #expect(strip("A fucking idiot called.") == "An idiot called.")
+        #expect(strip("An asshole called.") == "A jerk called.")
+    }
+
+    @Test func vowelSoundHeuristic() {
+        for word in ["annoyed", "idiot", "hour", "honest", "honor", "umbrella", "unimportant", "egg"] {
+            #expect(ProfanityRemover.startsWithVowelSound(word), "\(word)")
+        }
+        for word in ["jerk", "university", "unit", "one", "euro", "user", "bad", "hat"] {
+            #expect(!ProfanityRemover.startsWithVowelSound(word), "\(word)")
+        }
+    }
+
+    /// Every inflection of every listed swear word has some outcome in Formal. "damn" and its forms stay for the model
+    /// when they are not an exclamation or an intensifier, so only the ones that always go are swept here.
+    @Test func noListedSwearSurvivesInAnyFrame() {
+        let kept: Set<String> = ["damn", "damned", "goddamn", "goddamned"]
+        let frames = [
+            "%@", "Well, %@.", "He said %@ again.", "I %@ it.", "She %@ about work.", "That is a %@ idea.", "The %@ is here.",
+            "Don't be %@.", "%@ the whole thing.", "They gave two %@.", "Stop %@ around.", "He %@ on everything.",
+            "We %@ you not.", "What a %@!", "Such %@ people.", "It is %@ broken.",
+        ]
+        let swears = ProfanityRemover.words.subtracting(kept).sorted()
+        var survivors: [String] = []
+        for word in swears {
+            for frame in frames {
+                for form in [word, word.capitalized] {
+                    let input = frame.replacingOccurrences(of: "%@", with: form)
+                    let output = strip(input).lowercased()
+                    let tokens = output.split(whereSeparator: { !$0.isLetter && $0 != "'" }).map(String.init)
+                    if tokens.contains(where: { swears.contains($0) }) { survivors.append("\(input) -> \(output)") }
+                }
+            }
+        }
+        #expect(survivors.isEmpty, "\(survivors.joined(separator: "\n"))")
+    }
+
+    @Test func innocentWordsAreNotMistakenForSwearing() {
+        for text in [
+            "Shiitake soup and shitake rice.", "Scrap the plan.", "A crappie is a fish.", "Assess the damage.", "Mr. Cockburn called.",
+            "Dickens wrote it.", "I live in Scunthorpe.", "Class is over.", "A passage from the book.", "Bass and glass.",
+        ] {
+            #expect(strip(text) == text, "\(text.debugDescription)")
+        }
+    }
+
     static let dismissals: [(input: String, expected: String)] = [
         ("Fuck you.", ""),
         ("Fuck off", ""),
