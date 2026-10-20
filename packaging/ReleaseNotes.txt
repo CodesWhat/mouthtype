@@ -1,4 +1,16 @@
-Mouthtype 0.2.0
+Mouthtype 0.3.0
+
+Home. Open Mouthtype from the menu to get a new Home page with your last 50 takes, newest first. Each take has Copy and Recover. Recover works for any take whose audio is still saved. It offers the text again without changing the history entry. Home updates as you dictate.
+
+Stats. Home shows words today, this week and all time, a 14-day chart, your average and best speed, your current and longest streak, your biggest day, your longest take, and the time you saved compared with typing at 40 WPM. Records show your fastest speed, biggest day, longest streak and longest take, each with its date. Everything is worked out on your Mac from your own history. Takes from secure fields are never counted.
+
+Saved spellings now suggest spellings from your recent takes: names it keeps mishearing, brand names that come out lowercase, and words that get split apart. Each suggestion comes with examples. Choose Add, Remove or Dismiss, and Undo is there right after. Saved spellings also flag saved heard forms that rewrite everyday words.
+
+Settings: with Keyboard navigation on, the page now scrolls to follow Tab and Shift-Tab.
+
+Not verified on a device for this release: fresh installation, VoiceOver, and Bluetooth and USB microphones.
+
+Earlier in 0.2.0:
 
 Transform selected text. Select some text in any app and choose Fix grammar, Make shorter, Make more formal or Make more casual. The Thorough model rewrites it into an editable preview, and you choose Accept, Retry or Cancel. Accept replaces the text only if the app, field and selection are still the same. If they changed, Copy original is there, and Cmd-Z undoes a replacement.
 
