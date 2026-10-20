@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Code names (file, folder and identifier spellings) to bias recognition toward while dictating in an editor or
 /// terminal. Everything here is pure and in memory: nothing is stored or logged, and the terms live for one dictation.
@@ -224,12 +225,16 @@ public enum EditorHints {
         public var titleStyle: TitleStyle?
         public var readCursor: (@Sendable (_ until: ContinuousClock.Instant) -> InsertionContext?)?
         public var files: @Sendable () async -> [String]
+        /// Allows one cursor read at a time. The read can't be cancelled, so a stuck one would otherwise stack a new
+        /// worker per dictation. The app passes the shared one; each Input otherwise gets its own.
+        public var readGate: ReadGate
 
         public init(
             cursorBefore: String? = nil, cursorAfter: String? = nil, windowTitle: String? = nil,
             titleStyle: TitleStyle? = nil,
             readCursor: (@Sendable (_ until: ContinuousClock.Instant) -> InsertionContext?)? = nil,
-            files: @escaping @Sendable () async -> [String] = { [] }
+            files: @escaping @Sendable () async -> [String] = { [] },
+            readGate: ReadGate = ReadGate()
         ) {
             self.cursorBefore = cursorBefore
             self.cursorAfter = cursorAfter
@@ -237,7 +242,25 @@ public enum EditorHints {
             self.titleStyle = titleStyle
             self.readCursor = readCursor
             self.files = files
+            self.readGate = readGate
         }
+    }
+
+    /// Whether a cursor read is still running, including one `gather` already gave up on. While it is, a new gather
+    /// skips the read and uses title and file hints only. Only the read itself exiting frees it.
+    public final class ReadGate: Sendable {
+        public static let shared = ReadGate()
+        private let running = Mutex(false)
+        public init() {}
+        public var isBusy: Bool { running.withLock { $0 } }
+        fileprivate func acquire() -> Bool {
+            running.withLock { busy in
+                guard !busy else { return false }
+                busy = true
+                return true
+            }
+        }
+        fileprivate func release() { running.withLock { $0 = false } }
     }
 
     /// The terms for one dictation. The cheap sources are always used; the cursor read and the file source are used
@@ -245,7 +268,7 @@ public enum EditorHints {
     public static func gather(_ input: Input, deadline: Duration = defaultDeadline) async -> [VocabularyBias.Term] {
         let clock = ContinuousClock()
         let limit = clock.now + deadline
-        async let read = runBlocking(until: limit) { input.readCursor?(limit) }
+        async let read = readCursor(input, until: limit)
         var title: [String] = []
         if let text = input.windowTitle, let style = input.titleStyle {
             let parsed = parseTitle(text, style: style)
@@ -257,11 +280,23 @@ public enum EditorHints {
         return terms(cursor: cursor, title: title, files: nameCandidates(fromPaths: paths))
     }
 
+    private static func readCursor(_ input: Input, until limit: ContinuousClock.Instant) async -> InsertionContext? {
+        guard let read = input.readCursor, input.readGate.acquire() else { return nil }
+        let gate = input.readGate
+        return await runBlocking(until: limit, ifNotStarted: { gate.release() }) {
+            defer { gate.release() }
+            return read(limit)
+        }
+    }
+
     /// Runs blocking `work` on a background queue and returns its result, or nil if it hasn't finished by `limit`.
     /// The work isn't cancelled (a stuck Accessibility call can't be), but nothing waits for it past the limit.
-    public static func runBlocking<T: Sendable>(until limit: ContinuousClock.Instant, _ work: @escaping @Sendable () -> T?) async -> T? {
+    /// `ifNotStarted` runs when the limit has already passed, so the work was never handed to a queue.
+    public static func runBlocking<T: Sendable>(
+        until limit: ContinuousClock.Instant, ifNotStarted: (@Sendable () -> Void)? = nil, _ work: @escaping @Sendable () -> T?
+    ) async -> T? {
         let remaining = limit - ContinuousClock.now
-        guard remaining > .zero else { return nil }
+        guard remaining > .zero else { ifNotStarted?(); return nil }
         let once = OneShot<T>()
         return await withCheckedContinuation { continuation in
             once.install(continuation)

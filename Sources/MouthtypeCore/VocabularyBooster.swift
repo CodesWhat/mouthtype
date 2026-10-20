@@ -467,13 +467,39 @@ extension VocabularyBooster {
     }
 }
 
-/// FluidAudio's boosting code logs terms and replacements below warning level (and its "no CTC tokens" warning names
-/// the term), and its logger defaults to debug with console mirroring. Editor code names must not reach any log, so
-/// the library's logger keeps errors and faults only.
+/// FluidAudio's boosting code logs terms and replacements below warning level, and its logger defaults to debug with
+/// console mirroring. Editor code names must not reach any log, so the library's logger keeps warnings and up. The
+/// warnings that do name a term are all raised while a session is built (a term that "produced no CTC tokens", a
+/// term dropped by sanitizing), so `quietingWarnings` lifts the floor to errors just for that build. That leaves
+/// "Vocabulary rescoring failed", which names no term, visible at take time.
 enum DependencyLogging {
-    static let minimumLevel = AppLogger.Level.error
+    static let minimumLevel = AppLogger.Level.warning
+    static let buildLevel = AppLogger.Level.error
+
+    private struct Quiet {
+        var depth = 0
+        var saved = AppLogger.Level.debug
+    }
+    private static let quiet = Mutex(Quiet())
 
     static func keepTermsOutOfLogs() {
         if AppLogger.minimumLevel < minimumLevel { AppLogger.minimumLevel = minimumLevel }
+    }
+
+    /// Runs `body` with FluidAudio's logger at errors only, then puts the level back. Overlapping calls share one
+    /// saved level, restored when the last one finishes.
+    static func quietingWarnings<T>(_ body: () async throws -> T) async rethrows -> T {
+        quiet.withLock { state in
+            if state.depth == 0 { state.saved = AppLogger.minimumLevel }
+            state.depth += 1
+            if AppLogger.minimumLevel < buildLevel { AppLogger.minimumLevel = buildLevel }
+        }
+        defer {
+            quiet.withLock { state in
+                state.depth -= 1
+                if state.depth == 0 { AppLogger.minimumLevel = state.saved }
+            }
+        }
+        return try await body()
     }
 }

@@ -74,7 +74,7 @@ enum EditorHintsGatherer {
     /// gather, which does every Accessibility read inside its deadline.
     static func start(
         enabled: Bool, boostEnabled: Bool, focus: FocusSnapshot, readers: Readers,
-        deadline: Duration = EditorHints.defaultDeadline
+        deadline: Duration = EditorHints.defaultDeadline, readGate: EditorHints.ReadGate = EditorHints.ReadGate()
     ) -> Task<[VocabularyBias.Term], Never>? {
         guard enabled, boostEnabled, !focus.isSecure, let surface = EditorHintsSurface.of(bundleID: focus.bundleID) else { return nil }
 
@@ -109,7 +109,8 @@ enum EditorHintsGatherer {
             return [root.lastPathComponent] + (await ProjectFiles.trackedFiles(in: root))
         }
         let input = EditorHints.Input(
-            windowTitle: title, titleStyle: surface.titleStyle, readCursor: readCursor, files: files
+            windowTitle: title, titleStyle: surface.titleStyle, readCursor: readCursor, files: files,
+            readGate: readGate
         )
         return Task.detached { await EditorHints.gather(input, deadline: deadline) }
     }

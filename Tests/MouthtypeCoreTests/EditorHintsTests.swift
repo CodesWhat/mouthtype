@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import Testing
 @testable import MouthtypeCore
 
@@ -180,6 +181,47 @@ import Testing
         let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
         #expect(clock.now - start < .seconds(1))
         #expect(terms.map(\.text) == ["AppDelegate", "mouthtype"])
+    }
+
+    @Test func aStuckCursorReadKeepsOneWorkerInFlightAndFreesWhenItExits() async {
+        final class Calls: Sendable {
+            private let n = Mutex(0)
+            func next() -> Int { n.withLock { $0 += 1; return $0 } }
+            var count: Int { n.withLock { $0 } }
+        }
+        let hold = DispatchSemaphore(value: 0)
+        let calls = Calls()
+        let readGate = EditorHints.ReadGate()
+        let input = EditorHints.Input(
+            windowTitle: "AppDelegate.swift - mouthtype - Visual Studio Code", titleStyle: .vscode,
+            readCursor: { _ in
+                if calls.next() == 1 { hold.wait() }
+                return InsertionContext(before: "applyTheme(", after: nil)
+            },
+            readGate: readGate
+        )
+        let clock = ContinuousClock()
+        // The first gather starts the read; wait until the worker really is inside it before the later gathers, so
+        // a loaded machine can't make the count depend on thread scheduling.
+        _ = await EditorHints.gather(input, deadline: .milliseconds(100))
+        let started = clock.now + .seconds(60)
+        while calls.count == 0, clock.now < started { await Task.yield() }
+        for _ in 0..<3 {
+            let start = clock.now
+            let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
+            #expect(clock.now - start < .seconds(1))
+            #expect(terms.map(\.text) == ["AppDelegate", "mouthtype"])
+        }
+        #expect(calls.count == 1)
+        #expect(readGate.isBusy)
+
+        hold.signal()
+        let giveUp = clock.now + .seconds(60)
+        while readGate.isBusy, clock.now < giveUp { await Task.yield() }
+        #expect(!readGate.isBusy)
+        let terms = await EditorHints.gather(input, deadline: .seconds(2))
+        #expect(calls.count == 2)
+        #expect(terms.map(\.text) == ["applyTheme", "AppDelegate", "mouthtype"])
     }
 
     @Test func gatherUsesTitleAndCursorWhenFilesAreTooSlow() async {

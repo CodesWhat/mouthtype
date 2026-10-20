@@ -38,9 +38,13 @@ enum EditorAccessibility {
     }
 
     /// A field whose label calls it a terminal, such as the integrated terminal in VS Code and Cursor, which is a
-    /// text area like the editor.
+    /// text area like the editor. The label is "Terminal" alone or followed by a space, digit or comma ("Terminal 1",
+    /// "Terminal, zsh"). An editor field named for a file, `terminal.swift` or `TerminalController.swift`, is not one.
     static func isTerminalLabel(_ label: String?) -> Bool {
-        label?.localizedCaseInsensitiveContains("terminal") == true
+        guard let label else { return false }
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.range(of: #"^terminal(?=$|[\s\d,])"#, options: [.regularExpression, .caseInsensitive]) != nil else { return false }
+        return trimmed.range(of: #"\.[A-Za-z0-9]{1,10}$"#, options: .regularExpression) == nil
     }
 
     /// The cursor window from bounded reads only. A field that won't answer a range read gives nothing.

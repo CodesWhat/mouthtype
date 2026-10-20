@@ -320,14 +320,14 @@ private let maya = VocabularyBias(terms: ["Maya"])
 }
 
 @Suite(.serialized) struct DependencyLoggingTests {
-    @Test func buildingABoosterRaisesFluidAudioLoggingToErrorsOnly() {
+    @Test func buildingABoosterRaisesFluidAudioLoggingToWarnings() {
         let original = AppLogger.minimumLevel
         defer { AppLogger.minimumLevel = original }
         AppLogger.minimumLevel = .debug
         _ = VocabularyBooster(prepare: { _, _ in FakeRescorer() }, report: { _ in })
-        #expect(AppLogger.minimumLevel == .error)
-        // Errors and faults stay: the level is a floor of .error, so warnings (which name terms) are dropped.
-        #expect(AppLogger.minimumLevel > AppLogger.Level.warning)
+        // Debug and info lines carry terms and replacements; "Vocabulary rescoring failed" is a warning and stays.
+        #expect(AppLogger.minimumLevel == .warning)
+        #expect(AppLogger.minimumLevel <= AppLogger.Level.warning)
     }
 
     @Test func aStricterLevelIsLeftAlone() {
@@ -336,5 +336,33 @@ private let maya = VocabularyBias(terms: ["Maya"])
         AppLogger.minimumLevel = .fault
         _ = VocabularyBooster(prepare: { _, _ in FakeRescorer() }, report: { _ in })
         #expect(AppLogger.minimumLevel == .fault)
+    }
+
+    @Test func sessionBuildsDropTermWarningsThenRestoreTheLevel() async {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .warning
+        let during = await DependencyLogging.quietingWarnings { AppLogger.minimumLevel }
+        #expect(during == .error)
+        #expect(AppLogger.minimumLevel == .warning)
+    }
+
+    @Test func aThrowingBuildStillRestoresTheLevel() async {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .warning
+        _ = try? await DependencyLogging.quietingWarnings { throw Boom() }
+        #expect(AppLogger.minimumLevel == .warning)
+    }
+
+    @Test func overlappingBuildsRestoreOnlyWhenTheLastFinishes() async {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .warning
+        await DependencyLogging.quietingWarnings {
+            await DependencyLogging.quietingWarnings {}
+            #expect(AppLogger.minimumLevel == .error)
+        }
+        #expect(AppLogger.minimumLevel == .warning)
     }
 }

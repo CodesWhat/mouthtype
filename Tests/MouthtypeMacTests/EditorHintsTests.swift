@@ -198,6 +198,16 @@ private struct FakeSource: BoundedTextSource {
         #expect(EditorAccessibility.isTerminalLabel("terminal input"))
         #expect(!EditorAccessibility.isTerminalLabel("Editor content;Press Alt+F1 for Accessibility Options."))
         #expect(!EditorAccessibility.isTerminalLabel(nil))
+        #expect(EditorAccessibility.isTerminalLabel("Terminal 1"))
+        #expect(EditorAccessibility.isTerminalLabel("Terminal 2, zsh"))
+        #expect(EditorAccessibility.isTerminalLabel("Terminal"))
+    }
+
+    @Test func editorFieldsNamedForTerminalFilesAreNotTerminals() {
+        #expect(!EditorAccessibility.isTerminalLabel("terminal.swift"))
+        #expect(!EditorAccessibility.isTerminalLabel("TerminalController.swift"))
+        #expect(!EditorAccessibility.isTerminalLabel("Terminal 1.swift"))
+        #expect(!EditorAccessibility.isTerminalLabel("Show Terminal Accessibility Help"))
     }
 
     // MARK: Bounded reads
