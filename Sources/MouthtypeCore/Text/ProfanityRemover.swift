@@ -628,7 +628,7 @@ public struct ProfanityRemover: Sendable {
                         replace(k, cheat)
                         spans.append(TextSpan(range: words[over].start..<words[over].end, cut: words[over - 1].end..<words[over].end, replacement: ""))
                     } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k), isFree(k + 1),
-                              ProfanityRemover.personObjects.contains(words[k + 1].lower) || isName(k + 1) {
+                              ProfanityRemover.personObjects.contains(words[k + 1].lower) {
                         replace(k, sleep)
                     } else if let mess = ProfanityRemover.messUpForms[lower] {
                         replace(k, mess)
