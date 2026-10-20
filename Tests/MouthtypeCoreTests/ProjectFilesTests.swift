@@ -6,7 +6,7 @@ import Testing
     private func makeRepo() throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("project-files-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Sources/Deep"), withIntermediateDirectories: true)
-        try "x".write(to: root.appendingPathComponent("TopLevelThing.swift"), atomically: true, encoding: .utf8)
+        try "x".write(to: root.appendingPathComponent("TopLevelZephyr.swift"), atomically: true, encoding: .utf8)
         try "x".write(to: root.appendingPathComponent("Sources/Deep/NestedQuillKit.swift"), atomically: true, encoding: .utf8)
         try "x".write(to: root.appendingPathComponent("SecretsIgnored.env"), atomically: true, encoding: .utf8)
         try "SecretsIgnored.env\n".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
@@ -47,10 +47,10 @@ import Testing
         try git(root, ["init", "-q"])
         try git(root, ["add", "-A"])
         let files = await ProjectFiles.trackedFiles(in: root)
-        #expect(Set(files) == [".gitignore", "TopLevelThing.swift", "Sources/Deep/NestedQuillKit.swift"])
+        #expect(Set(files) == [".gitignore", "TopLevelZephyr.swift", "Sources/Deep/NestedQuillKit.swift"])
         #expect(!files.contains("SecretsIgnored.env"))
         let names = EditorHints.terms(cursor: [], title: [], files: EditorHints.nameCandidates(fromPaths: files)).map(\.text)
-        #expect(names == ["TopLevelThing", "NestedQuillKit"])
+        #expect(names == ["TopLevelZephyr", "NestedQuillKit"])
     }
 
     @Test(.enabled(if: ProjectFiles.gitExecutable() != nil)) func cachesByRootUntilTheIndexChanges() async throws {
