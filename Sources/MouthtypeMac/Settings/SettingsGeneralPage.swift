@@ -2,15 +2,6 @@ import SwiftUI
 import MouthtypeCore
 
 extension SettingsView {
-    /// Everything the old General page held. The redesign splits it: input and recording stay in the Settings modal's General,
-    /// cleanup moves to Style, launch at login and updates to the modal's Mac.
-    @ViewBuilder var general: some View {
-        generalInput
-        generalCleanup
-        generalRecording
-        generalMac
-    }
-
     /// Settings modal, General: Dictation (shortcut, recording behavior, microphone).
     @ViewBuilder var generalInput: some View {
         DesignSection(eyebrow: "DICTATION") {
@@ -27,27 +18,6 @@ extension SettingsView {
             }
             if let error = model.recordingModeError { ModalCardNote(text: error, tone: .red) }
             MicrophoneSettingsSection(model: model.microphone)
-        }
-    }
-
-    @ViewBuilder var generalCleanup: some View {
-        SettingsGroup(eyebrow: "CLEANUP") {
-            SettingsRow(title: "Cleanup", detail: cleanupDetail) {
-                if let cleaner = actions.cleaner {
-                    switch cleaner.state {
-                    case .absent, .failed:
-                        Button("Download…") {
-                            let target = cleaner.downloadTarget
-                            if CleanupMenuSection.askToDownload(name: target.modelName, sizeMB: target.downloadSizeMB) { target.startDownload() }
-                        }
-                    case .downloading: Button("Cancel") { cleaner.cancelDownload() }
-                    default: EmptyView()
-                    }
-                }
-                Picker("Cleanup", selection: Binding(get: { model.cleanup.level.rawValue }, set: { if let level = CleanupLevel(rawValue: $0) { model.setLevel(level) } })) {
-                    ForEach(CleanupLevel.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) }
-                }.labelsHidden().fixedSize().accessibilityIdentifier("settings-cleanup-level")
-            }
         }
     }
 
@@ -86,28 +56,6 @@ extension SettingsView {
                         .disabled(!updater.canCheckForUpdates).accessibilityIdentifier("settings-check-updates")
                 }
             }
-        }
-    }
-
-    private var cleanupDetail: String {
-        var text = "Fast and Thorough run locally on your Mac."
-        if let cleaner = actions.cleaner {
-            text += " " + modelStatus(cleaner)
-            if model.cleanup.level.needsModel, !isReady(cleaner) { text += " Basic is used until it is ready." }
-        }
-        return text
-    }
-
-    private func isReady(_ cleaner: any CleanupModelManaging) -> Bool { if case .ready = cleaner.state { true } else { false } }
-    private func modelStatus(_ cleaner: any CleanupModelManaging) -> String {
-        let name = cleaner.modelName
-        switch cleaner.state {
-        case .absent: return "\(name) is not downloaded."
-        case .downloading(let fraction): return "\(name) downloading: \(Int(fraction * 100))%."
-        case .loading: return "\(name) is loading…"
-        case .unloaded: return "\(name) is downloaded and loads when needed."
-        case .ready: return "\(name) is ready."
-        case .failed(let message): return "\(name): \(message)"
         }
     }
 }

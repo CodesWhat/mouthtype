@@ -29,13 +29,4 @@ extension SettingsView {
             DesignPage(title: page.headline, summary: page.summary) { appearance }
         }
     }
-
-    /// The editors scroll for themselves, so the header sits above them instead of inside a scroll view.
-    private func wordsPage<Content: View>(_ page: SettingsPage, @ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 0) {
-            DesignPageHeader(title: page.headline, summary: page.summary)
-                .padding(.horizontal, 32).padding(.top, 40).padding(.bottom, 8).frame(maxWidth: .infinity, alignment: .leading)
-            content()
-        }
-    }
 }

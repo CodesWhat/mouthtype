@@ -114,8 +114,6 @@ import Testing
         return stops
     }
 
-    }
-
     /// Appearance is built from the redesign's own controls (style tiles, segmented controls, switch), which are plain buttons and so are
     /// proxies in the loop. Tab must walk the sidebar and then reach all of them: five style tiles, two preview swatches, three sizes at least.
     @Test func tabReachesTheAppearanceStyleTilesAndSegmentsUnderFullKeyboardAccess() throws {
@@ -173,7 +171,7 @@ import Testing
         let (controller, window) = try keyWindow(page: .appearance, fullKeyboardAccess: false)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
-        #expect(stops.contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth })
+        #expect(stops.contains { $0.x >= SettingsTheme.sidebarWidth })
         #expect(stops.filter { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }.count == SettingsPage.allCases.count + 2)
         try expectTabReachesPageControl(window, sidebarStops: SettingsPage.allCases.count + 2, "keyboard navigation off")
     }

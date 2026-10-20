@@ -36,7 +36,6 @@ struct StylePage: View {
             case .context(let id): StyleContextTab(model: model, actions: actions, context: id, openCleanup: { tab = .cleanup })
             case .cleanup: StyleCleanupTab(model: model, actions: actions, open: { tab = .context($0) })
             }
-            StyleAdvancedSection(model: model, actions: actions)
         }
     }
 }

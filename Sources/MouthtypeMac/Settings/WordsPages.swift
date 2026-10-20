@@ -33,13 +33,3 @@ struct PhrasesPage: View {
         }
     }
 }
-
-private struct WordsPageScroll<Content: View>: View {
-    @ViewBuilder var content: () -> Content
-
-    var body: some View {
-        GeometryReader { proxy in
-            ScrollView { content().frame(minHeight: proxy.size.height, alignment: .top) }
-        }
-    }
-}

@@ -9,6 +9,9 @@ extension SettingsView {
                 isOn: Binding(get: { model.boostSavedWords }, set: model.setBoostSavedWords), identifier: "settings-boost-saved-words")
             ModalToggleRow(title: "Learn from my corrections", detail: "When you fix a take by hand, Mouthtype remembers the fix.",
                 isOn: Binding(get: { model.learnCorrections }, set: model.setLearnCorrections), identifier: "settings-learn-corrections")
+            ModalToggleRow(title: "Code names from your editor",
+                detail: "While you dictate in VS Code, Cursor, Xcode or a terminal, favour file, folder and function names from the window you\u{2019}re in. Needs the boost above. Nothing is stored.",
+                isOn: Binding(get: { model.editorHints }, set: model.setEditorHints), identifier: "settings-editor-hints")
             MicrophonePriorityRows(model: model.microphone)
         }
         DesignSection(eyebrow: "TONE DETAILS",

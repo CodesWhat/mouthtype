@@ -12,7 +12,7 @@ What 0.3.0 doesn't promise. Most of it is evidence the maintainer didn't collect
 
 ## Appearance
 
-- **Clear Glass over a dark window on a light wallpaper can be hard to read.** Glass picks clear or smoked from the wallpaper it measures, so a dark window behind it on a bright desktop can lower the contrast. Switch Pill style under Settings → Appearance if it bothers you. Under Reduce Transparency, Glass is solid instead.
+- **Clear Glass over a dark window on a light wallpaper can be hard to read.** Glass picks clear or smoked from the wallpaper it measures, so a dark window behind it on a bright desktop can lower the contrast. Switch Pill style on the Appearance page if it bothers you. Under Reduce Transparency, Glass is solid instead.
 - **The Matrix padlock sprite is low-detail at small size.** It's a pixel-art sprite. Choose Pill size Large (Settings → Appearance) for more room.
 - **The Hi-Fi card falls back to the Classic card for text its pixel font can't draw.** Characters outside the font's range would turn into question marks, so the card shows your text in the Classic style instead. The text is unchanged.
 
