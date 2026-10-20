@@ -31,6 +31,7 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
     private let readRange: (FocusedElement) -> NSRange?
     private let readText: (FocusedElement) -> String?
     private let writeText: (FocusedElement, String) -> Bool
+    private let setTimeout: (FocusedElement, Float) -> Void
 
     convenience init() {
         self.init(focus: AccessibilityFocusReader(), readRange: Self.selectedRange,
@@ -38,7 +39,9 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
     }
 
     init(focus: any FocusReading, readRange: @escaping (FocusedElement) -> NSRange?,
-         readText: @escaping (FocusedElement) -> String?, writeText: @escaping (FocusedElement, String) -> Bool) {
+         readText: @escaping (FocusedElement) -> String?, writeText: @escaping (FocusedElement, String) -> Bool,
+         setTimeout: @escaping (FocusedElement, Float) -> Void = { AXUIElementSetMessagingTimeout($0.ref, $1) }) {
+        self.setTimeout = setTimeout
         self.focus = focus
         self.readRange = readRange
         self.readText = readText
@@ -72,6 +75,8 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
     func replace(_ original: SelectedText, with replacement: String) -> Bool {
         guard !replacement.isEmpty, replacement.utf16.count <= 16_000,
               (try? capture()) == original, let element = original.element else { return false }
+        // The captured reference kept the capture's shortened timeout. 0 restores the system default the insertion path uses.
+        setTimeout(element, 0)
         // The user explicitly accepts this edit. No clipboard paste, keyboard events or retry.
         return writeText(element, replacement)
     }

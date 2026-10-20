@@ -123,14 +123,20 @@ final class AccessibilityFocusReader: FocusReading {
             }
             return snapshot
         }
-        bounded(element)
         snapshot.element = FocusedElement(element)
         snapshot.focusedOwnerPID = ownerPID(of: FocusedElement(element))
-        snapshot.role = stringValue(element, kAXRoleAttribute)
-        snapshot.subrole = stringValue(element, kAXSubroleAttribute)
-        snapshot.isSecure = isSecure(element, subrole: snapshot.subrole)
-        if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(element) }
-        snapshot.windowTitle = elementValue(element, kAXWindowAttribute).flatMap(title(of:))
+        // Each read below re-derives its timeout from what's left of the deadline, and none is issued once it has passed.
+        // The caller sees the expired deadline and treats the whole capture as timed out.
+        if Self.deadlinePassed { return snapshot }
+        snapshot.role = stringValue(bounded(element), kAXRoleAttribute)
+        if Self.deadlinePassed { return snapshot }
+        snapshot.subrole = stringValue(bounded(element), kAXSubroleAttribute)
+        if Self.deadlinePassed { return snapshot }
+        snapshot.isSecure = isSecure(bounded(element), subrole: snapshot.subrole)
+        if Self.deadlinePassed { return snapshot }
+        if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(bounded(element)) }
+        if Self.deadlinePassed { return snapshot }
+        snapshot.windowTitle = elementValue(bounded(element), kAXWindowAttribute).flatMap { title(of: bounded($0)) }
         return snapshot
     }
 
