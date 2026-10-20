@@ -45,4 +45,56 @@ import MouthtypeCore
         }
         #expect(WebsiteContext.host(document: "https://example.com", bundleID: "unknown.app") == nil)
     }
+
+    // MARK: Legacy resolver semantics (the dev/v0.4.0 resolver, unchanged for rules made before contexts)
+
+    @Test func subdomainRuleThatSetsOnlyToneDoesNotInheritParentDomainLevel() throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: nil, level: .off)
+        try styles.setWebsite(domain: "example.com", style: nil, level: .medium)
+        try styles.setWebsite(domain: "chat.example.com", style: StylePreset.casual.options)
+        #expect(styles.resolveLevel(bundleID: "com.google.Chrome", websiteHost: "chat.example.com") == CleanupLevel.off)
+        #expect(styles.resolveLevel(bundleID: "com.google.Chrome", websiteHost: "www.example.com") == .medium)
+        #expect(styles.resolveLevel(bundleID: "com.google.Chrome", websiteHost: "other.org") == CleanupLevel.off)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "chat.example.com", fallback: .formal) == StylePreset.casual.options)
+    }
+
+    @Test func subdomainRuleThatSetsOnlyLevelDoesNotInheritParentDomainTone() throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: StylePreset.veryCasual.options)
+        try styles.setWebsite(domain: "example.com", style: StylePreset.casual.options)
+        try styles.setWebsite(domain: "jobs.example.com", style: nil, level: .basic)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "jobs.example.com", fallback: .formal) == StylePreset.veryCasual.options)
+        #expect(styles.resolveLevel(bundleID: "com.google.Chrome", websiteHost: "jobs.example.com") == .basic)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "www.example.com", fallback: .formal) == StylePreset.casual.options)
+    }
+
+    @Test func websiteFieldsFallBackToAppThenDefault() throws {
+        var styles = AppCleanupStyles()
+        try styles.setWebsite(domain: "example.com", style: StylePreset.casual.options)
+        #expect(styles.resolveLevel(bundleID: "com.google.Chrome", websiteHost: "example.com") == nil)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "example.com", fallback: .formal) == StylePreset.casual.options)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "nope.org", fallback: .formal) == .formal)
+    }
+
+    @Test func contextSiteBeatsBrowserRuleAndUserOverrideBeatsBuiltIn() throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: StylePreset.veryCasual.options, level: .off)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "mail.google.com", fallback: .formal) == .formal)
+        try styles.setWebsite(domain: "mail.google.com", style: StylePreset.casual.options)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "mail.google.com", fallback: .formal) == StylePreset.casual.options)
+        #expect(styles.resolveLevel(bundleID: "com.google.Chrome", websiteHost: "mail.google.com") == CleanupLevel.off)
+    }
+
+    @Test func hasWebsiteRulesCountsContextSites() throws {
+        #expect(AppCleanupStyles().hasWebsiteRules)
+        var styles = AppCleanupStyles()
+        for site in StyleContexts.builtIns(.work).filter({ $0.kind == .site }) + StyleContexts.builtIns(.email).filter({ $0.kind == .site }) {
+            styles.contexts.remove(site, from: .work)
+            styles.contexts.remove(site, from: .email)
+        }
+        #expect(!styles.hasWebsiteRules)
+        styles.contexts.addSite(.personal, domain: "example.org")
+        #expect(styles.hasWebsiteRules)
+    }
 }

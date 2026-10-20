@@ -324,7 +324,7 @@ final class DictationController {
             recordingLive = true
             let globalLevel = pipeline.settings().level
             pipeline.smart?.recordingStarted(level: cleanupLevel ?? globalLevel, take: current.id)
-            if !appStyles.websites.isEmpty {
+            if appStyles.hasWebsiteRules, WebsiteContext.supports(bundleID: startFocus.bundleID) {
                 let websiteHost = inserter.websiteHost(for: startFocus)
                 current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID,
                     websiteHost: websiteHost, fallback: cleanupStyle)

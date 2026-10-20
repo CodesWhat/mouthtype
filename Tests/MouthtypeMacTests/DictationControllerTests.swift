@@ -644,6 +644,28 @@ private struct Rig {
         #expect(!plain.log.contains("inserter.website"))
     }
 
+    @Test func contextWebsitesApplyWithoutAnyLegacyWebsiteRule() async throws {
+        let builtIn = AppCleanupStyles()
+        let rig = Rig(appStyles: { builtIn })
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "www.linkedin.com"
+        rig.engine.result.text = "See Maya Friday."
+        await rig.dictate()
+        #expect(rig.log.contains("inserter.website"))
+        #expect(rig.store.insertion?.cleanup?.style == "casual")
+
+        var added = AppCleanupStyles()
+        added.contexts.addSite(.personal, domain: "example.org")
+        added.contexts.setTone(.personal, .veryCasual)
+        let configured = added
+        let custom = Rig(appStyles: { configured })
+        custom.inserter.focus.bundleID = "com.google.Chrome"
+        custom.inserter.website = "example.org"
+        custom.engine.result.text = "See Maya Friday."
+        await custom.dictate()
+        #expect(custom.store.insertion?.cleanup?.style == "veryCasual")
+    }
+
     @Test func unknownAppUsesGlobalToneAndOffStillBypassesTone() async throws {
         var styles = AppCleanupStyles()
         try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: StylePreset.veryCasual.options)

@@ -187,6 +187,11 @@ struct AppCleanupStyles: Equatable, Sendable {
         return host
     }
 
+    /// Whether a website can change the result: an explicit website rule, or a site listed in a context.
+    var hasWebsiteRules: Bool {
+        !websites.isEmpty || StyleContextID.allCases.contains { contexts.members($0).contains { $0.kind == .site } }
+    }
+
     /// The tone and cleanup level one rule or context contributes. A nil field falls through to the next layer.
     private struct Layer {
         let style: StyleOptions?
@@ -199,9 +204,11 @@ struct AppCleanupStyles: Equatable, Sendable {
         var result: [Layer] = []
         var hasListedSite = false
         if let host = supportedHost(websiteHost, bundleID: bundleID) {
-            var sites: [(length: Int, rank: Int, layer: Layer)] = websites
-                .filter { host == $0.domain || host.hasSuffix("." + $0.domain) }
-                .map { ($0.domain.count, 2, Layer(style: $0.style, level: $0.level)) }
+            // Like the original resolver, only the most specific legacy website rule counts; a parent domain never fills its fields in.
+            var sites: [(length: Int, rank: Int, layer: Layer)] = []
+            if let rule = websiteRule(websiteHost: host, bundleID: bundleID) {
+                sites.append((rule.domain.count, 2, Layer(style: rule.style, level: rule.level)))
+            }
             if let match = contexts.siteMatch(host: host) {
                 hasListedSite = true
                 sites.append((match.length, match.isBuiltIn ? 0 : 1, Layer(style: contexts.tone(match.context)?.options, level: contexts.level(match.context))))
