@@ -33,7 +33,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), transformer: cleanerHost, busy: { [weak self] in
         guard let self else { return true }
         return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
-    }, changed: { [weak self] in self?.appUpdater.refreshActivity() })
+    }, changed: { [weak self] in self?.appUpdater.refreshActivity() }, styleFor: { selection in
+        // The tone that applies to the focused app: its rule, else the global default.
+        let styles = (try? AppCleanupStyles.load()) ?? AppCleanupStyles()
+        return styles.resolve(bundleID: NSRunningApplication(processIdentifier: selection.pid)?.bundleIdentifier,
+                              fallback: CleanupSettings.load().style)
+    })
     private lazy var selectionCleanupWindow = SelectionCleanupWindow(model: selectionCleanupModel)
     private lazy var fileTranscriptionModel: FileTranscriptionModel = FileTranscriptionModel(
         makeJob: { [weak self] in
@@ -215,15 +220,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             if self.diagnostics.microphoneStatus != .authorized || !self.diagnostics.accessibilityGranted { self.showSetup() }
             else { self.settingsWindow.present(page: .diagnostics) }
         }))
-        menuBar.add(section: settingsSection, startsGroup: false)
+        menuBar.add(section: EngineRetryMenuSection(host: engineHost), startsGroup: false)
+        menuBar.add(section: UpdateAvailableMenuSection(updater: appUpdater), startsGroup: false)
+        menuBar.add(section: settingsSection)
         NSApp.mainMenu = settingsSection.applicationMenu()
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
+        menuBar.add(section: history, startsGroup: false)
         menuBar.add(section: SelectionCleanupMenuSection(
-            open: { [weak self] in self?.selectionCleanupWindow.present() },
-            openTransform: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
-            unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
+            cleanUp: { [weak self] in self?.selectionCleanupWindow.present() },
+            applyTone: { [weak self] in self?.selectionCleanupWindow.present(tone: $0) },
+            insertPhrase: { [weak self] in self?.insertPhraseOverSelection($0) },
+            editTransforms: { [weak self] in self?.settingsWindow.present(page: .phrases) },
+            phrases: { [weak self] in self?.phrases.snippets() ?? [] },
+            capture: { [weak self] in
+                guard let self, AXIsProcessTrusted() else { return .unavailable }
+                return self.selectionCleanupModel.captureForMenu()
+            }))
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(page: .transcribeFile) }, startsGroup: false)
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost, weak recovery] in
@@ -245,7 +259,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         dictation.canStartRecording = { [weak self] in self?.isTerminating != true && self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
-        menuBar.add(section: history, startsGroup: false)
         menuBar.add(section: UpdateMenuSection(updater: appUpdater), isFooter: true)
         menuBar.add(section: HelpMenuSection(), isFooter: true)
         self.menuBar = menuBar
@@ -400,6 +413,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") { cardPresenter.present(card) }
+        }
+    }
+
+    /// A saved phrase from the menu replaces the selection directly. When it can't, the phrase text goes to the clipboard.
+    private func insertPhraseOverSelection(_ phrase: Snippet) {
+        let clipboard = NSPasteboard.general.string(forType: .string)
+        switch selectionCleanupModel.insert(phrase: phrase, clipboard: clipboard) {
+        case .replaced:
+            break
+        case .busy:
+            showNotice(PillMessage("Finish the current dictation or file job first"))
+        case .unavailable:
+            showNotice(PillMessage("Select text in an accessible field first"))
+        case let .refused(text):
+            SystemClipboard().write(text)
+            showNotice(PillMessage("Couldn’t replace the selection", detail: "Phrase copied instead"))
         }
     }
 

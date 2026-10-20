@@ -40,7 +40,7 @@ import MouthtypeCore
         if cleanupNeedsAttention { return "Cleanup model needs attention…" }
         if dictionaryError != nil { return "Saved spellings need attention…" }
         if phrasesError != nil { return "Phrase replacements need attention…" }
-        if historyError != nil { return "Recent dictations unavailable…" }
+        if historyError != nil { return "Recent takes unavailable…" }
         return nil
     }
 

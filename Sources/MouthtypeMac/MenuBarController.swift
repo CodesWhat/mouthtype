@@ -16,6 +16,8 @@ extension MenuSection {
     private let stopItem = NSMenuItem(title: "Stop Dictation", action: nil, keyEquivalent: "")
     private let cancelItem = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
     private let aboutItem = NSMenuItem(title: "About Mouthtype", action: nil, keyEquivalent: "")
+    /// A custom action rather than `terminate:`, since macOS 26 gives standard-action items a system icon and this menu is plain text.
+    private let quitItem = NSMenuItem(title: "Quit", action: nil, keyEquivalent: "q")
     private var handsFree = false
     var onStopDictation: (@MainActor () -> Void)?
     var onCancelDictation: (@MainActor () -> Void)?
@@ -25,9 +27,8 @@ extension MenuSection {
     override init() {
         super.init()
         menu.delegate = self
-        aboutItem.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
         menu.autoenablesItems = false
-        for (item, action) in [(stopItem, #selector(stop)), (cancelItem, #selector(cancel)), (aboutItem, #selector(about))] {
+        for (item, action) in [(stopItem, #selector(stop)), (cancelItem, #selector(cancel)), (aboutItem, #selector(about)), (quitItem, #selector(quit))] {
             item.target = self
             item.action = action
         }
@@ -57,7 +58,7 @@ extension MenuSection {
             if entry.startsGroup || groups.isEmpty { groups.append(visible) }
             else { groups[groups.count - 1].append(contentsOf: visible) }
         }
-        let footer = sections.filter(\.isFooter).flatMap { $0.section.items.filter { !$0.isHidden && !$0.isSeparatorItem } } + [aboutItem, NSMenuItem(title: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")]
+        let footer = sections.filter(\.isFooter).flatMap { $0.section.items.filter { !$0.isHidden && !$0.isSeparatorItem } } + [aboutItem, quitItem]
         groups.append(footer)
         for (index, group) in groups.enumerated() {
             if index > 0 { menu.addItem(.separator()) }
@@ -67,6 +68,7 @@ extension MenuSection {
 
     @objc private func stop() { onStopDictation?() }
     @objc private func cancel() { onCancelDictation?() }
+    @objc private func quit() { NSApp.terminate(nil) }
     @objc private func about() { NSApp.activate(); NSApp.orderFrontStandardAboutPanel(nil) }
 }
 

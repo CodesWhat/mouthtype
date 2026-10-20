@@ -41,7 +41,7 @@ If you start a take and the focus lands in a secure field before it ends, the te
 
 - Make sure a text field has focus. With nowhere to paste, the card says "Nothing to paste into" and keeps the text.
 - If the field didn't change after a paste, the card says "Paste didn't land" and offers the transcript to copy. Some apps don't report a change even when text arrived, so look at the field before pasting again.
-- **Paste Last** (Control+Command+V) and **Copy Last** (Control+Command+C) work on the latest saved take, even after a restart. **Recent Dictations** in the menu lists earlier ones.
+- **Paste Last Take** (Control+Command+V) and **Copy Last Take** (Control+Command+C) work on the latest saved take, even after a restart. **Recent Takes** in the menu lists earlier ones.
 - Long pastes into a terminal can lose text. Turn on split pastes for that app under Settings → Writing → Delivery. If a split paste is interrupted, some text may already be there. Check the field before copying the full text.
 
 ## Recovering a take
@@ -54,7 +54,7 @@ If you start a take and the focus lands in a secure field before it ends, the te
 
 ## Update checks
 
-- Use **Check for Updates…** in the menu. When one is found the item reads **Update Available…**.
+- Use **Check for Updates…** in the menu. When one is found, **Update Available…** also appears at the top of the menu.
 - Automatic checks are on by default. Turn them off with **Check automatically** in Settings → General.
 - Updates wait while a dictation, recovery or file transcription is running.
 - Alpha.1 to alpha.3 have no updater. Download the current build from the website once.

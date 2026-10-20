@@ -281,7 +281,7 @@ private final class FakeLoginService: LoginItemService {
 
         let section = HistoryMenuSection(store: store, now: { base })
         let parent = try #require(section.items.first)
-        #expect(parent.title == "Recent Dictations")
+        #expect(parent.title == "Recent Takes")
         let items = try #require(parent.submenu?.items)
         #expect(items.count == 1 + HistoryMenuSection.recentCount)
         #expect(items[0].isEnabled == false && items[0].title.contains("words today"))
@@ -329,7 +329,7 @@ private final class FakeLoginService: LoginItemService {
         defer { defaults.removePersistentDomain(forName: suite) }
         let section = ActionsMenuSection(defaults: defaults, onPasteLast: {}, onCopyLast: {})
         let titles = section.items.map(\.title)
-        #expect(titles == ["Paste Last", "Copy Last"])
+        #expect(titles == ["Paste Last Take", "Copy Last Take"])
         #expect(section.items[0].keyEquivalent == "v" && section.items[0].keyEquivalentModifierMask == [.command, .control])
         #expect(section.items[1].keyEquivalent == "c" && section.items[1].keyEquivalentModifierMask == [.command, .control])
         #expect(SoundPreference.isEnabled(defaults))

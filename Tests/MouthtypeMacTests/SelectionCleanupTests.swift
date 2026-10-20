@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import MouthtypeCore
 @testable import MouthtypeMac
 
 @MainActor private final class SelectionFixture: SelectionEditing {
@@ -122,5 +123,78 @@ import Testing
         model.accept()
         model.cancel()
         #expect(!model.acceptanceErrorPresented && !model.hasPreview)
+    }
+
+    @Test func tonePreviewsUseTheRealStyleStageAndFormalSoftensSwearing() {
+        let editor = SelectionFixture()
+        editor.selected = SelectedText(pid: 1, element: nil, range: NSRange(location: 0, length: 22), text: "Okay that is fine.")
+        editor.selected.range.length = editor.selected.text.utf16.count
+        let model = SelectionCleanupModel(editor: editor)
+        model.prepare(tone: .veryCasual)
+        #expect(model.result == "okay that is fine")
+        #expect(model.tone == .veryCasual && model.message.contains("Very casual"))
+        model.prepare(tone: .casual)
+        #expect(model.result == "Okay that is fine")
+        editor.selected = SelectedText(pid: 1, element: nil, range: NSRange(location: 0, length: 0), text: "Shit, I forgot the keys.")
+        editor.selected.range.length = editor.selected.text.utf16.count
+        model.prepare(tone: .formal)
+        #expect(!model.result.lowercased().contains("shit"))
+        model.prepare(tone: .casual)
+        #expect(model.result.lowercased().contains("shit"))
+        model.accept()
+        #expect(editor.attempts == 1)
+    }
+
+    @Test func cleanUpUsesTheFocusedAppsTone() {
+        let editor = SelectionFixture()
+        editor.selected = SelectedText(pid: 77, element: nil, range: NSRange(location: 0, length: 0), text: "Okay that is fine.")
+        editor.selected.range.length = editor.selected.text.utf16.count
+        var seen: pid_t?
+        let model = SelectionCleanupModel(editor: editor, styleFor: { seen = $0.pid; return StylePreset.veryCasual.options })
+        model.prepare()
+        #expect(seen == 77 && model.result == "okay that is fine" && model.tone == nil)
+    }
+
+    @Test func phraseReplacesSelectionWithSafetyChecks() {
+        let editor = SelectionFixture()
+        var busy = false
+        let model = SelectionCleanupModel(editor: editor, busy: { busy })
+        let phrase = Snippet(trigger: "Sign-off", expansion: "Best,\nScott")
+        #expect(model.insert(phrase: phrase) == .unavailable)
+        #expect(model.captureForMenu() == .ready)
+        #expect(model.insert(phrase: phrase) == .replaced)
+        #expect(editor.attempts == 1)
+        #expect(model.captureForMenu() == .ready)
+        busy = true
+        #expect(model.insert(phrase: phrase) == .busy)
+        busy = false
+        editor.unavailable = true
+        #expect(model.captureForMenu() == .unavailable)
+        #expect(model.insert(phrase: phrase) == .unavailable)
+        #expect(editor.attempts == 1)
+    }
+
+    @Test func phraseRefusesWhenSelectionChangedAfterMenuOpened() {
+        let editor = SelectionFixture()
+        let model = SelectionCleanupModel(editor: editor)
+        let phrase = Snippet(trigger: "Sign-off", expansion: "Best,\nScott")
+        #expect(model.captureForMenu() == .ready)
+        editor.selected = SelectedText(pid: 123, element: nil, range: NSRange(location: 40, length: 5), text: "other")
+        #expect(model.insert(phrase: phrase) == .refused("Best,\nScott"))
+        #expect(editor.attempts == 0)
+    }
+
+    @Test func refusedPhraseCarriesExpandedText() {
+        let editor = SelectionFixture()
+        let model = SelectionCleanupModel(editor: editor)
+        let phrase = Snippet(trigger: "Sig", expansion: "On {date}: {clipboard}")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(model.captureForMenu() == .ready)
+        editor.current = SelectedText(pid: 9, element: nil, range: NSRange(location: 0, length: 1), text: "x")
+        guard case let .refused(text) = model.insert(phrase: phrase, now: now, clipboard: "pasted") else {
+            Issue.record("expected refused")
+            return
+        }
+        #expect(text.contains("pasted") && !text.contains("{date}") && !text.contains("{clipboard}"))
     }
 }

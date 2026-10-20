@@ -4,8 +4,8 @@ import AppKit
     private let defaults: UserDefaults
     private let onPasteLast: @MainActor () -> Void
     private let onCopyLast: @MainActor () -> Void
-    private let pasteItem = NSMenuItem(title: "Paste Last", action: nil, keyEquivalent: "v")
-    private let copyItem = NSMenuItem(title: "Copy Last", action: nil, keyEquivalent: "c")
+    private let pasteItem = NSMenuItem(title: "Paste Last Take", action: nil, keyEquivalent: "v")
+    private let copyItem = NSMenuItem(title: "Copy Last Take", action: nil, keyEquivalent: "c")
     var items: [NSMenuItem] { [pasteItem, copyItem] }
 
     init(defaults: UserDefaults = .standard,

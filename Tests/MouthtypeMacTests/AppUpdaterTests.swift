@@ -160,7 +160,7 @@ import Testing
         #expect(UpdateActivity.resolve(phase: .idle, recovering: false) == .idle)
     }
 
-    @Test func footerItemsCarryIconsLikeQuit() throws {
+    @Test func footerItemsAreIconlessPlainText() throws {
         let driver = Driver()
         let updater = AppUpdater(driver: driver, activity: { .idle })
         let daily = DailyMenu()
@@ -168,8 +168,16 @@ import Testing
         daily.add(section: HelpMenuSection(onShow: {}), isFooter: true)
         for title in ["Check for Updates…", "How to Use Mouthtype…", "About Mouthtype"] {
             let item = try #require(daily.menu.items.first { $0.title == title })
-            #expect(item.image != nil, "\(title) has no icon")
+            #expect(item.image == nil, "\(title) has an icon")
         }
+    }
+
+    @Test func updateAvailableShowsAtTopOnlyWhileAnUpdateWaits() throws {
+        let driver = Driver()
+        let updater = AppUpdater(driver: driver, activity: { .idle })
+        let section = UpdateAvailableMenuSection(updater: updater)
+        #expect(section.items.isEmpty)
+        #expect(UpdateMenuSection(updater: updater).items.first?.title == "Check for Updates…")
     }
 
     @Test func menuUsesActualEnablementAndRoutesExplicitChecks() throws {

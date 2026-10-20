@@ -10,18 +10,28 @@ struct SelectedText: Equatable {
     var text: String
 }
 
-enum SelectionCleanupError: Error { case unavailable }
+enum SelectionCleanupError: Error { case unavailable, timedOut }
 
 @MainActor protocol SelectionEditing {
     func capture() throws -> SelectedText
+    /// A capture that gives up once `budget` seconds have passed, for callers that can't block (the menu).
+    func capture(budget: TimeInterval) throws -> SelectedText
     func replace(_ original: SelectedText, with replacement: String) -> Bool
 }
+
+extension SelectionEditing {
+    func capture(budget: TimeInterval) throws -> SelectedText { try capture() }
+}
+
+/// What the menu-open capture found.
+enum MenuCapture: Equatable { case ready, unavailable, timedOut }
 
 @MainActor final class AccessibilitySelectionEditor: SelectionEditing {
     private let focus: any FocusReading
     private let readRange: (FocusedElement) -> NSRange?
     private let readText: (FocusedElement) -> String?
     private let writeText: (FocusedElement, String) -> Bool
+    private let setTimeout: (FocusedElement, Float) -> Void
 
     convenience init() {
         self.init(focus: AccessibilityFocusReader(), readRange: Self.selectedRange,
@@ -29,22 +39,33 @@ enum SelectionCleanupError: Error { case unavailable }
     }
 
     init(focus: any FocusReading, readRange: @escaping (FocusedElement) -> NSRange?,
-         readText: @escaping (FocusedElement) -> String?, writeText: @escaping (FocusedElement, String) -> Bool) {
+         readText: @escaping (FocusedElement) -> String?, writeText: @escaping (FocusedElement, String) -> Bool,
+         setTimeout: @escaping (FocusedElement, Float) -> Void = { AXUIElementSetMessagingTimeout($0.ref, $1) }) {
+        self.setTimeout = setTimeout
         self.focus = focus
         self.readRange = readRange
         self.readText = readText
         self.writeText = writeText
     }
 
+    func capture(budget: TimeInterval) throws -> SelectedText {
+        AccessibilityFocusReader.deadline = Date().addingTimeInterval(budget)
+        defer { AccessibilityFocusReader.deadline = nil }
+        return try capture()
+    }
+
     func capture() throws -> SelectedText {
         let snapshot = focus.snapshot()
+        if AccessibilityFocusReader.deadlinePassed { throw SelectionCleanupError.timedOut }
         guard !snapshot.isSecure, !focus.isSecureInputEnabled,
               let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
               let element = snapshot.element,
               ["AXTextField", "AXTextArea", "AXComboBox"].contains(snapshot.role ?? "") else {
             throw SelectionCleanupError.unavailable
         }
-        guard let range = readRange(element), range.location >= 0, (1...16_000).contains(range.length),
+        let range = readRange(element)
+        if AccessibilityFocusReader.deadlinePassed { throw SelectionCleanupError.timedOut }
+        guard let range, range.location >= 0, (1...16_000).contains(range.length),
               let text = readText(element), !text.isEmpty, text.utf16.count == range.length else {
             throw SelectionCleanupError.unavailable
         }
@@ -54,12 +75,14 @@ enum SelectionCleanupError: Error { case unavailable }
     func replace(_ original: SelectedText, with replacement: String) -> Bool {
         guard !replacement.isEmpty, replacement.utf16.count <= 16_000,
               (try? capture()) == original, let element = original.element else { return false }
+        // The captured reference kept the capture's shortened timeout. 0 restores the system default the insertion path uses.
+        setTimeout(element, 0)
         // The user explicitly accepts this edit. No clipboard paste, keyboard events or retry.
         return writeText(element, replacement)
     }
 
     private static func selectedRange(_ element: FocusedElement) -> NSRange? {
-        AXUIElementSetMessagingTimeout(element.ref, AccessibilityFocusReader.messagingTimeout)
+        AXUIElementSetMessagingTimeout(element.ref, AccessibilityFocusReader.callTimeout())
         return AccessibilityFocusReader.selectedRange(element.ref)
     }
 
@@ -79,13 +102,18 @@ enum SelectionCleanupError: Error { case unavailable }
     private let transformer: (any SelectionTransforming)?
     private let busy: () -> Bool
     private let changed: () -> Void
+    private let styleFor: (SelectedText) -> StyleOptions
     private var captured: SelectedText?
+    /// The tone behind the deterministic cleanup of the captured selection.
+    @ObservationIgnored private var style = StyleOptions.formal
     @ObservationIgnored private var transformTask: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
     private(set) var original = ""
     var result = ""
     private(set) var message = ""
     private(set) var submitted = false
+    /// The tone picked from the menu, or nil when the focused app's own tone applies.
+    private(set) var tone: StylePreset?
     /// The AI transform behind the current preview, or nil for Basic cleanup.
     private(set) var transform: TextTransform?
     private(set) var isTransforming = false
@@ -106,15 +134,36 @@ enum SelectionCleanupError: Error { case unavailable }
     var canChooseBasic: Bool { captured != nil && !submitted && !isTransforming && transform != nil }
 
     init(editor: any SelectionEditing, transformer: (any SelectionTransforming)? = nil,
-         busy: @escaping () -> Bool = { false }, changed: @escaping () -> Void = {}) {
+         busy: @escaping () -> Bool = { false }, changed: @escaping () -> Void = {},
+         styleFor: @escaping (SelectedText) -> StyleOptions = { _ in .formal }) {
+        self.styleFor = styleFor
         self.editor = editor
         self.transformer = transformer
         self.busy = busy
         self.changed = changed
     }
 
+    /// The selection read when the menu opened. A phrase replaces exactly this, so a selection that moved while the
+    /// menu was open is refused instead of being overwritten.
+    @ObservationIgnored private var menuSelection: SelectedText?
+
+    /// Reads the selection as the menu opens, so the menu can enable its items and a phrase can be checked against it.
+    /// Time-boxed: the AX calls each get a shrinking timeout, and a capture that still ran past `budget` is discarded.
+    func captureForMenu(budget: TimeInterval = 0.15) -> MenuCapture {
+        let start = ContinuousClock.now
+        menuSelection = nil
+        let selection: SelectedText
+        do { selection = try editor.capture(budget: budget) }
+        catch SelectionCleanupError.timedOut { return .timedOut }
+        catch { return .unavailable }
+        if start.duration(to: .now) > .seconds(budget) { return .timedOut }
+        menuSelection = selection
+        return .ready
+    }
+
     /// Captures the selection and previews either Basic cleanup or, when `requested` is set, an AI transform.
-    func prepare(transform requested: TextTransform? = nil) {
+    /// Basic cleanup runs the pipeline with `requestedTone`, or with the focused app's tone when that is nil.
+    func prepare(transform requested: TextTransform? = nil, tone requestedTone: StylePreset? = nil) {
         cancel()
         guard !busy() else { message = "Finish the current dictation or file job first."; return }
         if requested != nil, let reason = transformUnavailableReason {
@@ -124,6 +173,8 @@ enum SelectionCleanupError: Error { case unavailable }
         do {
             let selection = try editor.capture()
             guard !selection.text.isEmpty, selection.text.utf16.count <= 16_000 else { throw SelectionCleanupError.unavailable }
+            style = requestedTone?.options ?? styleFor(selection)
+            tone = requestedTone
             if let requested {
                 captured = selection
                 original = selection.text
@@ -131,12 +182,13 @@ enum SelectionCleanupError: Error { case unavailable }
                 begin(requested)
                 return
             }
-            let cleaned = Self.basicCleanup(selection.text)
+            let cleaned = Self.basicCleanup(selection.text, style: style)
             guard !cleaned.isEmpty, cleaned.utf16.count <= 16_000 else { throw SelectionCleanupError.unavailable }
             captured = selection
             original = selection.text
             result = cleaned
-            message = Self.basicMessage
+            message = requestedTone.map { "\($0.title) tone preview. Review it before accepting. Names and numbers aren’t rewritten." }
+                ?? Self.basicMessage
             changed()
         } catch {
             message = "Select up to 16,000 characters in an accessible text field, then try again. Password fields aren’t read."
@@ -156,7 +208,7 @@ enum SelectionCleanupError: Error { case unavailable }
         generation += 1
         transformTask?.cancel()
         transform = nil
-        let cleaned = Self.basicCleanup(original)
+        let cleaned = Self.basicCleanup(original, style: style)
         result = cleaned
         message = cleaned.isEmpty ? "Basic cleanup left nothing. Pick a transform or cancel." : Self.basicMessage
     }
@@ -224,9 +276,11 @@ enum SelectionCleanupError: Error { case unavailable }
         return leading + result.trimmingCharacters(in: .whitespacesAndNewlines) + String(trailing)
     }
 
-    private static func basicCleanup(_ text: String) -> String {
+    /// The deterministic stages plus the tone pass. Formal also softens swearing; the other tones leave it as written.
+    private static func basicCleanup(_ text: String, style: StyleOptions) -> String {
         let options = TextPipelineOptions(fillers: true, spokenCommands: true, selfCorrection: false, countedLists: false,
-            notation: false, numbers: false, dictionary: false, snippets: false, blend: false, whitespace: true)
+            notation: false, numbers: false, dictionary: false, snippets: false, blend: false, whitespace: true,
+            profanity: true, style: style)
         return TextPipeline().run(TextPipelineInput(text: text, options: options)).text
     }
 
@@ -239,7 +293,7 @@ enum SelectionCleanupError: Error { case unavailable }
         }
         let replacement = Self.restoringBoundaryWhitespace(of: captured.text, in: result)
         guard editor.replace(captured, with: replacement) else {
-            message = "The selection changed or the app refused replacement. Select the original text again and reopen Clean Selected Text, or copy the result."
+            message = "The selection changed or the app refused replacement. Select the original text again and reopen Clean Up Selection, or copy the result."
             acceptanceErrorPresented = true
             return
         }
@@ -260,8 +314,28 @@ enum SelectionCleanupError: Error { case unavailable }
         message = ""
         submitted = false
         transform = nil
+        tone = nil
         isTransforming = false
         acceptanceErrorPresented = false
         changed()
+    }
+
+    /// `refused` carries the expanded phrase text so the caller can copy exactly what would have been inserted.
+    enum PhraseOutcome: Equatable { case replaced, busy, unavailable, refused(String) }
+
+    /// Replaces the selection captured when the menu opened with a saved phrase as it would deliver by voice (`{date}`
+    /// and `{clipboard}` filled). The same rules apply as for Clean Up: no secure fields, no password reads, and the
+    /// replacement is refused if the selection moved since the menu opened. It never captures fresh at click time.
+    /// The app's own Undo (Cmd-Z) reverts it.
+    func insert(phrase: Snippet, now: Date = Date(), clipboard: String? = nil) -> PhraseOutcome {
+        guard !busy() else { return .busy }
+        let selection = menuSelection
+        menuSelection = nil
+        guard let selection else { return .unavailable }
+        let expander = SnippetExpander(snippets: [phrase], now: now, clipboard: clipboard)
+        let expanded = expander.apply(phrase.trigger).text
+        let text = expander.matchingTriggers(in: phrase.trigger).isEmpty ? phrase.expansion : expanded
+        guard !text.isEmpty, text.utf16.count <= 16_000, editor.replace(selection, with: text) else { return .refused(text) }
+        return .replaced
     }
 }

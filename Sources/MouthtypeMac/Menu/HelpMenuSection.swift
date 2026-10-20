@@ -19,7 +19,6 @@ final class HelpMenuSection: NSObject, MenuSection {
     init(onShow: @escaping @MainActor () -> Void = HelpMenuSection.showGuide) {
         self.onShow = onShow
         super.init()
-        item.image = NSImage(systemSymbolName: "questionmark.circle", accessibilityDescription: nil)
         item.target = self
         item.action = #selector(show)
     }

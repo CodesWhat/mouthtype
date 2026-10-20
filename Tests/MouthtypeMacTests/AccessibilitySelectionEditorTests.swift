@@ -19,6 +19,7 @@ import Testing
     var textReads = 0
     var writes: [(FocusedElement, String)] = []
     var acceptsWrite = true
+    var events: [String] = []
 
     func editor() -> AccessibilitySelectionEditor {
         AccessibilitySelectionEditor(focus: focus, readRange: { element in
@@ -28,8 +29,11 @@ import Testing
             self.textReads += 1
             return self.text
         }, writeText: { element, text in
+            self.events.append("write")
             self.writes.append((element, text))
             return self.acceptsWrite
+        }, setTimeout: { _, seconds in
+            self.events.append("timeout=\(seconds)")
         })
     }
 }
@@ -111,5 +115,28 @@ import Testing
         fixture.acceptsWrite = false
         #expect(!editor.replace(original, with: "result"))
         #expect(fixture.writes.count == 1)
+    }
+
+    @Test func writeResetsTheShortenedTimeoutBeforeWritingThroughTheOriginalReference() throws {
+        let fixture = SelectionBoundary()
+        fixture.range?.length = fixture.text!.utf16.count
+        let editor = fixture.editor()
+        let original = try editor.capture()
+        fixture.events = []
+        #expect(editor.replace(original, with: "result"))
+        #expect(fixture.events == ["timeout=0.0", "write"])
+    }
+
+    @Test func aBudgetedCaptureLeavesNoDeadlineBehind() throws {
+        let fixture = SelectionBoundary()
+        fixture.range?.length = fixture.text!.utf16.count
+        let editor = fixture.editor()
+        _ = try editor.capture(budget: 5)
+        #expect(AccessibilityFocusReader.deadline == nil)
+        fixture.range = nil
+        #expect(throws: SelectionCleanupError.self) { try editor.capture(budget: 5) }
+        #expect(AccessibilityFocusReader.deadline == nil)
+        #expect(throws: SelectionCleanupError.timedOut) { try editor.capture(budget: -1) }
+        #expect(AccessibilityFocusReader.deadline == nil)
     }
 }

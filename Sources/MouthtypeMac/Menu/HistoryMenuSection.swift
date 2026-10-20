@@ -1,7 +1,7 @@
 import AppKit
 import MouthtypeCore
 
-/// The stats line and the last few dictations, newest first. Choosing one copies its text.
+/// The stats line and the last few takes, newest first. Choosing one copies its text.
 @MainActor
 final class HistoryMenuSection: NSObject, MenuSection {
     static let recentCount = 5
@@ -10,7 +10,7 @@ final class HistoryMenuSection: NSObject, MenuSection {
     private let store: TranscriptStore?
     private let now: @MainActor () -> Date
     private let statsItem = NSMenuItem()
-    private let parent = NSMenuItem(title: "Recent Dictations", action: nil, keyEquivalent: "")
+    private let parent = NSMenuItem(title: "Recent Takes", action: nil, keyEquivalent: "")
     private let onError: @MainActor (String?) -> Void
     private let copy: @MainActor (String) -> Void
     private var recentItems: [NSMenuItem] = []
@@ -30,7 +30,7 @@ final class HistoryMenuSection: NSObject, MenuSection {
     }
 
     func refresh() {
-        guard let store else { onError("Recent dictations are unavailable."); return }
+        guard let store else { onError("Recent takes are unavailable."); return }
         do {
             statsItem.title = Self.statsLine(try store.stats(now: now()))
             let records = try store.recent(limit: Self.recentCount * 4)
@@ -47,7 +47,7 @@ final class HistoryMenuSection: NSObject, MenuSection {
             onError(nil)
         } catch { recentItems = []; onError(error.localizedDescription) }
         parent.submenu?.removeAllItems()
-        let submenu = NSMenu(title: "Recent Dictations")
+        let submenu = NSMenu(title: "Recent Takes")
         submenu.addItem(statsItem)
         recentItems.forEach(submenu.addItem)
         parent.submenu = submenu

@@ -35,7 +35,7 @@ Existing alpha.1–3 installations need one manual download to get the built-in 
 | Saved spellings and phrases | Keep exact local spelling rules and reusable text, including multiline phrases. |
 | Microphone selection | Follow System Default, choose a named input, or opt into an ordered priority list. |
 | Recovery | Copy or retry saved text after a failed paste. Interrupted audio remains recoverable. |
-| Clean Selected Text | Choose **Clean Selected Text…** to preview Basic cleanup on text you've selected in another app, then explicitly accept the replacement. |
+| Clean Up Selection | Choose **Clean Up Selection** to preview cleanup, or a Formal, Casual or Very Casual tone, on text you've selected in another app, then explicitly accept the replacement. Saved phrases replace the selection directly. |
 | File transcription | Import one WAV, AIFF or M4A, up to 10 minutes and 512 MB, then explicitly copy or save the result. |
 
 <p align="center">
