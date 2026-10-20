@@ -221,8 +221,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.fileTranscriptionWindow.present() }, startsGroup: false)
         if let recovery {
-            recovery.canRecover = { [weak self, weak dictation, weak engineHost] in
-                guard dictation?.phase == .idle, let engineHost else { return false }
+            recovery.canRecover = { [weak self, weak dictation, weak engineHost, weak recovery] in
+                guard dictation?.phase == .idle, recovery?.isRecovering != true, let engineHost else { return false }
                 guard self?.isTerminating != true, self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true else { return false }
                 if case .ready = engineHost.state { return true }
                 return false
@@ -230,6 +230,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
             let home = settingsWindow.model.home
             home.saved = { [weak recovery] in try await recovery?.loadSavedRecordings() ?? [] }
+            home.completedAudio = { [weak recovery] rows in await recovery?.loadCompletedRecordings(for: rows) ?? [] }
             home.canRecover = recovery.canRecover
             home.recoverTake = { [weak recovery] item in recovery?.offerSaved(item) }
             recovery.onFinished = { [weak menuBar] in

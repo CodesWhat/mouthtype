@@ -6,6 +6,12 @@ struct HomePage: View {
     var model: HomeLogModel
 
     var body: some View {
+        content
+            .onAppear { model.activate() }
+            .onDisappear { model.deactivate() }
+    }
+
+    @ViewBuilder private var content: some View {
         if model.takes.isEmpty {
             SettingsGroup(eyebrow: "RECENT DICTATIONS") {
                 SettingsNote(text: model.error ?? "No dictations yet. Hold your shortcut and talk, and they land here.")

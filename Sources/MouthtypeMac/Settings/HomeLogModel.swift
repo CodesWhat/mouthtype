@@ -14,21 +14,27 @@ struct HomeTake: Identifiable, Equatable {
 /// The data behind the Home page: recent dictations from the transcript store, newest first, plus the saved audio
 /// each one can be recovered from. Secure-field takes never show, matching the Recent Dictations menu.
 ///
-/// The store is observed, so a finished take, saved audio, or expired or purged audio updates the page without a reopen.
+/// While active (window open on the Home page) the store is observed, so a finished take, saved audio, or expired or
+/// purged audio updates the page without a reopen. Closing the window stops the observation; reopening starts it fresh.
 /// Reads run off the main thread and only `limit` rows are ever fetched.
 @MainActor @Observable final class HomeLogModel {
     static let limit = 50
 
     @ObservationIgnored var store: TranscriptStore? {
-        didSet { if store !== oldValue { observe() } }
+        didSet { if store !== oldValue, isActive { observe() } }
     }
     @ObservationIgnored var saved: @MainActor () async throws -> [RecoverableDictation]
     /// Whether Recover may run right now. Read through `recoverEnabled`, which the page watches.
     @ObservationIgnored var canRecover: @MainActor () -> Bool {
         didSet { refreshRecoverability() }
     }
+    /// Kept audio behind finished takes, from each row's own audio path. Runs off the main thread.
+    @ObservationIgnored var completedAudio: @MainActor ([DictationRecord]) async -> [RecoverableDictation] = { _ in [] }
     @ObservationIgnored var recoverTake: @MainActor (RecoverableDictation) -> Void
     @ObservationIgnored private let copyText: @MainActor (String) -> Void
+    @ObservationIgnored private var records: [DictationRecord] = []
+    @ObservationIgnored private var savedGeneration = 0
+    @ObservationIgnored private(set) var isActive: Bool
     @ObservationIgnored private var textTakes: [HomeTake] = []
     @ObservationIgnored private var recordings: [RecoverableDictation] = []
     @ObservationIgnored private var observation: TakesObservation?
@@ -47,21 +53,45 @@ struct HomeTake: Identifiable, Equatable {
          canRecover: @escaping @MainActor () -> Bool = { true },
          recover: @escaping @MainActor (RecoverableDictation) -> Void = { _ in },
          copy: @escaping @MainActor (String) -> Void = { text in
-             NSPasteboard.general.clearContents()
-             NSPasteboard.general.setString(text, forType: .string)
-         }) {
+             HomeLogModel.guardedCopy(text, to: SystemPasteboard(.general))
+         },
+         observing: Bool = true) {
+        self.isActive = observing
         self.store = store
         self.saved = saved
         self.canRecover = canRecover
         self.recoverTake = recover
         self.copyText = copy
         refreshRecoverability()
-        observe()
+        if observing { observe() }
     }
 
     isolated deinit {
         observation?.cancel()
         savedTask?.cancel()
+    }
+
+    /// Copy keeps the text out of clipboard-manager history, like the app's other copies.
+    static func guardedCopy(_ text: String, to pasteboard: PasteboardAccess) {
+        pasteboard.write(text, markers: PasteboardSession.concealedMarkers)
+    }
+
+    /// Starts watching the store. Delivers the current rows right away, so a reopened page begins from a fresh fetch.
+    func activate() {
+        guard !isActive else { return }
+        isActive = true
+        observe()
+    }
+
+    /// Stops watching the store and drops any audio scan in flight.
+    func deactivate() {
+        guard isActive else { return }
+        isActive = false
+        observation?.cancel()
+        observation = nil
+        savedTask?.cancel()
+        savedTask = nil
+        savedGeneration += 1
     }
 
     /// Recomputes `recoverEnabled` and re-arms tracking of whatever observable state `canRecover` reads.
@@ -111,15 +141,23 @@ struct HomeTake: Identifiable, Equatable {
     }
 
     private func apply(_ records: [DictationRecord]?, failure: String?) {
+        self.records = records ?? []
         textTakes = records.map(Self.takes(from:)) ?? []
         error = failure
         rebuild()
         refreshRecoverability()
     }
 
+    /// Only the latest call applies: an older scan that finishes after a newer one started is dropped.
     private func refreshSaved() async {
+        savedGeneration += 1
+        let generation = savedGeneration
+        let rows = records
         do {
-            attach(try await saved())
+            let unfinished = try await saved()
+            let finished = await completedAudio(rows)
+            guard generation == savedGeneration, !Task.isCancelled else { return }
+            attach(unfinished + finished)
         } catch {
             Log.app.error("home saved recordings unavailable: \(error.localizedDescription, privacy: .public)")
         }

@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import Testing
@@ -174,5 +175,90 @@ import Testing
         try dictate(store, minutes: 1, text: "late arrival")
         await waitUntil { model.takes.count == 1 }
         #expect(model.takes.map(\.text) == ["late arrival"])
+    }
+
+    @Test func guardedCopyMarksTheClipboardConcealed() {
+        let board = NSPasteboard(name: NSPasteboard.Name("mouthtype-home-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        HomeLogModel.guardedCopy("hello", to: SystemPasteboard(board))
+        let types = Set((board.types ?? []).map(\.rawValue))
+        #expect(board.string(forType: .string) == "hello")
+        #expect(types.isSuperset(of: PasteboardSession.concealedMarkers))
+    }
+
+    @Test func observationStopsOnDeactivateAndRestartsFreshOnActivate() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "first")
+        let model = HomeLogModel(store: store, observing: false)
+        #expect(model.takes.isEmpty && !model.isActive)
+        model.activate()
+        await waitUntil { model.takes.count == 1 }
+        model.deactivate()
+        try dictate(store, minutes: 2, text: "while closed")
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.takes.map(\.text) == ["first"])
+        model.activate()
+        await waitUntil { model.takes.count == 2 }
+        #expect(model.takes.map(\.text) == ["while closed", "first"])
+    }
+
+    @Test func storeSwapWhileInactiveDoesNotObserve() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "first")
+        let model = HomeLogModel(observing: false)
+        model.store = store
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.takes.isEmpty)
+    }
+
+    @Test func aStaleAudioScanNeverOverwritesANewerOne() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try dictate(store, minutes: 1, text: "kept")
+        let audio = recording(id, minutes: 1)
+        var calls = 0
+        let model = HomeLogModel(store: store, saved: {
+            calls += 1
+            if calls == 1 { try await Task.sleep(for: .milliseconds(400)); return [] }
+            return [audio]
+        }, observing: false)
+        await model.loadText()
+        async let slow: Void = model.reload()
+        try await Task.sleep(for: .milliseconds(100))
+        await model.reload()
+        #expect(model.takes.first?.recoverable == audio)
+        await slow
+        #expect(model.takes.first?.recoverable == audio)
+    }
+
+    @Test func finishedTakesGetRecoverFromTheirOwnAudio() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try dictate(store, minutes: 1, text: "kept")
+        let audio = recording(id, minutes: 1)
+        let model = HomeLogModel(store: store, observing: false)
+        model.completedAudio = { rows in rows.contains { $0.id == id } ? [audio] : [] }
+        await model.reload()
+        #expect(model.takes.first?.recoverable == audio)
+    }
+
+    @Test func completedAudioFollowsEachRowsPathAndExpiry() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let archive = AudioArchive(supportDirectory: dir)
+        let tone = (0..<16_000).map { 0.3 * sin(Float($0) * 0.2) }
+        let kept = try dictate(store, minutes: 1, text: "kept")
+        let expired = try dictate(store, minutes: 2, text: "expired")
+        let missing = try dictate(store, minutes: 3, text: "missing")
+        _ = try dictate(store, minutes: 4, text: "no audio")
+        for (id, expires) in [(kept, base.addingTimeInterval(9_000)), (expired, base.addingTimeInterval(-5))] {
+            let entry = try archive.write(samples: tone, id: id)
+            try store.recordCapture(id, CaptureRecord(audioMs: 1000, audioPath: entry.url.path, audioExpiresAt: expires))
+        }
+        try store.recordCapture(missing, CaptureRecord(audioMs: 1000, audioPath: dir.appendingPathComponent("gone.wav").path))
+        let found = DictationRecovery.completed(rows: try store.recentTakes(limit: 10), now: base)
+        #expect(found.map(\.id) == [kept] && found.first?.isCompleted == true)
     }
 }

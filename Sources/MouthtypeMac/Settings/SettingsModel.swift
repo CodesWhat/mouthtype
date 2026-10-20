@@ -50,7 +50,7 @@ import UniformTypeIdentifiers
          microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
          onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
          onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
-         home: HomeLogModel = HomeLogModel()) {
+         home: HomeLogModel = HomeLogModel(observing: false)) {
         self.home = home
         self.defaults = defaults
         self.microphone = microphone ?? MicrophoneSettingsModel(defaults: defaults, onChanged: onMicrophoneChanged)
