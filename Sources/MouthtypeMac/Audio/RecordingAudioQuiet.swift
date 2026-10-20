@@ -65,6 +65,6 @@ final class RecordingAudioQuiet: RecordingAudioQuieting {
 
 enum QuietAudioPreference {
     static let key = "quietOtherAudio"
-    static func isEnabled(_ defaults: UserDefaults = .standard) -> Bool { defaults.bool(forKey: key) }
+    static func isEnabled(_ defaults: UserDefaults = .standard) -> Bool { defaults.object(forKey: key) as? Bool ?? true }
     static func set(_ enabled: Bool, in defaults: UserDefaults = .standard) { defaults.set(enabled, forKey: key) }
 }

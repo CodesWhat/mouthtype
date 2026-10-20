@@ -26,7 +26,7 @@ import UniformTypeIdentifiers
     private(set) var livePreview = false
     private(set) var audioRetention = AudioRetentionPolicy()
     private(set) var sounds: Bool
-    private(set) var quietOtherAudio = false
+    private(set) var quietOtherAudio = true
     private(set) var skin: PillSkinKind
     private(set) var pillSize: PillSize
     private(set) var readoutColour: PillReadoutColour
