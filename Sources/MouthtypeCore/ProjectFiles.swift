@@ -60,18 +60,18 @@ public enum ProjectFiles {
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
-        let handle = Handle(process)
+        let handle = ProcessHandle(process)
         return await withTaskCancellationHandler {
             await withCheckedContinuation { (continuation: CheckedContinuation<[String]?, Never>) in
                 DispatchQueue.global(qos: .userInitiated).async {
-                    guard !handle.cancelled, (try? process.run()) != nil else { return continuation.resume(returning: nil) }
+                    guard handle.launch() else { return continuation.resume(returning: nil) }
                     var data = Data()
                     var truncated = false
                     while let chunk = try? pipe.fileHandleForReading.read(upToCount: 64 * 1024), !chunk.isEmpty {
                         data.append(chunk)
                         if data.count >= maxBytes {
                             truncated = true
-                            process.terminate()
+                            handle.terminateBounded()
                             break
                         }
                     }
@@ -88,15 +88,40 @@ public enum ProjectFiles {
         }
     }
 
-    private final class Handle: @unchecked Sendable {
+    /// A child process that a cancel can reach at any moment, including while it is starting. Launch and cancel share
+    /// one lock, so a cancel either lands first (nothing starts) or finds the process running and stops it.
+    final class ProcessHandle: @unchecked Sendable {
+        /// How long a terminated process gets to exit before it is killed.
+        static let graceSeconds = 0.2
         private let lock = NSLock()
         private let process: Process
         private var flagged = false
+        private var launched = false
         init(_ process: Process) { self.process = process }
         var cancelled: Bool { lock.withLock { flagged } }
+
+        /// False when cancelled first or when the process can't start. True means the process is running.
+        func launch() -> Bool {
+            lock.withLock {
+                guard !flagged, (try? process.run()) != nil else { return false }
+                launched = true
+                return true
+            }
+        }
+
         func cancel() {
-            lock.withLock { flagged = true }
-            if process.isRunning { process.terminate() }
+            let started = lock.withLock { flagged = true; return launched }
+            guard started else { return }
+            DispatchQueue.global(qos: .userInitiated).async { self.terminateBounded() }
+        }
+
+        /// `terminate`, a short wait, then `kill`, so a git that ignores SIGTERM can't outlive its caller.
+        func terminateBounded() {
+            guard process.isRunning else { return }
+            process.terminate()
+            let deadline = Date().addingTimeInterval(Self.graceSeconds)
+            while process.isRunning, Date() < deadline { usleep(5_000) }
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
         }
     }
 

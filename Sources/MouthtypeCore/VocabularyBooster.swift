@@ -118,6 +118,7 @@ actor VocabularyBooster {
         self.prepare = prepare
         self.release = release
         self.report = report
+        DependencyLogging.keepTermsOutOfLogs()
     }
 
     /// Sets the vocabulary. An unchanged one keeps the cached session; a changed one rebuilds it in the background;
@@ -463,5 +464,16 @@ extension VocabularyBooster {
             }
         }
         return result
+    }
+}
+
+/// FluidAudio's boosting code logs terms and replacements below warning level (and its "no CTC tokens" warning names
+/// the term), and its logger defaults to debug with console mirroring. Editor code names must not reach any log, so
+/// the library's logger keeps errors and faults only.
+enum DependencyLogging {
+    static let minimumLevel = AppLogger.Level.error
+
+    static func keepTermsOutOfLogs() {
+        if AppLogger.minimumLevel < minimumLevel { AppLogger.minimumLevel = minimumLevel }
     }
 }

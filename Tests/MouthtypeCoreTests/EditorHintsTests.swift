@@ -57,12 +57,11 @@ import Testing
         #expect(EditorHints.term("Mouthtype") != nil)
     }
 
-    @Test func shortRunsOfEverydayWordsGetNoAlias() throws {
-        let term = try #require(EditorHints.term("getUser"))
-        #expect(term.text == "getUser")
-        #expect(term.aliases.isEmpty)
-        let long = try #require(EditorHints.term("viewDidLoad"))
-        #expect(long.aliases == ["view did load"])
+    @Test func compoundsOfEverydayWordsAreNotTerms() {
+        for name in ["getUser", "setValue", "itemList", "isOpen", "get_user_list", "getUserItemList"] {
+            #expect(EditorHints.term(name) == nil, "\(name) should be rejected")
+        }
+        #expect(EditorHints.term("getUserRescorer")?.aliases == ["get user rescorer"])
     }
 
     @Test func rejectsNonNameShapes() {
@@ -74,22 +73,22 @@ import Testing
     // MARK: Ranking and cap
 
     @Test func ranksCursorThenTitleThenFiles() {
-        let terms = EditorHints.terms(cursor: ["cursorOne", "cursorTwo"], title: ["TitleFile", "projectName"], files: ["fileStemOne"])
-        #expect(terms.map(\.text) == ["cursorOne", "cursorTwo", "TitleFile", "projectName", "fileStemOne"])
+        let terms = EditorHints.terms(cursor: ["cursorOne", "cursorTwo"], title: ["TitleZephyr", "projectQuill"], files: ["fileStemOne"])
+        #expect(terms.map(\.text) == ["cursorOne", "cursorTwo", "TitleZephyr", "projectQuill", "fileStemOne"])
     }
 
     @Test func dedupesCaseInsensitivelyKeepingTheHigherRank() {
-        let terms = EditorHints.terms(cursor: ["AppDelegate"], title: ["appdelegate", "Other_name"], files: ["APPDELEGATE"])
-        #expect(terms.map(\.text) == ["AppDelegate", "Other_name"])
+        let terms = EditorHints.terms(cursor: ["AppDelegate"], title: ["appdelegate", "Other_quill"], files: ["APPDELEGATE"])
+        #expect(terms.map(\.text) == ["AppDelegate", "Other_quill"])
     }
 
     @Test func capsAtFortyAndLeavesRoomForTitleAndFiles() {
         let cursor = (0..<60).map { "cursorName\($0)Value" }
         let files = (0..<60).map { "fileStem\($0)Thing" }
-        let terms = EditorHints.terms(cursor: cursor, title: ["TitleFile"], files: files)
+        let terms = EditorHints.terms(cursor: cursor, title: ["TitleZephyr"], files: files)
         #expect(terms.count == EditorHints.maxTerms)
         #expect(terms.prefix(EditorHints.maxCursorTerms).allSatisfy { $0.text.hasPrefix("cursorName") })
-        #expect(terms.contains { $0.text == "TitleFile" })
+        #expect(terms.contains { $0.text == "TitleZephyr" })
         #expect(terms.last?.text.hasPrefix("fileStem") == true)
     }
 

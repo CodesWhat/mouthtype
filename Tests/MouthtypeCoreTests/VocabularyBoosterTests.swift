@@ -318,3 +318,23 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(await store.isLoaded)
     }
 }
+
+@Suite(.serialized) struct DependencyLoggingTests {
+    @Test func buildingABoosterRaisesFluidAudioLoggingToErrorsOnly() {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .debug
+        _ = VocabularyBooster(prepare: { _, _ in FakeRescorer() }, report: { _ in })
+        #expect(AppLogger.minimumLevel == .error)
+        // Errors and faults stay: the level is a floor of .error, so warnings (which name terms) are dropped.
+        #expect(AppLogger.minimumLevel > AppLogger.Level.warning)
+    }
+
+    @Test func aStricterLevelIsLeftAlone() {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .fault
+        _ = VocabularyBooster(prepare: { _, _ in FakeRescorer() }, report: { _ in })
+        #expect(AppLogger.minimumLevel == .fault)
+    }
+}

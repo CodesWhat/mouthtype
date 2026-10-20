@@ -153,9 +153,10 @@ public enum EditorHints {
 
     // MARK: Terms
 
-    /// One candidate as a boost term, or nil when it is too short, too long, not name-shaped, or an everyday word.
-    /// A compound gets its spoken form as an alias, except a short run of everyday words ("get user"), which would
-    /// rewrite plain speech.
+    /// One candidate as a boost term, or nil when it is too short, too long, not name-shaped, an everyday word, or a
+    /// compound made only of everyday words ("getUser", "itemList"). The rescorer joins adjacent spoken words, so even
+    /// without an alias such a term would rewrite plain speech like "get user". A compound with any other word gets
+    /// its spoken form as an alias.
     public static func term(_ raw: String) -> VocabularyBias.Term? {
         let text = raw.trimmingCharacters(in: CharacterSet(charactersIn: "_-."))
         guard text.count >= minLength, text.count <= maxLength,
@@ -166,9 +167,8 @@ public enum EditorHints {
         if words.count == 1 {
             return isEveryday(text.lowercased()) ? nil : VocabularyBias.Term(text: text)
         }
-        let spoken = words.joined(separator: " ")
-        let plainSpeech = words.count <= 2 && words.allSatisfy(isEveryday)
-        return VocabularyBias.Term(text: text, aliases: plainSpeech ? [] : [spoken])
+        if words.allSatisfy(isEveryday) { return nil }
+        return VocabularyBias.Term(text: text, aliases: [words.joined(separator: " ")])
     }
 
     /// At most `maxTerms`: cursor identifiers first (up to `maxCursorTerms`), then title names, then file names.

@@ -7,7 +7,7 @@ import Testing
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("project-files-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: root.appendingPathComponent("Sources/Deep"), withIntermediateDirectories: true)
         try "x".write(to: root.appendingPathComponent("TopLevelThing.swift"), atomically: true, encoding: .utf8)
-        try "x".write(to: root.appendingPathComponent("Sources/Deep/NestedHelperKit.swift"), atomically: true, encoding: .utf8)
+        try "x".write(to: root.appendingPathComponent("Sources/Deep/NestedQuillKit.swift"), atomically: true, encoding: .utf8)
         try "x".write(to: root.appendingPathComponent("SecretsIgnored.env"), atomically: true, encoding: .utf8)
         try "SecretsIgnored.env\n".write(to: root.appendingPathComponent(".gitignore"), atomically: true, encoding: .utf8)
         return root
@@ -47,10 +47,10 @@ import Testing
         try git(root, ["init", "-q"])
         try git(root, ["add", "-A"])
         let files = await ProjectFiles.trackedFiles(in: root)
-        #expect(Set(files) == [".gitignore", "TopLevelThing.swift", "Sources/Deep/NestedHelperKit.swift"])
+        #expect(Set(files) == [".gitignore", "TopLevelThing.swift", "Sources/Deep/NestedQuillKit.swift"])
         #expect(!files.contains("SecretsIgnored.env"))
         let names = EditorHints.terms(cursor: [], title: [], files: EditorHints.nameCandidates(fromPaths: files)).map(\.text)
-        #expect(names == ["TopLevelThing", "NestedHelperKit"])
+        #expect(names == ["TopLevelThing", "NestedQuillKit"])
     }
 
     @Test(.enabled(if: ProjectFiles.gitExecutable() != nil)) func cachesByRootUntilTheIndexChanges() async throws {
@@ -74,5 +74,55 @@ import Testing
         try FileManager.default.createDirectory(at: loose, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: loose) }
         #expect(await ProjectFiles.trackedFiles(in: loose).isEmpty)
+    }
+
+    // MARK: Cancel and launch
+
+    private func sleeper(ignoringTerminate: Bool = false) -> Process {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/sh")
+        process.arguments = ["-c", (ignoringTerminate ? "trap '' TERM; echo ready; " : "") + "exec sleep 30"]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        return process
+    }
+
+    @Test func cancelBeforeLaunchStartsNothing() {
+        let process = sleeper()
+        let handle = ProjectFiles.ProcessHandle(process)
+        handle.cancel()
+        #expect(!handle.launch())
+        #expect(!process.isRunning)
+    }
+
+    @Test func cancelRacingLaunchNeverLeavesAProcess() {
+        for _ in 0..<40 {
+            let process = sleeper()
+            let handle = ProjectFiles.ProcessHandle(process)
+            let group = DispatchGroup()
+            var launched = false
+            group.enter()
+            DispatchQueue.global().async { launched = handle.launch(); group.leave() }
+            group.enter()
+            DispatchQueue.global().async { handle.cancel(); group.leave() }
+            group.wait()
+            // A launched process must be gone within the grace period plus the kill; one cancelled first never started.
+            let deadline = Date().addingTimeInterval(5)
+            while process.isRunning, Date() < deadline { usleep(5_000) }
+            #expect(!process.isRunning, "launched=\(launched)")
+        }
+    }
+
+    @Test func aProcessThatIgnoresTerminateIsKilled() {
+        let process = sleeper(ignoringTerminate: true)
+        let ready = Pipe()
+        process.standardOutput = ready
+        let handle = ProjectFiles.ProcessHandle(process)
+        #expect(handle.launch())
+        _ = try? ready.fileHandleForReading.read(upToCount: 1) // the trap is installed once sh says so
+        handle.terminateBounded()
+        process.waitUntilExit()
+        #expect(process.terminationReason == .uncaughtSignal)
+        #expect(process.terminationStatus == SIGKILL)
     }
 }
