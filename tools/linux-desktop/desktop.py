@@ -249,8 +249,20 @@ class Session:
                     self.error = 'recovery_full'
                     return self.status()
                 self.take = self.recovery / uuid.uuid4().hex
-                self.take.mkdir(mode=0o700)
-                private_write(self.take / 'take.json', json.dumps({'created': time.time()}))
+                try:
+                    self.take.mkdir(mode=0o700)
+                    private_write(self.take / 'take.json', json.dumps({'created': time.time()}))
+                except (OSError, ValueError):
+                    # A take that can't record its own metadata must not hold a recovery slot.
+                    (self.take / 'take.json').unlink(missing_ok=True)
+                    try:
+                        self.take.rmdir()
+                    except OSError:
+                        pass
+                    self.take = None
+                    self.error = 'capture_unavailable'
+                    self._notify('error')
+                    return self.status()
                 self.discard_on_cancel = True
                 self.target = target
                 self.spellings = spellings
@@ -1276,7 +1288,7 @@ def main():
                 status = request(path, 'status')
                 if status.get('recovery') == args.id and status.get('state') != 'idle':
                     raise ValueError('Recovery is in use')
-            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json'):
+            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json', 'take.json'):
                 (take / name).unlink(missing_ok=True)
             take.rmdir()
             return 0
