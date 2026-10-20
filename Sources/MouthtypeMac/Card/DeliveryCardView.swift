@@ -96,9 +96,7 @@ final class CardButtonView: CardControlView {
         let rect = bounds.insetBy(dx: bounds.width * (1 - scale) / 2, dy: bounds.height * (1 - scale) / 2)
         let fill: NSColor
         if isPrimary {
-            let base = palette.primaryFill
-            fill = isPressed ? base.blended(withFraction: 0.18, of: .black) ?? base
-                : isHovered ? base.blended(withFraction: 0.5, of: .white) ?? base : base
+            fill = palette.primaryFill(hovered: isHovered, pressed: isPressed)
         } else {
             fill = palette.secondary.fill(hovered: isHovered, pressed: isPressed)
         }

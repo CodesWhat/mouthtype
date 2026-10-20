@@ -469,7 +469,7 @@ class SquirclePillView: NSView, PillSkinView {
         applyCardChrome()
     }
 
-    private var goodColor: NSColor { flavor == .minimal && !isDark ? NSColor(hex: 0x315B54) : palette.ink }
+    private var goodColor: NSColor { palette.ink }
 
     private func toneColor(_ tone: CardReadout.Tone) -> NSColor {
         switch tone {

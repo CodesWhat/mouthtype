@@ -140,10 +140,10 @@ import Testing
             let image = icon.image
             #expect(image?.isTemplate == true, "\(icon.rawValue) missing")
             #expect(image?.representations.count == 3, "\(icon.rawValue) should carry 1x, 2x and 4x")
-            #expect(image?.size == NSSize(width: 16, height: 16))
-            // Pixelarticons sampled without smoothing: 16, 32 and 64 px, every pixel fully on or fully off, so each stays crisp.
+            #expect(image?.size == NSSize(width: 24, height: 24))
+            // Pixelarticons drawn one grid pixel per point: 24, 48 and 96 px, every pixel fully on or fully off, so each stays crisp.
             let sizes = (image?.representations.compactMap { ($0 as? NSBitmapImageRep).map { $0.pixelsWide } } ?? []).sorted()
-            #expect(sizes == [16, 32, 64], "\(icon.rawValue) scales")
+            #expect(sizes == [24, 48, 96], "\(icon.rawValue) scales")
             for case let rep as NSBitmapImageRep in image?.representations ?? [] {
                 var partial = 0, lit = 0
                 for y in 0..<rep.pixelsHigh {
@@ -154,6 +154,24 @@ import Testing
                     }
                 }
                 #expect(partial == 0 && lit > 0, "\(icon.rawValue) \(rep.pixelsWide) px has smoothed or empty pixels")
+            }
+        }
+    }
+
+    @Test func everyIconScaleIsAnExactBlockEnlargementOfTheGrid() {
+        for icon in DesignIcon.allCases {
+            let reps = (icon.image?.representations.compactMap { $0 as? NSBitmapImageRep } ?? []).sorted { $0.pixelsWide < $1.pixelsWide }
+            guard let base = reps.first, reps.count == 3 else { Issue.record("\(icon.rawValue) lacks three scales"); continue }
+            #expect(base.pixelsWide == 24 && base.pixelsHigh == 24)
+            for rep in reps.dropFirst() {
+                let factor = rep.pixelsWide / 24
+                var mismatches = 0
+                for y in 0..<rep.pixelsHigh {
+                    for x in 0..<rep.pixelsWide where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) != (base.colorAt(x: x / factor, y: y / factor)?.alphaComponent ?? 0) {
+                        mismatches += 1
+                    }
+                }
+                #expect(mismatches == 0, "\(icon.rawValue) \(rep.pixelsWide) px is not a \(factor)x block enlargement of the 24 grid")
             }
         }
     }
