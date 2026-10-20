@@ -50,18 +50,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.settingsWindow.model.home.refreshRecoverability()
         }, copy: { SystemClipboard().write($0) })
     private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
-    private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
-    private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
+    private lazy var spellingEditor = SpellingEditor(store: dictionary)
+    private lazy var spellingSuggestions = SpellingSuggestionsModel(vocabulary: dictionary)
     private lazy var settingsWindow = SettingsWindow(
         model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
             onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
             onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
             onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
             onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
-            onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() }),
+            onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
+            spellings: spellingEditor, spellingSuggestions: spellingSuggestions, phrases: PhraseEditor(store: phrases)),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
-            openSpellings: { [weak self] in self?.spellingWindow.present() },
-            openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
+            cleaner: cleanerHost,
             diagnostics: diagnostics, retrySpeech: { [weak self] in self?.engineHost.start() },
             refreshDiagnostics: { [weak self] in self?.refreshDiagnostics() },
             toggleRemap: { [weak self] in self?.toggleRemap() },
@@ -203,7 +203,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
         settingsWindow.model.home.store = store
         settingsWindow.model.stats.store = store
-        spellingWindow.suggestions.store = store
+        settingsWindow.model.spellingSuggestions?.store = store
         let settingsSection = SettingsMenuSection(
             open: { [weak self] in self?.settingsWindow.present(page: .general) },
             openHome: { [weak self] in self?.settingsWindow.present(page: .home) })
@@ -302,7 +302,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
-        guard appUpdater.allowsTermination else { return .terminateCancel }
+        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
             await dictation?.prepareForTermination() ?? true
@@ -320,6 +320,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         })
         return .terminateLater
+    }
+
+    static func mayQuit(allowsTermination: Bool, resolveDraft: () -> Bool) -> Bool {
+        allowsTermination && resolveDraft()
     }
 
     public func applicationWillTerminate(_ notification: Notification) {

@@ -19,8 +19,12 @@ struct SettingsView: View {
             sidebar.frame(width: SettingsTheme.sidebarWidth)
             VStack(spacing: 0) {
                 header
-                SettingsForm {
+                switch model.page {
+                case .savedSpellings: SavedSpellingsPage(model: model)
+                case .phrases: PhrasesPage(model: model)
+                default: SettingsForm {
                     switch model.page {
+                    case .savedSpellings, .phrases: EmptyView()
                     case .home: HomePage(model: model.home)
                     case .stats: StatsHostPage(model: model.stats)
                     case .records: RecordsHostPage(model: model.stats)
@@ -31,6 +35,7 @@ struct SettingsView: View {
                         if let diagnostics = actions.diagnostics { SettingsDiagnosticsView(state: diagnostics, model: model, actions: actions) }
                         else { SettingsGroup(eyebrow: "DIAGNOSTICS") { SettingsNote(text: "Diagnostic status is unavailable.") } }
                     }
+                }
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Color(nsColor: .windowBackgroundColor))
                 .focusSection()
@@ -43,6 +48,7 @@ struct SettingsView: View {
         .onChange(of: model.page) { _, page in
             // The stats are watched only on their own pages. Moving between Stats and Records keeps one observation.
             if page == .stats || page == .records { model.stats.activate() } else { model.stats.deactivate() }
+            model.syncWords()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }
@@ -83,7 +89,7 @@ struct SettingsView: View {
                 Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
                 VStack(alignment: .leading, spacing: 2) {
-                    ForEach(SettingsSidebarLink.words) { link in linkRow(link) }
+                    ForEach(SettingsPage.wordsPages) { page in sidebarPageRow(page) }
                 }
                 Text("SETTINGS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8).accessibilityAddTraits(.isHeader)
@@ -106,14 +112,13 @@ struct SettingsView: View {
     }
 
     private func sidebarPageRow(_ page: SettingsPage) -> some View {
-        sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.page = page }
+        sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.select(page) }
             .focused($sidebarFocus, equals: page)
     }
 
     private func moveSidebar(by offset: Int) -> KeyPress.Result {
         let target = SettingsPage.arrowTarget(focused: sidebarFocus, selected: model.page, offset: offset)
-        model.page = target
-        if sidebarFocus != nil { sidebarFocus = target }
+        if model.select(target), sidebarFocus != nil { sidebarFocus = target }
         return .handled
     }
 

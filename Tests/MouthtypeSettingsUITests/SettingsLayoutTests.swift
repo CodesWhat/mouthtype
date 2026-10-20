@@ -52,20 +52,19 @@ import MouthtypeCore
 
     // MARK: Sidebar
 
-    @Test func sidebarListsHomeStatsRecordsThenFourSettingsPagesAndTheYourWordsEntries() {
-        #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Records", "General", "Writing", "Appearance", "Diagnostics"])
+    @Test func sidebarListsHomeStatsRecordsThenTheYourWordsPagesAndFourSettingsPages() {
+        #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Records", "Saved spellings", "Phrases", "General", "Writing", "Appearance", "Diagnostics"])
         #expect(SettingsPage.settingsPages.map(\.title) == ["General", "Writing", "Appearance", "Diagnostics"])
-        #expect(SettingsSidebarLink.words.map(\.title) == ["Saved spellings", "Phrases"])
+        #expect(SettingsPage.wordsPages.map(\.title) == ["Saved spellings", "Phrases"])
         #expect(SettingsSidebarLink.setUp.title == "Set Up Mouthtype…")
-        #expect(SettingsSidebarLink.allCases.map(\.accessibilityID) == ["settings-spellings", "settings-phrases", "settings-setup"])
+        #expect(SettingsSidebarLink.allCases.map(\.accessibilityID) == ["settings-setup"])
     }
 
-    @Test func sidebarLinksOpenTheirOwnWindows() {
+    @Test func theOnlySidebarLinkOpensSetup() {
         var opened: [String] = []
-        let actions = SettingsActions(openSetup: { opened.append("setup") }, openSpellings: { opened.append("spellings") },
-                                      openPhrases: { opened.append("phrases") })
+        let actions = SettingsActions(openSetup: { opened.append("setup") })
         for link in SettingsSidebarLink.allCases { actions.perform(link) }
-        #expect(opened == ["spellings", "phrases", "setup"])
+        #expect(opened == ["setup"])
     }
 
     // MARK: Type and colour
@@ -212,7 +211,9 @@ import MouthtypeCore
     @Test func arrowKeysMoveTheSidebarSelectionAndStopAtTheEnds() {
         #expect(SettingsPage.general.moved(by: 1) == .writing)
         #expect(SettingsPage.writing.moved(by: -1) == .general)
-        #expect(SettingsPage.general.moved(by: -1) == .records)
+        #expect(SettingsPage.general.moved(by: -1) == .phrases)
+        #expect(SettingsPage.phrases.moved(by: -1) == .savedSpellings)
+        #expect(SettingsPage.savedSpellings.moved(by: -1) == .records)
         #expect(SettingsPage.records.moved(by: -1) == .stats)
         #expect(SettingsPage.stats.moved(by: -1) == .home)
         #expect(SettingsPage.home.moved(by: 1) == .stats)
@@ -256,7 +257,7 @@ import MouthtypeCore
         let directory = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
         let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasSuffix(".swift") }
         let source = try files.map { try String(contentsOf: directory.appendingPathComponent($0), encoding: .utf8) }.joined()
-        let identifiers = ["settings-setup", "settings-spellings", "settings-phrases", "settings-shortcut", "settings-recording-mode",
+        let identifiers = ["settings-setup", "settings-shortcut", "settings-recording-mode",
                            "settings-quiet-audio", "settings-live-preview", "settings-microphone", "settings-microphone-refresh",
                            "settings-audio-age", "settings-audio-size", "settings-font-overrides", "settings-font-reset",
                            "settings-website-domain"]

@@ -2,45 +2,6 @@ import AppKit
 import SwiftUI
 import MouthtypeCore
 
-@MainActor
-final class PhraseEditorWindow: NSWindowController, NSWindowDelegate {
-    let editor: PhraseEditor
-
-    init(store: FilePhrases) {
-        editor = PhraseEditor(store: store)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 620),
-                              styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Phrase Replacements"
-        window.minSize = NSSize(width: 800, height: 540)
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: PhraseEditorView(editor: editor))
-        super.init(window: window)
-        window.delegate = self
-        window.center()
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    func present() {
-        editor.reload()
-        showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
-    }
-
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard editor.isDirty else { return true }
-        let alert = NSAlert()
-        alert.messageText = "Discard this unsaved phrase?"
-        alert.informativeText = "Save it before closing, or discard the draft."
-        alert.addButton(withTitle: "Keep Editing")
-        alert.addButton(withTitle: "Discard")
-        guard alert.runModal() == .alertSecondButtonReturn else { return false }
-        editor.cancel()
-        return true
-    }
-}
-
 struct PhraseEditorView: View {
     @Bindable var editor: PhraseEditor
     @State private var confirmDelete = false
@@ -48,20 +9,15 @@ struct PhraseEditorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Phrase replacements").font(.custom("InstrumentSerif-Regular", size: 34))
-                Text("Say a short phrase. Insert exactly the text you saved.")
-                    .foregroundStyle(.secondary)
-            }.padding(24)
-            Divider()
             HStack(alignment: .top, spacing: 0) {
                 library.frame(width: 252)
                 Divider()
                 form.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            }.frame(minHeight: 360, idealHeight: 360, maxHeight: .infinity)
             Divider()
             Text("Works with Basic, Fast and Thorough. Cleanup Off leaves your words unchanged.")
-                .font(.callout).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.vertical, 13)
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24).padding(.vertical, 13)
         }
         .background(paper)
         .confirmationDialog("Delete this phrase?", isPresented: $confirmDelete, titleVisibility: .visible) {

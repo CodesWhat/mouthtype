@@ -123,7 +123,7 @@ import Testing
             defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
             let stops = try tabOrder(window)
             let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
-            #expect(sidebar.count == SettingsPage.allCases.count + 3, "\(page): \(sidebar.count) sidebar Tab stops")
+            #expect(sidebar.count == SettingsPage.allCases.count + 1, "\(page): \(sidebar.count) sidebar Tab stops")
             #expect(stops.dropFirst(sidebar.count).contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth }, "\(page): Tab never reaches a page control")
             try expectTabReachesPageControl(window, sidebarStops: sidebar.count, "\(page)")
         }
@@ -148,7 +148,7 @@ import Testing
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
         let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
-        #expect(sidebar.count == SettingsPage.allCases.count + 3)
+        #expect(sidebar.count == SettingsPage.allCases.count + 1)
         let pageStops = stops.dropFirst(sidebar.count).filter { $0.isProxy && $0.x >= SettingsTheme.sidebarWidth }
         #expect(pageStops.count == 3, "Home: \(pageStops.count) button stops, expected Copy, Recover, Copy")
         let chain = try keyViewChain(window)
@@ -163,8 +163,8 @@ import Testing
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
         #expect(stops.contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth })
-        #expect(stops.filter { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }.count == SettingsPage.allCases.count + 4)
-        try expectTabReachesPageControl(window, sidebarStops: SettingsPage.allCases.count + 4, "keyboard navigation off")
+        #expect(stops.filter { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }.count == SettingsPage.allCases.count + 2)
+        try expectTabReachesPageControl(window, sidebarStops: SettingsPage.allCases.count + 2, "keyboard navigation off")
     }
 
     /// Every view `nextKeyView` links from the first proxy, in order, until the loop closes.
@@ -289,6 +289,10 @@ import Testing
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .general)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .phrases)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .savedSpellings)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .records)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .stats)
@@ -307,7 +311,7 @@ import Testing
     @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {
         #expect(SettingsPage.general.moved(by: 1) == .writing)
         #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
-        #expect(SettingsPage.general.moved(by: -1) == .records)
+        #expect(SettingsPage.general.moved(by: -1) == .phrases)
         #expect(SettingsPage.records.moved(by: -1) == .stats)
         #expect(SettingsPage.home.moved(by: -1) == .home)
     }
