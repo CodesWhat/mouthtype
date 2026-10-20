@@ -79,13 +79,18 @@ enum SelectionCleanupError: Error { case unavailable }
     private let transformer: (any SelectionTransforming)?
     private let busy: () -> Bool
     private let changed: () -> Void
+    private let styleFor: (SelectedText) -> StyleOptions
     private var captured: SelectedText?
+    /// The tone behind the deterministic cleanup of the captured selection.
+    @ObservationIgnored private var style = StyleOptions.formal
     @ObservationIgnored private var transformTask: Task<Void, Never>?
     @ObservationIgnored private var generation = 0
     private(set) var original = ""
     var result = ""
     private(set) var message = ""
     private(set) var submitted = false
+    /// The tone picked from the menu, or nil when the focused app's own tone applies.
+    private(set) var tone: StylePreset?
     /// The AI transform behind the current preview, or nil for Basic cleanup.
     private(set) var transform: TextTransform?
     private(set) var isTransforming = false
@@ -106,15 +111,21 @@ enum SelectionCleanupError: Error { case unavailable }
     var canChooseBasic: Bool { captured != nil && !submitted && !isTransforming && transform != nil }
 
     init(editor: any SelectionEditing, transformer: (any SelectionTransforming)? = nil,
-         busy: @escaping () -> Bool = { false }, changed: @escaping () -> Void = {}) {
+         busy: @escaping () -> Bool = { false }, changed: @escaping () -> Void = {},
+         styleFor: @escaping (SelectedText) -> StyleOptions = { _ in .formal }) {
+        self.styleFor = styleFor
         self.editor = editor
         self.transformer = transformer
         self.busy = busy
         self.changed = changed
     }
 
+    /// Whether a selection can be read right now, so the menu can enable its items. Reads nothing into the model.
+    var hasReadableSelection: Bool { (try? editor.capture()) != nil }
+
     /// Captures the selection and previews either Basic cleanup or, when `requested` is set, an AI transform.
-    func prepare(transform requested: TextTransform? = nil) {
+    /// Basic cleanup runs the pipeline with `requestedTone`, or with the focused app's tone when that is nil.
+    func prepare(transform requested: TextTransform? = nil, tone requestedTone: StylePreset? = nil) {
         cancel()
         guard !busy() else { message = "Finish the current dictation or file job first."; return }
         if requested != nil, let reason = transformUnavailableReason {
@@ -124,6 +135,8 @@ enum SelectionCleanupError: Error { case unavailable }
         do {
             let selection = try editor.capture()
             guard !selection.text.isEmpty, selection.text.utf16.count <= 16_000 else { throw SelectionCleanupError.unavailable }
+            style = requestedTone?.options ?? styleFor(selection)
+            tone = requestedTone
             if let requested {
                 captured = selection
                 original = selection.text
@@ -131,12 +144,13 @@ enum SelectionCleanupError: Error { case unavailable }
                 begin(requested)
                 return
             }
-            let cleaned = Self.basicCleanup(selection.text)
+            let cleaned = Self.basicCleanup(selection.text, style: style)
             guard !cleaned.isEmpty, cleaned.utf16.count <= 16_000 else { throw SelectionCleanupError.unavailable }
             captured = selection
             original = selection.text
             result = cleaned
-            message = Self.basicMessage
+            message = requestedTone.map { "\($0.title) tone preview. Review it before accepting. Names and numbers aren’t rewritten." }
+                ?? Self.basicMessage
             changed()
         } catch {
             message = "Select up to 16,000 characters in an accessible text field, then try again. Password fields aren’t read."
@@ -156,7 +170,7 @@ enum SelectionCleanupError: Error { case unavailable }
         generation += 1
         transformTask?.cancel()
         transform = nil
-        let cleaned = Self.basicCleanup(original)
+        let cleaned = Self.basicCleanup(original, style: style)
         result = cleaned
         message = cleaned.isEmpty ? "Basic cleanup left nothing. Pick a transform or cancel." : Self.basicMessage
     }
@@ -224,9 +238,11 @@ enum SelectionCleanupError: Error { case unavailable }
         return leading + result.trimmingCharacters(in: .whitespacesAndNewlines) + String(trailing)
     }
 
-    private static func basicCleanup(_ text: String) -> String {
+    /// The deterministic stages plus the tone pass. Formal also softens swearing; the other tones leave it as written.
+    private static func basicCleanup(_ text: String, style: StyleOptions) -> String {
         let options = TextPipelineOptions(fillers: true, spokenCommands: true, selfCorrection: false, countedLists: false,
-            notation: false, numbers: false, dictionary: false, snippets: false, blend: false, whitespace: true)
+            notation: false, numbers: false, dictionary: false, snippets: false, blend: false, whitespace: true,
+            profanity: true, style: style)
         return TextPipeline().run(TextPipelineInput(text: text, options: options)).text
     }
 
@@ -239,7 +255,7 @@ enum SelectionCleanupError: Error { case unavailable }
         }
         let replacement = Self.restoringBoundaryWhitespace(of: captured.text, in: result)
         guard editor.replace(captured, with: replacement) else {
-            message = "The selection changed or the app refused replacement. Select the original text again and reopen Clean Selected Text, or copy the result."
+            message = "The selection changed or the app refused replacement. Select the original text again and reopen Clean Up Selection, or copy the result."
             acceptanceErrorPresented = true
             return
         }
@@ -260,8 +276,24 @@ enum SelectionCleanupError: Error { case unavailable }
         message = ""
         submitted = false
         transform = nil
+        tone = nil
         isTransforming = false
         acceptanceErrorPresented = false
         changed()
+    }
+
+    enum PhraseOutcome: Equatable { case replaced, busy, unavailable, refused }
+
+    /// Replaces the current selection with a saved phrase as it would deliver by voice (`{date}` and `{clipboard}`
+    /// filled). The same capture rules apply as for Clean Up: no secure fields, no password reads, and the
+    /// replacement is refused if the selection moved since it was read. The app's own Undo (Cmd-Z) reverts it.
+    func insert(phrase: Snippet, now: Date = Date(), clipboard: String? = nil) -> PhraseOutcome {
+        guard !busy() else { return .busy }
+        guard let selection = try? editor.capture() else { return .unavailable }
+        let expander = SnippetExpander(snippets: [phrase], now: now, clipboard: clipboard)
+        let expanded = expander.apply(phrase.trigger).text
+        let text = expander.matchingTriggers(in: phrase.trigger).isEmpty ? phrase.expansion : expanded
+        guard !text.isEmpty, text.utf16.count <= 16_000, editor.replace(selection, with: text) else { return .refused }
+        return .replaced
     }
 }

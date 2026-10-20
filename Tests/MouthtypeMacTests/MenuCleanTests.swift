@@ -23,10 +23,10 @@ import MouthtypeCore
         daily.add(section: HistoryMenuSection(store: nil), startsGroup: false)
         daily.add(section: HelpMenuSection(onShow: {}), isFooter: true)
         #expect(daily.menu.items.filter { !$0.isSeparatorItem }.map(\.title) == [
-            "Open Mouthtype", "Settings…", "Paste Last", "Copy Last", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+            "Open Mouthtype", "Settings…", "Paste Last Take", "Copy Last Take", "How to Use Mouthtype…", "About Mouthtype", "Quit",
         ])
         #expect(daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
-            "Open Mouthtype", "Settings…", "|", "Paste Last", "Copy Last", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+            "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
         ])
         #expect(daily.menu.items.first?.isSeparatorItem == false)
         #expect(daily.menu.items.last?.isSeparatorItem == false)
@@ -73,7 +73,7 @@ import MouthtypeCore
         daily.add(section: HistoryMenuSection(store: nil, onError: { state.historyError = $0 }))
         state.historyError = nil
         daily.refresh()
-        #expect(attention.items.first?.title == "Recent dictations unavailable…")
+        #expect(attention.items.first?.title == "Recent takes unavailable…")
     }
 
     @Test func customShortcutDoesNotOfferFnRemappingOrGlobeConflict() {
@@ -146,5 +146,48 @@ import MouthtypeCore
         model.setChunks(false, bundleID: "com.mitchellh.ghostty")
         #expect(!PasteSettings.chunksEnabled("com.mitchellh.ghostty", defaults: defaults))
         #expect(Set(PasteSettings.supportedTerminals.map(\.bundleID)).count == 5)
+    }
+
+    @Test func fullMenuMatchesTheTargetLayoutWithNoIcons() throws {
+        let state = healthy()
+        let daily = DailyMenu()
+        daily.add(section: AttentionMenuSection(diagnostics: state, open: {}))
+        daily.add(section: SettingsMenuSection {})
+        daily.add(section: ActionsMenuSection(onPasteLast: {}, onCopyLast: {}))
+        daily.add(section: HistoryMenuSection(store: nil), startsGroup: false)
+        daily.add(section: SelectionCleanupMenuSection(cleanUp: {}, applyTone: { _ in }, insertPhrase: { _ in }, editTransforms: {}))
+        daily.add(section: FileTranscriptionMenuSection {}, startsGroup: false)
+        daily.add(section: HelpMenuSection(onShow: {}), isFooter: true)
+        let layout = daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title }
+        #expect(layout == [
+            "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|",
+            "Clean Up Selection", "Transcribe Audio File…", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+        ])
+        #expect(daily.menu.items.filter { $0.image != nil }.map(\.title) == [])
+        state.microphoneStatus = .denied
+        daily.refresh()
+        #expect(daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title }.prefix(3) == ["Microphone access needed…", "|", "Open Mouthtype"])
+    }
+
+    @Test func cleanUpSelectionSubmenuListsToneAndPhraseChoices() throws {
+        var tones: [StylePreset] = [], phrases: [String] = [], edited = 0, cleaned = 0
+        var enabled = true
+        let section = SelectionCleanupMenuSection(
+            cleanUp: { cleaned += 1 }, applyTone: { tones.append($0) }, insertPhrase: { phrases.append($0.trigger) },
+            editTransforms: { edited += 1 },
+            phrases: { [Snippet(trigger: "Sign-off", expansion: "Best,\nScott"), Snippet(trigger: "Meeting Link", expansion: "https://x.test")] },
+            canAct: { enabled })
+        let menu = try #require(section.items.first?.submenu)
+        #expect(section.items.first?.title == "Clean Up Selection")
+        #expect(menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
+            "Clean Up", "|", "Formal", "Casual", "Very Casual", "|", "Sign-off", "Meeting Link", "|", "Edit Transforms…",
+        ])
+        #expect(menu.items.allSatisfy { $0.image == nil })
+        for item in menu.items where !item.isSeparatorItem { _ = item.target?.perform(item.action, with: item) }
+        #expect(cleaned == 1 && edited == 1 && tones == [.formal, .casual, .veryCasual] && phrases == ["Sign-off", "Meeting Link"])
+        enabled = false
+        section.refresh()
+        let disabled = menu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title)
+        #expect(disabled == ["Edit Transforms…"])
     }
 }

@@ -8,7 +8,6 @@ import AppKit
     init(updater: AppUpdater) {
         self.updater = updater
         super.init()
-        item.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath", accessibilityDescription: nil)
         item.target = self
         item.action = #selector(check)
         refresh()
@@ -16,8 +15,28 @@ import AppKit
 
     func refresh() {
         updater.refreshActivity()
-        item.title = updater.hasUpdate ? "Update Available…" : "Check for Updates…"
         item.isEnabled = updater.canCheckForUpdates
     }
     @objc private func check() { updater.checkForUpdates() }
+}
+
+/// The attention line shown at the top of the menu while an update is waiting. Hidden otherwise.
+@MainActor final class UpdateAvailableMenuSection: NSObject, MenuSection {
+    private let updater: AppUpdater
+    private let item = NSMenuItem(title: "Update Available…", action: nil, keyEquivalent: "")
+    var items: [NSMenuItem] { refresh(); return item.isHidden ? [] : [item] }
+
+    init(updater: AppUpdater) {
+        self.updater = updater
+        super.init()
+        item.target = self
+        item.action = #selector(install)
+        refresh()
+    }
+
+    func refresh() {
+        item.isHidden = !updater.hasUpdate
+        item.isEnabled = updater.canCheckForUpdates
+    }
+    @objc private func install() { updater.checkForUpdates() }
 }
