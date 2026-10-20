@@ -334,6 +334,12 @@ final class DictationController {
                 }
             }
         }
+        if startError == nil {
+            current.editorHints = EditorHintsGatherer.start(
+                enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
+                readers: .system, readGate: .shared
+            )
+        }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
         captureStarting = false
         recordingLive = false

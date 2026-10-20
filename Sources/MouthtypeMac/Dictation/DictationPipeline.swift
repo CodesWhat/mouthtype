@@ -12,6 +12,9 @@ struct DictationSession: Sendable {
     var cleanupLevel: CleanupLevel?
     /// False when the store is missing or `begin` failed; later writes are then skipped.
     var rowOpen = false
+    /// Code names read from the editor for this dictation (see `EditorHintsGatherer`). Held in memory only: never
+    /// stored, logged or written to history. Nil when the setting is off or the app isn't one it covers.
+    var editorHints: Task<[VocabularyBias.Term], Never>?
 }
 
 struct TranscribedDictation: Sendable {
@@ -58,6 +61,7 @@ struct DictationPipeline: Sendable {
     var audioRetention: @Sendable () -> AudioRetentionPolicy = { AudioRetentionPreference.load() }
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
     var boostSavedWords: @Sendable () -> Bool = { VocabularyBoostSetting.isEnabled() }
+    var editorHints: @Sendable () -> Bool = { EditorHintsSetting.isEnabled() }
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
     var appStyles: @Sendable () -> AppCleanupStyles = { (try? AppCleanupStyles.load()) ?? AppCleanupStyles() }
     var textPipeline = TextPipeline()
@@ -177,10 +181,18 @@ struct DictationPipeline: Sendable {
             return nil
         }
         let trimmed = SilenceTrimmer.trim(audio.samples)
+        let rules = vocabulary.dictionary()
+        let editorTerms = await session.editorHints?.value ?? []
+        // Only a take with editor names waits for the model rebuild they cause. Saved words alone build in the background.
         await engine.setVocabularyBias(
-            VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary())
+            VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: rules, editorTerms: editorTerms),
+            settleWithin: editorTerms.isEmpty ? nil : VocabularyBias.editorSettle
         )
-        let transcription = try await engine.transcribe(samples: trimmed.samples)
+        var transcription = try await engine.transcribe(samples: trimmed.samples)
+        // Editor names help this take and nothing else: they never reach the stored record.
+        transcription.boostTermsApplied = VocabularyBoostSetting.withoutEditorTerms(
+            transcription.boostTermsApplied, editorTerms: editorTerms, rules: rules
+        )
         let asrDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
 
         // The engine's times are relative to the trimmed audio; put them back on the untrimmed capture.

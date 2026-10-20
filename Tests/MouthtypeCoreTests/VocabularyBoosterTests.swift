@@ -145,6 +145,45 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(invocations.count == 2)
     }
 
+    /// A booster whose build blocks until `gate` is bumped.
+    private func gatedBooster(gate: Counter, started: Counter) -> VocabularyBooster {
+        VocabularyBooster(prepare: { _, _ in
+            _ = started.next()
+            while gate.count == 0 {
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.005) { continuation.resume() }
+                }
+            }
+            return FakeRescorer(result: nil)
+        }, report: { _ in })
+    }
+
+    @Test func setBiasWithoutABudgetReturnsWhileTheBuildIsStillGated() async {
+        let gate = Counter()
+        let b = gatedBooster(gate: gate, started: Counter())
+        await b.setBias(maya)
+        #expect(await b.isReady == false)
+        _ = gate.next()
+        await b.waitUntilSettled()
+        #expect(await b.isReady)
+    }
+
+    @Test func setBiasWithABudgetWaitsForAFastBuild() async {
+        let b = booster()
+        await b.setBias(maya, settleWithin: .seconds(5))
+        #expect(await b.isReady)
+    }
+
+    @Test func setBiasWithABudgetGivesUpOnASlowBuildAndLeavesItRunning() async {
+        let gate = Counter()
+        let b = gatedBooster(gate: gate, started: Counter())
+        await b.setBias(maya, settleWithin: .milliseconds(50))
+        #expect(await b.isReady == false)
+        _ = gate.next()
+        await b.waitUntilSettled()
+        #expect(await b.isReady)
+    }
+
     @Test func rescoringPastTheLimitKeepsTheUnboostedText() async {
         let b = booster(delay: .seconds(5), timeout: .milliseconds(50))
         await b.setBias(maya)
@@ -316,5 +355,53 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(await store.isLoaded == false)
         #expect(try await store.load(report: { _ in }) == 2)
         #expect(await store.isLoaded)
+    }
+}
+
+@Suite(.serialized) struct DependencyLoggingTests {
+    @Test func buildingABoosterRaisesFluidAudioLoggingToWarnings() {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .debug
+        _ = VocabularyBooster(prepare: { _, _ in FakeRescorer() }, report: { _ in })
+        // Debug and info lines carry terms and replacements; "Vocabulary rescoring failed" is a warning and stays.
+        #expect(AppLogger.minimumLevel == .warning)
+        #expect(AppLogger.minimumLevel <= AppLogger.Level.warning)
+    }
+
+    @Test func aStricterLevelIsLeftAlone() {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .fault
+        _ = VocabularyBooster(prepare: { _, _ in FakeRescorer() }, report: { _ in })
+        #expect(AppLogger.minimumLevel == .fault)
+    }
+
+    @Test func sessionBuildsDropTermWarningsThenRestoreTheLevel() async {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .warning
+        let during = await DependencyLogging.quietingWarnings { AppLogger.minimumLevel }
+        #expect(during == .error)
+        #expect(AppLogger.minimumLevel == .warning)
+    }
+
+    @Test func aThrowingBuildStillRestoresTheLevel() async {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .warning
+        _ = try? await DependencyLogging.quietingWarnings { throw Boom() }
+        #expect(AppLogger.minimumLevel == .warning)
+    }
+
+    @Test func overlappingBuildsRestoreOnlyWhenTheLastFinishes() async {
+        let original = AppLogger.minimumLevel
+        defer { AppLogger.minimumLevel = original }
+        AppLogger.minimumLevel = .warning
+        await DependencyLogging.quietingWarnings {
+            await DependencyLogging.quietingWarnings {}
+            #expect(AppLogger.minimumLevel == .error)
+        }
+        #expect(AppLogger.minimumLevel == .warning)
     }
 }

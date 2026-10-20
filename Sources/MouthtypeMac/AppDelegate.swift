@@ -40,7 +40,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, case .ready = self.engineHost.state, let engine = self.engineHost.engine else {
                 throw CocoaError(.featureUnsupported)
             }
-            return AudioFileTranscription(decoder: MacAudioFileDecoder(), engine: engine)
+            // A dictation in an editor leaves its code names on the shared engine. An import gets the saved words only.
+            let bias = VocabularyBoostSetting.bias(enabled: VocabularyBoostSetting.isEnabled(), rules: self.dictionary.dictionary())
+            return AudioFileTranscription(decoder: MacAudioFileDecoder(), engine: engine, beforeTranscribing: {
+                await (engine as? any VocabularyBiasing)?.setVocabularyBias(bias)
+            })
         }, canBegin: { [weak self] in
             guard let self, !self.isTerminating else { return false }
             return self.dictation?.phase == .idle && self.recovery?.isRecovering != true && !self.appUpdater.blocksNewWork

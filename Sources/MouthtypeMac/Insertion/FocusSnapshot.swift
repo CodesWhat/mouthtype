@@ -96,7 +96,7 @@ extension FocusReading {
 @MainActor
 final class AccessibilityFocusReader: FocusReading {
     /// Upper bound on each Accessibility call, so a hung app cannot stall the main thread (and with it the hotkey tap).
-    static let messagingTimeout: Float = 0.25
+    nonisolated static let messagingTimeout: Float = 0.25
 
     var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
 
