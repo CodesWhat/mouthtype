@@ -202,6 +202,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         pill.onLevel = { [weak menuBar] level in menuBar?.setLevel(level) }
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
         settingsWindow.model.home.store = store
+        spellingWindow.suggestions.store = store
         let settingsSection = SettingsMenuSection(
             open: { [weak self] in self?.settingsWindow.present(page: .general) },
             openHome: { [weak self] in self?.settingsWindow.present(page: .home) })
