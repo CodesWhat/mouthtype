@@ -41,6 +41,8 @@ public struct SpellingSuggestion: Sendable, Equatable, Identifiable {
     public var evidence: [SuggestionEvidence]
     public var count: Int
     public var confidence: Double
+    /// For `.removeHazard`: the exact saved rules (heard and written as stored) this suggestion would remove.
+    public var hazardRules: [DictionaryRule] = []
 
     public var id: String { "\(kind.rawValue)|\(written.lowercased())" }
 }
@@ -172,6 +174,7 @@ private struct Group {
     var written: String
     var kind: SuggestionKind
     var forms: [String: FormEntry] = [:]
+    var hazardRules: [DictionaryRule] = []
 }
 
 private struct Run {
@@ -285,7 +288,7 @@ private struct Run {
         hits.positions.map { SuggestionEvidence(takeID: takes[$0.take].id, fragment: fragment(take: $0.take, word: $0.word, length: $0.length)) }
     }
 
-    mutating func add(kind: SuggestionKind, written: String, heard: String, count: Int, confidence: Double, evidence: [SuggestionEvidence], weak: Bool = false) {
+    mutating func add(kind: SuggestionKind, written: String, heard: String, count: Int, confidence: Double, evidence: [SuggestionEvidence], weak: Bool = false, hazardRule: DictionaryRule? = nil) {
         let key = "\(kind.rawValue)|\(written.lowercased())"
         var group = groups[key] ?? Group(written: written, kind: kind)
         var entry = group.forms[heard] ?? FormEntry()
@@ -294,6 +297,7 @@ private struct Run {
         entry.confidence = max(entry.confidence, confidence)
         for e in evidence where entry.evidence.count < 3 && !entry.evidence.contains(e) { entry.evidence.append(e) }
         group.forms[heard] = entry
+        if let hazardRule, !group.hazardRules.contains(hazardRule) { group.hazardRules.append(hazardRule) }
         groups[key] = group
     }
 
@@ -548,10 +552,10 @@ private struct Run {
             let count = hits?.count ?? 0
             if OrdinaryWords.warning(for: rule) != nil {
                 let ev = hits.map(evidence) ?? []
-                add(kind: .removeHazard, written: rule.written, heard: rule.heard, count: count, confidence: min(0.75 + 0.04 * Double(count), 0.95), evidence: ev)
+                add(kind: .removeHazard, written: rule.written, heard: rule.heard, count: count, confidence: min(0.75 + 0.04 * Double(count), 0.95), evidence: ev, hazardRule: rule)
             } else if count == 0, takes.count >= SpellingSuggester.minTakesForUnusedHazard,
                       heard != rule.written.lowercased(), !rule.isJoinedSpelling {
-                add(kind: .removeHazard, written: rule.written, heard: rule.heard, count: 0, confidence: 0.3, evidence: [])
+                add(kind: .removeHazard, written: rule.written, heard: rule.heard, count: 0, confidence: 0.3, evidence: [], hazardRule: rule)
             }
         }
     }
@@ -569,7 +573,8 @@ private struct Run {
             var ev: [SuggestionEvidence] = []
             for (_, e) in forms { for x in e.evidence where ev.count < 4 { ev.append(x) } }
             out.append(SpellingSuggestion(written: group.written, heardForms: forms.map(\.key), kind: group.kind, evidence: ev,
-                                          count: forms.reduce(0) { $0 + $1.value.count }, confidence: (confidence * 100).rounded() / 100))
+                                          count: forms.reduce(0) { $0 + $1.value.count }, confidence: (confidence * 100).rounded() / 100,
+                                          hazardRules: group.hazardRules))
         }
         out.sort {
             if $0.confidence != $1.confidence { return $0.confidence > $1.confidence }

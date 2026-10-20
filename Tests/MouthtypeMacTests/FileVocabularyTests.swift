@@ -237,8 +237,27 @@ import MouthtypeCore
         #expect(throws: FileVocabulary.WriteError.changed) { try vocabulary.remove(DictionaryRule(heard: "win", written: "Nguyen")) }
         let removed = try vocabulary.remove(DictionaryRule(heard: "win", written: "Win2"))
         try vocabulary.save(heard: "win", written: "Other")
-        #expect(throws: FileVocabulary.WriteError.invalid("A spelling for this heard phrase already exists.")) { try vocabulary.restore(removed) }
+        #expect(throws: FileVocabulary.WriteError.staleUndo) { try vocabulary.restore(removed) }
         #expect(try vocabulary.allRules() == [DictionaryRule(heard: "win", written: "Other")])
+    }
+
+    @Test func removeAllWritesOnceOrNotAtAll() throws {
+        let dir = directory()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let vocabulary = FileVocabulary(url: dir.appendingPathComponent("dictionary.json"))
+        try vocabulary.save(heard: "a", written: "Aa")
+        try vocabulary.save(heard: "b", written: "Bb")
+        try vocabulary.save(heard: "c", written: "Cc")
+        let before = try Data(contentsOf: vocabulary.url)
+        #expect(throws: FileVocabulary.WriteError.changed) {
+            try vocabulary.removeAll([DictionaryRule(heard: "a", written: "Aa"), DictionaryRule(heard: "b", written: "BB")])
+        }
+        #expect(try Data(contentsOf: vocabulary.url) == before)
+        let removed = try vocabulary.removeAll([DictionaryRule(heard: "c", written: "Cc"), DictionaryRule(heard: "a", written: "Aa")])
+        #expect(removed.map(\.index) == [0, 2])
+        #expect(try vocabulary.allRules() == [DictionaryRule(heard: "b", written: "Bb")])
+        try vocabulary.restore(removed)
+        #expect(try vocabulary.allRules().map(\.heard) == ["a", "b", "c"])
     }
 
 }

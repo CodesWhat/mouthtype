@@ -11,7 +11,7 @@ import UniformTypeIdentifiers
         editor = SpellingEditor(store: store)
         suggestions = SpellingSuggestionsModel(vocabulary: store)
         suggestions.onRulesChanged = { [editor] in editor.reload() }
-        editor.onLibraryChanged = { [suggestions] in suggestions.startReload() }
+        editor.onLibraryChanged = { [suggestions] in suggestions.libraryChanged() }
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 550),
             styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Saved Spellings"

@@ -218,7 +218,8 @@ import Testing
         [{"heard":"win","written":"Nguyen","extra":7},{"heard":"mid","written":"\(long)"},{"heard":"last","written":"Last"}]
         """.write(to: f.vocabulary.url, atomically: true, encoding: .utf8)
         let model = model(f)
-        let hazard = SpellingSuggestion(written: "Nguyen", heardForms: ["win"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3)
+        let hazard = SpellingSuggestion(written: "Nguyen", heardForms: ["win"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+                                       hazardRules: [DictionaryRule(heard: "win", written: "Nguyen")])
         model.remove(hazard)
         #expect(try f.vocabulary.allRules().map(\.heard) == ["mid", "last"])
         model.undoLast()
@@ -226,7 +227,8 @@ import Testing
         let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: f.vocabulary.url)) as? [[String: Any]])
         #expect(entries[0]["extra"] as? Int == 7)
 
-        let longHazard = SpellingSuggestion(written: long, heardForms: ["mid"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3)
+        let longHazard = SpellingSuggestion(written: long, heardForms: ["mid"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+                                           hazardRules: [DictionaryRule(heard: "mid", written: long)])
         model.remove(longHazard)
         model.undoLast()
         #expect(try f.vocabulary.allRules().map(\.written) == ["Nguyen", long, "Last"])
@@ -243,6 +245,81 @@ import Testing
         #expect(model.error != nil)
         #expect(model.undo == nil)
         #expect(try f.vocabulary.allRules().contains(DictionaryRule(heard: "shaban", written: "Shavon")))
+    }
+
+    @Test func undoOfRemoveIsRefusedAfterAnotherLibraryChange() async throws {
+        let f = try fixture(rules: [("a", "Aa"), ("b", "Bb"), ("c", "Cc")])
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let model = model(f)
+        let hazard = SpellingSuggestion(written: "Bb", heardForms: ["b"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+                                        hazardRules: [DictionaryRule(heard: "b", written: "Bb")])
+        // Plain remove then undo restores at the original index.
+        model.remove(hazard)
+        model.undoLast()
+        #expect(try f.vocabulary.allRules().map(\.heard) == ["a", "b", "c"])
+
+        // The editor deleting A clears the pending Undo.
+        model.remove(hazard)
+        try f.vocabulary.remove(DictionaryRule(heard: "a", written: "Aa"))
+        model.libraryChanged()
+        #expect(model.undo == nil)
+        #expect(try f.vocabulary.allRules().map(\.heard) == ["c"])
+
+        // A change the model never heard about is still refused at restore time.
+        let entries = try f.vocabulary.removeAll([DictionaryRule(heard: "c", written: "Cc")])
+        try f.vocabulary.save(heard: "z", written: "Zz")
+        #expect(throws: FileVocabulary.WriteError.staleUndo) { try f.vocabulary.restore(entries) }
+        #expect(FileVocabulary.WriteError.staleUndo.errorDescription == "Your saved spellings changed, so this can't be undone.")
+    }
+
+    @Test func staleUndoShowsTheInlineMessage() async throws {
+        let f = try fixture(rules: [("a", "Aa"), ("b", "Bb")])
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let model = model(f)
+        model.remove(SpellingSuggestion(written: "Bb", heardForms: ["b"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+                                        hazardRules: [DictionaryRule(heard: "b", written: "Bb")]))
+        try f.vocabulary.remove(DictionaryRule(heard: "a", written: "Aa"))
+        model.undoLast()
+        #expect(model.error == "Your saved spellings changed, so this can't be undone.")
+        #expect(model.undo == nil)
+        #expect(try f.vocabulary.allRules().isEmpty)
+    }
+
+    @Test func hazardGroupKeepsEachExactRuleAndRemovesIt() async throws {
+        let f = try fixture(rules: [("will", "Nguyen"), ("win", "NGUYEN")])
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        for n in 0..<120 { try dictate(f.store, n, raw: "we win take \(n) will go") }
+        let model = model(f)
+        await model.reload()
+        let hazards = model.suggestions.filter { $0.kind == .removeHazard }
+        let group = try #require(hazards.first { Set($0.hazardRules.map(\.heard)) == ["will", "win"] })
+        #expect(Set(group.hazardRules) == [DictionaryRule(heard: "will", written: "Nguyen"), DictionaryRule(heard: "win", written: "NGUYEN")])
+        // Remove just the NGUYEN one exactly.
+        let single = SpellingSuggestion(written: "NGUYEN", heardForms: ["win"], kind: .removeHazard, evidence: [], count: 5, confidence: 0.9,
+                                        hazardRules: [DictionaryRule(heard: "win", written: "NGUYEN")])
+        model.remove(single)
+        #expect(model.error == nil)
+        #expect(try f.vocabulary.allRules() == [DictionaryRule(heard: "will", written: "Nguyen")])
+        model.undoLast()
+        #expect(try f.vocabulary.allRules().map(\.heard) == ["will", "win"])
+        // Removing the whole group takes both in one go, and Undo puts both back.
+        model.remove(group)
+        #expect(try f.vocabulary.allRules().isEmpty)
+        model.undoLast()
+        #expect(try f.vocabulary.allRules().map(\.heard) == ["will", "win"])
+    }
+
+    @Test func undoOfAddWithOneChangedRuleRemovesNothing() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        let model = model(f)
+        model.add(SpellingSuggestion(written: "Siobhan", heardForms: ["shaban", "shavon"], kind: .misheardVariant, evidence: [], count: 3, confidence: 0.8))
+        try f.vocabulary.save(original: DictionaryRule(heard: "shavon", written: "Siobhan"), rule: DictionaryRule(heard: "shavon", written: "Shavon"))
+        model.undoLast()
+        #expect(model.error != nil)
+        #expect(model.undo == nil)
+        let heard = try f.vocabulary.allRules().map(\.heard)
+        #expect(heard.contains("shaban") && heard.contains("shavon"))
     }
 
     @Test func corruptDismissalCountsAreDroppedAndNeverOverflow() throws {

@@ -47,7 +47,7 @@ struct DismissedSuggestions: Codable, Equatable {
 
     /// What the last Add or Remove did, so Undo can put it back.
     struct Undo: Equatable {
-        enum Action: Equatable { case added([DictionaryRule]), removed(FileVocabulary.RemovedEntry) }
+        enum Action: Equatable { case added([DictionaryRule]), removed([FileVocabulary.RemovedEntry]) }
         var message: String
         var action: Action
     }
@@ -171,13 +171,14 @@ struct DismissedSuggestions: Codable, Equatable {
         finish(Undo(message: "Added \(suggestion.written).", action: .added(added)), dropping: suggestion)
     }
 
-    /// Removes exactly the rule the suggestion was computed from (heard and written). A rule the user has since
-    /// changed is left alone and the suggestions are refreshed.
+    /// Removes exactly the saved rules the suggestion was computed from (heard and written as stored), in one write. A
+    /// rule the user has since changed is left alone and the suggestions are refreshed.
     func remove(_ suggestion: SpellingSuggestion) {
-        guard suggestion.kind == .removeHazard, let heard = suggestion.heardForms.first else { return }
+        guard suggestion.kind == .removeHazard, !suggestion.hazardRules.isEmpty else { return }
         do {
-            let removed = try vocabulary.remove(DictionaryRule(heard: heard, written: suggestion.written))
-            finish(Undo(message: "Removed \(heard).", action: .removed(removed)), dropping: suggestion)
+            let removed = try vocabulary.removeAll(suggestion.hazardRules)
+            let label = suggestion.hazardRules.map(\.heard).joined(separator: ", ")
+            finish(Undo(message: "Removed \(label).", action: .removed(removed)), dropping: suggestion)
         } catch FileVocabulary.WriteError.changed {
             error = "That spelling changed. Refreshing suggestions."
             startReload()
@@ -189,22 +190,29 @@ struct DismissedSuggestions: Codable, Equatable {
         do {
             switch undo.action {
             case .added(let rules):
-                let current = try vocabulary.allRules()
-                guard rules.allSatisfy({ current.contains($0) }) else {
-                    clearUndo()
-                    error = "That spelling changed, so Undo left it alone. Refreshing suggestions."
-                    startReload()
-                    return
-                }
-                for rule in rules { try vocabulary.remove(rule) }
-            case .removed(let entry):
-                try vocabulary.restore(entry)
+                try vocabulary.removeAll(rules)
+            case .removed(let entries):
+                try vocabulary.restore(entries)
             }
             clearUndo()
             error = nil
             onRulesChanged()
             startReload()
+        } catch FileVocabulary.WriteError.changed {
+            clearUndo()
+            error = "That spelling changed, so Undo left it alone. Refreshing suggestions."
+            startReload()
+        } catch FileVocabulary.WriteError.staleUndo {
+            clearUndo()
+            error = FileVocabulary.WriteError.staleUndo.errorDescription
+            startReload()
         } catch { self.error = error.localizedDescription }
+    }
+
+    /// The editor saved, deleted, imported or reloaded something. Positions and rules an Undo remembers may be stale.
+    func libraryChanged() {
+        clearUndo()
+        startReload()
     }
 
     func dismiss(_ suggestion: SpellingSuggestion) {
