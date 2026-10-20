@@ -8,6 +8,15 @@ extension PillSize {
 }
 
 extension PillSkinKind {
+    /// The tiles the picker shows. Glass is Classic on the system material, so it is a switch on Classic, not a tile.
+    static let pickerKinds: [PillSkinKind] = [.classic, .matrix, .minimal, .hifi]
+
+    /// The tile a stored skin belongs to; a saved `glass` loads as Classic with Glass on.
+    var pickerKind: PillSkinKind { self == .glass ? .classic : self }
+
+    /// Classic and Glass share one set of settings, and Glass is the one with its own switch.
+    var hasGlassSwitch: Bool { self == .classic || self == .glass }
+
     /// Whether the delivery cards and pill messages draw with the user's text font. Hi-Fi keeps its own bitmap type, so the
     /// font rows are hidden for it. Matrix draws its pill messages in the text font, and Minimal's pill uses the system font but
     /// its delivery cards still use the text font, so both keep the rows.
@@ -25,8 +34,18 @@ extension PillSkinKind {
 extension SettingsView {
     @ViewBuilder var appearance: some View {
         appearancePreview
-        AppearanceStylePicker(selection: model.skin, onSelect: model.setSkin)
+        AppearanceStylePicker(selection: model.skin, readout: model.readoutColour, wallpaper: model.previewWallpaper) { kind in
+            // Choosing Classic while Glass is on keeps Glass: that is the same tile.
+            if kind == .classic, model.skin == .glass { return }
+            model.setSkin(kind)
+        }
         DesignCard {
+            if model.skin.hasGlassSwitch {
+                DesignRow(title: "Glass", detail: "Draws the pill and its cards on the system glass material. Falls back to solid when Reduce Transparency is on.") {
+                    Toggle("Glass", isOn: Binding(get: { model.skin == .glass }, set: { model.setSkin($0 ? .glass : .classic) }))
+                        .labelsHidden().toggleStyle(.designSwitch).accessibilityIdentifier("settings-pill-glass")
+                }
+            }
             DesignRow(title: "Pill size", detail: "Automatic picks Large on wide screens. Applies the next time the pill appears.") {
                 DesignSegmented(title: "Pill size", selection: Binding(get: { model.pillSize }, set: { model.setPillSize($0) }),
                                 choices: PillSize.allCases.map { DesignChoice($0.title, $0) })

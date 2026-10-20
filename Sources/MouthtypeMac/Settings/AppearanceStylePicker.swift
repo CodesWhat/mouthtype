@@ -1,17 +1,22 @@
 import SwiftUI
 
-/// The five pill styles as picture tiles, drawn like the handoff's Style board: a wallpaper swatch with a miniature pill, the name
+/// The pill styles as picture tiles: a wallpaper swatch with the real pill drawn on it, the name
 /// under it, and an accent ring on the selected one. Each tile is a button so Space picks it, and Left and Right step through them.
 struct AppearanceStylePicker: View {
+    /// The skin in use. Glass shows as Classic with its switch on.
     let selection: PillSkinKind
+    var readout: PillReadoutColour = .default
+    var wallpaper: PreviewWallpaper = .dark
     let onSelect: (PillSkinKind) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             DesignEyebrow("Style")
             HStack(spacing: 12) {
-                ForEach(PillSkinKind.allCases, id: \.rawValue) { skin in
-                    AppearanceStyleTile(skin: skin, selected: skin == selection) { onSelect(skin) }
+                ForEach(PillSkinKind.pickerKinds, id: \.rawValue) { skin in
+                    // The Classic tile draws whichever of Classic or Glass is in use.
+                    let drawn = skin == .classic && selection == .glass ? PillSkinKind.glass : skin
+                    AppearanceStyleTile(skin: skin, drawn: drawn, readout: readout, wallpaper: wallpaper, selected: skin == selection.pickerKind) { onSelect(skin) }
                 }
             }
             .onKeyPress(.leftArrow) { step(-1) }
@@ -22,8 +27,8 @@ struct AppearanceStylePicker: View {
     }
 
     private func step(_ offset: Int) -> KeyPress.Result {
-        let all = PillSkinKind.allCases
-        guard let index = all.firstIndex(of: selection) else { return .ignored }
+        let all = PillSkinKind.pickerKinds
+        guard let index = all.firstIndex(of: selection.pickerKind) else { return .ignored }
         let next = min(max(index + offset, 0), all.count - 1)
         if next != index { onSelect(all[next]) }
         return .handled
@@ -33,15 +38,18 @@ struct AppearanceStylePicker: View {
 private struct AppearanceStyleTile: View {
     @Environment(\.colorScheme) private var scheme
     let skin: PillSkinKind
+    let drawn: PillSkinKind
+    let readout: PillReadoutColour
+    let wallpaper: PreviewWallpaper
     let selected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             VStack(spacing: 8) {
-                ZStack { AppearanceStyleArt(skin: skin) }
-                    .frame(maxWidth: .infinity).frame(height: 62)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(AppearanceStyleArt.swatch(skin)))
+                AppearanceStyleArt(skin: drawn, readout: readout, wallpaper: wallpaper)
+                    .frame(maxWidth: .infinity).frame(height: AppearanceStyleArt.height)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
                     .accessibilityHidden(true)
                 HStack(spacing: 6) {
                     Text(skin.title).font(DesignFont.sans(12.5, .medium)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
@@ -65,81 +73,65 @@ private struct AppearanceStyleTile: View {
     }
 }
 
-/// The miniature pill for each style, in fixed colours because it sits on a drawn swatch rather than on the page.
-private struct AppearanceStyleArt: View {
-    let skin: PillSkinKind
+/// The real pill for a tile: the same still `SettingsPillImage` draws for the preview, in the recording state with a level, trimmed
+/// to the pill itself so it can be scaled to fit the tile. Static, never animated. A Glass pill shows the tint the offscreen
+/// renderer draws in the material's place; the live preview above it has the real material.
+@MainActor enum PillTileImage {
+    private static var cache: [String: NSImage] = [:]
 
-    static func swatch(_ skin: PillSkinKind) -> Color {
-        switch skin {
-        case .classic, .matrix, .hifi: Color(red: 0x3A / 255, green: 0x3A / 255, blue: 0x40 / 255)
-        case .glass: Color(red: 0xB9 / 255, green: 0xBE / 255, blue: 0xC8 / 255)
-        case .minimal: Color(red: 0xDA / 255, green: 0xDB / 255, blue: 0xE0 / 255)
-        }
+    static func image(skin: PillSkinKind, readout: PillReadoutColour, wallpaper: PreviewWallpaper) -> NSImage? {
+        let key = "\(skin.rawValue)-\(readout.rawValue)-\(wallpaper.rawValue)"
+        if let cached = cache[key] { return cached }
+        guard let full = SettingsPillImage.make(skin: skin, size: .standard, readout: readout, wallpaper: wallpaper),
+              let cg = full.cgImage(forProposedRect: nil, context: nil, hints: nil), let box = opaqueBounds(cg),
+              let part = cg.cropping(to: box) else { return nil }
+        let image = NSImage(cgImage: part, size: NSSize(width: CGFloat(part.width) / 2, height: CGFloat(part.height) / 2))
+        cache[key] = image
+        return image
     }
 
-    private static let mint = Color(red: 0x8F / 255, green: 0xC1 / 255, blue: 0xB5 / 255)
-    private static let deepGreen = Color(red: 0x31 / 255, green: 0x5B / 255, blue: 0x54 / 255)
-    private static let amber = Color(red: 1, green: 0xB3 / 255, blue: 0x27 / 255)
-    private static let bars: [CGFloat] = [4, 8, 10, 6, 9, 5]
-
-    var body: some View {
-        switch skin {
-        case .classic: capsule(fill: Color(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1E / 255), bar: Self.mint, stroke: nil)
-        case .glass: capsule(fill: .white.opacity(0.55), bar: Self.deepGreen, stroke: .white.opacity(0.9))
-        case .matrix: matrix
-        case .minimal: minimal
-        case .hifi: hifi
-        }
-    }
-
-    private func capsule(fill: Color, bar: Color, stroke: Color?) -> some View {
-        HStack(spacing: 6) {
-            HStack(alignment: .bottom, spacing: 1.5) {
-                ForEach(Self.bars.indices, id: \.self) { Rectangle().fill(bar).frame(width: 2, height: Self.bars[$0]) }
-            }.frame(height: 10)
-            Circle().fill(Color(red: 0xFC / 255, green: 0xFC / 255, blue: 0xFB / 255)).frame(width: 13, height: 13)
-        }
-        .padding(.leading, 9).padding(.trailing, 5).frame(height: 22)
-        .background(Capsule().fill(fill))
-        .overlay { if let stroke { Capsule().strokeBorder(stroke, lineWidth: 1) } }
-        .shadow(color: .black.opacity(stroke == nil ? 0 : 0.12), radius: 3, y: 2)
-    }
-
-    private var matrix: some View {
-        let grid: [[Bool]] = ["1011010", "0110110", "1101011"].map { $0.map { $0 == "1" } }
-        return HStack(spacing: 6) {
-            Circle().fill(Color(red: 1, green: 0x4A / 255, blue: 0x3C / 255)).frame(width: 5, height: 5)
-            VStack(spacing: 1.5) {
-                ForEach(grid.indices, id: \.self) { row in
-                    HStack(spacing: 1.5) {
-                        ForEach(grid[row].indices, id: \.self) { col in
-                            Rectangle().fill(Self.amber.opacity(grid[row][col] ? 1 : 0.15)).frame(width: 3, height: 3)
-                        }
-                    }
-                }
+    /// The pixels holding anything drawn, with a pixel of margin.
+    static func opaqueBounds(_ image: CGImage) -> CGRect? {
+        let width = image.width, height = image.height
+        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let data = context.data else { return nil }
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        var minX = width, minY = height, maxX = -1, maxY = -1
+        for y in 0..<height {
+            for x in 0..<width where bytes[(y * width + x) * 4 + 3] > 8 {
+                minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
             }
         }
-        .padding(.horizontal, 8).frame(height: 24)
-        .background(RoundedRectangle(cornerRadius: 9).fill(Color(red: 0x19 / 255, green: 0x19 / 255, blue: 0x1B / 255)))
+        guard maxX >= minX, maxY >= minY else { return nil }
+        // The context's rows run bottom-up, CGImage cropping is top-down.
+        let top = height - 1 - maxY
+        return CGRect(x: max(0, minX - 1), y: max(0, top - 1), width: min(width, maxX + 2) - max(0, minX - 1),
+                      height: min(height, height - 1 - minY + 2) - max(0, top - 1))
     }
+}
 
-    private var minimal: some View {
-        let ink = Color(red: 0x1D / 255, green: 0x1D / 255, blue: 0x1F / 255)
-        return HStack(spacing: 6) {
-            Circle().fill(Color(red: 0xE0 / 255, green: 0x28 / 255, blue: 0x1C / 255)).frame(width: 5, height: 5)
-            HStack(spacing: 2) {
-                ForEach(Array([4, 8, 10, 6, 9, 5, 7].enumerated()), id: \.offset) { Rectangle().fill(ink).frame(width: 1.5, height: CGFloat($0.element)) }
-            }.frame(height: 10)
+/// The pill for each style on the swatch the preview is showing, so the tile follows Light and Dark.
+private struct AppearanceStyleArt: View {
+    let skin: PillSkinKind
+    let readout: PillReadoutColour
+    let wallpaper: PreviewWallpaper
+
+    static let height: CGFloat = 70
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack {
+                if let swatch = PreviewSwatch.image(wallpaper, size: proxy.size) {
+                    Image(decorative: swatch, scale: 2).resizable().frame(width: proxy.size.width, height: proxy.size.height)
+                }
+                if let image = PillTileImage.image(skin: skin, readout: readout, wallpaper: wallpaper) {
+                    Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
+                        .frame(maxWidth: min(image.size.width, proxy.size.width - 20), maxHeight: min(image.size.height, proxy.size.height - 16))
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
         }
-        .padding(.horizontal, 9).frame(height: 24)
-        .background(RoundedRectangle(cornerRadius: 9).fill(Color(red: 0xFB / 255, green: 0xFB / 255, blue: 0xFC / 255)))
-        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(.black.opacity(0.16), lineWidth: 0.5))
-    }
-
-    private var hifi: some View {
-        Text("REC 0:07").font(DesignFont.mono(9)).tracking(0.7).foregroundStyle(Self.amber).fixedSize()
-            .padding(.horizontal, 8).frame(height: 26)
-            .background(RoundedRectangle(cornerRadius: 3).fill(Color(red: 0x2A / 255, green: 0x26 / 255, blue: 0x22 / 255)))
-            .overlay(RoundedRectangle(cornerRadius: 3).strokeBorder(Color(red: 0x4A / 255, green: 0x40 / 255, blue: 0x38 / 255), lineWidth: 1))
     }
 }

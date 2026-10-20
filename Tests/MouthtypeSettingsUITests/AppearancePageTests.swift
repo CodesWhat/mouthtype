@@ -52,4 +52,33 @@ import Testing
             }
         }
     }
+
+    @Test func glassIsASwitchOnClassicNotATile() {
+        #expect(PillSkinKind.pickerKinds == [.classic, .matrix, .minimal, .hifi])
+        #expect(PillSkinKind.glass.pickerKind == .classic && PillSkinKind.classic.pickerKind == .classic)
+        for skin in PillSkinKind.allCases { #expect(skin.hasGlassSwitch == (skin == .classic || skin == .glass), "glass switch for \(skin)") }
+    }
+
+    @Test func aSavedGlassSkinLoadsAsClassicWithGlassOn() {
+        let (model, defaults, name) = makeModel(skin: .glass)
+        defer { defaults.removePersistentDomain(forName: name) }
+        // The stored value is untouched, so the live pill, the menu and the cards still read `glass`.
+        #expect(model.skin == .glass && defaults.string(forKey: "pillSkin") == "glass")
+        #expect(model.skin.pickerKind == .classic && model.skin.hasGlassSwitch)
+        model.setSkin(.classic)
+        #expect(PillSkinPreference.current(defaults) == .classic)
+        model.setSkin(.glass)
+        #expect(PillSkinPreference.current(defaults) == .glass)
+    }
+
+    @Test func tilesShowTheRealPillOnTheSwatch() throws {
+        FontRegistry.registerBundledFonts()
+        for skin in PillSkinKind.allCases {
+            for wallpaper in PreviewWallpaper.allCases {
+                let image = try #require(PillTileImage.image(skin: skin, readout: .amber, wallpaper: wallpaper), "\(skin) on \(wallpaper)")
+                // Trimmed to the pill, so it is wider than tall and no larger than the preview canvas.
+                #expect(image.size.width > image.size.height && image.size.width < PreviewFit.canvas.width)
+            }
+        }
+    }
 }
