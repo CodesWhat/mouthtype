@@ -109,7 +109,13 @@ struct SpellingSuggestionRow: View {
 
     static func title(_ suggestion: SpellingSuggestion) -> String {
         if suggestion.kind == .removeHazard {
-            return "Remove ‘\(suggestion.heardForms.first ?? "")’ → \(suggestion.written)"
+            let pairs = suggestion.hazardRules.isEmpty
+                ? ["‘\(suggestion.heardForms.first ?? "")’ → \(suggestion.written)"]
+                : suggestion.hazardRules.map { "‘\($0.heard)’ → \($0.written)" }
+            let list = pairs.count <= 2
+                ? pairs.joined(separator: " and ")
+                : pairs.dropLast().joined(separator: ", ") + ", and " + pairs[pairs.count - 1]
+            return "Remove " + list
         }
         return suggestion.heardForms.joined(separator: ", ") + " → " + suggestion.written
     }

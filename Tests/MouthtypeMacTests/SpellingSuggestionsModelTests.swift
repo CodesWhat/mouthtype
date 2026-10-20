@@ -55,6 +55,19 @@ import Testing
         #expect(SpellingSuggestionRow.title(hazard) == "Remove ‘win’ → Nguyen")
     }
 
+    @Test func hazardTitleNamesEveryRuleRemoveDeletes() {
+        func hazard(_ rules: [DictionaryRule]) -> SpellingSuggestion {
+            SpellingSuggestion(written: "Nguyen", heardForms: rules.map(\.heard), kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+                               hazardRules: rules)
+        }
+        let will = DictionaryRule(heard: "will", written: "Nguyen")
+        let win = DictionaryRule(heard: "win", written: "NGUYEN")
+        let wynn = DictionaryRule(heard: "wynn", written: "nguyen")
+        #expect(SpellingSuggestionRow.title(hazard([will])) == "Remove ‘will’ → Nguyen")
+        #expect(SpellingSuggestionRow.title(hazard([will, win])) == "Remove ‘will’ → Nguyen and ‘win’ → NGUYEN")
+        #expect(SpellingSuggestionRow.title(hazard([will, win, wynn])) == "Remove ‘will’ → Nguyen, ‘win’ → NGUYEN, and ‘wynn’ → nguyen")
+    }
+
     @Test func emptyStateWhenThereIsNothingToSuggest() async throws {
         let f = try fixture(rules: [])
         defer { try? FileManager.default.removeItem(at: f.dir) }
