@@ -110,30 +110,51 @@ class Session:
     def take_count(self):
         return sum(1 for path in self.recovery.iterdir() if path.is_dir() and not path.is_symlink())
 
+    @staticmethod
+    def take_time(path):
+        """When the take was made. Never the directory mtime, which moves whenever a file inside is removed."""
+        try:
+            created = json.loads((path / 'take.json').read_text())['created']
+            if type(created) in (int, float) and math.isfinite(created):
+                return created
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        # Takes from before take.json: the earliest surviving file, which expiring the WAV cannot move.
+        stamps = []
+        for child in path.iterdir():
+            try:
+                if child.is_file():
+                    stamps.append(child.stat().st_mtime)
+            except OSError:
+                pass
+        return min(stamps) if stamps else path.stat().st_mtime
+
     def prune_history(self):
         """Keep only the newest `history_keep` takes, forgetting the rest entirely. The active take is never touched."""
         if not self.history_keep:
             return 0
-        with self.lock:
-            active = self.take
-        takes = []
-        for path in self.recovery.iterdir():
-            if not path.is_dir() or path.is_symlink() or not re.fullmatch('[0-9a-f]{32}', path.name):
-                continue
-            stamps = [path.stat().st_mtime] + [child.stat().st_mtime for child in path.iterdir() if child.is_file()]
-            takes.append((max(stamps), path))
-        takes.sort(reverse=True)
         removed = 0
-        for _, path in takes[self.history_keep:]:
-            if path == active:
-                continue
-            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json'):
-                (path / name).unlink(missing_ok=True)
-            try:
-                path.rmdir()
-                removed += 1
-            except OSError:
-                pass
+        # Choosing and deleting share the session lock, so recover_audio cannot accept a take in between.
+        with self.lock:
+            takes = []
+            for path in self.recovery.iterdir():
+                if not path.is_dir() or path.is_symlink() or not re.fullmatch('[0-9a-f]{32}', path.name):
+                    continue
+                try:
+                    takes.append((self.take_time(path), path.name, path))
+                except OSError:
+                    continue
+            takes.sort(reverse=True)
+            for _, _, path in takes[self.history_keep:]:
+                if path == self.take:
+                    continue
+                for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json', 'take.json'):
+                    (path / name).unlink(missing_ok=True)
+                try:
+                    path.rmdir()
+                    removed += 1
+                except OSError:
+                    pass
         return removed
 
     def retire_completed_audio(self, now=None):
@@ -228,7 +249,20 @@ class Session:
                     self.error = 'recovery_full'
                     return self.status()
                 self.take = self.recovery / uuid.uuid4().hex
-                self.take.mkdir(mode=0o700)
+                try:
+                    self.take.mkdir(mode=0o700)
+                    private_write(self.take / 'take.json', json.dumps({'created': time.time()}))
+                except (OSError, ValueError):
+                    # A take that can't record its own metadata must not hold a recovery slot.
+                    (self.take / 'take.json').unlink(missing_ok=True)
+                    try:
+                        self.take.rmdir()
+                    except OSError:
+                        pass
+                    self.take = None
+                    self.error = 'capture_unavailable'
+                    self._notify('error')
+                    return self.status()
                 self.discard_on_cancel = True
                 self.target = target
                 self.spellings = spellings
@@ -244,6 +278,7 @@ class Session:
                         audio = self.take / 'recording.wav'
                         if audio.exists() and audio.stat().st_size == 0:
                             audio.unlink()
+                        (self.take / 'take.json').unlink(missing_ok=True)
                         self.take.rmdir()
                     except OSError:
                         pass
@@ -287,6 +322,7 @@ class Session:
             (self.take / 'recording.wav').unlink(missing_ok=True)
             if not (self.take / 'transcript.txt').exists():
                 (self.take / 'raw-recognition.txt').unlink(missing_ok=True)
+                (self.take / 'take.json').unlink(missing_ok=True)
             try:
                 self.take.rmdir()
             except OSError:
@@ -926,6 +962,11 @@ def validate_config(value):
         number = result[field]
         if number is not None and (type(number) not in (int, float) or not math.isfinite(number) or not minimum <= number <= maximum):
             raise ValueError(field + ' must be null or a finite number in range')
+    keep = result['history_keep']
+    if keep is not None:
+        if keep != int(keep):
+            raise ValueError('history_keep must be a whole number')
+        result['history_keep'] = int(keep)
     delivery = result['delivery']
     if not isinstance(delivery, dict) or delivery.get('mode') not in ('recover', 'type', 'paste'):
         raise ValueError('delivery.mode must be recover, type or paste')
@@ -974,12 +1015,15 @@ def read_message(connection, maximum=4096):
     return json.loads(line)
 
 
-def serve(path, session, stopped, *, lifetime_seconds=43200, files=None):
+def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup=None):
     path = Path(path)
     # The lock owns this one runtime socket, including cleanup after an interrupted session.
     with open(str(path) + '.lock', 'a') as ownership:
         os.chmod(ownership.name, 0o600)
         fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if startup is not None:
+            # Maintenance prunes takes, so only the daemon that owns the runtime lock may run it.
+            startup()
         if path.exists():
             info = path.lstat()
             if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
@@ -1244,7 +1288,7 @@ def main():
                 status = request(path, 'status')
                 if status.get('recovery') == args.id and status.get('state') != 'idle':
                     raise ValueError('Recovery is in use')
-            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json'):
+            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json', 'take.json'):
                 (take / name).unlink(missing_ok=True)
             take.rmdir()
             return 0
@@ -1287,8 +1331,6 @@ def main():
                           cleanup_engine=cleanup_engine, maximum_takes=int(config['maximum_recovery_takes']),
                           audio_days=config['audio_retention_days'], audio_megabytes=config['audio_retention_megabytes'],
                           history_keep=config['history_keep'])
-        session.retire_completed_audio()
-        session.prune_history()
         files = FileTranscription(engine, args.imports, request_seconds=config['request_seconds'])
         if cleanup_engine is not None and cleanup_engine.state == 'idle':
             cleanup_engine.warm()
@@ -1297,7 +1339,8 @@ def main():
         for event in (signal.SIGINT, signal.SIGTERM):
             signal.signal(event, lambda *_: stopped.set())
         try:
-            serve(path, session, stopped, lifetime_seconds=args.lifetime_seconds, files=files)
+            serve(path, session, stopped, lifetime_seconds=args.lifetime_seconds, files=files,
+                  startup=lambda: (session.retire_completed_audio(), session.prune_history()))
         finally:
             try:
                 files.close()

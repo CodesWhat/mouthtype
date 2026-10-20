@@ -7,6 +7,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 import wave
 
 from desktop import Session
@@ -329,6 +330,24 @@ for line in sys.stdin:
                 session.close()
             self.assertFalse(thread.is_alive())
             self.assertFalse(path.exists())
+
+    def test_second_serve_does_not_run_startup_maintenance_without_the_runtime_lock(self):
+        import fcntl
+        from desktop import serve
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
+            ran = []
+            with open(str(path) + '.lock', 'a') as owner:
+                fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                with self.assertRaises(OSError):
+                    serve(path, session, threading.Event(), lifetime_seconds=1, startup=lambda: ran.append(1))
+            self.assertEqual(ran, [])
+            stopped = threading.Event()
+            stopped.set()
+            serve(path, session, stopped, lifetime_seconds=1, startup=lambda: ran.append(1))
+            self.assertEqual(ran, [1])
+            session.close()
 
 class RecoveryTests(unittest.TestCase):
     def test_recovery_is_explicit_read_only_and_never_delivers(self):
@@ -1055,6 +1074,115 @@ class RetentionTests(unittest.TestCase):
             finally:
                 off.close()
 
+    def test_history_orders_by_take_time_not_directory_mtime_after_audio_expiry(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old = self.take(root, 'a', age_days=100)
+            recent = self.take(root, 'b', age_days=1)
+            for path, days in ((old, 100), (recent, 1)):
+                (path / 'take.json').write_text(json.dumps({'created': time.time() - days * 86400}))
+                stamp = time.time() - days * 86400
+                os.utime(path / 'transcript.txt', (stamp, stamp))
+            session = Session(Capture(), Engine(), Delivery(), root, audio_days=90, history_keep=1)
+            try:
+                # Expiring the old WAV bumps the old directory's mtime to now.
+                self.assertEqual(session.retire_completed_audio(), 1)
+                self.assertGreater(old.stat().st_mtime, recent.stat().st_mtime)
+                self.assertEqual(session.prune_history(), 1)
+                self.assertFalse(old.exists())
+                self.assertTrue(recent.exists())
+            finally:
+                session.close()
+
+    def test_history_orders_legacy_takes_without_metadata_by_surviving_files(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old = self.take(root, 'a', age_days=100)
+            recent = self.take(root, 'b', age_days=1)
+            stamp = time.time() - 100 * 86400
+            os.utime(old / 'transcript.txt', (stamp, stamp))
+            stamp = time.time() - 86400
+            os.utime(recent / 'transcript.txt', (stamp, stamp))
+            session = Session(Capture(), Engine(), Delivery(), root, audio_days=90, history_keep=1)
+            try:
+                session.retire_completed_audio()
+                self.assertEqual(session.prune_history(), 1)
+                self.assertFalse(old.exists())
+                self.assertTrue(recent.exists())
+            finally:
+                session.close()
+
+    def test_new_takes_record_their_creation_time_and_cancel_leaves_nothing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            session = Session(Capture(), Engine(), Delivery(), root)
+            try:
+                before = time.time()
+                session.command('start')
+                created = json.loads((session.take / 'take.json').read_text())['created']
+                self.assertTrue(before <= created <= time.time())
+                session.command('cancel')
+                self.assertEqual(list(root.iterdir()), [])
+            finally:
+                session.close()
+
+    def test_prune_never_deletes_a_take_recovered_while_it_is_choosing(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            retried = self.take(root, 'a', age_days=5, transcript=False)
+            newest = self.take(root, 'b', age_days=1)
+            engine = Engine()
+            engine.gate = threading.Event()
+            session = Session(Capture(), engine, Delivery(), root, history_keep=1)
+            results = []
+            def retry():
+                try:
+                    session.recover_audio(retried.name)
+                    results.append('accepted')
+                except ValueError:
+                    results.append('rejected')
+            thread = threading.Thread(target=retry)
+            real = Path.iterdir
+            def iterdir(path):
+                found = list(real(path))
+                if path == root and not thread.ident:
+                    # The retry arrives after the take list is built but before anything is deleted.
+                    thread.start()
+                    thread.join(.2)
+                return iter(found)
+            try:
+                with unittest.mock.patch.object(Path, 'iterdir', iterdir):
+                    session.prune_history()
+                thread.join(2)
+                if results == ['accepted']:
+                    self.assertTrue((retried / 'recording.wav').exists())
+                    self.assertEqual(session.take, retried)
+                else:
+                    self.assertEqual(results, ['rejected'])
+                self.assertTrue(newest.exists())
+                # Whatever happened, a later prune never takes the take being retried.
+                engine.gate.set()
+                session.wait()
+            finally:
+                engine.gate.set()
+                session.close()
+
+    def test_prune_skips_the_take_in_flight(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            retried = self.take(root, 'a', age_days=5, transcript=False)
+            self.take(root, 'b', age_days=1)
+            engine = Engine()
+            engine.gate = threading.Event()
+            session = Session(Capture(), engine, Delivery(), root, history_keep=1)
+            try:
+                session.recover_audio(retried.name)
+                self.assertEqual(session.prune_history(), 0)
+                self.assertTrue((retried / 'recording.wav').exists())
+            finally:
+                engine.gate.set()
+                session.close()
+
     def test_configuration_bounds(self):
         from desktop import validate_config
         base = {'engine_config': '/local/engines.json'}
@@ -1063,6 +1191,11 @@ class RetentionTests(unittest.TestCase):
         self.assertEqual(validate_config({**base, 'history_keep': 5})['history_keep'], 5)
         with self.assertRaises(ValueError):
             validate_config({**base, 'history_keep': 0})
+        converted = validate_config({**base, 'history_keep': 5.0})['history_keep']
+        self.assertEqual((converted, type(converted)), (5, int))
+        for bad in (5.5, True, float('nan'), '5'):
+            with self.subTest(history_keep=bad), self.assertRaises(ValueError):
+                validate_config({**base, 'history_keep': bad})
         validate_config({**base, 'audio_retention_days': None, 'audio_retention_megabytes': None, 'maximum_recovery_takes': 500})
         for change in ({'maximum_recovery_takes': 0}, {'maximum_recovery_takes': 5001}, {'audio_retention_days': 'forever'},
                        {'audio_retention_megabytes': -1}):
