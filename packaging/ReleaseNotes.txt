@@ -2,7 +2,7 @@ Mouthtype 0.3.0
 
 Home. Open Mouthtype from the menu to get a new Home page with your last 50 takes, newest first. Each take has Copy and Recover. Recover works for any take whose audio is still saved. It offers the text again without changing the history entry. Home updates as you dictate.
 
-Stats. Home shows words today, this week and all time, a 14-day chart, your average and best speed, your current and longest streak, your biggest day, your longest take, and the time you saved compared with typing at 40 WPM. Records show your fastest speed, biggest day, longest streak and longest take, each with its date. Everything is worked out on your Mac from your own history. Takes from secure fields are never counted.
+Stats. The new Stats page shows words today, this week and all time, a 14-day chart, your average and best speed, your current and longest streak, your biggest day, your longest take, and the time you saved compared with typing at 40 WPM. Records show your fastest speed, biggest day, longest streak and longest take, each with its date. Everything is worked out on your Mac from your own history. Takes from secure fields are never counted.
 
 Saved spellings now suggest spellings from your recent takes: names it keeps mishearing, brand names that come out lowercase, and words that get split apart. Each suggestion comes with examples. Choose Add, Remove or Dismiss, and Undo is there right after. Saved spellings also flag saved heard forms that rewrite everyday words.
 
