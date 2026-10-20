@@ -10,7 +10,7 @@ public enum TranscriptStoreError: Error, Equatable {
 /// Stops a `TranscriptStore.observeRecentTakes` observation when cancelled or released.
 public final class TakesObservation: @unchecked Sendable {
     private let cancellable: AnyDatabaseCancellable
-    fileprivate init(_ cancellable: AnyDatabaseCancellable) { self.cancellable = cancellable }
+    init(_ cancellable: AnyDatabaseCancellable) { self.cancellable = cancellable }
     public func cancel() { cancellable.cancel() }
 }
 

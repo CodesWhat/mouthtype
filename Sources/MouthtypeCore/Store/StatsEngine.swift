@@ -104,6 +104,35 @@ public struct ArcadeRecords: Equatable, Sendable {
     }
 }
 
+/// What the Stats and Records pages show, worked out from the log in one go.
+public struct StatsSnapshot: Equatable, Sendable {
+    public static let dailyWindowDays = 14
+
+    public var report: StatsReport
+    public var records: ArcadeRecords
+    /// The last `dailyWindowDays` local days ending today, zero-filled. Empty when there is no history.
+    public var daily: [DailyWords]
+
+    public var hasHistory: Bool { report.dictationCount > 0 }
+
+    public init(report: StatsReport, records: ArcadeRecords, daily: [DailyWords]) {
+        self.report = report
+        self.records = records
+        self.daily = daily
+    }
+
+    public static func make(samples: [DictationSample], now: Date, timeZone: TimeZone = .current,
+                            typingWPM: Double = StatsEngine.defaultTypingWPM) -> StatsSnapshot {
+        let engine = StatsEngine(samples: samples, typingWPM: typingWPM)
+        let today = Streaks.localDay(for: now, in: timeZone)
+        let report = engine.report(today: today)
+        let daily = report.dictationCount == 0 ? [] : Streaks.dayNumber(today).map {
+            engine.dailyWords(from: StatsEngine.dayString($0 - (dailyWindowDays - 1)), to: today)
+        } ?? []
+        return StatsSnapshot(report: report, records: engine.records(), daily: daily)
+    }
+}
+
 /// Pure statistics over the dictation log. Everything here is rebuilt from samples on demand; nothing is stored,
 /// so deleting or re-importing the log can never leave a stale record behind.
 ///

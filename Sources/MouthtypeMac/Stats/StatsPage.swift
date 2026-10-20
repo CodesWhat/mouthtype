@@ -1,8 +1,25 @@
 import SwiftUI
 import MouthtypeCore
 
-/// Usage numbers from the local dictation log, in the Settings grouped-form look. Standalone: the Home window hosts it
-/// later. The caller passes in a `StatsReport` and the last couple of weeks of `DailyWords`.
+/// The Stats sidebar page: live numbers from the model, or a plain empty state when there is no history yet.
+struct StatsHostPage: View {
+    var model: StatsModel
+
+    var body: some View {
+        Group {
+            if let snapshot = model.snapshot, snapshot.hasHistory {
+                StatsPage(report: snapshot.report, daily: snapshot.daily)
+            } else {
+                SettingsGroup(eyebrow: "STATS") {
+                    SettingsNote(text: model.error ?? "No stats yet. Dictate something and your numbers show up here.")
+                }
+            }
+        }
+    }
+}
+
+/// Usage numbers from the local dictation log, in the Settings grouped-form look. The caller passes in a `StatsReport`
+/// and the last couple of weeks of `DailyWords`.
 struct StatsPage: View {
     let report: StatsReport
     let daily: [DailyWords]
@@ -12,31 +29,31 @@ struct StatsPage: View {
             SettingsGroup(eyebrow: "WORDS") {
                 stat("Today", StatsFormat.number(report.wordsToday))
                 stat("This week", StatsFormat.number(report.wordsThisWeek), detail: "The last seven days, including today.")
-                stat("All time", StatsFormat.number(report.wordsAllTime), detail: "Across \(StatsFormat.number(report.dictationCount)) dictations.")
+                stat("All time", StatsFormat.number(report.wordsAllTime), detail: "Across \(StatsFormat.number(report.dictationCount)) \(report.dictationCount == 1 ? "take" : "takes").")
             }
             if !daily.isEmpty {
                 SettingsGroup(eyebrow: "DAILY WORDS") { DailyBars(days: daily).padding(.vertical, 8) }
             }
             SettingsGroup(
                 eyebrow: "SPEED",
-                footer: "Words per minute of speaking, from dictations of at least 5 words and 3 seconds. The average is total words over total speaking time."
+                footer: "Words per minute of speaking time, from takes of at least 5 words and 3 seconds. The average is total words over total speaking time."
             ) {
                 stat("Average speed", StatsFormat.wpm(report.averageWPM))
                 stat("Best speed", StatsFormat.wpm(report.bestWPM))
             }
             SettingsGroup(eyebrow: "STREAK") {
-                stat("Current streak", StatsFormat.days(report.currentStreakDays), detail: "Days in a row with at least one dictation.")
+                stat("Current streak", StatsFormat.days(report.currentStreakDays), detail: "Days in a row with at least one take. It carries through today if you haven't dictated yet.")
                 stat("Longest streak", StatsFormat.days(report.longestStreakDays))
             }
             SettingsGroup(eyebrow: "HIGHS") {
                 stat("Biggest day", report.biggestDay.map { "\(StatsFormat.number($0.words)) words" } ?? "None yet",
                      detail: report.biggestDay.map { StatsFormat.date($0.day) })
-                stat("Longest dictation", report.longestDictation.map { "\(StatsFormat.number($0.words)) words" } ?? "None yet",
+                stat("Longest take", report.longestDictation.map { "\(StatsFormat.number($0.words)) words" } ?? "None yet",
                      detail: report.longestDictation.map { longestDetail($0) })
             }
             SettingsGroup(
                 eyebrow: "TIME SAVED",
-                footer: "Compared with typing the same words at \(Int(report.typingWPM)) WPM. Everything here is worked out on this Mac from your own log."
+                footer: "Typing the same words at \(Int(report.typingWPM)) WPM, minus your speaking time. Everything here is worked out on this Mac from your own log."
             ) {
                 stat("Time saved", StatsFormat.duration(minutes: report.minutesSaved))
             }

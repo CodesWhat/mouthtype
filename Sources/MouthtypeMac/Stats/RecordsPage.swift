@@ -1,8 +1,24 @@
 import SwiftUI
 import MouthtypeCore
 
+/// The Records sidebar page: live bests from the model, or a plain empty state when there is no history yet.
+struct RecordsHostPage: View {
+    var model: StatsModel
+
+    var body: some View {
+        Group {
+            if let snapshot = model.snapshot, snapshot.hasHistory {
+                RecordsPage(records: snapshot.records)
+            } else {
+                SettingsGroup(eyebrow: "PERSONAL BESTS") {
+                    SettingsNote(text: model.error ?? "No records yet. Your first take sets the bar.")
+                }
+            }
+        }
+    }
+}
+
 /// The local arcade board: your own bests and the day each was set. No accounts and no online leaderboard.
-/// Standalone: the Home window hosts it later.
 struct RecordsPage: View {
     let records: ArcadeRecords
 
@@ -15,7 +31,7 @@ struct RecordsPage: View {
                 row("Fastest speaking", records.wpm.map { StatsFormat.wpm($0.value) }, setOn: records.wpm?.setOn)
                 row("Biggest day", records.biggestDay.map { "\(StatsFormat.number($0.value)) words" }, setOn: records.biggestDay?.setOn)
                 row("Longest streak", records.longestStreak.map { StatsFormat.days($0.value) }, setOn: records.longestStreak?.setOn)
-                row("Longest dictation", records.longestDictation.map { "\(StatsFormat.number($0.value.words)) words" },
+                row("Longest take", records.longestDictation.map { "\(StatsFormat.number($0.value.words)) words" },
                     setOn: records.longestDictation?.setOn, extra: StatsFormat.speaking(ms: records.longestDictation?.value.durationMs))
             }
         }

@@ -94,16 +94,27 @@ import MouthtypeCore
         reloadHome()
     }
 
-    /// The Home log is watched only while the window is open on the Home page.
+    /// The Home log and the stats are watched only while the window is open on their pages.
     func windowWillClose(_ notification: Notification) {
         model.home.deactivate()
+        model.stats.deactivate()
     }
 
     private func reloadHome() {
         let home = model.home
-        guard model.page == .home else { home.deactivate(); return }
-        home.activate()
-        home.startReload()
+        if model.page == .home {
+            home.activate()
+            home.startReload()
+        } else {
+            home.deactivate()
+        }
+        let stats = model.stats
+        if model.page == .stats || model.page == .records {
+            stats.activate()
+            stats.startReload()
+        } else {
+            stats.deactivate()
+        }
     }
 }
 
@@ -148,7 +159,7 @@ final class SettingsNSWindow: NSWindow {
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case home, general, writing, appearance, diagnostics
+    case home, stats, records, general, writing, appearance, diagnostics
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
     /// The pages under the sidebar's SETTINGS header.
@@ -164,11 +175,13 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         (focused ?? selected).moved(by: offset)
     }
     var icon: String {
-        switch self { case .home: "house"; case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
+        switch self { case .home: "house"; case .stats: "chart.bar"; case .records: "trophy"; case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
     }
     var headline: String {
         switch self {
         case .home: "Your recent takes."
+        case .stats: "Your numbers."
+        case .records: "Your personal bests."
         case .general: "A little less typing."
         case .writing: "Your words. Your way."
         case .appearance: "Clean by default. Personal by choice."
@@ -178,6 +191,8 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     var summary: String {
         switch self {
         case .home: "Everything you dictated lately, newest first. Copy it or recover it."
+        case .stats: "Words, speed, streaks and time saved, worked out on this Mac from your log."
+        case .records: "Your fastest, biggest and longest. Just for you, nothing is shared."
         case .general: "Set your shortcut, choose your cleanup, and carry on."
         case .writing: "A finish that feels right, without changing what you mean."
         case .appearance: "The same Mouthtype underneath. A different little machine when you want one."

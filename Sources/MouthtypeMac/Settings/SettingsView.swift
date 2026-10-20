@@ -22,6 +22,8 @@ struct SettingsView: View {
                 SettingsForm {
                     switch model.page {
                     case .home: HomePage(model: model.home)
+                    case .stats: StatsHostPage(model: model.stats)
+                    case .records: RecordsHostPage(model: model.stats)
                     case .general: general
                     case .writing: writing
                     case .appearance: appearance
@@ -38,6 +40,10 @@ struct SettingsView: View {
         .tint(SettingsTheme.control)
         .ignoresSafeArea()
         .frame(minWidth: SettingsTheme.minimumSize.width, minHeight: SettingsTheme.minimumSize.height)
+        .onChange(of: model.page) { _, page in
+            // The stats are watched only on their own pages. Moving between Stats and Records keeps one observation.
+            if page == .stats || page == .records { model.stats.activate(); model.stats.startReload() } else { model.stats.deactivate() }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }
     }
@@ -69,7 +75,11 @@ struct SettingsView: View {
             // With it on the list stays out of the loop, so Tab walks on into the page instead of cycling in the sidebar.
             // The flag is re-read each time the window becomes key, so toggling Keyboard navigation applies on the next focus.
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 2) { sidebarPageRow(.home) }
+                VStack(alignment: .leading, spacing: 2) {
+                    sidebarPageRow(.home)
+                    sidebarPageRow(.stats)
+                    sidebarPageRow(.records)
+                }
                 Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
                 VStack(alignment: .leading, spacing: 2) {
