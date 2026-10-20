@@ -42,18 +42,28 @@ struct HubDownloader: MLXLMCommon.Downloader {
     }
 
     /// The commit the cached snapshot is at, or nil when nothing is cached.
-    static func cachedRevision(id: String, revision: String = "main") -> String? {
-        Repo.ID(rawValue: id).flatMap { HubCache.default.resolveRevision(repo: $0, kind: .model, ref: revision) }
+    static func cachedRevision(id: String, revision: String) -> String? {
+        Repo.ID(rawValue: id).flatMap { resolveCommit(repo: $0, ref: revision) }
     }
 
-    static func isCached(id: String, revision: String = "main") -> Bool {
+    static func isCached(id: String, revision: String) -> Bool {
         guard let repo = Repo.ID(rawValue: id) else { return false }
         return completeSnapshot(repo: repo, ref: revision) != nil
     }
 
+    /// A 40-hex ref is a commit, so it names its snapshot directory directly. The hub cache only keeps ref files for branch names.
+    static func resolveCommit(repo: Repo.ID, ref: String) -> String? {
+        if isCommitHash(ref) { return ref }
+        return HubCache.default.resolveRevision(repo: repo, kind: .model, ref: ref)
+    }
+
+    static func isCommitHash(_ ref: String) -> Bool {
+        ref.count == 40 && ref.allSatisfy { $0.isASCII && $0.isHexDigit && !$0.isUppercase }
+    }
+
     private static func completeSnapshot(repo: Repo.ID, ref: String) -> URL? {
         let cache = HubCache.default
-        guard let commit = cache.resolveRevision(repo: repo, kind: .model, ref: ref),
+        guard let commit = resolveCommit(repo: repo, ref: ref),
               let snapshot = try? cache.snapshotPath(repo: repo, kind: .model, commitHash: commit)
         else { return nil }
         let fm = FileManager.default

@@ -62,9 +62,7 @@ public struct DictionaryReplacer: Sendable {
 
     /// The model cannot introduce an exact alias target without a matching source or target phrase.
     static func introducedAlias(input: String, output: String, rules: [DictionaryRule]) -> String? {
-        func key(_ phrase: String) -> String {
-            phrase.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
-        }
+        let key = PhraseKey.normalized
         let usable = rules.filter { !key($0.heard).isEmpty && !key($0.written).isEmpty }
         let hints = Set(usable.filter(\.allowsSpellingHints).map { key($0.written) })
         let exact = usable.filter { !hints.contains(key($0.written)) }

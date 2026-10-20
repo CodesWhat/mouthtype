@@ -40,7 +40,7 @@
     {
       "src": "/download/file",
       "headers": {
-        "Location": "/releases/0.1.0-rc.3/Mouthtype-0.1.0-rc.3-macos-arm64.zip",
+        "Location": "/releases/0.2.0/Mouthtype-0.2.0-macos-arm64.zip",
         "Cache-Control": "no-store"
       },
       "status": 302
@@ -48,7 +48,7 @@
     {
       "src": "/source",
       "headers": {
-        "Location": "/releases/0.1.0-rc.3/Mouthtype-0.1.0-rc.3-source.tar.gz",
+        "Location": "/releases/0.2.0/Mouthtype-0.2.0-source.tar.gz",
         "Cache-Control": "no-store"
       },
       "status": 302

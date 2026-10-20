@@ -127,6 +127,21 @@ private final class FakeEngine: DictationEngine {
     }
 }
 
+private final class SpySmart: SmartCleaning, @unchecked Sendable {
+    private let lock = NSLock()
+    private var _levels: [CleanupLevel] = []
+    var levels: [CleanupLevel] { lock.withLock { _levels } }
+    private var _takes: [String] = []
+    private var _released: [String] = []
+    var takes: [String] { lock.withLock { _takes } }
+    var released: [String] { lock.withLock { _released } }
+    func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? { nil }
+    func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult { fatalError("not used") }
+    func recordingStarted() {}
+    func recordingStarted(level: CleanupLevel, take: String) { lock.withLock { _levels.append(level); _takes.append(take) } }
+    func releasePrewarm(for take: String) { lock.withLock { _released.append(take) } }
+}
+
 private final class FakeStore: DictationStoring, @unchecked Sendable {
     let log: CallLog
     private let lock = NSLock()
@@ -490,7 +505,8 @@ private struct Rig {
         vocabulary: FakeVocabulary = FakeVocabulary(), textPipeline: TextPipeline = TextPipeline(),
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
         quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false,
-        audioRetention: AudioRetentionPolicy = AudioRetentionPolicy(), storeWriter: (any DictationStoring)? = nil
+        audioRetention: AudioRetentionPolicy = AudioRetentionPolicy(), storeWriter: (any DictationStoring)? = nil,
+        smart: (any SmartCleaning)? = nil
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -507,6 +523,7 @@ private struct Rig {
         )
         pipeline.settings = { settings }
         pipeline.appStyles = appStyles
+        pipeline.smart = smart
         pipeline.vocabulary = vocabulary
         pipeline.textPipeline = textPipeline
         pipeline.audioRetention = { audioRetention }
@@ -641,6 +658,106 @@ private struct Rig {
         #expect(off.store.insertion?.cleanup?.outcome == "skipped")
     }
 
+    @Test func appRuleLevelOffSkipsCleanupForThatTakeOnly() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: nil, level: .off)
+        let configured = styles
+        let rig = Rig(appStyles: { configured })
+        rig.engine.result.text = messy
+        await rig.dictate()
+        #expect(rig.inserter.delivered == [messy])
+        #expect(rig.store.insertion?.cleanup?.level == "off" && rig.store.insertion?.cleanup?.outcome == "skipped")
+        let plain = Rig()
+        plain.engine.result.text = messy
+        await plain.dictate()
+        #expect(plain.inserter.delivered == [cleaned])
+    }
+
+    @Test func appRuleLevelTurnsCleanupOnWhenTheGlobalLevelIsOff() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: nil, level: .basic)
+        let configured = styles
+        var settings = CleanupSettings()
+        settings.level = .off
+        let rig = Rig(settings: settings, appStyles: { configured })
+        rig.engine.result.text = messy
+        await rig.dictate()
+        #expect(rig.inserter.delivered == [cleaned])
+        #expect(rig.store.insertion?.cleanup?.level == "basic")
+    }
+
+    @Test func recordingStartPrewarmsFromTheRulesLevelNotTheGlobalOne() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.apple.Notes", appName: "Notes", style: nil, level: .medium)
+        let configured = styles
+        var settings = CleanupSettings()
+        settings.level = .off
+        let spy = SpySmart()
+        let rig = Rig(settings: settings, appStyles: { configured }, smart: spy)
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(spy.levels == [.medium])
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+
+        let plain = SpySmart()
+        let other = Rig(settings: settings, appStyles: { configured }, smart: plain)
+        other.inserter.focus = FocusSnapshot(pid: 9, bundleID: "org.example.other", appName: "Other")
+        await other.controller.handle(.pressed(at: keyDown))
+        #expect(plain.levels == [.off])
+    }
+
+    @Test func recordingStartPrewarmsAgainWhenTheWebsiteRuleNeedsAModel() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: nil, level: .basic)
+        try styles.setWebsite(domain: "slack.com", style: nil, level: .medium)
+        let configured = styles
+        let spy = SpySmart()
+        let rig = Rig(appStyles: { configured }, smart: spy)
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "work.slack.com"
+        await rig.controller.handle(.pressed(at: keyDown))
+        #expect(spy.levels == [.basic, .medium])
+        #expect(Set(spy.takes).count == 1)
+    }
+
+    @Test func theTakesPrewarmHoldEndsWithTheTakeOnEveryExit() async throws {
+        let cancelSpy = SpySmart()
+        let cancelRig = Rig(smart: cancelSpy)
+        await cancelRig.controller.handle(.pressed(at: keyDown))
+        #expect(cancelSpy.released.isEmpty)
+        await cancelRig.controller.handle(.cancelled(reason: .escape))
+        #expect(cancelSpy.released == cancelSpy.takes)
+        #expect(cancelSpy.released.count == 1)
+
+        let deliverSpy = SpySmart()
+        let deliverRig = Rig(smart: deliverSpy)
+        await deliverRig.controller.handle(.pressed(at: keyDown))
+        await deliverRig.controller.handle(.released(at: keyUp))
+        await deliverRig.controller.waitForProcessing()
+        #expect(deliverSpy.released.contains(deliverSpy.takes[0]))
+    }
+
+    @Test func websiteRuleLevelBeatsTheAppRuleLevel() async throws {
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: nil, level: .basic)
+        try styles.setWebsite(domain: "slack.com", style: nil, level: .off)
+        let configured = styles
+        let rig = Rig(appStyles: { configured })
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "work.slack.com"
+        rig.engine.result.text = messy
+        await rig.dictate()
+        #expect(rig.inserter.delivered == [messy])
+        #expect(rig.store.insertion?.cleanup?.outcome == "skipped")
+        let app = Rig(appStyles: { configured })
+        app.inserter.focus.bundleID = "com.google.Chrome"
+        app.inserter.website = "example.org"
+        app.engine.result.text = messy
+        await app.dictate()
+        #expect(app.inserter.delivered == [cleaned])
+        #expect(app.store.insertion?.cleanup?.level == "basic")
+    }
+
     @Test func theCleanedTextIsDeliveredAndStored() async throws {
         let rig = Rig()
         rig.engine.result.text = messy
@@ -735,6 +852,16 @@ private struct Rig {
         #expect(rig.inserter.delivered == [messy])
         #expect(rig.store.insertion?.cleanup?.outcome == "timeout")
         #expect(rig.store.insertion?.detText == messy)
+    }
+
+    @Test func slowCleanupStillDropsTheGuardedTag() async throws {
+        let rig = Rig(textPipeline: TextPipeline(numberFormatter: SlowNumbers()))
+        rig.engine.result.text = "[MUSIC] ship it"
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["ship it"])
+        #expect(rig.store.insertion?.cleanup?.outcome == "timeout")
+        #expect(rig.store.transcription?.rawText == "[MUSIC] ship it")
+        #expect(rig.store.insertion?.detText == "ship it")
     }
 
     @Test func aDictationOfOnlyFillersEndsAsEmpty() async {
@@ -1138,6 +1265,29 @@ private final class FakeCorrections: CorrectionObserving {
         rig.clock.advance(by: 10)
         await rig.settle()
         #expect(rig.log.all.filter { $0 == "card.dismiss" }.count == dismissals)
+    }
+
+    @Test func undoWorksWhileAnEarlierDictationIsStillProcessing() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        rig.engine.texts = ["First one.", "Second one."]
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.pressed(at: keyUp + 1))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        #expect(rig.controller.phase == .processing)
+
+        let undo = Task { await rig.controller.undoCancel() }
+        await rig.settle()
+        // Queued behind the first take: nothing reopened or delivered yet, and the audio is no longer pending.
+        #expect(rig.inserter.delivered.isEmpty && rig.store.reopens == 0)
+
+        rig.engine.releaseHeld()
+        await undo.value
+        await rig.controller.waitForProcessing()
+        #expect(rig.store.reopens == 1)
+        #expect(rig.inserter.delivered == ["First one.", "Second one."])
     }
 
     @Test func undoDeliversToACardWhenThePasteCannotLand() async {
@@ -2003,7 +2153,7 @@ private final class SlowCapture: DictationCapturing {
         #expect(rig.pill.messages.last?.detail == "No audio could be recovered")
     }
 
-    @Test(arguments: ["archive", "recordCapture", "finish"])
+    @Test(arguments: ["archive", "recordCapture"])
     func terminationRefusesFailedPreservationAndRetriesTheRetainedAudioWithoutStoppingTwice(failure: String) async {
         let archive = RetryArchive()
         let rig = Rig(archive: archive)
@@ -2019,7 +2169,7 @@ private final class SlowCapture: DictationCapturing {
         #expect(await rig.controller.prepareForTermination())
         #expect(archive.attempts == 2)
         #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
-        #expect(rig.store.finishes.last?.0 == .failed)
+        #expect(rig.store.finishes.isEmpty)
     }
 
     @Test func terminationPreservesTheWholeActiveTakeBeforeTheFirstPartialFlush() async throws {
@@ -2034,8 +2184,8 @@ private final class SlowCapture: DictationCapturing {
         #expect(await rig.controller.prepareForTermination())
         #expect(try archive.read(id: id).count == capturedTone().samples.count)
         let row = try #require(try store.dictation(id: id))
-        #expect(row.status == .failed && row.audioPath == archive.url(for: id).path)
-        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(-1)).map(\.id) == [id])
+        #expect(row.status == .recorded && row.audioPath == archive.url(for: id).path)
+        #expect(try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(60)).map(\.id) == [id])
         #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 1)
         #expect(!rig.log.contains("engine.transcribe") && rig.inserter.delivered.isEmpty)
         #expect(rig.log.contains("audio.restore"))
@@ -2043,6 +2193,26 @@ private final class SlowCapture: DictationCapturing {
         await rig.controller.handle(.pressed(at: keyDown + 1))
         #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
         #expect(rig.clock.sleeperCount == 0)
+    }
+
+    @Test func aTakeCutOffByQuitIsOfferedByTheNextLaunchScanAndThenEnded() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-quit-relaunch-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("history.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let rig = Rig(archive: archive, quietAudio: true, storeWriter: TranscriptStoreWriter(store: store))
+        await rig.controller.handle(.pressed(at: keyDown))
+        let id = try #require(try store.unfinished(from: .distantPast, before: .distantFuture).first?.id)
+        #expect(await rig.controller.prepareForTermination())
+
+        let relaunch = FakeClock.wall.addingTimeInterval(60)
+        let scan = try DictationRecovery.scan(store: store, archive: archive, now: relaunch, launchedAt: relaunch)
+
+        #expect(scan.newest?.id == id && scan.olderCount == 0 && scan.lostCount == 0)
+        let row = try #require(try store.dictation(id: id))
+        #expect(row.status == .failed && row.errorMessage == DictationRecovery.interruptedMessage)
+        let again = try DictationRecovery.scan(store: store, archive: archive, now: relaunch, launchedAt: relaunch)
+        #expect(again.newest == nil)
     }
 
     @Test(arguments: ["archive", "recordCapture"])
@@ -2150,10 +2320,10 @@ private final class SlowCapture: DictationCapturing {
         await rig.controller.handle(.pressed(at: keyUp + 3))
         #expect(await rig.controller.prepareForTermination())
         let beforeRestart = try store.unfinished(from: .distantPast, before: .distantFuture)
-        #expect(beforeRestart.count == 2 && beforeRestart.allSatisfy { $0.audioPath != nil })
+        #expect(beforeRestart.count == 3 && beforeRestart.allSatisfy { $0.audioPath != nil })
         rig.engine.releaseHeld()
         await rig.controller.waitForProcessing()
-        let saved = try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(-1))
+        let saved = try DictationRecovery.saved(store: store, archive: archive, now: FakeClock.wall, launchedAt: FakeClock.wall.addingTimeInterval(60))
         #expect(saved.count == 3)
         for item in saved { #expect(try archive.read(id: item.id).count == capturedTone().samples.count) }
         #expect(rig.engine.samplesSeen.count == 1 && rig.inserter.delivered.isEmpty)
@@ -2171,7 +2341,7 @@ private final class SlowCapture: DictationCapturing {
         rig.engine.releaseHeld()
         await rig.controller.waitForProcessing()
         #expect(rig.inserter.delivered.isEmpty)
-        #expect(rig.store.finishes.last?.0 == .failed)
+        #expect(rig.store.finishes.isEmpty)
     }
 
     @Test func terminationDuringCaptureStartupWaitsForRegistrationAndKeepsTheTail() async throws {

@@ -24,7 +24,7 @@ struct SpellingImportView: View {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             ForEach(preview.rows) { row in
                                 columns(row: String(row.id), heard: row.rule.heard, written: row.rule.written,
-                                    result: row.status.label, invalid: isInvalid(row.status))
+                                    result: row.status.label, invalid: isInvalid(row.status), warning: row.everydayWarning)
                                     .padding(.vertical, 10)
                                 Divider()
                             }
@@ -52,12 +52,15 @@ struct SpellingImportView: View {
         }.background(Color(nsColor: .windowBackgroundColor))
     }
 
-    private func columns(row: String, heard: String, written: String, result: String, invalid: Bool = false) -> some View {
+    private func columns(row: String, heard: String, written: String, result: String, invalid: Bool = false, warning: String? = nil) -> some View {
         HStack(alignment: .top, spacing: 14) {
             Text(row).monospacedDigit().frame(width: 30, alignment: .leading).foregroundStyle(.secondary)
             Text(heard.isEmpty ? "Blank" : heard).frame(maxWidth: .infinity, alignment: .leading)
             Text(written.isEmpty ? "Blank" : written).frame(maxWidth: .infinity, alignment: .leading)
-            Text(result).foregroundStyle(invalid ? Color.red : Color.secondary).frame(width: 175, alignment: .leading)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(result).foregroundStyle(invalid ? Color.red : Color.secondary)
+                if let warning { Text(warning).font(.caption).foregroundStyle(.orange) }
+            }.frame(width: 175, alignment: .leading)
         }.fixedSize(horizontal: false, vertical: true)
     }
 

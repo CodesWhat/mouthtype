@@ -157,6 +157,20 @@ private struct Rig {
         #expect(!rig.watcher.isWatching)
     }
 
+    @Test func aFieldOverTheLearnerCapIsNeverWatchedAndStopsWhenItGrowsPastIt() {
+        var rig = Rig()
+        rig.reader.value = String(repeating: "a", count: CorrectionLearner.maxFieldCharacters + 2)
+        rig.paste()
+        #expect(!rig.watcher.isWatching && rig.traces.last == "not watching: field too large")
+
+        rig = Rig()
+        rig.paste()
+        #expect(rig.watcher.isWatching)
+        rig.reader.value = String(repeating: "a", count: CorrectionLearner.maxFieldCharacters + 2)
+        rig.step(0.5)
+        #expect(!rig.watcher.isWatching && rig.traces.last?.hasPrefix("stopped: field too large") == true)
+    }
+
     @Test func withTheSettingOffNothingIsReadAtAll() {
         let rig = Rig(enabled: false)
         rig.paste()

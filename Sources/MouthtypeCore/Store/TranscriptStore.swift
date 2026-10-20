@@ -7,6 +7,13 @@ public enum TranscriptStoreError: Error, Equatable {
     case notCancelled(DictationStatus)
 }
 
+/// Stops a `TranscriptStore.observeRecentTakes` observation when cancelled or released.
+public final class TakesObservation: @unchecked Sendable {
+    private let cancellable: AnyDatabaseCancellable
+    fileprivate init(_ cancellable: AnyDatabaseCancellable) { self.cancellable = cancellable }
+    public func cancel() { cancellable.cancel() }
+}
+
 public final class TranscriptStore: Sendable {
     let pool: DatabasePool
 
@@ -148,7 +155,7 @@ public final class TranscriptStore: Sendable {
             ("asr_confidence", t.confidence.map { Double($0) }), ("language", record.language),
             ("word_timings_json", timings), ("boost_terms_applied_json", boost),
             ("asr_done_ms", record.asrDoneMs), ("speech_onset_ms", record.speechOnsetMs),
-            ("raw_text", record.rawText), ("words_raw", Self.wordCount(record.rawText)),
+            ("raw_text", record.rawText), ("words_raw", TextMetrics.wordCount(record.rawText)),
         ])
     }
 
@@ -157,7 +164,7 @@ public final class TranscriptStore: Sendable {
         var columns: [(String, (any DatabaseValueConvertible)?)] = [
             ("status", DictationStatus.inserted),
             ("final_text", record.finalText), ("det_text", record.detText),
-            ("words_final", Self.wordCount(record.finalText)), ("chars_final", record.finalText.count),
+            ("words_final", TextMetrics.wordCount(record.finalText)), ("chars_final", record.finalText.count),
             ("cleaner_id", cleanup?.cleanerID), ("cleaner_rev", cleanup?.cleanerRev),
             ("cleanup_level", cleanup?.level), ("style", cleanup?.style), ("cleanup_ms", cleanup?.ms),
             ("cleanup_outcome", cleanup?.outcome), ("prompt_sha", cleanup?.promptSha),
@@ -327,6 +334,28 @@ public final class TranscriptStore: Sendable {
         }
     }
 
+    /// The newest takes with usable text, secure-field rows excluded, filtered in SQL so the limit is the row count.
+    public func recentTakes(limit: Int) throws -> [DictationRecord] {
+        try pool.read { db in try Self.fetchRecentTakes(db, limit: limit) }
+    }
+
+    private static func fetchRecentTakes(_ db: Database, limit: Int) throws -> [DictationRecord] {
+        try DictationRecord.fetchAll(db, sql: """
+            SELECT * FROM dictation
+            WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0
+            ORDER BY started_at DESC LIMIT ?
+            """, arguments: [limit])
+    }
+
+    /// Calls `onChange` on the main queue now and again whenever the dictation table changes: a new take, a status
+    /// change, or audio saved, expired or purged. Reads happen off the main thread.
+    public func observeRecentTakes(limit: Int, onError: @escaping @Sendable (Error) -> Void,
+                                   onChange: @escaping @Sendable ([DictationRecord]) -> Void) -> TakesObservation {
+        let observation = ValueObservation.tracking { db in try Self.fetchRecentTakes(db, limit: limit) }
+        let cancellable = observation.start(in: pool, scheduling: .async(onQueue: .main), onError: onError, onChange: onChange)
+        return TakesObservation(cancellable)
+    }
+
     public func lastTranscript() throws -> String? {
         try pool.read { db in
             try String.fetchOne(db, sql: """
@@ -381,10 +410,6 @@ public final class TranscriptStore: Sendable {
 
     static let wpmSampleSize = 100
     static let wpmMaxAudioMs = 400_000
-
-    public static func wordCount(_ text: String) -> Int {
-        text.split(whereSeparator: \.isWhitespace).count
-    }
 
     // MARK: Internals
 

@@ -10,19 +10,22 @@ import MouthtypeCore
     private let refreshDiagnostics: () -> Void
     private let actions: SettingsActions
     private let reduceTransparency: () -> Bool
+    private let fullKeyboardAccess: @MainActor () -> Bool
     private let notifications: NotificationCenter
     private nonisolated(unsafe) var transparencyObserver: NSObjectProtocol?
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
     init(model: SettingsModel, actions: SettingsActions = SettingsActions(),
          reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+         fullKeyboardAccess: @escaping @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess,
          notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
         self.model = model
+        self.fullKeyboardAccess = fullKeyboardAccess
         self.actions = actions
         self.reduceTransparency = reduceTransparency
         self.notifications = notifications
         refreshDiagnostics = actions.refreshDiagnostics
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+        let window = SettingsNSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Mouthtype Settings"
         window.titlebarAppearsTransparent = true
@@ -46,7 +49,7 @@ import MouthtypeCore
     private func applyContent() {
         guard let window else { return }
         let solid = reduceTransparency()
-        let hosting = NSHostingView(rootView: SettingsView(model: model, actions: actions, solid: solid))
+        let hosting = NSHostingView(rootView: SettingsView(model: model, actions: actions, solid: solid, fullKeyboardAccess: fullKeyboardAccess))
         hosting.sizingOptions = []
         if solid {
             window.backgroundColor = .windowBackgroundColor
@@ -78,6 +81,7 @@ import MouthtypeCore
         if let page { model.page = page }
         refreshDiagnostics()
         model.refresh()
+        reloadHome()
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -87,24 +91,84 @@ import MouthtypeCore
         startObservingTransparency()
         refreshDiagnostics()
         model.refresh()
+        reloadHome()
+    }
+
+    /// The Home log is watched only while the window is open on the Home page.
+    func windowWillClose(_ notification: Notification) {
+        model.home.deactivate()
+    }
+
+    private func reloadHome() {
+        let home = model.home
+        guard model.page == .home else { home.deactivate(); return }
+        home.activate()
+        home.startReload()
+    }
+}
+
+/// The Settings window. The app runs without a main menu, so nothing supplies Cmd-W; handle it here.
+final class SettingsNSWindow: NSWindow {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        if event.type == .keyDown, flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
+            performClose(nil)
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    /// Shift-Tab. SwiftUI links the hosted controls forward only, so AppKit's own backward walk skips from a page control to the
+    /// end of the window. Step back through the forward Tab order instead, which is the order Tab already follows.
+    override func selectKeyView(preceding view: NSView) {
+        guard let previous = SettingsKeyLoop.previous(of: view, in: contentView) else { return super.selectKeyView(preceding: view) }
+        makeFirstResponder(previous)
+    }
+}
+
+/// The Settings window's Tab order, walked forward from the content view.
+@MainActor enum SettingsKeyLoop {
+    static func order(in root: NSView?) -> [NSView] {
+        guard let root else { return [] }
+        var views: [NSView] = []
+        var current = root.nextValidKeyView
+        while let view = current, view !== root, !views.contains(where: { $0 === view }) {
+            views.append(view)
+            current = view.nextValidKeyView
+        }
+        return views
+    }
+
+    /// The control before `view` in Tab order, wrapping from the first to the last. Nil when `view` is not in the loop.
+    static func previous(of view: NSView, in root: NSView?) -> NSView? {
+        let order = order(in: root)
+        guard let index = order.firstIndex(where: { $0 === view }), !order.isEmpty else { return nil }
+        return order[(index - 1 + order.count) % order.count]
     }
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, writing, appearance, diagnostics
+    case home, general, writing, appearance, diagnostics
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
+    /// The pages under the sidebar's SETTINGS header.
+    static let settingsPages: [SettingsPage] = [.general, .writing, .appearance, .diagnostics]
     /// The page `offset` rows away, stopping at the first and last pages.
     func moved(by offset: Int) -> SettingsPage {
         let pages = Self.allCases
         let index = pages.firstIndex(of: self) ?? 0
         return pages[min(max(index + offset, 0), pages.count - 1)]
     }
+    /// Arrow keys step from the focused sidebar row when there is one, else from the selected page.
+    static func arrowTarget(focused: SettingsPage?, selected: SettingsPage, offset: Int) -> SettingsPage {
+        (focused ?? selected).moved(by: offset)
+    }
     var icon: String {
-        switch self { case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
+        switch self { case .home: "house"; case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
     }
     var headline: String {
         switch self {
+        case .home: "Your recent takes."
         case .general: "A little less typing."
         case .writing: "Your words. Your way."
         case .appearance: "Clean by default. Personal by choice."
@@ -113,6 +177,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     }
     var summary: String {
         switch self {
+        case .home: "Everything you dictated lately, newest first. Copy it or recover it."
         case .general: "Set your shortcut, choose your cleanup, and carry on."
         case .writing: "A finish that feels right, without changing what you mean."
         case .appearance: "The same Mouthtype underneath. A different little machine when you want one."

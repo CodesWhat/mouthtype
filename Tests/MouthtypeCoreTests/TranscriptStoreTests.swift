@@ -17,6 +17,18 @@ import Testing
         #expect(try store.lastTranscript() == "Keep this text")
     }
 
+    @Test func recentTakesFiltersInSqlAndHonoursTheLimit() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        for n in 0..<8 {
+            let id = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(Double(n))))
+            let text = n == 7 ? "   " : "take \(n)"
+            try store.recordInsertion(id, InsertionRecord(finalText: text, target: DictationTarget(isSecure: n == 6 ? true : nil)))
+        }
+        let takes = try store.recentTakes(limit: 3)
+        #expect(takes.map(\.finalText) == ["take 5", "take 4", "take 3"])
+    }
+
     private static let utc = TimeZone(identifier: "UTC")!
     /// 2026-10-12 12:00:00 UTC
     private static let noon = Date(timeIntervalSince1970: 1_791_806_400)
@@ -357,10 +369,5 @@ import Testing
         #expect(try store.recent(limit: 10).map(\.id) == [next])
         #expect(try store.stats(now: Self.noon, timeZone: Self.utc).wordsToday == 3)
         #expect(try store.dictation(id: stale)?.status == .started)
-    }
-
-    @Test func wordCountSplitsOnWhitespace() {
-        #expect(TranscriptStore.wordCount("  one  two\nthree\tfour ") == 4)
-        #expect(TranscriptStore.wordCount("") == 0)
     }
 }

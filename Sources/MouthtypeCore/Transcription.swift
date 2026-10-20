@@ -21,6 +21,7 @@ public struct Transcription: Sendable, Codable, Equatable {
     public var processingSeconds: Double  // wall time of the engine call, measured here with ContinuousClock
     public var engineID: String
     public var modelRevision: String?     // model repo/variant identifier; nil when the engine exposes none
+    public var boostTermsApplied: [String]?   // saved spellings vocabulary boosting wrote into the text; nil when none
 
     public init(
         text: String,
@@ -28,7 +29,8 @@ public struct Transcription: Sendable, Codable, Equatable {
         confidence: Float? = nil,
         processingSeconds: Double,
         engineID: String,
-        modelRevision: String? = nil
+        modelRevision: String? = nil,
+        boostTermsApplied: [String]? = nil
     ) {
         self.text = text
         self.words = words
@@ -36,5 +38,6 @@ public struct Transcription: Sendable, Codable, Equatable {
         self.processingSeconds = processingSeconds
         self.engineID = engineID
         self.modelRevision = modelRevision
+        self.boostTermsApplied = boostTermsApplied
     }
 }

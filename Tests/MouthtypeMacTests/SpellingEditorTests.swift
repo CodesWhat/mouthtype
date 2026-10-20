@@ -33,6 +33,18 @@ import MouthtypeCore
         #expect(try store.allRules().isEmpty)
     }
 
+    @Test func everydayHeardFormWarnsButStillSaves() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let editor = SpellingEditor(store: store)
+        editor.heard = "win"
+        editor.written = "Nguyen"
+        #expect(editor.everydayWarning?.contains("everyday word") == true)
+        #expect(editor.canSave)
+        editor.heard = "shivon"
+        #expect(editor.everydayWarning == nil)
+    }
+
     @Test func draftAndLibrarySurviveOutsideChanges() throws {
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }

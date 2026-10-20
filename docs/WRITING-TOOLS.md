@@ -2,9 +2,9 @@
 
 Browser/device coverage and remaining physical acceptance limits are described below.
 
-## Website tone
+## Website rules
 
-Settings → Writing has a Website tone section. Add an ASCII domain such as `slack.com` and choose the existing Formal, Casual or Very Casual presentation. The rule also matches subdomains. The most specific matching domain wins, followed by the app rule, then the default. Tone changes capitalization and ending punctuation; it does not add a freeform rewrite prompt or change the cleanup level.
+Settings → Writing has a Website rules section. Add an ASCII domain such as `slack.com` and choose a tone (the existing Formal, Casual or Very Casual presentation), a cleanup level (Off, Basic, Fast or Thorough) or both. The rule also matches subdomains. The most specific matching domain wins, followed by the app rule, then the default. Tone changes capitalization and ending punctuation, and Formal removes or softens swearing at Basic, Fast and Thorough (Off bypasses cleanup): exclamations, emphasis and dismissals like "fuck off" are dropped, and swear nouns and verbs become a plain word ("asshole" becomes "jerk"); it does not add a freeform rewrite prompt. A rule’s cleanup level replaces the General level for takes on that site, and a field left on Use default falls back to the app rule, then the default. A level that needs a model that isn’t installed runs as Basic.
 
 Safari, Chrome, Edge and Brave are eligible when their focused window exposes its document URL through macOS Accessibility. An unsupported or unavailable URL uses the app/default style. Password fields and secure input are excluded. No history, address-bar scraping, AppleScript or additional browser permissions are used. Only HTTP/HTTPS hosts participate; local files do not. The URL lookup runs after capture starts and only when website rules exist. The selected style stays with that take. Document URLs used by these rules are not stored or logged.
 
@@ -25,3 +25,11 @@ Select text in an accessible editable field, then choose **Clean Selected Text�
 **Accept** requests replacement of that exact original selection through Accessibility. The app, field, selection range and selected text must still match. Password fields and secure input are excluded. Unsupported or changed selections keep the result available through **Copy result**. There is no automatic clipboard paste, key event, retry or fallback to a different field. One accepted request disables another submission. API acceptance is reported as a replacement request, not verified insertion.
 
 The limit is 16,000 UTF-16 units. Original and preview text stay in memory until the panel closes; they are not added to dictation history or written to disk. Pending update installation waits until the preview is closed. Dictation, recovery, file jobs and update installation block preparation/acceptance while active. Automated/offscreen checks do not replace coordinated real-app replacement testing.
+
+## AI transforms for selected text
+
+Choose **Transform Selected Text** in Mouthtype's menu, or **Transform** in the Clean Selected Text preview, then pick Fix grammar, Make shorter, Make more formal or Make more casual. The local Thorough cleanup model (Gemma 4 E4B) runs the one instruction on your selection. Nothing leaves the Mac and there is no free-form prompt.
+
+The result opens in the same editable preview. **Accept** uses the same guarded replacement as Basic cleanup (app, field, range and text must still match), **Retry** reruns the transform, **Cancel** drops it. There is no automatic paste and no whole-field replacement. After Accept, press Cmd-Z in the original app to undo, or use **Copy original**. Whether Cmd-Z restores the text depends on the target app, since the edit goes through Accessibility.
+
+Without the downloaded Thorough model the transforms are disabled and the menu says why. Download it in Settings. S1-mini does not run transforms.

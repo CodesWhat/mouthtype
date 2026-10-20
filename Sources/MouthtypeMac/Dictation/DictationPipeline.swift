@@ -8,6 +8,8 @@ struct DictationSession: Sendable {
     var keyDownAt: UInt64 // host nanoseconds (`HostClock`)
     var startFocus: FocusSnapshot?
     var cleanupStyle: StyleOptions?
+    /// A rule's cleanup level; nil uses the global one.
+    var cleanupLevel: CleanupLevel?
     /// False when the store is missing or `begin` failed; later writes are then skipped.
     var rowOpen = false
 }
@@ -55,6 +57,7 @@ struct DictationPipeline: Sendable {
 
     var audioRetention: @Sendable () -> AudioRetentionPolicy = { AudioRetentionPreference.load() }
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
+    var boostSavedWords: @Sendable () -> Bool = { VocabularyBoostSetting.isEnabled() }
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
     var appStyles: @Sendable () -> AppCleanupStyles = { (try? AppCleanupStyles.load()) ?? AppCleanupStyles() }
     var textPipeline = TextPipeline()
@@ -64,8 +67,9 @@ struct DictationPipeline: Sendable {
         Log.cleaner.info("\(message, privacy: .public)")
     }
 
-    /// Cleanup slower than this is thrown away and the raw text goes out.
+    /// Cleanup slower than this is thrown away and the guarded text (after TranscriptGuard, before cleanup) goes out.
     static let cleanupBudgetMs = 50.0
+    var cleanupBudget = Self.cleanupBudgetMs
 
     func begin(_ session: DictationSession, target: DictationTarget) async -> Bool {
         let version = ProcessInfo.processInfo.operatingSystemVersion
@@ -133,11 +137,9 @@ struct DictationPipeline: Sendable {
             return true
         }
         let capture = await recordCaptureAndArchive(audio, session: session, keyUpMs: keyUpMs)
-        guard capture.durable else { return false }
-        guard store != nil, session.rowOpen else { return true }
-        return await write(session, "finish") { store in
-            try await store.finish(session.id, status: .failed, errorMessage: DictationRecovery.interruptedMessage)
-        }
+        // The row stays `recorded` on purpose: the next launch's scan only offers unfinished rows, and it ends
+        // the row as failed ("interrupted") itself once it has offered it.
+        return capture.durable
     }
 
     func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
@@ -175,6 +177,9 @@ struct DictationPipeline: Sendable {
             return nil
         }
         let trimmed = SilenceTrimmer.trim(audio.samples)
+        await engine.setVocabularyBias(
+            VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary())
+        )
         let transcription = try await engine.transcribe(samples: trimmed.samples)
         let asrDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
 
@@ -190,10 +195,11 @@ struct DictationPipeline: Sendable {
         let onset = shifted.words.first.map { Int(((audio.firstSampleMs ?? 0) + $0.start * 1000).rounded()) }
         await write(session, "recordTranscription") { store in
             try await store.recordTranscription(session.id, TranscriptionRecord(
-                transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset
+                transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset,
+                boostTerms: transcription.boostTermsApplied
             ))
         }
-        let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: settings().enabled)
+        let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)
         guard !guarded.isEmpty else {
             if !guarded.edits.isEmpty { await write(session, "appendEdits") { try await $0.appendEdits(session.id, guarded.edits) } }
             await finish(session, .empty)
@@ -210,14 +216,15 @@ struct DictationPipeline: Sendable {
         return styles.resolve(bundleID: bundleID, websiteHost: websiteHost, fallback: settings().style)
     }
 
-    func cleanupInputs(style: StyleOptions? = nil) -> CleanupInputs {
+    func cleanupInputs(style: StyleOptions? = nil, level: CleanupLevel? = nil) -> CleanupInputs {
         var chosen = settings()
         if let style { chosen.style = style }
+        if let level { chosen.level = level }
         return CleanupInputs(settings: chosen, dictionary: vocabulary.dictionary(), snippets: vocabulary.snippets(), now: clock.now())
     }
 
     /// The cleanup. The deterministic pass cannot lose a dictation: past the time budget, or when it leaves nothing
-    /// for text that had words, the raw text is delivered instead. At light and medium the local model then works on
+    /// for text that had words, the guarded text is delivered instead. At light and medium the local model then works on
     /// its output, and anything it does wrong delivers the deterministic text. `context` and `clipboard` are used
     /// here and dropped.
     func clean(
@@ -238,17 +245,34 @@ struct DictationPipeline: Sendable {
         let spoken = phrases.matchingTriggers(in: transcribed.text)
         var options = settings.pipelineOptions
         options.snippets = false
+        // Swearing removal must not cut into a saved spelling's heard form (even one waiting for the model to join it)
+        // or a snippet trigger heard in the text.
+        // The same goes for written spellings and snippet text, which the fallback passes run without the dictionary.
+        let snippetsOn = settings.pipelineOptions.snippets
+        let protectedPhrases = inputs.dictionary.flatMap { [$0.heard, $0.written] }
+            + (snippetsOn ? inputs.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
+        let protectedWords = inputs.dictionary.map(\.written) + (snippetsOn ? inputs.snippets.map(\.expansion) : [])
+
+        /// A take delivered as heard still loses its swearing.
+        func asHeard(_ text: String) -> TextPipelineResult {
+            guard options.profanity, options.style == .formal else { return TextPipelineResult(text: text) }
+            var only = TextPipelineOptions.none
+            only.profanity = true
+            only.style = options.style
+            return textPipeline.run(TextPipelineInput(text: text, options: only, protectedPhrases: protectedPhrases, protectedWords: protectedWords))
+        }
 
         func deterministic(_ dictionary: [DictionaryRule], startedAt start: ContinuousClock.Instant)
             -> (result: TextPipelineResult, expanded: StageResult, expected: [String], ms: Double) {
             var result = textPipeline.run(TextPipelineInput(
                 text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
-                now: inputs.now, clipboard: clipboard, options: options
+                now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases,
+                protectedWords: protectedWords
             ))
             // Cleanup may remove a filler or format a number that is part of a saved trigger.
             // Keep the spoken trigger intact rather than silently losing its replacement.
             if !spoken.isEmpty, phrases.matchingTriggers(in: result.text) != spoken {
-                result = TextPipelineResult(text: transcribed.text)
+                result = asHeard(transcribed.text)
             }
             let expanded = phrases.apply(result.text)
             let expected = phrases.matchingTriggers(in: result.text)
@@ -263,10 +287,11 @@ struct DictationPipeline: Sendable {
             cleanerID: Self.cleanerID, level: CleanupLevel.basic.rawValue, style: settings.styleName,
             ms: Int(ms.rounded()), outcome: "ok"
         )
-        if ms > Self.cleanupBudgetMs {
-            Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the raw text")
+        if ms > cleanupBudget {
+            Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the guarded text")
             record.outcome = "timeout"
-            return CleanedDictation(text: transcribed.rawText, edits: transcribed.guardEdits, cleanup: record)
+            let heard = asHeard(transcribed.text)
+            return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
         }
         for note in result.notes { Log.app.info("cleanup note: \(note, privacy: .public)") }
         let edits = transcribed.guardEdits + result.edits
@@ -278,16 +303,18 @@ struct DictationPipeline: Sendable {
         }
         guard let delivery = await smart.runReady(SmartCleanupRequest(
             text: result.text, level: level, style: settings.style, destination: destination,
-            dictionary: inputs.dictionary, snippets: [], context: context, appName: appName
+            dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
+            protectedPhrases: protectedPhrases
         ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
             if dictionary.count != inputs.dictionary.count {
                 let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
                 let totalMs = ms + fallback.ms
                 record.ms = Int(totalMs.rounded())
-                if totalMs > Self.cleanupBudgetMs {
-                    Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the raw text")
+                if totalMs > cleanupBudget {
+                    Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
                     record.outcome = "timeout"
-                    return CleanedDictation(text: transcribed.rawText, edits: transcribed.guardEdits, cleanup: record)
+                    let heard = asHeard(transcribed.text)
+                    return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
                 }
                 return CleanedDictation(text: fallback.expanded.text,
                     edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)

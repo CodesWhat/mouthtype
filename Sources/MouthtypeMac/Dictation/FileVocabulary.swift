@@ -152,7 +152,7 @@ final class FileVocabulary: VocabularyProviding, Sendable {
     }
 
     static func heardKey(_ text: String) -> String {
-        text.split(whereSeparator: \.isWhitespace).joined(separator: " ").lowercased()
+        PhraseKey.normalized(text)
     }
 
     static func validationMessage(heard: String, written: String) -> String? {

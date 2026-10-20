@@ -100,6 +100,7 @@ import Testing
         var engine = lockedEngine()
         #expect(engine.process(KeyEvent(key: .escape, modifiers: []), now: at(5)) == .cancelled(.escape))
         #expect(!engine.isRecording && !engine.isLocked)
+        #expect(engine.process(fnDown, now: at(6)) == .pressed)
     }
 
     @Test func slowSecondTapOutsideTheWindowDoesNotLock() {

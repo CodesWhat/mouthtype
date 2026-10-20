@@ -70,7 +70,8 @@ final class CrashRecovery {
         isRecovering = true
         defer { isRecovering = false; onFinished?() }
         offered = nil
-        let session = DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: true)
+        // A finished take keeps its row as it was: a closed session turns every store write into a no-op.
+        let session = DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: !item.isCompleted)
         pill.showProcessing()
         do {
             let url = item.audioURL
@@ -125,6 +126,12 @@ final class CrashRecovery {
         }.value
     }
 
+    /// The kept audio behind finished takes, for the Home log.
+    func loadCompletedRecordings(for rows: [DictationRecord]) async -> [RecoverableDictation] {
+        let now = clock.now()
+        return await Task.detached { DictationRecovery.completed(rows: rows, now: now) }.value
+    }
+
     func savedRecordings() throws -> [RecoverableDictation] {
         try DictationRecovery.saved(store: store, archive: archive, now: clock.now(), launchedAt: launchedAt)
     }
@@ -149,7 +156,7 @@ final class CrashRecovery {
         guard let item = offered else { return }
         offered = nil
         await pipeline.finish(
-            DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: true), .cancelled
+            DictationSession(id: item.id, startedAt: item.startedAt, keyDownAt: clock.nowNanos(), rowOpen: !item.isCompleted), .cancelled
         )
         onFinished?()
     }

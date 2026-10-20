@@ -38,10 +38,13 @@ protocol DictationEngine: AnyObject, Sendable {
     var readiness: EngineReadiness { get }
     func transcribe(samples: [Float]) async throws -> Transcription
     func preview(samples: [Float]) async throws -> String?
+    func setVocabularyBias(_ bias: VocabularyBias?) async
 }
 
 extension DictationEngine {
     func preview(samples: [Float]) async throws -> String? { nil }
+    /// Engines without a recognition-time hook ignore the bias.
+    func setVocabularyBias(_ bias: VocabularyBias?) async {}
 }
 
 /// Every write is async so a real store keeps its blocking database calls off the main actor.
@@ -198,6 +201,11 @@ final class HostEngine: DictationEngine {
     func transcribe(samples: [Float]) async throws -> Transcription {
         guard let engine = host.engine else { throw EngineError.notPrepared(id: EngineHost.defaultEngineID) }
         return try await engine.transcribe(samples: samples)
+    }
+
+    func setVocabularyBias(_ bias: VocabularyBias?) async {
+        guard let biasing = host.engine as? any VocabularyBiasing else { return }
+        await biasing.setVocabularyBias(bias)
     }
 
     func preview(samples: [Float]) async throws -> String? {

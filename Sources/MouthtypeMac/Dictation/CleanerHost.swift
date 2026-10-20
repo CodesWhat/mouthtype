@@ -23,6 +23,11 @@ protocol SmartCleaning: Sendable {
     func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult
     /// A recording began: load the model now so the first cleanup doesn't wait for it.
     func recordingStarted()
+    /// The same, for a take whose rules resolve to `level` rather than the global one. The model stays demanded until
+    /// `releasePrewarm(for:)`, and a second call for the same take replaces the level.
+    func recordingStarted(level: CleanupLevel, take: String)
+    /// The take's cleanup finished, or the take was cancelled, discarded or failed. Safe to call more than once.
+    func releasePrewarm(for take: String)
     func runReady(_ request: SmartCleanupRequest, waitingUpTo limit: Duration) async -> ReadyCleanup?
 }
 
@@ -32,6 +37,9 @@ struct ReadyCleanup: Sendable {
 }
 
 extension SmartCleaning {
+    func recordingStarted(level: CleanupLevel, take: String) { recordingStarted() }
+    func releasePrewarm(for take: String) {}
+
     func runReady(_ request: SmartCleanupRequest, waitingUpTo limit: Duration) async -> ReadyCleanup? {
         guard let model = await readiness(waitingUpTo: limit) else { return nil }
         return ReadyCleanup(model: model, result: await run(request))
@@ -134,6 +142,11 @@ final class CleanerHost: CleanupModelManaging {
         }
     }
 
+    /// Demand for this model dropped. Unloads it if the level no longer wants it; never loads.
+    func demandDropped() {
+        if !level().needsModel { unload(reason: "prewarm released") }
+    }
+
     func ensureLoaded() {
         guard state == .unloaded, loadTask == nil else { return }
         guard model.isDownloaded else {
@@ -225,21 +238,33 @@ final class CleanerHost: CleanupModelManaging {
         let clock = ContinuousClock()
         let deadline = clock.now + limit
         if state == .unloaded { ensureLoaded() }
-        while true {
+        while !Task.isCancelled {
             switch state {
             case .ready:
                 return SmartCleanerInfo(id: model.id, revision: model.revision)
             case .loading:
                 guard clock.now < deadline else { return nil }
-                try? await Task.sleep(for: .milliseconds(20))
+                do { try await Task.sleep(for: .milliseconds(20)) } catch { return nil }
             default:
                 return nil
             }
         }
+        return nil
     }
 
     nonisolated func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
         await smart.run(request)
+    }
+
+    /// Runs one explicit selected-text transform once the model is ready.
+    func transform(_ kind: TextTransform, text: String, waitingUpTo limit: Duration) async throws -> String {
+        let ready = await readiness(waitingUpTo: limit)
+        try Task.checkCancellation()
+        guard ready != nil else {
+            throw CleanerError.unavailable(reason: "\(modelName) isn't loaded yet. Try again in a moment.")
+        }
+        // Through SmartCleanup so unload, dictation cleanup and a re-requested transform all wait for this generation.
+        return try await smart.transform(kind, text: text)
     }
 
     nonisolated func recordingStarted() {
