@@ -1,23 +1,28 @@
 import AppKit
 
 @MainActor
-final class ShortcutRecorderWindow: NSWindowController, NSWindowDelegate {
+/// The dictation shortcut recorder, shown as a sheet on the Mouthtype window. Capture is live only while the sheet is up.
+final class ShortcutRecorderSheet: NSObject, NSWindowDelegate {
     let recorder: ShortcutRecorder
     private let recordButton = NSButton(title: "", target: nil, action: nil)
     private let hint = NSTextField(wrappingLabelWithString: "")
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
     private let apply: (DictationShortcut?) -> String?
     private let onClose: () -> Void
+    let window: NSWindow
+    private weak var parent: NSWindow?
+    private var finished = false
 
     init(saved: DictationShortcut?, apply: @escaping (DictationShortcut?) -> String?, onClose: @escaping () -> Void) {
         recorder = ShortcutRecorder(saved: saved)
         self.apply = apply
         self.onClose = onClose
         let window = CaptureWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 330),
-            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+            styleMask: [.titled], backing: .buffered, defer: false)
         window.title = "Dictation Shortcut"
         window.isReleasedWhenClosed = false
-        super.init(window: window)
+        self.window = window
+        super.init()
         window.delegate = self
         window.capture = { [weak self] event in self?.capture(event) ?? false }
         let heading = NSTextField(labelWithString: "Dictation shortcut")
@@ -30,11 +35,12 @@ final class ShortcutRecorderWindow: NSWindowController, NSWindowDelegate {
         recordButton.setAccessibilityLabel("Dictation shortcut. Click to record a new key or combination.")
         hint.textColor = .secondaryLabelColor
         hint.heightAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
-        let paused = NSTextField(labelWithString: "Dictation is paused while this window is open.")
+        let paused = NSTextField(labelWithString: "Dictation is paused while this is open.")
         paused.font = .systemFont(ofSize: 12)
         paused.textColor = .secondaryLabelColor
         let reset = NSButton(title: "Use Fn / Globe", target: self, action: #selector(useDefault))
         let cancel = NSButton(title: "Cancel", target: self, action: #selector(cancel))
+        cancel.keyEquivalent = "\u{1b}"
         saveButton.target = self
         saveButton.action = #selector(save)
         saveButton.keyEquivalent = "\r"
@@ -64,11 +70,23 @@ final class ShortcutRecorderWindow: NSWindowController, NSWindowDelegate {
 
     required init?(coder: NSCoder) { nil }
 
-    func present() {
-        window?.center()
-        showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
+    func present(over parent: NSWindow) {
+        self.parent = parent
+        parent.beginSheet(window) { [weak self] _ in self?.finish() }
+    }
+
+    /// Ends the sheet. Safe to call twice; the capture and the hotkey hand-back run once.
+    func close() {
+        guard let parent, window.sheetParent === parent else { finish(); return }
+        parent.endSheet(window)
+    }
+
+    private func finish() {
+        guard !finished else { return }
+        finished = true
+        recorder.cancelRecording()
+        window.orderOut(nil)
+        onClose()
     }
 
     private func refresh() {
@@ -96,10 +114,6 @@ final class ShortcutRecorderWindow: NSWindowController, NSWindowDelegate {
     @objc private func cancel() { close() }
     @objc private func save() { if recorder.save(apply) { close() } }
     func windowDidResignKey(_ notification: Notification) { recorder.cancelRecording() }
-    func windowWillClose(_ notification: Notification) {
-        recorder.cancelRecording()
-        onClose()
-    }
 }
 
 @MainActor private final class CaptureWindow: NSWindow {

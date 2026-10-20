@@ -1,8 +1,8 @@
 # Transcribe an audio file
 
-Choose **Transcribe Audio File…** in Mouthtype's menu, then choose one WAV, AIFF or M4A file. Files can be up to 10 minutes long and 512 MB. Speech recognition uses the model already loaded on your Mac. It doesn't record the microphone or upload your audio.
+Choose **Transcribe Audio File…** in Mouthtype's menu, which opens the Transcribe file page in the Mouthtype window, then choose one WAV, AIFF or M4A file. Files can be up to 10 minutes long and 512 MB. Speech recognition uses the model already loaded on your Mac. It doesn't record the microphone or upload your audio.
 
-Mouthtype reads and resamples the file in small chunks. It shows preparation, transcription and cancellation states. Cancel stops further work when the current recognition operation returns. Closing the window also cancels a running import.
+Mouthtype reads and resamples the file in small chunks. It shows preparation, transcription and cancellation states. Cancel stops further work when the current recognition operation returns. Closing the Mouthtype window also cancels a running import. Switching to another page does not; the state is there when you return.
 
 The result is the full raw transcript, with selectable text. Use **Copy** to put it on the clipboard, or **Save Text…** to write a UTF-8 text file. Neither action runs automatically. Your original audio is preserved, and Mouthtype refuses to save the transcript over that source file.
 

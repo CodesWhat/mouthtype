@@ -52,8 +52,8 @@ import MouthtypeCore
 
     // MARK: Sidebar
 
-    @Test func sidebarListsHomeStatsRecordsThenTheYourWordsPagesAndFourSettingsPages() {
-        #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Records", "Saved spellings", "Phrases", "General", "Writing", "Appearance", "Diagnostics"])
+    @Test func sidebarListsHomeStatsRecordsTranscribeFileThenTheYourWordsPagesAndFourSettingsPages() {
+        #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Records", "Transcribe file", "Saved spellings", "Phrases", "General", "Writing", "Appearance", "Diagnostics"])
         #expect(SettingsPage.settingsPages.map(\.title) == ["General", "Writing", "Appearance", "Diagnostics"])
         #expect(SettingsPage.wordsPages.map(\.title) == ["Saved spellings", "Phrases"])
         #expect(SettingsSidebarLink.setUp.title == "Set Up Mouthtype…")
@@ -213,7 +213,8 @@ import MouthtypeCore
         #expect(SettingsPage.writing.moved(by: -1) == .general)
         #expect(SettingsPage.general.moved(by: -1) == .phrases)
         #expect(SettingsPage.phrases.moved(by: -1) == .savedSpellings)
-        #expect(SettingsPage.savedSpellings.moved(by: -1) == .records)
+        #expect(SettingsPage.savedSpellings.moved(by: -1) == .transcribeFile)
+        #expect(SettingsPage.transcribeFile.moved(by: -1) == .records)
         #expect(SettingsPage.records.moved(by: -1) == .stats)
         #expect(SettingsPage.stats.moved(by: -1) == .home)
         #expect(SettingsPage.home.moved(by: 1) == .stats)

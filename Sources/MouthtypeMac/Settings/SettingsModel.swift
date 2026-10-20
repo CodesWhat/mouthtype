@@ -20,6 +20,8 @@ import UniformTypeIdentifiers
     let spellings: SpellingEditor?
     let spellingSuggestions: SpellingSuggestionsModel?
     let phrases: PhraseEditor?
+    /// The import behind the Transcribe file page. It belongs to the app, so a run carries on while another page is showing.
+    let fileTranscription: FileTranscriptionModel?
     /// Asks whether to throw away an unsaved draft. Injectable so tests can answer without a modal alert.
     @ObservationIgnored var confirmDiscard: @MainActor (DraftExit, DraftKind) -> Bool = SettingsModel.askToDiscard
     var page = SettingsPage.general
@@ -59,7 +61,9 @@ import UniformTypeIdentifiers
          onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
          home: HomeLogModel = HomeLogModel(observing: false),
          stats: StatsModel = StatsModel(observing: false),
-         spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil) {
+         spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil,
+         fileTranscription: FileTranscriptionModel? = nil) {
+        self.fileTranscription = fileTranscription
         self.home = home
         self.stats = stats
         self.spellings = spellings

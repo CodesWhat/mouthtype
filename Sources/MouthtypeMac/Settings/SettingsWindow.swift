@@ -8,7 +8,7 @@ import MouthtypeCore
 
     let model: SettingsModel
     private let refreshDiagnostics: () -> Void
-    private let actions: SettingsActions
+    private var actions: SettingsActions
     private let reduceTransparency: () -> Bool
     private let fullKeyboardAccess: @MainActor () -> Bool
     private let notifications: NotificationCenter
@@ -33,6 +33,12 @@ import MouthtypeCore
         window.contentMinSize = Self.minimumContentSize
         window.isReleasedWhenClosed = false
         super.init(window: window)
+        self.actions.chooseAudioFile = { [weak self] in
+            if let transcription = self?.model.fileTranscription { FileTranscriptionPanels.chooseFile(model: transcription, over: self?.window) }
+        }
+        self.actions.saveTranscript = { [weak self] in
+            if let transcription = self?.model.fileTranscription { FileTranscriptionPanels.saveText(model: transcription, over: self?.window) }
+        }
         applyContent()
         window.setContentSize(Self.contentSize)
         window.delegate = self
@@ -94,8 +100,10 @@ import MouthtypeCore
         reloadHome()
     }
 
-    /// The Home log and the stats are watched only while the window is open on their pages.
+    /// The Home log and the stats are watched only while the window is open on their pages. Closing the window cancels a running
+    /// file transcription, as closing the old Transcribe Audio File window did. Switching pages does not.
     func windowWillClose(_ notification: Notification) {
+        model.fileTranscription?.cancel()
         model.home.deactivate()
         model.stats.deactivate()
         model.deactivateWords()
@@ -199,10 +207,10 @@ final class SettingsNSWindow: NSWindow {
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case home, stats, records, savedSpellings, phrases, general, writing, appearance, diagnostics
+    case home, stats, records, transcribeFile, savedSpellings, phrases, general, writing, appearance, diagnostics
     var id: String { rawValue }
     var title: String {
-        switch self { case .savedSpellings: "Saved spellings"; default: rawValue.capitalized }
+        switch self { case .savedSpellings: "Saved spellings"; case .transcribeFile: "Transcribe file"; default: rawValue.capitalized }
     }
     /// The pages under the sidebar's YOUR WORDS header.
     static let wordsPages: [SettingsPage] = [.savedSpellings, .phrases]
@@ -219,13 +227,14 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         (focused ?? selected).moved(by: offset)
     }
     var icon: String {
-        switch self { case .home: "house"; case .stats: "chart.bar"; case .records: "trophy"; case .savedSpellings: "character.book.closed"; case .phrases: "text.badge.plus"; case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
+        switch self { case .home: "house"; case .stats: "chart.bar"; case .records: "trophy"; case .transcribeFile: "waveform"; case .savedSpellings: "character.book.closed"; case .phrases: "text.badge.plus"; case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
     }
     var headline: String {
         switch self {
         case .home: "Your recent takes."
         case .stats: "Your numbers."
         case .records: "Your personal bests."
+        case .transcribeFile: "Turn a recording into text."
         case .savedSpellings: "Names, spelled your way."
         case .phrases: "Say less. Insert more."
         case .general: "A little less typing."
@@ -239,6 +248,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .home: "Everything you dictated lately, newest first. Copy it or recover it."
         case .stats: "Words, speed, streaks and time saved, worked out on this Mac from your log."
         case .records: "Your fastest, biggest and longest. Just for you, nothing is shared."
+        case .transcribeFile: "Transcribe one audio file on this Mac. Nothing is pasted for you."
         case .savedSpellings: "Keep names and terms spelled the way you want."
         case .phrases: "Say a short phrase. Insert exactly the text you saved."
         case .general: "Set your shortcut, choose your cleanup, and carry on."
@@ -261,6 +271,8 @@ enum SettingsSidebarLink: String, CaseIterable, Identifiable {
 @MainActor struct SettingsActions {
     var openSetup: () -> Void = {}
     var changeShortcut: () -> Void = {}
+    var chooseAudioFile: () -> Void = {}
+    var saveTranscript: () -> Void = {}
     var cleaner: (any CleanupModelManaging)?
     var diagnostics: SettingsDiagnostics?
     var retrySpeech: () -> Void = {}

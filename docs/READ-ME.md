@@ -23,7 +23,7 @@ Saved spellings now suggest spellings from your recent takes: names it keeps mis
 
 In Settings, with Keyboard navigation on, the page scrolls to follow Tab and Shift-Tab.
 
-Saved spellings and Phrases are now pages in the Mouthtype window instead of separate windows. Leaving a page or closing the window with an unsaved draft still asks first.
+Saved spellings, Phrases and file transcription are now pages in the Mouthtype window instead of separate windows, and the shortcut recorder is a sheet on it. Only Set Up Mouthtype keeps its own window. Leaving a page or closing the window with an unsaved draft still asks first.
 
 Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
 
@@ -73,7 +73,7 @@ Choose System Default, a named microphone or an opt-in Priority list in General.
 
 **Live words** in General is optional and off by default. It shows provisional words above the pill. The finished take still goes through full transcription and inserts once. Preview work is bounded to an eight-second audio window; that is not a wall-clock deadline. Final transcription waits for any already-running preview model work to finish.
 
-The shortcut recorder accepts a key or modifier combination. Click Change, press the shortcut, release all keys, then Save. Cancel keeps the previous shortcut; Use Fn / Globe restores the default. Your shortcut is reserved for Mouthtype while it runs, including a bare letter. A shortcut matching Paste Last or Copy Last takes precedence over that action.
+The shortcut recorder accepts a key or modifier combination. Click Change, which opens a sheet on the Mouthtype window, press the shortcut, release all keys, then Save. Cancel or Escape keeps the previous shortcut; Use Fn / Globe restores the default. Your shortcut is reserved for Mouthtype while it runs, including a bare letter. A shortcut matching Paste Last or Copy Last takes precedence over that action.
 
 In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. Fn+Space also locks the default Fn shortcut. Escape cancels and offers Undo for five seconds. If Escape itself is your dictation shortcut, use the menu’s Cancel action. Caps Lock uses press-to-start/press-to-stop even in Hold mode; its system Caps Lock state may also change. Some system-reserved/media keys may be handled by macOS first. Control+Command+V pastes the last delivered take, and Control+Command+C copies it.
 
@@ -85,9 +85,9 @@ Select text in an accessible editable field, then choose **Clean Selected Text�
 
 ## Transcribe an audio file
 
-Choose **Transcribe Audio File…** in the menu, then select one WAV, AIFF or M4A file up to 10 minutes and 512 MB. Mouthtype uses the speech model already loaded on your Mac. Your original file stays unchanged.
+Choose **Transcribe Audio File…** in the menu (it opens the Transcribe file page in the Mouthtype window, also in the sidebar), then select one WAV, AIFF or M4A file up to 10 minutes and 512 MB. Mouthtype uses the speech model already loaded on your Mac. Your original file stays unchanged.
 
-Preparing and Transcribing show actual work stages. Cancel, or close the window, to cancel the import. Cancellation may wait for the current recognition operation to return. The full raw result is selectable: explicitly use **Copy** or **Save Text…** to export UTF-8 text. Saving over the original audio is refused.
+Preparing and Transcribing show actual work stages. Cancel, or close the Mouthtype window, to cancel the import. Switching to another page keeps it running. Cancellation may wait for the current recognition operation to return. The full raw result is selectable: explicitly use **Copy** or **Save Text…** to export UTF-8 text. Saving over the original audio is refused.
 
 Imports do not apply cleanup, saved spellings or phrases, paste automatically, or change dictation history/statistics. Finish any dictation or recovery before importing; new recording, recovery and update installation wait while the import or its cancellation settles.
 
