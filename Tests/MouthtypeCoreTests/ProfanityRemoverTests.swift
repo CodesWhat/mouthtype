@@ -26,7 +26,7 @@ import Testing
         ("Damn it, I lost it.", "I lost it."),
         ("I lost it, dammit.", "I lost it."),
         ("Goddamn, that is good.", "That is good."),
-        ("It was fucking shit, honestly.", "It was shit, honestly."),
+        ("It was fucking shit, honestly.", "It was stuff, honestly."),
         ("I drove a goddamn car.", "I drove a car."),
         ("That is damn good.", "That is good."),
         ("Fuck!!", ""),
@@ -39,18 +39,189 @@ import Testing
         ("It broke and, fuck, it stayed broken.", "It broke and it stayed broken."),
     ]
 
-    /// Nouns and objects stay; the model levels smooth those over.
-    static let nounsKept = [
-        "Don't be an asshole.", "He is a motherfucker.", "Quit the bullshit and go.", "Stop being a bitch about it.",
-        "This is some crap.", "Talk shit all day.", "It is a piece of shit.", "My shit is gone.", "Damn it all.",
-        "Such a bitch.", "Fuck off.", "Stop fucking around.", "I feel crappy today.", "We are damned if we do.",
-        "That was a shitty day.", "Stop fucking up the build.",
+    /// Swearing the sentence needs is swapped for a mild word.
+    static let swapped: [(input: String, expected: String)] = [
+        ("Don't be an asshole.", "Don't be a jerk."),
+        ("He is a motherfucker.", "He is a jerk."),
+        ("They are assholes.", "They are jerks."),
+        ("Stop being a bitch about it.", "Stop being a jerk about it."),
+        ("Such a bitch.", "Such a jerk."),
+        ("Quit the bullshit and go.", "Quit the nonsense and go."),
+        ("This is some crap.", "This is some junk."),
+        ("Talk shit all day.", "Talk nonsense all day."),
+        ("He talks shit about me.", "He talks nonsense about me."),
+        ("It is a piece of shit.", "It is a piece of junk."),
+        ("My shit is gone.", "My stuff is gone."),
+        ("Pick up this shit.", "Pick up this stuff."),
+        ("What a pain in the ass.", "What a pain in the neck."),
+        ("I am pissed off.", "I am annoyed."),
+        ("Pissed off about it.", "Annoyed about it."),
+        ("That was a shitty day.", "That was a bad day."),
+        ("I feel crappy today.", "I feel bad today."),
+        ("It was a damned fool idea.", "It was a fool idea."),
+        ("Damned fool.", "Fool."),
+        ("Stop fucking around.", "Stop messing around."),
+        ("Quit screwing around.", "Quit messing around."),
+        ("Stop fucking up the build.", "Stop messing up the build."),
+        ("I fucked up the build.", "I messed up the build."),
+        ("Don't fuck up.", "Don't mess up."),
+        ("Fuck this job.", "Forget this job."),
+        ("I hate it, fuck that guy.", "I hate it, forget that guy."),
+        ("Fuck, asshole.", "Jerk."),
+        ("Holy shit, we shipped.", "We shipped."),
     ]
 
-    @Test func keepsNounsAndObjects() {
-        for text in Self.nounsKept {
+    @Test(arguments: swapped)
+    func swapsNeededSwearingForAMildWord(_ pair: (input: String, expected: String)) {
+        #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
+    }
+
+    /// Verb forms, split phrasal verbs and the article before whatever replaced the swear word.
+    static let verbsAndArticles: [(input: String, expected: String)] = [
+        ("I shit you not.", "I kid you not."),
+        ("She bitches about work.", "She complains about work."),
+        ("They bitched about it all day.", "They complained about it all day."),
+        ("Stop bitching about it.", "Stop complaining about it."),
+        ("I hate to bitch.", "I hate to complain."),
+        ("He shits on everything.", "He dumps on everything."),
+        ("Stop shitting on the plan.", "Stop dumping on the plan."),
+        ("Those bitches are loud.", "Those jerks are loud."),
+        ("I don't give a shit.", "I don't give a hoot."),
+        ("I fucked it up.", "I messed it up."),
+        ("He fucked the whole thing up.", "He messed the whole thing up."),
+        ("They screwed it up.", "They screwed it up."),
+        ("Don't fuck it up.", "Don't mess it up."),
+        ("Stop fucking it up.", "Stop messing it up."),
+        ("We're fucked.", "We're messed up."),
+        ("Don't fuck with it.", "Don't mess with it."),
+        ("Fuck me, that hurt.", "That hurt."),
+        ("I fucked her.", "I slept with her."),
+        ("He fucked Sarah.", "He messed up Sarah."),
+        ("He fucked Excel.", "He messed up Excel."),
+        ("They fucked us over.", "They cheated us."),
+        ("They fucked over the team.", "They cheated the team."),
+        ("You bitch about work.", "You complain about work."),
+        ("You shit on everything.", "You dump on everything."),
+        ("You bitch!", "You jerk!"),
+        ("Stop bitchin' about it.", "Stop complaining about it."),
+        ("She keeps bitchin'.", "She keeps complaining."),
+        ("That's bitchin'.", "That's great."),
+        ("That is a fucking unique idea.", "That is a unique idea."),
+        ("He has a fucking MBA.", "He has an MBA."),
+        ("It was a fucking UFO.", "It was a UFO."),
+        ("It was a fucking FBI agent.", "It was an FBI agent."),
+        ("An asshole wrote 'an jerk'.", "A jerk wrote 'an jerk'."),
+        ("That is a pissed off look.", "That is an annoyed look."),
+        ("He is a pissed off guy.", "He is an annoyed guy."),
+        ("She was a bit pissed off.", "She was a bit annoyed."),
+        ("I was a fucking idiot.", "I was an idiot."),
+        ("He is an asshole.", "He is a jerk."),
+        ("He is a fucking annoying guy.", "He is an annoying guy."),
+        ("That is a fucking university.", "That is a university."),
+        ("It took a fucking hour.", "It took an hour."),
+        ("It was a shitty idea.", "It was a bad idea."),
+        ("A pissed off customer called.", "An annoyed customer called."),
+        ("That damned asshole.", "That jerk."),
+        ("Damned asshole.", "Jerk."),
+        ("Kick his ass.", "Kick his butt."),
+        ("That bitchin' car.", "That great car."),
+        ("Bitchin' idea.", "Great idea."),
+    ]
+
+    @Test(arguments: verbsAndArticles)
+    func handlesVerbsPhrasalVerbsAndArticles(_ pair: (input: String, expected: String)) {
+        #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
+    }
+
+    @Test func leavesTheSpeakersOwnArticlesAlone() {
+        for text in ["A apple a day.", "He is an hour late.", "A university, an hour, an honest man."] {
             #expect(strip(text) == text, "\(text.debugDescription)")
         }
+        #expect(strip("A fucking apple a day.") == "An apple a day.")
+    }
+
+    @Test func articleRepairKeepsCapitalisation() {
+        #expect(strip("A fucking idiot called.") == "An idiot called.")
+        #expect(strip("An asshole called.") == "A jerk called.")
+    }
+
+    @Test func vowelSoundHeuristic() {
+        for word in ["annoyed", "idiot", "hour", "honest", "honor", "umbrella", "unimportant", "unanswered", "egg"] {
+            #expect(ProfanityRemover.startsWithVowelSound(word), "\(word)")
+        }
+        for word in ["jerk", "university", "unit", "one", "once", "euro", "user", "usual", "utility", "ubiquitous", "unanimous", "bad", "hat"] {
+            #expect(!ProfanityRemover.startsWithVowelSound(word), "\(word)")
+        }
+    }
+
+    /// Every inflection of every listed swear word has some outcome in Formal. "damn" and its forms stay for the model
+    /// when they are not an exclamation or an intensifier, so only the ones that always go are swept here.
+    @Test func noListedSwearSurvivesInAnyFrame() {
+        let kept: Set<String> = ["damn", "damned", "goddamn", "goddamned"]
+        let frames = [
+            "%@", "Well, %@.", "He said %@ again.", "I %@ it.", "She %@ about work.", "That is a %@ idea.", "The %@ is here.",
+            "Don't be %@.", "%@ the whole thing.", "They gave two %@.", "Stop %@ around.", "He %@ on everything.",
+            "We %@ you not.", "What a %@!", "Such %@ people.", "It is %@ broken.",
+        ]
+        let swears = ProfanityRemover.words.subtracting(kept).sorted()
+        var survivors: [String] = []
+        for word in swears {
+            for frame in frames {
+                for form in [word, word.capitalized] {
+                    let input = frame.replacingOccurrences(of: "%@", with: form)
+                    let output = strip(input).lowercased()
+                    let tokens = output.split(whereSeparator: { !$0.isLetter && $0 != "'" }).map(String.init)
+                    if tokens.contains(where: { swears.contains($0) }) { survivors.append("\(input) -> \(output)") }
+                }
+            }
+        }
+        #expect(survivors.isEmpty, "\(survivors.joined(separator: "\n"))")
+    }
+
+    @Test func innocentWordsAreNotMistakenForSwearing() {
+        for text in [
+            "Shiitake soup and shitake rice.", "Scrap the plan.", "A crappie is a fish.", "Assess the damage.", "Mr. Cockburn called.",
+            "Dickens wrote it.", "I live in Scunthorpe.", "Class is over.", "A passage from the book.", "Bass and glass.",
+        ] {
+            #expect(strip(text) == text, "\(text.debugDescription)")
+        }
+    }
+
+    static let dismissals: [(input: String, expected: String)] = [
+        ("Fuck you.", ""),
+        ("Fuck off", ""),
+        ("Fuck that.", ""),
+        ("Fuck it.", ""),
+        ("Fuck it, let's go.", "Let's go."),
+        ("Fuck it we ship.", "We ship."),
+        ("Screw you.", ""),
+        ("Okay. Fuck you. Next.", "Okay. Next."),
+        ("I told him to fuck off.", "I told him to."),
+        ("Fuck you, man.", "Man."),
+    ]
+
+    @Test(arguments: dismissals)
+    func dropsDismissivePhrases(_ pair: (input: String, expected: String)) {
+        #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
+    }
+
+    @Test func keepsWordsThatAreNotSwearing() {
+        for text in ["We are damned if we do.", "Damn it all.", "I screw in the bolt.", "Tighten the screw.", "He was pissed.", "Pick up the shell.", "A fine class."] {
+            #expect(strip(text) == text, "\(text.debugDescription)")
+        }
+    }
+
+    @Test func swapsRespectProtectedSpellingsAndPhrases() {
+        #expect(strip("Don't be an asshole.", protected: ["asshole"]) == "Don't be an asshole.")
+        #expect(ProfanityRemover(protectedPhrases: ["piece of shit"]).apply("It is a piece of shit.").text == "It is a piece of shit.")
+        #expect(ProfanityRemover(protectedPhrases: ["fuck off"]).apply("Fuck off.").text == "Fuck off.")
+        #expect(strip("Fuck this job.", protected: ["fuck"]) == "Fuck this job.")
+    }
+
+    @Test func swapsOnlyInFormal() {
+        let text = "Don't be an asshole, stop fucking around, it is a piece of shit."
+        #expect(pipeline(text, style: StylePreset.casual.options).hasPrefix("Don't be an asshole, stop fucking around, it is a piece of shit"))
+        #expect(pipeline(text) == "Don't be a jerk, stop messing around, it is a piece of junk.")
     }
 
     @Test func capitalisationRepairSkipsSavedSpellingsAndIdentifiers() {
@@ -101,7 +272,7 @@ import Testing
 
     static let untouched = [
         "Please assess the class.", "Scunthorpe won.", "Say hello to the shell.", "Dickens wrote it.", "He is a badass.",
-        "Open shit.py now.", "See /tmp/crap/file", "It's hell out there.", "I'm pissed off.", "bull-shit",
+        "Open shit.py now.", "See /tmp/crap/file", "It's hell out there.", "bull-shit",
         "Cockburn and Hancock met.", "The grass is green.", "A passenger and a compass.",
     ]
 
@@ -124,6 +295,39 @@ import Testing
         #expect(out.hasSuffix("Yeah, just tell Alice to message me."))
     }
 
+    static let openingWithoutComma: [(input: String, expected: String)] = [
+        ("Fuck this is a test and it's fucking great.", "This is a test and it's great."),
+        ("Shit I forgot the keys.", "I forgot the keys."),
+        ("Damn it's cold.", "It's cold."),
+        ("Fuck we're late.", "We're late."),
+        ("Okay. Crap we missed it.", "Okay. We missed it."),
+        ("Fuck, this is a test.", "This is a test."),
+    ]
+
+    @Test(arguments: openingWithoutComma)
+    func removesAnOpeningSwearBeforeANewClause(_ pair: (input: String, expected: String)) {
+        #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
+    }
+
+    @Test func openingSwearWithoutCommaRespectsProtections() {
+        #expect(strip("Fuck we're late.", protected: ["fuck"]) == "Fuck we're late.")
+        #expect(ProfanityRemover(protectedPhrases: ["fuck this"]).apply("Fuck this is a test.").text == "Fuck this is a test.")
+    }
+
+    @Test func openingSwearWithoutCommaOnlyGoesInFormal() {
+        let text = "Fuck this is a test and it's fucking great."
+        #expect(pipeline(text, style: StylePreset.casual.options).contains("Fuck this is a test"))
+        #expect(pipeline(text) == "This is a test and it's great.")
+    }
+
+    /// A leading space in a stored final text comes from insertion spacing after a word already in the field, not from
+    /// the pipeline: removing the first word never leaves one.
+    @Test func removingTheFirstWordLeavesNoLeadingSpace() {
+        #expect(pipeline("Fuck this is a test and it's fucking great.").first == "T")
+        #expect(pipeline("Fuck, this is a test.").first == "T")
+        #expect(pipeline("Um this is a test.").first == "T")
+    }
+
     @Test func nonFormalTonesKeepSwearing() {
         let text = "This is fucking great."
         #expect(pipeline(text, style: StylePreset.casual.options).contains("fucking"))
@@ -144,7 +348,7 @@ import Testing
     }
 
     @Test func replayMatchesOutput() {
-        for c in Self.removals {
+        for c in Self.removals + Self.swapped + Self.dismissals {
             let out = ProfanityRemover().apply(c.input)
             #expect(
                 TextTestSupport.replay(out.edits, on: c.input) == TextTestSupport.stripWhitespace(out.text),

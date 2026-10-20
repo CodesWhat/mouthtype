@@ -13,9 +13,21 @@ import NaturalLanguage
 ///   "goddamn car", "damn good"), and the phrases "the fuck", "the hell" ("what the fuck is this" becomes "what is
 ///   this"), "damn it" and "dammit". An intensifier goes only when the part-of-speech tagger says the next word is
 ///   an adjective, adverb or noun, so "stop fucking around" keeps its verb. Adjective-only forms ("shitty", "crappy", "damned") stay for the model.
-/// - Kept: a swear word that is a noun or the object of a verb ("be an asshole", "talk shit", "piece of shit",
-///   "my shit"). Removing those would leave a broken sentence.
-/// - "hell" alone and "pissed off" are left out because they are often ordinary speech.
+/// - A sentence-opening exclamation with no punctuation after it also goes when a new clause follows, judged by the
+///   tagger ("Fuck this is a test", "Shit I forgot the keys", "Damn it's cold"). "Fuck this job" keeps its object.
+/// - Dismissive phrases go whole ("Fuck you.", "Fuck off", "Fuck that.", "Fuck it, let's go", "Screw you"); a sentence
+///   that was only that disappears.
+/// - Swapped for a mild word when the sentence needs one (`swaps`, applied after the removals): asshole, bitch and
+///   fucker become "jerk" ("an asshole" becomes "a jerk"), bullshit "nonsense", shitty and crappy "bad", crap "junk",
+///   noun shit "stuff" ("talk shit" "talk nonsense", "piece of shit" "piece of junk"), "pain in the ass" "pain in the
+///   neck", "pissed off" "annoyed", "Fuck this job" "Forget this job", "fuck up", "fucked up" and "fucking / screwing
+///   around" use "mess" (also split: "fucked it up"). "damned" before a noun or adjective is dropped, and the noun
+///   still gets its own swap. Verb forms get verb swaps by position ("I shit you not" "I kid you not", "she bitches
+///   about work" "she complains about work", "he shits on it" "he dumps on it"); a leftover "fuck" verb is "mess with",
+///   "cheat" ("fucked us over"), "sleep with" (a person as the object) or, as a last resort, "mess up", so no listed
+///   word survives except the "damn" family when it is not an exclamation or intensifier.
+///   "a" or "an" before an edited spot is recomputed ("an asshole" "a jerk", "a fucking idiot" "an idiot").
+/// - "hell" alone is left out because it is often ordinary speech.
 /// - An exclamation takes all the punctuation attached to it ("Fuck!!", "Shit..."), and the next word is
 ///   capitalised unless it is a saved spelling or looks like an identifier. A sentence that was only the swear word
 ///   disappears.
@@ -29,10 +41,10 @@ public struct ProfanityRemover: Sendable {
 
     public static let words: Set<String> = [
         "fuck", "fucks", "fucked", "fucking", "fucker", "fuckers", "motherfucker", "motherfuckers", "motherfucking",
-        "shit", "shits", "shitty", "bullshit",
+        "shit", "shits", "shitting", "shitty", "bullshit",
         "damn", "damned", "goddamn", "goddamned", "goddamnit", "dammit",
         "ass", "asses", "asshole", "assholes",
-        "bitch", "bitches", "bitching",
+        "bitch", "bitches", "bitched", "bitching", "bitchin",
         "crap", "crappy",
     ]
 
@@ -84,8 +96,107 @@ public struct ProfanityRemover: Sendable {
         guard !chars.isEmpty else { return StageResult(text: text) }
         var scan = Scan(chars: chars, protectedWords: protectedWords, writtenForms: writtenForms, protectedPhrases: protectedPhrases)
         scan.run()
-        return SpanRewriter.apply(scan.spans, to: chars, stage: Self.stageName)
+        let removed = SpanRewriter.apply(scan.spans, to: chars, stage: Self.stageName)
+        // What is left of the swearing is a noun, adjective or verb the sentence needs: swap it for a mild word.
+        let tidied = Array(removed.text)
+        let swaps = Scan(chars: tidied, protectedWords: protectedWords, writtenForms: writtenForms, protectedPhrases: protectedPhrases)
+            .findSwaps()
+        let swapped = swaps.isEmpty ? removed : SpanRewriter.apply(swaps, to: tidied, stage: Self.stageName)
+        guard !removed.edits.isEmpty || !swaps.isEmpty else { return removed }
+        // The swap edits are positioned in the text the removals left; report them against the original.
+        let origin = Self.originalOffsets(of: scan.spans, count: chars.count)
+        func inOriginal(_ edits: [EditOp], through map: [Int]) -> [EditOp] {
+            edits.map { edit -> EditOp in
+                var edit = edit
+                edit.position = edit.position < map.count ? map[edit.position] : chars.count
+                return edit
+            }
+        }
+        let swapMap = swaps.isEmpty
+            ? origin
+            : Self.originalOffsets(of: swaps, count: tidied.count).map { $0 < origin.count ? origin[$0] : chars.count }
+        var edits = removed.edits + (swaps.isEmpty ? [] : inOriginal(swapped.edits, through: origin))
+        // A swap or a removal can leave the wrong "a" or "an" before the next word.
+        let final = Array(swapped.text)
+        let finalScan = Scan(chars: final, protectedWords: protectedWords, writtenForms: writtenForms, protectedPhrases: protectedPhrases)
+        let known = Set(scan.articlePairs().map { "\($0.offset):\($0.key)" })
+        let articles = finalScan.articleRepairs(skipping: known, origin: swapMap)
+        guard !articles.isEmpty else { return StageResult(text: swapped.text, edits: edits) }
+        let repaired = SpanRewriter.apply(articles, to: final, stage: Self.stageName)
+        edits += inOriginal(repaired.edits, through: swapMap)
+        return StageResult(text: repaired.text, edits: edits)
     }
+
+    /// For each character of the text `SpanRewriter` produces from `spans`, where it sat in the original.
+    private static func originalOffsets(of spans: [TextSpan], count: Int) -> [Int] {
+        var map: [Int] = []
+        var cursor = 0
+        let ordered = spans.sorted { ($0.range.lowerBound, $0.range.upperBound) < ($1.range.lowerBound, $1.range.upperBound) }
+        for span in ordered {
+            guard span.range.lowerBound >= cursor, span.cut.upperBound <= count,
+                  span.cut.lowerBound <= span.range.lowerBound, span.cut.upperBound >= span.range.upperBound else { continue }
+            let cutStart = max(span.cut.lowerBound, cursor)
+            map.append(contentsOf: cursor..<cutStart)
+            for i in 0..<span.replacement.count { map.append(min(span.range.lowerBound + i, span.cut.upperBound - 1)) }
+            cursor = span.cut.upperBound
+        }
+        map.append(contentsOf: cursor..<count)
+        return map
+    }
+
+    /// Swear words that have a mild stand-in wherever they appear.
+    static let swaps: [String: String] = [
+        "asshole": "jerk", "assholes": "jerks", "bitch": "jerk", "bitches": "jerks", "fucker": "jerk", "fuckers": "jerks",
+        "motherfucker": "jerk", "motherfuckers": "jerks", "bullshit": "nonsense", "shitty": "bad", "crappy": "bad",
+        "crap": "junk", "bitching": "complaining", "ass": "butt", "asses": "butts",
+    ]
+    /// "fuck up", "fucked up", "fucking around" and so on.
+    private static let messForms: [String: String] = ["fuck": "mess", "fucks": "messes", "fucked": "messed", "fucking": "messing"]
+    private static let cheatForms: [String: String] = ["fuck": "cheat", "fucks": "cheats", "fucked": "cheated", "fucking": "cheating"]
+    private static let sleepForms: [String: String] = [
+        "fuck": "sleep with", "fucks": "sleeps with", "fucked": "slept with", "fucking": "sleeping with",
+    ]
+    private static let messUpForms: [String: String] = [
+        "fuck": "mess up", "fucks": "messes up", "fucked": "messed up", "fucking": "messing up",
+    ]
+    private static let personObjects: Set<String> = ["her", "him", "them", "me", "us", "you"]
+    private static let talkVerbs: Set<String> = ["talk", "talks", "talked", "talking"]
+    /// Words before a swear word that mark it as a verb ("I shit you not", "to bitch", "they bitch").
+    private static let verbLeaders: Set<String> = [
+        "i", "we", "they", "to", "will", "would", "can", "could", "should", "might", "must", "may", "shall", "not", "never",
+        "don't", "doesn't", "didn't", "won't", "can't", "couldn't", "wouldn't", "shouldn't", "i'll", "we'll", "they'll",
+        "you'll", "he'll", "she'll", "it'll", "i'd", "we'd", "they'd", "you'd", "he'd", "she'd",
+    ]
+    /// Words before a swear word that mark it as a noun ("a bitch", "of shit", "my shit", "two shits").
+    private static let nounLeaders: Set<String> = [
+        "a", "an", "the", "this", "that", "these", "those", "my", "your", "his", "her", "its", "our", "their", "some", "any",
+        "no", "each", "every", "another", "such", "what", "whose", "many", "few", "several", "more", "most", "other", "of",
+        "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "like", "you", "stupid",
+    ]
+    private static let idiomCounts: Set<String> = ["a", "one", "two", "three", "no", "any"]
+    private static let giveVerbs: Set<String> = ["give", "gives", "gave", "giving", "given"]
+    /// What "fuck" at the start of a sentence can be a dismissal of ("fuck the police").
+    private static let forgetObjects: Set<String> = [
+        "the", "those", "these", "my", "his", "her", "their", "our", "your", "him", "them", "everything", "everyone", "everybody",
+    ]
+    /// Words that can't be the object in "fucked X up".
+    private static let phrasalStops: Set<String> = [
+        "and", "or", "but", "to", "of", "in", "on", "at", "for", "with", "up", "around", "off", "out", "so", "if", "because",
+    ]
+
+    /// Whether "a" or "an" before this word should be "an": a vowel letter, except where it sounds like "y" or "w"
+    /// ("university", "one"), plus the silent h of "hour" and "honest".
+    static func startsWithVowelSound(_ word: String) -> Bool {
+        let w = word.lowercased()
+        if ["hour", "honest", "honor", "honour", "heir"].contains(where: { w.hasPrefix($0) }) { return true }
+        guard let first = w.first, "aeiou".contains(first) else { return false }
+        if ["eu", "once", "use", "usu", "uti", "uto", "ubiq", "unanim"].contains(where: { w.hasPrefix($0) }) { return false }
+        if w.hasPrefix("one") { return w.hasPrefix("onerous") }
+        if w.hasPrefix("uni") { return ["unim", "unin", "unid"].contains(where: { w.hasPrefix($0) }) }
+        return true
+    }
+    /// Adjective forms dropped before the noun they modify.
+    private static let droppedAdjectives: Set<String> = ["damned", "goddamned"]
 
     /// Part-of-speech tags for the characters of a text, computed only when an intensifier needs one.
     private final class LexicalClasses {
@@ -206,6 +317,11 @@ public struct ProfanityRemover: Sendable {
                     k += 1
                     continue
                 }
+                if let last = holyEnd(from: k) ?? dismissiveEnd(from: k) {
+                    add(k, last)
+                    k = last + 1
+                    continue
+                }
                 guard isProfane(k) else { k += 1; continue }
                 let lower = words[k].lower
                 if ProfanityRemover.standalone.contains(lower) {
@@ -237,6 +353,38 @@ public struct ProfanityRemover: Sendable {
             return units
         }
 
+        /// A word that can be edited here: not saved, not protected, not part of a token.
+        func isFree(_ k: Int) -> Bool {
+            !protectedWords.contains(words[k].lower) && !isProtected(words[k]) && !insideToken(words[k])
+        }
+
+        /// "Holy shit" as an exclamation: both words go.
+        func holyEnd(from k: Int) -> Int? {
+            guard words[k].lower == "holy", isFree(k), adjacent(k), isProfane(k + 1),
+                  ["shit", "crap", "fuck"].contains(words[k + 1].lower) else { return nil }
+            return k + 1
+        }
+
+        /// "Fuck you", "fuck off", "fuck that", "fuck it", "fuck me", "screw you": a dismissal that can go whole. "that" and "this"
+        /// only when nothing follows; with an object they become "Forget ..." (see `findSwaps`). "it" may also be
+        /// followed by a new clause ("Fuck it let's go").
+        func dismissiveEnd(from k: Int) -> Int? {
+            let verb = words[k].lower
+            guard verb == "fuck" || verb == "screw", isFree(k), adjacent(k), isFree(k + 1) else { return nil }
+            let target = words[k + 1].lower
+            guard ["you", "yourself", "off", "that", "this", "it", "me"].contains(target) else { return nil }
+            if verb == "screw" || target == "me" {
+                var j = words[k].start - 1
+                while j >= 0, TextScan.isSpace(chars[j]) { j -= 1 }
+                guard sentenceStart(before: words[k].start) || (j >= 0 && chars[j] == ",") else { return nil }
+            }
+            let after = words[k + 1].end
+            if after >= n || isPunctuation(chars[after]) || isClauseEnd(after) { return k + 1 }
+            if target == "it", sentenceStart(before: words[k].start), adjacent(k + 1), k + 2 < words.count,
+               startsClause(at: k + 2) || ["i", "we", "they", "he", "she"].contains(words[k + 2].lower) { return k + 1 }
+            return nil
+        }
+
         /// The last word of an exclamation starting at `k`, when it opens a sentence or follows a comma and is closed
         /// by punctuation or the end of the text ("Shit,", "Fuck!!", "fucking shit.").
         func interjectionEnd(from k: Int) -> Int? {
@@ -247,9 +395,36 @@ public struct ProfanityRemover: Sendable {
             var j = s - 1
             while j >= 0, TextScan.isSpace(chars[j]) { j -= 1 }
             guard j >= 0 && chars[j] == "," || sentenceStart(before: s) else { return nil }
-            guard e >= n || isPunctuation(chars[e]) || isClauseEnd(e) else { return nil }
+            if e >= n || isPunctuation(chars[e]) || isClauseEnd(e) { return last }
+            // No comma after a spoken opener ("Fuck this is a test"): it goes when a new clause follows.
+            guard sentenceStart(before: s), adjacent(last), startsClause(at: last + 1) else { return nil }
             return last
         }
+
+        /// Whether the words from `k` begin a clause of their own: a pronoun or determiner, then a verb ("this is",
+        /// "I forgot", "it's"). A noun after it means the swear word takes an object ("Fuck this job").
+        func startsClause(at k: Int) -> Bool {
+            guard k < words.count else { return false }
+            if Self.contractedSubjects.contains(words[k].lower) { return true }
+            guard k + 1 < words.count, adjacent(k),
+                  let a = tags.lexicalClass(at: words[k].start), a == .pronoun || a == .determiner,
+                  let b = tags.lexicalClass(at: words[k + 1].start), b == .verb else { return false }
+            return true
+        }
+
+        static let contractedSubjects: Set<String> = {
+            var result: Set<String> = []
+            for subject in ["it", "he", "she", "that", "there", "here", "what", "who", "let"] {
+                for suffix in ["'s", "\u{2019}s", "'ll", "\u{2019}ll", "'d", "\u{2019}d"] { result.insert(subject + suffix) }
+            }
+            for subject in ["i", "you", "we", "they"] {
+                for suffix in ["'m", "'re", "'ve", "'ll", "'d"] {
+                    result.insert(subject + suffix)
+                    result.insert(subject + suffix.replacingOccurrences(of: "'", with: "\u{2019}"))
+                }
+            }
+            return result
+        }()
 
         /// The last word of a run of intensifiers directly before the word they modify ("fucking great").
         func intensifierEnd(from k: Int) -> Int? {
@@ -278,6 +453,227 @@ public struct ProfanityRemover: Sendable {
             case .verb: return previous.map(ProfanityRemover.auxiliaries.contains) ?? false
             default: return false
             }
+        }
+
+        // MARK: Swapping
+
+        /// `replacement` with the first letter in the case of the word it replaces.
+        func matchingCase(_ replacement: String, like w: ScanWord) -> String {
+            guard chars[w.start].isUppercase, let first = replacement.first else { return replacement }
+            return first.uppercased() + replacement.dropFirst()
+        }
+
+        /// The word before `k`, when only spaces sit between them, with typographic apostrophes straightened.
+        func previous(_ k: Int) -> String? {
+            guard k > 0, adjacent(k - 1) else { return nil }
+            return words[k - 1].lower.replacingOccurrences(of: "\u{2019}", with: "'")
+        }
+
+        /// Whether a verb form of the swear word at `k` fits here: after a subject, "to" or an auxiliary. A determiner,
+        /// possessive, number or "of" before it means a noun. The tagger only breaks the tie for -s forms, since it
+        /// misreads the swear words themselves.
+        func isVerbPosition(_ k: Int, thirdPerson: Bool) -> Bool {
+            guard let prev = previous(k) else { return false }
+            // "you" is a subject before a verb ("You bitch about work") and a noun phrase opener in a vocative ("You bitch!").
+            if prev == "you" { return !thirdPerson && adjacent(k) }
+            if ProfanityRemover.verbLeaders.contains(prev) { return true }
+            if ProfanityRemover.nounLeaders.contains(prev) { return false }
+            guard thirdPerson else { return false }
+            switch tags.lexicalClass(at: words[k - 1].start) {
+            case .some(.noun), .some(.pronoun): return true
+            default: return false
+            }
+        }
+
+        /// "give a shit", "gave two fucks": the noun is part of an idiom for caring.
+        func isGiveIdiom(_ k: Int) -> Bool {
+            guard let prev = previous(k), ProfanityRemover.idiomCounts.contains(prev), k > 1, adjacent(k - 2) else { return false }
+            return ProfanityRemover.giveVerbs.contains(words[k - 2].lower)
+        }
+
+        /// "fuck this", "fuck the police": a dismissal with an object, at the start of a sentence or clause.
+        func isForgetObject(_ k: Int) -> Bool {
+            guard adjacent(k), isFree(k + 1), ProfanityRemover.forgetObjects.contains(words[k + 1].lower) || isName(k + 1) else { return false }
+            return previous(k) == nil
+        }
+
+        /// A capitalised word that isn't "I": a person's name, as far as spoken text can tell.
+        func isName(_ k: Int) -> Bool {
+            k < words.count && words[k].lower != "i" && chars[words[k].start].isUppercase && !isAcronym(words[k])
+        }
+
+        func isAcronym(_ w: ScanWord) -> Bool {
+            w.end - w.start > 1 && chars[w.start..<w.end].allSatisfy { $0.isUppercase }
+        }
+
+        /// "fucked it up", "fuck the whole thing up": the object sits between the verb and "up".
+        func hasSplitUp(_ k: Int) -> Bool { splitParticle(k, "up") != nil }
+
+        /// The particle that sits one to three words after the verb at `k` ("fucked us over"), when nothing in between
+        /// ends the phrase.
+        func splitParticle(_ k: Int, _ particle: String) -> Int? {
+            for length in 1...3 {
+                let at = k + length + 1
+                guard at < words.count, (k...(at - 1)).allSatisfy({ adjacent($0) }) else { return nil }
+                if (k + 1...k + length).contains(where: { ProfanityRemover.phrasalStops.contains(words[$0].lower) }) { return nil }
+                if words[at].lower == particle, isFree(at) { return at }
+            }
+            return nil
+        }
+
+        /// Mild stand-ins for the swearing that is still in the text after the removals.
+        func findSwaps() -> [TextSpan] {
+            var spans: [TextSpan] = []
+            // Words that must come out capitalised because the dropped word before them opened the sentence.
+            var capitalise: Set<Int> = []
+            var handled: Set<Int> = []
+            func cased(_ k: Int, _ text: String) -> String {
+                var text = matchingCase(text, like: words[k])
+                if capitalise.contains(k), let first = text.first { text = first.uppercased() + text.dropFirst() }
+                return text
+            }
+            func replace(_ k: Int, _ with: String, through end: Int? = nil) {
+                let stop = end ?? words[k].end
+                spans.append(TextSpan(range: words[k].start..<stop, replacement: cased(k, with)))
+                handled.insert(k)
+            }
+            /// Drops the word and the space after it, or the space before it at the end of a clause.
+            func drop(_ k: Int) {
+                let w = words[k]
+                if adjacent(k) {
+                    spans.append(TextSpan(range: w.start..<w.end, cut: w.start..<words[k + 1].start, replacement: ""))
+                    if capitalise.contains(k) || sentenceStart(before: w.start), !keepsCase(words[k + 1]) { capitalise.insert(k + 1) }
+                } else {
+                    var back = w.start
+                    while back > 0, TextScan.isSpace(chars[back - 1]) { back -= 1 }
+                    spans.append(TextSpan(range: w.start..<w.end, cut: back..<w.end, replacement: ""))
+                }
+                handled.insert(k)
+            }
+            func nextIs(_ k: Int, _ options: Set<String>) -> Bool {
+                adjacent(k) && options.contains(words[k + 1].lower) && isFree(k + 1)
+            }
+            var k = 0
+            while k < words.count {
+                let lower = words[k].lower
+                if lower == "pissed", isFree(k), nextIs(k, ["off"]) {
+                    spans.append(TextSpan(range: words[k].start..<words[k + 1].end, replacement: matchingCase("annoyed", like: words[k])))
+                    handled.insert(k)
+                    k += 2
+                    continue
+                }
+                if lower == "screwing", isFree(k), nextIs(k, ["around"]) {
+                    replace(k, "messing")
+                    k += 1
+                    continue
+                }
+                guard ProfanityRemover.words.contains(lower), isProfane(k) else { k += 1; continue }
+                defer { k += 1 }
+                if let mess = ProfanityRemover.messForms[lower], nextIs(k, ["up", "around", "with"]) || hasSplitUp(k) {
+                    replace(k, mess)
+                } else if lower == "fuck", nextIs(k, ["this", "that"]), adjacent(k + 1) {
+                    replace(k, "forget")
+                } else if lower == "ass", k >= 3, adjacent(k - 1), adjacent(k - 2), adjacent(k - 3),
+                          words[k - 1].lower == "the", words[k - 2].lower == "in", words[k - 3].lower == "pain" {
+                    replace(k, "neck")
+                } else if ProfanityRemover.droppedAdjectives.contains(lower), adjacent(k), modifiesNext(k) {
+                    // Only the adjective goes; the noun after it still gets its own swap ("damned asshole" is "jerk").
+                    drop(k)
+                } else if lower == "shit" || lower == "shits" || lower == "shitting" {
+                    if lower == "shitting" {
+                        replace(k, "dumping")
+                    } else if isGiveIdiom(k) {
+                        replace(k, lower == "shit" ? "hoot" : "hoots")
+                    } else if lower == "shit", adjacent(k), words[k + 1].lower == "you", adjacent(k + 1), words[k + 2].lower == "not" {
+                        replace(k, "kid")
+                    } else if isVerbPosition(k, thirdPerson: lower == "shits") {
+                        replace(k, lower == "shit" ? "dump" : "dumps")
+                    } else if lower == "shits", previous(k) != nil, !ProfanityRemover.nounLeaders.contains(previous(k) ?? "") {
+                        replace(k, "dumps")
+                    } else if lower == "shits" {
+                        replace(k, "stuff")
+                    } else if k > 0, adjacent(k - 1), ProfanityRemover.talkVerbs.contains(words[k - 1].lower) {
+                        replace(k, "nonsense")
+                    } else if k > 1, adjacent(k - 1), adjacent(k - 2), words[k - 1].lower == "of", words[k - 2].lower == "piece" {
+                        replace(k, "junk")
+                    } else {
+                        replace(k, "stuff")
+                    }
+                } else if lower == "bitch" || lower == "bitches" {
+                    if isVerbPosition(k, thirdPerson: lower == "bitches") {
+                        replace(k, lower == "bitch" ? "complain" : "complains")
+                    } else {
+                        replace(k, lower == "bitch" ? "jerk" : "jerks")
+                    }
+                } else if lower == "bitched" {
+                    replace(k, "complained")
+                } else if lower == "bitchin" {
+                    let end = words[k].end < n && "'\u{2019}".contains(chars[words[k].end]) ? words[k].end + 1 : words[k].end
+                    // The verb ("stop bitchin'", "he bitchin' about it") complains; only the adjective is great.
+                    let prev = previous(k) ?? ""
+                    let aboutNext = k + 1 < words.count && TextScan.onlySpaces(chars, end, words[k + 1].start) && words[k + 1].lower == "about"
+                    let isVerb = aboutNext || ProfanityRemover.gerundTriggers.contains(prev)
+                        || ["i", "we", "they", "you", "he", "she"].contains(prev)
+                    replace(k, isVerb ? "complaining" : "great", through: end)
+                } else if lower == "fuck" || lower == "fucks" || lower == "fucked" || lower == "fucking" || lower == "motherfucking" {
+                    if lower == "motherfucking" {
+                        drop(k)
+                    } else if lower == "fuck" || lower == "fucks", isGiveIdiom(k) {
+                        replace(k, lower == "fuck" ? "hoot" : "hoots")
+                    } else if lower == "fuck", isForgetObject(k) {
+                        replace(k, "forget")
+                    } else if let cheat = ProfanityRemover.cheatForms[lower], nextIs(k, ["over"]) {
+                        replace(k, cheat, through: words[k + 1].end)
+                    } else if let cheat = ProfanityRemover.cheatForms[lower], let over = splitParticle(k, "over") {
+                        replace(k, cheat)
+                        spans.append(TextSpan(range: words[over].start..<words[over].end, cut: words[over - 1].end..<words[over].end, replacement: ""))
+                    } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k), isFree(k + 1),
+                              ProfanityRemover.personObjects.contains(words[k + 1].lower) {
+                        replace(k, sleep)
+                    } else if let mess = ProfanityRemover.messUpForms[lower] {
+                        replace(k, mess)
+                    }
+                } else if let mild = ProfanityRemover.swaps[lower] {
+                    replace(k, mild)
+                }
+            }
+            for index in capitalise where !handled.contains(index) {
+                if !keepsCase(words[index]), let up = TextScan.capitalized(chars, words[index]) {
+                    spans.append(TextSpan(range: words[index].start..<words[index].end, replacement: up))
+                }
+            }
+            return spans
+        }
+
+        // MARK: Articles
+
+        /// Each "a" or "an" with the word right after it, keyed by the pair in lower case.
+        func articlePairs() -> [(key: String, article: Int, offset: Int)] {
+            var pairs: [(key: String, article: Int, offset: Int)] = []
+            for k in 0..<max(words.count - 1, 0) where ["a", "an"].contains(words[k].lower) && adjacent(k) && !insideToken(words[k]) {
+                pairs.append((words[k].lower + " " + words[k + 1].lower, k, words[k].start))
+            }
+            return pairs
+        }
+
+        /// Fixes "a" and "an" before the word that follows, except for pairs already in the text before the edits
+        /// (`skipping`, "original offset:pair"), which were the speaker's. `origin` maps this text's offsets back to the
+        /// original. Capitalisation is kept.
+        func articleRepairs(skipping known: Set<String>, origin: [Int]) -> [TextSpan] {
+            var spans: [TextSpan] = []
+            for (key, k, offset) in articlePairs() {
+                let original = offset < origin.count ? origin[offset] : n
+                if known.contains("\(original):\(key)") { continue }
+                let next = words[k + 1]
+                guard isFree(k), isFree(k + 1), let first = chars[next.start...].first, first.isLetter else { continue }
+                // An acronym ("an MBA", "a UFO") is read letter by letter, so the letter's name decides.
+                let wanted = isAcronym(next)
+                    ? ("AEFHILMNORSX".contains(chars[next.start]) ? "an" : "a")
+                    : (ProfanityRemover.startsWithVowelSound(next.lower) ? "an" : "a")
+                guard wanted != words[k].lower else { continue }
+                spans.append(TextSpan(range: words[k].start..<words[k].end, replacement: matchingCase(wanted, like: words[k])))
+            }
+            return spans
         }
 
         func isClauseEnd(_ i: Int) -> Bool {
