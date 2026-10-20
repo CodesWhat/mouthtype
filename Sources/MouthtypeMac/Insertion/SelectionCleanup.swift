@@ -120,8 +120,15 @@ enum SelectionCleanupError: Error { case unavailable }
         self.changed = changed
     }
 
-    /// Whether a selection can be read right now, so the menu can enable its items. Reads nothing into the model.
-    var hasReadableSelection: Bool { (try? editor.capture()) != nil }
+    /// The selection read when the menu opened. A phrase replaces exactly this, so a selection that moved while the
+    /// menu was open is refused instead of being overwritten.
+    @ObservationIgnored private var menuSelection: SelectedText?
+
+    /// Reads the selection as the menu opens, so the menu can enable its items and a phrase can be checked against it.
+    func captureForMenu() -> Bool {
+        menuSelection = try? editor.capture()
+        return menuSelection != nil
+    }
 
     /// Captures the selection and previews either Basic cleanup or, when `requested` is set, an AI transform.
     /// Basic cleanup runs the pipeline with `requestedTone`, or with the focused app's tone when that is nil.
@@ -282,18 +289,22 @@ enum SelectionCleanupError: Error { case unavailable }
         changed()
     }
 
-    enum PhraseOutcome: Equatable { case replaced, busy, unavailable, refused }
+    /// `refused` carries the expanded phrase text so the caller can copy exactly what would have been inserted.
+    enum PhraseOutcome: Equatable { case replaced, busy, unavailable, refused(String) }
 
-    /// Replaces the current selection with a saved phrase as it would deliver by voice (`{date}` and `{clipboard}`
-    /// filled). The same capture rules apply as for Clean Up: no secure fields, no password reads, and the
-    /// replacement is refused if the selection moved since it was read. The app's own Undo (Cmd-Z) reverts it.
+    /// Replaces the selection captured when the menu opened with a saved phrase as it would deliver by voice (`{date}`
+    /// and `{clipboard}` filled). The same rules apply as for Clean Up: no secure fields, no password reads, and the
+    /// replacement is refused if the selection moved since the menu opened. It never captures fresh at click time.
+    /// The app's own Undo (Cmd-Z) reverts it.
     func insert(phrase: Snippet, now: Date = Date(), clipboard: String? = nil) -> PhraseOutcome {
         guard !busy() else { return .busy }
-        guard let selection = try? editor.capture() else { return .unavailable }
+        let selection = menuSelection
+        menuSelection = nil
+        guard let selection else { return .unavailable }
         let expander = SnippetExpander(snippets: [phrase], now: now, clipboard: clipboard)
         let expanded = expander.apply(phrase.trigger).text
         let text = expander.matchingTriggers(in: phrase.trigger).isEmpty ? phrase.expansion : expanded
-        guard !text.isEmpty, text.utf16.count <= 16_000, editor.replace(selection, with: text) else { return .refused }
+        guard !text.isEmpty, text.utf16.count <= 16_000, editor.replace(selection, with: text) else { return .refused(text) }
         return .replaced
     }
 }

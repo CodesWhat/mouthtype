@@ -236,7 +236,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             phrases: { [weak self] in self?.phrases.snippets() ?? [] },
             canAct: { [weak self] in
                 guard let self else { return false }
-                return AXIsProcessTrusted() && self.selectionCleanupModel.hasReadableSelection
+                return AXIsProcessTrusted() && self.selectionCleanupModel.captureForMenu()
             }))
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(page: .transcribeFile) }, startsGroup: false)
         if let recovery {
@@ -426,8 +426,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             showNotice(PillMessage("Finish the current dictation or file job first"))
         case .unavailable:
             showNotice(PillMessage("Select text in an accessible field first"))
-        case .refused:
-            SystemClipboard().write(phrase.expansion)
+        case let .refused(text):
+            SystemClipboard().write(text)
             showNotice(PillMessage("Couldn’t replace the selection", detail: "Phrase copied instead"))
         }
     }

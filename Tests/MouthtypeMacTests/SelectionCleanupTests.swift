@@ -160,13 +160,41 @@ import MouthtypeCore
         var busy = false
         let model = SelectionCleanupModel(editor: editor, busy: { busy })
         let phrase = Snippet(trigger: "Sign-off", expansion: "Best,\nScott")
+        #expect(model.insert(phrase: phrase) == .unavailable)
+        #expect(model.captureForMenu())
         #expect(model.insert(phrase: phrase) == .replaced)
         #expect(editor.attempts == 1)
+        #expect(model.captureForMenu())
         busy = true
         #expect(model.insert(phrase: phrase) == .busy)
         busy = false
         editor.unavailable = true
+        #expect(!model.captureForMenu())
         #expect(model.insert(phrase: phrase) == .unavailable)
-        #expect(editor.attempts == 1 && !model.hasReadableSelection)
+        #expect(editor.attempts == 1)
+    }
+
+    @Test func phraseRefusesWhenSelectionChangedAfterMenuOpened() {
+        let editor = SelectionFixture()
+        let model = SelectionCleanupModel(editor: editor)
+        let phrase = Snippet(trigger: "Sign-off", expansion: "Best,\nScott")
+        #expect(model.captureForMenu())
+        editor.selected = SelectedText(pid: 123, element: nil, range: NSRange(location: 40, length: 5), text: "other")
+        #expect(model.insert(phrase: phrase) == .refused("Best,\nScott"))
+        #expect(editor.attempts == 0)
+    }
+
+    @Test func refusedPhraseCarriesExpandedText() {
+        let editor = SelectionFixture()
+        let model = SelectionCleanupModel(editor: editor)
+        let phrase = Snippet(trigger: "Sig", expansion: "On {date}: {clipboard}")
+        let now = Date(timeIntervalSince1970: 1_700_000_000)
+        #expect(model.captureForMenu())
+        editor.current = SelectedText(pid: 9, element: nil, range: NSRange(location: 0, length: 1), text: "x")
+        guard case let .refused(text) = model.insert(phrase: phrase, now: now, clipboard: "pasted") else {
+            Issue.record("expected refused")
+            return
+        }
+        #expect(text.contains("pasted") && !text.contains("{date}") && !text.contains("{clipboard}"))
     }
 }
