@@ -24,9 +24,9 @@ Turn it off with `defaults delete com.codeswhat.mouthtype automationEnabled`. A 
 | `mouthtype://cancel` | Cancels a hands-free recording. | Cancel Dictation in the menu |
 | `mouthtype://copy-last` | Copies the last delivered text. | Copy Last in the menu |
 | `mouthtype://paste-last` | Pastes the last delivered text. | Paste Last in the menu |
-| `mouthtype://open?page=<page>` | Shows that page in the Mouthtype window: `home`, `general`, `writing`, `appearance` or `diagnostics`. `settings` or no page shows the window on whatever page it's on. | Settings in the menu |
+| `mouthtype://open?page=<page>` | Shows that page in the Mouthtype window: `home`, `stats`, `records`, `spellings` (Saved spellings), `phrases`, `transcribe` (Transcribe file), `general`, `writing`, `appearance` or `diagnostics`. `settings` or no page shows the window on whatever page it's on. | Settings in the menu |
 
-Every verb goes through the same code as the menu and hotkeys, so the busy, permission, engine-readiness and secure-field checks still apply. Pasting still refuses secure fields and changed destinations. `stop` and `cancel` only act on a hands-free recording, same as the menu. While you're holding the dictation key, `start` and `toggle` do nothing, and two starts fired together begin one recording.
+Every verb goes through the same code as the menu and hotkeys, so the busy, permission, engine-readiness and secure-field checks still apply. Pasting still refuses secure fields and changed destinations. `stop` and `cancel` only act on a hands-free recording, same as the menu. While you're holding the dictation key, `start` and `toggle` do nothing, and two starts fired together begin one recording, and the second shows "Already starting" in the pill and is logged.
 
 Anything else is ignored and logged: unknown verbs, unknown pages, extra path segments, other schemes. Parameters other than `page` are dropped. URLs can't return a value, so there's no `status` yet.
 
@@ -43,7 +43,7 @@ mouthtype open appearance
 
 `mouthtype --help` prints the usage and exits 0. Any bad verb, bad page or extra argument prints the usage to stderr and exits 64 without opening anything.
 
-URL commands run in the order they arrive, so `start` followed by `stop` stops the recording the start is still bringing up. A recording started this way stops with the dictation key and cancels with Esc, like one started from the keyboard.
+URL commands run in the order they arrive, so `start` followed by `stop` stops the recording the start is still bringing up. A command waits at most 10 seconds for the one before it, so a start that never returns can't hold up a later `stop` or `cancel` forever. A `stop` or `cancel` that stops waiting this way is remembered by the start and applied the moment the recording comes up: `stop` ends and transcribes it, `cancel` discards it, and it is never left locked on. A recording started this way stops with the dictation key and cancels with Esc, like one started from the keyboard.
 
 ## Shortcuts
 

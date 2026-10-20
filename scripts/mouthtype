@@ -6,7 +6,7 @@ set -euo pipefail
 text() {
     cat <<'USAGE'
 usage: mouthtype <start|stop|toggle|cancel|copy-last|paste-last>
-       mouthtype open [home|settings|general|writing|appearance|diagnostics]
+       mouthtype open [home|settings|stats|records|spellings|phrases|transcribe|general|writing|appearance|diagnostics]
 USAGE
 }
 
@@ -32,7 +32,7 @@ case "$verb" in
         url="mouthtype://open"
         if [ $# -eq 2 ]; then
             case "$2" in
-                home | settings | general | writing | appearance | diagnostics) url="$url?page=$2" ;;
+                home | settings | stats | records | spellings | phrases | transcribe | general | writing | appearance | diagnostics) url="$url?page=$2" ;;
                 *) usage ;;
             esac
         fi

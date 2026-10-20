@@ -107,7 +107,8 @@ import MouthtypeCore
 
     @Test func everyOpenPageRoutesToItsSidebarPage() {
         let expected: [AutomationPage: SettingsPage?] = [
-            .home: .home, .settings: nil, .general: .general, .writing: .writing,
+            .home: .home, .settings: nil, .stats: .stats, .records: .records, .spellings: .savedSpellings,
+            .phrases: .phrases, .transcribe: .transcribeFile, .general: .general, .writing: .writing,
             .appearance: .appearance, .diagnostics: .diagnostics,
         ]
         #expect(Set(expected.keys) == Set(AutomationPage.allCases))
