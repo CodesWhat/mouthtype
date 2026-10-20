@@ -6,7 +6,7 @@ The scheme comes from `CFBundleURLTypes` in the built app. An app bundle built b
 
 ## Turn it on
 
-Verbs that record, copy or insert are off until you opt in, because any web page can open a `mouthtype://` link. Opening a Settings page works without it.
+Verbs that record, copy or insert are off until you opt in, because any web page can open a `mouthtype://` link. Opening a page works without it. If you have an unsaved spelling or phrase, the window asks before leaving that page.
 
 ```sh
 defaults write com.codeswhat.mouthtype automationEnabled -bool true
@@ -24,9 +24,9 @@ Turn it off with `defaults delete com.codeswhat.mouthtype automationEnabled`. A 
 | `mouthtype://cancel` | Cancels a hands-free recording. | Cancel Dictation in the menu |
 | `mouthtype://copy-last` | Copies the last delivered text. | Copy Last in the menu |
 | `mouthtype://paste-last` | Pastes the last delivered text. | Paste Last in the menu |
-| `mouthtype://open?page=<page>` | Shows a page: `home`, `settings`, `general`, `writing`, `appearance` or `diagnostics`. No page means Settings. | Settings in the menu |
+| `mouthtype://open?page=<page>` | Shows that page in the Mouthtype window: `home`, `general`, `writing`, `appearance` or `diagnostics`. `settings` or no page shows the window on whatever page it's on. | Settings in the menu |
 
-Every verb goes through the same code as the menu and hotkeys, so the busy, permission, engine-readiness and secure-field checks still apply. Pasting still refuses secure fields and changed destinations. `stop` and `cancel` only act on a hands-free recording, same as the menu. While you're holding the dictation key, `start` and `toggle` do nothing, and two starts fired together begin one recording. `home` opens Settings until the Home page lands.
+Every verb goes through the same code as the menu and hotkeys, so the busy, permission, engine-readiness and secure-field checks still apply. Pasting still refuses secure fields and changed destinations. `stop` and `cancel` only act on a hands-free recording, same as the menu. While you're holding the dictation key, `start` and `toggle` do nothing, and two starts fired together begin one recording.
 
 Anything else is ignored and logged: unknown verbs, unknown pages, extra path segments, other schemes. Parameters other than `page` are dropped. URLs can't return a value, so there's no `status` yet.
 

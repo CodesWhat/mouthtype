@@ -3,6 +3,11 @@ import Foundation
 /// A page the `open` verb can show. `home` and `settings` are destinations; the rest are Settings pages by name.
 enum AutomationPage: String, CaseIterable, Equatable {
     case home, settings, general, writing, appearance, diagnostics
+
+    /// The sidebar page this opens in the Mouthtype window. `settings` has no page of its own: it shows the window where it is.
+    var settingsPage: SettingsPage? {
+        self == .settings ? nil : SettingsPage(rawValue: rawValue)
+    }
 }
 
 /// The whole `mouthtype://` operation set. Each verb is exactly one case, and each case reaches exactly one action.

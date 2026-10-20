@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import MouthtypeCore
 @testable import MouthtypeMac
 
 @MainActor
@@ -104,9 +105,50 @@ import Testing
         #expect(recorder.calls == ["toggle"])
     }
 
-    @Test func everyOpenPageMapsToASettingsPageOrHome() {
-        for page in AutomationPage.allCases where page != .home && page != .settings {
-            #expect(SettingsPage(rawValue: page.rawValue) != nil)
+    @Test func everyOpenPageRoutesToItsSidebarPage() {
+        let expected: [AutomationPage: SettingsPage?] = [
+            .home: .home, .settings: nil, .general: .general, .writing: .writing,
+            .appearance: .appearance, .diagnostics: .diagnostics,
+        ]
+        #expect(Set(expected.keys) == Set(AutomationPage.allCases))
+        for (page, target) in expected {
+            #expect(page.settingsPage == target)
         }
+    }
+
+    @Test func openByURLGoesThroughSelectSoADraftStillAsks() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-automation-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let suite = "AutomationOpen-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer {
+            defaults.removePersistentDomain(forName: suite)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let vocabulary = FileVocabulary(url: dir.appendingPathComponent("dictionary.json"))
+        let spellings = SpellingEditor(store: vocabulary)
+        let model = SettingsModel(defaults: defaults, spellings: spellings,
+            spellingSuggestions: SpellingSuggestionsModel(vocabulary: vocabulary, dismissedURL: dir.appendingPathComponent("dismissed.json")),
+            phrases: PhraseEditor(store: FilePhrases(url: dir.appendingPathComponent("phrases.json"))))
+        var asked = 0
+        var answer = false
+        model.confirmDiscard = { _, _ in asked += 1; return answer }
+        let router = AutomationRouter(actions: AutomationActions(
+            startDictation: {}, stopDictation: {}, toggleDictation: {}, cancelDictation: {}, copyLast: {}, pasteLast: {},
+            open: { if let page = $0.settingsPage { model.select(page) } }
+        ), isEnabled: { false })
+
+        model.page = .savedSpellings
+        spellings.newSpelling()
+        spellings.heard = "mouth type"
+        #expect(router.handle(url("mouthtype://open?page=general")) == .performed(.open(.general)))
+        #expect(model.page == .savedSpellings && spellings.isDirty && asked == 1)
+
+        answer = true
+        router.handle(url("mouthtype://open?page=writing"))
+        #expect(model.page == .writing && !spellings.isDirty && asked == 2)
+
+        router.handle(url("mouthtype://open?page=home"))
+        #expect(model.page == .home && asked == 2)
     }
 }

@@ -316,8 +316,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             copyLast: { [weak self] in self?.copyLast() },
             pasteLast: { [weak self] in self?.pasteLast() },
-            // Home has no window yet, so it opens Settings until it does.
-            open: { [weak self] page in self?.settingsWindow.present(page: SettingsPage(rawValue: page.rawValue)) }
+            // present(page:) moves through SettingsModel.select, so an unsaved spelling or phrase draft still asks first.
+            open: { [weak self] page in self?.settingsWindow.present(page: page.settingsPage) }
         ))
     }
 
