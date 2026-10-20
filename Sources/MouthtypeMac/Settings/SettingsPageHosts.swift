@@ -2,7 +2,7 @@ import SwiftUI
 import MouthtypeCore
 
 /// What each sidebar page shows. Until a page agent replaces its entry, the page hosts the pre-redesign view so the app stays
-/// complete: Stats shows Stats then Records, Dictionary the Saved spellings editor, Transforms the Phrases editor, Style the cleanup
+/// complete: Stats shows the redesigned page (Records is its High scores card), Dictionary the Saved spellings editor, Transforms the Phrases editor, Style the cleanup
 /// level and the Writing groups, Appearance the Appearance groups. Each hosted page gets the redesign header from `DesignPage`.
 extension SettingsView {
     @ViewBuilder var pageContent: some View {
@@ -16,7 +16,6 @@ extension SettingsView {
         case .stats:
             DesignPage(title: page.headline, summary: page.summary) {
                 StatsHostPage(model: model.stats)
-                RecordsHostPage(model: model.stats)
             }
         case .dictionary:
             wordsPage(page) { SavedSpellingsPage(model: model) }
