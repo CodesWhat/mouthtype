@@ -132,7 +132,43 @@ final class SettingsNSWindow: NSWindow {
     /// end of the window. Step back through the forward Tab order instead, which is the order Tab already follows.
     override func selectKeyView(preceding view: NSView) {
         guard let previous = SettingsKeyLoop.previous(of: view, in: contentView) else { return super.selectKeyView(preceding: view) }
-        makeFirstResponder(previous)
+        focusByKeyboard(previous)
+    }
+
+    /// True while a Tab, Shift-Tab or key view step is moving focus, so mouse clicks don't jump the page.
+    private var isMovingFocusByKeyboard = false
+
+    override func selectNextKeyView(_ sender: Any?) { keyboardStep { super.selectNextKeyView(sender) } }
+    override func selectPreviousKeyView(_ sender: Any?) { keyboardStep { super.selectPreviousKeyView(sender) } }
+    override func selectKeyView(following view: NSView) { keyboardStep { super.selectKeyView(following: view) } }
+
+    private func keyboardStep(_ body: () -> Void) {
+        let was = isMovingFocusByKeyboard
+        isMovingFocusByKeyboard = true
+        defer { isMovingFocusByKeyboard = was }
+        body()
+    }
+
+    /// Moves focus the way Tab does, which also scrolls the page to the new control.
+    @discardableResult func focusByKeyboard(_ view: NSView) -> Bool {
+        var moved = false
+        keyboardStep { moved = makeFirstResponder(view) }
+        return moved
+    }
+
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        let moved = super.makeFirstResponder(responder)
+        if moved, isMovingFocusByKeyboard, let responder { scrollFocusIntoView(responder) }
+        return moved
+    }
+
+    /// Scrolls the page so the focused control is on screen with a small margin. The sidebar rows always fit, so they're left alone.
+    private func scrollFocusIntoView(_ responder: NSResponder) {
+        var target = responder as? NSView
+        if let editor = responder as? NSText, editor.isFieldEditor, let owner = editor.delegate as? NSView { target = owner }
+        guard let view = target, view.enclosingScrollView != nil,
+              view.convert(view.bounds, to: nil).minX >= SettingsTheme.sidebarWidth else { return }
+        view.scrollToVisible(view.bounds.insetBy(dx: 0, dy: -12))
     }
 }
 

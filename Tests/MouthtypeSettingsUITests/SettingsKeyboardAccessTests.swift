@@ -216,6 +216,45 @@ import Testing
         #expect(SettingsKeyLoop.previous(of: NSView(), in: root) == nil)
     }
 
+    /// The page's scroll view and a keyboard stop in it that starts below the fold.
+    private func pageScrollAndOffscreenStop(_ window: NSWindow) throws -> (NSScrollView, NSView) {
+        var scrolls: [NSScrollView] = []
+        func collect(_ view: NSView) {
+            if let scroll = view as? NSScrollView, scroll.convert(scroll.bounds, to: nil).minX >= SettingsTheme.sidebarWidth { scrolls.append(scroll) }
+            view.subviews.forEach(collect)
+        }
+        collect(try #require(window.contentView))
+        let scroll = try #require(scrolls.max { $0.bounds.height < $1.bounds.height }, "no page scroll view")
+        let document = try #require(scroll.documentView)
+        let stop = try keyViewChain(window).filter { $0.enclosingScrollView === scroll && $0.acceptsFirstResponder }
+            .max { $0.convert($0.bounds, to: document).maxY < $1.convert($1.bounds, to: document).maxY }
+        let target = try #require(stop, "no focusable control in the page")
+        #expect(target.convert(target.bounds, to: document).maxY > scroll.documentVisibleRect.maxY, "control is not below the fold")
+        return (scroll, target)
+    }
+
+    /// Tab (and the Shift-Tab path) must bring a control below the fold into view.
+    @Test func keyboardFocusScrollsTheControlIntoView() throws {
+        let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let (scroll, target) = try pageScrollAndOffscreenStop(window)
+        let document = try #require(scroll.documentView)
+        #expect(window.focusByKeyboard(target))
+        scroll.layoutSubtreeIfNeeded()
+        let frame = target.convert(target.bounds, to: document)
+        #expect(scroll.documentVisibleRect.contains(frame), "frame \(frame) outside visible \(scroll.documentVisibleRect)")
+    }
+
+    /// A click (plain makeFirstResponder) must not move the page.
+    @Test func nonKeyboardFocusDoesNotScroll() throws {
+        let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let (scroll, target) = try pageScrollAndOffscreenStop(window)
+        let before = scroll.contentView.bounds.origin
+        #expect(window.makeFirstResponder(target))
+        #expect(scroll.contentView.bounds.origin == before)
+    }
+
     private func press(_ key: UInt32, keyCode: UInt16, in window: NSWindow) throws {
         let characters = String(UnicodeScalar(key)!)
         let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function], timestamp: 0,
