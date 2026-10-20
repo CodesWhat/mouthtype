@@ -68,7 +68,8 @@ import Testing
         }
         #expect(tables.contains("dictation") && tables.contains("edit_op"))
         #expect(indexes.contains("dictation_local_day") && indexes.contains("dictation_started_at") && indexes.contains("dictation_status"))
-        #expect(migrations == ["v1", "v2"])
+        #expect(migrations == ["v1", "v2", "v3"])
+        #expect(indexes.contains("dictation_stats"))
         #expect(tables.contains("correction"))
         for column in ["id", "started_at", "utc_offset_s", "local_day", "first_nonzero_ms", "word_timings_json", "raw_text",
                        "det_text", "final_text", "prompt_sha", "is_secure", "paste_receipt_ms", "retry_of", "os_version", "error_message"] {

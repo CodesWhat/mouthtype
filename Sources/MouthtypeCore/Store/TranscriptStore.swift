@@ -10,12 +10,12 @@ public enum TranscriptStoreError: Error, Equatable {
 /// Stops a `TranscriptStore.observeRecentTakes` observation when cancelled or released.
 public final class TakesObservation: @unchecked Sendable {
     private let cancellable: AnyDatabaseCancellable
-    fileprivate init(_ cancellable: AnyDatabaseCancellable) { self.cancellable = cancellable }
+    init(_ cancellable: AnyDatabaseCancellable) { self.cancellable = cancellable }
     public func cancel() { cancellable.cancel() }
 }
 
 public final class TranscriptStore: Sendable {
-    private let pool: DatabasePool
+    let pool: DatabasePool
 
     public static func defaultURL() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -96,6 +96,13 @@ public final class TranscriptStore: Sendable {
                     created_at REAL NOT NULL
                 );
                 CREATE INDEX correction_dictation_id ON correction(dictation_id);
+                """)
+        }
+        migrator.registerMigration("v3") { db in
+            // Covers the Stats and Records aggregates so they read one index and never the dictation rows.
+            try db.execute(sql: """
+                CREATE INDEX dictation_stats ON dictation(local_day, words_final, started_at, voiced_ms, audio_ms, is_secure)
+                WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0;
                 """)
         }
         return migrator

@@ -250,6 +250,10 @@ import Testing
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .general)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .records)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .stats)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .home)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .home)
@@ -264,7 +268,8 @@ import Testing
     @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {
         #expect(SettingsPage.general.moved(by: 1) == .writing)
         #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
-        #expect(SettingsPage.general.moved(by: -1) == .home)
+        #expect(SettingsPage.general.moved(by: -1) == .records)
+        #expect(SettingsPage.records.moved(by: -1) == .stats)
         #expect(SettingsPage.home.moved(by: -1) == .home)
     }
 }

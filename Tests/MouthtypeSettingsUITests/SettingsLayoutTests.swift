@@ -52,8 +52,8 @@ import MouthtypeCore
 
     // MARK: Sidebar
 
-    @Test func sidebarListsHomeThenFourSettingsPagesAndTheYourWordsEntries() {
-        #expect(SettingsPage.allCases.map(\.title) == ["Home", "General", "Writing", "Appearance", "Diagnostics"])
+    @Test func sidebarListsHomeStatsRecordsThenFourSettingsPagesAndTheYourWordsEntries() {
+        #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Records", "General", "Writing", "Appearance", "Diagnostics"])
         #expect(SettingsPage.settingsPages.map(\.title) == ["General", "Writing", "Appearance", "Diagnostics"])
         #expect(SettingsSidebarLink.words.map(\.title) == ["Saved spellings", "Phrases"])
         #expect(SettingsSidebarLink.setUp.title == "Set Up Mouthtype…")
@@ -212,7 +212,10 @@ import MouthtypeCore
     @Test func arrowKeysMoveTheSidebarSelectionAndStopAtTheEnds() {
         #expect(SettingsPage.general.moved(by: 1) == .writing)
         #expect(SettingsPage.writing.moved(by: -1) == .general)
-        #expect(SettingsPage.general.moved(by: -1) == .home)
+        #expect(SettingsPage.general.moved(by: -1) == .records)
+        #expect(SettingsPage.records.moved(by: -1) == .stats)
+        #expect(SettingsPage.stats.moved(by: -1) == .home)
+        #expect(SettingsPage.home.moved(by: 1) == .stats)
         #expect(SettingsPage.home.moved(by: -1) == .home)
         #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
     }
