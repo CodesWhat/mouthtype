@@ -108,7 +108,8 @@ import MouthtypeCore
         let directory = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
         let files = ["SettingsView", "SettingsTheme", "SettingsGeneralPage", "SettingsWritingPage", "SettingsAppearancePage",
                      "MicrophoneSettingsSection", "AudioRetentionSection", "FontOverridesSection", "LivePreviewSettingsRow",
-                     "SettingsDiagnosticsView", "SettingsWindow"]
+                     "SettingsDiagnosticsView", "SettingsWindow", "SettingsAdvancedPage", "SettingsMacPage", "SettingsModalRows",
+                     "SettingsModalView", "SetupWindow"]
         let pattern = try NSRegularExpression(pattern: #"size:\s*([0-9]+(?:\.[0-9]+)?)"#)
         var found = 0
         for file in files {
@@ -196,14 +197,9 @@ import MouthtypeCore
                 "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
         #expect(document.frame.width <= scroll.contentView.bounds.width + 1)
         #expect(textsAreUntruncated(in: view).isEmpty, "\(textsAreUntruncated(in: view))")
-        let popups = descendants(of: view).compactMap { $0 as? NSPopUpButton }
-        let mic = try #require(popups.first { $0.itemTitles.contains(Self.longMic) && $0.titleOfSelectedItem == Self.longMic })
-        let titleWidth = (Self.longMic as NSString).size(withAttributes: [.font: mic.font ?? .systemFont(ofSize: 13)]).width
-        #expect(mic.intrinsicContentSize.width >= titleWidth, "popup \(mic.intrinsicContentSize.width) < title \(titleWidth)")
-        #expect(mic.bounds.width >= mic.intrinsicContentSize.width - 1, "popup laid out at \(mic.bounds.width), needs \(mic.intrinsicContentSize.width)")
-        if let refresh = descendants(of: view).compactMap({ $0 as? NSButton }).first(where: { $0.title == "Refresh inputs" }) {
-            #expect(refresh.bounds.width >= refresh.intrinsicContentSize.width - 1)
-        }
+        // The design popup is drawn rather than an NSPopUpButton, so check the model and let the width and untruncated checks above cover layout.
+        #expect(model.microphone.choice == .device("long"))
+        #expect(model.microphone.inputs.contains { $0.name == Self.longMic })
         let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
         view.cacheDisplay(in: view.bounds, to: bitmap)
         #expect(!window.isVisible)
@@ -254,17 +250,7 @@ import MouthtypeCore
     @Test func everySettingFromTheOldWindowHasAHomeOnItsPage() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        let modal: [(SettingsModalPage, popups: Int, switches: Int)] = [
-            (.general, 2, 3),                       // mic, recording behavior | quiet audio, live words, sounds
-            (.mac, 0, 1),                           // launch at login (updates are a checkbox and a button)
-            (.health, 2, 1),                        // audio age, audio size | remap Fn
-        ]
-        for (page, popups, switches) in modal {
-            model.modalPage = page
-            let (view, _) = SettingsRender.hostModal(model: model, actions: actions(), dark: false)
-            #expect(count("SwiftUIPopupButton", in: view) == popups, "modal \(page.title) pop-ups")
-            #expect(count("PlatformSwitch", in: view) == switches, "modal \(page.title) switches")
-        }
+        // The Settings modal pages draw their own popups and switches, so their controls are checked by identifier in ModalPagesTests.
     }
 
     @Test func everyOldControlIdentifierStillExistsInTheSettingsSources() throws {
@@ -277,7 +263,7 @@ import MouthtypeCore
                            "settings-audio-age", "settings-audio-size", "settings-font-overrides", "settings-font-reset",
                            "style-website-domain"]
         for id in identifiers { #expect(source.contains("\"\(id)\""), "missing \(id)") }
-        let titles = ["Microphone", "Dictation shortcut", "Recording behavior", "Cleanup", "Quiet other audio", "Live words",
+        let titles = ["Microphone", "Shortcut", "Recording behavior", "Cleanup", "Quiet other audio", "Live words",
                       "Recording sounds", "Launch at login", "Updates", "Remove fillers", "Spoken commands and lists", "Format numbers", "Learn from my corrections",
                       "Lowercase sentence starts", "Drop the final full stop", "Edit dictionary file…", "Pill style", "Pill size",
                       "Text font", "Choose Font…", "Override individual fonts", "Keep completed recordings",

@@ -96,7 +96,7 @@ struct DesignRow<Controls: View>: View {
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(alignment: .center, spacing: 16) {
-                label.frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+                label.frame(minWidth: 180, idealWidth: 180, maxWidth: .infinity, alignment: .leading)
                 trailing.layoutPriority(1)
             }
             VStack(alignment: .leading, spacing: 8) {

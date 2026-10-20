@@ -11,21 +11,22 @@ extension SettingsView {
         generalMac
     }
 
+    /// Settings modal, General: Dictation (shortcut, recording behavior, microphone).
     @ViewBuilder var generalInput: some View {
-        SettingsGroup(eyebrow: "INPUT") {
+        DesignSection(eyebrow: "DICTATION") {
+            DesignRow(title: "Shortcut", detail: model.recordingMode == .hold ? "Hold it, speak, let go." : "Press it once to start, again to stop.") {
+                DesignKbd(model.shortcut)
+                Button("Change…", action: actions.changeShortcut).buttonStyle(.designSecondary).fixedSize()
+                    .accessibilityLabel("Change dictation shortcut").accessibilityIdentifier("settings-shortcut")
+            }
+            DesignRow(title: "Recording behavior", detail: "Hold to talk, or press once to start and again to stop. Changing this cancels an active recording.") {
+                DesignPopup(title: "Recording behavior",
+                    selection: Binding(get: { model.recordingMode.rawValue }, set: { if let mode = RecordingMode(rawValue: $0) { model.setRecordingMode(mode) } }),
+                    choices: [DesignChoice("Hold to talk", RecordingMode.hold.rawValue), DesignChoice("Press to toggle", RecordingMode.toggle.rawValue)])
+                    .accessibilityIdentifier("settings-recording-mode")
+            }
+            if let error = model.recordingModeError { ModalCardNote(text: error, tone: .red) }
             MicrophoneSettingsSection(model: model.microphone)
-            SettingsRow(title: "Dictation shortcut", detail: "A key or combination that feels natural.") {
-                Text(model.shortcut).font(.system(size: 12, design: .monospaced)).padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(Color.primary.opacity(0.07), in: RoundedRectangle(cornerRadius: 5))
-                Button("Change…", action: actions.changeShortcut).accessibilityIdentifier("settings-shortcut")
-            }
-            SettingsRow(title: "Recording behavior", detail: "Changing this cancels an active recording.") {
-                Picker("Recording behavior", selection: Binding(get: { model.recordingMode.rawValue }, set: { if let mode = RecordingMode(rawValue: $0) { model.setRecordingMode(mode) } })) {
-                    Text("Hold to talk").tag(RecordingMode.hold.rawValue)
-                    Text("Press to toggle").tag(RecordingMode.toggle.rawValue)
-                }.labelsHidden().fixedSize().accessibilityIdentifier("settings-recording-mode")
-            }
-            if let error = model.recordingModeError { SettingsNote(text: error, tone: .red) }
         }
     }
 
@@ -50,34 +51,38 @@ extension SettingsView {
         }
     }
 
+    /// Settings modal, General: While recording (sounds, live words, quiet other audio).
     @ViewBuilder var generalRecording: some View {
-        SettingsGroup(eyebrow: "WHILE RECORDING") {
-            SettingsRow(title: "Quiet other audio", detail: "Mute the current output while recording, on supported devices.") {
-                Toggle("Quiet other audio", isOn: Binding(get: { model.quietOtherAudio }, set: model.setQuietOtherAudio))
-                    .labelsHidden().toggleStyle(.switch).accessibilityIdentifier("settings-quiet-audio")
-            }
+        DesignSection(eyebrow: "WHILE RECORDING") {
+            ModalToggleRow(title: "Recording sounds", detail: "A small cue when you start and finish.",
+                isOn: Binding(get: { model.sounds }, set: model.setSounds), identifier: "settings-sounds")
             LivePreviewSettingsRow(model: model)
-            SettingsRow(title: "Recording sounds", detail: "A small cue when you start and finish.") {
-                Toggle("Recording sounds", isOn: Binding(get: { model.sounds }, set: model.setSounds))
-                    .labelsHidden().toggleStyle(.switch).accessibilityIdentifier("settings-sounds")
-            }
+            ModalToggleRow(title: "Quiet other audio", detail: "Mute the current output while recording, on supported devices.",
+                isOn: Binding(get: { model.quietOtherAudio }, set: model.setQuietOtherAudio), identifier: "settings-quiet-audio")
         }
     }
 
+    /// Settings modal, Mac: launch at login and updates.
     @ViewBuilder var generalMac: some View {
-        SettingsGroup(eyebrow: "MAC") {
-            SettingsRow(title: "Launch at login",
+        DesignSection(eyebrow: "STARTUP") {
+            DesignRow(title: "Launch at login",
                 detail: model.loginState == .mixed ? "Waiting for approval in System Settings." : "Keep Mouthtype ready in your menu bar.") {
-                if model.loginState == .mixed { Button("Open Login Items…") { model.toggleLogin() } }
+                if model.loginState == .mixed {
+                    Button("Open Login Items…") { model.toggleLogin() }.buttonStyle(.designSecondary).fixedSize()
+                }
                 Toggle("Launch at login", isOn: Binding(get: { model.loginState != .off }, set: { _ in model.toggleLogin() }))
-                    .labelsHidden().toggleStyle(.switch).accessibilityIdentifier("settings-launch-at-login")
+                    .labelsHidden().toggleStyle(.designSwitch).accessibilityIdentifier("settings-launch-at-login")
             }
-            if let updater = actions.updater {
-                SettingsRow(title: "Updates", detail: updater.statusText) {
-                    Toggle("Check automatically", isOn: Binding(get: { updater.automaticallyChecksForUpdates }, set: updater.setAutomaticChecks))
-                        .toggleStyle(.checkbox).fixedSize().disabled(!updater.isAvailable).accessibilityIdentifier("settings-auto-updates")
+        }
+        if let updater = actions.updater {
+            DesignSection(eyebrow: "UPDATES") {
+                DesignRow(title: "Check for updates automatically", detail: "Mouthtype looks in the background and tells you when one is ready.") {
+                    Toggle("Check for updates automatically", isOn: Binding(get: { updater.automaticallyChecksForUpdates }, set: updater.setAutomaticChecks))
+                        .labelsHidden().toggleStyle(.designSwitch).disabled(!updater.isAvailable).accessibilityIdentifier("settings-auto-updates")
+                }
+                DesignRow(title: "Updates", detail: updater.statusText) {
                     Button(updater.hasUpdate ? "Review Update…" : "Check for Updates…") { updater.checkForUpdates() }
-                        .fixedSize()
+                        .buttonStyle(.designSecondary).fixedSize()
                         .disabled(!updater.canCheckForUpdates).accessibilityIdentifier("settings-check-updates")
                 }
             }

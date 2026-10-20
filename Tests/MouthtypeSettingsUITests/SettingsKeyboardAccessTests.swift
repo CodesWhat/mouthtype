@@ -114,6 +114,22 @@ import Testing
         return stops
     }
 
+    }
+
+    /// Appearance is built from the redesign's own controls (style tiles, segmented controls, switch), which are plain buttons and so are
+    /// proxies in the loop. Tab must walk the sidebar and then reach all of them: five style tiles, two preview swatches, three sizes at least.
+    @Test func tabReachesTheAppearanceStyleTilesAndSegmentsUnderFullKeyboardAccess() throws {
+        let (controller, window) = try keyWindow(page: .appearance, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let stops = try tabOrder(window)
+        let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
+        #expect(sidebar.count == SettingsPage.allCases.count + 1)
+        let pageStops = stops.dropFirst(sidebar.count).filter { $0.x >= SettingsTheme.sidebarWidth }
+        #expect(pageStops.count >= PillSkinKind.allCases.count + PreviewWallpaper.allCases.count + PillSize.allCases.count,
+                "Appearance: \(pageStops.count) page Tab stops")
+    }
+
+
     /// Home's Copy and Recover buttons are plain buttons, so they are proxies in the loop. Tab must walk the sidebar rows (Home included)
     /// and then reach every row button in order, and `previousKeyView` must mirror it so Shift-Tab steps back through the same stops.
     @Test func tabReachesHomeRowButtonsAfterTheSidebarAndShiftTabMirrorsIt() async throws {

@@ -5,9 +5,6 @@ import MouthtypeCore
 /// The Settings modal: a 760x540 sheet on the Mouthtype window with a mini-nav (General, Mac, Health, and Advanced while its footer
 /// switch is on). Esc and the close button dismiss it. Nested editors (the shortcut recorder, Add application) open as another
 /// sheet on top of this one, see `SettingsWindow.topmostWindow`.
-///
-/// The page bodies still host the pre-redesign groups (`SettingsView.generalInput` and friends). Page agents replace them with
-/// `DesignSection`/`DesignRow` versions and keep this shell.
 struct SettingsModalView: View {
     static let size = CGSize(width: 760, height: 540)
     static let navWidth: CGFloat = 200
@@ -106,21 +103,14 @@ struct SettingsModalView: View {
             host.generalInput
             host.generalRecording
         case .mac:
-            host.generalMac
+            host.macPage
         case .health:
-            SettingsGroup(eyebrow: "SET UP") {
-                SettingsRow(title: "Set Up Mouthtype", detail: "Walk through the microphone, Accessibility and shortcut steps again.") {
-                    Button("Set Up Mouthtype…") { model.closeSettings(); actions.openSetup() }.accessibilityIdentifier("settings-setup")
-                }
-            }
             if let diagnostics = actions.diagnostics { SettingsDiagnosticsView(state: diagnostics, model: model, actions: actions) }
-            else { SettingsGroup(eyebrow: "DIAGNOSTICS") { SettingsNote(text: "Diagnostic status is unavailable.") } }
-        case .advanced:
-            // Its options (boost saved words, corrections, fillers, delivery, audio retention, Remap Fn, dictionary file) are still
-            // on Style and Health until the Advanced page is built; nothing has gone missing.
-            SettingsGroup(eyebrow: "ADVANCED") {
-                SettingsNote(text: "Boost saved words, learning from corrections, cleanup details, split pastes, audio retention, the dictionary file and Remap Fn are on the Style page and under Health until this page takes them.")
+            else {
+                DesignSection(eyebrow: "HEALTH") { ModalCardNote(text: "Diagnostic status is unavailable.") }
             }
+        case .advanced:
+            host.advancedPage
         }
     }
 }
