@@ -36,7 +36,6 @@ import SwiftUI
         #expect(bitmap.pixelsWide >= 900 && bitmap.pixelsHigh >= 620)
         try SettingsRender.save(bitmap, name: "home-light")
         try SettingsRender.save(try SettingsRender.render(model: model, actions: actions, dark: true), name: "home-dark")
-        model.page = .general
-        try SettingsRender.save(try SettingsRender.render(model: model, actions: actions, dark: false), name: "general-light")
+        try SettingsRender.save(try SettingsRender.renderModal(model: model, actions: actions, dark: false), name: "general-light")
     }
 }

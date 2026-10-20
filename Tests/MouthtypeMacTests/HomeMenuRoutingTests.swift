@@ -32,11 +32,15 @@ import Testing
         defer { defaults.removePersistentDomain(forName: name) }
         let model = SettingsModel(defaults: defaults)
         let window = SettingsWindow(model: model, reduceTransparency: { true })
-        #expect(model.page == .general)
+        #expect(model.page == .home && !model.settingsOpen)
+        window.present(destination: .settings(.general))
+        #expect(model.page == .home && model.settingsOpen && model.modalPage == .general)
+        window.present(page: .style)
+        #expect(model.page == .style && !model.settingsOpen)
+        window.present(destination: .settings(.health))
+        #expect(model.page == .style && model.settingsOpen && model.modalPage == .health)
         window.present(page: .home)
-        #expect(model.page == .home)
-        window.present(page: .general)
-        #expect(model.page == .general)
+        #expect(model.page == .home && !model.settingsOpen)
         window.close()
     }
 }

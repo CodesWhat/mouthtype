@@ -2,7 +2,16 @@ import SwiftUI
 import MouthtypeCore
 
 extension SettingsView {
+    /// Everything the old General page held. The redesign splits it: input and recording stay in the Settings modal's General,
+    /// cleanup moves to Style, launch at login and updates to the modal's Mac.
     @ViewBuilder var general: some View {
+        generalInput
+        generalCleanup
+        generalRecording
+        generalMac
+    }
+
+    @ViewBuilder var generalInput: some View {
         SettingsGroup(eyebrow: "INPUT") {
             MicrophoneSettingsSection(model: model.microphone)
             SettingsRow(title: "Dictation shortcut", detail: "A key or combination that feels natural.") {
@@ -18,6 +27,9 @@ extension SettingsView {
             }
             if let error = model.recordingModeError { SettingsNote(text: error, tone: .red) }
         }
+    }
+
+    @ViewBuilder var generalCleanup: some View {
         SettingsGroup(eyebrow: "CLEANUP") {
             SettingsRow(title: "Cleanup", detail: cleanupDetail) {
                 if let cleaner = actions.cleaner {
@@ -36,6 +48,9 @@ extension SettingsView {
                 }.labelsHidden().fixedSize().accessibilityIdentifier("settings-cleanup-level")
             }
         }
+    }
+
+    @ViewBuilder var generalRecording: some View {
         SettingsGroup(eyebrow: "WHILE RECORDING") {
             SettingsRow(title: "Quiet other audio", detail: "Mute the current output while recording, on supported devices.") {
                 Toggle("Quiet other audio", isOn: Binding(get: { model.quietOtherAudio }, set: model.setQuietOtherAudio))
@@ -47,6 +62,9 @@ extension SettingsView {
                     .labelsHidden().toggleStyle(.switch).accessibilityIdentifier("settings-sounds")
             }
         }
+    }
+
+    @ViewBuilder var generalMac: some View {
         SettingsGroup(eyebrow: "MAC") {
             SettingsRow(title: "Launch at login",
                 detail: model.loginState == .mixed ? "Waiting for approval in System Settings." : "Keep Mouthtype ready in your menu bar.") {

@@ -128,7 +128,7 @@ import Testing
             stage.refresh()
             #expect(stage.isAnimating)
             weak var weakStage = stage
-            model.page = .general
+            model.page = .home
             view.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.1))
             #expect(weakStage?.isAnimating != true)

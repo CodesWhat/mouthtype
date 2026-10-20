@@ -19,7 +19,7 @@ import Testing
     }
 
     @Test func settingsWindowHandlesCommandW() throws {
-        let controller = makeWindow(page: .general)
+        let controller = makeWindow(page: .home)
         let window = try #require(controller.window)
         #expect(window is SettingsNSWindow)
         let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
@@ -36,7 +36,7 @@ import Testing
 
     @Test func windowBuildsWithTheKeyboardFlagForcedEitherWay() throws {
         for flag in [true, false] {
-            let controller = makeWindow(page: .general, fullKeyboardAccess: flag)
+            let controller = makeWindow(page: .home, fullKeyboardAccess: flag)
             #expect(controller.window?.contentView != nil)
         }
     }
@@ -118,7 +118,7 @@ import Testing
     /// the page rows under it, so the sidebar's four page rows dropped out of the key view loop. Every sidebar row (four pages, three
     /// links) must be a Tab stop, followed directly by the page's controls.
     @Test func tabWalksSidebarRowsThenIntoPageControlsUnderFullKeyboardAccess() throws {
-        for page in [SettingsPage.general, .writing, .appearance] {
+        for page in [SettingsPage.style, .appearance] {
             let (controller, window) = try keyWindow(page: page, fullKeyboardAccess: true)
             defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
             let stops = try tabOrder(window)
@@ -150,7 +150,7 @@ import Testing
         let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
         #expect(sidebar.count == SettingsPage.allCases.count + 1)
         let pageStops = stops.dropFirst(sidebar.count).filter { $0.isProxy && $0.x >= SettingsTheme.sidebarWidth }
-        #expect(pageStops.count == 3, "Home: \(pageStops.count) button stops, expected Copy, Recover, Copy")
+        #expect(pageStops.count == 4, "Home: \(pageStops.count) button stops, expected Transcribe a file, Copy, Recover, Copy")
         let chain = try keyViewChain(window)
         for (current, next) in zip(chain, chain.dropFirst()) {
             #expect(next.previousKeyView === current, "previousKeyView of \(type(of: next)) does not mirror nextKeyView")
@@ -159,7 +159,7 @@ import Testing
 
     /// With Keyboard navigation off the list is itself the focus target, ahead of the rows, and Tab still continues into the page.
     @Test func tabLoopStillReachesPageControlsWithKeyboardNavigationOff() throws {
-        let (controller, window) = try keyWindow(page: .general, fullKeyboardAccess: false)
+        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: false)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
         #expect(stops.contains { !$0.isProxy && $0.x >= SettingsTheme.sidebarWidth })
@@ -235,7 +235,7 @@ import Testing
 
     /// Tab (and the Shift-Tab path) must bring a control below the fold into view.
     @Test func keyboardFocusScrollsTheControlIntoView() throws {
-        let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: true)
+        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let (scroll, target) = try pageScrollAndOffscreenStop(window)
         let document = try #require(scroll.documentView)
@@ -247,7 +247,7 @@ import Testing
 
     /// A click (plain makeFirstResponder) must not move the page.
     @Test func nonKeyboardFocusDoesNotScroll() throws {
-        let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: true)
+        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let (scroll, target) = try pageScrollAndOffscreenStop(window)
         let before = scroll.contentView.bounds.origin
@@ -280,22 +280,17 @@ import Testing
     /// With Keyboard navigation off the list is the focus target and the arrow handlers drive selection. Real key events go through the
     /// window, so deleting `onKeyPress` (or the list's focus) leaves the page where it was and fails this.
     @Test func arrowKeysMoveSidebarSelectionWithKeyboardNavigationOff() throws {
-        let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: false)
+        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: false)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         try focusSidebarList(in: window)
         try press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
         #expect(controller.model.page == .appearance)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .style)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
-        #expect(controller.model.page == .general)
+        #expect(controller.model.page == .transforms)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
-        #expect(controller.model.page == .phrases)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
-        #expect(controller.model.page == .savedSpellings)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
-        #expect(controller.model.page == .transcribeFile)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
-        #expect(controller.model.page == .records)
+        #expect(controller.model.page == .dictionary)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .stats)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
@@ -305,17 +300,16 @@ import Testing
     }
 
     @Test func arrowsStepFromTheFocusedRowOtherwiseFromTheSelection() {
-        #expect(SettingsPage.arrowTarget(focused: .appearance, selected: .general, offset: -1) == .writing)
-        #expect(SettingsPage.arrowTarget(focused: nil, selected: .writing, offset: 1) == .appearance)
-        #expect(SettingsPage.arrowTarget(focused: nil, selected: .diagnostics, offset: 1) == .diagnostics)
+        #expect(SettingsPage.arrowTarget(focused: .appearance, selected: .home, offset: -1) == .style)
+        #expect(SettingsPage.arrowTarget(focused: nil, selected: .style, offset: 1) == .appearance)
+        #expect(SettingsPage.arrowTarget(focused: nil, selected: .appearance, offset: 1) == .appearance)
     }
 
     @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {
-        #expect(SettingsPage.general.moved(by: 1) == .writing)
-        #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
-        #expect(SettingsPage.general.moved(by: -1) == .phrases)
-        #expect(SettingsPage.records.moved(by: 1) == .transcribeFile)
-        #expect(SettingsPage.records.moved(by: -1) == .stats)
+        #expect(SettingsPage.style.moved(by: 1) == .appearance)
+        #expect(SettingsPage.appearance.moved(by: 1) == .appearance)
+        #expect(SettingsPage.style.moved(by: -1) == .transforms)
+        #expect(SettingsPage.stats.moved(by: -1) == .home)
         #expect(SettingsPage.home.moved(by: -1) == .home)
     }
 }

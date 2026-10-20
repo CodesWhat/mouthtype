@@ -24,7 +24,12 @@ import UniformTypeIdentifiers
     let fileTranscription: FileTranscriptionModel?
     /// Asks whether to throw away an unsaved draft. Injectable so tests can answer without a modal alert.
     @ObservationIgnored var confirmDiscard: @MainActor (DraftExit, DraftKind) -> Bool = SettingsModel.askToDiscard
-    var page = SettingsPage.general
+    var page = SettingsPage.home
+    /// The Settings modal over the window: whether it is up, and which of its pages shows.
+    var settingsOpen = false
+    var modalPage = SettingsModalPage.general
+    /// The Transcribe a file sheet, opened from Home.
+    var transcribeOpen = false
     var previewWallpaper = PreviewWallpaper.dark
     var previewStatus: PreviewStatus?
     var websiteDomain = ""
@@ -33,6 +38,8 @@ import UniformTypeIdentifiers
     private(set) var cleanup: CleanupSettings
     private(set) var livePreview = false
     private(set) var audioRetention = AudioRetentionPolicy()
+    /// The Settings modal's footer switch. Adds the Advanced page to its nav.
+    private(set) var advancedOptions = false
     private(set) var sounds: Bool
     private(set) var quietOtherAudio = true
     private(set) var skin: PillSkinKind
@@ -102,8 +109,8 @@ import UniformTypeIdentifiers
     /// The draft on the current page that has unsaved edits, if any.
     var unsavedDraft: DraftKind? {
         switch page {
-        case .savedSpellings: spellings?.isDirty == true ? .spelling : nil
-        case .phrases: phrases?.isDirty == true ? .phrase : nil
+        case .dictionary: spellings?.isDirty == true ? .spelling : nil
+        case .transforms: phrases?.isDirty == true ? .phrase : nil
         default: nil
         }
     }
@@ -116,6 +123,46 @@ import UniformTypeIdentifiers
         page = target
         return true
     }
+
+    /// Goes where a menu item or URL asks. A page goes through `select`, so an unsaved draft still asks first; the Settings modal
+    /// and the Transcribe sheet open over the current page. Returns whether it got there.
+    @discardableResult func open(_ destination: SettingsDestination) -> Bool {
+        switch destination {
+        case .page(let target):
+            guard select(target) else { return false }
+            settingsOpen = false
+            transcribeOpen = false
+        case .settings(let target):
+            transcribeOpen = false
+            openSettings(target)
+        case .transcribeFile:
+            guard select(.home) else { return false }
+            settingsOpen = false
+            transcribeOpen = true
+        }
+        return true
+    }
+
+    /// Opens the Settings modal on `target`. Advanced falls back to General while the switch is off.
+    func openSettings(_ target: SettingsModalPage = .general) {
+        modalPage = target == .advanced && !advancedOptions ? .general : target
+        settingsOpen = true
+    }
+
+    func closeSettings() { settingsOpen = false }
+
+    func selectModal(_ target: SettingsModalPage) {
+        guard target != .advanced || advancedOptions else { return }
+        modalPage = target
+    }
+
+    func setAdvancedOptions(_ enabled: Bool) {
+        defaults.set(enabled, forKey: Self.advancedOptionsKey)
+        advancedOptions = enabled
+        if !enabled, modalPage == .advanced { modalPage = .general }
+    }
+
+    static let advancedOptionsKey = "settingsAdvancedOptions"
 
     /// True when it is fine to leave the current page or close the window: there is no unsaved draft, or the user chose to discard it.
     func resolveDraft(_ exit: DraftExit) -> Bool {
@@ -143,13 +190,13 @@ import UniformTypeIdentifiers
 
     /// The word lists are read, and the spelling suggestions watched, only while their page is showing in an open window.
     func syncWords() {
-        if page == .savedSpellings {
+        if page == .dictionary {
             spellings?.reload()
             spellingSuggestions?.activate()
         } else {
             spellingSuggestions?.deactivate()
         }
-        if page == .phrases { phrases?.reload() }
+        if page == .transforms { phrases?.reload() }
     }
 
     func deactivateWords() { spellingSuggestions?.deactivate() }
@@ -161,6 +208,7 @@ import UniformTypeIdentifiers
 
     func refresh() {
         microphone.refresh()
+        advancedOptions = defaults.bool(forKey: Self.advancedOptionsKey)
         audioRetention = AudioRetentionPreference.load(defaults)
         livePreview = LivePreviewPreference.isEnabled(defaults)
         cleanup = CleanupSettings.load(defaults)

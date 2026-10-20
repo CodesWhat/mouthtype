@@ -16,7 +16,7 @@ enum SettingsTheme {
 
     static let windowSize = NSSize(width: 900, height: 620)
     static let minimumSize = NSSize(width: 860, height: 600)
-    static let sidebarWidth: CGFloat = 210
+    static let sidebarWidth: CGFloat = 212
     static let headerHeight: CGFloat = 46
     static let rowMinHeight: CGFloat = 36
     static let rowLabelWidth: CGFloat = 220
@@ -124,14 +124,24 @@ struct SettingsGroup<Content: View>: View {
     }
 }
 
-/// The scrolling page body: groups stacked 12 pt apart under the header bar.
+/// Set false by `DesignPage`, which owns the scrolling, so a hosted `SettingsForm` page lays out in place instead of nesting a scroll view.
+extension EnvironmentValues {
+    @Entry var settingsFormScrolls = true
+}
+
+/// The scrolling page body: groups stacked 14 pt apart. Inside a `DesignPage` it only stacks, with no margins of its own.
 struct SettingsForm<Content: View>: View {
+    @Environment(\.settingsFormScrolls) private var scrolls
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) { content() }
-                .padding(.horizontal, 24).padding(.top, 6).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
+        if scrolls {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) { content() }
+                    .padding(.horizontal, 24).padding(.top, 6).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 14) { content() }.frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

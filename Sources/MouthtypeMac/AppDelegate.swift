@@ -23,7 +23,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.accessibility.start()
             NSWorkspace.shared.open(AccessibilityAccess.settingsURL)
         }, retrySpeech: { [weak self] in self?.engineHost.start() },
-        inputSettings: { [weak self] in self?.settingsWindow.present(page: .diagnostics) }))
+        inputSettings: { [weak self] in self?.settingsWindow.present(destination: .settings(.health)) }))
     private let fontChooser = TextFontMenuSection()
     private lazy var appUpdater: AppUpdater = AppUpdater(
         driver: UpdateLaunchPolicy.allows(arguments: CommandLine.arguments, bundleURL: Bundle.main.bundleURL,
@@ -204,12 +204,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.model.stats.store = store
         settingsWindow.model.spellingSuggestions?.store = store
         let settingsSection = SettingsMenuSection(
-            open: { [weak self] in self?.settingsWindow.present(page: .general) },
+            open: { [weak self] in self?.settingsWindow.present(destination: .settings(.general)) },
             openHome: { [weak self] in self?.settingsWindow.present(page: .home) })
         menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in
             guard let self else { return }
             if self.diagnostics.microphoneStatus != .authorized || !self.diagnostics.accessibilityGranted { self.showSetup() }
-            else { self.settingsWindow.present(page: .diagnostics) }
+            else { self.settingsWindow.present(destination: .settings(.health)) }
         }))
         menuBar.add(section: settingsSection, startsGroup: false)
         NSApp.mainMenu = settingsSection.applicationMenu()
@@ -220,7 +220,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             open: { [weak self] in self?.selectionCleanupWindow.present() },
             openTransform: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
             unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
-        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(page: .transcribeFile) }, startsGroup: false)
+        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(destination: .transcribeFile) }, startsGroup: false)
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost, weak recovery] in
                 guard dictation?.phase == .idle, recovery?.isRecovering != true, let engineHost else { return false }
@@ -315,7 +315,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             copyLast: { [weak self] in self?.copyLast() },
             pasteLast: { [weak self] in self?.pasteLast() },
             // present(page:) moves through SettingsModel.select, so an unsaved spelling or phrase draft still asks first.
-            open: { [weak self] page in self?.settingsWindow.present(page: page.settingsPage) }
+            open: { [weak self] page in self?.settingsWindow.present(destination: page.destination) }
         ))
     }
 
@@ -666,7 +666,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         })
         shortcutSheet = sheet
         settingsWindow.present()
-        if let parent = settingsWindow.window { sheet.present(over: parent) } else { sheet.close() }
+        if let parent = settingsWindow.topmostWindow { sheet.present(over: parent) } else { sheet.close() }
     }
 
     private func showSetup() {
