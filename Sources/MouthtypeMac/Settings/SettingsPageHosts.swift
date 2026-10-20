@@ -21,7 +21,7 @@ extension SettingsView {
         case .dictionary:
             wordsPage(page) { SavedSpellingsPage(model: model) }
         case .transforms:
-            wordsPage(page) { PhrasesPage(model: model) }
+            DesignPage(title: page.headline, summary: page.summary) { PhrasesPage(model: model) }
         case .style:
             DesignPage(title: page.headline, summary: page.summary) {
                 generalCleanup

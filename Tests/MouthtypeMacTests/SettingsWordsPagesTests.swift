@@ -153,4 +153,43 @@ import MouthtypeCore
         #expect(f.spellings.items.map(\.heard) == ["mouth type"])
         #expect(f.suggestions.isActive)
     }
+
+    @Test func phraseKindsFollowTheClipboardPlaceholder() {
+        #expect(TransformKind.of(Snippet(trigger: "my email", expansion: "me@example.com")) == .text)
+        #expect(TransformKind.of(Snippet(trigger: "paste quote", expansion: "> {clipboard}")) == .clipboard)
+        #expect(TransformKind.of(Snippet(trigger: "today", expansion: "{date}")) == .text)
+        #expect(TransformKind.allCases.map(\.title) == ["text", "clipboard", "clean selection"])
+    }
+
+    @Test func phraseSearchMatchesTriggerTextAndKind() throws {
+        let f = try fixture()
+        defer { f.cleanup() }
+        for (trigger, expansion) in [("my email", "me@example.com"), ("paste quote", "> {clipboard}"), ("sign off", "Best,\nScott")] {
+            f.phrases.newPhrase()
+            f.phrases.trigger = trigger
+            f.phrases.expansion = expansion
+            f.phrases.save()
+        }
+        #expect(f.phrases.matching("").count == 3)
+        #expect(f.phrases.matching("EMAIL").map(\.trigger) == ["my email"])
+        #expect(f.phrases.matching("scott").map(\.trigger) == ["sign off"])
+        #expect(f.phrases.matching("clipboard").map(\.trigger) == ["paste quote"])
+        #expect(f.phrases.matching("my  example").map(\.trigger) == ["my email"])
+        #expect(f.phrases.matching("nothing here").isEmpty)
+    }
+
+    @Test func cancelDropsAPhraseDraftAndSaveKeepsIt() throws {
+        let f = try fixture()
+        defer { f.cleanup() }
+        f.phrases.newPhrase()
+        f.phrases.trigger = "my email"
+        f.phrases.expansion = "me@example.com"
+        f.phrases.cancel()
+        #expect(!f.phrases.isDirty && f.phrases.items.isEmpty)
+        f.phrases.newPhrase()
+        f.phrases.trigger = "my email"
+        f.phrases.expansion = "me@example.com"
+        f.phrases.save()
+        #expect(!f.phrases.isDirty && f.phrases.items.map(\.trigger) == ["my email"])
+    }
 }

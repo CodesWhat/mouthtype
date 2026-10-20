@@ -77,3 +77,35 @@ import Observation
         expansion = phrase?.expansion ?? ""
     }
 }
+
+/// What a row on the Transforms page does. A phrase that uses the clipboard placeholder is a clipboard phrase, every other phrase
+/// is plain text, and Clean Selected Text is the built-in menu action.
+enum TransformKind: String, CaseIterable {
+    case text, clipboard, cleanSelection
+
+    var title: String {
+        switch self {
+        case .text: "text"
+        case .clipboard: "clipboard"
+        case .cleanSelection: "clean selection"
+        }
+    }
+
+    static func of(_ phrase: Snippet) -> TransformKind {
+        phrase.expansion.localizedCaseInsensitiveContains("{clipboard}") ? .clipboard : .text
+    }
+}
+
+extension PhraseEditor {
+    /// The saved phrases that match a search, by trigger, text or kind. An empty search matches everything.
+    func matching(_ query: String) -> [Snippet] {
+        let terms = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !terms.isEmpty else { return items }
+        return items.filter { phrase in
+            terms.allSatisfy { term in
+                phrase.trigger.localizedCaseInsensitiveContains(term) || phrase.expansion.localizedCaseInsensitiveContains(term)
+                    || TransformKind.of(phrase).title.localizedCaseInsensitiveContains(term)
+            }
+        }
+    }
+}
