@@ -46,7 +46,7 @@ struct HomePage: View {
     @ViewBuilder private var content: some View {
         if model.takes.isEmpty {
             DesignSection(eyebrow: "Recent takes") {
-                Text(model.error ?? "No dictations yet. Hold your shortcut and talk, and they land here.")
+                Text(model.error ?? "No takes yet. Hold your shortcut and talk, and they land here.")
                     .font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(14)

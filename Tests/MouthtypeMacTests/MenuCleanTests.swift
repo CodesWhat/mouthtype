@@ -73,7 +73,7 @@ import MouthtypeCore
         daily.add(section: HistoryMenuSection(store: nil, onError: { state.historyError = $0 }))
         state.historyError = nil
         daily.refresh()
-        #expect(attention.items.first?.title == "Recent dictations unavailable…")
+        #expect(attention.items.first?.title == "Recent takes unavailable…")
     }
 
     @Test func customShortcutDoesNotOfferFnRemappingOrGlobeConflict() {

@@ -65,7 +65,7 @@ struct SettingsDiagnosticsView: View {
                     if let error = state.phrasesError {
                         row("Phrase replacements", error) { Button("Edit phrases file…", action: actions.editPhrasesFile).buttonStyle(.designSecondary).fixedSize() }
                     }
-                    if let error = state.historyError { ModalCardNote(text: "Recent dictations: " + error) }
+                    if let error = state.historyError { ModalCardNote(text: "Recent takes: " + error) }
                 }
             }
             DesignSection(eyebrow: "STATUS") {

@@ -11,8 +11,8 @@ struct HomeTake: Identifiable, Equatable {
     var recoverable: RecoverableDictation?
 }
 
-/// The data behind the Home page: recent dictations from the transcript store, newest first, plus the saved audio
-/// each one can be recovered from. Secure-field takes never show, matching the Recent Dictations menu.
+/// The data behind the Home page: recent takes from the transcript store, newest first, plus the saved audio
+/// each one can be recovered from. Secure-field takes never show, matching the Recent Takes menu.
 ///
 /// While active (window open on the Home page) the store is observed, so a finished take, saved audio, or expired or
 /// purged audio updates the page without a reopen. Closing the window stops the observation; reopening starts it fresh.
@@ -135,7 +135,7 @@ struct HomeTake: Identifiable, Equatable {
 
     /// Fetches the newest takes off the main thread.
     func loadText() async {
-        guard let store else { apply(nil, failure: "Recent dictations are unavailable."); return }
+        guard let store else { apply(nil, failure: "Recent takes are unavailable."); return }
         let limit = Self.limit
         let fetch = fetchRecent
         let generation = lifecycleGeneration

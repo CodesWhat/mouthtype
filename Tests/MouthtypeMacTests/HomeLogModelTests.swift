@@ -67,7 +67,7 @@ import Testing
         let model = HomeLogModel(store: nil)
         await model.loadText()
         #expect(model.takes.isEmpty)
-        #expect(model.error == "Recent dictations are unavailable.")
+        #expect(model.error == "Recent takes are unavailable.")
     }
 
     @Test func savedAudioJoinsItsTakeAndTextlessRecordingsBecomeTakes() async throws {

@@ -54,6 +54,49 @@ import Testing
         }
     }
 
+    /// Three rows with the first and last drawn as hovered, the way a list row's grey fill sits against the card.
+    private struct HoveredRows: View {
+        var body: some View {
+            DesignSection(eyebrow: "Hover") {
+                DesignRow(title: "First row, hovered", detail: "The fill must stop at the card's rounded corners.") { EmptyView() }
+                    .background(DesignPalette.hair2)
+                DesignRow(title: "Middle row") { EmptyView() }
+                DesignRow(title: "Last row, hovered") { EmptyView() }
+                    .background(DesignPalette.hair2)
+            }
+            .padding(24)
+        }
+    }
+
+    @Test func hoveredFirstAndLastRowsStayInsideTheCardCorners() throws {
+        FontRegistry.registerBundledFonts()
+        for dark in [false, true] {
+            let size = NSSize(width: 480, height: 260)
+            let bitmap = try SettingsRender.render(HoveredRows(), dark: dark, size: size)
+            try SettingsRender.save(bitmap, name: "design-card-hover-\(dark ? "dark" : "light")")
+            let scale = CGFloat(bitmap.pixelsWide) / size.width
+            // The card starts 24 pt in, plus 6 pt of eyebrow and its height; read just inside the top-left corner and inside the row.
+            func pixel(_ x: CGFloat, _ y: CGFloat) -> NSColor? {
+                bitmap.colorAt(x: Int(x * scale), y: Int(y * scale))?.usingColorSpace(.sRGB)
+            }
+            func same(_ a: NSColor?, _ b: NSColor?) -> Bool {
+                guard let a, let b else { return false }
+                return abs(a.redComponent - b.redComponent) + abs(a.greenComponent - b.greenComponent) + abs(a.blueComponent - b.blueComponent) < 0.02
+            }
+            // Find the card's top edge: the first row from the top where the middle of the page is no longer the page background.
+            let page = pixel(4, 4)
+            var top: CGFloat = 0
+            for y in stride(from: CGFloat(10), to: 120, by: 1) where !same(pixel(size.width / 2, y), page) && !same(pixel(size.width / 2, y), nil) {
+                // The eyebrow text can match this too, so take the first full-width run: the card edge is non-page at both x = 40 and x = 440.
+                if !same(pixel(60, y), page), !same(pixel(440, y), page) { top = y; break }
+            }
+            #expect(top > 0)
+            let inside = pixel(size.width / 2, top + 12)
+            let corner = pixel(24.5, top + 0.5)
+            #expect(!same(corner, inside), "the hover fill reaches the square corner")
+        }
+    }
+
     @Test func paletteMatchesTheHandoffValues() {
         func hex(_ color: NSColor, _ name: NSAppearance.Name) -> String {
             var out = ""
@@ -78,7 +121,29 @@ import Testing
             #expect(image?.isTemplate == true, "\(icon.rawValue) missing")
             #expect(image?.representations.count == 3, "\(icon.rawValue) should carry 1x, 2x and 4x")
             #expect(image?.size == NSSize(width: 16, height: 16))
+            // Pixelarticons sampled without smoothing: 16, 32 and 64 px, every pixel fully on or fully off, so each stays crisp.
+            let sizes = (image?.representations.compactMap { ($0 as? NSBitmapImageRep).map { $0.pixelsWide } } ?? []).sorted()
+            #expect(sizes == [16, 32, 64], "\(icon.rawValue) scales")
+            for case let rep as NSBitmapImageRep in image?.representations ?? [] {
+                var partial = 0, lit = 0
+                for y in 0..<rep.pixelsHigh {
+                    for x in 0..<rep.pixelsWide {
+                        let alpha = rep.colorAt(x: x, y: y)?.alphaComponent ?? 0
+                        if alpha > 0.001 && alpha < 0.999 { partial += 1 }
+                        if alpha >= 0.999 { lit += 1 }
+                    }
+                }
+                #expect(partial == 0 && lit > 0, "\(icon.rawValue) \(rep.pixelsWide) px has smoothed or empty pixels")
+            }
         }
+    }
+
+    @Test func pixelarticonsLicenceShipsWithTheFontLicences() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let licence = root.appendingPathComponent("Sources/MouthtypeMac/Resources/Fonts/MIT-Pixelarticons.txt")
+        let text = try String(contentsOf: licence, encoding: .utf8)
+        #expect(try String(contentsOf: root.appendingPathComponent("THIRD_PARTY_NOTICES.md"), encoding: .utf8).contains("MIT-Pixelarticons.txt"))
+        #expect(text.contains("MIT License") && text.contains("Gerrit Halfmann"))
     }
 
     @Test func bundledFontsRegisterOrTheSystemFallbackStillGivesTypography() {
