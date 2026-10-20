@@ -79,30 +79,42 @@ private struct Word {
     var lower: String
     var startsSentence: Bool
     var isAlpha: Bool
+    /// Only whitespace separates this word from the one before it.
+    var adjacentToPrevious: Bool
+    var start: String.Index
+    var end: String.Index
 }
 
 private func tokenize(_ s: String) -> [Word] {
     var words: [Word] = []
     var cur = ""
+    var curStart = s.startIndex
     var startsSentence = true
-    func flush() {
+    var punctuationSince = false
+    func flush(end: String.Index) {
         let trimmed = cur.trimmingCharacters(in: CharacterSet(charactersIn: "'"))
         cur = ""
         guard !trimmed.isEmpty else { return }
-        words.append(Word(text: trimmed, lower: trimmed.lowercased(), startsSentence: startsSentence, isAlpha: trimmed.allSatisfy(\.isLetter)))
+        words.append(Word(text: trimmed, lower: trimmed.lowercased(), startsSentence: startsSentence, isAlpha: trimmed.allSatisfy(\.isLetter),
+                          adjacentToPrevious: !words.isEmpty && !punctuationSince, start: curStart, end: end))
         startsSentence = false
+        punctuationSince = false
     }
-    for ch in s {
+    for i in s.indices {
+        let ch = s[i]
         if ch.isLetter || ch.isNumber || ch == "'" {
+            if cur.isEmpty { curStart = i }
             cur.append(ch)
         } else if ch == "\u{2019}" {
+            if cur.isEmpty { curStart = i }
             cur.append("'")
         } else {
-            flush()
+            flush(end: i)
             if ch == "." || ch == "!" || ch == "?" || ch == "\n" { startsSentence = true }
+            if !(ch == " " || ch == "\t") { punctuationSince = true }
         }
     }
-    flush()
+    flush(end: s.endIndex)
     return words
 }
 
@@ -131,6 +143,8 @@ private struct FormEntry {
     var count = 0
     var confidence = 0.0
     var evidence: [SuggestionEvidence] = []
+    /// True while every contribution came from a loose match (folded phonetic key only).
+    var weak = true
 }
 
 private struct Group {
@@ -156,6 +170,16 @@ private struct Run {
 
     // MARK: Helpers
 
+    /// Most frequent spelling; ties go to the form with an inner capital, then the lexicographically smallest.
+    static func topForm(_ forms: [String: Int]) -> String? {
+        func inner(_ f: String) -> Bool { f.dropFirst().contains(where: \.isUppercase) }
+        return forms.max { a, b in
+            if a.value != b.value { return a.value < b.value }
+            if inner(a.key) != inner(b.key) { return !inner(a.key) }
+            return a.key > b.key
+        }?.key
+    }
+
     static func norm(_ s: String) -> String {
         tokenize(s).map(\.lower).joined(separator: " ")
     }
@@ -167,17 +191,19 @@ private struct Run {
     func fragment(take: Int, word: Int, length: Int, final: Bool = false) -> String {
         let words = final ? finalWords[take] : rawWords[take]
         let lo = max(0, word - 2), hi = min(words.count - 1, word + length - 1 + 2)
-        return words[lo...hi].map(\.text).joined(separator: " ")
+        let source = final ? takes[take].finalText : takes[take].rawText
+        return String(source[words[lo].start..<words[hi].end])
     }
 
     func evidence(_ hits: Hits) -> [SuggestionEvidence] {
         hits.positions.map { SuggestionEvidence(takeID: takes[$0.take].id, fragment: fragment(take: $0.take, word: $0.word, length: $0.length)) }
     }
 
-    mutating func add(kind: SuggestionKind, written: String, heard: String, count: Int, confidence: Double, evidence: [SuggestionEvidence]) {
+    mutating func add(kind: SuggestionKind, written: String, heard: String, count: Int, confidence: Double, evidence: [SuggestionEvidence], weak: Bool = false) {
         let key = "\(kind.rawValue)|\(written.lowercased())"
         var group = groups[key] ?? Group(written: written, kind: kind)
         var entry = group.forms[heard] ?? FormEntry()
+        entry.weak = group.forms[heard] == nil ? weak : (entry.weak && weak)
         entry.count += count
         entry.confidence = max(entry.confidence, confidence)
         for e in evidence where entry.evidence.count < 3 && !entry.evidence.contains(e) { entry.evidence.append(e) }
@@ -213,16 +239,16 @@ private struct Run {
         for t in targets where t.compact.count >= 6 { minCompact = min(minCompact, t.compact.count); maxCompact = max(maxCompact, t.compact.count) }
         // Brand tokens the finals keep using (CodesWhat, GitHub) are joined-compound targets too.
         var finalForms: [String: [String: Int]] = [:]
-        for words in finalWords {
+        for (ti, words) in finalWords.enumerated() {
             for w in words where w.text.count >= 3 && w.text.allSatisfy(\.isLetter) {
-                if w.text == w.lower { finalLowerCount[w.lower, default: 0] += 1; continue }
+                if w.text == w.lower { lowerTakes[w.lower, default: []].insert(ti); continue }
                 let capitalOnlyAtStart = w.startsSentence && w.text == w.lower.capitalized
                 if capitalOnlyAtStart { continue }
                 finalForms[w.lower, default: [:]][w.text, default: 0] += 1
             }
         }
         for (lower, forms) in finalForms {
-            guard let (form, _) = forms.max(by: { $0.value < $1.value }) else { continue }
+            guard let form = Self.topForm(forms) else { continue }
             let hasInnerCapital = form.dropFirst().contains(where: \.isUppercase) && form != form.uppercased()
             if hasInnerCapital, forms.values.reduce(0, +) >= 2, lower.count >= 6, !savedWritten.contains(form.lowercased()), seenTargets.insert(lower).inserted {
                 targets.append(Target(written: form, compact: lower, classKey: PhoneticKey.classKey(lower), singleToken: true, fromRule: false))
@@ -233,12 +259,13 @@ private struct Run {
         for (ti, words) in rawWords.enumerated() {
             for (wi, w) in words.enumerated() {
                 let capMid = !w.startsSentence && w.text != w.lower && w.text.first?.isUppercase == true
-                if w.text == w.lower { rawLowerCount[w.lower, default: 0] += 1 }
+                if w.text == w.lower { lowerTakes[w.lower, default: []].insert(ti) }
                 unigrams[w.lower, default: Hits()].add(Position(take: ti, word: wi, length: 1), capitalizedMid: capMid)
             }
             for n in phraseLengths where words.count >= n {
                 for wi in 0...(words.count - n) {
                     let slice = words[wi..<(wi + n)]
+                    guard slice.dropFirst().allSatisfy({ $0.adjacentToPrevious && !$0.startsSentence }) else { continue }
                     var joinable = false
                     if n <= 3, maxCompact > 0 {
                         let len = slice.reduce(0) { $0 + $1.lower.utf8.count }
@@ -258,8 +285,8 @@ private struct Run {
         return ranked(limit: limit)
     }
 
-    var finalLowerCount: [String: Int] = [:]
-    var rawLowerCount: [String: Int] = [:]
+    /// Takes where a word shows up in lowercase, in raw or final text. A take counts once.
+    var lowerTakes: [String: Set<Int>] = [:]
 
     // MARK: 1 and 2: misheard variants and casing
 
@@ -273,6 +300,7 @@ private struct Run {
         }
         let writtenLower = Set(singles.map { $0.written.lowercased() })
         var keyCache: [String: String] = [:]
+        let correctionPairs = Set(corrections.map { "\(Self.norm($0.heard))|\($0.corrected.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())" })
 
         for (token, hits) in unigrams {
             guard token.count >= 4, token.allSatisfy(\.isLetter), !savedHeard.contains(token), !OrdinaryWords.isOrdinary(token) else { continue }
@@ -292,14 +320,21 @@ private struct Run {
                 }
             }
             guard let (target, ratio) = best else { continue }
-            var conf = Self.sightingConfidence(hits.count)
-            if ratio <= 0.5 { conf += 0.05 }
-            if hits.capitalizedMid || (finalForms[token]?.values.contains { $0 > 0 }) == true { conf += 0.1 }
             let missedBoost = hits.positions.contains { p in
                 takes[p.take].boostTermsApplied.contains { $0.caseInsensitiveCompare(target.written) == .orderedSame }
             }
-            if missedBoost { conf += 0.05 }
-            add(kind: .misheardVariant, written: target.written, heard: token, count: hits.count, confidence: min(conf, 0.95), evidence: evidence(hits))
+            let corrected = correctionPairs.contains("\(token)|\(target.written.lowercased())")
+            var conf = Self.sightingConfidence(hits.count)
+            if ratio <= 0.5 { conf += 0.05 }
+            if ratio <= 0.25 || missedBoost || corrected {
+                if hits.capitalizedMid || (finalForms[token]?.values.contains { $0 > 0 }) == true { conf += 0.1 }
+                if missedBoost { conf += 0.05 }
+                add(kind: .misheardVariant, written: target.written, heard: token, count: hits.count, confidence: min(conf, 0.95), evidence: evidence(hits))
+            } else {
+                // Matched only through the folded key: look-alike names (Chopin, Shaven) land here, so stay low and need repeats.
+                guard hits.count >= 2 else { continue }
+                add(kind: .misheardVariant, written: target.written, heard: token, count: hits.count, confidence: min(conf, 0.5), evidence: evidence(hits), weak: true)
+            }
         }
 
         // Casing: brand form from the dictionary first, then from what the finals consistently show.
@@ -311,15 +346,15 @@ private struct Run {
         }
         for (lower, forms) in finalForms where brand[lower] == nil {
             let total = forms.values.reduce(0, +)
-            guard total >= 1, let top = forms.max(by: { $0.value < $1.value }), Double(top.value) / Double(total) >= 0.6 else { continue }
-            brand[lower] = (top.key, false)
+            guard total >= 1, let top = Self.topForm(forms), Double(forms[top] ?? 0) / Double(total) >= 0.6 else { continue }
+            brand[lower] = (top, false)
         }
         for (lower, info) in brand {
             guard !savedHeard.contains(lower), !OrdinaryWords.isOrdinary(lower) else { continue }
             let rawLower = unigrams[lower].map { hits -> [Position] in
                 hits.positions.filter { rawWords[$0.take][$0.word].text == lower }
             } ?? []
-            let sightings = (rawLowerCount[lower] ?? 0) + (finalLowerCount[lower] ?? 0)
+            let sightings = lowerTakes[lower]?.count ?? 0
             guard sightings >= 1 else { continue }
             var conf = Self.sightingConfidence(sightings) + (sightings == 1 ? 0.1 : 0)
             if info.fromDictionary { conf += 0.15 }
@@ -345,7 +380,7 @@ private struct Run {
             guard let (target, d) = best else { continue }
             var conf = Self.sightingConfidence(hits.count) + (d == 0 ? 0.1 : 0)
             if OrdinaryWords.isOrdinary(phrase) {
-                guard d == 0 || (d <= 1 && compact.count >= 7) else { continue }
+                guard d == 0 else { continue }
                 conf = min(conf, 0.6)
             }
             add(kind: .joinedCompound, written: target.written, heard: phrase, count: hits.count, confidence: min(conf, 0.95), evidence: evidence(hits))
@@ -393,7 +428,8 @@ private struct Run {
             let forms = group.forms.sorted { ($0.value.count, $1.key) > ($1.value.count, $0.key) }
             var miss = 1.0
             for (_, e) in forms { miss *= 1 - e.confidence }
-            let confidence = min(1 - miss, 0.95)
+            var confidence = min(1 - miss, 0.95)
+            if forms.allSatisfy({ $0.value.weak }) { confidence = min(confidence, 0.5) }
             var ev: [SuggestionEvidence] = []
             for (_, e) in forms { for x in e.evidence where ev.count < 4 { ev.append(x) } }
             out.append(SpellingSuggestion(written: group.written, heardForms: forms.map(\.key), kind: group.kind, evidence: ev,

@@ -27,12 +27,14 @@ import Testing
             take("a", raw: "Shaban took a minute", boost: ["Siobhan"]),
             take("b", raw: "then Shaban called back"),
             take("c", raw: "Shabon took a minute"),
-            take("d", raw: "ask Chavon about it"),
+            take("d", raw: "Shabon agreed"),
+            take("e", raw: "ask Chavon about it"),
         ] + filler(5)
         let out = SpellingSuggester.suggest(takes: takes, rules: rules)
         let s = try #require(out.first { $0.kind == .misheardVariant && $0.written == "Siobhan" })
-        #expect(Set(s.heardForms) == ["shaban", "shabon", "chavon"])
-        #expect(s.heardForms.first == "shaban")
+        // Chavon is a single folded-key sighting, so it stays out.
+        #expect(Set(s.heardForms) == ["shaban", "shabon"])
+        #expect(s.heardForms.first == "shaban" || s.heardForms.first == "shabon")
         #expect(s.count == 4)
         #expect(s.confidence >= 0.8)
         #expect(s.evidence.contains { $0.takeID == "a" && $0.fragment.contains("Shaban") })
@@ -40,8 +42,8 @@ import Testing
     }
 
     @Test func singleSightingIsLowerConfidenceThanRepeated() throws {
-        let one = SpellingSuggester.suggest(takes: [take("a", raw: "ask Chavon about it")], rules: rules)
-        let two = SpellingSuggester.suggest(takes: [take("a", raw: "ask Chavon about it"), take("b", raw: "Chavon agreed")], rules: rules)
+        let one = SpellingSuggester.suggest(takes: [take("a", raw: "ask Chavon about it", boost: ["Siobhan"])], rules: rules)
+        let two = SpellingSuggester.suggest(takes: [take("a", raw: "ask Chavon about it", boost: ["Siobhan"]), take("b", raw: "Chavon agreed", boost: ["Siobhan"])], rules: rules)
         let c1 = try #require(one.first { $0.written == "Siobhan" }).confidence
         let c2 = try #require(two.first { $0.written == "Siobhan" }).confidence
         #expect(c1 < 0.6)
@@ -156,7 +158,7 @@ import Testing
 
     @Test func ranksByConfidenceThenCount() {
         let takes = [
-            take("a", raw: "Shaban took a minute"), take("b", raw: "Shaban called"), take("c", raw: "Shabon too"),
+            take("a", raw: "Shaban took a minute", boost: ["Siobhan"]), take("b", raw: "Shaban called"), take("c", raw: "Shabon too"),
             take("d", raw: "email priya", final: "Email priya"),
             take("e", raw: "we win again"),
         ]
@@ -184,21 +186,74 @@ import Testing
     }
 
     @Test func thousandTakesStayFast() {
+        let brands = ["Drydock", "Sockguard", "Portwing", "Mouthtype", "Wispr Flow", "CodesWhat", "Siobhan", "Priya", "Nguyen", "Kubernetes", "Tailscale", "Postgres", "Grafana", "Terraform", "Cloudflare", "Anthropic", "Figma", "Linear", "Notion", "Vercel", "Supabase", "Stripe", "Datadog", "Sentry", "Raycast", "Obsidian", "Homebrew", "Xcode", "Swiftly", "Cursor", "Ghostty", "Warp", "Zed", "Docker", "Compose", "Nginx", "Traefik", "Caddy", "Prometheus", "Loki", "Tempo", "Mimir", "Alloy", "Vector", "Fluentd", "Kibana", "Elastic", "Mongo", "Redis", "Valkey", "Kafka", "Pulsar", "Temporal", "Dagster", "Airflow", "Metabase", "Superset", "Retool", "Zapier"]
+        let r = brands.enumerated().map { DictionaryRule(heard: "heard\($0.offset)", written: $0.element) }
+        let syllables = ["ka", "lo", "mi", "ra", "te", "vu", "no", "pi", "sa", "du", "fe", "gro", "bli", "tre", "sho", "quan", "zel", "man", "dor", "win"]
         var takes: [SuggestionTake] = []
-        let vocab = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet", "kilo", "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango", "uniform", "victor", "whiskey", "xray", "yankee", "zulu"]
         for i in 0..<1000 {
-            let words = (0..<45).map { vocab[($0 * 7 + i * 3 + $0 / 3) % vocab.count] + (($0 + i) % 11 == 0 ? "\($0 % 5)x" : "") }
+            let words = (0..<45).map { w -> String in
+                let a = syllables[(w * 7 + i * 3) % syllables.count]
+                let b = syllables[(w * 11 + i * 5 + w / 3) % syllables.count]
+                let c = syllables[(w + i * 13) % syllables.count]
+                return w % 4 == 0 ? a + b : (w % 4 == 1 ? a + b + c : (w % 4 == 2 ? b + a : c + a + b))
+            }
             var raw = words.joined(separator: " ")
             if i % 50 == 0 { raw += " Shaban and dry doc and priya" }
-            takes.append(take("t\(i)", raw: raw, final: raw.capitalized))
+            takes.append(take("t\(i)", raw: raw))
         }
-        let r = rules + (0..<60).map { DictionaryRule(heard: "heard\($0)", written: "Written\($0)") }
         let start = Date()
-        let out = SpellingSuggester.suggest(takes: takes, rules: r)
+        let out = SpellingSuggester.suggest(takes: takes, rules: r, limit: 100)
         let elapsed = Date().timeIntervalSince(start)
-        print("SpellingSuggester 1000 takes: \(Int(elapsed * 1000)) ms")
+        print("SpellingSuggester 1000 takes, \(r.count) rules: \(Int(elapsed * 1000)) ms")
         #expect(elapsed < 1.0)
         #expect(out.contains { $0.written == "Siobhan" })
+        #expect(out.contains { $0.written == "Drydock" })
+    }
+
+    @Test func lookAlikeNamesStayLowConfidence() throws {
+        let chopin = (0..<3).map { take("c\($0)", raw: "we played Chopin on the radio \($0)") }
+        let low = SpellingSuggester.suggest(takes: chopin, rules: rules).filter { $0.written == "Siobhan" }
+        #expect(low.allSatisfy { $0.confidence <= 0.5 })
+        let names = [take("a", raw: "ask Shaban about it"), take("b", raw: "Chavon agreed"), take("c", raw: "then Shaban left"), take("d", raw: "so Chavon called")]
+        let weak = try #require(SpellingSuggester.suggest(takes: names, rules: rules).first { $0.written == "Siobhan" })
+        #expect(weak.confidence <= 0.5)
+        let corrected = SpellingSuggester.suggest(takes: names, rules: rules, corrections: [CorrectionProposal(heard: "Shaban", corrected: "Siobhan")])
+        #expect(try #require(corrected.first { $0.written == "Siobhan" }).confidence >= 0.8)
+    }
+
+    @Test func ordinaryPhrasesNeverJoinFuzzily() {
+        let r = [DictionaryRule(heard: "new york", written: "NewYork")]
+        let out = SpellingSuggester.suggest(takes: [take("a", raw: "a new work plan"), take("b", raw: "the new work item")], rules: r)
+        #expect(!out.contains { $0.kind == .joinedCompound })
+    }
+
+    @Test func compoundsDoNotCrossPunctuationOrSentences() {
+        let takes = [take("a", raw: "Let it dry. Doc called back."), take("b", raw: "we let it dry, doc called")]
+        let out = SpellingSuggester.suggest(takes: takes, rules: rules)
+        #expect(!out.contains { $0.kind == .joinedCompound && $0.written == "Drydock" })
+    }
+
+    @Test func evidenceKeepsOriginalPunctuation() throws {
+        let takes = [take("a", raw: "Sure, Dry Doc, and Sockguard share a repo"), take("b", raw: "the dry doc, again")]
+        let s = try #require(SpellingSuggester.suggest(takes: takes, rules: rules).first { $0.written == "Drydock" })
+        #expect(s.evidence.contains { $0.fragment.contains("Sure, Dry Doc, and") })
+    }
+
+    @Test func compoundTargetSpellingIsDeterministic() throws {
+        for order in [["GitHub", "Github"], ["Github", "GitHub"]] {
+            let takes = zip(["a", "b"], order).map { id, form in take(id, raw: "open git hub now", final: "Open \(form) now") }
+            for _ in 0..<5 {
+                let s = try #require(SpellingSuggester.suggest(takes: takes, rules: []).first { $0.kind == .joinedCompound })
+                #expect(s.written == "GitHub")
+            }
+        }
+    }
+
+    @Test func unchangedOutputIsOneSightingNotTwo() throws {
+        let takes = [take("a", raw: "email priya about it", final: "email priya about it")]
+        let s = try #require(SpellingSuggester.suggest(takes: takes, rules: rules).first { $0.kind == .casing })
+        #expect(s.count == 1)
+        #expect(s.confidence < 0.7)
     }
 
     @Test func phoneticKeysFoldTheNameVariants() {
