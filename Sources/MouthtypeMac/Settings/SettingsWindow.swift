@@ -81,6 +81,7 @@ import MouthtypeCore
         if let page { model.page = page }
         refreshDiagnostics()
         model.refresh()
+        reloadHome()
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -90,6 +91,29 @@ import MouthtypeCore
         startObservingTransparency()
         refreshDiagnostics()
         model.refresh()
+        reloadHome()
+    }
+
+    /// The Home log and the stats are watched only while the window is open on their pages.
+    func windowWillClose(_ notification: Notification) {
+        model.home.deactivate()
+        model.stats.deactivate()
+    }
+
+    private func reloadHome() {
+        let home = model.home
+        if model.page == .home {
+            home.activate()
+            home.startReload()
+        } else {
+            home.deactivate()
+        }
+        let stats = model.stats
+        if model.page == .stats || model.page == .records {
+            stats.activate()
+        } else {
+            stats.deactivate()
+        }
     }
 }
 
@@ -108,7 +132,43 @@ final class SettingsNSWindow: NSWindow {
     /// end of the window. Step back through the forward Tab order instead, which is the order Tab already follows.
     override func selectKeyView(preceding view: NSView) {
         guard let previous = SettingsKeyLoop.previous(of: view, in: contentView) else { return super.selectKeyView(preceding: view) }
-        makeFirstResponder(previous)
+        focusByKeyboard(previous)
+    }
+
+    /// True while a Tab, Shift-Tab or key view step is moving focus, so mouse clicks don't jump the page.
+    private var isMovingFocusByKeyboard = false
+
+    override func selectNextKeyView(_ sender: Any?) { keyboardStep { super.selectNextKeyView(sender) } }
+    override func selectPreviousKeyView(_ sender: Any?) { keyboardStep { super.selectPreviousKeyView(sender) } }
+    override func selectKeyView(following view: NSView) { keyboardStep { super.selectKeyView(following: view) } }
+
+    private func keyboardStep(_ body: () -> Void) {
+        let was = isMovingFocusByKeyboard
+        isMovingFocusByKeyboard = true
+        defer { isMovingFocusByKeyboard = was }
+        body()
+    }
+
+    /// Moves focus the way Tab does, which also scrolls the page to the new control.
+    @discardableResult func focusByKeyboard(_ view: NSView) -> Bool {
+        var moved = false
+        keyboardStep { moved = makeFirstResponder(view) }
+        return moved
+    }
+
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        let moved = super.makeFirstResponder(responder)
+        if moved, isMovingFocusByKeyboard, let responder { scrollFocusIntoView(responder) }
+        return moved
+    }
+
+    /// Scrolls the page so the focused control is on screen with a small margin. The sidebar rows always fit, so they're left alone.
+    private func scrollFocusIntoView(_ responder: NSResponder) {
+        var target = responder as? NSView
+        if let editor = responder as? NSText, editor.isFieldEditor, let owner = editor.delegate as? NSView { target = owner }
+        guard let view = target, view.enclosingScrollView != nil,
+              view.convert(view.bounds, to: nil).minX >= SettingsTheme.sidebarWidth else { return }
+        view.scrollToVisible(view.bounds.insetBy(dx: 0, dy: -12))
     }
 }
 
@@ -134,9 +194,11 @@ final class SettingsNSWindow: NSWindow {
 }
 
 enum SettingsPage: String, CaseIterable, Identifiable {
-    case general, writing, appearance, diagnostics
+    case home, stats, records, general, writing, appearance, diagnostics
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
+    /// The pages under the sidebar's SETTINGS header.
+    static let settingsPages: [SettingsPage] = [.general, .writing, .appearance, .diagnostics]
     /// The page `offset` rows away, stopping at the first and last pages.
     func moved(by offset: Int) -> SettingsPage {
         let pages = Self.allCases
@@ -148,10 +210,13 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         (focused ?? selected).moved(by: offset)
     }
     var icon: String {
-        switch self { case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
+        switch self { case .home: "house"; case .stats: "chart.bar"; case .records: "trophy"; case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
     }
     var headline: String {
         switch self {
+        case .home: "Your recent takes."
+        case .stats: "Your numbers."
+        case .records: "Your personal bests."
         case .general: "A little less typing."
         case .writing: "Your words. Your way."
         case .appearance: "Clean by default. Personal by choice."
@@ -160,6 +225,9 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     }
     var summary: String {
         switch self {
+        case .home: "Everything you dictated lately, newest first. Copy it or recover it."
+        case .stats: "Words, speed, streaks and time saved, worked out on this Mac from your log."
+        case .records: "Your fastest, biggest and longest. Just for you, nothing is shared."
         case .general: "Set your shortcut, choose your cleanup, and carry on."
         case .writing: "A finish that feels right, without changing what you mean."
         case .appearance: "The same Mouthtype underneath. A different little machine when you want one."

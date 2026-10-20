@@ -206,8 +206,8 @@ import MouthtypeCore
     @Test func settingsMenuOpensTheOwnedWindow() throws {
         var opened = 0
         let section = SettingsMenuSection { opened += 1 }
-        let item = try #require(section.items.first)
-        #expect(item.title == "Settings…" && item.keyEquivalent == ",")
+        let item = try #require(section.items.first { $0.title == "Settings…" })
+        #expect(item.keyEquivalent == ",")
         _ = item.target?.perform(item.action, with: item)
         #expect(opened == 1)
     }

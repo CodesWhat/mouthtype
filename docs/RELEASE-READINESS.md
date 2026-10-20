@@ -1,8 +1,8 @@
-# Mac 0.2.0 release readiness
+# Mac 0.3.0 release readiness
 
-Stable 0.2.0 (build 16) adds selected-text transforms, optional saved-word boosting during recognition, cleanup levels in app and website rules, the Formal swearing change, Settings keyboard access and the Appearance preview change. Stable 0.1.0 (build 15) was cut from the rc.4 tree plus the quit-recovery fix and a docs correction.
+Stable 0.3.0 (build 17) adds the Home page with recent takes and Recover, local stats and records, saved-spelling suggestions from recent takes, and Settings scrolling that follows Tab. Stable 0.2.0 (build 16) added selected-text transforms, optional saved-word boosting during recognition, cleanup levels in app and website rules, the Formal swearing change, Settings keyboard access and the Appearance preview change. Stable 0.1.0 (build 15) was cut from the rc.4 tree plus the quit-recovery fix and a docs correction.
 
-Not verified on a device for stable 0.2.0:
+Not verified on a device for stable 0.3.0:
 
 - Fresh install on a Mac that has never run Mouthtype.
 - VoiceOver.

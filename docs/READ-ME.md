@@ -1,4 +1,4 @@
-# Mouthtype 0.2.0
+# Mouthtype 0.3.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
 
@@ -12,6 +12,18 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 6. Click a blank TextEdit document. Hold Fn, say a sentence, then release. Wait for text to appear. Dictate another sentence without clicking or typing between takes. Confirm one insertion per take and a space between them.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
+
+## What changed in 0.3.0
+
+Open Mouthtype from the menu to a new Home page with your last 50 takes, newest first. Each take has Copy and Recover. Recover works for any take whose audio is still saved, and it offers the text again without changing the history entry. Home updates as you dictate.
+
+Home also shows your stats: words today, this week and all time, a 14-day chart, average and best speed, current and longest streak, biggest day, longest take, and time saved compared with typing at 40 WPM. Records show your fastest speed, biggest day, longest streak and longest take, each with its date. Everything is worked out on your Mac from your own history, and takes from secure fields are never counted.
+
+Saved spellings now suggest spellings from your recent takes: names it keeps mishearing, brand names that come out lowercase, and words that get split apart, each with examples. Add, Remove or Dismiss a suggestion, and Undo right after. It also flags saved heard forms that rewrite everyday words.
+
+In Settings, with Keyboard navigation on, the page scrolls to follow Tab and Shift-Tab.
+
+Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
 
 ## What changed in 0.2.0
 

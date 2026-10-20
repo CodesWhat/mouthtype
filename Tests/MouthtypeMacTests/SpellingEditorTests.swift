@@ -33,6 +33,20 @@ import MouthtypeCore
         #expect(try store.allRules().isEmpty)
     }
 
+    @Test func saveAndDeleteTellTheSuggestionsTheLibraryChanged() throws {
+        let (dir, store) = try library()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let editor = SpellingEditor(store: store)
+        var changes = 0
+        editor.onLibraryChanged = { changes += 1 }
+        editor.heard = "mouth type"
+        editor.written = "Mouthtype"
+        editor.save()
+        #expect(changes == 1)
+        editor.delete()
+        #expect(changes == 2)
+    }
+
     @Test func everydayHeardFormWarnsButStillSaves() throws {
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -127,7 +141,7 @@ import MouthtypeCore
         let editor = SpellingEditor(store: store)
         editor.select(try #require(editor.items.first))
         FontRegistry.registerBundledFonts()
-        let view = NSHostingView(rootView: SpellingEditorView(editor: editor))
+        let view = NSHostingView(rootView: SpellingEditorView(editor: editor, suggestions: SpellingSuggestionsModel(vocabulary: store)))
         for (label, size) in [("", NSSize(width: 900, height: 550)), (".small", NSSize(width: 760, height: 500))] {
             view.frame = NSRect(origin: .zero, size: size)
             view.layoutSubtreeIfNeeded()

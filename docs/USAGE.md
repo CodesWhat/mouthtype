@@ -6,7 +6,7 @@ Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or p
 
 ## Mac release
 
-The latest published release, 0.2.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
+The latest published release, 0.3.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
 
 For a larger pill in any style, choose **Settings → Appearance → Pill size → Large**. Automatic, the default, picks Large on screens at least 2000 pt wide. The size is saved. Changes during recording take effect the next time the pill appears.
 

@@ -2,15 +2,16 @@ import AppKit
 import ObjectiveC
 import SwiftUI
 import Testing
+@testable import MouthtypeCore
 @testable import MouthtypeMac
 
 /// Builds the real Settings window offscreen and checks the keyboard path from the sidebar into each page.
 @MainActor @Suite struct SettingsKeyboardAccessTests {
-    private func makeWindow(page: SettingsPage, fullKeyboardAccess: Bool = false) -> SettingsWindow {
+    private func makeWindow(page: SettingsPage, fullKeyboardAccess: Bool = false, home: HomeLogModel = HomeLogModel()) -> SettingsWindow {
         let name = "SettingsKeyboardTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defaults.removePersistentDomain(forName: name)
-        let model = SettingsModel(defaults: defaults)
+        let model = SettingsModel(defaults: defaults, home: home)
         model.page = page
         let controller = SettingsWindow(model: model, reduceTransparency: { true }, fullKeyboardAccess: { fullKeyboardAccess })
         controller.window?.contentView?.layoutSubtreeIfNeeded()
@@ -58,11 +59,11 @@ import Testing
 
     /// Orders the real window front and pumps AppKit's event queue. SwiftUI builds its key view proxies once the window is on screen; whether macOS
     /// lets a test process become the active app depends on the desktop session, so the window is not required to be key.
-    private func keyWindow(page: SettingsPage, fullKeyboardAccess: Bool) throws -> (SettingsWindow, SettingsNSWindow) {
+    private func keyWindow(page: SettingsPage, fullKeyboardAccess: Bool, home: HomeLogModel = HomeLogModel()) throws -> (SettingsWindow, SettingsNSWindow) {
         _ = NSApplication.shared
         Self.installSystemFullKeyboardAccessOverride
         Self.forcedSystemFullKeyboardAccess = fullKeyboardAccess
-        let controller = makeWindow(page: page, fullKeyboardAccess: fullKeyboardAccess)
+        let controller = makeWindow(page: page, fullKeyboardAccess: fullKeyboardAccess, home: home)
         let window = try #require(controller.window as? SettingsNSWindow)
         NSApp.setActivationPolicy(.regular)
         NSApp.finishLaunching()
@@ -128,6 +129,34 @@ import Testing
         }
     }
 
+    /// Home's Copy and Recover buttons are plain buttons, so they are proxies in the loop. Tab must walk the sidebar rows (Home included)
+    /// and then reach every row button in order, and `previousKeyView` must mirror it so Shift-Tab steps back through the same stops.
+    @Test func tabReachesHomeRowButtonsAfterTheSidebarAndShiftTabMirrorsIt() async throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-home-keys-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite"))
+        var firstID = ""
+        for (index, text) in ["first take", "second take"].enumerated() {
+            let id = try store.begin(DictationStart(startedAt: Date().addingTimeInterval(Double(-index) * 60), target: DictationTarget()))
+            try store.recordInsertion(id, InsertionRecord(finalText: text))
+            if index == 0 { firstID = id }
+        }
+        let home = HomeLogModel(store: store, canRecover: { true })
+        await home.loadText()
+        home.attach([RecoverableDictation(id: firstID, startedAt: Date(), audioURL: URL(fileURLWithPath: "/tmp/a.wav"), seconds: 3, isPartial: false)])
+        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true, home: home)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let stops = try tabOrder(window)
+        let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
+        #expect(sidebar.count == SettingsPage.allCases.count + 3)
+        let pageStops = stops.dropFirst(sidebar.count).filter { $0.isProxy && $0.x >= SettingsTheme.sidebarWidth }
+        #expect(pageStops.count == 3, "Home: \(pageStops.count) button stops, expected Copy, Recover, Copy")
+        let chain = try keyViewChain(window)
+        for (current, next) in zip(chain, chain.dropFirst()) {
+            #expect(next.previousKeyView === current, "previousKeyView of \(type(of: next)) does not mirror nextKeyView")
+        }
+    }
+
     /// With Keyboard navigation off the list is itself the focus target, ahead of the rows, and Tab still continues into the page.
     @Test func tabLoopStillReachesPageControlsWithKeyboardNavigationOff() throws {
         let (controller, window) = try keyWindow(page: .general, fullKeyboardAccess: false)
@@ -187,6 +216,45 @@ import Testing
         #expect(SettingsKeyLoop.previous(of: NSView(), in: root) == nil)
     }
 
+    /// The page's scroll view and a keyboard stop in it that starts below the fold.
+    private func pageScrollAndOffscreenStop(_ window: NSWindow) throws -> (NSScrollView, NSView) {
+        var scrolls: [NSScrollView] = []
+        func collect(_ view: NSView) {
+            if let scroll = view as? NSScrollView, scroll.convert(scroll.bounds, to: nil).minX >= SettingsTheme.sidebarWidth { scrolls.append(scroll) }
+            view.subviews.forEach(collect)
+        }
+        collect(try #require(window.contentView))
+        let scroll = try #require(scrolls.max { $0.bounds.height < $1.bounds.height }, "no page scroll view")
+        let document = try #require(scroll.documentView)
+        let stop = try keyViewChain(window).filter { $0.enclosingScrollView === scroll && $0.acceptsFirstResponder }
+            .max { $0.convert($0.bounds, to: document).maxY < $1.convert($1.bounds, to: document).maxY }
+        let target = try #require(stop, "no focusable control in the page")
+        #expect(target.convert(target.bounds, to: document).maxY > scroll.documentVisibleRect.maxY, "control is not below the fold")
+        return (scroll, target)
+    }
+
+    /// Tab (and the Shift-Tab path) must bring a control below the fold into view.
+    @Test func keyboardFocusScrollsTheControlIntoView() throws {
+        let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let (scroll, target) = try pageScrollAndOffscreenStop(window)
+        let document = try #require(scroll.documentView)
+        #expect(window.focusByKeyboard(target))
+        scroll.layoutSubtreeIfNeeded()
+        let frame = target.convert(target.bounds, to: document)
+        #expect(scroll.documentVisibleRect.contains(frame), "frame \(frame) outside visible \(scroll.documentVisibleRect)")
+    }
+
+    /// A click (plain makeFirstResponder) must not move the page.
+    @Test func nonKeyboardFocusDoesNotScroll() throws {
+        let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let (scroll, target) = try pageScrollAndOffscreenStop(window)
+        let before = scroll.contentView.bounds.origin
+        #expect(window.makeFirstResponder(target))
+        #expect(scroll.contentView.bounds.origin == before)
+    }
+
     private func press(_ key: UInt32, keyCode: UInt16, in window: NSWindow) throws {
         let characters = String(UnicodeScalar(key)!)
         let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function], timestamp: 0,
@@ -221,7 +289,13 @@ import Testing
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .general)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
-        #expect(controller.model.page == .general)
+        #expect(controller.model.page == .records)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .stats)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .home)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .home)
     }
 
     @Test func arrowsStepFromTheFocusedRowOtherwiseFromTheSelection() {
@@ -233,6 +307,8 @@ import Testing
     @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {
         #expect(SettingsPage.general.moved(by: 1) == .writing)
         #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
-        #expect(SettingsPage.general.moved(by: -1) == .general)
+        #expect(SettingsPage.general.moved(by: -1) == .records)
+        #expect(SettingsPage.records.moved(by: -1) == .stats)
+        #expect(SettingsPage.home.moved(by: -1) == .home)
     }
 }

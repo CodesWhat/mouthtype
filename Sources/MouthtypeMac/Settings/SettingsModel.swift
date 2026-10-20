@@ -14,6 +14,8 @@ import UniformTypeIdentifiers
     private var capsLockShortcut = false
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
+    let home: HomeLogModel
+    let stats: StatsModel
     var page = SettingsPage.general
     var previewWallpaper = PreviewWallpaper.dark
     var previewStatus: PreviewStatus?
@@ -48,7 +50,11 @@ import UniformTypeIdentifiers
          onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
          microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
          onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
-         onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in }) {
+         onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+         home: HomeLogModel = HomeLogModel(observing: false),
+         stats: StatsModel = StatsModel(observing: false)) {
+        self.home = home
+        self.stats = stats
         self.defaults = defaults
         self.microphone = microphone ?? MicrophoneSettingsModel(defaults: defaults, onChanged: onMicrophoneChanged)
         self.loginItem = loginItem
