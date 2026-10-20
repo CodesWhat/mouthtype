@@ -1,8 +1,26 @@
-Mouthtype 0.1.0
+Mouthtype 0.2.0
+
+Transform selected text. Select some text in any app and choose Fix grammar, Make shorter, Make more formal or Make more casual. The Thorough model rewrites it into an editable preview, and you choose Accept, Retry or Cancel. Accept replaces the text only if the app, field and selection are still the same. If they changed, Copy original is there, and Cmd-Z undoes a replacement.
+
+Boost my saved words while recognising is a new setting and it's off by default. It favours your saved spellings while Mouthtype is recognising speech. The first time you use it, Mouthtype downloads an English speech model of about 100 MB. Dictation never waits for that download.
+
+App and website rules can now set a cleanup level as well as a tone, so cleanup can be on for one app while it's off everywhere else.
+
+Formal tone now removes or softens swearing at Basic, Fast and Thorough.
+
+Saved spellings warn you when a heard form is an everyday word, like "win". Those aren't used as boost hints.
+
+Settings: with macOS Keyboard navigation on, Tab now reaches the page controls and Shift-Tab steps back. Sidebar rows show focus.
+
+Appearance: the preview now offers Light and Dark, and Desktop is gone. Glass no longer judges itself against Apple's placeholder picture when your wallpaper is a live one.
+
+Not verified on a device for this release: fresh installation, VoiceOver, and Bluetooth and USB microphones.
+
+Earlier in 0.1.0:
 
 The first stable release of Mouthtype for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
-Since rc.4: if you quit Mouthtype in the middle of a take, the next launch offers to recover it. The docs now say plainly that Tab doesn't reach Settings controls yet; arrow keys move through the sidebar, and a fix is planned for 0.2.
+Since rc.4: if you quit Mouthtype in the middle of a take, the next launch offers to recover it. The docs now say plainly that Tab doesn't reach Settings controls yet; arrow keys move through the sidebar. That is fixed in 0.2.0.
 
 Not verified on a device for this release: fresh installation, Bluetooth and USB microphones, and VoiceOver.
 

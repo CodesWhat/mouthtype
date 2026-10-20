@@ -59,7 +59,7 @@
             A key, a thought, and somewhere to put it.<br />
             Here’s how to get Mouthtype ready on your Mac.
           </p>
-          <p class="page-meta">0.1.0 · macOS 26+ · APPLE SILICON</p>
+          <p class="page-meta">0.2.0 · macOS 26+ · APPLE SILICON</p>
           <div class="page-actions">
             <a class="primary" href="/download/">Download for Mac <span aria-hidden="true">↓</span></a>
             <a class="text-link" href="/source">Source code (GPL-3.0) <span aria-hidden="true">↗</span></a>
@@ -79,8 +79,8 @@
                     copy before replacing it, and open the app from Applications.
                   </p>
                   <p>
-                    This is <strong>0.1.0</strong> (build 15), for Apple
-                    Silicon Macs running macOS 26 or later. This is the first stable
+                    This is <strong>0.2.0</strong> (build 16), for Apple
+                    Silicon Macs running macOS 26 or later. This is a stable
                     release; read the notes below before your first dictation.
                   </p>
                 </div>
@@ -203,13 +203,30 @@
         <section class="build-note" id="your-build">
           <h2>What’s in this release?</h2>
           <p>
-            0.1.0 is the first stable release. It brings together the release
-            candidate fixes: clipboard and audio are put back after a take,
-            Esc and Undo behave while an earlier take is still processing, and
-            a take cut off by Quit is offered on the next launch.
-            Saved Recordings loads in pages without filling the main menu, and
-            incomplete cleanup downloads can be retried. Review the destination
-            before retrying a take; hardware and app-specific behavior still needs feedback.
+            0.2.0 adds <strong>Transform Selected Text</strong>: choose Fix
+            grammar, Make shorter, Make more formal or Make more casual on the
+            Thorough model, then edit the preview and Accept, Retry or Cancel.
+            Accept replaces the text only while the original selection is
+            unchanged, and Cmd-Z or Copy original gets the old text back.
+          </p>
+          <p>
+            <strong>Boost my saved words while recognising</strong> is off by
+            default. It favours your saved spellings during recognition. First
+            use downloads an English speech model of about 100 MB, and dictation
+            never waits for it. App and website rules can now set a cleanup
+            level as well as a tone, Formal tone removes or softens swearing at
+            Basic, Fast and Thorough, and saved spellings warn when a heard form
+            is an everyday word. In Settings, Tab reaches the page controls
+            with Keyboard navigation on, and Appearance previews Light and Dark.
+            Fresh installation, VoiceOver, and Bluetooth and USB microphones
+            weren’t verified on a device.
+          </p>
+          <p>
+            Since 0.1.0 the app has also included clipboard and audio
+            restoration after a take, a take cut off by Quit offered on the next
+            launch, and paged Saved Recordings with retryable cleanup downloads.
+            Review the destination before retrying a take; hardware and
+            app-specific behavior still needs feedback.
           </p>
           <p>
             It includes <a href="/docs/#cleanup">app and website tone rules and an editable
