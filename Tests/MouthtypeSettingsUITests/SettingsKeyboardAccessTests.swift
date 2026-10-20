@@ -293,6 +293,8 @@ import Testing
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .savedSpellings)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        #expect(controller.model.page == .transcribeFile)
+        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .records)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .stats)
@@ -312,6 +314,7 @@ import Testing
         #expect(SettingsPage.general.moved(by: 1) == .writing)
         #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
         #expect(SettingsPage.general.moved(by: -1) == .phrases)
+        #expect(SettingsPage.records.moved(by: 1) == .transcribeFile)
         #expect(SettingsPage.records.moved(by: -1) == .stats)
         #expect(SettingsPage.home.moved(by: -1) == .home)
     }

@@ -10,34 +10,21 @@ import Testing
         let model = FileTranscriptionModel(makeJob: {
             AudioFileTranscription(decoder: RenderFileDecoder(), engine: RenderFileEngine())
         }, copy: { _ in copies += 1 })
-        let controller = FileTranscriptionWindow(model: model)
-        #expect(controller.window?.title == "Transcribe Audio File")
-        try render(controller, size: NSSize(width: 760, height: 600), name: "file-idle")
+        let settings = SettingsModel(defaults: UserDefaults(suiteName: "FileRender-\(UUID().uuidString)")!, fileTranscription: model)
+        settings.page = .transcribeFile
+        try render(settings, size: SettingsTheme.minimumSize, name: "file-idle")
         model.start(URL(fileURLWithPath: "/not-opened/recording.wav"))
         for _ in 0..<500 where model.isBusy { await Task.yield() }
         #expect(model.state == .finished)
         #expect(model.text == RenderFileEngine.text)
-        try render(controller, size: NSSize(width: 560, height: 440), name: "file-result-minimum")
+        try render(settings, size: SettingsTheme.minimumSize, name: "file-result-minimum")
         #expect(copies == 0)
-        #expect(controller.window?.isVisible == false)
     }
 
-    private func render(_ controller: FileTranscriptionWindow, size: NSSize, name: String) throws {
-        controller.window?.appearance = NSAppearance(named: .aqua)
-        controller.window?.setContentSize(size)
-        let view = try #require(controller.window?.contentView)
-        view.setFrameSize(size)
-        view.layoutSubtreeIfNeeded()
-        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-        view.cacheDisplay(in: view.bounds, to: bitmap)
-        #expect(!controller.window!.isVisible)
+    private func render(_ settings: SettingsModel, size: NSSize, name: String) throws {
+        let bitmap = try SettingsRender.render(model: settings, actions: SettingsActions(), dark: false, size: size)
         #expect(bitmap.pixelsWide >= Int(size.width) && bitmap.pixelsHigh >= Int(size.height))
-        if let directory = ProcessInfo.processInfo.environment["MOUTHTYPE_SETTINGS_PREVIEWS"] {
-            let output = URL(fileURLWithPath: directory, isDirectory: true)
-            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-            let data = try #require(bitmap.representation(using: .png, properties: [:]))
-            try data.write(to: output.appendingPathComponent(name + ".png"))
-        }
+        try SettingsRender.save(bitmap, name: name)
     }
 }
 

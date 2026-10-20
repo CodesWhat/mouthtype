@@ -22,9 +22,10 @@ struct SettingsView: View {
                 switch model.page {
                 case .savedSpellings: SavedSpellingsPage(model: model)
                 case .phrases: PhrasesPage(model: model)
+                case .transcribeFile: FileTranscriptionHostPage(model: model, actions: actions)
                 default: SettingsForm {
                     switch model.page {
-                    case .savedSpellings, .phrases: EmptyView()
+                    case .savedSpellings, .phrases, .transcribeFile: EmptyView()
                     case .home: HomePage(model: model.home)
                     case .stats: StatsHostPage(model: model.stats)
                     case .records: RecordsHostPage(model: model.stats)
@@ -85,6 +86,7 @@ struct SettingsView: View {
                     sidebarPageRow(.home)
                     sidebarPageRow(.stats)
                     sidebarPageRow(.records)
+                    sidebarPageRow(.transcribeFile)
                 }
                 Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
                     .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)

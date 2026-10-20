@@ -49,7 +49,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.menuBar?.refresh()
             self?.settingsWindow.model.home.refreshRecoverability()
         }, copy: { SystemClipboard().write($0) })
-    private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
     private lazy var spellingEditor = SpellingEditor(store: dictionary)
     private lazy var spellingSuggestions = SpellingSuggestionsModel(vocabulary: dictionary)
     private lazy var settingsWindow = SettingsWindow(
@@ -59,7 +58,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
             onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
             onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
-            spellings: spellingEditor, spellingSuggestions: spellingSuggestions, phrases: PhraseEditor(store: phrases)),
+            spellings: spellingEditor, spellingSuggestions: spellingSuggestions, phrases: PhraseEditor(store: phrases), fileTranscription: fileTranscriptionModel),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
             cleaner: cleanerHost,
             diagnostics: diagnostics, retrySpeech: { [weak self] in self?.engineHost.start() },
@@ -89,7 +88,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var historySection: HistoryMenuSection?
     private var hotkeyService: HotkeyService?
-    private var shortcutWindow: ShortcutRecorderWindow?
+    private var shortcutSheet: ShortcutRecorderSheet?
     private var hotkeyLogTask: Task<Void, Never>?
     private var pill: PillController?
     private var cardController: DeliveryCardController?
@@ -221,7 +220,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             open: { [weak self] in self?.selectionCleanupWindow.present() },
             openTransform: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
             unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
-        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.fileTranscriptionWindow.present() }, startsGroup: false)
+        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(page: .transcribeFile) }, startsGroup: false)
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost, weak recovery] in
                 guard dictation?.phase == .idle, recovery?.isRecovering != true, let engineHost else { return false }
@@ -506,7 +505,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startInput() {
-        guard !inputStarted, shortcutWindow == nil else { return }
+        guard !inputStarted, shortcutSheet == nil else { return }
         inputStarted = true
         if let mode = InputProbe.mode(in: CommandLine.arguments) {
             Task { await InputProbe.run(mode, remap: fnRemap) }
@@ -586,7 +585,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func activateRecordingMode(_ mode: RecordingMode) -> String? {
-        guard shortcutWindow == nil else { return "Finish changing the shortcut before changing recording behavior." }
+        guard shortcutSheet == nil else { return "Finish changing the shortcut before changing recording behavior." }
         guard let service = hotkeyService else { return nil }
         let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
         do {
@@ -606,7 +605,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showShortcutEditor() {
-        if let shortcutWindow { shortcutWindow.present(); return }
+        if shortcutSheet != nil { settingsWindow.present(); return }
         guard dictation?.phase == .idle else {
             pill?.showMessage("Finish or cancel this dictation before changing its shortcut")
             return
@@ -617,12 +616,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeyService?.stop()
         shortcuts.unregisterAll()
-        let window = ShortcutRecorderWindow(saved: ShortcutSettings.load(), apply: { [weak self] shortcut in
+        let sheet = ShortcutRecorderSheet(saved: ShortcutSettings.load(), apply: { [weak self] shortcut in
             guard let self else { return "Mouthtype is closing." }
             return ShortcutSettings.apply(shortcut, activate: self.activateShortcut)
         }, onClose: { [weak self] in
             guard let self else { return }
-            self.shortcutWindow = nil
+            self.shortcutSheet = nil
             guard !self.isTerminating else { return }
             if let error = self.activateShortcut(ShortcutSettings.load()) {
                 self.pill?.showMessage(error)
@@ -635,8 +634,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self.registerGlobalShortcuts()
             self.refreshGlobeCheck()
         })
-        shortcutWindow = window
-        window.present()
+        shortcutSheet = sheet
+        settingsWindow.present()
+        if let parent = settingsWindow.window { sheet.present(over: parent) } else { sheet.close() }
     }
 
     private func showSetup() {

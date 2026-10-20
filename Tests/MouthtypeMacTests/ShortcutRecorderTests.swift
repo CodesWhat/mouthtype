@@ -85,17 +85,20 @@ import Testing
         #expect(recorder.canSave)
     }
 
-    @Test func windowCapturesCommandQBeforeMenuShortcutsAndCanRenderOffscreen() throws {
+    private func keyEvent(_ characters: String, code: UInt16, flags: NSEvent.ModifierFlags = [], in window: NSWindow) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+            windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+    }
+
+    @Test func sheetCapturesCommandQBeforeMenuShortcutsAndCanRenderOffscreen() throws {
         _ = NSApplication.shared
         var closed = 0
-        let controller = ShortcutRecorderWindow(saved: nil, apply: { _ in nil }, onClose: { closed += 1 })
-        let window = try #require(controller.window)
-        controller.recorder.begin()
-        let down = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
-            windowNumber: window.windowNumber, context: nil, characters: "q", charactersIgnoringModifiers: "q", isARepeat: false, keyCode: 12))
-        #expect(window.performKeyEquivalent(with: down))
-        #expect(controller.recorder.draft?.keyCode == 12)
-        controller.recorder.cancelRecording()
+        let sheet = ShortcutRecorderSheet(saved: nil, apply: { _ in nil }, onClose: { closed += 1 })
+        let window = sheet.window
+        sheet.recorder.begin()
+        #expect(window.performKeyEquivalent(with: try keyEvent("q", code: 12, flags: .command, in: window)))
+        #expect(sheet.recorder.draft?.keyCode == 12)
+        sheet.recorder.cancelRecording()
         let view = try #require(window.contentView)
         view.layoutSubtreeIfNeeded()
         #expect(view.bounds.width == 520 && view.bounds.height == 330)
@@ -108,10 +111,42 @@ import Testing
             view.cacheDisplay(in: view.bounds, to: image)
             try #require(image.representation(using: .png, properties: [:])).write(to: URL(fileURLWithPath: path))
         }
-        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification, object: window))
+        sheet.close()
+        sheet.close()
         #expect(closed == 1)
-        window.delegate = nil
-        controller.close()
+    }
+
+    @Test func escapeCancelsTheSheetWithoutSavingAndReleasesCapture() throws {
+        _ = NSApplication.shared
+        var closed = 0
+        var applied: [DictationShortcut?] = []
+        let parent = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
+        parent.isReleasedWhenClosed = false
+        let sheet = ShortcutRecorderSheet(saved: nil, apply: { applied.append($0); return nil }, onClose: { closed += 1 })
+        sheet.present(over: parent)
+        // Mid-recording, Escape is a shortcut candidate like any other key and does not close the sheet.
+        sheet.recorder.begin()
+        #expect(sheet.window.performKeyEquivalent(with: try keyEvent("\u{1b}", code: 53, in: sheet.window)))
+        #expect(closed == 0)
+        sheet.recorder.cancelRecording()
+        // Idle, Escape presses Cancel.
+        #expect(sheet.window.performKeyEquivalent(with: try keyEvent("\u{1b}", code: 53, in: sheet.window)))
+        #expect(closed == 1)
+        #expect(applied.isEmpty)
+        #expect(!sheet.recorder.isRecording)
+        let stray = try keyEvent("k", code: 40, in: sheet.window)
+        #expect(!sheet.capture(stray))
+        parent.close()
+    }
+
+    @Test func closingTheSheetWhileRecordingStopsCapture() {
+        _ = NSApplication.shared
+        var closed = 0
+        let sheet = ShortcutRecorderSheet(saved: nil, apply: { _ in nil }, onClose: { closed += 1 })
+        sheet.recorder.begin()
+        #expect(sheet.recorder.isRecording)
+        sheet.close()
+        #expect(!sheet.recorder.isRecording && closed == 1)
     }
 }
 
