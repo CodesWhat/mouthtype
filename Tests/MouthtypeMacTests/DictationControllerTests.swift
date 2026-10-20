@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 import MouthtypeCore
@@ -1886,6 +1887,47 @@ private final class FakeCorrections: CorrectionObserving {
             await rig.settle()
             #expect(rig.log.all.filter { $0 == "capture.start" }.count == before + 1)
         }
+    }
+
+    @Test func aQuickFnTapDuringAURLStartCannotDiscardTheRecordingAndTheNextTapStopsIt() async {
+        let rig = Rig()
+        let gate = StartGate()
+        let service = HotkeyService(options: .init(source: .fnFlag, configuration: .init(recordingMode: .hold)), otherKeysHeld: { _ in false })
+        defer { service.stop() }
+        rig.controller.onAutomationLock = { service.adoptLockedRecording() }
+        let consumer = Task { @MainActor in await rig.controller.consume(service.events) }
+        defer { consumer.cancel() }
+        let fn = CGEventFlags.maskSecondaryFn.rawValue
+        rig.capture.duringStart = { await gate.wait() }
+
+        let url = Task { @MainActor in await rig.controller.startHandsFree() }
+        await rig.settle()
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: fn, timestamp: 1_000_000))
+        await rig.settle()
+        gate.open()
+        await url.value
+        await rig.settle()
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+
+        // The release lands inside the minimum hold, which used to read as a discard.
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: 0, timestamp: 20_000_000))
+        await rig.settle()
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+        #expect(rig.store.finishes.isEmpty)
+
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: fn, timestamp: 900_000_000))
+        await rig.until { rig.controller.phase != .recording }
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+    }
+
+    @Test func aDiscardNeverEndsAHandsFreeRecording() async {
+        let rig = Rig()
+        await rig.lockIn()
+        await rig.controller.handle(.discarded(reason: .tooShort))
+        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree)
+        #expect(rig.store.finishes.isEmpty)
     }
 
     @Test func anAutomationStartTellsTheHotkeySideButAKeyLockDoesNot() async {

@@ -629,7 +629,8 @@ final class DictationController {
     // MARK: Discard and cancel
 
     private func discarded() async {
-        guard phase == .recording, let current = session else { return }
+        // A hands-free recording was started on purpose, and a key gesture that didn't start it can't throw it away.
+        guard phase == .recording, !isHandsFree, let current = session else { return }
         captureFinalizations += 1
         defer { captureFinalizations -= 1 }
         session = nil

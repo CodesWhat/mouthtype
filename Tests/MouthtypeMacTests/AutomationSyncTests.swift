@@ -60,13 +60,14 @@ import MouthtypeCore
         #expect(await events(service, count: 1) == [.pressed(at: 1_000_000)])
     }
 
-    @Test func adoptingWhileTheKeyAlreadyHasARecordingChangesNothing() async {
+    @Test func adoptingMidPressTurnsTheHeldKeyIntoTheLockSoItsReleaseIsSwallowed() async {
         let service = service(.hold)
         defer { service.stop() }
         service.process(.init(kind: .flagsChanged, keyCode: 63, flags: fn, timestamp: 1_000_000))
         service.adoptLockedRecording()
-        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: 0, timestamp: 400_000_000))
-        #expect(await events(service, count: 2) == [.pressed(at: 1_000_000), .released(at: 400_000_000)])
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: 0, timestamp: 20_000_000))
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: fn, timestamp: 900_000_000))
+        #expect(await events(service, count: 2) == [.pressed(at: 1_000_000), .released(at: 900_000_000)])
     }
 }
 
