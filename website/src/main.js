@@ -1,4 +1,5 @@
 import "./hero-demo.js";
+import "./menubar-mouth.js";
 
 const principles = document.querySelector(".principles-group");
 const repeatedPrinciples = principles.cloneNode(true);

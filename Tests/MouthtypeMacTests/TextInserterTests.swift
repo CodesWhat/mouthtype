@@ -22,6 +22,8 @@ private final class FakePasteboard: PasteboardAccess {
     /// The callback of the promise now on the pasteboard, as the system would run it.
     var onRead: (@Sendable () -> Void)?
 
+    func currentString() -> String? { publishedText }
+
     func snapshot() -> PasteboardSnapshot {
         snapshots += 1
         return contents
@@ -1085,6 +1087,14 @@ private struct Rig {
         #expect(AccessibilityFocusReader().ownerPID(of: focused) == pid)
     }
 
+    @Test func theRealSecureFieldDetectorReadsSubroleAndDefaultsToNotSecure() {
+        let element = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        let reader = AccessibilityFocusReader()
+        #expect(reader.isSecure(element, subrole: kAXSecureTextFieldSubrole as String))
+        #expect(!reader.isSecure(element, subrole: "AXTextField"))
+        #expect(!reader.isSecure(element, subrole: nil))
+    }
+
     @Test func boundaryDiagnosticsDoNotRunForSecureOrRefusedTargets() async {
         var diagnostics: [String] = []
         let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
@@ -1382,6 +1392,33 @@ private struct Rig {
         #expect(rig.pasteboard.contents != original)
         rig.pending.run(0.2)
         #expect(rig.pasteboard.contents == original)
+    }
+
+    @Test func clipboardTextIsTheUsersCopyWhileARestoreIsPending() async {
+        let rig = Rig()
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("user copy")]])
+        _ = await rig.inserter.deliver("first dictation", startFocus: nil)
+        #expect(rig.pasteboard.publishedText == "first dictation")
+        #expect(rig.inserter.clipboardText() == "user copy")
+        rig.pending.run(PasteboardSession.receiptCap)
+        #expect(rig.inserter.clipboardText() == "user copy")
+    }
+
+    @Test func clipboardTextPrefersAnExternalWriteDuringThePendingWindow() async {
+        let rig = Rig()
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("user copy")]])
+        _ = await rig.inserter.deliver("first dictation", startFocus: nil)
+        rig.pasteboard.externalCopy("newer copy")
+        #expect(rig.inserter.clipboardText() == "newer copy")
+    }
+
+    @Test func clipboardTextAfterAClipboardOnlyDeliveryIsTheTranscript() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        rig.keys.code = nil
+        let result = await rig.inserter.deliver("left behind", startFocus: nil)
+        #expect(result.method == .clipboardOnly)
+        #expect(rig.inserter.clipboardText() == "left behind")
     }
 
     @Test func theRestoreWaitsForTheLastReceipt() async {

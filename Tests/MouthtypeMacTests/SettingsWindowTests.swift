@@ -29,17 +29,26 @@ import MouthtypeCore
         var changes: [Bool] = []
         let model = SettingsModel(defaults: defaults, onQuietOtherAudioChanged: { changes.append($0) })
         let sounds = model.sounds
-        #expect(!model.quietOtherAudio)
-        model.setQuietOtherAudio(true)
         #expect(model.quietOtherAudio)
-        #expect(QuietAudioPreference.isEnabled(defaults))
         model.setQuietOtherAudio(false)
+        #expect(!model.quietOtherAudio)
         #expect(!QuietAudioPreference.isEnabled(defaults))
-        QuietAudioPreference.set(true, in: defaults)
+        model.setQuietOtherAudio(true)
+        #expect(QuietAudioPreference.isEnabled(defaults))
+        QuietAudioPreference.set(false, in: defaults)
         model.refresh()
-        #expect(model.quietOtherAudio)
+        #expect(!model.quietOtherAudio)
         #expect(model.sounds == sounds)
-        #expect(changes == [true, false])
+        #expect(changes == [false, true])
+    }
+
+    @Test func explicitOffIsKeptAndUnsetIsOn() {
+        let name = "SettingsQuietUnsetTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(SettingsModel(defaults: defaults).quietOtherAudio)
+        defaults.set(false, forKey: QuietAudioPreference.key)
+        #expect(!SettingsModel(defaults: defaults).quietOtherAudio)
     }
 
     @Test func cleanupEditsPersistWithoutChangingOtherPreferences() {
@@ -206,8 +215,8 @@ import MouthtypeCore
     @Test func settingsMenuOpensTheOwnedWindow() throws {
         var opened = 0
         let section = SettingsMenuSection { opened += 1 }
-        let item = try #require(section.items.first)
-        #expect(item.title == "Settings…" && item.keyEquivalent == ",")
+        let item = try #require(section.items.first { $0.title == "Settings…" })
+        #expect(item.keyEquivalent == ",")
         _ = item.target?.perform(item.action, with: item)
         #expect(opened == 1)
     }

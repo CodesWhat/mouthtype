@@ -30,7 +30,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             info: Bundle.main.infoDictionary ?? [:]) ? SparkleDriver() : nil,
         activity: { [weak self] in .resolve(phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true,
             transcribingFile: self?.fileTranscriptionModel.isBusy == true, editingSelection: self?.selectionCleanupModel.hasPreview == true) })
-    private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), busy: { [weak self] in
+    private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), transformer: cleanerHost, busy: { [weak self] in
         guard let self else { return true }
         return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
     }, changed: { [weak self] in self?.appUpdater.refreshActivity() })
@@ -47,22 +47,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }, activityChanged: { [weak self] in
             self?.appUpdater.refreshActivity()
             self?.menuBar?.refresh()
-        }, copy: { text in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-        })
-    private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
-    private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
-    private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
+            self?.settingsWindow.model.home.refreshRecoverability()
+        }, copy: { SystemClipboard().write($0) })
+    private lazy var spellingEditor = SpellingEditor(store: dictionary)
+    private lazy var spellingSuggestions = SpellingSuggestionsModel(vocabulary: dictionary)
     private lazy var settingsWindow = SettingsWindow(
         model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
             onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
             onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
             onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
-            onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } }),
+            onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
+            onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
+            spellings: spellingEditor, spellingSuggestions: spellingSuggestions, phrases: PhraseEditor(store: phrases), fileTranscription: fileTranscriptionModel),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
-            openSpellings: { [weak self] in self?.spellingWindow.present() },
-            openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
+            cleaner: cleanerHost,
             diagnostics: diagnostics, retrySpeech: { [weak self] in self?.engineHost.start() },
             refreshDiagnostics: { [weak self] in self?.refreshDiagnostics() },
             toggleRemap: { [weak self] in self?.toggleRemap() },
@@ -72,6 +70,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             editDictionary: { [weak self] in self?.editDictionary() },
             editPhrasesFile: { [weak self] in self?.editPhrasesFile() },
             chooseFont: { [weak self] in self?.fontChooser.presentFontChooser() }, updater: appUpdater))
+    /// Hands the engine the current bias now, so turning the setting on starts the model download without waiting for a take.
+    private func refreshVocabularyBias() {
+        let bias = VocabularyBoostSetting.bias(enabled: VocabularyBoostSetting.isEnabled(), rules: dictionary.dictionary())
+        let engine = HostEngine(host: engineHost)
+        Task { await engine.setVocabularyBias(bias) }
+    }
+
     private let micCapture = MicCapture()
     private let audioQuiet = RecordingAudioQuiet(output: CoreAudioQuietOutput(), enabled: { QuietAudioPreference.isEnabled() })
     private let microphoneSection = MicrophoneMenuSection()
@@ -83,7 +88,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var historySection: HistoryMenuSection?
     private var hotkeyService: HotkeyService?
-    private var shortcutWindow: ShortcutRecorderWindow?
+    private var shortcutSheet: ShortcutRecorderSheet?
     private var hotkeyLogTask: Task<Void, Never>?
     private var pill: PillController?
     private var cardController: DeliveryCardController?
@@ -162,6 +167,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         cards.onDismiss = { [weak presenter] in presenter?.userDismissed() }
         cardController = cards
         cardPresenter = presenter
+        ProfanityRemover.prewarm()
         var pipeline = DictationPipeline(
             store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
         )
@@ -194,7 +200,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let menuBar = MenuBarController()
         pill.onLevel = { [weak menuBar] level in menuBar?.setLevel(level) }
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
-        let settingsSection = SettingsMenuSection { [weak self] in self?.settingsWindow.present() }
+        settingsWindow.model.home.store = store
+        settingsWindow.model.stats.store = store
+        settingsWindow.model.spellingSuggestions?.store = store
+        let settingsSection = SettingsMenuSection(
+            open: { [weak self] in self?.settingsWindow.present(page: .general) },
+            openHome: { [weak self] in self?.settingsWindow.present(page: .home) })
         menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in
             guard let self else { return }
             if self.diagnostics.microphoneStatus != .authorized || !self.diagnostics.accessibilityGranted { self.showSetup() }
@@ -205,17 +216,29 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
-        menuBar.add(section: SelectionCleanupMenuSection { [weak self] in self?.selectionCleanupWindow.present() }, startsGroup: false)
-        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.fileTranscriptionWindow.present() }, startsGroup: false)
+        menuBar.add(section: SelectionCleanupMenuSection(
+            open: { [weak self] in self?.selectionCleanupWindow.present() },
+            openTransform: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
+            unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
+        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(page: .transcribeFile) }, startsGroup: false)
         if let recovery {
-            recovery.canRecover = { [weak self, weak dictation, weak engineHost] in
-                guard dictation?.phase == .idle, let engineHost else { return false }
+            recovery.canRecover = { [weak self, weak dictation, weak engineHost, weak recovery] in
+                guard dictation?.phase == .idle, recovery?.isRecovering != true, let engineHost else { return false }
                 guard self?.isTerminating != true, self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true else { return false }
                 if case .ready = engineHost.state { return true }
                 return false
             }
             menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
-            recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
+            let home = settingsWindow.model.home
+            home.saved = { [weak recovery] in try await recovery?.loadSavedRecordings() ?? [] }
+            home.completedAudio = { [weak recovery] rows in await recovery?.loadCompletedRecordings(for: rows) ?? [] }
+            home.canRecover = recovery.canRecover
+            home.recoverTake = { [weak recovery] item in recovery?.offerSaved(item) }
+            recovery.onFinished = { [weak menuBar] in
+                menuBar?.refresh()
+                home.refreshRecoverability()
+                home.startReload()
+            }
         }
         dictation.canStartRecording = { [weak self] in self?.isTerminating != true && self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
         menuBar.add(section: history, startsGroup: false)
@@ -228,7 +251,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { _ = await self.prepareCapture() }
         }
         historySection = history
-        dictation.onAttemptFinished = { [weak menuBar] in menuBar?.refresh() }
+        dictation.onAttemptFinished = { [weak menuBar, weak home = settingsWindow.model.home] in menuBar?.refresh(); home?.refreshRecoverability() }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
         dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
         menuBar.onStopDictation = { [weak dictation] in dictation?.stopHandsFree() }
@@ -310,7 +333,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
-        guard appUpdater.allowsTermination else { return .terminateCancel }
+        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
             await dictation?.prepareForTermination() ?? true
@@ -328,6 +351,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         })
         return .terminateLater
+    }
+
+    static func mayQuit(allowsTermination: Bool, resolveDraft: () -> Bool) -> Bool {
+        allowsTermination && resolveDraft()
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
@@ -510,7 +537,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startInput() {
-        guard !inputStarted, shortcutWindow == nil else { return }
+        guard !inputStarted, shortcutSheet == nil else { return }
         inputStarted = true
         if let mode = InputProbe.mode(in: CommandLine.arguments) {
             Task { await InputProbe.run(mode, remap: fnRemap) }
@@ -590,7 +617,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func activateRecordingMode(_ mode: RecordingMode) -> String? {
-        guard shortcutWindow == nil else { return "Finish changing the shortcut before changing recording behavior." }
+        guard shortcutSheet == nil else { return "Finish changing the shortcut before changing recording behavior." }
         guard let service = hotkeyService else { return nil }
         let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
         do {
@@ -610,7 +637,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showShortcutEditor() {
-        if let shortcutWindow { shortcutWindow.present(); return }
+        if shortcutSheet != nil { settingsWindow.present(); return }
         guard dictation?.phase == .idle else {
             pill?.showMessage("Finish or cancel this dictation before changing its shortcut")
             return
@@ -621,12 +648,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeyService?.stop()
         shortcuts.unregisterAll()
-        let window = ShortcutRecorderWindow(saved: ShortcutSettings.load(), apply: { [weak self] shortcut in
+        let sheet = ShortcutRecorderSheet(saved: ShortcutSettings.load(), apply: { [weak self] shortcut in
             guard let self else { return "Mouthtype is closing." }
             return ShortcutSettings.apply(shortcut, activate: self.activateShortcut)
         }, onClose: { [weak self] in
             guard let self else { return }
-            self.shortcutWindow = nil
+            self.shortcutSheet = nil
             guard !self.isTerminating else { return }
             if let error = self.activateShortcut(ShortcutSettings.load()) {
                 self.pill?.showMessage(error)
@@ -639,8 +666,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self.registerGlobalShortcuts()
             self.refreshGlobeCheck()
         })
-        shortcutWindow = window
-        window.present()
+        shortcutSheet = sheet
+        settingsWindow.present()
+        if let parent = settingsWindow.window { sheet.present(over: parent) } else { sheet.close() }
     }
 
     private func showSetup() {

@@ -51,6 +51,21 @@ IMPORT_MESSAGES = {
 }
 
 
+SESSION_MESSAGES = {
+    "recovery_full": "Dictation history is full. Forget older dictations in Dictation History, or raise the limit in Recording Settings.",
+    "capture_unavailable": "The microphone could not be opened. Check PipeWire and pw-record.",
+    "capture_interrupted": "The microphone stopped during the take. Audio was saved for retry.",
+    "recording_limit": "The take hit the recording limit and was saved for retry.",
+    "transcription_failed": "Speech recognition failed. Audio was saved; retry from Saved Recordings.",
+    "dictionary_unavailable": "The saved spellings file is missing or invalid.",
+    "phrases_unavailable": "The saved phrases file is missing or invalid.",
+    "phrase_context_unavailable": "A phrase needs the clipboard, which could not be read.",
+    "cleanup_unavailable": "The cleanup setting is invalid.",
+    "command_expired": "The start request arrived too late; try again.",
+    "file_import_active": "Wait for the file transcription to finish or cancel it.",
+}
+
+
 def cli(*args, timeout=35):
     return subprocess.run(
         [str(LAUNCHER), "--config", str(CONFIG), *args],
@@ -199,6 +214,9 @@ def config_summary():
     delivery = config.get("delivery", {"mode": "recover"})
     return {
         "cleanup": config.get("cleanup", "off"),
+        "maximum_recovery_takes": config.get("maximum_recovery_takes", 200),
+        "audio_retention_days": config.get("audio_retention_days", 90),
+        "history_keep": config.get("history_keep"),
         "notifications": config.get("notifications", True),
         "maximum_recording_seconds": config.get("maximum_recording_seconds", 60),
         "delivery_mode": delivery.get("mode", "recover"),
@@ -326,8 +344,10 @@ def state():
     file_import["message"] = IMPORT_MESSAGES.get(file_import.get("error") or "", "")
     # A failed replacement keeps the previous result readable through import-result.
     file_import["retained"] = bool(file_import.get("retained_id"))
+    code = status.get("error") if running else None
     return {"running": running, "state": status.get("state", "off") if running else "off",
-            "error": status.get("error") if running else None,
+            "error": SESSION_MESSAGES.get(code, code) if code else None, "error_code": code,
+            "history": {"takes": len(entries), "maximum": status.get("maximum_takes") if running else config_summary().get("maximum_recovery_takes")},
             "recent": transcripts[:5], "has_transcript": bool(transcripts),
             "saved": [entry for entry in entries if entry["audio"] and not entry["transcript"]],
             "words_today": words_today(entries),
@@ -602,6 +622,12 @@ def set_config(field, value, extra=None):
         config["notifications"] = value == "on"
     elif field == "maximum_recording_seconds" and value in {"30", "60", "120"}:
         config["maximum_recording_seconds"] = int(value)
+    elif field == "maximum_recovery_takes" and value in {"100", "200", "500", "1000"}:
+        config["maximum_recovery_takes"] = int(value)
+    elif field == "audio_retention_days" and value in {"14", "30", "90", "none"}:
+        config["audio_retention_days"] = None if value == "none" else int(value)
+    elif field == "history_keep" and value in {"off", "5", "20", "50"}:
+        config["history_keep"] = None if value == "off" else int(value)
     elif field == "delivery" and value == "recover":
         config["delivery"] = {"mode": "recover"}
     elif field == "delivery" and value == "paste":
@@ -770,6 +796,44 @@ def set_shortcut(value, keys=None):
     return output
 
 
+def forget(identity):
+    if len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity):
+        raise RuntimeError("Invalid recording ID")
+    result = cli("forget", identity, timeout=10)
+    if result.returncode:
+        raise RuntimeError("That dictation is in use or could not be forgotten")
+    output = state()
+    output["page"] = "menu"
+    return output
+
+
+def prune(rule, value):
+    """Forget saved dictations by rule: keep-N newest, older-N days, or all. The active take is never touched."""
+    entries = recent_dictations(limit=None)
+    entries.sort(key=lambda e: e["mtime"])
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = 0
+    if rule == "keep":
+        targets = entries[:-number] if number > 0 else entries
+    elif rule == "older":
+        cutoff = time.time() - max(1, number) * 86400
+        targets = [e for e in entries if e["mtime"] < cutoff]
+    elif rule == "all":
+        targets = entries
+    else:
+        raise RuntimeError("Unsupported history rule")
+    forgotten = 0
+    for entry in targets:
+        if cli("forget", entry["id"], timeout=10).returncode == 0:
+            forgotten += 1
+    output = state()
+    output["page"] = "history"
+    output["message"] = f"Forgot {forgotten} dictation{'s' if forgotten != 1 else ''}"
+    return output
+
+
 def recover(identity):
     if len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity):
         raise RuntimeError("Invalid recording ID")
@@ -924,13 +988,16 @@ VALID_ACTIONS = {
     "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
     "set-autostart", "set-shortcut", "import-pick", "import-start", "import-cancel",
     "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
+,
+    "forget", "prune"
 }
 
 
 def main():
     if len(sys.argv) < 2 or sys.argv[1] not in VALID_ACTIONS or (
-        sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "import-start", "cleanup-setup"}
+        sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "import-start", "cleanup-setup", "forget"}
         and len(sys.argv) != 3
+    ) or (sys.argv[1] == "prune" and len(sys.argv) != 4
     ) or (sys.argv[1] == "set-shortcut" and len(sys.argv) not in {3, 4}
     ) or (sys.argv[1] == "copy" and len(sys.argv) not in {2, 3}) or (
         sys.argv[1] in {"set-config", "set-font"} and len(sys.argv) not in {4, 5}
@@ -969,6 +1036,10 @@ def main():
             output = paste_last()
         elif action == "set-config" and len(sys.argv) in {4, 5}:
             output = set_config(sys.argv[2], sys.argv[3], sys.argv[4] if len(sys.argv) == 5 else None)
+        elif action == "forget":
+            output = forget(sys.argv[2])
+        elif action == "prune":
+            output = prune(sys.argv[2], sys.argv[3])
         elif action == "cleanup-setup":
             output = cleanup_setup(sys.argv[2])
         elif action == "set-pill":

@@ -1,64 +1,27 @@
 import AppKit
+import MouthtypeCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-@MainActor final class SpellingEditorWindow: NSWindowController, NSWindowDelegate {
-    let editor: SpellingEditor
-
-    init(store: FileVocabulary) {
-        editor = SpellingEditor(store: store)
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 550),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Saved Spellings"
-        window.minSize = NSSize(width: 760, height: 500)
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: SpellingEditorView(editor: editor))
-        super.init(window: window)
-        window.delegate = self
-        window.center()
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    func present() {
-        editor.reload()
-        showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
-    }
-
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard editor.isDirty else { return true }
-        let alert = NSAlert()
-        alert.messageText = "Discard this unsaved spelling?"
-        alert.informativeText = "Save it before closing, or discard the draft."
-        alert.addButton(withTitle: "Keep Editing")
-        alert.addButton(withTitle: "Discard")
-        guard alert.runModal() == .alertSecondButtonReturn else { return false }
-        editor.cancel()
-        return true
-    }
-}
-
 struct SpellingEditorView: View {
     @Bindable var editor: SpellingEditor
+    var suggestions: SpellingSuggestionsModel
+    var expandFirstSuggestion = false
     @State private var confirmDelete = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Saved spellings").font(.custom("InstrumentSerif-Regular", size: 34))
-                Text("Keep names and terms spelled the way you want.").foregroundStyle(.secondary)
-            }.padding(24)
+            SpellingSuggestionsSection(model: suggestions, editor: editor, expandFirst: expandFirstSuggestion)
             Divider()
             HStack(alignment: .top, spacing: 0) {
                 library.frame(width: 240)
                 Divider()
                 form.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            }.frame(minHeight: 320, idealHeight: 320, maxHeight: .infinity)
             Divider()
             Text("Works with Basic, Fast and Thorough. Cleanup Off leaves your words unchanged.")
-                .font(.callout).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.vertical, 13)
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24).padding(.vertical, 13)
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: $editor.showingImport, onDismiss: editor.cancelImport) {
@@ -92,6 +55,10 @@ struct SpellingEditorView: View {
                             VStack(alignment: .leading, spacing: 5) {
                                 Text(rule.heard).fontWeight(.medium)
                                 Text("→ " + rule.written).font(.callout).foregroundStyle(.secondary)
+                                if OrdinaryWords.warning(for: rule) != nil {
+                                    Label(rule.heard.contains(where: \.isWhitespace) ? "Everyday phrase" : "Everyday word", systemImage: "exclamationmark.triangle")
+                                        .font(.caption).foregroundStyle(.orange)
+                                }
                             }
                             .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading).padding(12)
@@ -113,9 +80,15 @@ struct SpellingEditorView: View {
         panel.canChooseDirectories = false
         panel.message = "Choose a UTF-8 CSV to preview. Nothing is imported until you confirm."
         panel.prompt = "Preview"
-        panel.begin { response in
+        let handle: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let url = panel.url else { return }
             editor.previewImport(fileURL: url)
+        }
+        // A sheet blocks the window, so the page can't change while the picker is open.
+        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+            panel.beginSheetModal(for: window, completionHandler: handle)
+        } else {
+            panel.begin(completionHandler: handle)
         }
     }
 
@@ -145,6 +118,12 @@ struct SpellingEditorView: View {
             }
             if let message = editor.importMessage {
                 Label(message, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
+                    .padding(.horizontal, 24).padding(.bottom, 12)
+            }
+            if let warning = editor.everydayWarning {
+                Label(warning, systemImage: "exclamationmark.triangle").foregroundStyle(.orange)
+                    .font(.callout).fixedSize(horizontal: false, vertical: true)
+                    .accessibilityIdentifier("spelling-everyday-warning")
                     .padding(.horizontal, 24).padding(.bottom, 12)
             }
             if let error = editor.error ?? editor.validationMessage {

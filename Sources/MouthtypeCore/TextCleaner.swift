@@ -11,9 +11,14 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     public var before: String?
     public var after: String?
     public var correctionsOnly: Bool
+    /// An explicit selected-text edit. Only the shared-prompt models run it.
+    public var transform: TextTransform?
+    /// The Formal tone: the shared prompt asks the model to leave swearing out.
+    public var omitProfanity: Bool
 
     public init(vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
-                level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false) {
+                level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false,
+                transform: TextTransform? = nil, omitProfanity: Bool = false) {
         self.vocabulary = vocabulary
         self.appName = appName
         self.s1Controls = s1Controls
@@ -27,6 +32,8 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
             return bounded.allSatisfy(\.isWhitespace) ? nil : bounded
         }
         self.correctionsOnly = correctionsOnly
+        self.transform = transform
+        self.omitProfanity = omitProfanity
     }
 }
 
@@ -92,12 +99,18 @@ public enum CleanerError: Error, LocalizedError, Equatable {
     /// The cleaner cannot run on this machine right now. Reported as a status, not as a failure.
     case unavailable(reason: String)
     case failed(String)
+    /// Generation hit its output limit, so the text is a fragment and must not be used.
+    case outputTruncated
+    /// The output is implausibly longer than the input, so it is not an edit of it.
+    case outputTooLong
 
     public var errorDescription: String? {
         switch self {
         case let .notPrepared(id): return "Cleaner '\(id)' used before prepare()"
         case let .unavailable(reason): return reason
         case let .failed(message): return message
+        case .outputTruncated: return "The model hit its length limit before it finished."
+        case .outputTooLong: return "The model returned far more text than it was given."
         }
     }
 }
@@ -106,5 +119,19 @@ public enum CleanupLimits {
     /// Cap on generated tokens: a small multiple of the input length, with a floor for tiny inputs.
     public static func maxOutputTokens(for transcript: String) -> Int {
         TextMetrics.wordCount(transcript) * 3 + 48
+    }
+
+    /// Hard ceiling on any single generation.
+    public static let outputTokenCeiling = 16_384
+
+    /// Sizes the allowance from the encoded input as well as its word count, because text without spaces (Japanese,
+    /// Chinese) has few whitespace words but many tokens. Never below the word-based allowance.
+    public static func maxOutputTokens(for transcript: String, inputTokens: Int) -> Int {
+        min(outputTokenCeiling, max(maxOutputTokens(for: transcript), inputTokens * 2 + 64))
+    }
+
+    /// A transform's output more than four times the input plus 200 characters is not an edit of it.
+    public static func isImplausiblyLong(output: String, input: String) -> Bool {
+        output.count > input.count * 4 + 200
     }
 }

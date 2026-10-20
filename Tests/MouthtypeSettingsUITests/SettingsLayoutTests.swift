@@ -52,19 +52,19 @@ import MouthtypeCore
 
     // MARK: Sidebar
 
-    @Test func sidebarListsFourPagesAndTheYourWordsEntries() {
-        #expect(SettingsPage.allCases.map(\.title) == ["General", "Writing", "Appearance", "Diagnostics"])
-        #expect(SettingsSidebarLink.words.map(\.title) == ["Saved spellings", "Phrases"])
+    @Test func sidebarListsHomeStatsRecordsTranscribeFileThenTheYourWordsPagesAndFourSettingsPages() {
+        #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Records", "Transcribe file", "Saved spellings", "Phrases", "General", "Writing", "Appearance", "Diagnostics"])
+        #expect(SettingsPage.settingsPages.map(\.title) == ["General", "Writing", "Appearance", "Diagnostics"])
+        #expect(SettingsPage.wordsPages.map(\.title) == ["Saved spellings", "Phrases"])
         #expect(SettingsSidebarLink.setUp.title == "Set Up Mouthtype…")
-        #expect(SettingsSidebarLink.allCases.map(\.accessibilityID) == ["settings-spellings", "settings-phrases", "settings-setup"])
+        #expect(SettingsSidebarLink.allCases.map(\.accessibilityID) == ["settings-setup"])
     }
 
-    @Test func sidebarLinksOpenTheirOwnWindows() {
+    @Test func theOnlySidebarLinkOpensSetup() {
         var opened: [String] = []
-        let actions = SettingsActions(openSetup: { opened.append("setup") }, openSpellings: { opened.append("spellings") },
-                                      openPhrases: { opened.append("phrases") })
+        let actions = SettingsActions(openSetup: { opened.append("setup") })
         for link in SettingsSidebarLink.allCases { actions.perform(link) }
-        #expect(opened == ["spellings", "phrases", "setup"])
+        #expect(opened == ["setup"])
     }
 
     // MARK: Type and colour
@@ -211,7 +211,14 @@ import MouthtypeCore
     @Test func arrowKeysMoveTheSidebarSelectionAndStopAtTheEnds() {
         #expect(SettingsPage.general.moved(by: 1) == .writing)
         #expect(SettingsPage.writing.moved(by: -1) == .general)
-        #expect(SettingsPage.general.moved(by: -1) == .general)
+        #expect(SettingsPage.general.moved(by: -1) == .phrases)
+        #expect(SettingsPage.phrases.moved(by: -1) == .savedSpellings)
+        #expect(SettingsPage.savedSpellings.moved(by: -1) == .transcribeFile)
+        #expect(SettingsPage.transcribeFile.moved(by: -1) == .records)
+        #expect(SettingsPage.records.moved(by: -1) == .stats)
+        #expect(SettingsPage.stats.moved(by: -1) == .home)
+        #expect(SettingsPage.home.moved(by: 1) == .stats)
+        #expect(SettingsPage.home.moved(by: -1) == .home)
         #expect(SettingsPage.diagnostics.moved(by: 1) == .diagnostics)
     }
 
@@ -234,7 +241,7 @@ import MouthtypeCore
         // Pop-up menus and switches per page, counted from the live AppKit controls.
         let expected: [(SettingsPage, popups: Int, switches: Int)] = [
             (.general, 3, 4),                       // mic, recording behavior, cleanup level | quiet audio, live words, sounds, launch at login
-            (.writing, 1, 6 + terminals),           // website tone | fillers, commands, numbers, learn, lowercase, final stop, terminals
+            (.writing, 2, 7 + terminals),           // website tone, website cleanup | fillers, commands, numbers, learn, boost saved words, lowercase, final stop, terminals
             (.appearance, 2, 1),                    // pill size, text font | override fonts
             (.diagnostics, 2, 1),                   // audio age, audio size | remap Fn
         ]
@@ -251,7 +258,7 @@ import MouthtypeCore
         let directory = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
         let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasSuffix(".swift") }
         let source = try files.map { try String(contentsOf: directory.appendingPathComponent($0), encoding: .utf8) }.joined()
-        let identifiers = ["settings-setup", "settings-spellings", "settings-phrases", "settings-shortcut", "settings-recording-mode",
+        let identifiers = ["settings-setup", "settings-shortcut", "settings-recording-mode",
                            "settings-quiet-audio", "settings-live-preview", "settings-microphone", "settings-microphone-refresh",
                            "settings-audio-age", "settings-audio-size", "settings-font-overrides", "settings-font-reset",
                            "settings-website-domain"]

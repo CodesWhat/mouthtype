@@ -248,6 +248,7 @@ named is the one on the model's Hugging Face card; follow the link for the full 
 | --- | --- | --- | --- |
 | Parakeet TDT 0.6B v3 (NVIDIA; Core ML conversion by FluidInference) | Speech recognition | CC BY 4.0 | https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3 and https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml |
 | Parakeet TDT 0.6B v2 (NVIDIA; Core ML conversion by FluidInference) | Speech recognition, English | CC BY 4.0 | https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2 and https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v2-coreml |
+| Parakeet CTC 110M (NVIDIA parakeet-tdt_ctc-110m; Core ML conversion by FluidInference) | Vocabulary boosting, only when you turn on "Boost my saved words while recognising" | CC BY 4.0 | https://huggingface.co/nvidia/parakeet-tdt_ctc-110m and https://huggingface.co/FluidInference/parakeet-ctc-110m-coreml |
 | Silero VAD (Core ML conversion by FluidInference) | Speech detection | MIT | https://huggingface.co/FluidInference/silero-vad-coreml |
 | Whisper large-v3 turbo and small.en (OpenAI; Core ML builds by argmax) | Alternative speech recognition | MIT | https://huggingface.co/argmaxinc/whisperkit-coreml |
 | S1-mini (Superwhisper) | Fast cleanup | Apache License 2.0 plus a naming clause, see the S1-mini section above | https://huggingface.co/superwhisper/s1-mini |

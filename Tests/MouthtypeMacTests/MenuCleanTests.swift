@@ -23,10 +23,10 @@ import MouthtypeCore
         daily.add(section: HistoryMenuSection(store: nil), startsGroup: false)
         daily.add(section: HelpMenuSection(onShow: {}), isFooter: true)
         #expect(daily.menu.items.filter { !$0.isSeparatorItem }.map(\.title) == [
-            "Settings…", "Paste Last", "Copy Last", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+            "Open Mouthtype", "Settings…", "Paste Last", "Copy Last", "How to Use Mouthtype…", "About Mouthtype", "Quit",
         ])
         #expect(daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
-            "Settings…", "|", "Paste Last", "Copy Last", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+            "Open Mouthtype", "Settings…", "|", "Paste Last", "Copy Last", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
         ])
         #expect(daily.menu.items.first?.isSeparatorItem == false)
         #expect(daily.menu.items.last?.isSeparatorItem == false)
@@ -39,7 +39,7 @@ import MouthtypeCore
         for item in daily.menu.items.prefix(2) { _ = item.target?.perform(item.action, with: item) }
         #expect(stopped == 1 && cancelled == 1)
         daily.setHandsFree(false)
-        #expect(daily.menu.items.first?.title == "Settings…")
+        #expect(daily.menu.items.first?.title == "Open Mouthtype")
     }
 
     @Test func attentionIsSpecificRoutesToDiagnosticsAndDisappearsWhenRepaired() throws {
@@ -111,7 +111,7 @@ import MouthtypeCore
         daily.add(section: SettingsMenuSection {})
         daily.add(section: HistoryMenuSection(store: nil), startsGroup: false)
         #expect(daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
-            "Settings…", "|", "About Mouthtype", "Quit",
+            "Open Mouthtype", "Settings…", "|", "About Mouthtype", "Quit",
         ])
     }
 

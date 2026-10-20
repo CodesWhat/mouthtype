@@ -192,7 +192,9 @@ public struct HotKeyProcessor: Sendable {
         // 1) ESC => immediate cancel
         let isToggleShortcut = recordingMode == .toggle && chordMatchesHotkey(keyEvent)
         if keyEvent.key == .escape, state != .idle, !isToggleShortcut {
-            isDirty = recordingMode == .hold || toggleChordHeld
+            // A held hotkey always shows as non-empty modifiers. Esc's own release never reaches the processor,
+            // so a locked take can't be left dirty waiting for a release that won't come.
+            isDirty = (recordingMode == .hold && !keyEvent.modifiers.isEmpty) || toggleChordHeld
             resetToIdle()
             return .cancel
         }

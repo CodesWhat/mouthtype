@@ -8,6 +8,9 @@ public struct RecoverableDictation: Sendable, Equatable {
     public var seconds: Double
     /// The audio is only the in-progress copy of a recording; no archived WAV was ever written.
     public var isPartial: Bool
+    /// A finished take whose audio was kept. Recovering it re-transcribes the audio and offers the result, but never
+    /// writes to or ends its row.
+    public var isCompleted: Bool = false
 }
 
 /// What a launch found: the newest dictation worth offering and how many older ones were set aside.
@@ -35,6 +38,19 @@ public enum DictationRecovery {
                     seconds: audio.seconds, isPartial: audio.url == archive.partialURL(for: row.id)
                 )
             }
+    }
+
+    /// The kept audio of finished takes, from each row's own `audio_path`: the file must exist and not be expired.
+    /// Rows without usable audio are skipped.
+    public static func completed(rows: [DictationRecord], now: Date) -> [RecoverableDictation] {
+        rows.compactMap { row in
+            guard let path = row.audioPath, row.audioExpiresAt.map({ $0 > now.timeIntervalSince1970 }) ?? true else { return nil }
+            guard let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int, size > 44 else { return nil }
+            return RecoverableDictation(
+                id: row.id, startedAt: Date(timeIntervalSince1970: row.startedAt), audioURL: URL(fileURLWithPath: path),
+                seconds: Double(size - 44) / Double(AudioArchive.sampleRate * 2), isPartial: false, isCompleted: true
+            )
+        }
     }
 
     /// Finds rows from the last `window` that began before `launchedAt` and never ended, and ends every one of them

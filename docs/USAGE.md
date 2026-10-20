@@ -4,9 +4,9 @@ Local dictation for Apple Silicon Macs running macOS 26 or later.
 
 Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or press Fn+Space for hands-free dictation; tap Fn to stop. Esc cancels, with a five-second Undo window.
 
-## Mac release candidate
+## Mac release
 
-The latest published release, 0.1.0-rc.3, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
+The latest published release, 0.3.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
 
 For a larger pill in any style, choose **Settings → Appearance → Pill size → Large**. Automatic, the default, picks Large on screens at least 2000 pt wide. The size is saved. Changes during recording take effect the next time the pill appears.
 
@@ -14,7 +14,7 @@ For a larger pill in any style, choose **Settings → Appearance → Pill size �
 
 Install Xcode with Swift 6.2, then run `bash scripts/run-app.sh`. The script builds and opens a signed app bundle. A Developer ID identity keeps permission grants stable between builds; without one, builds use ad-hoc signing.
 
-The app includes a native **Settings…** window with General, Writing, Appearance and Diagnostics panes, including per-app tone rules. See [settings](SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and wait for dictation, recovery and file transcription to finish.
+The app includes a native **Settings…** window with General, Writing, Appearance and Diagnostics panes, including per-app tone and cleanup rules. See [settings](SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and wait for dictation, recovery and file transcription to finish.
 
 **Settings → General → Recording behavior** offers **Hold to talk** (the default) or **Press to toggle**. Toggle starts recording with one press and stops with the next; releasing the shortcut keeps recording. This preserves your chosen key or combination. Escape cancels, except when Escape itself is your dictation key; use the pill or menu to cancel then.
 
@@ -24,7 +24,7 @@ The speech model and a small speech detector download on first launch. The detec
 
 Fast cleanup uses S1-mini by Superwhisper locally, a roughly 1.4 GB download. Thorough uses Gemma 4 E4B, a roughly 5.2 GB download. The default level is Fast; dictations use Basic until its model finishes downloading. Both handle fillers, corrections and spoken technical notation while preserving wording. Neither mode authorizes paraphrasing or a more formal voice. Cleanup can read up to 300 UTF-16 units before the cursor and 40 after it when available, excluding secure fields. This supports boundary formatting and limited spelling hints; it does not read previous chat messages as conversation history. Fast cleanup receives the current take, and Thorough receives extracted spelling hints. Invalid output or a missed deadline delivers the basic cleanup instead. Known project spellings can be joined in clear software contexts, while ordinary phrases such as a boat in dry dock are preserved. In model-backed cleanup, dictionary entries that only join words are context hints; Basic retains literal dictionary replacements. Ambiguous names still have gaps, especially with Fast cleanup. Neither model is downloaded until requested. Switching models loads the selected cached model and unloads the inactive one after pending work finishes.
 
-Open **Saved spellings…** in the Settings sidebar to add, edit or delete exact spelling rules. “Heard as” is the word or phrase Mouthtype gets wrong; “Write as” is the spelling you want. Rules match whole words and phrases regardless of capitalization, so use a specific phrase for ambiguous common words. An exact “geoff → Jeff” rule leaves “Geoffrey” alone through model cleanup too. The editor uses the existing local dictionary and learned corrections. It rejects blank or duplicate rules, preserves other entries, and keeps your draft if the file changes outside the editor. **Edit dictionary file…** under Settings → Writing → Advanced writing still opens the file for manual repair. Cleanup Off leaves words unchanged.
+Open **Saved spellings** under YOUR WORDS in the Mouthtype window sidebar to add, edit or delete exact spelling rules. “Heard as” is the word or phrase Mouthtype gets wrong; “Write as” is the spelling you want. Rules match whole words and phrases regardless of capitalization, so use a specific phrase for ambiguous common words. An exact “geoff → Jeff” rule leaves “Geoffrey” alone through model cleanup too. The editor uses the existing local dictionary and learned corrections. It rejects blank or duplicate rules, preserves other entries, and keeps your draft if the file changes outside the editor. **Edit dictionary file…** under Settings → Writing → Advanced writing still opens the file for manual repair. Cleanup Off leaves words unchanged.
 
 Open **Phrases…** in the Settings sidebar to save a spoken phrase and the exact text to insert. For example, set “my work email” to your email address, then say it alone or inside a sentence. Matching ignores capitalization, uses whole phrases, and picks the longest match. The library starts empty and is stored locally in `~/Library/Application Support/Mouthtype/phrases.json`. Add, edit, or delete phrases in the editor; save or cancel a draft before changing selection. Duplicate triggers are rejected. A malformed file keeps the last good library in use and must be repaired before editing.
 
@@ -42,15 +42,15 @@ RC.1 also waits for the preceding ordinary paste’s clipboard read before repla
 
 Open **Settings → General → Cleanup** to choose the cleanup path: Off keeps the recognized text, Basic applies local formatting rules, Fast adds S1-mini and Thorough uses Gemma. Both model modes preserve wording; they differ in speed and model capability, independently of Tone. Existing saved Light settings become Fast, and Medium becomes Thorough; Off, Basic and tone settings stay as saved.
 
-**Tone** is a separate writing-style choice. **Formal** keeps sentence capitalization and punctuation. **Casual** keeps sentence capitalization and drops the final full stop. **Very Casual** also relaxes sentence capitalization while protecting names and technical spellings. Questions still keep their question marks. These presets don't add enthusiasm or rewrite your personality.
+**Tone** is a separate writing-style choice. **Formal** keeps sentence capitalization and punctuation, and removes or softens swearing at Basic, Fast and Thorough (Off bypasses cleanup): exclamations, emphasis and dismissals like "fuck off" are dropped, and swear nouns and verbs become a plain word ("asshole" becomes "jerk", "fucking around" becomes "messing around"). **Casual** keeps sentence capitalization and drops the final full stop. **Very Casual** also relaxes sentence capitalization while protecting names and technical spellings. Questions still keep their question marks. These presets don't add enthusiasm or rewrite your personality.
 
 ## Microphone, live words and files
 
 **Settings → General → Microphone** follows System Default or remembers a named input for Mouthtype. A missing chosen microphone is reported instead of silently using another input. The choice applies to the next take and does not change the Mac’s system input.
 
-**Quiet other audio** and **Live words** are optional and off by default. Quieting mutes supported output while recording and restores the state Mouthtype still owns. Live words shows provisional text above the pill. Preview text can change; the completed take is still transcribed and inserted once. See [Settings](SETTINGS.md) for hardware and execution limits.
+**Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Quieting mutes supported output while recording and restores the state Mouthtype still owns. Live words shows provisional text above the pill. Preview text can change; the completed take is still transcribed and inserted once. See [Settings](SETTINGS.md) for hardware and execution limits.
 
-Choose **Transcribe Audio File…** from the menu to import one WAV, AIFF or M4A up to 10 minutes and 512 MB. The full raw result is selectable, with explicit Copy and Save Text. It preserves the original and does not paste, run cleanup or change dictation statistics. See [file transcription](FILE-TRANSCRIPTION.md).
+Choose **Transcribe Audio File…** from the menu, which opens the **Transcribe file** page in the Mouthtype window, to import one WAV, AIFF or M4A up to 10 minutes and 512 MB. The full raw result is selectable, with explicit Copy and Save Text. It preserves the original and does not paste, run cleanup or change dictation statistics. See [file transcription](FILE-TRANSCRIPTION.md).
 
 ## Experimental Linux source
 

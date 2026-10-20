@@ -62,6 +62,34 @@ import Testing
         #expect(FileManager.default.fileExists(atPath: archive.url(for: "recent").path))
     }
 
+    @Test func aFailedRemovalStillClearsPointersForFilesAlreadyDeleted() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        var urls: [String: URL] = [:]
+        for id in ["a", "b", "c"] {
+            try store.begin(DictationStart(id: id, startedAt: now.addingTimeInterval(-30 * 86_400)))
+            let audio = try archive.write(samples: [0.1, 0.2], id: id)
+            urls[id] = audio.url
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-30 * 86_400)], ofItemAtPath: audio.url.path)
+            try store.recordCapture(id, CaptureRecord(audioPath: audio.url.path, audioExpiresAt: now))
+            try store.recordInsertion(id, InsertionRecord(finalText: "Done."))
+        }
+        let blocked = try #require(urls["b"])
+        try FileManager.default.setAttributes([.immutable: true], ofItemAtPath: blocked.path)
+        defer {
+            try? FileManager.default.setAttributes([.immutable: false], ofItemAtPath: blocked.path)
+            try? FileManager.default.removeItem(at: dir)
+        }
+        let removed = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
+        #expect(Set(removed) == ["a", "c"])
+        #expect(try store.dictation(id: "a")?.audioPath == nil)
+        #expect(try store.dictation(id: "c")?.audioPath == nil)
+        #expect(try store.dictation(id: "b")?.audioPath == blocked.path)
+        #expect(FileManager.default.fileExists(atPath: blocked.path))
+    }
+
     @Test(arguments: [false, true])
     func unfinishedAndFailedRecoveryAudioSurvivesMaintenanceBeforeOrAfterStartupScan(scanFirst: Bool) throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")

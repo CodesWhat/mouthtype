@@ -22,6 +22,8 @@ final class CleanupSelection: CleanupModelManaging {
     private let fast: CleanerHost
     private let thorough: CleanerHost
     private let demand: CleanupDemand
+    /// The level each take is holding a model for, from its recording start until its cleanup ends.
+    private var holds: [String: CleanupLevel] = [:]
 
     init(fast: any SmartModel, thorough: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
          budget: (@Sendable (Int) -> Duration)? = nil) {
@@ -42,11 +44,46 @@ final class CleanupSelection: CleanupModelManaging {
     var downloadSizeMB: Int { selected.downloadSizeMB }
     var downloadTarget: any CleanupModelManaging { selected }
 
+    func unloadThoroughForMemoryPressure() { thorough.unloadForMemoryPressure() }
     func start() { fast.start(); thorough.start() }
     func levelChanged() { fast.levelChanged(); thorough.levelChanged() }
     func startDownload() { selected.startDownload() }
     func cancelDownload() { selected.cancelDownload() }
     nonisolated func recordingStarted() { Task { @MainActor in self.selected.recordingStarted() } }
+
+    /// A rule can ask for a model level while the global one is Off or Basic. Hold demand for that model for the
+    /// take, from recording start until `releasePrewarm(for:)`, or the host unloads it the moment its load finishes.
+    /// A second call for the same take (the website rule resolving) replaces its hold rather than adding one.
+    nonisolated func recordingStarted(level: CleanupLevel, take: String) {
+        Task { @MainActor in
+            let previous = self.holds.removeValue(forKey: take)
+            if let previous { self.adjust(previous, by: -1) }
+            guard level.needsModel else {
+                if let previous, previous != level { self.host(for: previous).demandDropped() }
+                self.selected.recordingStarted()
+                return
+            }
+            self.holds[take] = level
+            self.adjust(level, by: 1)
+            self.host(for: level).levelChanged()
+            if let previous, previous != level { self.host(for: previous).demandDropped() }
+        }
+    }
+
+    /// The take's cleanup finished or the take ended another way. Drops its demand and unloads the model only when
+    /// nothing else wants it; it never loads one, so a model memory pressure unloaded stays unloaded.
+    nonisolated func releasePrewarm(for take: String) {
+        Task { @MainActor in
+            guard let level = self.holds.removeValue(forKey: take) else { return }
+            self.adjust(level, by: -1)
+            self.host(for: level).demandDropped()
+        }
+    }
+
+    private func adjust(_ level: CleanupLevel, by delta: Int) {
+        if level == .light { demand.fastRequests += delta } else { demand.thoroughRequests += delta }
+    }
+
     func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? {
         await selected.readiness(waitingUpTo: limit)
     }
@@ -64,5 +101,21 @@ final class CleanupSelection: CleanupModelManaging {
         }
         host.levelChanged()
         return await host.runReady(request, waitingUpTo: limit)
+    }
+}
+
+/// Explicit selected-text transforms run on the Thorough model. S1-mini only normalizes transcripts.
+extension CleanupSelection: SelectionTransforming {
+    var transformUnavailableReason: String? { TransformAvailability.reason(for: thorough.state, modelName: thorough.modelName) }
+
+    func transform(_ transform: TextTransform, text: String) async throws -> String {
+        if let reason = transformUnavailableReason { throw CleanerError.unavailable(reason: reason) }
+        demand.thoroughRequests += 1
+        defer {
+            demand.thoroughRequests -= 1
+            levelChanged()
+        }
+        thorough.levelChanged()
+        return try await thorough.transform(transform, text: text, waitingUpTo: .seconds(60))
     }
 }

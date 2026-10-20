@@ -1,7 +1,7 @@
 import Foundation
 import WhisperKit
 
-public actor WhisperEngine: MeasuredTranscriber {
+public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
     static let turboID = "whisper-large-v3-turbo"
     static let turboDisplayName = "Whisper large-v3 turbo"
     static let turboVariant = "large-v3-v20240930_turbo"
@@ -17,6 +17,7 @@ public actor WhisperEngine: MeasuredTranscriber {
 
     private let variant: String
     private var kit: WhisperKit?
+    private var bias: VocabularyBias?
 
     init(id: String, displayName: String, variant: String) {
         self.id = id
@@ -61,11 +62,36 @@ public actor WhisperEngine: MeasuredTranscriber {
         )
     }
 
+    public func setVocabularyBias(_ bias: VocabularyBias?) {
+        self.bias = bias?.isEmpty == false ? bias : nil
+    }
+
+    /// Whisper's prompt budget is half its 448-token context. Stay well under it so the audio keeps its room.
+    static let maxPromptTokens = 96
+
+    /// The prompt for `bias`, encoded without special tokens and cut to the budget. Nil when there is nothing to send.
+    static func promptTokens(for bias: VocabularyBias?, encode: (String) -> [Int], firstSpecialToken: Int) -> [Int]? {
+        guard let bias, !bias.isEmpty else { return nil }
+        let tokens = encode(" " + bias.promptText).filter { $0 < firstSpecialToken }
+        return tokens.isEmpty ? nil : Array(tokens.prefix(maxPromptTokens))
+    }
+
+    static func decodingOptions(promptTokens: [Int]?) -> DecodingOptions {
+        DecodingOptions(
+            verbose: false, task: .transcribe, language: "en", detectLanguage: false,
+            wordTimestamps: true, promptTokens: promptTokens
+        )
+    }
+
     public func transcribe(samples: [Float]) async throws -> Transcription {
         guard let kit else { throw EngineError.notPrepared(id: id) }
-        let options = DecodingOptions(
-            verbose: false, task: .transcribe, language: "en", detectLanguage: false, wordTimestamps: true
-        )
+        var tokens: [Int]?
+        if let tokenizer = kit.tokenizer {
+            tokens = Self.promptTokens(
+                for: bias, encode: { tokenizer.encode(text: $0) }, firstSpecialToken: tokenizer.specialTokens.specialTokenBegin
+            )
+        }
+        let options = Self.decodingOptions(promptTokens: tokens)
         let clock = ContinuousClock()
         let start = clock.now
         let results = try await kit.transcribe(audioArray: samples, decodeOptions: options)

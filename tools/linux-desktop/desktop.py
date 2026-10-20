@@ -81,8 +81,10 @@ def level_db(data):
 class Session:
     def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
                  dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None, cleanup='off',
-                 cleanup_engine=None):
+                 cleanup_engine=None, maximum_takes=200, audio_days=90, audio_megabytes=2048, history_keep=None):
         self.capture, self.engine, self.delivery = capture, engine, delivery
+        self.maximum_takes, self.audio_days, self.audio_megabytes = maximum_takes, audio_days, audio_megabytes
+        self.history_keep = history_keep
         self.cleanup_engine = cleanup_engine
         self.cleanup_outcome, self.cleanup_ms = None, None
         self.feedback = feedback
@@ -105,8 +107,92 @@ class Session:
         self.discard_on_cancel = False
         self.closed = False
 
+    def take_count(self):
+        return sum(1 for path in self.recovery.iterdir() if path.is_dir() and not path.is_symlink())
+
+    @staticmethod
+    def take_time(path):
+        """When the take was made. Never the directory mtime, which moves whenever a file inside is removed."""
+        try:
+            created = json.loads((path / 'take.json').read_text())['created']
+            if type(created) in (int, float) and math.isfinite(created):
+                return created
+        except (OSError, ValueError, KeyError, TypeError):
+            pass
+        # Takes from before take.json: the earliest surviving file, which expiring the WAV cannot move.
+        stamps = []
+        for child in path.iterdir():
+            try:
+                if child.is_file():
+                    stamps.append(child.stat().st_mtime)
+            except OSError:
+                pass
+        return min(stamps) if stamps else path.stat().st_mtime
+
+    def prune_history(self):
+        """Keep only the newest `history_keep` takes, forgetting the rest entirely. The active take is never touched."""
+        if not self.history_keep:
+            return 0
+        removed = 0
+        # Choosing and deleting share the session lock, so recover_audio cannot accept a take in between.
+        with self.lock:
+            takes = []
+            for path in self.recovery.iterdir():
+                if not path.is_dir() or path.is_symlink() or not re.fullmatch('[0-9a-f]{32}', path.name):
+                    continue
+                try:
+                    takes.append((self.take_time(path), path.name, path))
+                except OSError:
+                    continue
+            takes.sort(reverse=True)
+            for _, _, path in takes[self.history_keep:]:
+                if path == self.take:
+                    continue
+                for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json', 'take.json'):
+                    (path / name).unlink(missing_ok=True)
+                try:
+                    path.rmdir()
+                    removed += 1
+                except OSError:
+                    pass
+        return removed
+
+    def retire_completed_audio(self, now=None):
+        """Mirror the Mac saved-audio policy: drop completed takes' WAVs past the age or size limit, keep their text."""
+        now = time.time() if now is None else now
+        completed = []
+        with self.lock:
+            active = self.take
+        for path in self.recovery.iterdir():
+            if not path.is_dir() or path.is_symlink() or path == active:
+                continue
+            audio, transcript = path / 'recording.wav', path / 'transcript.txt'
+            if audio.is_file() and transcript.is_file():
+                try:
+                    info = audio.stat()
+                except OSError:
+                    continue
+                completed.append((info.st_mtime, info.st_size, audio))
+        removed = 0
+        completed.sort()
+        kept_bytes = sum(size for _, size, _ in completed)
+        limit = self.audio_megabytes * 1024 * 1024 if self.audio_megabytes else None
+        for mtime, size, audio in completed:
+            expired = self.audio_days is not None and now - mtime > self.audio_days * 86400
+            oversize = limit is not None and kept_bytes > limit
+            if not expired and not oversize:
+                continue
+            try:
+                audio.unlink()
+                removed += 1
+                kept_bytes -= size
+            except OSError:
+                pass
+        return removed
+
     def status(self):
         return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
+                'takes': self.take_count(), 'maximum_takes': self.maximum_takes, 'history_keep': self.history_keep,
                 'recovery': self.take.name if self.take else None,
                 'context': 'unsupported', 'secure_field_detection': 'unsupported',
                 'delivery_verified': False,
@@ -159,11 +245,24 @@ class Session:
                 if admit_before is not None and time.monotonic() >= admit_before:
                     self.error = 'command_expired'
                     return self.status()
-                if len(list(self.recovery.iterdir())) >= 50:
+                if self.take_count() >= self.maximum_takes:
                     self.error = 'recovery_full'
                     return self.status()
                 self.take = self.recovery / uuid.uuid4().hex
-                self.take.mkdir(mode=0o700)
+                try:
+                    self.take.mkdir(mode=0o700)
+                    private_write(self.take / 'take.json', json.dumps({'created': time.time()}))
+                except (OSError, ValueError):
+                    # A take that can't record its own metadata must not hold a recovery slot.
+                    (self.take / 'take.json').unlink(missing_ok=True)
+                    try:
+                        self.take.rmdir()
+                    except OSError:
+                        pass
+                    self.take = None
+                    self.error = 'capture_unavailable'
+                    self._notify('error')
+                    return self.status()
                 self.discard_on_cancel = True
                 self.target = target
                 self.spellings = spellings
@@ -179,6 +278,7 @@ class Session:
                         audio = self.take / 'recording.wav'
                         if audio.exists() and audio.stat().st_size == 0:
                             audio.unlink()
+                        (self.take / 'take.json').unlink(missing_ok=True)
                         self.take.rmdir()
                     except OSError:
                         pass
@@ -222,6 +322,7 @@ class Session:
             (self.take / 'recording.wav').unlink(missing_ok=True)
             if not (self.take / 'transcript.txt').exists():
                 (self.take / 'raw-recognition.txt').unlink(missing_ok=True)
+                (self.take / 'take.json').unlink(missing_ok=True)
             try:
                 self.take.rmdir()
             except OSError:
@@ -265,6 +366,11 @@ class Session:
             with self.lock:
                 if cancelled.is_set() and self.cancelled is cancelled and self.state == 'cancelling':
                     self.state = 'idle'
+            try:
+                self.retire_completed_audio()
+                self.prune_history()
+            except OSError:
+                pass
 
     def _model_cleanup(self, basic, cancelled):
         """Run the resident model on the deterministic text within its budget. Any trouble keeps the basic text."""
@@ -841,14 +947,26 @@ class CleanupEngine:
 def validate_config(value):
     if not isinstance(value, dict) or not isinstance(value.get('engine_config'), str):
         raise ValueError('engine_config is required')
-    result = {'maximum_recording_seconds': 60, 'request_seconds': 30,
+    result = {'maximum_recording_seconds': 60, 'request_seconds': 30, 'maximum_recovery_takes': 200,
+              'audio_retention_days': 90, 'audio_retention_megabytes': 2048, 'history_keep': None,
               'delivery': {'mode': 'recover'}, 'notifications': True, 'cleanup': 'off', **value}
     if type(result['notifications']) is not bool:
         raise ValueError('notifications must be true or false')
-    for field, minimum, maximum in (('maximum_recording_seconds', 1, 120), ('request_seconds', 1, 120)):
+    for field, minimum, maximum in (('maximum_recording_seconds', 1, 120), ('request_seconds', 1, 120),
+                                    ('maximum_recovery_takes', 1, 5000)):
         number = result[field]
         if type(number) not in (int, float) or not math.isfinite(number) or not minimum <= number <= maximum:
             raise ValueError('Invalid finite ' + field)
+    for field, minimum, maximum in (('audio_retention_days', 1, 3650), ('audio_retention_megabytes', 1, 1024 * 1024),
+                                    ('history_keep', 1, 5000)):
+        number = result[field]
+        if number is not None and (type(number) not in (int, float) or not math.isfinite(number) or not minimum <= number <= maximum):
+            raise ValueError(field + ' must be null or a finite number in range')
+    keep = result['history_keep']
+    if keep is not None:
+        if keep != int(keep):
+            raise ValueError('history_keep must be a whole number')
+        result['history_keep'] = int(keep)
     delivery = result['delivery']
     if not isinstance(delivery, dict) or delivery.get('mode') not in ('recover', 'type', 'paste'):
         raise ValueError('delivery.mode must be recover, type or paste')
@@ -897,12 +1015,15 @@ def read_message(connection, maximum=4096):
     return json.loads(line)
 
 
-def serve(path, session, stopped, *, lifetime_seconds=43200, files=None):
+def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup=None):
     path = Path(path)
     # The lock owns this one runtime socket, including cleanup after an interrupted session.
     with open(str(path) + '.lock', 'a') as ownership:
         os.chmod(ownership.name, 0o600)
         fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if startup is not None:
+            # Maintenance prunes takes, so only the daemon that owns the runtime lock may run it.
+            startup()
         if path.exists():
             info = path.lstat()
             if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
@@ -1167,7 +1288,7 @@ def main():
                 status = request(path, 'status')
                 if status.get('recovery') == args.id and status.get('state') != 'idle':
                     raise ValueError('Recovery is in use')
-            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json'):
+            for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json', 'take.json'):
                 (take / name).unlink(missing_ok=True)
             take.rmdir()
             return 0
@@ -1207,7 +1328,9 @@ def main():
                           maximum_seconds=config['maximum_recording_seconds'],
                           feedback=Notifications(config['notifications']), dictionary=dictionary, phrases=phrases,
                           phrase_clipboard=config.get('phrase_clipboard', False), cleanup=config['cleanup'],
-                          cleanup_engine=cleanup_engine)
+                          cleanup_engine=cleanup_engine, maximum_takes=int(config['maximum_recovery_takes']),
+                          audio_days=config['audio_retention_days'], audio_megabytes=config['audio_retention_megabytes'],
+                          history_keep=config['history_keep'])
         files = FileTranscription(engine, args.imports, request_seconds=config['request_seconds'])
         if cleanup_engine is not None and cleanup_engine.state == 'idle':
             cleanup_engine.warm()
@@ -1216,7 +1339,8 @@ def main():
         for event in (signal.SIGINT, signal.SIGTERM):
             signal.signal(event, lambda *_: stopped.set())
         try:
-            serve(path, session, stopped, lifetime_seconds=args.lifetime_seconds, files=files)
+            serve(path, session, stopped, lifetime_seconds=args.lifetime_seconds, files=files,
+                  startup=lambda: (session.retire_completed_audio(), session.prune_history()))
         finally:
             try:
                 files.close()
