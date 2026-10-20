@@ -7,7 +7,7 @@ What 0.3.0 doesn't promise. Most of it is evidence the maintainer didn't collect
 - **Fresh install.** Installing on a Mac that has never run Mouthtype wasn't verified for 0.3.0. That was a maintainer scope decision. The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours.
 - **Bluetooth and USB microphones.** Not physically verified. Built-in microphones are the tested path. Microphone removal, reconnection and sleep are also only lightly covered, and Setup's microphone status can lag a recovered input until you return to the app and refresh it.
 - **VoiceOver.** Acceptance testing is deferred. Controls have accessibility identifiers and render correctly offscreen, but that doesn't show they work with VoiceOver.
-- **Update installation.** Signed update checks are tested. Installing an update over a running app and relaunching hasn't been verified end to end.
+- **Update installation.** Signed update checks are tested. An update from one release to the next was observed installing and relaunching on one Mac. Other macOS versions and fresh installs aren't verified.
 - **Other apps.** TextEdit and Chrome have physical coverage. Other browsers, terminals and Electron apps need more testing. An unknown delivery status isn't proof the text failed to land.
 
 ## Appearance

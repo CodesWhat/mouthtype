@@ -87,7 +87,7 @@ test("installation and update help cover 0.3.0 and the manual first upgrade", as
     "do not upload transcripts or audio",
   );
   await expect(page.locator("#permissions")).toContainText(
-    "in-app update installation",
+    "observed installing on one",
   );
 });
 

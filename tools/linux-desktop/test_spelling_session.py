@@ -70,6 +70,24 @@ class SpellingSessionTests(unittest.TestCase):
             desktop.private_write(path, 'replacement')
         self.assertEqual(path.read_text(), 'existing result')
 
+    def test_take_metadata_write_failure_leaves_no_take_directory(self):
+        with patch.object(desktop, 'private_write', side_effect=OSError('disk full')):
+            status = self.session.command('start')
+        self.assertEqual(status['error'], 'capture_unavailable')
+        self.assertEqual(list(self.session.recovery.iterdir()), [])
+        self.assertEqual(self.session.take_count(), 0)
+
+    def test_forget_removes_take_json_with_the_take(self):
+        self.session.command('start')
+        self.finish()
+        take = self.session.take
+        self.assertTrue((take / 'take.json').exists())
+        argv = [sys.executable, str(Path(desktop.__file__)), '--recovery', str(self.session.recovery),
+                '--runtime', str(self.root / 'runtime')]
+        result = subprocess.run(argv + ['forget', take.name], capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse(take.exists())
+
     def test_relative_dictionary_config_is_resolved_beside_client_config(self):
         config = self.root / 'linux.json'
         config.write_text(json.dumps({'engine_config': 'engine.json', 'dictionary': 'dictionary.json',

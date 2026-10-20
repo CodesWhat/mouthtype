@@ -41,6 +41,7 @@ Panel {
   property var capabilities: ({})
   property var pillPrefs: ({ enabled: true, skin: "classic", size: 1 })
   property var cleanupInfo: ({ models: {}, setup: null, service: null })
+  property var history: ({ takes: 0, maximum: 200 })
   property var fontPrefs: ({ preset: "default", family: "", overrides: {} })
   property string familyDraft: ""
   property string overrideRole: "menu"
@@ -162,6 +163,7 @@ Panel {
     if (result.capabilities !== undefined) capabilities = result.capabilities || ({})
     if (result.pill !== undefined) pillPrefs = result.pill || ({ enabled: true, skin: "classic", size: 1 })
     if (result.cleanup !== undefined) cleanupInfo = result.cleanup || ({ models: {}, setup: null, service: null })
+    if (result.history !== undefined) history = result.history || ({ takes: 0, maximum: 200 })
     if (result.font !== undefined) { fontPrefs = result.font || ({}); familyDraft = String(fontPrefs.family || "") }
     if (result.file_import !== undefined) {
       fileImport = result.file_import || ({ state: "off" })
@@ -429,7 +431,7 @@ Panel {
               }
             }
             MenuDivider { width: parent.width; visible: root.canImportFiles }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Saved Recordings"; detail: root.savedCount ? String(root.savedCount) : ""; chevron: true; onActivated: root.openPage("saved") }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Dictation History"; detail: root.history.takes + " / " + root.history.maximum + (root.savedCount ? " · " + root.savedCount + " to retry" : ""); chevron: true; onActivated: root.openPage("history") }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Cleanup"; detail: root.config.cleanup === "basic" ? "Basic" : root.config.cleanup === "fast" ? "Fast" : root.config.cleanup === "thorough" ? "Thorough" : "Off"; chevron: true; onActivated: root.openPage("cleanup") }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Paste Options"; detail: root.config.delivery_mode === "paste" ? "Paste" : root.config.delivery_mode === "type" ? "Type" : "Off"; chevron: true; onActivated: root.openPage("delivery") }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Recording Settings"; chevron: true; onActivated: root.openPage("recording") }
@@ -719,15 +721,70 @@ Panel {
           }
 
           Column {
-            visible: root.page === "saved"
+            visible: root.page === "history"
             width: parent.width
-            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "‹  Saved Recordings"; onActivated: root.openPage("menu") }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "‹  Dictation History"; onActivated: root.openPage("menu") }
             MenuDivider { width: parent.width }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; enabled: false; label: root.history.takes + " of " + root.history.maximum + " saved dictations" + (root.history.takes >= root.history.maximum ? " · full" : "") }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Forget dictations older than 30 days"; enabled: root.history.takes > 0; onActivated: root.run(["prune", "older", "30"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Forget all but the newest 20"; enabled: root.history.takes > 20; onActivated: root.run(["prune", "keep", "20"]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Forget all dictations"; enabled: root.history.takes > 0; onActivated: root.run(["prune", "all", "0"]) }
+            MenuDivider { width: parent.width }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; enabled: false; label: "Automatically keep only the newest" }
+            Row {
+              x: Style.space(30); spacing: Style.space(6)
+              Repeater {
+                model: [["off", "Keep all"], ["5", "5"], ["20", "20"], ["50", "50"]]
+                ControlButton {
+                  required property var modelData
+                  label: modelData[1]
+                  enabled: String(root.config.history_keep === null || root.config.history_keep === undefined ? "off" : root.config.history_keep) !== modelData[0]
+                  onClicked: root.run(["set-config", "history_keep", modelData[0]])
+                }
+              }
+            }
+            Item { height: Style.space(6) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; enabled: false; label: "History limit" }
+            Row {
+              x: Style.space(30); spacing: Style.space(6)
+              Repeater {
+                model: ["100", "200", "500", "1000"]
+                ControlButton {
+                  required property string modelData
+                  label: modelData
+                  enabled: String(root.config.maximum_recovery_takes || 200) !== modelData
+                  onClicked: root.run(["set-config", "maximum_recovery_takes", modelData])
+                }
+              }
+            }
+            Item { height: Style.space(6) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; enabled: false; label: "Keep completed audio for" }
+            Row {
+              x: Style.space(30); spacing: Style.space(6)
+              Repeater {
+                model: [["14", "14 days"], ["30", "30 days"], ["90", "90 days"], ["none", "No limit"]]
+                ControlButton {
+                  required property var modelData
+                  label: modelData[1]
+                  enabled: String(root.config.audio_retention_days === null || root.config.audio_retention_days === undefined ? "none" : root.config.audio_retention_days) !== modelData[0]
+                  onClicked: root.run(["set-config", "audio_retention_days", modelData[0]])
+                }
+              }
+            }
+            Item { height: Style.space(6) }
+            MenuDivider { width: parent.width; visible: root.savedCount > 0 }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.savedCount > 0; enabled: false; label: "Saved audio waiting for retry" }
             Repeater {
               model: root.saved
               MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Retry speech for saved audio"; onActivated: root.run(["transcribe", modelData.id]) }
             }
-            MenuRow { fontFamily: root.menuFont; width: parent.width; visible: root.savedCount === 0; enabled: false; label: "No saved recordings" }
+            Text {
+              x: Style.space(30); width: parent.width - Style.space(50)
+              text: "With \"Keep all\", every take stays until you forget it and recording stops at the history limit rather than deleting anything by itself. With a number, everything but that many newest takes is forgotten after each dictation. Completed audio older than the chosen age (or beyond 2 GB) is removed when the service starts and after each take, keeping the text."
+              color: "#6F6F6D"; wrapMode: Text.Wrap
+              font.family: root.menuFont; font.pixelSize: Style.font.bodySmall
+            }
+            Item { height: Style.space(14) }
           }
 
           Column {
@@ -803,6 +860,7 @@ Panel {
             }
             Item { height: Style.space(8) }
             MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Copy Dictation"; onActivated: root.run(["copy", root.transcriptId]) }
+            MenuRow { fontFamily: root.menuFont; width: parent.width; label: "Forget This Dictation"; onActivated: root.run(["forget", root.transcriptId]) }
           }
 
           Column {
