@@ -318,6 +318,12 @@ final class DictationController {
                 }
             }
         }
+        if startError == nil {
+            current.editorHints = EditorHintsGatherer.start(
+                enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
+                readers: .system(inserter: inserter, focus: startFocus)
+            )
+        }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
         captureStarting = false
         if let startError {

@@ -110,6 +110,8 @@ public final class TextInserter {
 
     func websiteHost(for snapshot: FocusSnapshot) -> String? { focus.websiteHost(for: snapshot) }
 
+    func editorDocumentURL(for snapshot: FocusSnapshot) -> URL? { focus.editorDocumentURL(for: snapshot) }
+
     func snapshotApplication() -> FocusSnapshot {
         focus.snapshotApplication()
     }

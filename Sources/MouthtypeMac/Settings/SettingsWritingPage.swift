@@ -35,6 +35,10 @@ extension SettingsView {
             SettingsRow(title: "Boost my saved words while recognising", detail: boostDetail) {
                 Toggle("Boost my saved words while recognising", isOn: Binding(get: { model.boostSavedWords }, set: model.setBoostSavedWords)).labelsHidden().toggleStyle(.switch)
             }
+            SettingsRow(title: "Code names from your editor", detail: "While you dictate in VS Code, Cursor, Xcode or a terminal, favour file, folder and function names from the window you're in. Needs the boost above. Nothing is stored.") {
+                Toggle("Code names from your editor", isOn: Binding(get: { model.editorHints }, set: model.setEditorHints)).labelsHidden().toggleStyle(.switch)
+                    .accessibilityIdentifier("settings-editor-hints")
+            }
             SettingsRow(title: "Lowercase sentence starts") {
                 Toggle("Lowercase sentence starts", isOn: Binding(get: { model.cleanup.style.capitalisation == .lowercase }, set: model.setLowercaseStarts))
                     .labelsHidden().toggleStyle(.switch).disabled(!sharedControlsEnabled)

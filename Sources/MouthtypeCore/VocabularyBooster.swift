@@ -122,7 +122,9 @@ actor VocabularyBooster {
 
     /// Sets the vocabulary. An unchanged one keeps the cached session; a changed one rebuilds it in the background;
     /// nil or empty releases everything. Never waits for a download, so a take is not held up by one.
-    func setBias(_ new: VocabularyBias?) async {
+    /// With `settleWithin`, a changed vocabulary also waits that long for its session, so a take whose terms differ
+    /// from the last one's (editor hints) is still boosted. A slow build is left running and the take goes unboosted.
+    func setBias(_ new: VocabularyBias?, settleWithin: Duration? = nil) async {
         let new = new?.isEmpty == false ? new : nil
         if new == bias {
             guard new != nil, session == nil, building == nil, let failedAt,
@@ -140,6 +142,9 @@ actor VocabularyBooster {
             return
         }
         start(new, generation: generation)
+        if let settleWithin, let building {
+            _ = await Self.withTimeout(settleWithin) { await building.value }
+        }
     }
 
     /// Resolves once the session for the current vocabulary is built or has failed. For tests and the bench.

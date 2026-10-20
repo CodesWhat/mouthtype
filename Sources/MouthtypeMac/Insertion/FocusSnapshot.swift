@@ -78,6 +78,8 @@ protocol FocusReading: AnyObject {
     func snapshotApplication() -> FocusSnapshot
     func snapshot() -> FocusSnapshot
     func websiteHost(for snapshot: FocusSnapshot) -> String?
+    /// The focused window's open document, for editor hints. Nil for a secure field or when the app doesn't say.
+    func editorDocumentURL(for snapshot: FocusSnapshot) -> URL?
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor
     /// A bounded window of text around the cursor, for the cleanup pass. Nil when the app doesn't say.
     func insertionContext(of element: FocusedElement) -> InsertionContext?
@@ -89,6 +91,7 @@ protocol FocusReading: AnyObject {
 extension FocusReading {
     func snapshotApplication() -> FocusSnapshot { snapshot() }
     func websiteHost(for snapshot: FocusSnapshot) -> String? { nil }
+    func editorDocumentURL(for snapshot: FocusSnapshot) -> URL? { nil }
     func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
     func readField(of element: FocusedElement) -> FieldReading { FieldReading() }
 }
@@ -134,6 +137,14 @@ final class AccessibilityFocusReader: FocusReading {
               let window = elementValue(bounded(element.ref), kAXWindowAttribute) else { return nil }
         // Apple's AXDocument attribute is a URL string. Missing browser support is a fallback, never a guess.
         return WebsiteContext.host(document: stringValue(bounded(window), kAXDocumentAttribute), bundleID: snapshot.bundleID)
+    }
+
+    func editorDocumentURL(for snapshot: FocusSnapshot) -> URL? {
+        guard !snapshot.isSecure, !isSecureInputEnabled, let element = snapshot.element, let pid = snapshot.pid,
+              snapshot.focusedOwnerPID == pid, NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
+              let window = elementValue(bounded(element.ref), kAXWindowAttribute),
+              let document = stringValue(bounded(window), kAXDocumentAttribute) else { return nil }
+        return URL(string: document).flatMap { $0.isFileURL ? $0 : nil }
     }
 
     /// Diagnostic ownership only. Event delivery still uses the frontmost application.

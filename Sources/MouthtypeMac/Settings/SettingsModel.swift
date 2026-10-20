@@ -47,6 +47,7 @@ import UniformTypeIdentifiers
     private(set) var shortcut = "Fn"
     private(set) var learnCorrections = true
     private(set) var boostSavedWords = false
+    private(set) var editorHints = false
     private(set) var boostStatus = VocabularyBoostStatusCenter.current
     private(set) var chunkedTerminals: Set<String> = []
     private(set) var appStyles = AppCleanupStyles()
@@ -181,6 +182,7 @@ import UniformTypeIdentifiers
         loginState = loginItem.menuState
         learnCorrections = CorrectionSettings.isEnabled(defaults)
         boostSavedWords = VocabularyBoostSetting.isEnabled(defaults)
+        editorHints = EditorHintsSetting.isEnabled(defaults)
         chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
         do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil }
         catch { appStylesError = error.localizedDescription }
@@ -301,6 +303,11 @@ import UniformTypeIdentifiers
         VocabularyBoostSetting.set(enabled, in: defaults)
         boostSavedWords = enabled
         onBoostSavedWordsChanged(enabled)
+    }
+
+    func setEditorHints(_ enabled: Bool) {
+        EditorHintsSetting.set(enabled, in: defaults)
+        editorHints = enabled
     }
 
     func setAudioRetentionAge(_ value: AudioRetentionAge) {
