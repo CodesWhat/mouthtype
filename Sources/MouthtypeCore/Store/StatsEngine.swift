@@ -9,12 +9,17 @@ public struct DictationSample: Equatable, Sendable {
     public var words: Int
     /// Speaking time: voiced audio when the log has it, otherwise the whole recording. Nil when neither was logged.
     public var durationMs: Int?
+    /// The offset the take was logged with, for its time of day.
+    public var utcOffsetSeconds: Int
+    public var appName: String?
 
-    public init(day: String, startedAt: Date, words: Int, durationMs: Int?) {
+    public init(day: String, startedAt: Date, words: Int, durationMs: Int?, utcOffsetSeconds: Int = 0, appName: String? = nil) {
         self.day = day
         self.startedAt = startedAt
         self.words = words
         self.durationMs = durationMs
+        self.utcOffsetSeconds = utcOffsetSeconds
+        self.appName = appName
     }
 }
 
@@ -55,11 +60,15 @@ public struct StatsReport: Equatable, Sendable {
     /// Minutes saved against typing the same words at `typingWPM`, never negative.
     public var minutesSaved: Double
     public var typingWPM: Double
+    /// Total speaking time of the takes with a logged duration, in minutes.
+    public var speakingMinutes: Double
+    /// The earliest local day with words (`YYYY-MM-DD`).
+    public var firstDay: String?
 
     public init(
         wordsToday: Int, wordsThisWeek: Int, wordsAllTime: Int, dictationCount: Int, averageWPM: Double?, bestWPM: Double?,
         currentStreakDays: Int, longestStreakDays: Int, biggestDay: DailyWords?, longestDictation: LongestDictation?,
-        minutesSaved: Double, typingWPM: Double
+        minutesSaved: Double, typingWPM: Double, speakingMinutes: Double = 0, firstDay: String? = nil
     ) {
         self.wordsToday = wordsToday
         self.wordsThisWeek = wordsThisWeek
@@ -73,6 +82,8 @@ public struct StatsReport: Equatable, Sendable {
         self.longestDictation = longestDictation
         self.minutesSaved = minutesSaved
         self.typingWPM = typingWPM
+        self.speakingMinutes = speakingMinutes
+        self.firstDay = firstDay
     }
 }
 
@@ -106,19 +117,27 @@ public struct ArcadeRecords: Equatable, Sendable {
 
 /// What the Stats and Records pages show, worked out from the log in one go.
 public struct StatsSnapshot: Equatable, Sendable {
-    public static let dailyWindowDays = 14
+    public static let dailyWindowDays = 30
 
     public var report: StatsReport
     public var records: ArcadeRecords
     /// The last `dailyWindowDays` local days ending today, zero-filled. Empty when there is no history.
     public var daily: [DailyWords]
+    /// Words by local hour of day (24 buckets) over the last `StatsTimeline.hourWindowDays` days ending today.
+    public var hourlyWords: [Int]
+    /// Today's takes in start order. From the SQL path this includes takes with saved audio and no transcript; the
+    /// sample path only sees takes that produced words.
+    public var todayTakes: [TodayTake]
 
     public var hasHistory: Bool { report.dictationCount > 0 }
 
-    public init(report: StatsReport, records: ArcadeRecords, daily: [DailyWords]) {
+    public init(report: StatsReport, records: ArcadeRecords, daily: [DailyWords],
+                hourlyWords: [Int] = Array(repeating: 0, count: StatsTimeline.hoursPerDay), todayTakes: [TodayTake] = []) {
         self.report = report
         self.records = records
         self.daily = daily
+        self.hourlyWords = hourlyWords
+        self.todayTakes = todayTakes
     }
 
     public static func make(samples: [DictationSample], now: Date, timeZone: TimeZone = .current,
@@ -129,7 +148,9 @@ public struct StatsSnapshot: Equatable, Sendable {
         let daily = report.dictationCount == 0 ? [] : Streaks.dayNumber(today).map {
             engine.dailyWords(from: StatsEngine.dayString($0 - (dailyWindowDays - 1)), to: today)
         } ?? []
-        return StatsSnapshot(report: report, records: engine.records(), daily: daily)
+        let timeline = engine.timeline(today: today)
+        return StatsSnapshot(report: report, records: engine.records(), daily: daily,
+                             hourlyWords: timeline.hourly, todayTakes: timeline.takes)
     }
 }
 
@@ -151,6 +172,8 @@ struct StatsAggregates: Sendable {
     /// The highest qualifying rate, earliest take on a tie, and the day it was set.
     var bestWPM: (rate: Double, day: String)?
     var longest: LongestDictation?
+    var hourlyWords = [Int](repeating: 0, count: StatsTimeline.hoursPerDay)
+    var todayTakes: [TodayTake] = []
 }
 
 extension StatsSnapshot {
@@ -182,7 +205,8 @@ extension StatsSnapshot {
             averageWPM: average, bestWPM: aggregates.bestWPM?.rate,
             currentStreakDays: streaks.current, longestStreakDays: streaks.longest,
             biggestDay: biggest, longestDictation: aggregates.longest,
-            minutesSaved: max(0, typingMinutes - speakingMinutes), typingWPM: typingWPM
+            minutesSaved: max(0, typingMinutes - speakingMinutes), typingWPM: typingWPM,
+            speakingMinutes: speakingMinutes, firstDay: days.first?.0.day
         )
         let streak = StatsEngine.longestStreak(totals.map(\.number))
         let records = ArcadeRecords(
@@ -197,7 +221,8 @@ extension StatsSnapshot {
             for d in totals { byNumber[d.number] = d.words }
             daily = ((t - (dailyWindowDays - 1))...t).map { DailyWords(day: StatsEngine.dayString($0), words: byNumber[$0] ?? 0) }
         }
-        return StatsSnapshot(report: report, records: records, daily: daily)
+        return StatsSnapshot(report: report, records: records, daily: daily,
+                             hourlyWords: aggregates.hourlyWords, todayTakes: StatsTimeline.sorted(aggregates.todayTakes))
     }
 }
 
@@ -279,8 +304,28 @@ public struct StatsEngine: Sendable {
             averageWPM: average, bestWPM: rated.map(\.rate).max(),
             currentStreakDays: streaks.current, longestStreakDays: streaks.longest,
             biggestDay: Self.biggestDay(days), longestDictation: longestDictation(),
-            minutesSaved: max(0, typingMinutes - speakingMinutes), typingWPM: typingWPM
+            minutesSaved: max(0, typingMinutes - speakingMinutes), typingWPM: typingWPM,
+            speakingMinutes: speakingMinutes, firstDay: days.first?.day
         )
+    }
+
+    /// Words by local hour over the trailing `hourWindowDays` days ending `today`, and today's takes in order.
+    func timeline(today: String) -> (hourly: [Int], takes: [TodayTake]) {
+        var hourly = [Int](repeating: 0, count: StatsTimeline.hoursPerDay)
+        var takes: [TodayTake] = []
+        guard let t = Streaks.dayNumber(today) else { return (hourly, takes) }
+        for s in samples {
+            guard let n = Streaks.dayNumber(s.day) else { continue }
+            if n > t - StatsTimeline.hourWindowDays && n <= t {
+                hourly[StatsTimeline.hour(startedAt: s.startedAt, utcOffsetSeconds: s.utcOffsetSeconds)] += s.words
+            }
+            if s.day == today {
+                takes.append(TodayTake(startedAt: s.startedAt,
+                                       secondsIntoDay: StatsTimeline.secondsIntoDay(startedAt: s.startedAt, utcOffsetSeconds: s.utcOffsetSeconds),
+                                       words: s.words, durationMs: s.durationMs, appName: s.appName))
+            }
+        }
+        return (hourly, StatsTimeline.sorted(takes))
     }
 
     public func records() -> ArcadeRecords {
