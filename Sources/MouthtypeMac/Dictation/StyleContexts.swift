@@ -58,7 +58,8 @@ struct StyleContextConfig: Codable, Equatable, Sendable {
     var tone: String?
     /// A `CleanupLevel` raw value; nil is "Same as everywhere".
     var level: String?
-    /// Member ids (`StyleMember.id`) of built-ins the user took out of this context.
+    /// Member ids (`StyleMember.id`) of built-ins the user took out of this context. A `key:<bundleID>` entry takes out one identifier
+    /// of a built-in that ships under several, leaving its siblings in place.
     var removed: [String] = []
     var apps: [AddedApp] = []
     var sites: [String] = []
@@ -124,6 +125,8 @@ struct StyleContexts: Equatable, Sendable {
         update(id) { $0.level = level?.rawValue }
     }
 
+    private static func keyMark(_ bundleID: String) -> String { "key:" + bundleID }
+
     private mutating func update(_ id: StyleContextID, _ change: (inout StyleContextConfig) -> Void) {
         var config = config(id)
         change(&config)
@@ -136,7 +139,12 @@ struct StyleContexts: Equatable, Sendable {
     func members(_ id: StyleContextID) -> [StyleMember] {
         guard id.hasList else { return [] }
         let config = config(id)
-        let builtIn = Self.builtIns(id).filter { !config.removed.contains($0.id) }
+        let builtIn = Self.builtIns(id).compactMap { member -> StyleMember? in
+            guard !config.removed.contains(member.id) else { return nil }
+            let keys = member.keys.filter { !config.removed.contains(Self.keyMark($0)) }
+            guard !keys.isEmpty else { return nil }
+            return keys == member.keys ? member : StyleMember(kind: member.kind, name: member.name, keys: keys, isBuiltIn: true)
+        }
         let apps = config.apps.map { StyleMember(kind: .app, name: $0.appName, keys: [$0.bundleID], isBuiltIn: false) }
         let sites = config.sites.map { StyleMember(kind: .site, name: $0, keys: [$0], isBuiltIn: false) }
         return builtIn + apps + sites
@@ -173,7 +181,7 @@ struct StyleContexts: Equatable, Sendable {
         detachApp(bundleID: bundleID)
         let builtIn = Self.builtIns(id).first { $0.kind == .app && $0.keys.contains(bundleID) }
         update(id) { config in
-            if let builtIn { config.removed.removeAll { $0 == builtIn.id } } else {
+            if let builtIn { config.removed.removeAll { $0 == builtIn.id || $0 == Self.keyMark(bundleID) } } else {
                 config.apps.append(.init(bundleID: bundleID, appName: appName))
             }
         }
@@ -191,13 +199,25 @@ struct StyleContexts: Equatable, Sendable {
         return true
     }
 
-    mutating func remove(_ member: StyleMember, from id: StyleContextID) {
+    /// Takes `keys` (default: every key the member has) out of a context. A built-in that ships under several identifiers stays
+    /// listed while any other identifier does, so removing one row never takes its sibling with it.
+    mutating func remove(_ member: StyleMember, keys: [String]? = nil, from id: StyleContextID) {
+        let keys = keys ?? member.keys
         update(id) { config in
             if member.isBuiltIn {
-                if !config.removed.contains(member.id) { config.removed.append(member.id) }
+                guard let original = Self.builtIns(id).first(where: { $0.kind == member.kind && !Set($0.keys).isDisjoint(with: member.keys) }) else { return }
+                let gone = Set(keys).intersection(original.keys).union(original.keys.filter { config.removed.contains(Self.keyMark($0)) })
+                if gone.count == original.keys.count {
+                    if !config.removed.contains(original.id) { config.removed.append(original.id) }
+                    config.removed.removeAll { mark in original.keys.contains { Self.keyMark($0) == mark } }
+                } else {
+                    for key in keys where original.keys.contains(key) && !config.removed.contains(Self.keyMark(key)) {
+                        config.removed.append(Self.keyMark(key))
+                    }
+                }
             } else {
-                config.apps.removeAll { member.keys.contains($0.bundleID) }
-                config.sites.removeAll { member.keys.contains($0) }
+                config.apps.removeAll { keys.contains($0.bundleID) }
+                config.sites.removeAll { keys.contains($0) }
             }
         }
     }

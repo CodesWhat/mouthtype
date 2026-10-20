@@ -30,12 +30,14 @@ extension SettingsModel {
         }
     }
 
-    /// Removing a row also drops your own rule on the same app or site, which would otherwise keep it listed.
-    func removeContextMember(_ member: StyleMember, from context: StyleContextID) {
+    /// Removing a row also drops your own rule on the same app or site, which would otherwise keep it listed. `bundleIDs` limits an
+    /// app removal to one split row's identifiers, so the sibling row keeps its membership and its overrides.
+    func removeContextMember(_ member: StyleMember, bundleIDs: [String]? = nil, from context: StyleContextID) {
+        let keys = member.kind == .app ? (bundleIDs ?? member.keys) : member.keys
         updateAppStyles { styles in
-            styles.contexts.remove(member, from: context)
-            if member.kind == .app { member.keys.forEach { styles.remove(bundleID: $0) } }
-            else { member.keys.forEach { styles.removeWebsite(domain: $0) } }
+            styles.contexts.remove(member, keys: keys, from: context)
+            if member.kind == .app { keys.forEach { styles.remove(bundleID: $0) } }
+            else { keys.forEach { styles.removeWebsite(domain: $0) } }
         }
     }
 

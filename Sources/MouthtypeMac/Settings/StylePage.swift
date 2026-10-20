@@ -307,7 +307,7 @@ struct StyleMembersCard: View {
                 if row.ownRule {
                     if isApp { model.removeAppStyles(bundleIDs: row.targets) } else { model.removeWebsiteStyle(domain: key) }
                 } else {
-                    model.removeContextMember(member, from: context)
+                    model.removeContextMember(member, bundleIDs: isApp ? row.targets : nil, from: context)
                 }
             } label: {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)

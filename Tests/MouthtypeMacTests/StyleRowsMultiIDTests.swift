@@ -61,4 +61,39 @@ import MouthtypeCore
         let rows = StyleRows.rows(for: .email, in: AppCleanupStyles(), installed: { _ in true }).filter { $0.member.name == "Mail" }
         #expect(rows.count == 1 && rows[0].targets == ["com.apple.mail"] && rows[0].id == rows[0].member.id)
     }
+
+    @Test func removingOneTelegramRowKeepsTheSiblingMemberAndOverride() throws {
+        let m = model()
+        m.setAppStyle(bundleIDs: [classic], appName: "Telegram", tone: .formal)
+        m.setAppStyle(bundleIDs: [modern], appName: "Telegram", tone: .veryCasual)
+        let rows = telegramRows(m.appStyles, installed: [classic, modern])
+        let classicRow = try #require(rows.first { $0.targets == [classic] })
+        m.removeContextMember(classicRow.member, bundleIDs: classicRow.targets, from: .personal)
+        #expect(m.appStyles.entries.map(\.bundleID) == [modern])
+        #expect(m.appStyles.contexts.context(bundleID: modern) == .personal)
+        #expect(m.appStyles.contexts.context(bundleID: classic) == nil)
+        #expect(telegramRows(m.appStyles, installed: [classic, modern]).map(\.targets) == [[modern]])
+        // Removing the last identifier takes the whole member out.
+        m.removeContextMember(classicRow.member, bundleIDs: [modern], from: .personal)
+        #expect(telegramRows(m.appStyles, installed: [classic, modern]).isEmpty)
+        #expect(m.appStyles.entries.isEmpty)
+    }
+
+    @Test func removingClassicTeamsKeepsModernTeamsAndItsOverride() throws {
+        let modernTeams = "com.microsoft.teams2", classicTeams = "com.microsoft.teams"
+        let m = model()
+        m.setAppStyle(bundleIDs: [modernTeams], appName: "Microsoft Teams", tone: .formal)
+        m.setAppStyle(bundleIDs: [classicTeams], appName: "Microsoft Teams", tone: .veryCasual)
+        func teams() -> [StyleRows.Row] {
+            StyleRows.rows(for: .work, in: m.appStyles, installed: { $0 == modernTeams }).filter { $0.member.name == "Microsoft Teams" }
+        }
+        let rows = teams()
+        #expect(rows.map(\.targets) == [[modernTeams], [classicTeams]])
+        m.removeContextMember(rows[1].member, bundleIDs: rows[1].targets, from: .work)
+        #expect(m.appStyles.entries.map(\.bundleID) == [modernTeams])
+        #expect(m.appStyles.resolve(bundleID: modernTeams, fallback: StylePreset.casual.options) == StylePreset.formal.options)
+        #expect(m.appStyles.contexts.context(bundleID: modernTeams) == .work)
+        #expect(m.appStyles.contexts.context(bundleID: classicTeams) == nil)
+        #expect(teams().map(\.targets) == [[modernTeams]])
+    }
 }
