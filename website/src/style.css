@@ -1087,3 +1087,53 @@ footer {
   .principles-group[aria-hidden="true"] { display: none; }
   .principle { padding-inline: 10px; }
 }
+
+/* The Mac menu bar strip. The mouth is the app's real status item sprite: idle, three recording frames, processing. */
+.menubar {
+  --bar: #f3f4f6e6;
+  --bar-ink: #111827;
+  --glyph-filter: none;
+  width: 100%;
+  max-width: 420px;
+  height: 28px;
+  margin-bottom: 14px;
+  padding: 0 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bar);
+  color: var(--bar-ink);
+  font: 500 12px/1 var(--sans);
+  box-shadow: 0 10px 22px -18px #233f2980;
+}
+.menubar-app { font-weight: 700; }
+.menubar-items { display: flex; align-items: center; gap: 12px; white-space: nowrap; }
+.menubar-glyph { flex-shrink: 0; }
+.menubar-mouth {
+  display: block;
+  flex-shrink: 0;
+  width: 16px;
+  height: 15px;
+  background: url(/assets/menubar-mouth-sprite@2x.png) 0 0 / 80px 15px no-repeat;
+  filter: var(--glyph-filter);
+}
+.menubar-mouth[data-frame="0"] { background-position: 0 0; }
+.menubar-mouth[data-frame="1"] { background-position: -16px 0; }
+.menubar-mouth[data-frame="2"] { background-position: -32px 0; }
+.menubar-mouth[data-frame="3"] { background-position: -48px 0; }
+.menubar-mouth[data-frame="4"] { background-position: -64px 0; }
+@media (prefers-color-scheme: dark) {
+  .menubar {
+    --bar: #1f2125e6;
+    --bar-ink: #f3f4f6;
+    --glyph-filter: invert(1);
+    border-color: #3a3d44;
+  }
+}
+@media (max-width: 360px) {
+  .menubar { padding: 0 8px; }
+  .menubar-items { gap: 8px; }
+  .menubar-clock { display: none; }
+}
