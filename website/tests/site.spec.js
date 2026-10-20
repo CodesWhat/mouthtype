@@ -257,3 +257,37 @@ for (const width of [320, 390, 600]) {
     await page.locator('.alpha-section').screenshot({ path: testInfo.outputPath('alpha-note.png') });
   });
 }
+
+test("hero menu bar mouth renders, animates and holds still under reduced motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  const mouth = page.locator(".menubar-mouth");
+  await expect(mouth).toBeVisible();
+  expect(await mouth.boundingBox()).toMatchObject({ width: 16, height: 15 });
+  const sprite = await page.request.get("/assets/menubar-mouth-sprite@2x.png");
+  expect(sprite.ok()).toBe(true);
+  const seen = new Set();
+  for (let i = 0; i < 30; i += 1) {
+    seen.add(await mouth.getAttribute("data-frame"));
+    await page.waitForTimeout(70);
+  }
+  expect(seen.size).toBeGreaterThan(2);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(mouth).toHaveAttribute("data-frame", "0");
+  await page.waitForTimeout(800);
+  await expect(mouth).toHaveAttribute("data-frame", "0");
+});
+
+test("hero menu bar mouth does not shift the hero layout", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await page.goto("/");
+  const bar = page.locator(".menubar");
+  const before = await bar.boundingBox();
+  await page.waitForTimeout(600);
+  expect(await bar.boundingBox()).toEqual(before);
+  expect(before.x + before.width).toBeLessThanOrEqual(360);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+});
