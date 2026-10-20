@@ -254,6 +254,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictation.onAttemptFinished = { [weak menuBar, weak home = settingsWindow.model.home] in menuBar?.refresh(); home?.refreshRecoverability() }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
         dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
+        dictation.onAutomationLock = { [weak self] in self?.hotkeyService?.adoptLockedRecording() }
         menuBar.onStopDictation = { [weak dictation] in dictation?.stopHandsFree() }
         menuBar.onCancelDictation = { [weak dictation] in
             guard let dictation else { return }
@@ -287,6 +288,35 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibility.start(prompt: diagnosticLaunch)
         if showFirstSetup { showSetup() }
         appUpdater.start()
+    }
+
+    public func application(_ application: NSApplication, open urls: [URL]) {
+        guard !isTerminating else { return }
+        let router = automationRouter()
+        for url in urls {
+            if case .disabled = router.handle(url) {
+                showNotice(PillMessage("Automation is off", detail: "See the automation docs"), duration: 3)
+            }
+        }
+    }
+
+    /// A line on the pill that never takes a live recording's place.
+    private func showNotice(_ message: PillMessage, duration: TimeInterval = 2.5) {
+        if let dictation { dictation.showNotice(message, duration: duration) } else { pill?.showMessage(message, duration: duration) }
+    }
+
+    private func automationRouter() -> AutomationRouter {
+        AutomationRouter(actions: AutomationActions(
+            // Queued, so a stop or cancel that follows a start waits for the recording the start is still bringing up.
+            startDictation: { [weak self] in self?.dictation?.enqueueAutomation(.start) },
+            stopDictation: { [weak self] in self?.dictation?.enqueueAutomation(.stop) },
+            toggleDictation: { [weak self] in self?.dictation?.enqueueAutomation(.toggle) },
+            cancelDictation: { [weak self] in self?.dictation?.enqueueAutomation(.cancel) },
+            copyLast: { [weak self] in self?.copyLast() },
+            pasteLast: { [weak self] in self?.pasteLast() },
+            // present(page:) moves through SettingsModel.select, so an unsaved spelling or phrase draft still asks first.
+            open: { [weak self] page in self?.settingsWindow.present(page: page.settingsPage) }
+        ))
     }
 
     public func applicationDidBecomeActive(_ notification: Notification) {
@@ -359,10 +389,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pasteLast() {
         guard !isTerminating else { return }
-        guard let inserter, let pill, let cardPresenter else { return }
+        guard let inserter, let cardPresenter else { return }
         Task {
             guard let result = await inserter.pasteLast() else {
-                pill.showMessage("Nothing to paste yet")
+                showNotice(PillMessage("Nothing to paste yet"))
                 return
             }
             if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") { cardPresenter.present(card) }
@@ -370,8 +400,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func copyLast() {
-        guard let inserter, let pill else { return }
-        pill.showMessage(inserter.copyLast() ? "Copied" : "Nothing to copy yet")
+        guard let inserter else { return }
+        showNotice(PillMessage(inserter.copyLast() ? "Copied" : "Nothing to copy yet"))
     }
 
     /// Fn-key presence comes from an IOHIDManager enumeration, so the 2 s setup poll reuses the last full check's answer.

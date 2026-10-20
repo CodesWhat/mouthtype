@@ -1,0 +1,44 @@
+#!/bin/bash
+# Thin command-line front end for Mouthtype's mouthtype:// automation URLs.
+# Usage: mouthtype start|stop|toggle|cancel|copy-last|paste-last|open [page]
+set -euo pipefail
+
+text() {
+    cat <<'USAGE'
+usage: mouthtype <start|stop|toggle|cancel|copy-last|paste-last>
+       mouthtype open [home|settings|general|writing|appearance|diagnostics]
+USAGE
+}
+
+usage() {
+    text >&2
+    exit 64
+}
+
+[ $# -ge 1 ] || usage
+verb="$1"
+case "$verb" in
+    -h | --help)
+        [ $# -eq 1 ] || usage
+        text
+        exit 0
+        ;;
+    start | stop | toggle | cancel | copy-last | paste-last)
+        [ $# -eq 1 ] || usage
+        url="mouthtype://$verb"
+        ;;
+    open)
+        [ $# -le 2 ] || usage
+        url="mouthtype://open"
+        if [ $# -eq 2 ]; then
+            case "$2" in
+                home | settings | general | writing | appearance | diagnostics) url="$url?page=$2" ;;
+                *) usage ;;
+            esac
+        fi
+        ;;
+    *) usage ;;
+esac
+
+# -g keeps the calling app in front; Mouthtype brings its own windows forward when a verb needs them.
+exec /usr/bin/open -g "$url"
