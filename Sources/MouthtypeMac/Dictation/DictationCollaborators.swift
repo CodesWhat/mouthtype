@@ -84,8 +84,6 @@ protocol DictationInserting: AnyObject {
     func snapshotApplication() -> FocusSnapshot
     func snapshotFocus() -> FocusSnapshot
     func websiteHost(for snapshot: FocusSnapshot) -> String?
-    /// The focused window's open file, for editor hints.
-    func editorDocumentURL(for snapshot: FocusSnapshot) -> URL?
     func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult
     /// A little text either side of the cursor for the cleanup pass, or nil when it can't be read.
     func insertionContext() -> InsertionContext?
@@ -100,7 +98,6 @@ protocol DictationInserting: AnyObject {
 extension DictationInserting {
     func snapshotApplication() -> FocusSnapshot { snapshotFocus() }
     func websiteHost(for snapshot: FocusSnapshot) -> String? { nil }
-    func editorDocumentURL(for snapshot: FocusSnapshot) -> URL? { nil }
     func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void) {}
     func cancelVerification() {}
     func insertionContext() -> InsertionContext? { nil }

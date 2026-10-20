@@ -321,7 +321,7 @@ final class DictationController {
         if startError == nil {
             current.editorHints = EditorHintsGatherer.start(
                 enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
-                readers: .system(inserter: inserter, focus: startFocus)
+                readers: .system
             )
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)

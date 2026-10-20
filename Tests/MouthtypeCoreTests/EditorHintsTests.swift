@@ -138,6 +138,31 @@ import Testing
 
     // MARK: Deadline
 
+    @Test func gatherReadsTheCursorUnderTheDeadlineAndOffTheCallersThread() async {
+        let input = EditorHints.Input(
+            windowTitle: "AppDelegate.swift - mouthtype - Visual Studio Code", titleStyle: .vscode,
+            readCursor: { _ in
+                InsertionContext(before: Thread.isMainThread ? "" : "applyTheme(", after: nil)
+            }
+        )
+        let terms = await EditorHints.gather(input, deadline: .seconds(2))
+        #expect(terms.map(\.text) == ["applyTheme", "AppDelegate", "mouthtype"])
+    }
+
+    @Test func gatherGivesUpOnAStuckCursorReadAtTheDeadline() async {
+        let gate = DispatchSemaphore(value: 0)
+        defer { gate.signal() }
+        let input = EditorHints.Input(
+            windowTitle: "AppDelegate.swift - mouthtype - Visual Studio Code", titleStyle: .vscode,
+            readCursor: { _ in gate.wait(); return InsertionContext(before: "applyTheme(", after: nil) }
+        )
+        let clock = ContinuousClock()
+        let start = clock.now
+        let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
+        #expect(clock.now - start < .seconds(1))
+        #expect(terms.map(\.text) == ["AppDelegate", "mouthtype"])
+    }
+
     @Test func gatherUsesTitleAndCursorWhenFilesAreTooSlow() async {
         let input = EditorHints.Input(
             cursorBefore: "applyTheme()", windowTitle: "AppDelegate.swift - mouthtype - Visual Studio Code", titleStyle: .vscode,

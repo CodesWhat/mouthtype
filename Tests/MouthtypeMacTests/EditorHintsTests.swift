@@ -38,24 +38,53 @@ private struct Rules: VocabularyProviding {
     func snippets() -> [Snippet] { [] }
 }
 
-/// Counts reads so a test can show nothing was touched.
-@MainActor
-private final class ReaderCalls {
-    var cursor = 0, document = 0, cwd = 0, workspace = 0
-    func readers(context: InsertionContext? = nil) -> EditorHintsGatherer.Readers {
+/// Counts reads so a test can show nothing was touched, and records where and how late they ran.
+private final class ReaderCalls: @unchecked Sendable {
+    private let lock = NSLock()
+    private var counts = (cursor: 0, document: 0)
+    private var onMain: [Bool] = []
+    private var deadlines: [ContinuousClock.Instant] = []
+    var cursor: Int { lock.withLock { counts.cursor } }
+    var document: Int { lock.withLock { counts.document } }
+    var readOnMainThread: Bool { lock.withLock { onMain.contains(true) } }
+    var lastDeadline: ContinuousClock.Instant? { lock.withLock { deadlines.last } }
+
+    func readers(context: InsertionContext? = nil, block: DispatchSemaphore? = nil) -> EditorHintsGatherer.Readers {
         EditorHintsGatherer.Readers(
-            cursorContext: { [self] in cursor += 1; return context },
-            documentURL: { [self] in document += 1; return nil },
+            cursorContext: { [self] _, deadline in
+                lock.withLock { counts.cursor += 1; onMain.append(Thread.isMainThread); deadlines.append(deadline) }
+                block?.wait()
+                return context
+            },
+            documentURL: { [self] _, _ in lock.withLock { counts.document += 1 }; return nil },
             workingDirectory: { _, _ in nil },
             workspaceFolder: { _, _ in nil }
         )
     }
 }
 
+/// A text field that answers only what is configured. Anything it can't give is nil, like a field with no range reads.
+private struct FakeSource: BoundedTextSource {
+    var text: String?
+    var cursor: Int?
+    var supportsRanges = true
+    var count: Int?
+    func selection() -> NSRange? { cursor.map { NSRange(location: $0, length: 0) } }
+    func length() -> Int? { count ?? text?.utf16.count }
+    func slice(location: Int, length: Int) -> String? {
+        guard supportsRanges, let text else { return nil }
+        let units = Array(text.utf16)
+        guard location >= 0, location + length <= units.count else { return nil }
+        return String(decoding: units[location..<(location + length)], as: UTF16.self)
+    }
+}
+
 @MainActor
 @Suite struct EditorHintsGathererTests {
-    private func focus(_ bundleID: String?, title: String? = nil, secure: Bool = false) -> FocusSnapshot {
-        FocusSnapshot(pid: 1, bundleID: bundleID, windowTitle: title, isSecure: secure)
+    private func focus(
+        _ bundleID: String?, title: String? = nil, secure: Bool = false, role: String? = "AXTextArea", subrole: String? = nil
+    ) -> FocusSnapshot {
+        FocusSnapshot(pid: 1, bundleID: bundleID, windowTitle: title, role: role, subrole: subrole, isSecure: secure)
     }
 
     private func audio() -> CapturedAudio {
@@ -119,6 +148,85 @@ private final class ReaderCalls {
         let terms = await task.value
         #expect(terms.map(\.text) == ["applyTheme", "DictationPipeline", "mouthtype"])
         #expect(calls.cursor == 1)
+        #expect(!calls.readOnMainThread)
+    }
+
+    @Test func startReadsNothingItself() {
+        let calls = ReaderCalls()
+        let gate = DispatchSemaphore(value: 0)
+        let task = EditorHintsGatherer.start(
+            enabled: true, boostEnabled: true, focus: focus("com.microsoft.VSCode"),
+            readers: calls.readers(block: gate), deadline: .milliseconds(50)
+        )
+        // The reader is parked on the gate, so a start that read inline would never have returned.
+        #expect(task != nil)
+        gate.signal()
+    }
+
+    @Test func aStuckCursorReadCostsTheCursorAndNothingElse() async throws {
+        let calls = ReaderCalls()
+        let gate = DispatchSemaphore(value: 0)
+        defer { gate.signal() }
+        let task = try #require(EditorHintsGatherer.start(
+            enabled: true, boostEnabled: true,
+            focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
+            readers: calls.readers(context: InsertionContext(before: "applyTheme(", after: nil), block: gate),
+            deadline: .milliseconds(50)
+        ))
+        #expect(await task.value.map(\.text) == ["DictationPipeline", "mouthtype"])
+        let deadline = try #require(calls.lastDeadline)
+        #expect(deadline <= ContinuousClock.now + .milliseconds(50))
+    }
+
+    @Test func onlyASourceEditorsTextAreaIsRead() async throws {
+        for (role, subrole) in [(nil, nil), ("AXTextField", nil), ("AXGroup", nil), ("AXTextArea", "AXSearchField"), ("AXTextArea", "AXTerminal")] as [(String?, String?)] {
+            let calls = ReaderCalls()
+            let task = try #require(EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true, focus: focus("com.microsoft.VSCode", title: "a.swift - proj - Visual Studio Code", role: role, subrole: subrole),
+                readers: calls.readers(context: InsertionContext(before: "secretTerminalOutput(", after: nil))
+            ))
+            let terms = await task.value
+            #expect(calls.cursor == 0, "\(role ?? "nil") \(subrole ?? "nil")")
+            #expect(!terms.contains { $0.text == "secretTerminalOutput" })
+        }
+        #expect(EditorHintsSurface.isSourceEditor(role: "AXTextArea", subrole: nil))
+        #expect(EditorHintsSurface.isSourceEditor(role: "AXTextArea", subrole: ""))
+    }
+
+    @Test func theIntegratedTerminalIsToldApartByItsLabel() {
+        #expect(EditorAccessibility.isTerminalLabel("Terminal 1, zsh Run the command: Show Terminal Accessibility Help"))
+        #expect(EditorAccessibility.isTerminalLabel("terminal input"))
+        #expect(!EditorAccessibility.isTerminalLabel("Editor content;Press Alt+F1 for Accessibility Options."))
+        #expect(!EditorAccessibility.isTerminalLabel(nil))
+    }
+
+    // MARK: Bounded reads
+
+    @Test func cursorWindowComesFromRangeReads() throws {
+        let text = String(repeating: "x", count: 400) + "applyTheme(" + String(repeating: "y", count: 100)
+        let context = try #require(EditorAccessibility.context(from: FakeSource(text: text, cursor: 411)))
+        #expect(context.before?.utf16.count == EditorAccessibility.contextBefore)
+        #expect(context.before?.hasSuffix("applyTheme(") == true)
+        #expect(context.after?.utf16.count == EditorAccessibility.contextAfter)
+    }
+
+    @Test func aFieldWithoutRangeReadsGivesNoCursorTextAtAll() {
+        // The text is right there, but the only way to it would be the whole value, which is never read.
+        #expect(EditorAccessibility.context(from: FakeSource(text: "applyTheme(", cursor: 11, supportsRanges: false)) == nil)
+    }
+
+    @Test func positionZeroIsTheStartOnlyOfAnEmptyField() {
+        #expect(EditorAccessibility.context(from: FakeSource(text: "", cursor: 0)) == InsertionContext(before: "", after: ""))
+        #expect(EditorAccessibility.context(from: FakeSource(text: "terminal screen", cursor: 0)) == nil)
+        #expect(EditorAccessibility.context(from: FakeSource(text: "abc", cursor: nil)) == nil)
+    }
+
+    @Test func eachCallGetsOnlyTheTimeLeft() {
+        let soon = ContinuousClock.now + .milliseconds(100)
+        let budget = EditorAccessibility.budget(until: soon)
+        #expect(budget != nil && budget! <= 0.1 && budget! >= 0.005)
+        #expect(EditorAccessibility.budget(until: ContinuousClock.now - .milliseconds(1)) == nil)
+        #expect(EditorAccessibility.budget(until: ContinuousClock.now + .seconds(60)) == AccessibilityFocusReader.messagingTimeout)
     }
 
     @Test func terminalsNeverReadTheirScreenText() async throws {

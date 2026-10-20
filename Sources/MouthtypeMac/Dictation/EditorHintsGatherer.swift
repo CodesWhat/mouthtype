@@ -33,6 +33,13 @@ enum EditorHintsSurface: Equatable, Sendable {
         }
     }
 
+    /// Only a source editor's text area is read for cursor text. Search fields, secure fields and anything with a
+    /// subrole are not. (The integrated terminal in VS Code and Cursor is told apart by its label, in
+    /// `EditorAccessibility`.)
+    static func isSourceEditor(role: String?, subrole: String?) -> Bool {
+        role == "AXTextArea" && (subrole ?? "").isEmpty
+    }
+
     var titleStyle: EditorHints.TitleStyle? {
         switch self {
         case .vscode: .vscode
@@ -46,46 +53,52 @@ enum EditorHintsSurface: Equatable, Sendable {
 /// and the work runs under `EditorHints.defaultDeadline`.
 @MainActor
 enum EditorHintsGatherer {
-    /// What the focused app can give, injected so tests need no Accessibility.
-    struct Readers {
-        var cursorContext: @MainActor () -> InsertionContext?
-        var documentURL: @MainActor () -> URL?
+    /// What the focused app can give, injected so tests need no Accessibility. The readers block, so they run off the
+    /// main thread, and each takes the instant it must finish by.
+    struct Readers: Sendable {
+        var cursorContext: @Sendable (_ focus: FocusSnapshot, _ deadline: ContinuousClock.Instant) -> InsertionContext?
+        var documentURL: @Sendable (_ focus: FocusSnapshot, _ deadline: ContinuousClock.Instant) -> URL?
         var workingDirectory: @Sendable (_ terminalPID: pid_t, _ windowTitle: String?) -> URL?
         var workspaceFolder: @Sendable (_ supportFolder: String, _ projectName: String) -> URL?
 
-        @MainActor static func system(inserter: any DictationInserting, focus: FocusSnapshot) -> Readers {
-            Readers(
-                cursorContext: { inserter.insertionContext() },
-                documentURL: { inserter.editorDocumentURL(for: focus) },
-                workingDirectory: { TerminalWorkingDirectory.current(terminalPID: $0, windowTitle: $1) },
-                workspaceFolder: { WorkspaceFolder.resolve(supportFolder: $0, projectName: $1) }
-            )
-        }
+        static let system = Readers(
+            cursorContext: { EditorAccessibility.cursorContext(focus: $0, deadline: $1) },
+            documentURL: { EditorAccessibility.documentURL(focus: $0, deadline: $1) },
+            workingDirectory: { TerminalWorkingDirectory.current(terminalPID: $0, windowTitle: $1) },
+            workspaceFolder: { WorkspaceFolder.resolve(supportFolder: $0, projectName: $1) }
+        )
     }
 
     /// Nil, with no reader called, unless the switch and the saved-word boost are both on, the app is on the list and
-    /// the field isn't secure.
+    /// the field isn't secure. Nothing is read here: the focus taken at dictation start is handed to the detached
+    /// gather, which does every Accessibility read inside its deadline.
     static func start(
         enabled: Bool, boostEnabled: Bool, focus: FocusSnapshot, readers: Readers,
         deadline: Duration = EditorHints.defaultDeadline
     ) -> Task<[VocabularyBias.Term], Never>? {
         guard enabled, boostEnabled, !focus.isSecure, let surface = EditorHintsSurface.of(bundleID: focus.bundleID) else { return nil }
 
-        // Terminals report their whole screen as the field's text, so only editors give a cursor window.
-        let context = surface == .terminal ? nil : readers.cursorContext()
-        let document = surface == .xcode ? readers.documentURL() : nil
+        let limit = ContinuousClock.now + deadline
+        // Terminals report their whole screen as the field's text, so only a source editor gives a cursor window.
+        var readCursor: (@Sendable (ContinuousClock.Instant) -> InsertionContext?)?
+        if surface != .terminal, EditorHintsSurface.isSourceEditor(role: focus.role, subrole: focus.subrole) {
+            let read = readers.cursorContext
+            readCursor = { @Sendable until in read(focus, until) }
+        }
         let title = focus.windowTitle
         let pid = focus.pid
         let parsed = surface.titleStyle.map { EditorHints.parseTitle(title ?? "", style: $0) }
 
         let workingDirectory = readers.workingDirectory
         let workspaceFolder = readers.workspaceFolder
+        let documentURL = readers.documentURL
         let files: @Sendable () async -> [String] = {
             var root: URL?
             switch surface {
             case .terminal:
                 if let pid { root = workingDirectory(pid, title).flatMap(ProjectFiles.repositoryRoot(containing:)) }
             case .xcode:
+                let document = await EditorHints.runBlocking(until: limit) { documentURL(focus, limit) }
                 root = document.flatMap { ProjectFiles.repositoryRoot(containing: $0.deletingLastPathComponent()) }
             case .vscode(let supportFolder):
                 if let project = parsed?.project {
@@ -96,8 +109,7 @@ enum EditorHintsGatherer {
             return [root.lastPathComponent] + (await ProjectFiles.trackedFiles(in: root))
         }
         let input = EditorHints.Input(
-            cursorBefore: context?.before, cursorAfter: context?.after, windowTitle: title, titleStyle: surface.titleStyle,
-            files: files
+            windowTitle: title, titleStyle: surface.titleStyle, readCursor: readCursor, files: files
         )
         return Task.detached { await EditorHints.gather(input, deadline: deadline) }
     }
