@@ -20,7 +20,7 @@ RC.1 keeps fallback enabled while the priority list is empty. Add an input befor
 
 ## Clean selected text
 
-Select text in an accessible editable field, then choose **Clean Selected Text…** from Mouthtype's menu. A nonactivating preview shows the original and a result you can review or edit. This first version uses deterministic basic cleanup: filler removal, spoken punctuation and whitespace/capitalization. It does not run an AI rewrite, expand phrases, rewrite numbers or use surrounding text.
+Select text in an accessible editable field, then choose **Clean Up Selection** from Mouthtype's menu. **Clean Up** uses the tone that applies to the app you're in. **Formal**, **Casual** and **Very Casual** apply that tone to the selection instead; Formal also removes or softens swearing. A saved phrase in the same submenu replaces the selection directly with the text it inserts (with {date} and {clipboard} filled in), and it's refused if the selection changed or the field is secure. **Edit Transforms…** opens the Phrases page. The items are disabled when nothing is selected or Accessibility isn't granted. A nonactivating preview shows the original and a result you can review or edit. This first version uses deterministic basic cleanup: filler removal, spoken punctuation and whitespace/capitalization. It does not run an AI rewrite, expand phrases, rewrite numbers or use surrounding text.
 
 **Accept** requests replacement of that exact original selection through Accessibility. The app, field, selection range and selected text must still match. Password fields and secure input are excluded. Unsupported or changed selections keep the result available through **Copy result**. There is no automatic clipboard paste, key event, retry or fallback to a different field. One accepted request disables another submission. API acceptance is reported as a replacement request, not verified insertion.
 
@@ -28,8 +28,8 @@ The limit is 16,000 UTF-16 units. Original and preview text stay in memory until
 
 ## AI transforms for selected text
 
-Choose **Transform Selected Text** in Mouthtype's menu, or **Transform** in the Clean Selected Text preview, then pick Fix grammar, Make shorter, Make more formal or Make more casual. The local Thorough cleanup model (Gemma 4 E4B) runs the one instruction on your selection. Nothing leaves the Mac and there is no free-form prompt.
+Choose **Transform** in the Clean Up Selection preview, then pick Fix grammar, Make shorter, Make more formal or Make more casual. The local Thorough cleanup model (Gemma 4 E4B) runs the one instruction on your selection. Nothing leaves the Mac and there is no free-form prompt.
 
 The result opens in the same editable preview. **Accept** uses the same guarded replacement as Basic cleanup (app, field, range and text must still match), **Retry** reruns the transform, **Cancel** drops it. There is no automatic paste and no whole-field replacement. After Accept, press Cmd-Z in the original app to undo, or use **Copy original**. Whether Cmd-Z restores the text depends on the target app, since the edit goes through Accessibility.
 
-Without the downloaded Thorough model the transforms are disabled and the menu says why. Download it in Settings. S1-mini does not run transforms.
+Without the downloaded Thorough model the transforms are disabled and the preview says why. Download it in Settings. S1-mini does not run transforms.

@@ -11,7 +11,7 @@ import SwiftUI
         self.maximumContentHeight = max(260, min(620, maximumContentHeight ?? ((NSScreen.main?.visibleFrame.height ?? 684) - 64)))
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 620, height: 280),
                             styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
-        panel.title = "Clean Selected Text"
+        panel.title = "Clean Up Selection"
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.level = .floating
@@ -26,8 +26,8 @@ import SwiftUI
 
     required init?(coder: NSCoder) { nil }
 
-    func present(transform: TextTransform? = nil) {
-        model.prepare(transform: transform)
+    func present(transform: TextTransform? = nil, tone: StylePreset? = nil) {
+        model.prepare(transform: transform, tone: tone)
         resizeToFitContent()
         // The original app keeps activation so Accept can check its exact selection.
         window?.orderFrontRegardless()
@@ -52,7 +52,7 @@ private struct SelectionCleanupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 6 : 10) {
-            Text(model.transform?.title ?? "Clean selected text").font(.title2.bold())
+            Text(model.transform?.title ?? model.tone.map { "\($0.title) tone" } ?? "Clean Up Selection").font(.title2.bold())
             Text("Original").font(.callout).foregroundStyle(.secondary)
             ScrollView { Text(model.original).font(.body).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading) }
                 .frame(height: textHeight(model.original, width: 576, minimum: 22,
@@ -117,53 +117,82 @@ private struct SelectionCleanupView: View {
     }
 }
 
+/// The Clean Up Selection submenu: Clean Up (the focused app's tone), the three tones, the saved phrases, and a way
+/// into the Transforms page. The actions need a readable selection, so they disable when there is none.
 @MainActor final class SelectionCleanupMenuSection: NSObject, MenuSection, NSMenuDelegate {
-    private let open: () -> Void
-    private let openTransform: (TextTransform) -> Void
-    private let unavailableReason: () -> String?
-    private let item = NSMenuItem(title: "Clean Selected Text…", action: nil, keyEquivalent: "")
-    private let transformItem = NSMenuItem(title: "Transform Selected Text", action: nil, keyEquivalent: "")
-    private let transformMenu = NSMenu(title: "Transform Selected Text")
-    private let reasonItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-    private var transformItems: [NSMenuItem] = []
-    var items: [NSMenuItem] { [item, transformItem] }
+    static let title = "Clean Up Selection"
+    private let cleanUp: () -> Void
+    private let applyTone: (StylePreset) -> Void
+    private let insertPhrase: (Snippet) -> Void
+    private let editTransforms: () -> Void
+    private let phrases: () -> [Snippet]
+    private let capture: () -> MenuCapture
+    private let parent = NSMenuItem(title: SelectionCleanupMenuSection.title, action: nil, keyEquivalent: "")
+    private let submenu = NSMenu(title: SelectionCleanupMenuSection.title)
+    var items: [NSMenuItem] { [parent] }
 
-    init(open: @escaping () -> Void, openTransform: @escaping (TextTransform) -> Void = { _ in },
-         unavailableReason: @escaping () -> String? = { "AI transforms aren’t available in this build." }) {
-        self.open = open
-        self.openTransform = openTransform
-        self.unavailableReason = unavailableReason
+    init(cleanUp: @escaping () -> Void, applyTone: @escaping (StylePreset) -> Void,
+         insertPhrase: @escaping (Snippet) -> Void, editTransforms: @escaping () -> Void,
+         phrases: @escaping () -> [Snippet] = { [] }, capture: @escaping () -> MenuCapture = { .ready }) {
+        self.cleanUp = cleanUp
+        self.applyTone = applyTone
+        self.insertPhrase = insertPhrase
+        self.editTransforms = editTransforms
+        self.phrases = phrases
+        self.capture = capture
         super.init()
-        item.target = self
-        item.action = #selector(present)
-        transformMenu.autoenablesItems = false
-        transformMenu.delegate = self
-        transformMenu.addItem(reasonItem)
-        reasonItem.isEnabled = false
-        for (index, kind) in TextTransform.allCases.enumerated() {
-            let entry = NSMenuItem(title: kind.title, action: #selector(presentTransform(_:)), keyEquivalent: "")
-            entry.target = self
-            entry.tag = index
-            transformMenu.addItem(entry)
-            transformItems.append(entry)
+        submenu.autoenablesItems = false
+        submenu.delegate = self
+        parent.submenu = submenu
+        rebuild(.ready)
+    }
+
+    /// The selection is read only when this submenu opens, never when the top-level menu refreshes, so a slow app
+    /// can't hold up Settings, Stop Dictation or Quit.
+    func menuNeedsUpdate(_ menu: NSMenu) { rebuild(capture()) }
+
+    private func rebuild(_ state: MenuCapture) {
+        let enabled = state == .ready
+        submenu.removeAllItems()
+        if state == .timedOut {
+            let note = NSMenuItem(title: "Couldn’t read the selection", action: nil, keyEquivalent: "")
+            note.isEnabled = false
+            submenu.addItem(note)
+            submenu.addItem(.separator())
         }
-        transformItem.submenu = transformMenu
-        update()
+        func add(_ title: String, _ action: Selector, enabled: Bool, object: Any? = nil, tip: String? = nil) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = enabled
+            item.representedObject = object
+            item.toolTip = tip
+            submenu.addItem(item)
+        }
+        add("Clean Up", #selector(runCleanUp), enabled: enabled)
+        submenu.addItem(.separator())
+        for preset in StylePreset.allCases {
+            add(preset.title.capitalized, #selector(runTone(_:)), enabled: enabled, object: preset.rawValue)
+        }
+        let saved = phrases()
+        if !saved.isEmpty {
+            submenu.addItem(.separator())
+            for phrase in saved {
+                add(HistoryMenuSection.shortened(phrase.trigger), #selector(runPhrase(_:)), enabled: enabled,
+                    object: phrase, tip: phrase.expansion)
+            }
+        }
+        submenu.addItem(.separator())
+        add("Edit Transforms…", #selector(runEdit), enabled: true)
     }
 
-    func menuNeedsUpdate(_ menu: NSMenu) { update() }
-    func refresh() { update() }
-
-    private func update() {
-        let reason = unavailableReason()
-        reasonItem.title = reason ?? ""
-        reasonItem.isHidden = reason == nil
-        for entry in transformItems { entry.isEnabled = reason == nil }
+    @objc private func runCleanUp() { cleanUp() }
+    @objc private func runTone(_ sender: NSMenuItem) {
+        guard let preset = (sender.representedObject as? String).flatMap(StylePreset.init(rawValue:)) else { return }
+        applyTone(preset)
     }
-
-    @objc private func present() { open() }
-    @objc private func presentTransform(_ sender: NSMenuItem) {
-        guard TextTransform.allCases.indices.contains(sender.tag) else { return }
-        openTransform(TextTransform.allCases[sender.tag])
+    @objc private func runPhrase(_ sender: NSMenuItem) {
+        guard let phrase = sender.representedObject as? Snippet else { return }
+        insertPhrase(phrase)
     }
+    @objc private func runEdit() { editTransforms() }
 }

@@ -14,7 +14,7 @@ For a larger pill in any style, choose **Settings → Appearance → Pill size �
 
 Install Xcode with Swift 6.2, then run `bash scripts/run-app.sh`. The script builds and opens a signed app bundle. A Developer ID identity keeps permission grants stable between builds; without one, builds use ad-hoc signing.
 
-The app includes a native Mouthtype window with Home, Stats, Dictionary, Transforms, Style and Appearance pages, and a Settings modal with General, Mac, Health and Advanced pages. Style holds the tone and cleanup rules for each kind of app and website. See [settings](SETTINGS.md). Mac also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and wait for dictation, recovery and file transcription to finish.
+The app includes a native Mouthtype window with Home, Stats, Dictionary, Transforms, Style and Appearance pages, and a Settings modal with General, Mac, Health and Advanced pages. Style holds the tone and cleanup rules for each kind of app and website. See [settings](SETTINGS.md). Mac also has update-check preferences; the menu offers **Check for Updates…**, and an **Update Available…** line appears at the top while one is waiting. Updates are signed and wait for dictation, recovery and file transcription to finish.
 
 **Settings → General → Recording behavior** offers **Hold to talk** (the default) or **Press to toggle**. Toggle starts recording with one press and stops with the next; releasing the shortcut keeps recording. This preserves your chosen key or combination. Escape cancels, except when Escape itself is your dictation key; use the pill or menu to cancel then.
 
@@ -60,7 +60,7 @@ The source includes a daemon/CLI targeting Linux x86_64, Arch/Omarchy, Hyprland 
 
 A single recording stops after 20 minutes; a "One minute left" card appears at 19. If the field doesn't change after a paste, Mouthtype shows "Paste didn't land" with the transcript to copy. Secure fields and "Nothing to paste into" also keep the text for copying. If the microphone disconnects mid-recording, what was captured is saved and you can Insert or Discard it. When you correct a dictated word, Mouthtype can offer "Remember this spelling?"; **Learn from my corrections** in Advanced writing turns that off.
 
-If a paste fails or there's nowhere to paste, the result stays available to copy. **Paste Last** and **Copy Last** restore the latest saved transcript after restart. Control+Command+V and Control+Command+C are their global shortcuts, unless your dictation shortcut uses the same combination. The menu also lists recent transcripts.
+If a paste fails or there's nowhere to paste, the result stays available to copy. **Paste Last Take** and **Copy Last Take** restore the latest saved take after restart. Control+Command+V and Control+Command+C are their global shortcuts, shown beside them in the menu, unless your dictation shortcut uses the same combination, in which case the menu shows none. **Recent Takes** lists earlier ones.
 
 A recording interrupted by a crash can be recovered on the next launch. **Saved Recordings** makes older interrupted or failed recordings available to recover without pasting into the wrong app. Failed recovery keeps a Recover action so it can be retried. Recovery pauses new recordings until it finishes.
 

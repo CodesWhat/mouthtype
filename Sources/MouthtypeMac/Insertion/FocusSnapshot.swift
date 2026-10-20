@@ -97,6 +97,13 @@ extension FocusReading {
 final class AccessibilityFocusReader: FocusReading {
     /// Upper bound on each Accessibility call, so a hung app cannot stall the main thread (and with it the hotkey tap).
     nonisolated static let messagingTimeout: Float = 0.25
+    /// Set while a time-boxed read runs (the menu capture). Each call's timeout shrinks to what's left, so the reads together stay near the budget.
+    static var deadline: Date?
+    static var deadlinePassed: Bool { deadline.map { $0.timeIntervalSinceNow <= 0 } ?? false }
+    static func callTimeout() -> Float {
+        guard let deadline else { return messagingTimeout }
+        return max(0.005, min(messagingTimeout, Float(deadline.timeIntervalSinceNow)))
+    }
 
     var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
 
@@ -116,14 +123,20 @@ final class AccessibilityFocusReader: FocusReading {
             }
             return snapshot
         }
-        bounded(element)
         snapshot.element = FocusedElement(element)
         snapshot.focusedOwnerPID = ownerPID(of: FocusedElement(element))
-        snapshot.role = stringValue(element, kAXRoleAttribute)
-        snapshot.subrole = stringValue(element, kAXSubroleAttribute)
-        snapshot.isSecure = isSecure(element, subrole: snapshot.subrole)
-        if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(element) }
-        snapshot.windowTitle = elementValue(element, kAXWindowAttribute).flatMap(title(of:))
+        // Each read below re-derives its timeout from what's left of the deadline, and none is issued once it has passed.
+        // The caller sees the expired deadline and treats the whole capture as timed out.
+        if Self.deadlinePassed { return snapshot }
+        snapshot.role = stringValue(bounded(element), kAXRoleAttribute)
+        if Self.deadlinePassed { return snapshot }
+        snapshot.subrole = stringValue(bounded(element), kAXSubroleAttribute)
+        if Self.deadlinePassed { return snapshot }
+        snapshot.isSecure = isSecure(bounded(element), subrole: snapshot.subrole)
+        if Self.deadlinePassed { return snapshot }
+        if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(bounded(element)) }
+        if Self.deadlinePassed { return snapshot }
+        snapshot.windowTitle = elementValue(bounded(element), kAXWindowAttribute).flatMap { title(of: bounded($0)) }
         return snapshot
     }
 
@@ -246,7 +259,7 @@ final class AccessibilityFocusReader: FocusReading {
 
     @discardableResult
     private func bounded(_ element: AXUIElement) -> AXUIElement {
-        AXUIElementSetMessagingTimeout(element, Self.messagingTimeout)
+        AXUIElementSetMessagingTimeout(element, Self.callTimeout())
         return element
     }
 
