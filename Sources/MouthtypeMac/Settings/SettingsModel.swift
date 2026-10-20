@@ -282,6 +282,27 @@ import UniformTypeIdentifiers
         }
     }
 
+    /// One edit across every identifier a row is bound to. Each keeps its own other field.
+    func setAppStyle(bundleIDs: [String], appName: String, tone: StylePreset?) {
+        updateAppStyles { styles in
+            for id in bundleIDs {
+                let level = styles.entries.first { $0.bundleID == id }?.level
+                try styles.set(bundleID: id, appName: appName, style: tone?.options, level: level)
+            }
+        }
+    }
+
+    func setAppCleanupLevel(bundleIDs: [String], appName: String, level: CleanupLevel?) {
+        updateAppStyles { styles in
+            for id in bundleIDs {
+                let style = styles.entries.first { $0.bundleID == id }?.style
+                try styles.set(bundleID: id, appName: appName, style: style, level: level)
+            }
+        }
+    }
+
+    func removeAppStyles(bundleIDs: [String]) { updateAppStyles { styles in bundleIDs.forEach { styles.remove(bundleID: $0) } } }
+
     func setWebsiteStyle(domain: String, tone: StylePreset?) {
         updateAppStyles {
             let level = $0.websiteRule(domain: domain)?.level

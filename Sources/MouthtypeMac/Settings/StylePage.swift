@@ -292,20 +292,20 @@ struct StyleMembersCard: View {
                 get: { row.ruleStyle.map { $0.preset?.rawValue ?? "custom" } ?? "same" },
                 set: { value in
                     let tone = StylePreset(rawValue: value)
-                    if isApp { model.setAppStyle(bundleID: key, appName: member.name, tone: tone) }
+                    if isApp { model.setAppStyle(bundleIDs: row.targets, appName: member.name, tone: tone) }
                     else { model.setWebsiteStyle(domain: key, tone: tone) }
                 }), choices: toneChoices(row, contextTone: contextTone))
                 .accessibilityIdentifier("style-member-tone")
             DesignPopup(title: "Cleanup for \(member.name)", selection: Binding(
                 get: { row.ruleLevel },
                 set: { level in
-                    if isApp { model.setAppCleanupLevel(bundleID: key, appName: member.name, level: level) }
+                    if isApp { model.setAppCleanupLevel(bundleIDs: row.targets, appName: member.name, level: level) }
                     else { model.setWebsiteCleanupLevel(domain: key, level: level) }
                 }), choices: levelChoices)
                 .accessibilityIdentifier("style-member-cleanup")
             Button {
                 if row.ownRule {
-                    if isApp { model.removeAppStyle(bundleID: key) } else { model.removeWebsiteStyle(domain: key) }
+                    if isApp { model.removeAppStyles(bundleIDs: row.targets) } else { model.removeWebsiteStyle(domain: key) }
                 } else {
                     model.removeContextMember(member, from: context)
                 }

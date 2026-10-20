@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MouthtypeCore
 
@@ -13,7 +14,11 @@ enum StyleRows {
         let ruleStyle: StyleOptions?
         /// Cleanup level your own rule sets for this app or site, if any.
         let ruleLevel: CleanupLevel?
-        var id: String { member.id }
+        /// The exact bundle identifiers this row reads and writes. Empty for a website.
+        var targets: [String] = []
+        /// Set when an app with several identifiers is split into one row per identifier.
+        var splitKey: String?
+        var id: String { member.id + (splitKey.map { "#" + $0 } ?? "") }
         var isBuiltIn: Bool { member.isBuiltIn && !ownRule }
     }
 
@@ -58,17 +63,45 @@ enum StyleRows {
         listed.contains { id in styles.contexts.members(id).contains { $0.kind == kind && $0.keys.contains(key) } }
     }
 
-    static func rows(for id: StyleContextID, in styles: AppCleanupStyles) -> [Row] {
+    static func isInstalled(_ bundleID: String) -> Bool {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
+
+    /// The rows for one built-in or added member. A website has one. An app has one row per identifier that is installed or carries
+    /// a stored rule, each bound to exactly that identifier. With none installed it has one row that edits every identifier it
+    /// ships under (plus a row for any stored rule that differs), so an edit never lands on an identifier dictation won't see.
+    private static func memberRows(_ member: StyleMember, in styles: AppCleanupStyles, installed: (String) -> Bool) -> [Row] {
+        guard member.kind == .app else {
+            return [Row(member: member, ownRule: false, ruleStyle: ruleStyle(member, in: styles), ruleLevel: ruleLevel(member, in: styles))]
+        }
+        func row(_ keys: [String], split: String?) -> Row {
+            let entry = keys.lazy.compactMap { key in styles.entries.first { $0.bundleID == key } }.first
+            return Row(member: member, ownRule: false, ruleStyle: entry?.style, ruleLevel: entry?.level, targets: keys, splitKey: split)
+        }
+        let present = member.keys.filter(installed)
+        if present.isEmpty {
+            let primary = row(member.keys, split: member.keys.count > 1 ? member.keys[0] : nil)
+            var rows = [primary]
+            for key in member.keys.dropFirst() {
+                guard let entry = styles.entries.first(where: { $0.bundleID == key }),
+                      entry.style != primary.ruleStyle || entry.level != primary.ruleLevel else { continue }
+                rows.append(row([key], split: key))
+            }
+            return rows
+        }
+        let keys = member.keys.filter { key in installed(key) || styles.entries.contains { $0.bundleID == key } }
+        return keys.map { row([$0], split: keys.count > 1 ? $0 : nil) }
+    }
+
+    static func rows(for id: StyleContextID, in styles: AppCleanupStyles, installed: (String) -> Bool = isInstalled) -> [Row] {
         guard id.hasList else { return [] }
         let contexts = styles.contexts
-        var rows: [Row] = contexts.members(id).map {
-            Row(member: $0, ownRule: false, ruleStyle: ruleStyle($0, in: styles), ruleLevel: ruleLevel($0, in: styles))
-        }
+        var rows: [Row] = contexts.members(id).flatMap { memberRows($0, in: styles, installed: installed) }
         for entry in styles.entries {
             let member = StyleMember(kind: .app, name: entry.appName, keys: [entry.bundleID], isBuiltIn: false)
             guard let style = entry.style, !isMember(kind: .app, key: entry.bundleID, in: styles),
                   claim(member, style: style, in: styles) == id else { continue }
-            rows.append(Row(member: member, ownRule: true, ruleStyle: style, ruleLevel: entry.level))
+            rows.append(Row(member: member, ownRule: true, ruleStyle: style, ruleLevel: entry.level, targets: [entry.bundleID]))
         }
         for entry in styles.websites {
             let member = StyleMember(kind: .site, name: entry.domain, keys: [entry.domain], isBuiltIn: false)
