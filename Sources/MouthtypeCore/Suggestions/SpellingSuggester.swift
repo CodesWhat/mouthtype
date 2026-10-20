@@ -62,14 +62,17 @@ public enum SpellingSuggester {
     public static let defaultLimit = 20
     /// Unused-rule hazards only mean something once the history is long enough to have used the rule.
     public static let minTakesForUnusedHazard = 100
+    // `isKnownWord` takes a lowercase word and says whether it is ordinary English. The Mac app backs it with the
+    // system spell checker; Core only knows the bundled list, so it stays AppKit-free.
 
     public static func suggest(
         takes: [SuggestionTake],
         rules: [DictionaryRule],
         corrections: [CorrectionProposal] = [],
-        limit: Int = defaultLimit
+        limit: Int = defaultLimit,
+        isKnownWord: @escaping @Sendable (String) -> Bool = { OrdinaryWords.isOrdinary($0) }
     ) -> [SpellingSuggestion] {
-        var run = Run(takes: takes, rules: rules, corrections: corrections)
+        var run = Run(takes: takes, rules: rules, corrections: corrections, isKnownWord: isKnownWord)
         return run.execute(limit: limit)
     }
 }
@@ -181,12 +184,14 @@ private struct Run {
     let takes: [SuggestionTake]
     let rules: [DictionaryRule]
     let corrections: [CorrectionProposal]
+    let isKnownWord: @Sendable (String) -> Bool
 
     var rawWords: [[Word]] = []
     var finalWords: [[Word]] = []
     var groups: [String: Group] = [:]
 
-    init(takes: [SuggestionTake], rules: [DictionaryRule], corrections: [CorrectionProposal]) {
+    init(takes: [SuggestionTake], rules: [DictionaryRule], corrections: [CorrectionProposal], isKnownWord: @escaping @Sendable (String) -> Bool) {
+        self.isKnownWord = isKnownWord
         self.takes = takes
         self.rules = rules
         self.corrections = corrections
@@ -267,6 +272,10 @@ private struct Run {
             if rowMin > limit { return nil }
         }
         return row[b.count] <= limit ? row[b.count] : nil
+    }
+
+    func isKnown(_ word: String) -> Bool {
+        OrdinaryWords.isOrdinary(word) || isKnownWord(word)
     }
 
     static func norm(_ s: String) -> String {
@@ -438,7 +447,7 @@ private struct Run {
                     if r <= 0.25, best == nil || r < best!.1 { best = (t, r) }
                 }
             }
-            guard let (target, ratio) = best else { continue }
+            guard let (target, ratio) = best, !isKnown(token) else { continue }
             let missedBoost = hits.positions.contains { p in
                 takes[p.take].boostTermsApplied.contains { $0.caseInsensitiveCompare(target.written) == .orderedSame }
             }
@@ -458,6 +467,7 @@ private struct Run {
 
         // Casing: brand form from the dictionary first, then from what the finals consistently show.
         var brand: [String: (form: String, fromDictionary: Bool)] = [:]
+        let savedExact = Set(rules.map { $0.written.trimmingCharacters(in: .whitespacesAndNewlines) })
         for rule in rules {
             let w = rule.written.trimmingCharacters(in: .whitespacesAndNewlines)
             guard w.count >= 3, w.allSatisfy(\.isLetter), w != w.lowercased() else { continue }
@@ -470,6 +480,10 @@ private struct Run {
         }
         for (lower, info) in brand {
             guard !savedHeard.contains(lower), !OrdinaryWords.isOrdinary(lower) else { continue }
+            // Plain Title case on an ordinary word (candy to Candy) is a title or list item, not a spelling. Brand
+            // casing with an inner capital and forms the dictionary already saves still go through.
+            let innerCapital = info.form.dropFirst().contains(where: \.isUppercase)
+            if !innerCapital, !info.fromDictionary || !savedExact.contains(info.form), isKnown(lower) { continue }
             let rawLower = unigrams[lower].map { hits -> [Position] in
                 hits.positions.filter { rawWords[$0.take][$0.word].text == lower }
             } ?? []
@@ -516,7 +530,7 @@ private struct Run {
             for len in max(0, compact.count - 1)...(compact.count + 1) {
                 for t in byLength[len] ?? [] where t.classKey != phraseKey { consider(t, limit: 1) }
             }
-            guard let (target, d) = best else { continue }
+            guard let (target, d) = best, d == 0 || !isKnown(compact) else { continue }
             var conf = Self.sightingConfidence(hits.count) + (d == 0 ? 0.1 : 0)
             if OrdinaryWords.isOrdinary(phrase) {
                 guard d == 0 else { continue }
@@ -534,7 +548,7 @@ private struct Run {
             let heard = Self.norm(c.heard)
             let corrected = c.corrected.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !heard.isEmpty, !corrected.isEmpty, heard != corrected.lowercased(), !savedHeard.contains(heard),
-                  OrdinaryWords.warning(heard: heard, written: corrected) == nil, !OrdinaryWords.isOrdinary(heard) || heard.contains(" ") else { continue }
+                  OrdinaryWords.warning(heard: heard, written: corrected) == nil, (!isKnown(heard) || heard.contains(" ")) else { continue }
             let written = known[corrected.lowercased()] ?? corrected
             add(kind: .misheardVariant, written: written, heard: heard, count: 1, confidence: 0.7,
                 evidence: [SuggestionEvidence(takeID: "correction", fragment: "\(c.heard) -> \(c.corrected)")])

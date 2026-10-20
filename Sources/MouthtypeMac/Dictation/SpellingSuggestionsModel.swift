@@ -61,6 +61,7 @@ struct DismissedSuggestions: Codable, Equatable {
     @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [DictationRecord] = { store, limit in
         try store.recentTakes(limit: limit)
     }
+    @ObservationIgnored var isKnownWord: @Sendable (String) -> Bool = { SystemWordChecker.shared.isKnown($0) }
     @ObservationIgnored private var dismissed: DismissedSuggestions
     @ObservationIgnored private var all: [SpellingSuggestion] = []
     @ObservationIgnored private(set) var isActive = false
@@ -122,10 +123,11 @@ struct DismissedSuggestions: Codable, Equatable {
         let fetch = fetchRecent
         let vocabulary = vocabulary
         let limit = Self.takeLimit
+        let isKnownWord = isKnownWord
         computeTask?.cancel()
         let work = Task.detached { () -> [SpellingSuggestion]? in
             guard let records = try? fetch(store, limit), let rules = try? vocabulary.allRules(), !Task.isCancelled else { return nil }
-            let found = SpellingSuggester.suggest(takes: Self.takes(from: records), rules: rules)
+            let found = SpellingSuggester.suggest(takes: Self.takes(from: records), rules: rules, isKnownWord: isKnownWord)
             return Task.isCancelled ? nil : found
         }
         computeTask = work
