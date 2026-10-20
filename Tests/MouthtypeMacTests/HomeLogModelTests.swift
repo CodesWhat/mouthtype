@@ -233,6 +233,46 @@ import Testing
         #expect(model.takes.first?.recoverable == audio)
     }
 
+    @Test func aReloadFinishingAfterDeactivateAppliesNothingAndStartsNoScan() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "first")
+        var scans = 0
+        let model = HomeLogModel(store: store, saved: { scans += 1; return [] }, observing: false)
+        // The reload's read comes back empty, so applying it would blank the rows the observation delivered.
+        model.fetchRecent = { _, _ in Thread.sleep(forTimeInterval: 0.4); return [] }
+        model.activate()
+        await waitUntil { model.takes.count == 1 }
+        model.startReload()
+        try await Task.sleep(for: .milliseconds(100))
+        model.deactivate()
+        let scansAfterDeactivate = scans
+        try await Task.sleep(for: .milliseconds(700))
+        #expect(model.takes.map(\.text) == ["first"])
+        #expect(scans == scansAfterDeactivate)
+    }
+
+    @Test func aSlowOldReloadNeverOverwritesAReopenedPage() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "old")
+        let model = HomeLogModel(store: store, observing: false)
+        model.fetchRecent = { store, limit in
+            let rows = try store.recentTakes(limit: limit)
+            Thread.sleep(forTimeInterval: 0.5)
+            return rows
+        }
+        model.activate()
+        model.startReload()
+        try await Task.sleep(for: .milliseconds(100))
+        model.deactivate()
+        try dictate(store, minutes: 2, text: "new")
+        model.activate()
+        await waitUntil { model.takes.map(\.text) == ["new", "old"] }
+        try await Task.sleep(for: .milliseconds(700))
+        #expect(model.takes.map(\.text) == ["new", "old"])
+    }
+
     @Test func finishedTakesGetRecoverFromTheirOwnAudio() async throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }

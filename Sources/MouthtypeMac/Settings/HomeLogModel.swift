@@ -40,6 +40,13 @@ struct HomeTake: Identifiable, Equatable {
     @ObservationIgnored private var observation: TakesObservation?
     @ObservationIgnored private var savedTask: Task<Void, Never>?
     @ObservationIgnored private var trackingGeneration = 0
+    /// Bumped on every deactivate. A reload that started under an older value is dropped when it finishes.
+    @ObservationIgnored private var lifecycleGeneration = 0
+    @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    /// The off-main read behind `loadText()`. Replaceable so a test can make it slow.
+    @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [DictationRecord] = { store, limit in
+        try store.recentTakes(limit: limit)
+    }
     private(set) var takes: [HomeTake] = []
     private(set) var error: String?
     private(set) var lastCopiedID: String?
@@ -69,6 +76,7 @@ struct HomeTake: Identifiable, Equatable {
     isolated deinit {
         observation?.cancel()
         savedTask?.cancel()
+        reloadTask?.cancel()
     }
 
     /// Copy keeps the text out of clipboard-manager history, like the app's other copies.
@@ -92,6 +100,16 @@ struct HomeTake: Identifiable, Equatable {
         savedTask?.cancel()
         savedTask = nil
         savedGeneration += 1
+        reloadTask?.cancel()
+        reloadTask = nil
+        lifecycleGeneration += 1
+    }
+
+    /// Starts a tracked reload, only while active. Deactivating cancels it and drops whatever it was about to apply.
+    func startReload() {
+        guard isActive else { return }
+        reloadTask?.cancel()
+        reloadTask = Task { @MainActor [weak self] in await self?.reload() }
     }
 
     /// Recomputes `recoverEnabled` and re-arms tracking of whatever observable state `canRecover` reads.
@@ -109,7 +127,9 @@ struct HomeTake: Identifiable, Equatable {
 
     /// Reloads the text, then attaches saved audio. The text shows first so a slow audio scan never blanks the page.
     func reload() async {
+        let generation = lifecycleGeneration
         await loadText()
+        guard generation == lifecycleGeneration, !Task.isCancelled else { return }
         await refreshSaved()
     }
 
@@ -117,10 +137,14 @@ struct HomeTake: Identifiable, Equatable {
     func loadText() async {
         guard let store else { apply(nil, failure: "Recent dictations are unavailable."); return }
         let limit = Self.limit
+        let fetch = fetchRecent
+        let generation = lifecycleGeneration
         do {
-            let records = try await Task.detached { try store.recentTakes(limit: limit) }.value
+            let records = try await Task.detached { try fetch(store, limit) }.value
+            guard generation == lifecycleGeneration, !Task.isCancelled else { return }
             apply(records, failure: nil)
         } catch {
+            guard generation == lifecycleGeneration, !Task.isCancelled else { return }
             apply(nil, failure: error.localizedDescription)
         }
     }

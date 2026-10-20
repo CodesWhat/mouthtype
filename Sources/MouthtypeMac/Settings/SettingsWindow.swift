@@ -103,7 +103,7 @@ import MouthtypeCore
         let home = model.home
         guard model.page == .home else { home.deactivate(); return }
         home.activate()
-        Task { @MainActor in await home.reload() }
+        home.startReload()
     }
 }
 

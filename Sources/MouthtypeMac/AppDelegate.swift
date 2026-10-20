@@ -236,7 +236,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             recovery.onFinished = { [weak menuBar] in
                 menuBar?.refresh()
                 home.refreshRecoverability()
-                Task { @MainActor in await home.reload() }
+                home.startReload()
             }
         }
         dictation.canStartRecording = { [weak self] in self?.isTerminating != true && self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
