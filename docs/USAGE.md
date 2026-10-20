@@ -48,7 +48,7 @@ Open **Settings → General → Cleanup** to choose the cleanup path: Off keeps 
 
 **Settings → General → Microphone** follows System Default or remembers a named input for Mouthtype. A missing chosen microphone is reported instead of silently using another input. The choice applies to the next take and does not change the Mac’s system input.
 
-**Quiet other audio** and **Live words** are optional and off by default. Quieting mutes supported output while recording and restores the state Mouthtype still owns. Live words shows provisional text above the pill. Preview text can change; the completed take is still transcribed and inserted once. See [Settings](SETTINGS.md) for hardware and execution limits.
+**Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Quieting mutes supported output while recording and restores the state Mouthtype still owns. Live words shows provisional text above the pill. Preview text can change; the completed take is still transcribed and inserted once. See [Settings](SETTINGS.md) for hardware and execution limits.
 
 Choose **Transcribe Audio File…** from the menu to import one WAV, AIFF or M4A up to 10 minutes and 512 MB. The full raw result is selectable, with explicit Copy and Save Text. It preserves the original and does not paste, run cleanup or change dictation statistics. See [file transcription](FILE-TRANSCRIPTION.md).
 

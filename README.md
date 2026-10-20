@@ -42,7 +42,7 @@ Existing alpha.1–3 installations need one manual download to get the built-in 
   <img src="website/public/assets/classic-recording.png" alt="Mouthtype's Classic recording pill showing an active take" width="400">
 </p>
 
-See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current caveats. **Quiet other audio** and **Live words** are optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. A single recording stops after 20 minutes, with a warning at 19. **Control+Command+V** pastes the last delivered take and **Control+Command+C** copies it. Split pastes preserve text and never synthesize a Return key press.
+See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current caveats. **Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. A single recording stops after 20 minutes, with a warning at 19. **Control+Command+V** pastes the last delivered take and **Control+Command+C** copies it. Split pastes preserve text and never synthesize a Return key press.
 
 ## Privacy and permissions
 
