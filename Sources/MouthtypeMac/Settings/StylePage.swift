@@ -54,7 +54,7 @@ struct StyleTabBar: View {
                         .foregroundStyle(selected ? DesignPalette.ink : DesignPalette.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                         .padding(.horizontal, 2).padding(.top, 2).padding(.bottom, 10)
-                        .overlay(alignment: .bottom) { Rectangle().fill(selected ? DesignPalette.accent : Color.clear).frame(height: 2) }
+                        .overlay(alignment: .bottom) { Rectangle().fill(selected ? DesignPalette.ink : Color.clear).frame(height: 2) }
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
@@ -207,7 +207,7 @@ struct StyleToneCard: View {
         for segment in segments {
             var piece = AttributedString(segment.text)
             if segment.added {
-                piece.backgroundColor = DesignPalette.c1
+                piece.backgroundColor = DesignPalette.sel
                 piece.foregroundColor = DesignPalette.ink
             }
             out += piece
@@ -234,7 +234,7 @@ struct StyleToneCard: View {
             .padding(.top, 14).padding(.horizontal, 14).padding(.bottom, 12)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(RoundedRectangle(cornerRadius: 12).fill(DesignPalette.surface))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? DesignPalette.accent : DesignPalette.hair2, lineWidth: selected ? 1.5 : 1))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? DesignPalette.ink : DesignPalette.hair2, lineWidth: selected ? 1.5 : 1))
             .overlay(alignment: .topTrailing) { if selected { StyleCheck().padding(12) } }
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }
@@ -249,8 +249,8 @@ struct StyleToneCard: View {
 
 struct StyleCheck: View {
     var body: some View {
-        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(DesignPalette.onAccent)
-            .frame(width: 18, height: 18).background(Circle().fill(DesignPalette.accent)).accessibilityHidden(true)
+        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(DesignPalette.surface)
+            .frame(width: 18, height: 18).background(Circle().fill(DesignPalette.ink)).accessibilityHidden(true)
     }
 }
 
@@ -338,9 +338,9 @@ struct StyleMembersCard: View {
             Button("Add a website…") { addingSite = true }
         } label: {
             HStack(spacing: 8) {
-                Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(DesignPalette.accent)
-                    .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.accentSoft))
-                Text("Add an app or website").font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.accent)
+                Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(DesignPalette.ink)
+                    .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.sel))
+                Text("Add an app or website").font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
             }
             .padding(.horizontal, 6).frame(minHeight: 32).contentShape(Rectangle())
         }
@@ -367,7 +367,7 @@ struct StyleMembersCard: View {
 
     private func errorRow(_ error: String) -> some View {
         HStack {
-            Text(error).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(Color.red).fixedSize(horizontal: false, vertical: true)
+            Text(error).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.danger).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Button("Reload") { model.refresh() }.buttonStyle(.designSecondary)
         }.padding(.horizontal, 14).padding(.vertical, 8)
@@ -386,14 +386,14 @@ struct StyleMemberIcon: View {
     var body: some View {
         Group {
             if member.kind == .site {
-                Image(systemName: "globe").font(.system(size: 12)).foregroundStyle(DesignPalette.accent)
-                    .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.c1))
+                Image(systemName: "globe").font(.system(size: 12)).foregroundStyle(DesignPalette.ink2)
+                    .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.sel))
             } else if let icon = installedIcon {
                 Image(nsImage: icon).resizable().frame(width: 24, height: 24)
             } else {
                 Text(String(member.name.prefix(1)).uppercased()).font(DesignFont.sans(11, .semibold)).foregroundStyle(Color.white)
                     .frame(width: 24, height: 24)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Self.brand[member.name].map { Color(hex: $0) } ?? DesignPalette.c3))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Self.brand[member.name].map { Color(hex: $0) } ?? DesignPalette.ink3))
             }
         }.accessibilityHidden(true)
     }

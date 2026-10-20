@@ -27,7 +27,7 @@ enum DesignIcon: String, CaseIterable, Identifiable {
     }
 }
 
-/// A pixel icon at its drawn 16 pt, tinted with the symbol colour unless told otherwise. Decorative: the row it sits in carries the label.
+/// A pixel icon at its drawn 16 pt, tinted with the secondary ink unless told otherwise. Decorative: the row it sits in carries the label.
 struct DesignIconView: View {
     let icon: DesignIcon
     var size: CGFloat = 16
@@ -40,7 +40,7 @@ struct DesignIconView: View {
                 Color.clear
             }
         }
-        .foregroundStyle(DesignPalette.symbol)
+        .foregroundStyle(DesignPalette.ink2)
         .frame(width: size, height: size)
         .accessibilityHidden(true)
     }

@@ -56,7 +56,7 @@ struct StyleCleanupTab: View {
         .padding(.top, 14).padding(.horizontal, 14).padding(.bottom, 12)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 12).fill(DesignPalette.surface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? DesignPalette.accent : DesignPalette.hair2, lineWidth: selected ? 1.5 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(selected ? DesignPalette.ink : DesignPalette.hair2, lineWidth: selected ? 1.5 : 1))
         .overlay(alignment: .topTrailing) { if selected { StyleCheck().padding(12) } }
     }
 
@@ -83,21 +83,21 @@ struct StyleCleanupTab: View {
             statusText("NO MODEL · INSTANT")
         } else if selected, let cleaner = actions.cleaner {
             switch cleaner.state {
-            case .ready: HStack(spacing: 6) { Circle().fill(DesignPalette.accent).frame(width: 6, height: 6).accessibilityHidden(true); statusText("READY") }
+            case .ready: HStack(spacing: 6) { Circle().fill(DesignPalette.success).frame(width: 6, height: 6).accessibilityHidden(true); statusText("READY") }
             case .absent, .failed:
                 HStack(spacing: 8) {
                     statusText(cleaner.state == .absent ? "NOT DOWNLOADED" : "FAILED")
                     Button("DOWNLOAD…") {
                         let target = cleaner.downloadTarget
                         if CleanupMenuSection.askToDownload(name: target.modelName, sizeMB: target.downloadSizeMB) { target.startDownload() }
-                    }.buttonStyle(.plain).font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8).foregroundStyle(DesignPalette.accent)
+                    }.buttonStyle(.plain).font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8).foregroundStyle(DesignPalette.ink)
                         .underline().accessibilityLabel("Download the cleanup model")
                 }
             case .downloading(let fraction):
                 HStack(spacing: 8) {
                     statusText("DOWNLOADING \(Int(fraction * 100))%")
                     Button("CANCEL") { cleaner.cancelDownload() }.buttonStyle(.plain).font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8)
-                        .foregroundStyle(DesignPalette.accent).underline().accessibilityLabel("Cancel the model download")
+                        .foregroundStyle(DesignPalette.ink).underline().accessibilityLabel("Cancel the model download")
                 }
             case .loading: statusText("LOADING")
             case .unloaded: statusText("DOWNLOADED · LOADS WHEN NEEDED")
@@ -139,7 +139,7 @@ struct StyleCleanupTab: View {
                     DesignRow(title: override.context.title, detail: detail(override.context)) {
                         Text(override.level.title.uppercased()).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink)
                         Button("Change on its tab") { open(override.context) }.buttonStyle(.plain)
-                            .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.accent)
+                            .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink).underline()
                     }
                 }
                 if ownLevels > 0 {

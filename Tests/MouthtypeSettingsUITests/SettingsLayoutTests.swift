@@ -123,7 +123,7 @@ import MouthtypeCore
         #expect(found > 0)
     }
 
-    @Test func accentIsBrandGreenNotSystemBlue() {
+    @Test func accentIsLimeNotSystemBlue() {
         func resolve(_ color: NSColor, _ name: NSAppearance.Name) -> String {
             var hex = ""
             NSAppearance(named: name)!.performAsCurrentDrawingAppearance {
@@ -132,10 +132,8 @@ import MouthtypeCore
             }
             return hex
         }
-        #expect(resolve(SettingsTheme.controlNS, .aqua) == "315B54")
-        #expect(resolve(SettingsTheme.symbolNS, .aqua) == "315B54")
-        #expect(resolve(SettingsTheme.controlNS, .darkAqua) == "4F8F82")
-        #expect(resolve(SettingsTheme.symbolNS, .darkAqua) == "8FC1B5")
+        #expect(resolve(SettingsTheme.controlNS, .aqua) == "76A11A")
+        #expect(resolve(SettingsTheme.controlNS, .darkAqua) == "A6CD52")
     }
 
     // MARK: Layout

@@ -89,7 +89,7 @@ struct PhraseEditorView: View {
     private func kindBadge(_ kind: TransformKind) -> some View {
         Text(kind.title).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink)
             .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 5).fill(kind == .text ? DesignPalette.c0 : DesignPalette.c1))
+            .background(RoundedRectangle(cornerRadius: 5).fill(kind == .text ? DesignPalette.sel : DesignPalette.track))
             .fixedSize()
             .frame(width: Self.kindColumn, alignment: .leading)
     }

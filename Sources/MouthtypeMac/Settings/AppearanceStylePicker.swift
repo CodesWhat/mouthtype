@@ -54,7 +54,7 @@ private struct AppearanceStyleTile: View {
                 HStack(spacing: 6) {
                     Text(skin.title).font(DesignFont.sans(12.5, .medium)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
                     if selected {
-                        Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(DesignPalette.accent).accessibilityHidden(true)
+                        Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(DesignPalette.ink).accessibilityHidden(true)
                     }
                 }
                 .frame(maxWidth: .infinity)
@@ -62,7 +62,7 @@ private struct AppearanceStyleTile: View {
             .padding(.horizontal, 8).padding(.top, 8).padding(.bottom, 10)
             .background(RoundedRectangle(cornerRadius: 12).fill(DesignPalette.surface))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(DesignPalette.hair2, lineWidth: 1))
-            .overlay { if selected { RoundedRectangle(cornerRadius: 12).strokeBorder(DesignPalette.accent, lineWidth: 1.5) } }
+            .overlay { if selected { RoundedRectangle(cornerRadius: 12).strokeBorder(DesignPalette.ink, lineWidth: 1.5) } }
             .shadow(color: DesignPalette.shadowColor(dark: scheme == .dark), radius: 0.5, y: 1)
             .contentShape(RoundedRectangle(cornerRadius: 12))
         }

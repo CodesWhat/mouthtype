@@ -161,7 +161,7 @@ struct HeardChip: View {
         Text(text).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 5).fill(DesignPalette.c0))
+            .background(RoundedRectangle(cornerRadius: 5).fill(DesignPalette.sel))
     }
 }
 
@@ -222,7 +222,7 @@ struct SpellingWordSheet: View {
                     .font(DesignFont.sans(14)).foregroundStyle(DesignPalette.ink)
                     .padding(.horizontal, 12).frame(height: 34)
                     .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.surface))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(focus == .written ? DesignPalette.accent : DesignPalette.hair, lineWidth: focus == .written ? 2 : 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(focus == .written ? DesignPalette.focus : DesignPalette.hair, lineWidth: focus == .written ? 2 : 1))
                     .focused($focus, equals: .written).onSubmit { focus = .heard }
                     .accessibilityLabel("Written").accessibilityIdentifier("spelling-written")
             }
@@ -238,7 +238,7 @@ struct SpellingWordSheet: View {
                             }.buttonStyle(.plain).accessibilityLabel("Remove \(form)")
                         }
                         .padding(.leading, 8).padding(.trailing, 4).frame(minHeight: 24)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.c0))
+                        .background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.sel))
                     }
                     TextField(editor.heardForms.isEmpty ? "For example, mouth type" : "Another, then Return", text: $editor.heardInput)
                         .textFieldStyle(.plain).font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink)
@@ -248,7 +248,7 @@ struct SpellingWordSheet: View {
                 }
                 .padding(.horizontal, 8).padding(.vertical, 5).frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.surface))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(focus == .heard ? DesignPalette.accent : DesignPalette.hair, lineWidth: focus == .heard ? 2 : 1))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(focus == .heard ? DesignPalette.focus : DesignPalette.hair, lineWidth: focus == .heard ? 2 : 1))
                 Text("What Mouthtype hears when you say it. Matches whole words and phrases, regardless of capitalization. Leave it empty to fix the written form only.")
                     .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3).fixedSize(horizontal: false, vertical: true)
             }

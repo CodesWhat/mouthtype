@@ -126,7 +126,7 @@ struct SpellingSuggestionRow: View {
                     ForEach(suggestion.heardForms, id: \.self) { form in
                         Text(form).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 6).padding(.vertical, 1)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(DesignPalette.c0))
+                            .background(RoundedRectangle(cornerRadius: 4).fill(DesignPalette.sel))
                     }
                     Text("· " + Self.reason(suggestion).replacingOccurrences(of: "Heard ", with: "")).font(DesignFont.sans(DesignFont.detail))
                         .foregroundStyle(DesignPalette.ink2)
@@ -190,7 +190,7 @@ struct SpellingSuggestionRow: View {
             var from = text.startIndex
             while from < text.endIndex, let range = text[from...].range(of: term, options: .caseInsensitive) {
                 text[range].font = DesignFont.sans(DesignFont.detail, .semibold)
-                text[range].backgroundColor = DesignPalette.c1
+                text[range].backgroundColor = DesignPalette.sel
                 from = range.upperBound
             }
         }

@@ -195,7 +195,7 @@ struct FlipCounter: View {
         HStack(spacing: 4) {
             ForEach(Array(text.enumerated()), id: \.offset) { index, character in
                 if character.isNumber {
-                    cell(String(character), accent: index == text.count - 1)
+                    cell(String(character))
                 } else {
                     Text(String(character)).font(DesignFont.mono(24)).foregroundStyle(DesignPalette.ink3)
                         .frame(width: 10).padding(.top, 18).accessibilityHidden(true)
@@ -207,10 +207,10 @@ struct FlipCounter: View {
         .accessibilityLabel("\(text) words")
     }
 
-    private func cell(_ digit: String, accent: Bool) -> some View {
+    private func cell(_ digit: String) -> some View {
         Text(digit).font(DesignFont.mono(30).weight(.medium)).monospacedDigit()
             .contentTransition(reduceMotion ? .identity : .numericText())
-            .foregroundStyle(accent ? DesignPalette.accent : DesignPalette.ink)
+            .foregroundStyle(DesignPalette.ink)
             .frame(width: 36, height: 48)
             .background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.bg))
             .overlay(Rectangle().fill(DesignPalette.hair).frame(height: 1))
@@ -362,7 +362,7 @@ struct StatsTapeCard: View {
     private var legend: some View {
         HStack(spacing: 5) {
             RoundedRectangle(cornerRadius: 2).fill(DesignPalette.surface)
-                .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(DesignPalette.accent, lineWidth: 1.5))
+                .overlay(RoundedRectangle(cornerRadius: 2).strokeBorder(DesignPalette.ink3, lineWidth: 1.5))
                 .frame(width: 8, height: 8)
             Text("AUDIO SAVED, NO TRANSCRIPT").font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8)
                 .foregroundStyle(DesignPalette.ink2).fixedSize(horizontal: false, vertical: true)
@@ -430,18 +430,20 @@ struct StatsTapeCard: View {
         let tall = CGFloat(TapeSlots.height(words: slot.words, maxWords: maxWords))
         let wide: CGFloat = slot.isAllHollow ? 4 : 2.5
         let pad: CGFloat = highlighted ? 3 : 0
+        // Lime only on the peak or hovered needle; every other needle is grey.
+        let mark = highlighted ? DesignPalette.accent : DesignPalette.neutralMark
         return ZStack {
             if slot.isAllHollow {
                 UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).fill(DesignPalette.surface)
-                    .overlay(UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).strokeBorder(DesignPalette.accent, lineWidth: 1))
+                    .overlay(UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).strokeBorder(mark, lineWidth: 1))
             } else {
-                UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).fill(DesignPalette.accent)
+                UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).fill(mark)
             }
         }
         .frame(width: wide, height: tall)
         .overlay(alignment: .top) {
             if slot.hasHollowCap {
-                Circle().fill(DesignPalette.surface).overlay(Circle().strokeBorder(DesignPalette.accent, lineWidth: 1))
+                Circle().fill(DesignPalette.surface).overlay(Circle().strokeBorder(mark, lineWidth: 1))
                     .frame(width: 5, height: 5).offset(y: -6)
             }
         }
@@ -525,7 +527,7 @@ struct StatsSpeedCard: View {
                 HStack(spacing: 14) {
                     key(DesignPalette.accent, "average", report.averageWPM.map { String(Int($0.rounded())) } ?? "none")
                     key(DesignPalette.ink, "peak", report.bestWPM.map { String(Int($0.rounded())) } ?? "none")
-                    key(DesignPalette.accent, "a typist", String(Int(report.typingWPM)), outlined: true)
+                    key(DesignPalette.track, "a typist", String(Int(report.typingWPM)), outlined: true)
                 }
                 if let caption {
                     Text(caption).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
@@ -540,8 +542,9 @@ struct StatsSpeedCard: View {
 
     private func fill(_ index: Int, average: Int?, peak: Int?) -> Color {
         if index == peak { return DesignPalette.ink }
-        if let average, index <= average { return DesignPalette.accent }
-        return DesignPalette.c0
+        if index == average { return DesignPalette.accent }
+        if let average, index < average { return DesignPalette.neutralMark }
+        return DesignPalette.track
     }
 
     private func key(_ color: Color, _ label: String, _ value: String, outlined: Bool = false) -> some View {
@@ -609,8 +612,8 @@ struct StatsStreakCard: View {
     }
 
     private func dotColor(_ index: Int, lit: [Bool]) -> Color {
-        if lit[index] { return DesignPalette.accent }
-        return daily[index].words > 0 ? DesignPalette.c2 : DesignPalette.c0
+        if lit[index] { return DesignPalette.ink }
+        return daily[index].words > 0 ? DesignPalette.neutralMark : DesignPalette.track
     }
 }
 
@@ -675,10 +678,10 @@ struct StatsDayCard: View {
                         let words = hour < hourly.count ? hourly[hour] : 0
                         Group {
                             if words == 0 {
-                                Rectangle().fill(DesignPalette.c0).frame(height: 2)
+                                Rectangle().fill(DesignPalette.track).frame(height: 2)
                             } else {
                                 UnevenRoundedRectangle(topLeadingRadius: 2, topTrailingRadius: 2)
-                                    .fill(hour == peak ? DesignPalette.accent : DesignPalette.c2)
+                                    .fill(hour == peak ? DesignPalette.accent : DesignPalette.neutralMark)
                                     .frame(height: max(3, proxy.size.height * CGFloat(words) / CGFloat(maxWords)))
                             }
                         }

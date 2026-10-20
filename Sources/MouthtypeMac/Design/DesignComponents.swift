@@ -257,7 +257,7 @@ struct DesignSegmented<Value: Hashable>: View {
             }
         }
         .padding(2)
-        .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.c0))
+        .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.sel))
         .onKeyPress(.leftArrow) { step(-1) }
         .onKeyPress(.rightArrow) { step(1) }
         .accessibilityElement(children: .contain).accessibilityLabel(title)
@@ -335,7 +335,7 @@ struct DesignNavRow: View {
                 switch icon {
                 case .pixel(let pixel): DesignIconView(icon: pixel)
                 case .symbol(let name):
-                    Image(systemName: name).font(.system(size: 13)).foregroundStyle(DesignPalette.symbol).frame(width: 16).accessibilityHidden(true)
+                    Image(systemName: name).font(.system(size: 13)).foregroundStyle(DesignPalette.ink2).frame(width: 16).accessibilityHidden(true)
                 }
                 Text(title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
                     .fixedSize(horizontal: false, vertical: true)
@@ -343,6 +343,10 @@ struct DesignNavRow: View {
             }
             .padding(.horizontal, 10).frame(minHeight: height)
             .background { if selected { RoundedRectangle(cornerRadius: 8).fill(DesignPalette.sel) } }
+            .overlay(alignment: .leading) {
+                // The one place the accent marks "you are here": a thin bar on the selected row.
+                if selected { Capsule().fill(DesignPalette.accent).frame(width: 3, height: 16).padding(.leading, 1).accessibilityHidden(true) }
+            }
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
