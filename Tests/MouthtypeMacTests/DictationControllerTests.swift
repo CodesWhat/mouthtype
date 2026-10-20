@@ -233,7 +233,12 @@ private final class FakeInserter: DictationInserting {
     var startFocusSeen: FocusSnapshot?
     var focus = FocusSnapshot(pid: 7, bundleID: "com.apple.Notes", appName: "Notes", role: "AXTextArea")
     var website: String?
-    func websiteHost(for snapshot: FocusSnapshot) -> String? { log.add("inserter.website"); return website }
+    /// How long the fake page-URL read blocks, to stand in for a hung browser.
+    var websiteDelay: TimeInterval = 0
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
+        let value = website, delay = websiteDelay, log = log
+        return { log.add("inserter.website"); if delay > 0 { Thread.sleep(forTimeInterval: delay) }; return value }
+    }
     var context: InsertionContext?
     var clipboard: String?
     private(set) var contextReads = 0
@@ -642,6 +647,30 @@ private struct Rig {
         let plain = Rig()
         await plain.dictate()
         #expect(!plain.log.contains("inserter.website"))
+    }
+
+    @Test func aSlowPageURLReadFallsBackToTheAppRuleAndNeverLeaksIntoTheNextTake() async throws {
+        var styles = AppCleanupStyles()
+        try styles.setWebsite(domain: "slack.com", style: StylePreset.casual.options)
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: StylePreset.veryCasual.options)
+        let configured = styles
+        let rig = Rig(appStyles: { configured })
+        rig.controller.websiteBudget = 0.05
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "work.slack.com"
+        rig.inserter.websiteDelay = 0.6
+        rig.engine.result.text = "See Maya Friday."
+        let started = Date()
+        await rig.dictate()
+        // The hung read costs the take about its budget, not the read's full delay, and the app rule answers.
+        #expect(Date().timeIntervalSince(started) < 0.55)
+        #expect(rig.store.insertion?.cleanup?.style == "veryCasual")
+
+        // A later take with a fast read gets its own site, not the abandoned read's.
+        rig.inserter.websiteDelay = 0
+        rig.inserter.website = "work.slack.com"
+        await rig.dictate()
+        #expect(rig.store.insertion?.cleanup?.style == "casual")
     }
 
     @Test func contextWebsitesApplyWithoutAnyLegacyWebsiteRule() async throws {

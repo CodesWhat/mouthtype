@@ -307,6 +307,7 @@ final class DictationController {
 
         // The capture goes first: nothing else waits ahead of it.
         var startError: Error?
+        var websiteRead: Task<String?, Never>?
         do {
             try await capture.start(keyDownAtNanos: nanos)
         } catch {
@@ -325,12 +326,9 @@ final class DictationController {
             let globalLevel = pipeline.settings().level
             pipeline.smart?.recordingStarted(level: cleanupLevel ?? globalLevel, take: current.id)
             if appStyles.hasWebsiteRules, WebsiteContext.supports(bundleID: startFocus.bundleID) {
-                let websiteHost = inserter.websiteHost(for: startFocus)
-                current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID,
-                    websiteHost: websiteHost, fallback: cleanupStyle)
-                current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
-                if current.cleanupLevel != cleanupLevel, let level = current.cleanupLevel {
-                    pipeline.smart?.recordingStarted(level: level, take: current.id)
+                websiteRead = inserter.websiteHostReader(for: startFocus).map { read in
+                    let budget = websiteBudget
+                    return Task { await Self.boundedRead(read, budget: budget) }
                 }
             }
         }
@@ -341,6 +339,18 @@ final class DictationController {
             )
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
+        // The page URL was read off the main actor while the row opened. It belongs to this recording only, and a read that missed
+        // its budget leaves the app and context resolution above as it was.
+        if let websiteRead, startError == nil {
+            let websiteHost = await websiteRead.value
+            if websiteHost != nil {
+                current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, websiteHost: websiteHost, fallback: cleanupStyle)
+                current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
+                if current.cleanupLevel != cleanupLevel, let level = current.cleanupLevel {
+                    pipeline.smart?.recordingStarted(level: level, take: current.id)
+                }
+            }
+        }
         captureStarting = false
         recordingLive = false
         if let startError {
@@ -355,6 +365,29 @@ final class DictationController {
             await captureInterrupted()
         } else {
             startTimers(for: current)
+        }
+    }
+
+    /// How long a recording waits for the browser's page URL before it goes with the app and context rules.
+    @ObservationIgnored var websiteBudget: TimeInterval = 0.15
+
+    /// Runs a blocking read on a background queue and gives up on it after `budget`. A read that outlives the budget is abandoned,
+    /// not cancelled; each Accessibility call inside it has its own timeout, so it ends shortly after.
+    nonisolated static func boundedRead(_ read: @escaping @Sendable () -> String?, budget: TimeInterval) async -> String? {
+        await withCheckedContinuation { continuation in
+            let once = OnceResume(continuation)
+            DispatchQueue.global(qos: .userInitiated).async { once.resume(read()) }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + budget) { once.resume(nil) }
+        }
+    }
+
+    private final class OnceResume: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<String?, Never>?
+        init(_ continuation: CheckedContinuation<String?, Never>) { self.continuation = continuation }
+        func resume(_ value: String?) {
+            let taken = lock.withLock { () -> CheckedContinuation<String?, Never>? in defer { continuation = nil }; return continuation }
+            taken?.resume(returning: value)
         }
     }
 
