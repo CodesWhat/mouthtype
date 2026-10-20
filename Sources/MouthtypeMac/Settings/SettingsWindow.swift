@@ -34,10 +34,10 @@ import MouthtypeCore
         window.isReleasedWhenClosed = false
         super.init(window: window)
         self.actions.chooseAudioFile = { [weak self] in
-            if let transcription = self?.model.fileTranscription { FileTranscriptionPanels.chooseFile(model: transcription, over: self?.window) }
+            if let transcription = self?.model.fileTranscription { FileTranscriptionPanels.chooseFile(model: transcription, over: self?.topmostWindow) }
         }
         self.actions.saveTranscript = { [weak self] in
-            if let transcription = self?.model.fileTranscription { FileTranscriptionPanels.saveText(model: transcription, over: self?.window) }
+            if let transcription = self?.model.fileTranscription { FileTranscriptionPanels.saveText(model: transcription, over: self?.topmostWindow) }
         }
         applyContent()
         window.setContentSize(Self.contentSize)
@@ -83,8 +83,13 @@ import MouthtypeCore
     }
 
     func present(page: SettingsPage? = nil) {
+        present(destination: page.map { .page($0) })
+    }
+
+    /// Shows the window and goes to `destination`. A page goes through `select`, so an unsaved draft still asks first.
+    func present(destination: SettingsDestination?) {
         startObservingTransparency()
-        if let page { model.select(page) }
+        if let destination { model.open(destination) }
         refreshDiagnostics()
         model.refresh()
         reloadHome()
@@ -109,6 +114,14 @@ import MouthtypeCore
         model.deactivateWords()
     }
 
+    /// The window a new sheet or panel should attach to: the Mouthtype window, or the Settings or Transcribe sheet when one is up,
+    /// so nested editors open on top of it rather than queueing behind it.
+    var topmostWindow: NSWindow? {
+        var top = window
+        while let sheet = top?.attachedSheet { top = sheet }
+        return top
+    }
+
     /// Closing with an unsaved spelling or phrase draft asks first, as the separate editor windows did.
     func windowShouldClose(_ sender: NSWindow) -> Bool { model.resolveDraft(.closing) }
 
@@ -130,7 +143,7 @@ import MouthtypeCore
             home.deactivate()
         }
         let stats = model.stats
-        if model.page == .stats || model.page == .records {
+        if model.page == .stats {
             stats.activate()
         } else {
             stats.deactivate()
@@ -215,68 +228,6 @@ final class SettingsNSWindow: NSWindow {
     }
 }
 
-enum SettingsPage: String, CaseIterable, Identifiable {
-    case home, stats, records, transcribeFile, savedSpellings, phrases, general, writing, appearance, diagnostics
-    var id: String { rawValue }
-    var title: String {
-        switch self { case .savedSpellings: "Saved spellings"; case .transcribeFile: "Transcribe file"; default: rawValue.capitalized }
-    }
-    /// The pages under the sidebar's YOUR WORDS header.
-    static let wordsPages: [SettingsPage] = [.savedSpellings, .phrases]
-    /// The pages under the sidebar's SETTINGS header.
-    static let settingsPages: [SettingsPage] = [.general, .writing, .appearance, .diagnostics]
-    /// The page `offset` rows away, stopping at the first and last pages.
-    func moved(by offset: Int) -> SettingsPage {
-        let pages = Self.allCases
-        let index = pages.firstIndex(of: self) ?? 0
-        return pages[min(max(index + offset, 0), pages.count - 1)]
-    }
-    /// Arrow keys step from the focused sidebar row when there is one, else from the selected page.
-    static func arrowTarget(focused: SettingsPage?, selected: SettingsPage, offset: Int) -> SettingsPage {
-        (focused ?? selected).moved(by: offset)
-    }
-    var icon: String {
-        switch self { case .home: "house"; case .stats: "chart.bar"; case .records: "trophy"; case .transcribeFile: "waveform"; case .savedSpellings: "character.book.closed"; case .phrases: "text.badge.plus"; case .general: "slider.horizontal.3"; case .writing: "textformat"; case .appearance: "paintpalette"; case .diagnostics: "stethoscope" }
-    }
-    var headline: String {
-        switch self {
-        case .home: "Your recent takes."
-        case .stats: "Your numbers."
-        case .records: "Your personal bests."
-        case .transcribeFile: "Turn a recording into text."
-        case .savedSpellings: "Names, spelled your way."
-        case .phrases: "Say less. Insert more."
-        case .general: "A little less typing."
-        case .writing: "Your words. Your way."
-        case .appearance: "Clean by default. Personal by choice."
-        case .diagnostics: "Keep things moving."
-        }
-    }
-    var summary: String {
-        switch self {
-        case .home: "Everything you dictated lately, newest first. Copy it or recover it."
-        case .stats: "Words, speed, streaks and time saved, worked out on this Mac from your log."
-        case .records: "Your fastest, biggest and longest. Just for you, nothing is shared."
-        case .transcribeFile: "Transcribe one audio file on this Mac. Nothing is pasted for you."
-        case .savedSpellings: "Keep names and terms spelled the way you want."
-        case .phrases: "Say a short phrase. Insert exactly the text you saved."
-        case .general: "Set your shortcut, choose your cleanup, and carry on."
-        case .writing: "A finish that feels right, without changing what you mean."
-        case .appearance: "The same Mouthtype underneath. A different little machine when you want one."
-        case .diagnostics: "Model progress, permissions and input. Repairs in one place."
-        }
-    }
-}
-
-/// Sidebar entries that open something instead of selecting a page.
-enum SettingsSidebarLink: String, CaseIterable, Identifiable {
-    case setUp
-    var id: String { rawValue }
-    var title: String { "Set Up Mouthtype…" }
-    var icon: String { "checklist" }
-    var accessibilityID: String { "settings-setup" }
-}
-
 @MainActor struct SettingsActions {
     var openSetup: () -> Void = {}
     var changeShortcut: () -> Void = {}
@@ -295,9 +246,4 @@ enum SettingsSidebarLink: String, CaseIterable, Identifiable {
     var chooseFont: () -> Void = {}
     var updater: AppUpdater?
 
-    func perform(_ link: SettingsSidebarLink) {
-        switch link {
-        case .setUp: openSetup()
-        }
-    }
 }

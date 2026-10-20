@@ -4,20 +4,21 @@ import Foundation
 enum AutomationPage: String, CaseIterable, Equatable {
     case home, settings, stats, records, spellings, phrases, transcribe, general, writing, appearance, diagnostics
 
-    /// The sidebar page this opens in the Mouthtype window. `settings` has no page of its own: it shows the window where it is.
-    var settingsPage: SettingsPage? {
+    /// Where this opens in the Mouthtype window. Old page names map to their new homes: Records is part of Stats, spellings is the
+    /// Dictionary, phrases is Transforms, writing is Style, and General and Diagnostics are pages of the Settings modal (the latter
+    /// renamed Health). `transcribe` is the sheet on Home. `settings` has no destination of its own: it shows the window where it is.
+    var destination: SettingsDestination? {
         switch self {
         case .settings: nil
-        case .home: .home
-        case .stats: .stats
-        case .records: .records
-        case .spellings: .savedSpellings
-        case .phrases: .phrases
+        case .home: .page(.home)
+        case .stats, .records: .page(.stats)
+        case .spellings: .page(.dictionary)
+        case .phrases: .page(.transforms)
         case .transcribe: .transcribeFile
-        case .general: .general
-        case .writing: .writing
-        case .appearance: .appearance
-        case .diagnostics: .diagnostics
+        case .general: .settings(.general)
+        case .writing: .page(.style)
+        case .appearance: .page(.appearance)
+        case .diagnostics: .settings(.health)
         }
     }
 }

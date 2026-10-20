@@ -46,30 +46,39 @@ struct FileTranscriptionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("WAV, AIFF or M4A. Up to 10 minutes and 512 MB.").foregroundStyle(.secondary)
-            HStack {
-                Button("Choose Audio File…", action: choose).disabled(model.isBusy).accessibilityIdentifier("file-choose")
+            Text("WAV, AIFF or M4A. Up to 10 minutes and 512 MB.")
+                .font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button("Choose Audio File\u{2026}", action: choose).buttonStyle(.designPrimary)
+                    .disabled(model.isBusy).accessibilityLabel("Choose an audio file").accessibilityIdentifier("file-choose")
                 Spacer()
                 if model.isBusy {
                     ProgressView().controlSize(.small)
-                    Button("Cancel", action: model.cancel).disabled(model.state == .cancelling).accessibilityIdentifier("file-cancel")
+                    Button("Cancel", action: model.cancel).buttonStyle(.designSecondary)
+                        .disabled(model.state == .cancelling).accessibilityLabel("Cancel transcription")
+                        .accessibilityIdentifier("file-cancel")
                 }
             }
-            Text(status).foregroundStyle(model.state == .failed ? .red : .secondary)
+            Text(status).font(DesignFont.sans(DesignFont.detail))
+                .foregroundStyle(model.state == .failed ? Color.red : DesignPalette.ink2)
                 .fixedSize(horizontal: false, vertical: true).accessibilityIdentifier("file-status")
             ScrollView {
                 Text(model.hasResult ? model.text : "Your transcript appears here. Nothing is pasted automatically.")
-                    .textSelection(.enabled).foregroundStyle(model.hasResult ? .primary : .secondary)
+                    .font(DesignFont.sans(DesignFont.body))
+                    .textSelection(.enabled).foregroundStyle(model.hasResult ? DesignPalette.ink : DesignPalette.ink3)
                     .frame(maxWidth: .infinity, alignment: .topLeading)
                     .padding(14).accessibilityIdentifier("file-result")
             }.frame(minHeight: 200, maxHeight: .infinity)
-                .background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 6))
-                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color(nsColor: .separatorColor)))
-            HStack {
-                Button("Copy", action: model.copy).disabled(!model.hasResult || model.isBusy).accessibilityIdentifier("file-copy")
-                Button("Save Text…", action: save).disabled(!model.hasResult || model.isBusy).accessibilityIdentifier("file-save")
+                .background(RoundedRectangle(cornerRadius: 12).fill(DesignPalette.surface))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(DesignPalette.hair2, lineWidth: 1))
+            HStack(spacing: 8) {
+                Button("Copy", action: model.copy).buttonStyle(.designSecondary)
+                    .disabled(!model.hasResult || model.isBusy).accessibilityLabel("Copy transcript").accessibilityIdentifier("file-copy")
+                Button("Save Text\u{2026}", action: save).buttonStyle(.designSecondary)
+                    .disabled(!model.hasResult || model.isBusy).accessibilityLabel("Save transcript as text").accessibilityIdentifier("file-save")
                 Spacer()
-                Text("Raw transcript · On your Mac").font(.caption).foregroundStyle(.secondary)
+                Text("Raw transcript \u{00B7} On your Mac").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
             }
         }.padding(.horizontal, 24).padding(.top, 6).padding(.bottom, 16)
     }
@@ -97,7 +106,8 @@ struct FileTranscriptionHostPage: View {
         if let transcription = model.fileTranscription {
             FileTranscriptionView(model: transcription, choose: actions.chooseAudioFile, save: actions.saveTranscript)
         } else {
-            SettingsForm { SettingsGroup(eyebrow: "TRANSCRIBE FILE") { SettingsNote(text: "File transcription is unavailable.") } }
+            Text("File transcription is unavailable.").font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
+                .padding(24).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

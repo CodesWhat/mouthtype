@@ -31,7 +31,7 @@ private struct PageEngine: Transcriber {
         let transcription = FileTranscriptionModel(makeJob: { AudioFileTranscription(decoder: PageDecoder(), engine: PageEngine(gate: gate)) }, copy: { _ in })
         let defaults = UserDefaults(suiteName: "FileTranscriptionPage-\(UUID().uuidString)")!
         let model = SettingsModel(defaults: defaults, fileTranscription: transcription)
-        model.page = .transcribeFile
+        model.page = .home
         transcription.start(URL(fileURLWithPath: "/audio.wav"))
         for _ in 0..<500 where await !gate.entered { await Task.yield() }
         return (model, transcription, gate)
@@ -40,12 +40,12 @@ private struct PageEngine: Transcriber {
     @Test func switchingPagesDuringARunKeepsItGoingAndTheResultIsThereOnReturn() async {
         let (model, transcription, gate) = await running()
         #expect(transcription.isBusy)
-        #expect(model.select(.general))
+        #expect(model.select(.style))
         #expect(model.select(.home))
         #expect(transcription.isBusy && transcription.state == .transcribing)
         await gate.release()
         for _ in 0..<500 where transcription.isBusy { await Task.yield() }
-        #expect(model.select(.transcribeFile))
+        #expect(model.open(.transcribeFile) && model.transcribeOpen)
         #expect(transcription.state == .finished && transcription.text == "Finished on another page.")
     }
 

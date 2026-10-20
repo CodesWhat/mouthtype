@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 import MouthtypeCore
 
-/// The Settings window content: a 210 pt sidebar and a grouped-form page under a 46 pt header bar. `solid` swaps the
-/// glass sidebar for an opaque fill (Reduce Transparency, and offscreen renders where glass cannot draw).
+/// The Mouthtype window content: a frosted 212 pt sidebar (Home, Stats, Dictionary, Transforms, Style, Appearance, and a Settings row
+/// that opens the modal) beside the page. `solid` swaps the glass sidebar for an opaque fill (Reduce Transparency, and offscreen
+/// renders where glass cannot draw). Pages live in `SettingsPageHosts.swift`; the modal in `SettingsModalView.swift`.
 struct SettingsView: View {
     @Bindable var model: SettingsModel
     var actions = SettingsActions()
@@ -17,53 +18,27 @@ struct SettingsView: View {
     var body: some View {
         HStack(spacing: 0) {
             sidebar.frame(width: SettingsTheme.sidebarWidth)
-            VStack(spacing: 0) {
-                header
-                switch model.page {
-                case .savedSpellings: SavedSpellingsPage(model: model)
-                case .phrases: PhrasesPage(model: model)
-                case .transcribeFile: FileTranscriptionHostPage(model: model, actions: actions)
-                default: SettingsForm {
-                    switch model.page {
-                    case .savedSpellings, .phrases, .transcribeFile: EmptyView()
-                    case .home: HomePage(model: model.home)
-                    case .stats: StatsHostPage(model: model.stats)
-                    case .records: RecordsHostPage(model: model.stats)
-                    case .general: general
-                    case .writing: writing
-                    case .appearance: appearance
-                    case .diagnostics:
-                        if let diagnostics = actions.diagnostics { SettingsDiagnosticsView(state: diagnostics, model: model, actions: actions) }
-                        else { SettingsGroup(eyebrow: "DIAGNOSTICS") { SettingsNote(text: "Diagnostic status is unavailable.") } }
-                    }
-                }
-                }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Color(nsColor: .windowBackgroundColor))
+            pageContent.frame(maxWidth: .infinity, maxHeight: .infinity).background(DesignPalette.bg)
                 .focusSection()
         }
-        .font(SettingsFont.sans(SettingsFont.body))
-        .foregroundStyle(.primary)
+        .font(DesignFont.sans(DesignFont.body))
+        .foregroundStyle(DesignPalette.ink)
         .tint(SettingsTheme.control)
         .ignoresSafeArea()
         .frame(minWidth: SettingsTheme.minimumSize.width, minHeight: SettingsTheme.minimumSize.height)
+        .sheet(isPresented: $model.settingsOpen) {
+            SettingsModalView(model: model, actions: actions, fullKeyboardAccess: fullKeyboardAccess)
+        }
+        .sheet(isPresented: $model.transcribeOpen) {
+            TranscribeFileSheet(model: model, actions: actions)
+        }
         .onChange(of: model.page) { _, page in
-            // The stats are watched only on their own pages. Moving between Stats and Records keeps one observation.
-            if page == .stats || page == .records { model.stats.activate() } else { model.stats.deactivate() }
+            // The stats are watched only on their own page.
+            if page == .stats { model.stats.activate() } else { model.stats.deactivate() }
             model.syncWords()
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }
-    }
-
-    private var header: some View {
-        let title = Text(model.page.headline).font(SettingsFont.serif(SettingsFont.title))
-            .accessibilityAddTraits(.isHeader)
-        let summary = Text(model.page.summary).font(SettingsFont.sans(SettingsFont.headerDescription)).foregroundStyle(.secondary)
-        return ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 14) { title.fixedSize(); summary.fixedSize() }
-            VStack(alignment: .leading, spacing: 2) { title; summary.fixedSize(horizontal: false, vertical: true) }.padding(.vertical, 6)
-        }.padding(.horizontal, 24).padding(.top, 8)
-            .frame(maxWidth: .infinity, minHeight: SettingsTheme.headerHeight, alignment: .leading)
     }
 
     // MARK: Sidebar
@@ -75,46 +50,33 @@ struct SettingsView: View {
                     Image(nsImage: mark).resizable().interpolation(.high).frame(width: SidebarMark.size, height: SidebarMark.size)
                         .accessibilityHidden(true)
                 }
-                Text("mouthtype").font(SettingsFont.serif(SettingsFont.wordmark))
-            }.padding(.horizontal, 10).padding(.top, 52).padding(.bottom, 22)
+                Text("mouthtype").font(DesignFont.serif(24)).foregroundStyle(DesignPalette.ink)
+            }.padding(.horizontal, 8).padding(.top, 52).padding(.bottom, 20)
             // Arrows bubble up from the focused row (Full Keyboard Access on) and move both selection and focus. With it off,
             // plain buttons never take focus, so the list itself is the focus target and arrows step from the selection.
             // With it on the list stays out of the loop, so Tab walks on into the page instead of cycling in the sidebar.
             // The flag is re-read each time the window becomes key, so toggling Keyboard navigation applies on the next focus.
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 2) {
-                    sidebarPageRow(.home)
-                    sidebarPageRow(.stats)
-                    sidebarPageRow(.records)
-                    sidebarPageRow(.transcribeFile)
-                }
-                Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(SettingsPage.wordsPages) { page in sidebarPageRow(page) }
-                }
-                Text("SETTINGS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8).accessibilityAddTraits(.isHeader)
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(SettingsPage.settingsPages) { page in sidebarPageRow(page) }
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(SettingsPage.allCases) { page in sidebarPageRow(page) }
             }
             .modifier(SidebarListFocus(focusable: SettingsView.sidebarListFocusable(fullKeyboardAccess: keyboardNavigation ?? fullKeyboardAccess())))
             .onKeyPress(.upArrow) { moveSidebar(by: -1) }
             .onKeyPress(.downArrow) { moveSidebar(by: 1) }
             Spacer(minLength: 12)
-            linkRow(.setUp)
-            Text("ON YOUR MAC · \(AppInfo.version)").font(SettingsFont.mono(SettingsFont.footer)).tracking(1).lineSpacing(4)
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 18)
-        }.padding(.horizontal, 10).frame(maxHeight: .infinity, alignment: .topLeading)
+            DesignNavRow(title: "Settings", icon: .pixel(.settings), selected: model.settingsOpen) { model.openSettings() }
+                .accessibilityIdentifier("settings-open")
+            Text(AppInfo.version.first?.isNumber == true ? "v\(AppInfo.version)" : AppInfo.version).font(DesignFont.mono(DesignFont.eyebrow)).tracking(1).foregroundStyle(DesignPalette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10).padding(.top, 14)
+        }.padding(.horizontal, 12).padding(.bottom, 16).frame(maxHeight: .infinity, alignment: .topLeading)
             .focusSection()
-            .background { if solid { Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.04)) } }
-            .overlay(alignment: .trailing) { if solid { Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1) } }
+            .background { DesignSidebarBackground(solid: solid) }
+            .overlay(alignment: .trailing) { Rectangle().fill(DesignPalette.hair2).frame(width: 1) }
     }
 
     private func sidebarPageRow(_ page: SettingsPage) -> some View {
-        sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.select(page) }
+        DesignNavRow(title: page.title, icon: .pixel(page.icon), selected: model.page == page) { model.select(page) }
+            .accessibilityIdentifier("settings-page-" + page.rawValue)
             .focused($sidebarFocus, equals: page)
     }
 
@@ -128,28 +90,12 @@ struct SettingsView: View {
     static func sidebarListFocusable(fullKeyboardAccess: Bool) -> Bool { !fullKeyboardAccess }
 
     @MainActor static func systemFullKeyboardAccess() -> Bool { NSApp?.isFullKeyboardAccessEnabled ?? false }
-
-    private func linkRow(_ link: SettingsSidebarLink) -> some View {
-        sidebarRow(link.title, icon: link.icon, selected: false, id: link.accessibilityID) { actions.perform(link) }
-    }
-
-    private func sidebarRow(_ title: String, icon: String, selected: Bool, id: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Image(systemName: icon).foregroundStyle(SettingsTheme.symbol).frame(width: 18)
-                Text(title).font(SettingsFont.sans(SettingsFont.body)).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-            }.padding(.horizontal, 10).padding(.vertical, 7).contentShape(Rectangle())
-                .background { if selected { RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.1)) } }
-        }.buttonStyle(.plain).accessibilityIdentifier(id)
-            .accessibilityAddTraits(selected ? .isSelected : [])
-    }
 }
 
 /// Makes the sidebar list a focus target only when `focusable`, with its focus ring suppressed (arrows drive selection there). When not
 /// focusable the rows are the focus targets and keep their system focus effect, the only cue for where focus is. Passing `false` to `.focusable(_:)` is not the same as leaving it
 /// off: it disables focus for every descendant, so under Full Keyboard Access the rows lost their own Tab stops.
-private struct SidebarListFocus: ViewModifier {
+struct SidebarListFocus: ViewModifier {
     let focusable: Bool
     @ViewBuilder func body(content: Content) -> some View {
         if focusable { content.focusable().focusEffectDisabled() } else { content }

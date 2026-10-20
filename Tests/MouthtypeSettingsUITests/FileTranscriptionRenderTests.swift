@@ -11,7 +11,7 @@ import Testing
             AudioFileTranscription(decoder: RenderFileDecoder(), engine: RenderFileEngine())
         }, copy: { _ in copies += 1 })
         let settings = SettingsModel(defaults: UserDefaults(suiteName: "FileRender-\(UUID().uuidString)")!, fileTranscription: model)
-        settings.page = .transcribeFile
+        settings.transcribeOpen = true
         try render(settings, size: SettingsTheme.minimumSize, name: "file-idle")
         model.start(URL(fileURLWithPath: "/not-opened/recording.wav"))
         for _ in 0..<500 where model.isBusy { await Task.yield() }
@@ -22,8 +22,8 @@ import Testing
     }
 
     private func render(_ settings: SettingsModel, size: NSSize, name: String) throws {
-        let bitmap = try SettingsRender.render(model: settings, actions: SettingsActions(), dark: false, size: size)
-        #expect(bitmap.pixelsWide >= Int(size.width) && bitmap.pixelsHigh >= Int(size.height))
+        let bitmap = try SettingsRender.render(TranscribeFileSheet(model: settings, actions: SettingsActions()), dark: false, size: NSSize(width: 560, height: 520))
+        #expect(bitmap.pixelsWide >= 560 && bitmap.pixelsHigh >= 520)
         try SettingsRender.save(bitmap, name: name)
     }
 }

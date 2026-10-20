@@ -18,6 +18,34 @@ import Testing
         return (view, window)
     }
 
+    /// Any view hosted offscreen at `size` in a light or dark window, for the Settings modal and sheets (a real sheet cannot draw offscreen).
+    static func host<Content: View>(_ content: Content, dark: Bool, size: NSSize) -> (NSHostingView<AnyView>, NSWindow) {
+        let view = NSHostingView(rootView: AnyView(content.frame(width: size.width, height: size.height)
+            .environment(\.colorScheme, dark ? .dark : .light)))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.contentView = view
+        view.setFrameSize(size)
+        view.layoutSubtreeIfNeeded()
+        return (view, window)
+    }
+
+    static func hostModal(model: SettingsModel, actions: SettingsActions, dark: Bool) -> (NSHostingView<AnyView>, NSWindow) {
+        host(SettingsModalView(model: model, actions: actions), dark: dark, size: NSSize(width: SettingsModalView.size.width, height: SettingsModalView.size.height))
+    }
+
+    static func render<Content: View>(_ content: Content, dark: Bool, size: NSSize) throws -> NSBitmapImageRep {
+        let (view, window) = host(content, dark: dark, size: size)
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        #expect(!window.isVisible)
+        return bitmap
+    }
+
+    static func renderModal(model: SettingsModel, actions: SettingsActions, dark: Bool) throws -> NSBitmapImageRep {
+        try render(SettingsModalView(model: model, actions: actions), dark: dark, size: NSSize(width: SettingsModalView.size.width, height: SettingsModalView.size.height))
+    }
+
     static func render(model: SettingsModel, actions: SettingsActions, dark: Bool,
                        size: NSSize = SettingsTheme.windowSize) throws -> NSBitmapImageRep {
         let (view, window) = host(model: model, actions: actions, dark: dark, size: size)

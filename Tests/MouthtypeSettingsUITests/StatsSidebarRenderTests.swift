@@ -36,7 +36,7 @@ import SwiftUI
         #expect(stats.snapshot?.report.wordsAllTime ?? 0 < 5_000, "the secure take must not be counted")
         let model = SettingsModel(defaults: defaults, stats: stats)
         let size = NSSize(width: 1000, height: 1100)
-        for (page, label) in [(SettingsPage.stats, "stats"), (.records, "records")] {
+        for (page, label) in [(SettingsPage.stats, "stats")] {
             model.page = page
             for dark in [false, true] {
                 let bitmap = try SettingsRender.render(model: model, actions: SettingsActions(), dark: dark, size: size)

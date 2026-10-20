@@ -24,7 +24,7 @@ Turn it off with `defaults delete com.codeswhat.mouthtype automationEnabled`. A 
 | `mouthtype://cancel` | Cancels a hands-free recording. | Cancel Dictation in the menu |
 | `mouthtype://copy-last` | Copies the last delivered text. | Copy Last Take in the menu |
 | `mouthtype://paste-last` | Pastes the last delivered text. | Paste Last Take in the menu |
-| `mouthtype://open?page=<page>` | Shows that page in the Mouthtype window: `home`, `stats`, `records`, `spellings` (Saved spellings), `phrases`, `transcribe` (Transcribe file), `general`, `writing`, `appearance` or `diagnostics`. `settings` or no page shows the window on whatever page it's on. | Settings in the menu |
+| `mouthtype://open?page=<page>` | Shows that page in the Mouthtype window: `home`, `stats`, `records`, `spellings`, `phrases`, `transcribe`, `general`, `writing`, `appearance` or `diagnostics`. The old names keep working and go to their new homes: `records` is Stats, `spellings` is Dictionary, `phrases` is Transforms, `transcribe` is Home with the Transcribe a file sheet open, `writing` is Style, `general` opens the Settings modal on General and `diagnostics` opens it on Health. `settings` or no page shows the window on whatever page it's on. | Settings in the menu |
 
 Every verb goes through the same code as the menu and hotkeys, so the busy, permission, engine-readiness and secure-field checks still apply. Pasting still refuses secure fields and changed destinations. `stop` and `cancel` only act on a hands-free recording, same as the menu. While you're holding the dictation key, `start` and `toggle` do nothing, and two starts fired together begin one recording, and the second shows "Already starting" in the pill and is logged.
 

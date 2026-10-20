@@ -20,6 +20,9 @@ struct AppCleanupStyles: Equatable, Sendable {
     static let preferenceKey = "cleanupAppStyles"
     private(set) var entries: [AppCleanupStyle] = []
     private(set) var websites: [WebsiteCleanupStyle] = []
+    /// The Style page's contexts: Personal, Work, Email and Other, with their built-in apps and websites. The explicit app and website
+    /// rules above are kept exactly as stored and always win over a context.
+    var contexts = StyleContexts()
 
     enum ValidationError: LocalizedError {
         case invalidBundleID, missingAppName, invalidPreferences, invalidDomain
@@ -101,6 +104,7 @@ struct AppCleanupStyles: Equatable, Sendable {
                 }
                 try result.setWebsite(domain: entry.domain, style: style, level: level)
             }
+            result.contexts = StyleContexts.load(defaults)
             return result
         } catch {
             throw ValidationError.invalidPreferences
@@ -116,6 +120,7 @@ struct AppCleanupStyles: Equatable, Sendable {
                           endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue)
         })
         defaults.set(try JSONEncoder().encode(document), forKey: Self.preferenceKey)
+        try contexts.save(to: defaults)
     }
 
     /// A rule that sets neither tone nor level is removed, the same as choosing "Use default" for both.
@@ -173,23 +178,61 @@ struct AppCleanupStyles: Equatable, Sendable {
     }
 
     private func websiteRule(websiteHost: String?, bundleID: String?) -> WebsiteCleanupStyle? {
-        guard let websiteHost, let host = Self.normalizedDomain(websiteHost), WebsiteContext.supports(bundleID: bundleID) else { return nil }
+        guard let host = supportedHost(websiteHost, bundleID: bundleID) else { return nil }
         return websites.filter { host == $0.domain || host.hasSuffix("." + $0.domain) }.max(by: { $0.domain.count < $1.domain.count })
     }
 
-    /// Website rule, then app rule, then the global default; each field falls through on its own.
-    func resolve(bundleID: String?, websiteHost: String? = nil, fallback: StyleOptions) -> StyleOptions {
-        websiteRule(websiteHost: websiteHost, bundleID: bundleID)?.style
-            ?? entries.first { $0.bundleID == bundleID }?.style ?? fallback
+    private func supportedHost(_ websiteHost: String?, bundleID: String?) -> String? {
+        guard let websiteHost, let host = Self.normalizedDomain(websiteHost), WebsiteContext.supports(bundleID: bundleID) else { return nil }
+        return host
     }
 
-    /// Whether any app or website rule sets a level above Off, so cleanup can run for it even when the global level is Off.
+    /// Whether a website can change the result: an explicit website rule, or a site listed in a context.
+    var hasWebsiteRules: Bool {
+        !websites.isEmpty || StyleContextID.allCases.contains { contexts.members($0).contains { $0.kind == .site } }
+    }
+
+    /// The tone and cleanup level one rule or context contributes. A nil field falls through to the next layer.
+    private struct Layer {
+        let style: StyleOptions?
+        let level: CleanupLevel?
+    }
+
+    /// What you configured always beats a built-in default. In order: your website rules (the longest matching domain only, so a
+    /// parent domain never fills its fields in), your app rule, then the contexts' lists (a listed site, then a listed app, whether
+    /// built in or added), then Other, which only carries a cleanup level and only for what no list claims. Each field falls through
+    /// on its own, so with no contexts set up this is the original website-then-app resolution.
+    private func layers(bundleID: String?, websiteHost: String?) -> [Layer] {
+        var result: [Layer] = []
+        var hasListedSite = false
+        let host = supportedHost(websiteHost, bundleID: bundleID)
+        if let host, let rule = websiteRule(websiteHost: host, bundleID: bundleID) { result.append(Layer(style: rule.style, level: rule.level)) }
+        if let rule = entries.first(where: { $0.bundleID == bundleID }) { result.append(Layer(style: rule.style, level: rule.level)) }
+        if let host, let match = contexts.siteMatch(host: host) {
+            hasListedSite = true
+            result.append(Layer(style: contexts.tone(match.context)?.options, level: contexts.level(match.context)))
+        }
+        if let id = contexts.context(bundleID: bundleID) {
+            result.append(Layer(style: contexts.tone(id)?.options, level: contexts.level(id)))
+        } else if !hasListedSite {
+            result.append(Layer(style: nil, level: contexts.level(.other)))
+        }
+        return result
+    }
+
+    /// Your website rule, your app rule, a context's site, a context's app, then the global default.
+    func resolve(bundleID: String?, websiteHost: String? = nil, fallback: StyleOptions) -> StyleOptions {
+        layers(bundleID: bundleID, websiteHost: websiteHost).lazy.compactMap(\.style).first ?? fallback
+    }
+
+    /// Whether any rule or context sets a level above Off, so cleanup can run for it even when the global level is Off.
     var enablesCleanup: Bool {
         entries.contains { $0.level.map { $0 != .off } ?? false } || websites.contains { $0.level.map { $0 != .off } ?? false }
+            || contexts.overridingLevels.contains { $0.level != .off }
     }
 
-    /// Nil means no rule sets a level, so the global level stands.
+    /// Nil means nothing sets a level, so the global level stands.
     func resolveLevel(bundleID: String?, websiteHost: String? = nil) -> CleanupLevel? {
-        websiteRule(websiteHost: websiteHost, bundleID: bundleID)?.level ?? entries.first { $0.bundleID == bundleID }?.level
+        layers(bundleID: bundleID, websiteHost: websiteHost).lazy.compactMap(\.level).first
     }
 }

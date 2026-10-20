@@ -233,7 +233,12 @@ private final class FakeInserter: DictationInserting {
     var startFocusSeen: FocusSnapshot?
     var focus = FocusSnapshot(pid: 7, bundleID: "com.apple.Notes", appName: "Notes", role: "AXTextArea")
     var website: String?
-    func websiteHost(for snapshot: FocusSnapshot) -> String? { log.add("inserter.website"); return website }
+    /// When set, the fake page-URL read blocks on it, to stand in for a hung browser. The test signals it to let the read finish.
+    var websiteGate: DispatchSemaphore?
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
+        let value = website, gate = websiteGate, log = log
+        return { log.add("inserter.website"); _ = gate?.wait(timeout: .now() + 30); return value }
+    }
     var context: InsertionContext?
     var clipboard: String?
     private(set) var contextReads = 0
@@ -642,6 +647,53 @@ private struct Rig {
         let plain = Rig()
         await plain.dictate()
         #expect(!plain.log.contains("inserter.website"))
+    }
+
+    @Test func aSlowPageURLReadFallsBackToTheAppRuleAndNeverLeaksIntoTheNextTake() async throws {
+        var styles = AppCleanupStyles()
+        try styles.setWebsite(domain: "slack.com", style: StylePreset.casual.options)
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: StylePreset.veryCasual.options)
+        let configured = styles
+        let rig = Rig(appStyles: { configured })
+        rig.controller.websiteBudget = 0.05
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "work.slack.com"
+        let gate = DispatchSemaphore(value: 0)
+        rig.inserter.websiteGate = gate
+        rig.engine.result.text = "See Maya Friday."
+        await rig.dictate()
+        // The hung read is abandoned at its budget and the app rule answers.
+        #expect(rig.store.insertion?.cleanup?.style == "veryCasual")
+        gate.signal()
+
+        // A later take with a fast read gets its own site, not the abandoned read's.
+        rig.inserter.websiteGate = nil
+        rig.controller.websiteBudget = 5
+        rig.inserter.website = "work.slack.com"
+        await rig.dictate()
+        #expect(rig.store.insertion?.cleanup?.style == "casual")
+    }
+
+    @Test func contextWebsitesApplyWithoutAnyLegacyWebsiteRule() async throws {
+        let builtIn = AppCleanupStyles()
+        let rig = Rig(appStyles: { builtIn })
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "www.linkedin.com"
+        rig.engine.result.text = "See Maya Friday."
+        await rig.dictate()
+        #expect(rig.log.contains("inserter.website"))
+        #expect(rig.store.insertion?.cleanup?.style == "casual")
+
+        var added = AppCleanupStyles()
+        added.contexts.addSite(.personal, domain: "example.org")
+        added.contexts.setTone(.personal, .veryCasual)
+        let configured = added
+        let custom = Rig(appStyles: { configured })
+        custom.inserter.focus.bundleID = "com.google.Chrome"
+        custom.inserter.website = "example.org"
+        custom.engine.result.text = "See Maya Friday."
+        await custom.dictate()
+        #expect(custom.store.insertion?.cleanup?.style == "veryCasual")
     }
 
     @Test func unknownAppUsesGlobalToneAndOffStillBypassesTone() async throws {

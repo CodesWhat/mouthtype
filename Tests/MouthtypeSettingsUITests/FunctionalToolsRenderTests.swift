@@ -49,11 +49,13 @@ import MouthtypeCore
         model.setAppCleanupLevel(bundleID: "com.apple.Terminal", appName: "Terminal", level: .off)
         #expect(model.appStyles.websites.first?.level == .medium && model.appStyles.entries.first?.level == .off)
         let controller = SettingsWindow(model: model, reduceTransparency: { true })
-        for page in [SettingsPage.general, .writing] {
+        for page in [SettingsPage.style] {
             model.page = page
             controller.window?.contentView = NSHostingView(rootView: SettingsView(model: model, actions: SettingsActions()).frame(width: 1000, height: 690))
             try render(#require(controller.window?.contentView), size: NSSize(width: 1000, height: 690), name: "functional-\(page.rawValue)")
         }
+        controller.window?.contentView = NSHostingView(rootView: SettingsModalView(model: model).frame(width: 760, height: 540))
+        try render(#require(controller.window?.contentView), size: NSSize(width: 760, height: 540), name: "functional-general")
         #expect(controller.window?.isVisible == false)
     }
 }

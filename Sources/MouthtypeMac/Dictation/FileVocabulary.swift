@@ -194,6 +194,47 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         try write(Self.render(entries))
     }
 
+    /// Saves one word, meaning every rule that writes the same spelling, in ONE write. `original` is the word as it was
+    /// loaded (empty for a new word) and must still be in the file exactly, or this throws `.changed`. A rule whose heard
+    /// phrase survives keeps its place and extra keys, dropped phrases are removed, new ones are appended.
+    func saveWord(original: [DictionaryRule], rules: [DictionaryRule]) throws {
+        let rules = rules.map {
+            DictionaryRule(heard: $0.heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
+                written: $0.written.trimmingCharacters(in: .whitespacesAndNewlines), starred: $0.starred)
+        }
+        for rule in rules {
+            if let message = Self.validationMessage(heard: rule.heard, written: rule.written) { throw WriteError.invalid(message) }
+        }
+        guard Set(rules.map { Self.heardKey($0.heard) }).count == rules.count else {
+            throw WriteError.invalid("Each heard phrase can only be listed once.")
+        }
+        var entries = try managedEntries()
+        var originalIndices: [Int] = []
+        for rule in original {
+            guard let index = entries.firstIndex(where: { Self.rule($0) == rule }) else { throw WriteError.changed }
+            originalIndices.append(index)
+        }
+        let others = entries.indices.filter { !originalIndices.contains($0) }.map { Self.heardKey(Self.rule(entries[$0]).heard) }
+        if let clash = rules.first(where: { others.contains(Self.heardKey($0.heard)) }) {
+            throw WriteError.invalid("A spelling for \u{201C}\(clash.heard)\u{201D} already exists.")
+        }
+        var kept = Set<Int>()
+        var added: [[String: Any]] = []
+        for rule in rules {
+            if let position = original.firstIndex(where: { Self.heardKey($0.heard) == Self.heardKey(rule.heard) }) {
+                let index = originalIndices[position]
+                entries[index]["heard"] = rule.heard
+                entries[index]["written"] = rule.written
+                entries[index]["starred"] = rule.starred
+                kept.insert(index)
+            } else {
+                added.append(["heard": rule.heard, "written": rule.written, "starred": rule.starred])
+            }
+        }
+        for index in originalIndices.sorted(by: >) where !kept.contains(index) { entries.remove(at: index) }
+        try write(Self.render(entries + added))
+    }
+
     /// An entry taken out of the file: the raw JSON object and the index it had, so it can be put back exactly.
     struct RemovedEntry: Equatable, Sendable {
         var rule: DictionaryRule

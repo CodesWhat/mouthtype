@@ -138,8 +138,6 @@ struct SetupView: View {
     /// The window extends under the title bar, so the dots sit below the traffic lights (about 28 pt tall) with a gap.
     static let dotsTopInset: CGFloat = 36
 
-    private static let brand = Color(red: 0.19, green: 0.36, blue: 0.34)
-
     private var step: SetupStep { model.readiness.step }
 
     var body: some View {
@@ -183,7 +181,7 @@ struct SetupView: View {
         .frame(width: SetupWindow.contentSize.width, height: SetupWindow.contentSize.height)
         .ignoresSafeArea()
         .font(.custom("InstrumentSans-Regular", size: 14))
-        .tint(Self.brand)
+        .tint(SettingsTheme.control)
         .background { if solid { Color(nsColor: .windowBackgroundColor) } }
     }
 
@@ -265,7 +263,7 @@ struct SetupView: View {
     }
 
     private func action(_ title: String, identifier: String, perform: @escaping () -> Void) -> some View {
-        Button(title, action: perform).buttonStyle(.borderedProminent).controlSize(.large)
+        Button(title, action: perform).buttonStyle(.designPrimary).controlSize(.large)
             .keyboardShortcut(.defaultAction).accessibilityIdentifier(identifier)
     }
 }

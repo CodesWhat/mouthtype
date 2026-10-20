@@ -105,15 +105,15 @@ import MouthtypeCore
         #expect(recorder.calls == ["toggle"])
     }
 
-    @Test func everyOpenPageRoutesToItsSidebarPage() {
-        let expected: [AutomationPage: SettingsPage?] = [
-            .home: .home, .settings: nil, .stats: .stats, .records: .records, .spellings: .savedSpellings,
-            .phrases: .phrases, .transcribe: .transcribeFile, .general: .general, .writing: .writing,
-            .appearance: .appearance, .diagnostics: .diagnostics,
+    @Test func everyOpenPageRoutesToItsNewHome() {
+        let expected: [AutomationPage: SettingsDestination?] = [
+            .home: .page(.home), .settings: nil, .stats: .page(.stats), .records: .page(.stats), .spellings: .page(.dictionary),
+            .phrases: .page(.transforms), .transcribe: .transcribeFile, .general: .settings(.general), .writing: .page(.style),
+            .appearance: .page(.appearance), .diagnostics: .settings(.health),
         ]
         #expect(Set(expected.keys) == Set(AutomationPage.allCases))
         for (page, target) in expected {
-            #expect(page.settingsPage == target)
+            #expect(page.destination == target)
         }
     }
 
@@ -136,20 +136,27 @@ import MouthtypeCore
         model.confirmDiscard = { _, _ in asked += 1; return answer }
         let router = AutomationRouter(actions: AutomationActions(
             startDictation: {}, stopDictation: {}, toggleDictation: {}, cancelDictation: {}, copyLast: {}, pasteLast: {},
-            open: { if let page = $0.settingsPage { model.select(page) } }
+            open: { if let destination = $0.destination { model.open(destination) } }
         ), isEnabled: { false })
 
-        model.page = .savedSpellings
+        model.page = .dictionary
         spellings.newSpelling()
-        spellings.heard = "mouth type"
-        #expect(router.handle(url("mouthtype://open?page=general")) == .performed(.open(.general)))
-        #expect(model.page == .savedSpellings && spellings.isDirty && asked == 1)
+        spellings.heardInput = "mouth type"
+        #expect(router.handle(url("mouthtype://open?page=appearance")) == .performed(.open(.appearance)))
+        #expect(model.page == .dictionary && spellings.isDirty && asked == 1)
 
         answer = true
         router.handle(url("mouthtype://open?page=writing"))
-        #expect(model.page == .writing && !spellings.isDirty && asked == 2)
+        #expect(model.page == .style && !spellings.isDirty && asked == 2)
 
         router.handle(url("mouthtype://open?page=home"))
         #expect(model.page == .home && asked == 2)
+
+        router.handle(url("mouthtype://open?page=diagnostics"))
+        #expect(model.page == .home && model.settingsOpen && model.modalPage == .health)
+        router.handle(url("mouthtype://open?page=records"))
+        #expect(model.page == .stats && !model.settingsOpen)
+        router.handle(url("mouthtype://open?page=transcribe"))
+        #expect(model.page == .home && model.transcribeOpen)
     }
 }

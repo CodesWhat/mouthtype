@@ -77,7 +77,9 @@ struct FocusProbe: Sendable {
 protocol FocusReading: AnyObject {
     func snapshotApplication() -> FocusSnapshot
     func snapshot() -> FocusSnapshot
-    func websiteHost(for snapshot: FocusSnapshot) -> String?
+    /// A read of the browser's page URL that is safe to run off the main actor, or nil when the focus rules out reading it.
+    /// The cheap checks happen here, on the main actor; the Accessibility calls happen inside the returned closure.
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)?
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor
     /// A bounded window of text around the cursor, for the cleanup pass. Nil when the app doesn't say.
     func insertionContext(of element: FocusedElement) -> InsertionContext?
@@ -88,7 +90,7 @@ protocol FocusReading: AnyObject {
 
 extension FocusReading {
     func snapshotApplication() -> FocusSnapshot { snapshot() }
-    func websiteHost(for snapshot: FocusSnapshot) -> String? { nil }
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? { nil }
     func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
     func readField(of element: FocusedElement) -> FieldReading { FieldReading() }
 }
@@ -140,13 +142,12 @@ final class AccessibilityFocusReader: FocusReading {
         return snapshot
     }
 
-    func websiteHost(for snapshot: FocusSnapshot) -> String? {
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
         guard !snapshot.isSecure, !isSecureInputEnabled, WebsiteContext.supports(bundleID: snapshot.bundleID),
               let element = snapshot.element, let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
-              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
-              let window = elementValue(bounded(element.ref), kAXWindowAttribute) else { return nil }
-        // Apple's AXDocument attribute is a URL string. Missing browser support is a fallback, never a guess.
-        return WebsiteContext.host(document: stringValue(bounded(window), kAXDocumentAttribute), bundleID: snapshot.bundleID)
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return nil }
+        let bundleID = snapshot.bundleID
+        return { BrowserURLRead.host(of: element, bundleID: bundleID, timeout: BrowserURLRead.callTimeout) }
     }
 
     /// Diagnostic ownership only. Event delivery still uses the frontmost application.
@@ -317,5 +318,26 @@ final class AccessibilityFocusReader: FocusReading {
             return value.utf16.count
         }
         return nil
+    }
+}
+
+
+/// The page URL read from a browser window's document attribute. Blocking, so callers run it off the main actor under their own
+/// budget; every Accessibility call carries its own messaging timeout so a hung browser cannot hold the thread for long.
+enum BrowserURLRead {
+    /// Per-call Accessibility timeout, in seconds.
+    static let callTimeout: Float = 0.15
+
+    static func host(of element: FocusedElement, bundleID: String?, timeout: Float) -> String? {
+        AXUIElementSetMessagingTimeout(element.ref, timeout)
+        var window: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element.ref, kAXWindowAttribute as CFString, &window) == .success,
+              let window, CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+        let windowRef = window as! AXUIElement
+        AXUIElementSetMessagingTimeout(windowRef, timeout)
+        var document: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(windowRef, kAXDocumentAttribute as CFString, &document) == .success else { return nil }
+        // Apple's AXDocument attribute is a URL string. Missing browser support is a fallback, never a guess.
+        return WebsiteContext.host(document: document as? String, bundleID: bundleID)
     }
 }
