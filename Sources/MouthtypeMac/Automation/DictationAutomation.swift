@@ -60,25 +60,29 @@ extension DictationController {
             return
         }
         guard phase != .recording else { return }
-        automationStartPending = true
+        automationStartGeneration += 1
+        let generation = automationStartGeneration
+        automationStartOwner = generation
         pendingAutomationEnd = nil
-        defer {
-            automationStartPending = false
+        // Ownership ends when the startup does. A later start may own the flags by the time this one returns.
+        func release() {
+            guard automationStartOwner == generation else { return }
+            automationStartOwner = nil
             pendingAutomationEnd = nil
         }
+        defer { release() }
         await handle(.pressed(at: DispatchTime.now().uptimeNanoseconds))
         guard phase == .recording else { return }
         // A stop or cancel that gave up waiting on this start ends the recording as it comes up instead of locking it on.
         if let end = pendingAutomationEnd {
-            pendingAutomationEnd = nil
-            automationStartPending = false
+            release()
             switch end {
             case .stop: await handle(.released(at: DispatchTime.now().uptimeNanoseconds))
             case .cancel: await handle(.cancelled(reason: .escape))
             }
             return
         }
-        automationStartPending = false
+        release()
         await handle(.locked(at: DispatchTime.now().uptimeNanoseconds, trigger: .toggle))
         if isHandsFree { onAutomationLock?() }
     }

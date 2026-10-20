@@ -150,6 +150,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     private let lock = NSLock()
     var failing: Set<String> = []
     var duringBegin: (@MainActor @Sendable () async -> Void)?
+    var duringLock: (@MainActor @Sendable () async -> Void)?
     private(set) var start: DictationStart?
     private(set) var capture: CaptureRecord?
     private(set) var transcription: TranscriptionRecord?
@@ -184,6 +185,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     }
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
         try run("recordLock") { handsFreeLock = (mode, trigger) }
+        await duringLock?()
     }
     func reopen(_ id: String) async throws { try run("reopen") { reopens += 1 } }
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try run("appendEdits") { self.edits += edits } }
@@ -1946,6 +1948,67 @@ private final class FakeCorrections: CorrectionObserving {
             #expect(rig.store.finishes.map(\.0) == [.cancelled])
             #expect(rig.inserter.delivered.isEmpty)
         }
+    }
+
+    @Test(.timeLimit(.minutes(1)), arguments: [true, false])
+    func aCancelOnAHungStartWinsWhicheverOrderTheEndsArrive(cancelFirst: Bool) async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        let start = Task { @MainActor in await rig.controller.startHandsFree() }
+        await rig.settle()
+        if cancelFirst {
+            await rig.controller.cancelHandsFree()
+            rig.controller.stopHandsFree()
+        } else {
+            rig.controller.stopHandsFree()
+            await rig.controller.cancelHandsFree()
+        }
+        #expect(rig.controller.pendingAutomationEnd == .cancel)
+        gate.open()
+        await start.value
+        await rig.controller.waitForProcessing()
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aSlowEarlierStartCannotClearALaterStartsPendingStop() async {
+        let rig = Rig()
+        let lockGate = StartGate()
+        let limit = StartGate()
+        let startB = StartGate()
+        var locks = 0
+        rig.store.duringLock = { locks += 1; if locks == 1 { await lockGate.wait() } }
+        rig.controller.automationWaitLimit = { await limit.wait() }
+        // A comes up hands-free, then suspends writing its lock.
+        rig.controller.enqueueAutomation(.start)
+        while locks == 0 { await Task.yield() }
+        #expect(rig.controller.isHandsFree && !rig.controller.automationStartPending)
+        // Stop A and start B go through once the wait limit fires, and B hangs coming up.
+        rig.capture.duringStart = { await startB.wait() }
+        rig.controller.enqueueAutomation(.stop)
+        rig.controller.enqueueAutomation(.start)
+        limit.open()
+        await rig.settle()
+        #expect(rig.controller.automationStartPending)
+        // A's lock write finishes while B is pending, which used to wipe B's flags.
+        lockGate.open()
+        await rig.settle()
+        #expect(rig.controller.automationStartPending)
+        rig.controller.enqueueAutomation(.stop)
+        let stopB = rig.controller.automationTail
+        await rig.settle()
+        #expect(rig.controller.pendingAutomationEnd == .stop)
+        startB.open()
+        await stopB?.value
+        await rig.controller.waitForProcessing()
+        while rig.controller.phase != .idle { await Task.yield() }
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 2)
     }
 
     @Test func aFailedAutomationStartDropsAStopThatReachedIt() async {

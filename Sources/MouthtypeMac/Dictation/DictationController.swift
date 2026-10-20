@@ -61,9 +61,14 @@ final class DictationController {
     /// True from the moment a press passes its checks until its startup ends. Set before the first suspension, so a
     /// second press (a URL and the hotkey, say) can't also pass the phase check and start a second session.
     @ObservationIgnored private var startReserved = false
+    /// The generation of the automation start that is bringing its recording up, nil once it can lock. A start only
+    /// clears the pending flags while it still owns them, so a slow earlier start can't wipe a later one's.
+    @ObservationIgnored var automationStartOwner: Int?
+    @ObservationIgnored var automationStartGeneration = 0
     /// True while an automation start is bringing its recording up, before it can lock.
-    @ObservationIgnored var automationStartPending = false
-    /// A stop or cancel that reached the pending automation start, applied when the start comes up.
+    var automationStartPending: Bool { automationStartOwner != nil }
+    /// A stop or cancel that reached the pending automation start, applied when the start comes up. A cancel always
+    /// wins: it is never downgraded to a stop, and a stop already waiting is upgraded by a cancel.
     @ObservationIgnored var pendingAutomationEnd: AutomationEnd?
     /// The last queued URL command. Each one waits for the one before, so a stop or cancel lands after the start it follows.
     @ObservationIgnored var automationTail: Task<Void, Never>?
@@ -391,7 +396,7 @@ final class DictationController {
     func stopHandsFree() {
         guard !shuttingDown else { return }
         guard isHandsFree else {
-            if automationStartPending { pendingAutomationEnd = .stop }
+            if automationStartPending, pendingAutomationEnd != .cancel { pendingAutomationEnd = .stop }
             return
         }
         released(at: clock.nowNanos())
