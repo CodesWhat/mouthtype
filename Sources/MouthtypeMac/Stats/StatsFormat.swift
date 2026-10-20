@@ -86,23 +86,11 @@ enum StatsFormat {
         return min(segments - 1, max(0, Int((value / width).rounded(.up)) - 1))
     }
 
-    /// "Missed Sep 27, then 23 straight." with the rule underneath it.
-    static func streakCaption(daily: [DailyWords], current: Int) -> String {
-        let rule = "A day counts with one take, and today carries until midnight."
-        guard current > 0, let last = daily.last else { return "No streak running. \(rule)" }
-        let runEnd = last.words > 0 ? daily.count - 1 : daily.count - 2
-        let beforeRun = runEnd - current
-        if beforeRun >= 0, beforeRun < daily.count {
-            return "Missed \(shortDay(daily[beforeRun].day)), then \(current) straight. \(rule)"
-        }
-        return "\(current) straight. \(rule)"
-    }
-
-    /// The typist comparison for the speed card: "Four times a typist." style, or nothing when slower.
+    /// The typist comparison for the speed card: "4× a typist." style, or nothing when slower.
     static func typistRatio(wpm: Double?, typingWPM: Double) -> String? {
         guard let wpm, typingWPM > 0, wpm / typingWPM >= 1.5 else { return nil }
         let ratio = (wpm / typingWPM * 10).rounded() / 10
         let text = ratio == ratio.rounded() ? String(Int(ratio)) : String(format: "%.1f", ratio)
-        return "\(text) times a typist."
+        return "\(text)× a typist."
     }
 }

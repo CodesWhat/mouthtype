@@ -6,6 +6,9 @@ import MouthtypeCore
 struct StatsHostPage: View {
     var model: StatsModel
 
+    /// Today's tape shows whenever there is a take today, even when the history is only audio with no transcript.
+    static func showsTape(_ snapshot: StatsSnapshot) -> Bool { !snapshot.todayTakes.isEmpty }
+
     var body: some View {
         if let snapshot = model.snapshot, snapshot.hasHistory {
             // Once a minute, so the NOW marker on the tape keeps up without a reload.
@@ -13,10 +16,18 @@ struct StatsHostPage: View {
                 StatsPage(snapshot: snapshot, now: context.date)
             }
         } else {
-            DesignSection(eyebrow: "STATS") {
-                Text(model.error ?? "No stats yet. Dictate something and your numbers show up here.")
-                    .font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
-                    .fixedSize(horizontal: false, vertical: true).padding(16)
+            VStack(alignment: .leading, spacing: 16) {
+                if let snapshot = model.snapshot, Self.showsTape(snapshot) {
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        StatsTapeCard(takes: snapshot.todayTakes, nowSeconds: StatsTimeline.secondsIntoDay(of: context.date, in: .autoupdatingCurrent),
+                                      typingWPM: snapshot.report.typingWPM)
+                    }
+                }
+                DesignSection(eyebrow: "STATS") {
+                    Text(model.error ?? "No stats yet. Dictate something and your numbers show up here.")
+                        .font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true).padding(16)
+                }
             }
         }
     }
@@ -39,9 +50,10 @@ struct StatsPage: View {
                  right: { StatsStreakCard(daily: snapshot.daily, current: report.currentStreakDays, longest: report.longestStreakDays) })
             pair(left: { StatsDayCard(hourly: snapshot.hourlyWords) },
                  right: { StatsHighScoresCard(records: snapshot.records, today: today) })
-            Text("Everything here is worked out on this Mac from your own log. Nothing is shared or sent anywhere, and takes from password fields are never counted.")
+            Text("Worked out on this Mac. Nothing is sent anywhere.")
                 .font(DesignFont.sans(11)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.leading, 4)
+                .help("Everything here is worked out on this Mac from your own log. Nothing is shared or sent anywhere, and takes from password fields are never counted.")
         }
     }
 
@@ -138,13 +150,24 @@ struct StatsHeroCard: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Words, all time").designEyebrow()
             FlipCounter(value: report.wordsAllTime, reduceMotion: reduceMotion)
-            (Text("across \(StatsFormat.number(report.dictationCount)) \(report.dictationCount == 1 ? "take" : "takes")"
-                  + (report.firstDay.map { " since \(StatsFormat.shortDay($0))" } ?? "") + " · ")
-             + Text("\(StatsFormat.number(report.wordsToday)) today").foregroundStyle(DesignPalette.ink)
-             + Text(" · \(StatsFormat.number(report.wordsThisWeek)) this week"))
-                .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
-                .fixedSize(horizontal: false, vertical: true)
+            HStack(alignment: .top, spacing: 28) {
+                figure("Today", StatsFormat.number(report.wordsToday))
+                figure("This week", StatsFormat.number(report.wordsThisWeek))
+                figure("Takes", StatsFormat.number(report.dictationCount))
+            }
+            .padding(.top, 2)
         }
+        .help(report.firstDay.map { "Since \(StatsFormat.shortDay($0))" } ?? "")
+        .accessibilityElement(children: .combine)
+    }
+
+    /// A mono eyebrow over a number.
+    private func figure(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased()).font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8).foregroundStyle(DesignPalette.ink3)
+            Text(value).font(DesignFont.sans(14, .medium)).foregroundStyle(DesignPalette.ink)
+        }
+        .fixedSize()
     }
 
     private func savedBlock(alignment: HorizontalAlignment) -> some View {
@@ -153,8 +176,9 @@ struct StatsHeroCard: View {
                 .font(DesignFont.serif(DesignFont.display)).foregroundStyle(DesignPalette.ink)
                 .multilineTextAlignment(alignment == .trailing ? .trailing : .leading)
                 .fixedSize(horizontal: false, vertical: true)
-            monoLine("\(StatsFormat.talking(minutes: report.speakingMinutes)) TALKING · VS TYPING AT \(Int(report.typingWPM)) WPM")
+            monoLine("\(StatsFormat.talking(minutes: report.speakingMinutes)) TALKING")
                 .multilineTextAlignment(alignment == .trailing ? .trailing : .leading)
+                .help("Time saved is measured against typing at \(Int(report.typingWPM)) words per minute.")
         }
         .frame(maxWidth: 320, alignment: alignment == .trailing ? .trailing : .leading)
     }
@@ -197,16 +221,24 @@ struct FlipCounter: View {
 
 // MARK: Today's tape
 
-/// The hours the tape spans: 8 AM to 8 PM, widened to take in an earlier or later take or the current time.
+/// The hours the tape spans: from a little before the day's first take (or now, if that is earlier) to a little after now or the
+/// last take, never less than three hours, so a busy afternoon gets the room instead of a fixed 8 AM to 8 PM.
 struct TapeRange: Equatable {
+    static let minimumHours = 3
     var start: Int
     var end: Int
 
     init(takes: [TodayTake], nowSeconds: Int) {
-        let first = takes.map(\.secondsIntoDay).min().map { $0 / 3_600 } ?? 8
+        let first = min(takes.map(\.secondsIntoDay).min() ?? nowSeconds, nowSeconds)
         let last = max(takes.map(\.secondsIntoDay).max() ?? 0, nowSeconds)
-        start = max(0, min(8, first))
-        end = min(24, max(20, (last + 3_599) / 3_600))
+        var lower = max(0, (first - 15 * 60) / 3_600)
+        var upper = min(24, (last + 10 * 60 + 3_599) / 3_600)
+        if upper - lower < Self.minimumHours {
+            upper = min(24, lower + Self.minimumHours)
+            lower = max(0, upper - Self.minimumHours)
+        }
+        start = lower
+        end = upper
     }
 
     var span: Double { Double(end - start) * 3_600 }
@@ -214,7 +246,8 @@ struct TapeRange: Equatable {
 
     /// Hours that get a gridline and a label; the right edge is labelled separately.
     var ticks: [Int] {
-        let step = end - start <= 12 ? 2 : (end - start <= 18 ? 3 : 4)
+        let hours = end - start
+        let step = hours <= 6 ? 1 : (hours <= 12 ? 2 : (hours <= 18 ? 3 : 4))
         return stride(from: start, to: end, by: step).map { $0 }
     }
 
@@ -225,20 +258,83 @@ struct TapeRange: Equatable {
     }
 }
 
+/// One needle on the tape: a single take, or several that would have landed closer together than the minimum spacing.
+struct TapeSlot: Equatable {
+    var x: Double
+    var count: Int
+    var words: Int
+    /// Takes in the slot that saved audio but produced no transcript.
+    var hollow: Int
+    var firstSeconds: Int
+    var lastSeconds: Int
+    /// The take itself when the slot holds exactly one.
+    var take: TodayTake?
+
+    var isAllHollow: Bool { hollow == count }
+    var hasHollowCap: Bool { hollow > 0 && hollow < count }
+
+    /// "2:50 to 2:58 PM", or just "2:50 PM" for one moment.
+    var timeLabel: String {
+        let first = StatsFormat.clock(seconds: firstSeconds), last = StatsFormat.clock(seconds: lastSeconds)
+        if first == last { return first }
+        let firstPeriod = first.suffix(2), lastPeriod = last.suffix(2)
+        return (firstPeriod == lastPeriod ? String(first.dropLast(3)) : first) + " to " + last
+    }
+
+    /// "3 takes · 412 words · 2:50 to 2:58 PM".
+    var summary: String {
+        var text = "\(count) \(count == 1 ? "take" : "takes") · \(StatsFormat.number(words)) words · \(timeLabel)"
+        if hollow > 0 { text += " · \(hollow) audio only" }
+        return text
+    }
+}
+
+enum TapeSlots {
+    static let minimumSpacing: Double = 6
+    static let maximumHeight: Double = 44
+
+    /// Takes in time order, grouped so no two slots start closer than `minSpacing` points apart at this width. Each slot sits where its
+    /// first take falls, and its words are the sum.
+    static func merge(_ takes: [TodayTake], range: TapeRange, width: Double, minSpacing: Double = minimumSpacing) -> [TapeSlot] {
+        var slots: [TapeSlot] = []
+        for take in takes.sorted(by: { $0.secondsIntoDay < $1.secondsIntoDay }) {
+            let x = width * range.fraction(take.secondsIntoDay)
+            if var last = slots.last, x - last.x < minSpacing {
+                last.count += 1
+                last.words += take.words
+                last.hollow += take.hasTranscript ? 0 : 1
+                last.lastSeconds = take.secondsIntoDay
+                last.take = nil
+                slots[slots.count - 1] = last
+            } else {
+                slots.append(TapeSlot(x: x, count: 1, words: take.words, hollow: take.hasTranscript ? 0 : 1,
+                                      firstSeconds: take.secondsIntoDay, lastSeconds: take.secondsIntoDay, take: take))
+            }
+        }
+        return slots
+    }
+
+    /// Square-root scale so one long take doesn't flatten the rest. Still strictly taller for more words.
+    static func height(words: Int, maxWords: Int) -> Double {
+        guard words > 0 else { return 8 }
+        return 4 + (maximumHeight - 4) * (Double(words) / Double(max(1, maxWords))).squareRoot()
+    }
+}
+
 struct StatsTapeCard: View {
     let takes: [TodayTake]
     let nowSeconds: Int
     let typingWPM: Double
+    @State private var hovered: Int?
 
     private var range: TapeRange { TapeRange(takes: takes, nowSeconds: nowSeconds) }
-    private var biggest: TodayTake? { takes.filter(\.hasTranscript).max { $0.words < $1.words } }
 
     var body: some View {
         let summary = TodaySummary(takes: takes, typingWPM: typingWPM)
         StatsCard {
             VStack(alignment: .leading, spacing: 10) {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text("Today's tape · every take, by the hour").designEyebrow()
+                    Text("Today's tape").designEyebrow()
                     Spacer(minLength: 0)
                     monoLine("TALLER = MORE WORDS")
                 }
@@ -250,6 +346,7 @@ struct StatsTapeCard: View {
                 }
             }
         }
+        .help("Every take as a needle at its time of day. Takes closer together than the needles can show are merged, and their words added.")
     }
 
     @ViewBuilder private func readouts(_ summary: TodaySummary) -> some View {
@@ -279,18 +376,21 @@ struct StatsTapeCard: View {
 
     private var tape: some View {
         let range = range
-        let maxWords = max(1, takes.map(\.words).max() ?? 1)
-        let biggest = biggest
+        let biggestTake = takes.filter(\.hasTranscript).max { $0.words < $1.words }
         return GeometryReader { proxy in
             let width = proxy.size.width, height = proxy.size.height
+            let slots = TapeSlots.merge(takes, range: range, width: Double(width))
+            let maxWords = max(1, slots.map(\.words).max() ?? 1)
+            let biggest = slots.indices.filter { slots[$0].words > 0 }.max { slots[$0].words < slots[$1].words }
+            let highlighted = hovered.flatMap { $0 < slots.count ? $0 : nil } ?? biggest
             ZStack(alignment: .topLeading) {
                 ForEach(range.ticks.dropFirst(), id: \.self) { hour in
                     Rectangle().fill(DesignPalette.hair2).frame(width: 1, height: height)
                         .offset(x: width * range.fraction(hour * 3_600))
                 }
                 Rectangle().fill(DesignPalette.hair).frame(width: width, height: 1).offset(y: height - 11)
-                ForEach(Array(takes.enumerated()), id: \.offset) { _, take in
-                    needle(take, maxWords: maxWords, isBiggest: take == biggest, width: width, height: height)
+                ForEach(slots.indices, id: \.self) { index in
+                    needle(slots[index], maxWords: maxWords, highlighted: index == highlighted, width: width, height: height)
                 }
                 let nowX = width * range.fraction(nowSeconds)
                 Rectangle().fill(DesignPalette.ink).frame(width: 1.5, height: height - 12).offset(x: nowX - 0.75, y: 6)
@@ -303,51 +403,74 @@ struct StatsTapeCard: View {
                     .frame(width: 24, alignment: .trailing)
             }
             .frame(width: width, height: height, alignment: .topLeading)
+            .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let point):
+                    let nearest = slots.indices.min { abs(slots[$0].x - point.x) < abs(slots[$1].x - point.x) }
+                    hovered = nearest.flatMap { abs(slots[$0].x - point.x) <= TapeSlots.minimumSpacing ? $0 : nil }
+                case .ended:
+                    hovered = nil
+                }
+            }
         }
         .frame(height: 72)
         .background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.bg))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(DesignPalette.hair2, lineWidth: 1))
-        .padding(.top, biggest == nil ? 0 : 8)
+        .padding(.top, biggestTake == nil ? 0 : 8)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(accessibilityLabel(biggest))
+        .accessibilityLabel(accessibilityLabel(biggestTake))
     }
 
     private func axis(_ text: String) -> some View {
         Text(text).font(DesignFont.mono(DesignFont.axis)).foregroundStyle(DesignPalette.ink3).fixedSize()
     }
 
-    private func needle(_ take: TodayTake, maxWords: Int, isBiggest: Bool, width: CGFloat, height: CGFloat) -> some View {
-        let x = width * range.fraction(take.secondsIntoDay)
-        let tall = take.hasTranscript ? 4 + 48 * CGFloat(take.words) / CGFloat(maxWords) : 8
+    private func needle(_ slot: TapeSlot, maxWords: Int, highlighted: Bool, width: CGFloat, height: CGFloat) -> some View {
+        let tall = CGFloat(TapeSlots.height(words: slot.words, maxWords: maxWords))
+        let wide: CGFloat = slot.isAllHollow ? 4 : 2.5
+        let pad: CGFloat = highlighted ? 3 : 0
         return ZStack {
-            if take.hasTranscript {
-                UnevenRoundedRectangle(topLeadingRadius: 3, topTrailingRadius: 3).fill(DesignPalette.accent)
+            if slot.isAllHollow {
+                UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).fill(DesignPalette.surface)
+                    .overlay(UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).strokeBorder(DesignPalette.accent, lineWidth: 1))
             } else {
-                UnevenRoundedRectangle(topLeadingRadius: 3, topTrailingRadius: 3).fill(DesignPalette.surface)
-                    .overlay(UnevenRoundedRectangle(topLeadingRadius: 3, topTrailingRadius: 3).strokeBorder(DesignPalette.accent, lineWidth: 1.5))
+                UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).fill(DesignPalette.accent)
             }
         }
-        .frame(width: 8, height: tall)
-        .padding(isBiggest ? 3 : 0)
-        .overlay(isBiggest ? RoundedRectangle(cornerRadius: 4).strokeBorder(DesignPalette.accent, lineWidth: 1) : nil)
-        .overlay(alignment: callOutAlignment(x: x, width: width)) {
-            if isBiggest { callOut(take).fixedSize().offset(y: -28) }
+        .frame(width: wide, height: tall)
+        .overlay(alignment: .top) {
+            if slot.hasHollowCap {
+                Circle().fill(DesignPalette.surface).overlay(Circle().strokeBorder(DesignPalette.accent, lineWidth: 1))
+                    .frame(width: 5, height: 5).offset(y: -6)
+            }
         }
-        .offset(x: x - 4 - (isBiggest ? 3 : 0), y: height - 11 - tall - (isBiggest ? 3 : 0))
+        .padding(pad)
+        .overlay(highlighted ? RoundedRectangle(cornerRadius: 3).strokeBorder(DesignPalette.accent, lineWidth: 1) : nil)
+        .overlay(alignment: callOutAlignment(x: slot.x, width: width)) {
+            if highlighted { callOut(slot).fixedSize().offset(y: -28) }
+        }
+        .offset(x: slot.x - wide / 2 - pad, y: height - 11 - tall - pad)
         .accessibilityHidden(true)
     }
 
-    private func callOutAlignment(x: CGFloat, width: CGFloat) -> Alignment {
+    private func callOutAlignment(x: Double, width: CGFloat) -> Alignment {
         x < width * 0.22 ? .topLeading : (x > width * 0.78 ? .topTrailing : .top)
     }
 
-    private func callOut(_ take: TodayTake) -> some View {
-        let parts = [StatsFormat.clock(seconds: take.secondsIntoDay), take.appName].compactMap { $0 }.joined(separator: " · ")
-        let tail = StatsFormat.speaking(ms: take.durationMs).map { " · \($0)" } ?? ""
-        return (Text("\(parts) · ") + Text("\(StatsFormat.number(take.words))").fontWeight(.semibold) + Text(" words\(tail)"))
-            .font(DesignFont.sans(11)).foregroundStyle(DesignPalette.bg)
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.ink))
+    private func callOut(_ slot: TapeSlot) -> some View {
+        Group {
+            if let take = slot.take {
+                let parts = [StatsFormat.clock(seconds: take.secondsIntoDay), take.appName].compactMap { $0 }.joined(separator: " · ")
+                let tail = StatsFormat.speaking(ms: take.durationMs).map { " · \($0)" } ?? ""
+                Text("\(parts) · ") + Text("\(StatsFormat.number(take.words))").fontWeight(.semibold) + Text(" words\(tail)")
+            } else {
+                Text(slot.summary)
+            }
+        }
+        .font(DesignFont.sans(11)).foregroundStyle(DesignPalette.bg)
+        .padding(.horizontal, 8).padding(.vertical, 4)
+        .background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.ink))
     }
 
     private func accessibilityLabel(_ biggest: TodayTake?) -> String {
@@ -404,17 +527,16 @@ struct StatsSpeedCard: View {
                     key(DesignPalette.ink, "peak", report.bestWPM.map { String(Int($0.rounded())) } ?? "none")
                     key(DesignPalette.accent, "a typist", String(Int(report.typingWPM)), outlined: true)
                 }
-                Text(caption).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-                    .fixedSize(horizontal: false, vertical: true)
+                if let caption {
+                    Text(caption).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
+        .help("Words over speaking time, from takes of at least \(StatsEngine.minWPMWords) words and \(StatsEngine.minWPMDurationMs / 1_000) seconds.")
     }
 
-    private var caption: String {
-        let base = "Words over speaking time, from takes of at least \(StatsEngine.minWPMWords) words and \(StatsEngine.minWPMDurationMs / 1_000) seconds."
-        guard let ratio = StatsFormat.typistRatio(wpm: report.averageWPM, typingWPM: report.typingWPM) else { return base }
-        return "\(base) \(ratio)"
-    }
+    private var caption: String? { StatsFormat.typistRatio(wpm: report.averageWPM, typingWPM: report.typingWPM) }
 
     private func fill(_ index: Int, average: Int?, peak: Int?) -> Color {
         if index == peak { return DesignPalette.ink }
@@ -467,12 +589,13 @@ struct StatsStreakCard: View {
                             Circle().fill(dotColor(index, lit: lit))
                                 .aspectRatio(1, contentMode: .fit)
                                 .frame(minWidth: 0)
-                                .overlay(index == daily.count - 1 ? Circle().inset(by: -1.5).stroke(DesignPalette.ink, lineWidth: 1.5) : nil)
+                                .overlay(index == daily.count - 1 && daily[index].words == 0
+                                         ? Circle().strokeBorder(DesignPalette.accent, lineWidth: 1.5).background(Circle().fill(DesignPalette.surface)) : nil)
                         }
                     }
                     .padding(.horizontal, 2)
                     .accessibilityElement(children: .ignore)
-                    .accessibilityLabel("\(daily.count) dots, one per day; the last \(lit.filter { $0 }.count) are lit and today is the ringed one")
+                    .accessibilityLabel("\(daily.count) dots, one per day; the last \(lit.filter { $0 }.count) are lit" + (daily.last?.words == 0 ? "; today is an outline until you dictate" : ""))
                     HStack {
                         Text(daily.first.map { StatsFormat.shortDay($0.day).uppercased() } ?? "")
                         Spacer()
@@ -480,10 +603,9 @@ struct StatsStreakCard: View {
                     }
                     .font(DesignFont.mono(DesignFont.axis)).tracking(0.5).foregroundStyle(DesignPalette.ink3).accessibilityHidden(true)
                 }
-                Text(StatsFormat.streakCaption(daily: daily, current: current)).font(DesignFont.sans(DesignFont.caption))
-                    .foregroundStyle(DesignPalette.ink2).fixedSize(horizontal: false, vertical: true)
             }
         }
+        .help("A day counts with one take, and today carries until midnight.")
     }
 
     private func dotColor(_ index: Int, lit: [Bool]) -> Color {
@@ -520,9 +642,9 @@ struct StatsDayCard: View {
         let total = hourly.reduce(0, +)
         let maxWords = max(1, hourly.max() ?? 1)
         StatsCard {
-            HStack(alignment: .bottom, spacing: 18) {
-                text(peak: peak, total: total).frame(maxWidth: .infinity, alignment: .leading)
-                chart(peak: peak, maxWords: maxWords).layoutPriority(1)
+            VStack(alignment: .leading, spacing: 14) {
+                text(peak: peak, total: total)
+                chart(peak: peak, maxWords: maxWords)
             }
         }
     }
@@ -531,41 +653,45 @@ struct StatsDayCard: View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Your day · last \(StatsTimeline.hourWindowDays) days").designEyebrow()
             Text(peak.map { "A \(StatsFormat.hourName($0)) talker." } ?? "No pattern yet.")
-                .font(DesignFont.serif(DesignFont.display)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
-            Text(detail(peak: peak, total: total)).font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
-                .lineSpacing(2).fixedSize(horizontal: false, vertical: true)
+                .font(DesignFont.serif(30)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
+            if let detail = detail(peak: peak, total: total) {
+                Text(detail).font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
-    private func detail(peak: Int?, total: Int) -> String {
-        guard let peak, total > 0 else { return "No takes in the last \(StatsTimeline.hourWindowDays) days." }
-        let share = Int((Double(hourly[peak]) / Double(total) * 100).rounded())
-        return "Your busiest hour of the day, with \(share)% of your words."
+    private func detail(peak: Int?, total: Int) -> String? {
+        guard let peak, total > 0 else { return nil }
+        return "\(Int((Double(hourly[peak]) / Double(total) * 100).rounded()))% of your words."
     }
 
+    /// Stretches to whatever height the card has left, so it matches the card beside it.
     private func chart(peak: Int?, maxWords: Int) -> some View {
         VStack(spacing: 4) {
-            HStack(alignment: .bottom, spacing: 0) {
-                ForEach(0..<StatsTimeline.hoursPerDay, id: \.self) { hour in
-                    let words = hour < hourly.count ? hourly[hour] : 0
-                    Group {
-                        if words == 0 {
-                            Rectangle().fill(DesignPalette.c0).frame(height: 2)
-                        } else {
-                            UnevenRoundedRectangle(topLeadingRadius: 2, topTrailingRadius: 2)
-                                .fill(hour == peak ? DesignPalette.accent : DesignPalette.c2)
-                                .frame(height: max(3, 48 * CGFloat(words) / CGFloat(maxWords)))
+            GeometryReader { proxy in
+                HStack(alignment: .bottom, spacing: 0) {
+                    ForEach(0..<StatsTimeline.hoursPerDay, id: \.self) { hour in
+                        let words = hour < hourly.count ? hourly[hour] : 0
+                        Group {
+                            if words == 0 {
+                                Rectangle().fill(DesignPalette.c0).frame(height: 2)
+                            } else {
+                                UnevenRoundedRectangle(topLeadingRadius: 2, topTrailingRadius: 2)
+                                    .fill(hour == peak ? DesignPalette.accent : DesignPalette.c2)
+                                    .frame(height: max(3, proxy.size.height * CGFloat(words) / CGFloat(maxWords)))
+                            }
                         }
+                        .frame(width: 5)
+                        if hour < StatsTimeline.hoursPerDay - 1 { Spacer(minLength: 0) }
                     }
-                    .frame(width: 4)
-                    if hour < StatsTimeline.hoursPerDay - 1 { Spacer(minLength: 0) }
                 }
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
             }
-            .frame(height: 48, alignment: .bottom)
+            .frame(minHeight: 64, maxHeight: .infinity)
             HStack { Text("12 AM"); Spacer(); Text("NOON"); Spacer(); Text("11 PM") }
                 .font(DesignFont.mono(DesignFont.axis)).tracking(0.5).foregroundStyle(DesignPalette.ink3)
         }
-        .frame(width: 150)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(peak.map { "Words by hour of day over the last \(StatsTimeline.hourWindowDays) days, peaking at \(StatsFormat.hourName($0))" }
                             ?? "Words by hour of day over the last \(StatsTimeline.hourWindowDays) days, no takes")

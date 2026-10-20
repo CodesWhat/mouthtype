@@ -69,19 +69,6 @@ import MouthtypeCore
         try render(snapshot, dark: true, name: nil)
     }
 
-    @Test func tapeRangeWidensForEarlyAndLateTakes() {
-        let early = TodayTake(startedAt: Self.now, secondsIntoDay: 5 * 3_600 + 10, words: 5, durationMs: nil, appName: nil)
-        let late = TodayTake(startedAt: Self.now, secondsIntoDay: 21 * 3_600 + 10, words: 5, durationMs: nil, appName: nil)
-        #expect(TapeRange(takes: [], nowSeconds: 9 * 3_600) == TapeRange(takes: [], nowSeconds: 1))
-        let normal = TapeRange(takes: [], nowSeconds: 9 * 3_600)
-        #expect(normal.start == 8 && normal.end == 20 && normal.ticks == [8, 10, 12, 14, 16, 18])
-        let wide = TapeRange(takes: [early, late], nowSeconds: 22 * 3_600)
-        #expect(wide.start == 5 && wide.end == 22)
-        #expect(wide.fraction(5 * 3_600) == 0 && wide.fraction(22 * 3_600) == 1)
-        #expect(TapeRange(takes: [], nowSeconds: 23 * 3_600 + 1).end == 24)
-        #expect(TapeRange.label(12, edge: false) == "NOON" && TapeRange.label(14, edge: false) == "2" && TapeRange.label(20, edge: true) == "8 PM")
-    }
-
     @Test func formatterHandlesEdges() {
         #expect(StatsFormat.date("2026-10-03") == "Oct 3, 2026")
         #expect(StatsFormat.date("junk") == "junk")
@@ -107,18 +94,114 @@ import MouthtypeCore
         #expect(StatsFormat.meterSegment(40) == 3)
         #expect(StatsFormat.meterSegment(1_000) == 24)
         #expect(StatsFormat.meterSegment(nil) == nil && StatsFormat.meterSegment(0) == nil)
-        #expect(StatsFormat.typistRatio(wpm: 150, typingWPM: 40) == "3.8 times a typist.")
-        #expect(StatsFormat.typistRatio(wpm: 160, typingWPM: 40) == "4 times a typist.")
+        #expect(StatsFormat.typistRatio(wpm: 150, typingWPM: 40) == "3.8× a typist.")
+        #expect(StatsFormat.typistRatio(wpm: 160, typingWPM: 40) == "4× a typist.")
         #expect(StatsFormat.typistRatio(wpm: 45, typingWPM: 40) == nil)
         #expect(StatsFormat.typistRatio(wpm: nil, typingWPM: 40) == nil)
     }
 
-    @Test func streakCaptionNamesTheLastMiss() {
-        func days(_ words: [Int]) -> [DailyWords] { words.enumerated().map { DailyWords(day: "2026-10-\(String(format: "%02d", $0.offset + 1))", words: $0.element) } }
-        let rule = "A day counts with one take, and today carries until midnight."
-        #expect(StatsFormat.streakCaption(daily: days([3, 0, 4, 4, 4]), current: 3) == "Missed Oct 2, then 3 straight. \(rule)")
-        #expect(StatsFormat.streakCaption(daily: days([3, 0, 4, 4, 0]), current: 2) == "Missed Oct 2, then 2 straight. \(rule)")
-        #expect(StatsFormat.streakCaption(daily: days([4, 4, 4]), current: 3) == "3 straight. \(rule)")
-        #expect(StatsFormat.streakCaption(daily: days([4, 0, 0]), current: 0) == "No streak running. \(rule)")
+    @Test func streakTodayIsHollowOnlyBeforeTheFirstTake() throws {
+        var snapshot = Self.snapshot
+        snapshot.daily[snapshot.daily.count - 1].words = 0
+        try render(snapshot, dark: false, name: "stats-streak-today-pending-light")
+        try render(snapshot, dark: true, name: "stats-streak-today-pending-dark")
+        snapshot.daily[snapshot.daily.count - 1].words = 120
+        try render(snapshot, dark: false, name: "stats-streak-today-lit-light")
+    }
+
+    // MARK: Tape
+
+    private func take(_ seconds: Int, words: Int, app: String? = "Slack") -> TodayTake {
+        TodayTake(startedAt: Date(timeIntervalSince1970: Self.midnight + Double(seconds)), secondsIntoDay: seconds, words: words,
+                  durationMs: words * 380, appName: app)
+    }
+
+    /// 48 takes from 9 AM to 2:30 PM, a cluster of five inside one minute, one long take and two audio-only takes.
+    private var denseDay: [TodayTake] {
+        var takes: [TodayTake] = (0..<40).map { take(9 * 3_600 + $0 * 480, words: 12 + ($0 * 37) % 60) }
+        takes += (0..<5).map { take(11 * 3_600 + 10 * 60 + $0 * 10, words: 20 + $0 * 5) }
+        takes.append(take(13 * 3_600, words: 640, app: "Notes"))
+        takes += [take(10 * 3_600 + 25 * 60, words: 0, app: nil), take(12 * 3_600 + 2 * 60, words: 0, app: nil)]
+        return takes.sorted { $0.secondsIntoDay < $1.secondsIntoDay }
+    }
+
+    @Test func tapeRendersADenseAndASparseDay() throws {
+        var snapshot = Self.snapshot
+        snapshot.todayTakes = denseDay
+        try render(snapshot, dark: false, name: "stats-tape-dense-light")
+        try render(snapshot, dark: true, name: "stats-tape-dense-dark")
+        snapshot.todayTakes = [take(13 * 3_600 + 600, words: 60), take(14 * 3_600 + 10, words: 140)]
+        try render(snapshot, dark: false, name: "stats-tape-sparse-light")
+        try render(snapshot, dark: true, name: "stats-tape-sparse-dark")
+    }
+
+    @Test func tapeRangeFitsTheDaysActivity() {
+        let nine = take(9 * 3_600 + 5 * 60, words: 5)
+        let range = TapeRange(takes: [nine], nowSeconds: 14 * 3_600 + 30 * 60)
+        #expect(range.start == 8 && range.end == 15)
+        // Nothing yet: three hours around now, never wider than the day.
+        let empty = TapeRange(takes: [], nowSeconds: 9 * 3_600)
+        #expect(empty.start == 8 && empty.end == 11 && empty.end - empty.start >= TapeRange.minimumHours)
+        let late = TapeRange(takes: [take(23 * 3_600 + 30 * 60, words: 5)], nowSeconds: 23 * 3_600 + 40 * 60)
+        #expect(late.end == 24 && late.start == 21)
+        let wide = TapeRange(takes: [take(5 * 3_600 + 10, words: 5)], nowSeconds: 22 * 3_600)
+        #expect(wide.start == 4 && wide.end == 23)
+        #expect(wide.fraction(wide.start * 3_600) == 0 && wide.fraction(wide.end * 3_600) == 1)
+        #expect(TapeRange.label(12, edge: false) == "NOON" && TapeRange.label(14, edge: false) == "2" && TapeRange.label(20, edge: true) == "8 PM")
+    }
+
+    @Test func slotsNeverOverlapAndKeepTheirWords() {
+        let takes = denseDay
+        let range = TapeRange(takes: takes, nowSeconds: 14 * 3_600 + 30 * 60)
+        for width in [300.0, 600.0, 900.0] {
+            let slots = TapeSlots.merge(takes, range: range, width: width)
+            for index in slots.indices.dropFirst() { #expect(slots[index].x - slots[index - 1].x >= TapeSlots.minimumSpacing) }
+            let slotCount: Int = slots.reduce(0) { $0 + $1.count }
+            let slotWords: Int = slots.reduce(0) { $0 + $1.words }
+            let slotHollow: Int = slots.reduce(0) { $0 + $1.hollow }
+            let takeWords: Int = takes.reduce(0) { $0 + $1.words }
+            #expect(slotCount == takes.count)
+            #expect(slotWords == takeWords)
+            #expect(slotHollow == 2)
+        }
+        let narrow = TapeSlots.merge(takes, range: range, width: 300).count
+        let wide = TapeSlots.merge(takes, range: range, width: 900).count
+        #expect(narrow < wide)
+    }
+
+    @Test func closeTakesMergeIntoOneSlotWithSummedWordsAndALabel() {
+        let range = TapeRange(takes: [], nowSeconds: 15 * 3_600)
+        let takes = [take(14 * 3_600 + 50 * 60, words: 100), take(14 * 3_600 + 54 * 60, words: 200), take(14 * 3_600 + 58 * 60, words: 112)]
+        let slots = TapeSlots.merge(takes, range: range, width: 100)
+        #expect(slots.count == 1)
+        #expect(slots[0].count == 3 && slots[0].words == 412 && slots[0].take == nil)
+        #expect(slots[0].summary == "3 takes · 412 words · 2:50 to 2:58 PM")
+        let across = TapeSlot(x: 0, count: 2, words: 5, hollow: 0, firstSeconds: 11 * 3_600 + 55 * 60, lastSeconds: 12 * 3_600 + 5 * 60, take: nil)
+        #expect(across.timeLabel == "11:55 AM to 12:05 PM")
+        let single = TapeSlots.merge([takes[0]], range: range, width: 100)[0]
+        #expect(single.take == takes[0] && single.timeLabel == "2:50 PM" && single.summary == "1 take · 100 words · 2:50 PM")
+    }
+
+    @Test func hollowTakesStayDistinguishableAfterMerging() {
+        let range = TapeRange(takes: [], nowSeconds: 15 * 3_600)
+        let mixed = TapeSlots.merge([take(14 * 3_600, words: 50), take(14 * 3_600 + 30, words: 0, app: nil)], range: range, width: 100)
+        #expect(mixed.count == 1 && mixed[0].hasHollowCap && !mixed[0].isAllHollow && mixed[0].summary.hasSuffix("1 audio only"))
+        let hollow = TapeSlots.merge([take(14 * 3_600, words: 0, app: nil), take(14 * 3_600 + 30, words: 0, app: nil)], range: range, width: 100)
+        #expect(hollow[0].isAllHollow && !hollow[0].hasHollowCap)
+    }
+
+    @Test func needleHeightScalesBySquareRootAndStaysMonotonic() {
+        let heights = [1, 10, 100, 400, 640].map { TapeSlots.height(words: $0, maxWords: 640) }
+        #expect(zip(heights, heights.dropFirst()).allSatisfy { $0 < $1 })
+        #expect(heights.last == 44)
+        // A 640-word take doesn't flatten a 40-word one: linear would give it under 7% of the height.
+        #expect(TapeSlots.height(words: 40, maxWords: 640) > 4 + 40 * 0.2)
+    }
+
+    @Test func todaysTapeShowsForAnAudioOnlyHistory() throws {
+        var snapshot = StatsSnapshot.make(samples: [], now: Self.now, timeZone: Self.zone)
+        #expect(!snapshot.hasHistory && !StatsHostPage.showsTape(snapshot))
+        snapshot.todayTakes = [take(9 * 3_600, words: 0, app: nil)]
+        #expect(!snapshot.hasHistory && StatsHostPage.showsTape(snapshot))
     }
 }
