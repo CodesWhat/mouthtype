@@ -1,6 +1,6 @@
-# Mouthtype 0.1.0
+# Mouthtype 0.2.0
 
-The first stable release of Mouthtype, for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
+Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
 
 ## Install
 
@@ -13,9 +13,21 @@ The first stable release of Mouthtype, for Apple Silicon Macs running macOS 26 o
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
 
+## What changed in 0.2.0
+
+Transform Selected Text rewrites a selection with Fix grammar, Make shorter, Make more formal or Make more casual on the Thorough model. You get an editable preview with Accept, Retry and Cancel. Accept replaces the text only if the original app, field and selection still match, and Cmd-Z or Copy original gets the old text back.
+
+Boost my saved words while recognising is off by default. It favours your saved spellings during recognition. First use downloads an English speech model of about 100 MB, and dictation never waits for it.
+
+App and website rules can set a cleanup level as well as a tone, so cleanup can be on for one app while it's off elsewhere. Formal tone now removes or softens swearing at Basic, Fast and Thorough. Saved spellings warn when a heard form is an everyday word, like "win", and those aren't used as boost hints.
+
+In Settings, Tab reaches the page controls with macOS Keyboard navigation on, Shift-Tab steps back, and sidebar rows show focus. The Appearance preview offers Light and Dark, and Glass no longer judges itself against Apple's placeholder picture when your wallpaper is a live one.
+
+Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
+
 ## What changed in 0.1.0
 
-Since rc.4, a take cut off by quitting Mouthtype is offered for recovery on the next launch. The docs now say plainly that Tab doesn't reach Settings controls yet; arrow keys move through the sidebar, and a fix is planned for 0.2.
+Since rc.4, a take cut off by quitting Mouthtype is offered for recovery on the next launch. Tab didn't reach Settings controls in 0.1.0; that is fixed in 0.2.0.
 
 ## What changed in rc.4
 
