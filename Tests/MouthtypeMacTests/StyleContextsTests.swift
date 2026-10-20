@@ -79,10 +79,10 @@ import MouthtypeCore
         #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "mail.google.com", fallback: .formal) == casual)
     }
 
-    @Test func moreSpecificBuiltInBeatsABroaderUserWebsiteRule() throws {
+    @Test func aBroaderUserWebsiteRuleBeatsAMoreSpecificBuiltIn() throws {
         var styles = AppCleanupStyles()
         try styles.setWebsite(domain: "google.com", style: veryCasual)
-        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "mail.google.com", fallback: .formal) == .formal)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "mail.google.com", fallback: .formal) == veryCasual)
         #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "docs.google.com", fallback: .formal) == veryCasual)
     }
 

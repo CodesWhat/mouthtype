@@ -21,7 +21,7 @@ struct AppCleanupStyles: Equatable, Sendable {
     private(set) var entries: [AppCleanupStyle] = []
     private(set) var websites: [WebsiteCleanupStyle] = []
     /// The Style page's contexts: Personal, Work, Email and Other, with their built-in apps and websites. The explicit app and website
-    /// rules above are kept exactly as stored and win over a context at the same level.
+    /// rules above are kept exactly as stored and always win over a context.
     var contexts = StyleContexts()
 
     enum ValidationError: LocalizedError {
@@ -198,24 +198,20 @@ struct AppCleanupStyles: Equatable, Sendable {
         let level: CleanupLevel?
     }
 
-    /// Most specific first: websites (longest domain, your own rule over a context's list on a tie), then the app (your own rule
-    /// over its context), then Other, which only carries a cleanup level and only for what no list claims. Each field falls through on its own.
+    /// What you configured always beats a built-in default. In order: your website rules (the longest matching domain only, so a
+    /// parent domain never fills its fields in), your app rule, then the contexts' lists (a listed site, then a listed app, whether
+    /// built in or added), then Other, which only carries a cleanup level and only for what no list claims. Each field falls through
+    /// on its own, so with no contexts set up this is the original website-then-app resolution.
     private func layers(bundleID: String?, websiteHost: String?) -> [Layer] {
         var result: [Layer] = []
         var hasListedSite = false
-        if let host = supportedHost(websiteHost, bundleID: bundleID) {
-            // Like the original resolver, only the most specific legacy website rule counts; a parent domain never fills its fields in.
-            var sites: [(length: Int, rank: Int, layer: Layer)] = []
-            if let rule = websiteRule(websiteHost: host, bundleID: bundleID) {
-                sites.append((rule.domain.count, 2, Layer(style: rule.style, level: rule.level)))
-            }
-            if let match = contexts.siteMatch(host: host) {
-                hasListedSite = true
-                sites.append((match.length, match.isBuiltIn ? 0 : 1, Layer(style: contexts.tone(match.context)?.options, level: contexts.level(match.context))))
-            }
-            result += sites.sorted { ($0.length, $0.rank) > ($1.length, $1.rank) }.map(\.layer)
-        }
+        let host = supportedHost(websiteHost, bundleID: bundleID)
+        if let host, let rule = websiteRule(websiteHost: host, bundleID: bundleID) { result.append(Layer(style: rule.style, level: rule.level)) }
         if let rule = entries.first(where: { $0.bundleID == bundleID }) { result.append(Layer(style: rule.style, level: rule.level)) }
+        if let host, let match = contexts.siteMatch(host: host) {
+            hasListedSite = true
+            result.append(Layer(style: contexts.tone(match.context)?.options, level: contexts.level(match.context)))
+        }
         if let id = contexts.context(bundleID: bundleID) {
             result.append(Layer(style: contexts.tone(id)?.options, level: contexts.level(id)))
         } else if !hasListedSite {
@@ -224,7 +220,7 @@ struct AppCleanupStyles: Equatable, Sendable {
         return result
     }
 
-    /// Website, then app, then the global default; your own rule before a context's list at each step.
+    /// Your website rule, your app rule, a context's site, a context's app, then the global default.
     func resolve(bundleID: String?, websiteHost: String? = nil, fallback: StyleOptions) -> StyleOptions {
         layers(bundleID: bundleID, websiteHost: websiteHost).lazy.compactMap(\.style).first ?? fallback
     }

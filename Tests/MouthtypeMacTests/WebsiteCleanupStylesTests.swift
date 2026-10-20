@@ -77,10 +77,10 @@ import MouthtypeCore
         #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "nope.org", fallback: .formal) == .formal)
     }
 
-    @Test func contextSiteBeatsBrowserRuleAndUserOverrideBeatsBuiltIn() throws {
+    @Test func browserRuleBeatsContextSiteAndWebsiteRuleBeatsBoth() throws {
         var styles = AppCleanupStyles()
         try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: StylePreset.veryCasual.options, level: .off)
-        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "mail.google.com", fallback: .formal) == .formal)
+        #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "mail.google.com", fallback: .formal) == StylePreset.veryCasual.options)
         try styles.setWebsite(domain: "mail.google.com", style: StylePreset.casual.options)
         #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "mail.google.com", fallback: .formal) == StylePreset.casual.options)
         #expect(styles.resolveLevel(bundleID: "com.google.Chrome", websiteHost: "mail.google.com") == CleanupLevel.off)
