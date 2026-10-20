@@ -8,13 +8,13 @@
 
 Natural speech in, clean text out.
 
-[Download the Mac release candidate](https://mouthtype.app/download) · [Getting started](https://mouthtype.app/start/) · [Documentation](https://mouthtype.app/docs/) · [Security](SECURITY.md)
+[Download Mouthtype for Mac](https://mouthtype.app/download) · [Getting started](https://mouthtype.app/start/) · [Documentation](https://mouthtype.app/docs/) · [Security](SECURITY.md)
 
 </div>
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.1.0-rc.3, a release candidate. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
+The Mac app is at 0.2.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The repository remains private; the signed app and corresponding release source are available without repository access.
 
 ## Install
 
@@ -31,7 +31,7 @@ Existing alpha.1–3 installations need one manual download to get the built-in 
 | --- | --- |
 | Hold or hands-free dictation | Hold Fn, double-tap Fn, or use Fn+Space. Recording behavior and shortcuts are configurable. |
 | Local cleanup | Basic formatting works without a cleanup model. Fast (the default level) and Thorough use optional local models and preserve wording. Until the selected model finishes downloading, dictations use Basic. |
-| Writing rules | Choose Formal, Casual or Very casual, with per-app and website tone rules. |
+| Writing rules | Choose Formal, Casual or Very casual, with per-app and website rules for tone and cleanup level. |
 | Saved spellings and phrases | Keep exact local spelling rules and reusable text, including multiline phrases. |
 | Microphone selection | Follow System Default, choose a named input, or opt into an ordered priority list. |
 | Recovery | Copy or retry saved text after a failed paste. Interrupted audio remains recoverable. |
@@ -42,7 +42,7 @@ Existing alpha.1–3 installations need one manual download to get the built-in 
   <img src="website/public/assets/classic-recording.png" alt="Mouthtype's Classic recording pill showing an active take" width="400">
 </p>
 
-See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current prerelease caveats. **Quiet other audio** and **Live words** are optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. A single recording stops after 20 minutes, with a warning at 19. **Control+Command+V** pastes the last delivered take and **Control+Command+C** copies it. Split pastes preserve text and never synthesize a Return key press.
+See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current caveats. **Quiet other audio** and **Live words** are optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. A single recording stops after 20 minutes, with a warning at 19. **Control+Command+V** pastes the last delivered take and **Control+Command+C** copies it. Split pastes preserve text and never synthesize a Return key press.
 
 ## Privacy and permissions
 
@@ -56,7 +56,7 @@ Model downloads and optional update checks use the network. Dictation and cleanu
 
 - [Install, update and remove](docs/READ-ME.md)
 - [Troubleshooting](docs/TROUBLESHOOTING.md)
-- [Known limits for 0.1.0](docs/KNOWN-LIMITS.md)
+- [Known limits for 0.2.0](docs/KNOWN-LIMITS.md)
 - [Settings, tone rules and input selection](docs/SETTINGS.md)
 - [Usage and cleanup reference](docs/USAGE.md)
 - [Spoken commands and counted lists](docs/SPOKEN-COMMANDS.md)

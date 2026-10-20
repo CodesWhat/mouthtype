@@ -163,6 +163,113 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         #expect(model.loads == 2 && model.unloads == 1 && model.isLoaded)
     }
 
+    private final class Flag: @unchecked Sendable {
+        private let lock = NSLock()
+        private var _value = false
+        var value: Bool { lock.withLock { _value } }
+        func set() { lock.withLock { _value = true } }
+    }
+
+    private func readyHost(
+        budget: (@Sendable (Int) -> Duration)? = nil
+    ) async -> (CleanerHost, FakeSmartModel, Level) {
+        let model = FakeSmartModel(downloaded: true)
+        let level = Level()
+        let host = CleanerHost(model: model, level: { level.value }, budget: budget)
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        return (host, model, level)
+    }
+
+    @Test func cancellingReadinessStopsWaitingOnASuspendedLoad() async {
+        let gate = DownloadGate()
+        let model = FakeSmartModel(downloaded: true)
+        model.loadGate = gate
+        let level = Level()
+        let host = CleanerHost(model: model, level: { level.value })
+        host.start()
+        await settle(host) { $0 == .loading }
+        let finished = Flag()
+        let waiting = Task { @MainActor in
+            let info = await host.readiness(waitingUpTo: .seconds(60))
+            finished.set()
+            return info
+        }
+        try? await Task.sleep(for: .milliseconds(40))
+        waiting.cancel()
+        for _ in 0..<100 where !finished.value { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(finished.value)
+        #expect(await waiting.value == nil)
+        await gate.release()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+    }
+
+    @Test func aCancelledTransformNeverReachesTheModel() async {
+        let gate = DownloadGate()
+        let model = FakeSmartModel(downloaded: true)
+        model.loadGate = gate
+        let level = Level()
+        let host = CleanerHost(model: model, level: { level.value })
+        host.start()
+        await settle(host) { $0 == .loading }
+        let task = Task { @MainActor in try await host.transform(.shorter, text: "some text here", waitingUpTo: .seconds(60)) }
+        try? await Task.sleep(for: .milliseconds(40))
+        task.cancel()
+        await gate.release()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        let calls = model.cleanCalls
+        let outcome = await task.result
+        #expect({ if case .failure = outcome { true } else { false } }())
+        #expect(model.cleanCalls == calls)
+    }
+
+    @Test func memoryPressureUnloadWaitsForARunningTransform() async {
+        let (host, model, _) = await readyHost()
+        let gate = DownloadGate()
+        model.cleanGate = gate
+        let baseline = model.cleanCalls
+        let task = Task { @MainActor in try await host.transform(.fixGrammar, text: "some text here", waitingUpTo: .seconds(5)) }
+        for _ in 0..<100 where model.cleanCalls == baseline { try? await Task.sleep(for: .milliseconds(10)) }
+        host.unloadForMemoryPressure()
+        try? await Task.sleep(for: .milliseconds(60))
+        #expect(model.unloads == 0 && model.isLoaded)
+        await gate.release()
+        #expect((try? await task.value) == "some text here")
+        for _ in 0..<100 where model.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.unloads == 1 && !model.isLoaded)
+    }
+
+    @Test func aNewTransformWaitsForACancelledOneToSettle() async {
+        let (host, model, _) = await readyHost()
+        let gate = DownloadGate()
+        model.cleanGate = gate
+        let baseline = model.cleanCalls
+        let first = Task { @MainActor in try await host.transform(.shorter, text: "first text", waitingUpTo: .seconds(5)) }
+        for _ in 0..<100 where model.cleanCalls == baseline { try? await Task.sleep(for: .milliseconds(10)) }
+        first.cancel()
+        let second = Task { @MainActor in try await host.transform(.shorter, text: "second text", waitingUpTo: .seconds(5)) }
+        try? await Task.sleep(for: .milliseconds(80))
+        #expect(model.cleanCalls == baseline + 1)
+        await gate.release()
+        #expect((try? await second.value) == "second text")
+        #expect(model.cleanCalls == baseline + 2)
+        _ = await first.result
+    }
+
+    @Test func dictationCleanupDoesNotRunOnTheModelWhileATransformHoldsIt() async {
+        let (host, model, _) = await readyHost(budget: { _ in .milliseconds(30) })
+        let gate = DownloadGate()
+        model.cleanGate = gate
+        let baseline = model.cleanCalls
+        let task = Task { @MainActor in try await host.transform(.moreFormal, text: "some text here", waitingUpTo: .seconds(5)) }
+        for _ in 0..<100 where model.cleanCalls == baseline { try? await Task.sleep(for: .milliseconds(10)) }
+        let dictation = await host.run(SmartCleanupRequest(text: "keep this take", level: .light))
+        #expect(dictation.outcome == .timeout && dictation.text == "keep this take")
+        #expect(model.cleanCalls == baseline + 1)
+        await gate.release()
+        _ = try? await task.value
+    }
+
     private final class Level {
         var value = CleanupLevel.light
     }

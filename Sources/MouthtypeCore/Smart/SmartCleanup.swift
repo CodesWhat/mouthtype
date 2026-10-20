@@ -32,11 +32,13 @@ public struct SmartCleanupRequest: Sendable {
     public var snippets: [Snippet]
     public var context: InsertionContext?
     public var appName: String?
+    /// Phrases swearing removal must leave alone after the model, such as snippet triggers the caller expands itself.
+    public var protectedPhrases: [String]
 
     public init(
         text: String, level: CleanupLevel, style: StyleOptions = .formal,
         destination: S1MiniControls.Destination = .general, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
-        context: InsertionContext? = nil, appName: String? = nil
+        context: InsertionContext? = nil, appName: String? = nil, protectedPhrases: [String] = []
     ) {
         self.text = text
         self.level = level
@@ -46,6 +48,7 @@ public struct SmartCleanupRequest: Sendable {
         self.snippets = snippets
         self.context = context
         self.appName = appName
+        self.protectedPhrases = protectedPhrases
     }
 }
 
@@ -109,6 +112,8 @@ public actor SmartCleanup {
         var ordinary: [NameJoining.Candidate]
     }
     private var current: Task<Result<Draft, Error>, Never>?
+    /// The explicit selected-text transform holding the model, if any. Dictation waits for it like a stuck generation.
+    private var transforming: Task<Result<String, Error>, Never>?
     private var modelPaused = false
     private let customBudget: Bool
 
@@ -121,10 +126,48 @@ public actor SmartCleanup {
     /// Settle a timed-out generation before unloading its model or exiting the process.
     /// Dictation deadlines still return fallback immediately; only explicit teardown waits here.
     public func waitForPendingWork() async {
-        while let busy = current {
-            _ = await busy.value
-            if current == busy { current = nil }
+        while true {
+            if let busy = current {
+                _ = await busy.value
+                if current == busy { current = nil }
+            } else if let busy = transforming {
+                _ = await busy.value
+                if transforming == busy { transforming = nil }
+            } else {
+                return
+            }
         }
+    }
+
+    /// Runs one explicit transform on the model, one generation at a time with dictation cleanup. It waits for any
+    /// earlier generation (including a cancelled one still settling) and holds the model until its own generation has
+    /// finished, so unload and the next request wait for it. A transform in progress is never cut short by dictation.
+    public func transform(_ kind: TextTransform, text: String) async throws -> String {
+        func unloading() -> CleanerError {
+            .unavailable(reason: "The cleanup model is unloading. Try again in a moment.")
+        }
+        while true {
+            try Task.checkCancellation()
+            if let busy = current {
+                _ = await busy.value
+                if current == busy { current = nil }
+            } else if let busy = transforming {
+                _ = await busy.value
+                if transforming == busy { transforming = nil }
+            } else {
+                break
+            }
+        }
+        guard !modelPaused else { throw unloading() }
+        try Task.checkCancellation()
+        let cleaner = cleaner
+        let work = Task { () -> Result<String, Error> in
+            do { return .success(try await cleaner.clean(text, context: CleanupContext(transform: kind))) } catch { return .failure(error) }
+        }
+        transforming = work
+        let outcome = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+        if transforming == work { transforming = nil }
+        return try outcome.get()
     }
 
     public func pauseForModelUnload() async {
@@ -151,7 +194,8 @@ public actor SmartCleanup {
         guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
 
         let context = CleanupContext(vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
-            level: request.level, before: request.context?.before, after: request.context?.after)
+            level: request.level, before: request.context?.before, after: request.context?.after,
+            omitProfanity: request.style == .formal)
         let joining = NameJoining.candidates(in: request.text,
             spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
         let text = CorrectionCommas.apply(request.text)
@@ -162,9 +206,16 @@ public actor SmartCleanup {
             : min(budget(words) * (settleCorrections ? 2 : 1), .seconds(12))
         let deadline = start + allowance
         // A generation that outlived its own timeout still holds the model; wait for it, within this budget.
-        while let busy = current {
-            guard await Self.finished(busy, by: deadline, clock: clock) else { return finish(.timeout) }
-            if current == busy { current = nil }
+        while true {
+            if let busy = current {
+                guard await Self.finished(busy, by: deadline, clock: clock) else { return finish(.timeout) }
+                if current == busy { current = nil }
+            } else if let busy = transforming {
+                guard await Self.finished(busy, by: deadline, clock: clock) else { return finish(.timeout) }
+                if transforming == busy { transforming = nil }
+            } else {
+                break
+            }
         }
 
         guard !modelPaused else { return finish(.skipped) }
@@ -244,12 +295,14 @@ public actor SmartCleanup {
             whitespace: true, style: request.style
         )
         let rules = request.dictionary.filter { !$0.isJoinedSpelling || !deferredNames.contains($0.written) }
-        return TextPipeline().run(TextPipelineInput(text: text, dictionary: rules, context: request.context, options: options))
+        return TextPipeline().run(TextPipelineInput(
+            text: text, dictionary: rules, context: request.context, options: options,
+            protectedPhrases: request.protectedPhrases + request.dictionary.map(\.heard)))
     }
 
     /// Whether `task` finished before `deadline`. The watcher on the task is not a child of this call, so a task
     /// that ignores cancellation can't hold the caller past the deadline.
-    private static func finished(_ task: Task<Result<Draft, Error>, Never>, by deadline: ContinuousClock.Instant, clock: ContinuousClock) async -> Bool {
+    private static func finished<Value: Sendable>(_ task: Task<Value, Never>, by deadline: ContinuousClock.Instant, clock: ContinuousClock) async -> Bool {
         await waitForCompletion(task, sleep: { try await clock.sleep(until: deadline) })
     }
 

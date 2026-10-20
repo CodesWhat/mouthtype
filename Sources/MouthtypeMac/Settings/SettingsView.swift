@@ -81,7 +81,7 @@ struct SettingsView: View {
                     ForEach(SettingsPage.settingsPages) { page in sidebarPageRow(page) }
                 }
             }
-            .focusable(SettingsView.sidebarListFocusable(fullKeyboardAccess: keyboardNavigation ?? fullKeyboardAccess())).focusEffectDisabled()
+            .modifier(SidebarListFocus(focusable: SettingsView.sidebarListFocusable(fullKeyboardAccess: keyboardNavigation ?? fullKeyboardAccess())))
             .onKeyPress(.upArrow) { moveSidebar(by: -1) }
             .onKeyPress(.downArrow) { moveSidebar(by: 1) }
             Spacer(minLength: 12)
@@ -126,6 +126,16 @@ struct SettingsView: View {
                 .background { if selected { RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.1)) } }
         }.buttonStyle(.plain).accessibilityIdentifier(id)
             .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+/// Makes the sidebar list a focus target only when `focusable`, with its focus ring suppressed (arrows drive selection there). When not
+/// focusable the rows are the focus targets and keep their system focus effect, the only cue for where focus is. Passing `false` to `.focusable(_:)` is not the same as leaving it
+/// off: it disables focus for every descendant, so under Full Keyboard Access the rows lost their own Tab stops.
+private struct SidebarListFocus: ViewModifier {
+    let focusable: Bool
+    @ViewBuilder func body(content: Content) -> some View {
+        if focusable { content.focusable().focusEffectDisabled() } else { content }
     }
 }
 

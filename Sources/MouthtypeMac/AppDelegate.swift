@@ -30,7 +30,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             info: Bundle.main.infoDictionary ?? [:]) ? SparkleDriver() : nil,
         activity: { [weak self] in .resolve(phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true,
             transcribingFile: self?.fileTranscriptionModel.isBusy == true, editingSelection: self?.selectionCleanupModel.hasPreview == true) })
-    private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), busy: { [weak self] in
+    private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), transformer: cleanerHost, busy: { [weak self] in
         guard let self else { return true }
         return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
     }, changed: { [weak self] in self?.appUpdater.refreshActivity() })
@@ -47,10 +47,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }, activityChanged: { [weak self] in
             self?.appUpdater.refreshActivity()
             self?.menuBar?.refresh()
-        }, copy: { text in
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-        })
+        }, copy: { SystemClipboard().write($0) })
     private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
     private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
     private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
@@ -59,7 +56,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
             onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
             onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
-            onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } }),
+            onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
+            onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() }),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
             openSpellings: { [weak self] in self?.spellingWindow.present() },
             openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
@@ -72,6 +70,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             editDictionary: { [weak self] in self?.editDictionary() },
             editPhrasesFile: { [weak self] in self?.editPhrasesFile() },
             chooseFont: { [weak self] in self?.fontChooser.presentFontChooser() }, updater: appUpdater))
+    /// Hands the engine the current bias now, so turning the setting on starts the model download without waiting for a take.
+    private func refreshVocabularyBias() {
+        let bias = VocabularyBoostSetting.bias(enabled: VocabularyBoostSetting.isEnabled(), rules: dictionary.dictionary())
+        let engine = HostEngine(host: engineHost)
+        Task { await engine.setVocabularyBias(bias) }
+    }
+
     private let micCapture = MicCapture()
     private let audioQuiet = RecordingAudioQuiet(output: CoreAudioQuietOutput(), enabled: { QuietAudioPreference.isEnabled() })
     private let microphoneSection = MicrophoneMenuSection()
@@ -162,6 +167,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         cards.onDismiss = { [weak presenter] in presenter?.userDismissed() }
         cardController = cards
         cardPresenter = presenter
+        ProfanityRemover.prewarm()
         var pipeline = DictationPipeline(
             store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
         )
@@ -208,7 +214,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
-        menuBar.add(section: SelectionCleanupMenuSection { [weak self] in self?.selectionCleanupWindow.present() }, startsGroup: false)
+        menuBar.add(section: SelectionCleanupMenuSection(
+            open: { [weak self] in self?.selectionCleanupWindow.present() },
+            openTransform: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
+            unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.fileTranscriptionWindow.present() }, startsGroup: false)
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost] in

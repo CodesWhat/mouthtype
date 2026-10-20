@@ -1,6 +1,17 @@
-# Mac 0.1.0 release readiness
+# Mac 0.2.0 release readiness
 
-Phase3 froze the beta.1 feature set. The rc.1/build11 candidate was followed by rc.2/build12, which adds the visual refresh and default-on update checks, and rc.3/build13, which fixes the rc.2 review findings, before stable0.1.0. The new interface has automated and offscreen rendering coverage only; it adds no physical acceptance. A release candidate is not a declaration that every stable gate has passed. The repository remains private; published app/source/feed assets are verified independently.
+Stable 0.2.0 (build 16) adds selected-text transforms, optional saved-word boosting during recognition, cleanup levels in app and website rules, the Formal swearing change, Settings keyboard access and the Appearance preview change. Stable 0.1.0 (build 15) was cut from the rc.4 tree plus the quit-recovery fix and a docs correction.
+
+Not verified on a device for stable 0.2.0:
+
+- Fresh install on a Mac that has never run Mouthtype.
+- VoiceOver.
+- Bluetooth and USB microphones, and switching microphones.
+- File transcription.
+- The quit-recovery fix, which is covered by a regression test only.
+- Tab navigation in Settings, which is covered by automated tests only.
+
+Phase3 froze the beta.1 feature set. The rc.1/build11 candidate was followed by rc.2/build12, which adds the visual refresh and default-on update checks, rc.3/build13, which fixes the rc.2 review findings, and rc.4/build14, which fixes the rc.3 review findings, before stable0.1.0. The new interface has automated and offscreen rendering coverage only; it adds no physical acceptance. The earlier candidates were not a declaration that every stable gate had passed, and this stable release doesn't claim the unverified items above. The repository remains private; published app/source/feed assets are verified independently.
 
 ## Evidence and remaining gates
 
