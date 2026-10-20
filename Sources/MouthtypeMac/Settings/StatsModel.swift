@@ -27,12 +27,20 @@ import Observation
     @ObservationIgnored private var applied = 0
     /// The model's clock and zone. Replaceable so a test can cross midnight.
     @ObservationIgnored var now: @Sendable () -> Date = { Date() }
-    @ObservationIgnored var timeZone: TimeZone = .current
+    /// Read afresh for every query and midnight schedule, so a time zone change takes effect on the next refresh.
+    @ObservationIgnored var timeZoneProvider: @Sendable () -> TimeZone = { TimeZone.autoupdatingCurrent }
     /// Waits out a delay. Replaceable so a test doesn't wait for real midnight.
     @ObservationIgnored var sleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     /// The off-main read behind `load()`. Replaceable so a test can make it slow.
     @ObservationIgnored var fetch: @Sendable (TranscriptStore, Date, TimeZone) throws -> StatsSnapshot = { store, now, zone in
         try store.statsSnapshot(now: now, timeZone: zone)
+    }
+    /// Starts the store observation. Replaceable so a test can make it fail.
+    @ObservationIgnored var startObservation: (TranscriptStore, TimeZone, @escaping @Sendable () -> Date,
+                                               @escaping @Sendable (Error) -> Void,
+                                               @escaping @Sendable (StatsSnapshot) -> Void) -> TakesObservation? = {
+        store, zone, clock, onError, onChange in
+        store.observeStats(timeZone: zone, now: clock, onError: onError, onChange: onChange)
     }
     /// Nil until the first load finishes.
     private(set) var snapshot: StatsSnapshot?
@@ -73,7 +81,7 @@ import Observation
     func load() async {
         guard let store else { apply(nil, failure: "Stats are unavailable."); return }
         let read = fetch
-        let (instant, zone) = (now(), timeZone)
+        let (instant, zone) = (now(), timeZoneProvider())
         let generation = lifecycleGeneration
         issued += 1
         let ticket = issued
@@ -95,13 +103,21 @@ import Observation
         rolloverTask?.cancel()
         rolloverTask = nil
         removeRolloverObservers()
-        guard let store else { return }
+        guard let store else {
+            if isActive { apply(nil, failure: "Stats are unavailable.") }
+            return
+        }
         let generation = lifecycleGeneration
         let clock = now
         scheduleRollover()
-        observation = store.observeStats(timeZone: timeZone, now: clock, onError: { error in
+        observation = startObservation(store, timeZoneProvider(), clock, { [weak self] error in
             Log.app.error("stats observation failed: \(error.localizedDescription, privacy: .public)")
-        }, onChange: { [weak self] snapshot in
+            let message = error.localizedDescription
+            MainActor.assumeIsolated {
+                guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
+                self.apply(nil, failure: message)
+            }
+        }, { [weak self] snapshot in
             MainActor.assumeIsolated {
                 guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
                 // Newer than any read already in flight, so a slower earlier one can't overwrite it.
@@ -157,7 +173,7 @@ import Observation
 
     private func untilNextMidnight() -> (delay: Duration, sleep: @Sendable (Duration) async throws -> Void) {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = timeZone
+        calendar.timeZone = timeZoneProvider()
         let current = now()
         let midnight = calendar.nextDate(after: current, matching: DateComponents(hour: 0, minute: 0, second: 0),
                                          matchingPolicy: .nextTime) ?? current.addingTimeInterval(3_600)

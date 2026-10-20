@@ -129,7 +129,7 @@ import Testing
         let clock = Clock(evening)
         let model = StatsModel(store: store, observing: false)
         model.now = { clock.current }
-        model.timeZone = zone
+        model.timeZoneProvider = { zone }
         model.sleep = { duration in
             if clock.record(duration) == 1 {
                 clock.advance(to: nextMorning)
@@ -163,6 +163,78 @@ import Testing
         await waitUntil { model.snapshot?.daily.last?.day != today }
         #expect(model.snapshot?.daily.last?.day != today)
         #expect(model.snapshot?.report.wordsToday == 0)
+        model.deactivate()
+    }
+
+    private final class Zone: @unchecked Sendable {
+        private let lock = NSLock()
+        private var zone: TimeZone
+        init(_ zone: TimeZone) { self.zone = zone }
+        var current: TimeZone { lock.withLock { zone } }
+        func set(_ new: TimeZone) { lock.withLock { zone = new } }
+    }
+
+    @Test func aTimeZoneChangeRecomputesInTheNewZone() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let tokyo = try #require(TimeZone(identifier: "Asia/Tokyo"))
+        let honolulu = try #require(TimeZone(identifier: "Pacific/Honolulu"))
+        // 2026-03-10 20:00 UTC is Mar 11 in Tokyo and Mar 10 in Honolulu.
+        let instant = Date(timeIntervalSince1970: 1_773_172_800)
+        let id = try store.begin(DictationStart(startedAt: instant.addingTimeInterval(-60)))
+        try store.recordInsertion(id, InsertionRecord(finalText: "one two three"))
+        let zone = Zone(tokyo)
+        let model = StatsModel(store: store, observing: false)
+        model.now = { instant }
+        model.timeZoneProvider = { zone.current }
+        model.sleep = { _ in try await Task.sleep(for: .seconds(3_600)) }
+        model.activate()
+        await waitUntil { model.snapshot?.daily.last?.day == "2026-03-11" }
+        #expect(model.snapshot?.daily.last?.day == "2026-03-11")
+        zone.set(honolulu)
+        NotificationCenter.default.post(name: .NSSystemTimeZoneDidChange, object: nil)
+        await waitUntil { model.snapshot?.daily.last?.day == "2026-03-10" }
+        #expect(model.snapshot?.daily.last?.day == "2026-03-10")
+        model.deactivate()
+    }
+
+    @Test func aMissingStoreWhileActiveShowsTheUnavailableState() async throws {
+        let model = StatsModel(store: nil, observing: false)
+        model.activate()
+        #expect(model.snapshot == nil && model.error == "Stats are unavailable.")
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "one two")
+        model.store = store
+        await waitUntil { model.error == nil && model.snapshot != nil }
+        #expect(model.error == nil)
+        #expect(model.snapshot?.report.wordsAllTime == 2)
+        model.deactivate()
+    }
+
+    @Test func anObservationErrorShowsAndASuccessfulDeliveryClearsIt() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "one two")
+        let model = StatsModel(store: store, observing: false)
+        model.activate()
+        await waitUntil { model.snapshot != nil }
+        model.startObservation = { _, _, _, onError, _ in
+            DispatchQueue.main.async { onError(CocoaError(.fileReadUnknown)) }
+            return nil
+        }
+        model.deactivate()
+        model.activate()
+        await waitUntil { model.error != nil }
+        #expect(model.error != nil)
+        #expect(model.snapshot == nil)
+        model.startObservation = { store, zone, clock, onError, onChange in
+            store.observeStats(timeZone: zone, now: clock, onError: onError, onChange: onChange)
+        }
+        model.deactivate()
+        model.activate()
+        await waitUntil { model.error == nil && model.snapshot != nil }
+        #expect(model.error == nil)
         model.deactivate()
     }
 }
