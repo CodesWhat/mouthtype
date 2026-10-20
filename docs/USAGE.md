@@ -6,7 +6,7 @@ Click a text field, hold Fn and speak, then release to paste. Double-tap Fn or p
 
 ## Mac release
 
-The latest published release, 0.1.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
+The latest published release, 0.2.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately. Existing alpha.1–3 users need this download once to get the built-in updater.
 
 For a larger pill in any style, choose **Settings → Appearance → Pill size → Large**. Automatic, the default, picks Large on screens at least 2000 pt wide. The size is saved. Changes during recording take effect the next time the pill appears.
 
@@ -14,7 +14,7 @@ For a larger pill in any style, choose **Settings → Appearance → Pill size �
 
 Install Xcode with Swift 6.2, then run `bash scripts/run-app.sh`. The script builds and opens a signed app bundle. A Developer ID identity keeps permission grants stable between builds; without one, builds use ad-hoc signing.
 
-The app includes a native **Settings…** window with General, Writing, Appearance and Diagnostics panes, including per-app tone rules. See [settings](SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and wait for dictation, recovery and file transcription to finish.
+The app includes a native **Settings…** window with General, Writing, Appearance and Diagnostics panes, including per-app tone and cleanup rules. See [settings](SETTINGS.md). General also has update-check preferences; the menu offers **Check for Updates…**. Updates are signed and wait for dictation, recovery and file transcription to finish.
 
 **Settings → General → Recording behavior** offers **Hold to talk** (the default) or **Press to toggle**. Toggle starts recording with one press and stops with the next; releasing the shortcut keeps recording. This preserves your chosen key or combination. Escape cancels, except when Escape itself is your dictation key; use the pill or menu to cancel then.
 
@@ -42,7 +42,7 @@ RC.1 also waits for the preceding ordinary paste’s clipboard read before repla
 
 Open **Settings → General → Cleanup** to choose the cleanup path: Off keeps the recognized text, Basic applies local formatting rules, Fast adds S1-mini and Thorough uses Gemma. Both model modes preserve wording; they differ in speed and model capability, independently of Tone. Existing saved Light settings become Fast, and Medium becomes Thorough; Off, Basic and tone settings stay as saved.
 
-**Tone** is a separate writing-style choice. **Formal** keeps sentence capitalization and punctuation. **Casual** keeps sentence capitalization and drops the final full stop. **Very Casual** also relaxes sentence capitalization while protecting names and technical spellings. Questions still keep their question marks. These presets don't add enthusiasm or rewrite your personality.
+**Tone** is a separate writing-style choice. **Formal** keeps sentence capitalization and punctuation, and removes or softens swearing at Basic, Fast and Thorough (Off bypasses cleanup): exclamations, emphasis and dismissals like "fuck off" are dropped, and swear nouns and verbs become a plain word ("asshole" becomes "jerk", "fucking around" becomes "messing around"). **Casual** keeps sentence capitalization and drops the final full stop. **Very Casual** also relaxes sentence capitalization while protecting names and technical spellings. Questions still keep their question marks. These presets don't add enthusiasm or rewrite your personality.
 
 ## Microphone, live words and files
 

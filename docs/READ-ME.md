@@ -1,6 +1,6 @@
-# Mouthtype 0.1.0
+# Mouthtype 0.2.0
 
-The first stable release of Mouthtype, for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
+Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
 
 ## Install
 
@@ -13,9 +13,21 @@ The first stable release of Mouthtype, for Apple Silicon Macs running macOS 26 o
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
 
+## What changed in 0.2.0
+
+Transform Selected Text rewrites a selection with Fix grammar, Make shorter, Make more formal or Make more casual on the Thorough model. You get an editable preview with Accept, Retry and Cancel. Accept replaces the text only if the original app, field and selection still match, and Cmd-Z or Copy original gets the old text back.
+
+Boost my saved words while recognising is off by default. It favours your saved spellings during recognition. First use downloads an English speech model of about 100 MB, and dictation never waits for it.
+
+App and website rules can set a cleanup level as well as a tone, so cleanup can be on for one app while it's off elsewhere. Formal tone now removes or softens swearing at Basic, Fast and Thorough. Saved spellings warn when a heard form is an everyday word, like "win", and those aren't used as boost hints.
+
+In Settings, Tab reaches the page controls with macOS Keyboard navigation on, Shift-Tab steps back, and sidebar rows show focus. The Appearance preview offers Light and Dark, and Glass no longer judges itself against Apple's placeholder picture when your wallpaper is a live one.
+
+Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
+
 ## What changed in 0.1.0
 
-Since rc.4, a take cut off by quitting Mouthtype is offered for recovery on the next launch. The docs now say plainly that Tab doesn't reach Settings controls yet; arrow keys move through the sidebar, and a fix is planned for 0.2.
+Since rc.4, a take cut off by quitting Mouthtype is offered for recovery on the next launch. Tab didn't reach Settings controls in 0.1.0; that is fixed in 0.2.0.
 
 ## What changed in rc.4
 
@@ -27,7 +39,7 @@ RC.3 fixes what the rc.2 reviews found. The processing pill stays up while a tak
 
 ## What changed in rc.2
 
-The menu bar icon is lips that open with your voice. The app icon and the first-run setup window are redrawn, and Settings has a new layout with a glass sidebar. Pill size is Automatic, Standard or Large, and Pill style adds Glass, Matrix and Minimal beside Classic and Hi-Fi. Delivery cards follow the chosen style and size, including a pixel-art card for Hi-Fi. Appearance has a live preview with a Desktop, Light or Dark swatch, and Hi-Fi has a readout colour. Glass and the glass windows use a solid background under Reduce Transparency.
+The menu bar icon is lips that open with your voice. The app icon and the first-run setup window are redrawn, and Settings has a new layout with a glass sidebar. Pill size is Automatic, Standard or Large, and Pill style adds Glass, Matrix and Minimal beside Classic and Hi-Fi. Delivery cards follow the chosen style and size, including a pixel-art card for Hi-Fi. Appearance has a live preview with a Light or Dark swatch, and Hi-Fi has a readout colour. Glass and the glass windows use a solid background under Reduce Transparency.
 
 Update checks are now on by default without a prompt. Dictation, cleanup and delivery behavior did not change. The new interface has automated and offscreen rendering checks only; physical acceptance of it has not been done.
 
@@ -51,7 +63,7 @@ The shortcut recorder accepts a key or modifier combination. Click Change, press
 
 In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. Fn+Space also locks the default Fn shortcut. Escape cancels and offers Undo for five seconds. If Escape itself is your dictation shortcut, use the menu’s Cancel action. Caps Lock uses press-to-start/press-to-stop even in Hold mode; its system Caps Lock state may also change. Some system-reserved/media keys may be handled by macOS first. Control+Command+V pastes the last delivered take, and Control+Command+C copies it.
 
-**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app and website tone rules. Website domains include subdomains; the most specific domain wins before app/default tone when the browser exposes its document URL. Missing URL support falls back, and URLs are not retained. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Tone does not authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
+**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app and website rules that set tone, cleanup level or both. Website domains include subdomains; the most specific domain wins before the app rule and the default when the browser exposes its document URL. Missing URL support falls back, and URLs are not retained. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Formal removes swear words used as exclamations or emphasis at Basic, Fast and Thorough (Off bypasses cleanup), and Thorough also swaps a swear noun for a plain word, while Basic and Fast only remove exclamations and emphasis; tone does not otherwise authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
 
 ## Clean selected text
 

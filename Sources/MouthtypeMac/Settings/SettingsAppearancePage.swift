@@ -49,7 +49,7 @@ extension SettingsView {
                                          onStatus: { status in DispatchQueue.main.async { if model.previewStatus != status { model.previewStatus = status } } })
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     Text("\(model.skin.title) · live preview".uppercased()).font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1)
-                        .foregroundStyle(model.previewWallpaper.captionColor).shadow(color: model.previewWallpaper.captionShadow, radius: 2).padding(.bottom, 6).accessibilityHidden(true)
+                        .foregroundStyle(model.previewWallpaper.captionColor).padding(.bottom, 6).accessibilityHidden(true)
                 }
                 .frame(width: proxy.size.width, height: proxy.size.height)
                 .overlay(alignment: .topTrailing) { wallpaperPicker.padding(8) }

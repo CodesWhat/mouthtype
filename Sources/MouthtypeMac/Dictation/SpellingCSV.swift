@@ -17,6 +17,7 @@ struct SpellingImportPreview {
         let id: Int
         let rule: DictionaryRule
         let status: Status
+        var everydayWarning: String? { status == .add ? OrdinaryWords.warning(for: rule) : nil }
     }
     let rows: [Row]
     let problem: String?

@@ -4,11 +4,12 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.1.0 | Supported. Security fixes ship in 0.1.x patch releases or the next minor release |
-| 0.1.0-rc.x, 0.1.0-beta.x and 0.1.0-alpha.x | Upgrade to 0.1.0 |
+| 0.2.x | Supported. Security fixes ship in 0.2.x patch releases or the next minor release |
+| 0.1.x | Unsupported. Upgrade to 0.2.0 |
+| 0.1.0-rc.x, 0.1.0-beta.x and 0.1.0-alpha.x | Unsupported. Upgrade to 0.2.0 |
 | Experimental Linux source | Development only; no supported desktop release |
 
-0.1.0 is the first stable release. Fixes land on the active development branch and ship in a 0.1.x patch release or the next minor release. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current version.
+Fixes land on the active development branch and ship in a 0.2.x patch release or the next minor release. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current version.
 
 ## Report a vulnerability
 

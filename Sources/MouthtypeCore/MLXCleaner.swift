@@ -113,13 +113,16 @@ public actor MLXCleaner: MeasuredCleaner {
         let messages: [Chat.Message]
         var additionalContext: [String: any Sendable]?
         switch spec.promptFormat {
+        case .shared where context.transform != nil:
+            messages = [.system(context.transform!.systemPrompt()), .user(TextTransform.userMessage(transcript))]
+        case .s1Mini where context.transform != nil:
+            throw CleanerError.unavailable(reason: "\(displayName) can't run text transforms.")
         case .shared:
             messages = [.system(CleanupPrompt.system(for: context)), .user(CleanupPrompt.user(transcript, context: context))]
         case .s1Mini:
             messages = [.system(S1MiniPrompt.system), .user(S1MiniPrompt.user(transcript, controls: context.s1Controls))]
             additionalContext = ["enable_thinking": false]
         }
-        let parameters = GenerateParameters(maxTokens: CleanupLimits.maxOutputTokens(for: transcript), temperature: 0)
 
         let clock = ContinuousClock()
         let start = clock.now
@@ -127,6 +130,9 @@ public actor MLXCleaner: MeasuredCleaner {
         let input = try await container.prepare(input: UserInput(chat: messages, additionalContext: additionalContext))
         let (stream, generation) = try await container.perform(nonSendable: input) { model, prepared in
             try Task.checkCancellation()
+            let inputTokens = model.tokenizer.encode(text: transcript, addSpecialTokens: false).count
+            let parameters = GenerateParameters(
+                maxTokens: CleanupLimits.maxOutputTokens(for: transcript, inputTokens: inputTokens), temperature: 0)
             let iterator = try TokenIterator(input: prepared, model: model.model, parameters: parameters)
             return generateTask(promptTokenCount: prepared.text.tokens.size,
                 modelConfiguration: model.configuration, tokenizer: model.tokenizer, iterator: iterator,
@@ -136,6 +142,7 @@ public actor MLXCleaner: MeasuredCleaner {
         var text = ""
         var firstOutput: Double?
         var info: GenerateCompletionInfo?
+        var truncated = false
         try await withTaskCancellationHandler {
             for await event in stream {
                 switch event {
@@ -146,6 +153,7 @@ public actor MLXCleaner: MeasuredCleaner {
                     }
                 case let .info(completion):
                     info = completion
+                    truncated = completion.stopReason == .length
                 default:
                     break
                 }
@@ -157,13 +165,25 @@ public actor MLXCleaner: MeasuredCleaner {
             generation.cancel()
         }
         let total = (clock.now - start).seconds
+        let cleaned = try Self.finalize(text, input: transcript, transform: context.transform, truncated: truncated)
         return CleanupResult(
-            text: CleanupPrompt.sanitize(text),
+            text: cleaned,
             firstOutputSeconds: firstOutput ?? total,
             totalSeconds: total,
             outputTokens: info?.generationTokenCount,
             generationSeconds: info?.generateTime
         )
+    }
+
+    /// Turns raw generation into the result, or throws when the output can't be trusted. A generation that stopped at
+    /// its length limit is a fragment, so dictation cleanup (which falls back to the uncleaned text on any error) and
+    /// transforms (which keep Accept disabled) both refuse it.
+    static func finalize(_ text: String, input: String, transform: TextTransform?, truncated: Bool) throws -> String {
+        if truncated { throw CleanerError.outputTruncated }
+        guard transform != nil else { return CleanupPrompt.sanitize(text) }
+        let cleaned = TextTransform.sanitize(text, input: input)
+        if CleanupLimits.isImplausiblyLong(output: cleaned, input: input) { throw CleanerError.outputTooLong }
+        return cleaned
     }
 }
 

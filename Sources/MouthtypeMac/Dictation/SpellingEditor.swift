@@ -65,6 +65,8 @@ import Observation
 
     var isDirty: Bool { heard != (original?.heard ?? "") || written != (original?.written ?? "") }
     var validationMessage: String? { isDirty ? FileVocabulary.validationMessage(heard: heard, written: written) : nil }
+    /// Not a blocker: the rule saves as written, the user just learns it will rewrite an everyday word.
+    var everydayWarning: String? { OrdinaryWords.warning(heard: heard, written: written) }
     var canSave: Bool { !loadFailed && isDirty && validationMessage == nil }
 
     init(store: FileVocabulary) {
