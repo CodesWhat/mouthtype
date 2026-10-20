@@ -16,6 +16,12 @@ import UniformTypeIdentifiers
     let microphone: MicrophoneSettingsModel
     let home: HomeLogModel
     let stats: StatsModel
+    /// The editors behind the Saved spellings and Phrases pages. Nil where a model is built without a library, as in most tests.
+    let spellings: SpellingEditor?
+    let spellingSuggestions: SpellingSuggestionsModel?
+    let phrases: PhraseEditor?
+    /// Asks whether to throw away an unsaved draft. Injectable so tests can answer without a modal alert.
+    @ObservationIgnored var confirmDiscard: @MainActor (DraftExit, DraftKind) -> Bool = SettingsModel.askToDiscard
     var page = SettingsPage.general
     var previewWallpaper = PreviewWallpaper.dark
     var previewStatus: PreviewStatus?
@@ -52,9 +58,17 @@ import UniformTypeIdentifiers
          onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
          onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
          home: HomeLogModel = HomeLogModel(observing: false),
-         stats: StatsModel = StatsModel(observing: false)) {
+         stats: StatsModel = StatsModel(observing: false),
+         spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil) {
         self.home = home
         self.stats = stats
+        self.spellings = spellings
+        self.spellingSuggestions = spellingSuggestions
+        self.phrases = phrases
+        if let spellings, let spellingSuggestions {
+            spellingSuggestions.onRulesChanged = { [weak spellings] in spellings?.reload() }
+            spellings.onLibraryChanged = { [weak spellingSuggestions] in spellingSuggestions?.libraryChanged() }
+        }
         self.defaults = defaults
         self.microphone = microphone ?? MicrophoneSettingsModel(defaults: defaults, onChanged: onMicrophoneChanged)
         self.loginItem = loginItem
@@ -77,6 +91,60 @@ import UniformTypeIdentifiers
             MainActor.assumeIsolated { self?.boostStatus = VocabularyBoostStatusCenter.current }
         }
     }
+
+    enum DraftExit { case leaving, closing }
+    enum DraftKind { case spelling, phrase }
+
+    /// The draft on the current page that has unsaved edits, if any.
+    var unsavedDraft: DraftKind? {
+        switch page {
+        case .savedSpellings: spellings?.isDirty == true ? .spelling : nil
+        case .phrases: phrases?.isDirty == true ? .phrase : nil
+        default: nil
+        }
+    }
+
+    /// Moves to `target`. An unsaved spelling or phrase draft asks first: Keep Editing stays put and keeps the draft,
+    /// Discard drops it and moves on. Returns whether the page changed.
+    @discardableResult func select(_ target: SettingsPage) -> Bool {
+        guard target != page else { return true }
+        guard resolveDraft(.leaving) else { return false }
+        page = target
+        return true
+    }
+
+    /// True when it is fine to leave the current page or close the window: there is no unsaved draft, or the user chose to discard it.
+    func resolveDraft(_ exit: DraftExit) -> Bool {
+        guard let kind = unsavedDraft else { return true }
+        guard confirmDiscard(exit, kind) else { return false }
+        switch kind {
+        case .spelling: spellings?.cancel()
+        case .phrase: phrases?.cancel()
+        }
+        return true
+    }
+
+    static func askToDiscard(_ exit: DraftExit, _ kind: DraftKind) -> Bool {
+        let alert = NSAlert()
+        alert.messageText = kind == .spelling ? "Discard this unsaved spelling?" : "Discard this unsaved phrase?"
+        alert.informativeText = exit == .closing ? "Save it before closing, or discard the draft." : "Save it before leaving this page, or discard the draft."
+        alert.addButton(withTitle: "Keep Editing")
+        alert.addButton(withTitle: "Discard")
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
+    /// The word lists are read, and the spelling suggestions watched, only while their page is showing in an open window.
+    func syncWords() {
+        if page == .savedSpellings {
+            spellings?.reload()
+            spellingSuggestions?.activate()
+        } else {
+            spellingSuggestions?.deactivate()
+        }
+        if page == .phrases { phrases?.reload() }
+    }
+
+    func deactivateWords() { spellingSuggestions?.deactivate() }
 
     func setLivePreview(_ enabled: Bool) {
         LivePreviewPreference.set(enabled, in: defaults)

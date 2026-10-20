@@ -23,6 +23,8 @@ Saved spellings now suggest spellings from your recent takes: names it keeps mis
 
 In Settings, with Keyboard navigation on, the page scrolls to follow Tab and Shift-Tab.
 
+Saved spellings and Phrases are now pages in the Mouthtype window instead of separate windows. Leaving a page or closing the window with an unsaved draft still asks first.
+
 Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
 
 ## What changed in 0.2.0

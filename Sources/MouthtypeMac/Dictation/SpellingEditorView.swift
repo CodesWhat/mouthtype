@@ -3,53 +3,6 @@ import MouthtypeCore
 import SwiftUI
 import UniformTypeIdentifiers
 
-@MainActor final class SpellingEditorWindow: NSWindowController, NSWindowDelegate {
-    let editor: SpellingEditor
-    let suggestions: SpellingSuggestionsModel
-
-    init(store: FileVocabulary) {
-        editor = SpellingEditor(store: store)
-        suggestions = SpellingSuggestionsModel(vocabulary: store)
-        suggestions.onRulesChanged = { [editor] in editor.reload() }
-        editor.onLibraryChanged = { [suggestions] in suggestions.libraryChanged() }
-        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 550),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
-        window.title = "Saved Spellings"
-        window.minSize = NSSize(width: 760, height: 500)
-        window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: SpellingEditorView(editor: editor, suggestions: suggestions))
-        super.init(window: window)
-        window.delegate = self
-        window.center()
-    }
-
-    required init?(coder: NSCoder) { nil }
-
-    func present() {
-        editor.reload()
-        suggestions.activate()
-        showWindow(nil)
-        NSApp.activate(ignoringOtherApps: true)
-        window?.makeKeyAndOrderFront(nil)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        suggestions.deactivate()
-    }
-
-    func windowShouldClose(_ sender: NSWindow) -> Bool {
-        guard editor.isDirty else { return true }
-        let alert = NSAlert()
-        alert.messageText = "Discard this unsaved spelling?"
-        alert.informativeText = "Save it before closing, or discard the draft."
-        alert.addButton(withTitle: "Keep Editing")
-        alert.addButton(withTitle: "Discard")
-        guard alert.runModal() == .alertSecondButtonReturn else { return false }
-        editor.cancel()
-        return true
-    }
-}
-
 struct SpellingEditorView: View {
     @Bindable var editor: SpellingEditor
     var suggestions: SpellingSuggestionsModel
@@ -58,21 +11,17 @@ struct SpellingEditorView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Saved spellings").font(.custom("InstrumentSerif-Regular", size: 34))
-                Text("Keep names and terms spelled the way you want.").foregroundStyle(.secondary)
-            }.padding(24)
-            Divider()
             SpellingSuggestionsSection(model: suggestions, editor: editor, expandFirst: expandFirstSuggestion)
             Divider()
             HStack(alignment: .top, spacing: 0) {
                 library.frame(width: 240)
                 Divider()
                 form.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            }
+            }.frame(minHeight: 320, idealHeight: 320, maxHeight: .infinity)
             Divider()
             Text("Works with Basic, Fast and Thorough. Cleanup Off leaves your words unchanged.")
-                .font(.callout).foregroundStyle(.secondary).padding(.horizontal, 24).padding(.vertical, 13)
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 24).padding(.vertical, 13)
         }
         .background(Color(nsColor: .windowBackgroundColor))
         .sheet(isPresented: $editor.showingImport, onDismiss: editor.cancelImport) {
