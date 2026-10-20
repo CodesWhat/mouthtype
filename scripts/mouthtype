@@ -3,17 +3,26 @@
 # Usage: mouthtype start|stop|toggle|cancel|copy-last|paste-last|open [page]
 set -euo pipefail
 
-usage() {
-    cat >&2 <<'USAGE'
+text() {
+    cat <<'USAGE'
 usage: mouthtype <start|stop|toggle|cancel|copy-last|paste-last>
        mouthtype open [home|settings|general|writing|appearance|diagnostics]
 USAGE
+}
+
+usage() {
+    text >&2
     exit 64
 }
 
 [ $# -ge 1 ] || usage
 verb="$1"
 case "$verb" in
+    -h | --help)
+        [ $# -eq 1 ] || usage
+        text
+        exit 0
+        ;;
     start | stop | toggle | cancel | copy-last | paste-last)
         [ $# -eq 1 ] || usage
         url="mouthtype://$verb"

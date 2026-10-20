@@ -1820,6 +1820,86 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
     }
 
+    @Test func aNoticeNeverTakesALiveRecordingsPill() async {
+        let hands = Rig()
+        await hands.lockIn()
+        hands.controller.showNotice(PillMessage("Copied"))
+        #expect(hands.pill.messages.isEmpty && hands.pill.notices == ["Copied"])
+        #expect(!hands.log.contains("pill.hide") && hands.controller.phase == .recording)
+
+        let held = Rig()
+        await held.controller.handle(.pressed(at: keyDown))
+        held.controller.showNotice(PillMessage("Automation is off"))
+        #expect(held.pill.messages.isEmpty && held.pill.notices.isEmpty)
+
+        let idle = Rig()
+        idle.controller.showNotice(PillMessage("Copied"))
+        #expect(idle.pill.messages.map(\.headline) == ["Copied"])
+    }
+
+    @Test func aStopQueuedBehindAStartingRecordingStopsIt() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        rig.controller.enqueueAutomation(.start)
+        rig.controller.enqueueAutomation(.stop)
+        await rig.settle()
+        // The capture is still coming up, so the stop has not run and has not been dropped.
+        #expect(rig.controller.phase == .recording && !rig.controller.isHandsFree)
+        gate.open()
+        await rig.controller.automationTail?.value
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.log.contains("capture.stop"))
+    }
+
+    @Test func aCancelQueuedBehindAStartingRecordingCancelsIt() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        rig.controller.enqueueAutomation(.start)
+        rig.controller.enqueueAutomation(.cancel)
+        await rig.settle()
+        gate.open()
+        await rig.controller.automationTail?.value
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.inserter.delivered.isEmpty)
+    }
+
+    @Test func aURLStartAndAKeyPressDuringACaptureStopBeginOneSession() async {
+        for urlFirst in [true, false] {
+            let rig = Rig()
+            let gate = StartGate()
+            await rig.lockIn()
+            rig.capture.duringStop = { await gate.wait() }
+            rig.controller.stopHandsFree()
+            let before = rig.log.all.filter { $0 == "capture.start" }.count
+            var tasks: [Task<Void, Never>] = []
+            let url: @MainActor () -> Void = { tasks.append(Task { @MainActor in await rig.controller.startHandsFree() }) }
+            let key: @MainActor () -> Void = { tasks.append(Task { @MainActor in await rig.controller.handle(.pressed(at: keyDown + 1)) }) }
+            if urlFirst { url(); key() } else { key(); url() }
+            await rig.settle()
+            gate.open()
+            for task in tasks { await task.value }
+            await rig.settle()
+            #expect(rig.log.all.filter { $0 == "capture.start" }.count == before + 1)
+        }
+    }
+
+    @Test func anAutomationStartTellsTheHotkeySideButAKeyLockDoesNot() async {
+        let rig = Rig()
+        let told = Rig.Counter()
+        rig.controller.onAutomationLock = { told.count += 1 }
+        await rig.lockIn()
+        #expect(told.count == 0)
+        await rig.controller.cancelHandsFree()
+
+        await rig.controller.startHandsFree()
+        #expect(told.count == 1 && rig.controller.isHandsFree)
+    }
+
     @Test func automationStartIsRefusedWhenBusyLoadingOrFailed() async {
         let busy = Rig()
         busy.controller.canStartRecording = { false }
@@ -1960,6 +2040,24 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(controller.phase == .recording && controller.isHandsFree)
         #expect(store.finishes.map(\.0) == [.tooShort])
         #expect(store.handsFreeLock?.1 == .doubleTap)
+    }
+}
+
+/// Holds a fake capture's start or stop until the test lets it go, so the ordering under test is fixed, not timed.
+@MainActor
+private final class StartGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isOpen = false
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        isOpen = true
+        continuation?.resume()
+        continuation = nil
     }
 }
 

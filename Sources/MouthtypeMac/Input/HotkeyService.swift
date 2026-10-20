@@ -216,6 +216,14 @@ public final class HotkeyService {
         setRecording(false)
     }
 
+    /// A hands-free recording started from outside the keyboard (the URL scheme) joins the hotkey side as a lock: the key
+    /// tap goes up so Esc cancels, and the hotkey stops it instead of reading as a too-short tap.
+    public func adoptLockedRecording() {
+        guard !engine.isRecording, engine.beginExternalLock() else { return }
+        mapper.lockedRecording = true
+        setRecording(true)
+    }
+
     /// How many real key presses and clicks the taps have seen, or nil when they can't vouch for it.
     var userInputGeneration: UInt64? { shared.userInputGeneration }
 

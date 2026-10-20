@@ -55,8 +55,13 @@ final class DictationController {
     @ObservationIgnored weak var corrections: (any CorrectionObserving)?
     @ObservationIgnored private var session: DictationSession?
     @ObservationIgnored private var captureStarting = false
-    /// True while a URL-driven start is between its guard and the recording. Hotkey events are serialized by `consume`; URL tasks aren't.
-    @ObservationIgnored var automationStartInFlight = false
+    /// True from the moment a press passes its checks until its startup ends. Set before the first suspension, so a
+    /// second press (a URL and the hotkey, say) can't also pass the phase check and start a second session.
+    @ObservationIgnored private var startReserved = false
+    /// The last queued URL command. Each one waits for the one before, so a stop or cancel lands after the start it follows.
+    @ObservationIgnored var automationTail: Task<Void, Never>?
+    /// Fired when an automation start has become a hands-free recording, so the hotkey side can adopt the lock.
+    @ObservationIgnored var onAutomationLock: (@MainActor () -> Void)?
     @ObservationIgnored private var shuttingDown = false
     @ObservationIgnored private var termination: Task<Bool, Never>?
     @ObservationIgnored private var captureFinalizations = 0
@@ -225,7 +230,10 @@ final class DictationController {
 
     // MARK: Press
 
+    var isStartReserved: Bool { startReserved }
+
     private func pressed(at nanos: UInt64) async {
+        guard !startReserved else { return }
         guard terminationCapture == nil else {
             pill.showMessage(PillMessage("Recording not saved", detail: "Retry Quit to save the kept audio", isError: true), duration: 3)
             return
@@ -251,6 +259,9 @@ final class DictationController {
             )
             return
         }
+
+        startReserved = true
+        defer { startReserved = false }
 
         // A new dictation ends the last one's card and the Undo it offered, and the last paste's read-back. With
         // earlier dictations still queued their deliveries haven't happened yet, so there is no read-back to end. A
@@ -368,6 +379,16 @@ final class DictationController {
     func stopHandsFree() {
         guard !shuttingDown, isHandsFree else { return }
         released(at: clock.nowNanos())
+    }
+
+    /// Shows a line for a URL command or a copy, without taking a live recording's pill. A hands-free recording shows it
+    /// over the pill and comes back; a held-key recording keeps its pill and the line is dropped.
+    func showNotice(_ message: PillMessage, duration: TimeInterval = 2.5) {
+        guard phase == .recording else {
+            pill.showMessage(message, duration: duration)
+            return
+        }
+        if isHandsFree { pill.showHandsFreeNotice(message.headline, duration: duration) }
     }
 
     /// The menu's Cancel Dictation: the same as Esc.

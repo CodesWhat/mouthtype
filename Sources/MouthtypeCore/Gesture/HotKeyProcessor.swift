@@ -165,6 +165,14 @@ public struct HotKeyProcessor: Sendable {
         return true
     }
 
+    /// A recording started from outside the keyboard (the URL scheme) joins the lock, so the key stops it like any lock. False unless idle.
+    public mutating func beginExternalLock() -> Bool {
+        guard state == .idle else { return false }
+        state = .doubleTapLock
+        lastTapAt = nil
+        return true
+    }
+
     /// Leaves a lock from outside the keyboard (a menu stop, the safety cap). False when not locked.
     public mutating func endLock() -> Bool {
         guard isLocked else { return false }

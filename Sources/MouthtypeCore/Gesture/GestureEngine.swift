@@ -63,6 +63,14 @@ public struct GestureEngine: Sendable {
         return .locked(.fnSpace)
     }
 
+    /// Starts a locked recording that no key press began. Stopping it is never "too short". False unless idle.
+    public mutating func beginExternalLock() -> Bool {
+        guard processor.beginExternalLock() else { return false }
+        locked = true
+        recordingStart = nil
+        return true
+    }
+
     /// Leaves a lock without a gesture (a menu stop, the safety cap), so the next press starts fresh.
     public mutating func endLock() {
         guard processor.endLock() else { return }
