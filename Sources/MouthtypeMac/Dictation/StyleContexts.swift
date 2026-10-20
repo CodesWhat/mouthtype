@@ -84,7 +84,7 @@ struct StyleContexts: Equatable, Sendable {
         switch id {
         case .personal:
             return [app("Messages", "com.apple.MobileSMS"), app("WhatsApp", "net.whatsapp.WhatsApp"),
-                    app("Telegram", "ru.keepcoder.Telegram", "org.telegram.desktop"), app("Discord", "com.hnc.Discord"),
+                    app("Telegram", "ru.keepcoder.Telegram", "com.tdesktop.Telegram"), app("Discord", "com.hnc.Discord"),
                     app("Signal", "org.whispersystems.signal-desktop")]
         case .work:
             return [app("Slack", "com.tinyspeck.slackmacgap"), app("Microsoft Teams", "com.microsoft.teams2", "com.microsoft.teams"),

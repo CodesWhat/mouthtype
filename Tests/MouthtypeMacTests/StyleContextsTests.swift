@@ -28,7 +28,7 @@ import MouthtypeCore
     @Test func builtInBundleIdentifiers() {
         let contexts = StyleContexts()
         let expected: [(String, StyleContextID)] = [
-            ("com.apple.MobileSMS", .personal), ("net.whatsapp.WhatsApp", .personal), ("ru.keepcoder.Telegram", .personal),
+            ("com.apple.MobileSMS", .personal), ("net.whatsapp.WhatsApp", .personal), ("ru.keepcoder.Telegram", .personal), ("com.tdesktop.Telegram", .personal), ("com.microsoft.teams", .work),
             ("com.hnc.Discord", .personal), ("org.whispersystems.signal-desktop", .personal),
             ("com.tinyspeck.slackmacgap", .work), ("com.microsoft.teams2", .work),
             ("com.apple.mail", .email), ("com.microsoft.Outlook", .email),
@@ -222,18 +222,18 @@ import MouthtypeCore
         #expect(styles.resolve(bundleID: "com.google.Chrome", websiteHost: "example.org", fallback: .formal) == casual)
     }
 
-    @Test func legacyRulesShowUnderTheContextTheirToneMatches() throws {
+    @Test func legacyRulesShowOnTheirMemberRowOrUnderTheContextTheirToneMatches() throws {
         let d = defaults()
         d.set(Data(legacy.utf8), forKey: AppCleanupStyles.preferenceKey)
         let styles = try AppCleanupStyles.load(d)
 
-        // Slack's own Formal rule moves it from Work (Casual) to Email (Formal), tagged as yours.
+        // Slack's own Formal rule stays on its Work row as an editable override.
         let work = StyleRows.rows(for: .work, in: styles)
-        #expect(!work.contains { $0.member.name == "Slack" })
+        let slack = try #require(work.first { $0.member.name == "Slack" })
+        #expect(slack.isBuiltIn && !slack.ownRule && slack.ruleStyle == .formal)
         let email = StyleRows.rows(for: .email, in: styles)
-        let slack = try #require(email.first { $0.member.name == "Slack" })
-        #expect(slack.ownRule && !slack.isBuiltIn)
-        #expect(email.prefix(4).allSatisfy { $0.isBuiltIn })
+        #expect(!email.contains { $0.member.name == "Slack" })
+        #expect(email.allSatisfy { $0.isBuiltIn })
 
         // example.org's Casual rule has no context of its own, so it lands in the first Casual one.
         let personal = StyleRows.rows(for: .personal, in: styles)
@@ -247,14 +247,25 @@ import MouthtypeCore
         #expect(StyleRows.ownRules(in: styles).map(\.member.name).sorted() == ["Notes", "Terminal"])
     }
 
-    @Test func everyStoredRuleIsReachableOnSomeTab() throws {
+    @Test func everyStoredRuleAppearsExactlyOnceAcrossTheTabs() throws {
         let d = defaults()
         d.set(Data(legacy.utf8), forKey: AppCleanupStyles.preferenceKey)
-        let styles = try AppCleanupStyles.load(d)
-        var shown = Set<String>()
-        for id in StyleContextID.allCases { StyleRows.rows(for: id, in: styles).filter(\.ownRule).forEach { shown.insert($0.member.id) } }
-        StyleRows.ownRules(in: styles).forEach { shown.insert($0.member.id) }
-        for entry in styles.entries { #expect(shown.contains("app:" + entry.bundleID) || StyleContexts().context(bundleID: entry.bundleID) != nil) }
-        for entry in styles.websites { #expect(shown.contains("site:" + entry.domain) || StyleContexts().context(host: entry.domain) != nil) }
+        var styles = try AppCleanupStyles.load(d)
+        // A level-only rule on a subdomain of a built-in site, and a tone rule on a listed app that differs from its context.
+        try styles.setWebsite(domain: "jobs.linkedin.com", style: nil, level: .off)
+        try styles.set(bundleID: "com.apple.mail", appName: "Mail", style: nil, level: .basic)
+        styles.contexts.addApp(.personal, bundleID: "org.example.Added", appName: "Added")
+        try styles.set(bundleID: "org.example.Added", appName: "Added", style: veryCasual, level: .medium)
+
+        var appearances: [String: Int] = [:]
+        for id in StyleContextID.allCases {
+            for row in StyleRows.rows(for: id, in: styles) {
+                if row.ruleStyle != nil || row.ruleLevel != nil { appearances[row.member.id, default: 0] += 1 }
+            }
+        }
+        for rule in StyleRows.ownRules(in: styles) { appearances[rule.member.id, default: 0] += 1 }
+        for entry in styles.entries { #expect(appearances["app:" + entry.bundleID] == 1, "\(entry.bundleID)") }
+        for entry in styles.websites { #expect(appearances["site:" + entry.domain] == 1, "\(entry.domain)") }
+        #expect(appearances["site:jobs.linkedin.com"] == 1)
     }
 }

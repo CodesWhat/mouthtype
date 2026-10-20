@@ -277,26 +277,59 @@ struct StyleMembersCard: View {
     }
 
     private func memberRow(_ row: StyleRows.Row) -> some View {
-        HStack(spacing: 12) {
-            StyleMemberIcon(member: row.member)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(row.member.name).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                if let level = row.ruleLevel {
-                    Text("Cleanup here: \(level.title)").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-                }
-            }
+        let member = row.member
+        let key = member.keys.first ?? member.name
+        let isApp = member.kind == .app
+        let contextTone = model.appStyles.contexts.tone(context)
+        return HStack(spacing: 12) {
+            StyleMemberIcon(member: member)
+            Text(member.name).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
             Text(row.isBuiltIn ? "BUILT IN" : "ADDED BY YOU").font(DesignFont.mono(9)).tracking(0.9).foregroundStyle(DesignPalette.ink3)
                 .fixedSize()
-            Button { model.removeContextMember(row.member, from: context) } label: {
+            DesignPopup(title: "Tone for \(member.name)", selection: Binding(
+                get: { row.ruleStyle.map { $0.preset?.rawValue ?? "custom" } ?? "same" },
+                set: { value in
+                    let tone = StylePreset(rawValue: value)
+                    if isApp { model.setAppStyle(bundleID: key, appName: member.name, tone: tone) }
+                    else { model.setWebsiteStyle(domain: key, tone: tone) }
+                }), choices: toneChoices(row, contextTone: contextTone))
+                .accessibilityIdentifier("style-member-tone")
+            DesignPopup(title: "Cleanup for \(member.name)", selection: Binding(
+                get: { row.ruleLevel },
+                set: { level in
+                    if isApp { model.setAppCleanupLevel(bundleID: key, appName: member.name, level: level) }
+                    else { model.setWebsiteCleanupLevel(domain: key, level: level) }
+                }), choices: levelChoices)
+                .accessibilityIdentifier("style-member-cleanup")
+            Button {
+                if row.ownRule {
+                    if isApp { model.removeAppStyle(bundleID: key) } else { model.removeWebsiteStyle(domain: key) }
+                } else {
+                    model.removeContextMember(member, from: context)
+                }
+            } label: {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
                     .frame(width: 28, height: 28).contentShape(RoundedRectangle(cornerRadius: 7))
             }
-            .buttonStyle(.plain).accessibilityLabel("Remove \(row.member.name) from \(context.noun)")
+            .buttonStyle(.plain).accessibilityLabel("Remove \(member.name) from \(context.noun)")
         }
         .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 6).frame(minHeight: 40)
         .disabled(model.appStylesError != nil)
+    }
+
+    private func toneChoices(_ row: StyleRows.Row, contextTone: StylePreset?) -> [DesignChoice<String>] {
+        let name = contextTone?.title ?? context.title
+        var choices = [DesignChoice("Same as \(context.noun) · \(name)", "same")] + StylePreset.allCases.map { DesignChoice($0.title, $0.rawValue) }
+        if let style = row.ruleStyle, style.preset == nil { choices.append(DesignChoice("Custom", "custom")) }
+        return choices
+    }
+
+    private var levelChoices: [DesignChoice<CleanupLevel?>] {
+        let name = model.appStyles.contexts.level(context).map(\.title) ?? model.cleanup.level.title
+        return [DesignChoice<CleanupLevel?>("Same as \(context.noun) · \(name)", nil)]
+            + CleanupLevel.allCases.map { DesignChoice<CleanupLevel?>($0.title, $0) }
     }
 
     private var addRow: some View {
