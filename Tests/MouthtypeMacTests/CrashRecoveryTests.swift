@@ -247,6 +247,28 @@ private struct Rig {
         #expect(rig.engine.calls == 0)
     }
 
+    @Test func recoveringAFinishedTakeOffersTheTextAndLeavesItsRowAlone() async throws {
+        let rig = try Rig()
+        defer { rig.cleanUp() }
+        let id = try rig.seed(ago: 600)
+        try rig.store.recordInsertion(id, InsertionRecord(finalText: "Original text."))
+        let item = try #require(DictationRecovery.completed(rows: try rig.store.recentTakes(limit: 5), now: rig.now).first)
+        #expect(item.isCompleted)
+        let before = try #require(try rig.store.recentTakes(limit: 5).first)
+
+        rig.recovery.offerSaved(item)
+        await rig.recovery.recover()
+
+        #expect(rig.engine.calls == 1)
+        #expect(rig.cards.presented.last?.kind == .recovered)
+        #expect(rig.cards.presented.last?.transcript == "Hello from the crash.")
+        #expect(try rig.store.recentTakes(limit: 5).first == before)
+
+        rig.recovery.offerSaved(item)
+        await rig.recovery.discard()
+        #expect(try rig.store.recentTakes(limit: 5).first == before)
+    }
+
     @Test func theNewestIsOfferedWithItsLengthAndAgeAndTheOlderOnesCounted() async throws {
         let rig = try Rig()
         defer { rig.cleanUp() }

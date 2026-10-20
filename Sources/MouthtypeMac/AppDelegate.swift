@@ -47,6 +47,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }, activityChanged: { [weak self] in
             self?.appUpdater.refreshActivity()
             self?.menuBar?.refresh()
+            self?.settingsWindow.model.home.refreshRecoverability()
         }, copy: { SystemClipboard().write($0) })
     private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
     private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
@@ -200,7 +201,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let menuBar = MenuBarController()
         pill.onLevel = { [weak menuBar] level in menuBar?.setLevel(level) }
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
-        let settingsSection = SettingsMenuSection { [weak self] in self?.settingsWindow.present() }
+        settingsWindow.model.home.store = store
+        let settingsSection = SettingsMenuSection(
+            open: { [weak self] in self?.settingsWindow.present(page: .general) },
+            openHome: { [weak self] in self?.settingsWindow.present(page: .home) })
         menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in
             guard let self else { return }
             if self.diagnostics.microphoneStatus != .authorized || !self.diagnostics.accessibilityGranted { self.showSetup() }
@@ -217,14 +221,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.fileTranscriptionWindow.present() }, startsGroup: false)
         if let recovery {
-            recovery.canRecover = { [weak self, weak dictation, weak engineHost] in
-                guard dictation?.phase == .idle, let engineHost else { return false }
+            recovery.canRecover = { [weak self, weak dictation, weak engineHost, weak recovery] in
+                guard dictation?.phase == .idle, recovery?.isRecovering != true, let engineHost else { return false }
                 guard self?.isTerminating != true, self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true else { return false }
                 if case .ready = engineHost.state { return true }
                 return false
             }
             menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
-            recovery.onFinished = { [weak menuBar] in menuBar?.refresh() }
+            let home = settingsWindow.model.home
+            home.saved = { [weak recovery] in try await recovery?.loadSavedRecordings() ?? [] }
+            home.completedAudio = { [weak recovery] rows in await recovery?.loadCompletedRecordings(for: rows) ?? [] }
+            home.canRecover = recovery.canRecover
+            home.recoverTake = { [weak recovery] item in recovery?.offerSaved(item) }
+            recovery.onFinished = { [weak menuBar] in
+                menuBar?.refresh()
+                home.refreshRecoverability()
+                home.startReload()
+            }
         }
         dictation.canStartRecording = { [weak self] in self?.isTerminating != true && self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
         menuBar.add(section: history, startsGroup: false)
@@ -237,7 +250,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { _ = await self.prepareCapture() }
         }
         historySection = history
-        dictation.onAttemptFinished = { [weak menuBar] in menuBar?.refresh() }
+        dictation.onAttemptFinished = { [weak menuBar, weak home = settingsWindow.model.home] in menuBar?.refresh(); home?.refreshRecoverability() }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
         dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
         menuBar.onStopDictation = { [weak dictation] in dictation?.stopHandsFree() }
