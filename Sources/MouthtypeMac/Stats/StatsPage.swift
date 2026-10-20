@@ -76,8 +76,14 @@ struct DailyBars: View {
     let days: [DailyWords]
     private let height: CGFloat = 70
 
+    /// The real maximum, never the bar scale: an empty window says so instead of claiming a busiest day.
+    static func caption(busiest: Int) -> String {
+        busiest > 0 ? "Busiest: \(StatsFormat.number(busiest)) words" : "No takes in the last \(StatsSnapshot.dailyWindowDays) days"
+    }
+
     var body: some View {
-        let peak = max(days.map(\.words).max() ?? 0, 1)
+        let busiest = days.map(\.words).max() ?? 0
+        let peak = max(busiest, 1)
         VStack(alignment: .leading, spacing: 4) {
             HStack(alignment: .bottom, spacing: 3) {
                 ForEach(days.indices, id: \.self) { i in
@@ -92,7 +98,7 @@ struct DailyBars: View {
             HStack {
                 Text(StatsFormat.shortDay(days[0].day))
                 Spacer()
-                Text("Busiest: \(StatsFormat.number(peak)) words")
+                Text(DailyBars.caption(busiest: busiest))
                 Spacer()
                 Text(StatsFormat.shortDay(days[days.count - 1].day))
             }.font(SettingsFont.sans(SettingsFont.detail)).foregroundStyle(.secondary)

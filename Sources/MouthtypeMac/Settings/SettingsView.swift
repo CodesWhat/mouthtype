@@ -42,7 +42,7 @@ struct SettingsView: View {
         .frame(minWidth: SettingsTheme.minimumSize.width, minHeight: SettingsTheme.minimumSize.height)
         .onChange(of: model.page) { _, page in
             // The stats are watched only on their own pages. Moving between Stats and Records keeps one observation.
-            if page == .stats || page == .records { model.stats.activate(); model.stats.startReload() } else { model.stats.deactivate() }
+            if page == .stats || page == .records { model.stats.activate() } else { model.stats.deactivate() }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }

@@ -67,17 +67,102 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "one two")
         let model = StatsModel(store: store, observing: false)
-        model.fetch = { store, now in
+        model.fetch = { store, now, zone in
             Thread.sleep(forTimeInterval: 0.3)
-            return try store.statsSnapshot(now: now)
+            return try store.statsSnapshot(now: now, timeZone: zone)
         }
         model.activate()
-        model.startReload()
+        await waitUntil { model.snapshot != nil }
         model.deactivate()
-        try await Task.sleep(for: .milliseconds(600))
-        #expect(model.snapshot == nil)
+        let late = Task { await model.load() }
+        model.activate()
+        model.deactivate()
+        await late.value
+        let before = model.snapshot
         try dictate(store, minutes: 2, text: "three")
         try await Task.sleep(for: .milliseconds(300))
-        #expect(model.snapshot == nil)
+        #expect(model.snapshot == before)
+    }
+
+    @Test func aSlowEarlierLoadCannotOverwriteANewerObservationResult() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "one two")
+        let model = StatsModel(store: store, observing: false)
+        let stale = try store.statsSnapshot(now: base)
+        model.fetch = { _, _, _ in
+            Thread.sleep(forTimeInterval: 0.4)
+            var old = stale
+            old.report.wordsAllTime = 999
+            return old
+        }
+        let slow = Task { await model.load() }
+        try await Task.sleep(for: .milliseconds(50))
+        model.activate()
+        await waitUntil { model.snapshot?.report.wordsAllTime == 2 }
+        #expect(model.snapshot?.report.wordsAllTime == 2)
+        await slow.value
+        #expect(model.snapshot?.report.wordsAllTime == 2)
+    }
+
+    private final class Clock: @unchecked Sendable {
+        private let lock = NSLock()
+        private var date: Date
+        private(set) var sleeps: [Duration] = []
+        init(_ date: Date) { self.date = date }
+        var current: Date { lock.withLock { date } }
+        func advance(to new: Date) { lock.withLock { date = new } }
+        func record(_ d: Duration) -> Int { lock.withLock { sleeps.append(d); return sleeps.count } }
+    }
+
+    @Test func numbersRollOverAtMidnightWithTheInjectedClock() async throws {
+        let zone = TimeZone.current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = zone
+        let evening = try #require(calendar.date(from: DateComponents(year: 2026, month: 3, day: 10, hour: 23, minute: 59)))
+        let nextMorning = evening.addingTimeInterval(120)
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try store.begin(DictationStart(startedAt: evening.addingTimeInterval(-60)))
+        try store.recordInsertion(id, InsertionRecord(finalText: "one two three"))
+
+        let clock = Clock(evening)
+        let model = StatsModel(store: store, observing: false)
+        model.now = { clock.current }
+        model.timeZone = zone
+        model.sleep = { duration in
+            if clock.record(duration) == 1 {
+                clock.advance(to: nextMorning)
+            } else {
+                try await Task.sleep(for: .seconds(3_600))
+            }
+        }
+        model.activate()
+        await waitUntil { model.snapshot?.daily.last?.day == "2026-03-11" }
+        #expect(clock.sleeps.first == .seconds(60))
+        let snapshot = try #require(model.snapshot)
+        #expect(snapshot.daily.last?.day == "2026-03-11")
+        #expect(snapshot.report.wordsToday == 0)
+        #expect(snapshot.report.wordsThisWeek == 3)
+        model.deactivate()
+    }
+
+    @Test func aDayChangeNotificationRecomputesWithTheCurrentDate() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "one two")
+        let clock = Clock(base)
+        let model = StatsModel(store: store, observing: false)
+        model.now = { clock.current }
+        model.sleep = { _ in try await Task.sleep(for: .seconds(3_600)) }
+        model.activate()
+        await waitUntil { model.snapshot != nil }
+        let today = model.snapshot?.daily.last?.day
+        clock.advance(to: base.addingTimeInterval(2 * 86_400))
+        NotificationCenter.default.post(name: .NSCalendarDayChanged, object: nil)
+        await waitUntil { model.snapshot?.daily.last?.day != today }
+        #expect(model.snapshot?.daily.last?.day != today)
+        #expect(model.snapshot?.report.wordsToday == 0)
+        model.deactivate()
     }
 }

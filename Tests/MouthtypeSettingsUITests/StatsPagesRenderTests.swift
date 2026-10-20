@@ -60,4 +60,10 @@ import MouthtypeCore
         #expect(StatsFormat.duration(minutes: 0.2) == "Under a minute")
         #expect(StatsFormat.speaking(ms: 190_000) == "3 min 10 s")
     }
+
+    @Test func emptyWindowHidesTheBusiestLabel() {
+        #expect(DailyBars.caption(busiest: 0) == "No takes in the last 14 days")
+        #expect(DailyBars.caption(busiest: 1) == "Busiest: 1 words")
+        #expect(DailyBars.caption(busiest: 1_234) == "Busiest: \(StatsFormat.number(1_234)) words")
+    }
 }

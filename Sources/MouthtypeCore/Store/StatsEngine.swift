@@ -133,6 +133,74 @@ public struct StatsSnapshot: Equatable, Sendable {
     }
 }
 
+/// The log reduced by SQL: one row of sums per local day, and the two records that need a row-level ordering.
+struct StatsAggregates: Sendable {
+    struct Day: Sendable {
+        var day: String
+        var count: Int
+        var words: Int
+        /// Words and speaking milliseconds of the takes that count toward WPM.
+        var ratedWords: Int
+        var ratedMs: Int
+        /// Words and speaking milliseconds of the takes with a logged duration, for time saved.
+        var timedWords: Int
+        var timedMs: Int
+    }
+
+    var days: [Day]
+    /// The highest qualifying rate, earliest take on a tie, and the day it was set.
+    var bestWPM: (rate: Double, day: String)?
+    var longest: LongestDictation?
+}
+
+extension StatsSnapshot {
+    /// The same numbers as `make(samples:)`, from SQL aggregates instead of every sample.
+    static func make(aggregates: StatsAggregates, now: Date, timeZone: TimeZone = .current,
+                     typingWPM: Double = StatsEngine.defaultTypingWPM) -> StatsSnapshot {
+        let typingWPM = typingWPM > 0 ? typingWPM : StatsEngine.defaultTypingWPM
+        let days = aggregates.days.filter { $0.words > 0 }
+            .compactMap { d in Streaks.dayNumber(d.day).map { (d, $0) } }
+            .sorted { $0.1 < $1.1 }
+        let totals = days.map { (day: $0.0.day, number: $0.1, words: $0.0.words) }
+        let today = Streaks.localDay(for: now, in: timeZone)
+        let todayNumber = Streaks.dayNumber(today)
+
+        let wordsToday = totals.first { $0.day == today }?.words ?? 0
+        let week = todayNumber.map { t in totals.filter { $0.number > t - 7 && $0.number <= t }.reduce(0) { $0 + $1.words } } ?? 0
+        let all = totals.reduce(0) { $0 + $1.words }
+        let count = days.reduce(0) { $0 + $1.0.count }
+        let ratedWords = days.reduce(0) { $0 + $1.0.ratedWords }
+        let ratedMs = days.reduce(0) { $0 + $1.0.ratedMs }
+        let average = ratedMs > 0 ? Double(ratedWords) / (Double(ratedMs) / 60_000) : nil
+        let streaks = Streaks.compute(days: totals.map(\.day), today: today)
+        let typingMinutes = Double(days.reduce(0) { $0 + $1.0.timedWords }) / typingWPM
+        let speakingMinutes = Double(days.reduce(0) { $0 + $1.0.timedMs }) / 60_000
+
+        let biggest = StatsEngine.biggestDay(totals)
+        let report = StatsReport(
+            wordsToday: wordsToday, wordsThisWeek: week, wordsAllTime: all, dictationCount: count,
+            averageWPM: average, bestWPM: aggregates.bestWPM?.rate,
+            currentStreakDays: streaks.current, longestStreakDays: streaks.longest,
+            biggestDay: biggest, longestDictation: aggregates.longest,
+            minutesSaved: max(0, typingMinutes - speakingMinutes), typingWPM: typingWPM
+        )
+        let streak = StatsEngine.longestStreak(totals.map(\.number))
+        let records = ArcadeRecords(
+            wpm: aggregates.bestWPM.map { Record(value: $0.rate, setOn: $0.day) },
+            biggestDay: biggest.map { Record(value: $0.words, setOn: $0.day) },
+            longestStreak: streak.map { Record(value: $0.length, setOn: StatsEngine.dayString($0.reachedOn)) },
+            longestDictation: aggregates.longest.map { Record(value: $0, setOn: $0.day) }
+        )
+        var daily: [DailyWords] = []
+        if count > 0, let t = todayNumber {
+            var byNumber: [Int: Int] = [:]
+            for d in totals { byNumber[d.number] = d.words }
+            daily = ((t - (dailyWindowDays - 1))...t).map { DailyWords(day: StatsEngine.dayString($0), words: byNumber[$0] ?? 0) }
+        }
+        return StatsSnapshot(report: report, records: records, daily: daily)
+    }
+}
+
 /// Pure statistics over the dictation log. Everything here is rebuilt from samples on demand; nothing is stored,
 /// so deleting or re-importing the log can never leave a stale record behind.
 ///
@@ -150,7 +218,7 @@ public struct StatsEngine: Sendable {
     public static let minWPMDurationMs = 3_000
     public static let maxPlausibleWPM = 400.0
 
-    private typealias DayTotal = (day: String, number: Int, words: Int)
+    typealias DayTotal = (day: String, number: Int, words: Int)
 
     private let samples: [DictationSample]
     private let typingWPM: Double
@@ -162,7 +230,8 @@ public struct StatsEngine: Sendable {
 
     private func wpm(_ s: DictationSample) -> Double? {
         guard s.words >= Self.minWPMWords, let ms = s.durationMs, ms >= Self.minWPMDurationMs else { return nil }
-        let rate = Double(s.words) / (Double(ms) / 60_000)
+        // Multiply first so the arithmetic matches the SQL aggregates bit for bit.
+        let rate = Double(s.words) * 60_000 / Double(ms)
         return rate <= Self.maxPlausibleWPM ? rate : nil
     }
 
@@ -209,7 +278,7 @@ public struct StatsEngine: Sendable {
             wordsToday: wordsToday, wordsThisWeek: week, wordsAllTime: all, dictationCount: samples.count,
             averageWPM: average, bestWPM: rated.map(\.rate).max(),
             currentStreakDays: streaks.current, longestStreakDays: streaks.longest,
-            biggestDay: biggestDay(days), longestDictation: longestDictation(),
+            biggestDay: Self.biggestDay(days), longestDictation: longestDictation(),
             minutesSaved: max(0, typingMinutes - speakingMinutes), typingWPM: typingWPM
         )
     }
@@ -223,11 +292,11 @@ public struct StatsEngine: Sendable {
             }
         }
         let days = totalsByDay
-        let streak = longestStreak(days.map(\.number))
+        let streak = Self.longestStreak(days.map(\.number))
         let longest = longestDictation()
         return ArcadeRecords(
             wpm: bestRate.map { Record(value: $0.rate, setOn: $0.sample.day) },
-            biggestDay: biggestDay(days).map { Record(value: $0.words, setOn: $0.day) },
+            biggestDay: Self.biggestDay(days).map { Record(value: $0.words, setOn: $0.day) },
             longestStreak: streak.map { Record(value: $0.length, setOn: Self.dayString($0.reachedOn)) },
             longestDictation: longest.map { Record(value: $0, setOn: $0.day) }
         )
@@ -236,7 +305,7 @@ public struct StatsEngine: Sendable {
     // MARK: Internals
 
     /// Most words in one day; the earliest day wins a tie.
-    private func biggestDay(_ days: [DayTotal]) -> DailyWords? {
+    static func biggestDay(_ days: [DayTotal]) -> DailyWords? {
         var best: DayTotal?
         for d in days where d.words > (best?.words ?? 0) { best = d }
         return best.map { DailyWords(day: $0.day, words: $0.words) }
@@ -252,7 +321,7 @@ public struct StatsEngine: Sendable {
     }
 
     /// The longest run of consecutive day numbers (ascending, distinct) and the day it first reached that length.
-    private func longestStreak(_ numbers: [Int]) -> (length: Int, reachedOn: Int)? {
+    static func longestStreak(_ numbers: [Int]) -> (length: Int, reachedOn: Int)? {
         guard !numbers.isEmpty else { return nil }
         var best = (length: 1, reachedOn: numbers[0])
         var run = 1

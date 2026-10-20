@@ -111,7 +111,6 @@ import MouthtypeCore
         let stats = model.stats
         if model.page == .stats || model.page == .records {
             stats.activate()
-            stats.startReload()
         } else {
             stats.deactivate()
         }
