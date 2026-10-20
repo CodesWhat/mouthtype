@@ -195,11 +195,26 @@ import Testing
         for _ in 0..<3 { while let e = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(e) } }
     }
 
+    /// The window's initial first responder comes from AppKit's real keyboard UI mode, which the injected flag can't reach: with the machine's
+    /// Keyboard navigation on it is the first sidebar row, not the list. Focus the list proxy (the sidebar proxy taller than a single row)
+    /// so the test starts from the same place whatever the system setting is. The event pump lets SwiftUI settle the focus change before
+    /// the first arrow, otherwise that arrow is spent moving focus.
+    private func focusSidebarList(in window: NSWindow) throws {
+        let sidebar = try keyViewChain(window).filter {
+            String(describing: type(of: $0)) == "KeyViewProxy" && $0.convert($0.bounds, to: nil).minX < SettingsTheme.sidebarWidth
+        }
+        let rowHeight = try #require(sidebar.map { $0.bounds.height }.min())
+        let list = try #require(sidebar.first { $0.bounds.height > rowHeight * 2 }, "no sidebar list proxy in the key view chain")
+        #expect(window.makeFirstResponder(list))
+        for _ in 0..<3 { while let e = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(e) } }
+    }
+
     /// With Keyboard navigation off the list is the focus target and the arrow handlers drive selection. Real key events go through the
     /// window, so deleting `onKeyPress` (or the list's focus) leaves the page where it was and fails this.
     @Test func arrowKeysMoveSidebarSelectionWithKeyboardNavigationOff() throws {
         let (controller, window) = try keyWindow(page: .writing, fullKeyboardAccess: false)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        try focusSidebarList(in: window)
         try press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
         #expect(controller.model.page == .appearance)
         try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
