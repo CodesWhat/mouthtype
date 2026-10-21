@@ -20,7 +20,8 @@ public final class TextInserter {
     private let clipboard: PasteboardSession
     private let keys: PasteKeyResolving
     private let sleep: @Sendable (TimeInterval) async throws -> Void
-    private let now: @MainActor () -> Date
+    /// Monotonic, so a wall-clock jump (sleep/wake, NTP) can neither expire nor stretch a deadline.
+    private let now: @MainActor () -> ContinuousClock.Instant
     /// How many real key presses and clicks have happened, or nil when that isn't known.
     private let inputGeneration: @MainActor () -> UInt64?
     private let observeBoundary: @MainActor (PasteBoundaryDiagnostic) -> Void
@@ -41,7 +42,7 @@ public final class TextInserter {
         var bundleID: String?
         var element: FocusedElement?
         var finalCharacter: Character
-        var date: Date
+        var date: ContinuousClock.Instant
         /// The input count right after the paste; nil when unknown.
         var inputGeneration: UInt64?
     }
@@ -50,7 +51,7 @@ public final class TextInserter {
     public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
         self.observeBoundary = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
         self.chunkedPaste = { PasteSettings.chunksEnabled($0) }
-        self.now = { Date() }
+        self.now = { ContinuousClock.now }
         self.inputGeneration = inputGeneration
         self.restrictedToPID = restrictedToPID
         self.focus = AccessibilityFocusReader()
@@ -65,7 +66,7 @@ public final class TextInserter {
     init(
         focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, keys: PasteKeyResolving,
         schedule: @escaping PasteboardSession.Schedule, sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
-        now: @escaping @MainActor () -> Date = { Date() }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
+        now: @escaping @MainActor () -> ContinuousClock.Instant = { ContinuousClock.now }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
         restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false },
         observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
     ) {
@@ -135,7 +136,7 @@ public final class TextInserter {
         batchGeneration += 1
         cancelVerification()
         let work = Task {
-            let deadline = now().addingTimeInterval(PasteboardSession.receiptCap)
+            let deadline = now() + .seconds(PasteboardSession.receiptCap)
             for _ in 0..<400 {
                 guard deliveryActive, now() < deadline else { break }
                 do { try await sleep(0.02) } catch { break }
@@ -336,9 +337,9 @@ public final class TextInserter {
         return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: target, finalText: text)
     }
 
-    private func waitForPreviousPaste(_ lease: Int, deadline suppliedDeadline: Date? = nil) async -> Bool {
+    private func waitForPreviousPaste(_ lease: Int, deadline suppliedDeadline: ContinuousClock.Instant? = nil) async -> Bool {
         let generation = batchGeneration
-        let deadline = suppliedDeadline ?? now().addingTimeInterval(PasteboardSession.receiptCap)
+        let deadline = suppliedDeadline ?? now() + .seconds(PasteboardSession.receiptCap)
         func mayContinue() -> Bool {
             !Task.isCancelled && batchGeneration == generation && now() < deadline
                 && (clipboard.holdsPaste(lease) || clipboard.wasRestored(lease))
@@ -379,7 +380,7 @@ public final class TextInserter {
         let input = inputGeneration()
         let generation = batchGeneration
         // The injected clock, so a stalled main thread in a test can't spend the budget.
-        let deadline = now().addingTimeInterval(8)
+        let deadline = now() + .seconds(8)
         func mayContinue() -> Bool {
             let current = focus.snapshot()
             return !Task.isCancelled && generation == batchGeneration && now() < deadline
@@ -452,8 +453,8 @@ public final class TextInserter {
         guard let last = lastPaste else { return .noPreviousPaste }
         guard let pid = target.pid, last.pid == pid, last.bundleID == target.bundleID else { return .targetChanged }
         if let element = last.element, let other = target.element, element != other { return .elementChanged }
-        let age = now().timeIntervalSince(last.date)
-        guard age >= 0, age <= Self.continuationWindow else { return .outsideWindow }
+        let age = last.date.duration(to: now())
+        guard age >= .zero, age <= .seconds(Self.continuationWindow) else { return .outsideWindow }
         guard let recorded = last.inputGeneration, let current = inputGeneration() else { return .inputUnavailable }
         guard current == recorded else { return .inputChanged }
         return .available(last.finalCharacter)
