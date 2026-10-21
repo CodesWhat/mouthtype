@@ -60,8 +60,8 @@ Column {
         cleanupModel: Logic.levelChoices(root.ctxLevelLabel())
         cleanupValue: Logic.levelIndex(rule ? rule.cleanup : null)
         removeLabel: "Remove " + modelData.name + " from " + root.noun
-        onToneChosen: function(index) { root.edit(Logic.ruleRequests(modelData, rule, "tone", Logic.TONE_IDS[index])) }
-        onCleanupChosen: function(index) { root.edit(Logic.ruleRequests(modelData, rule, "cleanup", Logic.LEVEL_IDS[index])) }
+        onToneChosen: function(index) { root.edit(Logic.ruleRequests(modelData, root.rules, "tone", Logic.TONE_IDS[index])) }
+        onCleanupChosen: function(index) { root.edit(Logic.ruleRequests(modelData, root.rules, "cleanup", Logic.LEVEL_IDS[index])) }
         onRemoved: root.edit([["style-remove-app", [root.context.id, modelData.id]]])
       }
     }

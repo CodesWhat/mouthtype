@@ -88,18 +88,25 @@ class LogicTests(unittest.TestCase):
 
     def test_rule_requests_cover_each_window_class_once(self):
         member = {"id": "slack", "name": "Slack", "apps": ["Slack", "slack", "com.slack.Slack"]}
-        requests = self.run_js("L.ruleRequests(%s, null, 'tone', 'casual')" % json.dumps(member))
+        requests = self.run_js("L.ruleRequests(%s, [], 'tone', 'casual')" % json.dumps(member))
         self.assertEqual(requests, [["style-rule", ["Slack", "casual", "none", "Slack"]],
                                     ["style-rule", ["com.slack.Slack", "casual", "none", "Slack"]]])
 
     def test_rule_requests_keep_the_other_field(self):
         member = {"id": "a:x", "name": "X", "apps": ["x"]}
         rule = {"app": "x", "tone": "formal", "cleanup": "fast"}
-        self.assertEqual(self.run_js("L.ruleRequests(%s, %s, 'cleanup', null)" % (json.dumps(member), json.dumps(rule))),
+        self.assertEqual(self.run_js("L.ruleRequests(%s, [%s], 'cleanup', null)" % (json.dumps(member), json.dumps(rule))),
                          [["style-rule", ["x", "formal", "none", "X"]]])
         rule["tone"] = None
-        self.assertEqual(self.run_js("L.ruleRequests(%s, %s, 'cleanup', null)" % (json.dumps(member), json.dumps(rule))),
+        self.assertEqual(self.run_js("L.ruleRequests(%s, [%s], 'cleanup', null)" % (json.dumps(member), json.dumps(rule))),
                          [["style-rule", ["x", "none", "none", "X"]]])
+
+    def test_each_window_class_keeps_its_own_other_field(self):
+        member = {"id": "slack", "name": "Slack", "apps": ["Slack", "com.slack.Slack"]}
+        rules = [{"app": "Slack", "tone": None, "cleanup": "fast"}, {"app": "com.slack.Slack", "tone": None, "cleanup": "thorough"}]
+        self.assertEqual(self.run_js("L.ruleRequests(%s, %s, 'tone', 'casual')" % (json.dumps(member), json.dumps(rules))),
+                         [["style-rule", ["Slack", "casual", "fast", "Slack"]],
+                          ["style-rule", ["com.slack.Slack", "casual", "thorough", "Slack"]]])
 
     def test_rule_lookup_ignores_case(self):
         rules = [{"app": "SLACK", "tone": "casual", "cleanup": None}]

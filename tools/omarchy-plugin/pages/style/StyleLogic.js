@@ -179,12 +179,8 @@ function levelIndex(id) { var at = LEVEL_IDS.indexOf(id === undefined ? null : i
 function sameAs(noun, title) { return "Same as " + noun + (title ? " · " + title : "") }
 
 // The control.py requests that set one field of a member's rule. A built-in can ship under several window classes, so every
-// class gets the same rule. The other field keeps what the rule already holds. Both ending up unset removes the rule.
-function ruleRequests(member, rule, field, value) {
-  var tone = rule ? rule.tone : null
-  var cleanup = rule ? rule.cleanup : null
-  if (field === "tone") tone = value
-  else cleanup = value
+// class gets the change, and each class keeps whatever the other field holds on its own rule. Both ending up unset removes it.
+function ruleRequests(member, rules, field, value) {
   var out = []
   var apps = member.apps || []
   var seen = {}
@@ -192,6 +188,11 @@ function ruleRequests(member, rule, field, value) {
     var key = apps[i].toLowerCase()
     if (seen[key]) continue
     seen[key] = true
+    var rule = ruleFor(rules, [apps[i]])
+    var tone = rule ? rule.tone : null
+    var cleanup = rule ? rule.cleanup : null
+    if (field === "tone") tone = value
+    else cleanup = value
     out.push(["style-rule", [apps[i], tone || "none", cleanup || "none", member.name]])
   }
   return out

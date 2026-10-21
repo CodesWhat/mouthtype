@@ -21,6 +21,8 @@ Item {
   property var styles: null
   property string editError: ""
   property var seen: ({})
+  // Edits sent and not yet answered. Rule writes are built from the last reply, so editing waits until they are all back.
+  property int pending: 0
 
   readonly property var watched: ["style-state", "style-set-default-tone", "style-set-tone", "style-set-cleanup", "style-add-app",
     "style-remove-app", "style-rule", "set-config", "cleanup-setup"]
@@ -55,6 +57,8 @@ Item {
   // Send a list of [verb, args] control.py requests in order.
   function send(requests) {
     editError = ""
+    pending += requests.length
+    settle.restart()
     for (var i = 0; i < requests.length; i++) request(requests[i][0], requests[i][1])
   }
 
@@ -69,6 +73,7 @@ Item {
       var reply = results[verb]
       if (reply === undefined || reply === null || reply === seen[verb]) continue
       next[verb] = reply
+      if (verb !== "style-state" && pending > 0) pending--
       if (reply.error) { editError = String(reply.error); continue }
       editError = ""
       if (reply.contexts !== undefined) styles = reply
@@ -79,6 +84,9 @@ Item {
   onBackendChanged: absorb()
   onActiveChanged: if (active) refresh()
   Component.onCompleted: { absorb(); startup.start() }
+
+  // If a reply never comes, editing unlocks again.
+  Timer { id: settle; interval: 15000; onTriggered: root.pending = 0 }
 
   // The shell wires `request` and `active` after the page is created, so the first read waits a beat.
   Timer {
@@ -131,6 +139,7 @@ Item {
 
       ContextTab {
         id: contextTab
+        enabled: root.pending === 0
         visible: root.tab !== "cleanup" && root.current !== null
         width: parent.width
         context: root.current ? root.current : ({})
