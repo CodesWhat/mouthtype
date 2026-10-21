@@ -15,10 +15,13 @@ enum DesignPalette {
         static let ink3 = pair(light: 0x6B6B70, dark: 0x9A9A9F, contrastLight: 0x45454A, contrastDark: 0xC8C8CC)
         static let hair = pair(light: (0, 0, 0, 0.12), dark: (1, 1, 1, 0.14), contrastLight: (0, 0, 0, 0.45), contrastDark: (1, 1, 1, 0.5))
         static let hair2 = pair(light: (0, 0, 0, 0.07), dark: (1, 1, 1, 0.08), contrastLight: (0, 0, 0, 0.3), contrastDark: (1, 1, 1, 0.34))
-        // The v1-pass lime (palette page, 2026-10-20): the accent is a fill, never a text colour. Light mode holds 3:1 against white
-        // and dark ink on it holds 4.5:1; accentText and focus are the darker lime for text and the ring.
-        static let accent = pair(light: 0x76A11A, dark: 0xA6CD52)
-        static let accentSoft = pair(light: (0x76, 0xA1, 0x1A, 0.14), dark: (0xA6, 0xCD, 0x52, 0.16), bytes: true)
+        // The website's --lime (#D3E58B): the accent is a fill, never a text colour. Dark ink on it holds ~13:1, but it is only ~1.4:1
+        // against white, so a lime shape that has to be seen on a light surface takes a 1px accentMark edge or is drawn in accentMark.
+        // accentText and focus are the darker lime for text and the ring.
+        static let accent = pair(light: 0xD3E58B, dark: 0xD3E58B)
+        static let accentSoft = pair(light: (0xD3, 0xE5, 0x8B, 0.45), dark: (0xD3, 0xE5, 0x8B, 0.16), bytes: true)
+        /// Non-text accent: edges, small dots, thin bars and strokes. 3:1 or better on every surface it sits on.
+        static let accentMark = pair(light: 0x4A6A12, dark: 0xD3E58B)
         static let onAccent = pair(light: 0x1D1D1F, dark: 0x1F1F21)
         static let accentText = pair(light: 0x4A6A12, dark: 0xA6CD52)
         static let focus = pair(light: 0x4A6A12, dark: 0xA6CD52)
@@ -34,7 +37,7 @@ enum DesignPalette {
         static let personalBestInk = pair(light: 0x6B3A0A, dark: 0xF5C28F)
         static let sel = pair(light: (0, 0, 0, 0.08), dark: (1, 1, 1, 0.10))
         static let c0 = pair(light: 0xEFF4E4, dark: 0x373E2A)
-        static let c1 = pair(light: 0xCBDBA8, dark: 0x556535)
+        static let c1 = pair(light: 0xD3E58B, dark: 0x556535)
         static let c2 = pair(light: 0x76A11A, dark: 0x779041)
         static let c3 = pair(light: 0x5C7E14, dark: 0xA6CD52)
         static let c4 = pair(light: 0x3B4F0E, dark: 0xDBEBBA)
@@ -61,6 +64,7 @@ enum DesignPalette {
     static let accent = Color(nsColor: NS.accent)
     static let accentSoft = Color(nsColor: NS.accentSoft)
     static let onAccent = Color(nsColor: NS.onAccent)
+    static let accentMark = Color(nsColor: NS.accentMark)
     static let accentText = Color(nsColor: NS.accentText)
     static let focus = Color(nsColor: NS.focus)
     static let orange = Color(nsColor: NS.orange)

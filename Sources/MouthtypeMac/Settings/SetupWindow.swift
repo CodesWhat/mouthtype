@@ -185,7 +185,7 @@ struct SetupView: View {
         .frame(width: SetupWindow.contentSize.width, height: SetupWindow.contentSize.height)
         .ignoresSafeArea()
         .font(DesignFont.sans(DesignFont.body))
-        .tint(DesignPalette.accent)
+        .tint(DesignPalette.accentMark)
         .background { DesignSidebarBackground(solid: solid) }
     }
 
@@ -325,6 +325,7 @@ struct SetupProgressBar: View {
                 Capsule().fill(DesignPalette.track)
                     .overlay(Capsule().strokeBorder(DesignPalette.hair, lineWidth: 1))
                 Capsule().fill(DesignPalette.accent)
+                    .overlay(Capsule().strokeBorder(DesignPalette.accentMark, lineWidth: 1))
                     .frame(width: max(proxy.size.width * min(max(fraction, 0), 1), fraction > 0 ? 6 : 0))
             }
         }
@@ -426,6 +427,7 @@ struct SetupStepDots: View {
         HStack(spacing: 6) {
             ForEach(Array(dots.enumerated()), id: \.offset) { _, dot in
                 Capsule().fill(fill(dot)).frame(width: dot == .active ? 18 : 5, height: 5)
+                    .overlay { if dot == .active { Capsule().strokeBorder(DesignPalette.accentMark, lineWidth: 1) } }
             }
         }
         .accessibilityHidden(true)
@@ -464,6 +466,7 @@ private struct SetupActionButtonStyle: ButtonStyle {
             .font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.onAccent)
             .padding(.horizontal, 18).frame(minHeight: 36)
             .background(shape.fill(DesignPalette.accent))
+            .overlay(shape.strokeBorder(DesignPalette.accentMark, lineWidth: 1))
             .overlay { if configuration.isPressed { shape.fill(Color.black.opacity(0.1)) } }
             .contentShape(shape)
             .opacity(isEnabled ? 1 : 0.45)

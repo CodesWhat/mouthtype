@@ -101,6 +101,15 @@ final class CardButtonView: CardControlView {
             fill = palette.secondary.fill(hovered: isHovered, pressed: isPressed)
         }
         fillShape(in: rect, radius: 10 * k, round: false, color: fill)
+        if isPrimary, let edge = palette.primaryEdge, let context = NSGraphicsContext.current?.cgContext {
+            // A 1px ring in the same squircle the fill uses.
+            context.saveGState()
+            context.addPath(MatrixPillLayout.squirclePath(rect, reference: 10 * k / MatrixPillLayout.cornerFactor))
+            context.addPath(MatrixPillLayout.squirclePath(rect.insetBy(dx: 1, dy: 1), reference: 9 * k / MatrixPillLayout.cornerFactor))
+            context.setFillColor(edge.cgColor)
+            context.fillPath(using: .evenOdd)
+            context.restoreGState()
+        }
         if !isPrimary, palette.chips, let context = NSGraphicsContext.current?.cgContext {
             // The glass chip's specular edge along its top.
             context.saveGState()
