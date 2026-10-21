@@ -150,6 +150,17 @@ import MouthtypeCore
         #expect(TapeRange.label(12, edge: false) == "NOON" && TapeRange.label(14, edge: false) == "2" && TapeRange.label(20, edge: true) == "8 PM")
     }
 
+    @Test func hoverClearsWhenThePointerLeaves() {
+        let takes = denseDay
+        let range = TapeRange(takes: takes, nowSeconds: 14 * 3_600 + 30 * 60)
+        let slots = TapeSlots.merge(takes, range: range, width: 600)
+        let over = TapeSlots.hoveredIndex(slots, pointerX: slots[0].x + 1)
+        #expect(over == 0)
+        #expect(TapeSlots.hoveredIndex(slots, pointerX: nil) == nil)
+        #expect(TapeSlots.hoveredIndex(slots, pointerX: slots[0].x - 200) == nil)
+        #expect(TapeSlots.hoveredIndex([], pointerX: 10) == nil)
+    }
+
     @Test func slotsNeverOverlapAndKeepTheirWords() {
         let takes = denseDay
         let range = TapeRange(takes: takes, nowSeconds: 14 * 3_600 + 30 * 60)
