@@ -16,6 +16,12 @@ SOURCE = Path(__file__).resolve().parent
 CONFIG_ROOT = Path.home() / ".config/omarchy"
 TARGET = CONFIG_ROOT / "plugins/dstahl.mouthtype"
 SHELL = CONFIG_ROOT / "shell.json"
+UNIT = Path.home() / ".config/systemd/user/mouthtype-linux.service"
+BINDINGS = Path.home() / ".config/hypr/bindings.lua"
+PREFS = Path.home() / ".config/mouthtype/omarchy-plugin.json"
+BIND_BEGIN = "-- Mouthtype Omarchy plugin shortcut: begin"
+BIND_END = "-- Mouthtype Omarchy plugin shortcut: end"
+UNIT_MARKER = "# Managed by the Mouthtype Omarchy plugin"
 
 
 def read_versions(source=SOURCE):
@@ -52,22 +58,131 @@ def parse(argv):
     import argparse
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--update", action="store_true", help="Replace an existing installed plugin's files in place")
+    parser.add_argument("--uninstall", action="store_true",
+                        help="Remove the plugin, its bar entry, login service, shortcut block and settings file")
+    parser.add_argument("--purge", action="store_true",
+                        help="With --uninstall, also delete models, recordings and configuration under ~/.local/share|state|.config/mouthtype")
     parser.add_argument("--no-autostart", action="store_true", help="Do not enable the login service that starts dictation at boot")
     parser.add_argument("--no-restart-shell", action="store_true", help="Do not restart the Omarchy shell afterwards")
+    parser.add_argument("--shortcut", choices=("toggle", "hold"),
+                        help="Also bind the default dictation key (toggle: Super+Alt+M, hold: F10), refusing a key Hyprland already uses")
     return parser.parse_args(argv)
+
+
+def load_shell():
+    if not SHELL.is_file():
+        raise ValueError(f"Omarchy shell configuration not found at {SHELL}. This installer is for Omarchy's "
+                         "Quickshell desktop; run it on an Omarchy install after the shell has started once.")
+    try:
+        data = json.loads(SHELL.read_text())
+    except ValueError as error:
+        raise ValueError(f"{SHELL} is not valid JSON ({error}); fix or restore it, then run this again") from error
+    if not isinstance(data, dict) or data.get("version") != 1:
+        raise ValueError(f"Unknown Omarchy shell configuration version in {SHELL}; this plugin supports version 1")
+    return data
+
+
+def write_shell(data):
+    backup = SHELL.with_name(f"shell.json.bak.mouthtype.{int(time.time())}")
+    shutil.copy2(SHELL, backup)
+    fd, temporary = tempfile.mkstemp(prefix=".shell-mouthtype-", dir=CONFIG_ROOT)
+    try:
+        with os.fdopen(fd, "w") as output:
+            json.dump(data, output, indent=2)
+            output.write("\n")
+        os.chmod(temporary, SHELL.stat().st_mode & 0o777)
+        os.replace(temporary, SHELL)
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return backup
+
+
+def restart_shell(args):
+    if not args.no_restart_shell and shutil.which("omarchy-restart-shell"):
+        subprocess.run(["omarchy-restart-shell"], check=False, timeout=90, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    return False
+
+
+def uninstall(args):
+    """Undo install: service, shortcut block, bar entry, plugin files, plugin settings. Models and recordings stay unless --purge."""
+    systemctl = shutil.which("systemctl")
+    if UNIT.exists():
+        if UNIT_MARKER in UNIT.read_text(encoding="utf-8"):
+            if systemctl:
+                for verb in ("disable", "stop"):
+                    subprocess.run([systemctl, "--user", verb, UNIT.name], check=False, timeout=20,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            UNIT.unlink()
+            if systemctl:
+                subprocess.run([systemctl, "--user", "daemon-reload"], check=False, timeout=20,
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print(f"Removed {UNIT}")
+        else:
+            print(f"Left {UNIT} alone: the Mouthtype plugin did not create it", file=sys.stderr)
+    if BINDINGS.is_file() and BIND_BEGIN in BINDINGS.read_text(encoding="utf-8"):
+        original = BINDINGS.read_text(encoding="utf-8")
+        before, _, rest = original.partition(BIND_BEGIN)
+        if BIND_END in rest:
+            updated = before.rstrip() + rest.split(BIND_END, 1)[1]
+            backup = BINDINGS.with_name(f"bindings.lua.bak.mouthtype.{int(time.time())}")
+            shutil.copy2(BINDINGS, backup)
+            BINDINGS.write_text(updated.rstrip() + "\n", encoding="utf-8")
+            if shutil.which("hyprctl"):
+                subprocess.run(["hyprctl", "reload"], check=False, timeout=10, capture_output=True)
+            print(f"Removed the Mouthtype shortcut block from {BINDINGS} (backup: {backup})")
+        else:
+            print(f"The Mouthtype block in {BINDINGS} is incomplete; remove it by hand.", file=sys.stderr)
+    if SHELL.is_file():
+        data = load_shell()
+        changed = False
+        for section in data.get("bar", {}).get("layout", {}).values():
+            if isinstance(section, list):
+                kept = [entry for entry in section if not (isinstance(entry, dict) and entry.get("id") == "dstahl.mouthtype")]
+                changed = changed or len(kept) != len(section)
+                section[:] = kept
+        if changed:
+            print(f"Removed the bar entry from {SHELL} (backup: {write_shell(data)})")
+    if TARGET.exists() or TARGET.is_symlink():
+        shutil.rmtree(TARGET) if TARGET.is_dir() and not TARGET.is_symlink() else TARGET.unlink()
+        print(f"Removed {TARGET}")
+    if PREFS.exists():
+        PREFS.unlink()
+    if args.purge:
+        for directory in (Path.home() / ".local/share/mouthtype", Path.home() / ".local/state/mouthtype",
+                          Path.home() / ".config/mouthtype"):
+            if directory.is_dir():
+                shutil.rmtree(directory)
+                print(f"Deleted {directory}")
+    else:
+        print("Models, recordings and settings under ~/.local/share/mouthtype, ~/.local/state/mouthtype and "
+              "~/.config/mouthtype were kept. Add --purge to delete them.")
+    if restart_shell(args):
+        print("Omarchy shell restarted.")
 
 
 def main(argv=None):
     args = parse(argv)
+    if args.uninstall:
+        return uninstall(args)
     if (TARGET.exists() or TARGET.is_symlink()) and not args.update:
         raise FileExistsError(f"Plugin already exists: {TARGET} (use --update to replace its files)")
-    data = json.loads(SHELL.read_text())
-    if data.get("version") != 1:
-        raise ValueError("Unknown Omarchy shell configuration version")
-    right = data["bar"]["layout"]["right"]
+    data = load_shell()
+    right = data.get("bar", {}).get("layout", {}).get("right")
+    if not isinstance(right, list):
+        raise ValueError(f"{SHELL} has no bar layout to add the widget to (expected bar.layout.right)")
     if not any(entry.get("id") == "dstahl.mouthtype" for entry in right):
         index = next((i for i, entry in enumerate(right) if entry.get("id") == "dstahl.agents"), len(right))
         right.insert(index, {"id": "dstahl.mouthtype"})
+    launcher = shutil.which("mouthtype-linux") or next(
+        (str(path) for path in (Path.home() / ".local/bin/mouthtype-linux", Path("/usr/bin/mouthtype-linux")) if path.is_file()), None)
+    if launcher is None:
+        print("Warning: mouthtype-linux is not installed, so the widget will show Unavailable until it is "
+              "(install the package, or tools/linux-desktop/install.py).", file=sys.stderr)
+    elif not (Path.home() / ".local/share/mouthtype/speech-candidate/linux.json").is_file():
+        print("Warning: no speech setup yet, so the widget will show Unavailable until you run "
+              "tools/linux-desktop/setup.py (or setup_speech.py).", file=sys.stderr)
 
     TARGET.parent.mkdir(parents=True, exist_ok=True)
     if args.update and TARGET.exists():
@@ -83,18 +198,7 @@ def main(argv=None):
     (TARGET / "control.py").chmod(0o755)
     (TARGET / "save_dialog.py").chmod(0o755)
 
-    backup = SHELL.with_name(f"shell.json.bak.mouthtype.{int(time.time())}")
-    shutil.copy2(SHELL, backup)
-    fd, temporary = tempfile.mkstemp(prefix=".shell-mouthtype-", dir=CONFIG_ROOT)
-    try:
-        with os.fdopen(fd, "w") as output:
-            json.dump(data, output, indent=2)
-            output.write("\n")
-        os.chmod(temporary, SHELL.stat().st_mode & 0o777)
-        os.replace(temporary, SHELL)
-    finally:
-        if os.path.exists(temporary):
-            os.unlink(temporary)
+    backup = write_shell(data)
     print(TARGET)
     print(f"Config backup: {backup}")
     if not args.no_autostart:
@@ -106,20 +210,35 @@ def main(argv=None):
         except json.JSONDecodeError:
             outcome = {}
         if result.returncode or outcome.get("error"):
-            print("Launch at login was not enabled: " + str(outcome.get("error") or "systemctl failed"), file=sys.stderr)
+            print("Launch at login was not enabled: " + str(outcome.get("error") or result.stderr.strip() or "systemctl failed"),
+                  file=sys.stderr)
         else:
             print("Launch at login enabled (systemd user service mouthtype-linux); disable it from the menu or with --no-autostart.")
             if not outcome.get("running"):
                 subprocess.run(["systemctl", "--user", "start", "mouthtype-linux.service"], check=False, timeout=20,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    if not args.no_restart_shell and shutil.which("omarchy-restart-shell"):
-        subprocess.run(["omarchy-restart-shell"], check=False, timeout=90, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if args.shortcut:
+        result = subprocess.run([sys.executable, str(TARGET / "control.py"), "set-shortcut", args.shortcut],
+                                capture_output=True, text=True, timeout=60)
+        try:
+            outcome = json.loads(result.stdout or "{}")
+        except json.JSONDecodeError:
+            outcome = {}
+        if result.returncode or outcome.get("error"):
+            print("Shortcut was not bound: " + str(outcome.get("error") or result.stderr.strip() or "unknown error") +
+                  ". Choose a key from the Mouthtype menu instead.", file=sys.stderr)
+        else:
+            print(f"Dictation shortcut bound ({args.shortcut}); change it from the menu.")
+    if restart_shell(args):
         print("Omarchy shell restarted; the Mouthtype glyph is on the right side of the bar.")
 
 
 if __name__ == "__main__":
     try:
         main()
+    except FileExistsError as error:
+        print(f"Mouthtype plugin installation failed: {error}", file=sys.stderr)
+        sys.exit(1)
     except (OSError, ValueError, KeyError) as error:
         print(f"Mouthtype plugin installation failed: {error}", file=sys.stderr)
         sys.exit(1)

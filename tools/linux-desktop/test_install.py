@@ -111,6 +111,36 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(config.read_text(), 'user content')
             with self.assertRaises(FileExistsError):
                 installer.install(ROOT, prefix)
+    def test_update_replaces_and_uninstall_removes_only_what_was_installed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            prefix = Path(temp)
+            installer.install(ROOT, prefix)
+            (prefix / 'lib/mouthtype-linux/stale.txt').write_text('old')
+            (prefix / 'bin/other').write_text('keep')
+            installer.install(ROOT, prefix, update=True)
+            self.assertFalse((prefix / 'lib/mouthtype-linux/stale.txt').exists())
+            self.assertEqual(len(installer.uninstall(prefix)), 2)
+            self.assertFalse((prefix / 'lib/mouthtype-linux').exists())
+            self.assertEqual((prefix / 'bin/other').read_text(), 'keep')
+            self.assertEqual(installer.uninstall(prefix), [])
+
+    def test_uninstall_refuses_a_foreign_launcher(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / 'bin').mkdir()
+            (Path(temp) / 'bin/mouthtype-linux').write_text('#!/bin/sh\necho mine\n')
+            with self.assertRaises(FileExistsError):
+                installer.uninstall(temp)
+            self.assertTrue((Path(temp) / 'bin/mouthtype-linux').exists())
+
+    def test_existing_install_error_names_the_fix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            installer.install(ROOT, temp)
+            result = subprocess.run(['python3', str(Path(installer.__file__)), '--prefix', temp],
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('--update', result.stderr)
+            self.assertIn('--uninstall', result.stderr)
+
     def test_existing_launcher_is_not_replaced(self):
         with tempfile.TemporaryDirectory() as temp:
             prefix = Path(temp)

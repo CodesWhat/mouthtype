@@ -82,6 +82,10 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
             clipboard = which('wl-paste') is not None
             add('phrase_clipboard', 'ok' if clipboard else 'error', 'Clipboard helper availability checked; clipboard was not read.',
                 '' if clipboard else 'Install wl-clipboard using normal package policy, or disable phrase_clipboard.')
+        hyprland = which('hyprctl') is not None
+        add('hyprland', 'ok' if hyprland else 'warning',
+            'hyprctl is available for window-aware delivery.' if hyprland else 'hyprctl is missing, so the active window cannot be identified.',
+            '' if hyprland else 'Recovery-only delivery still works. For paste or type delivery run this on Hyprland (Omarchy ships it).')
         delivery = config['delivery']['mode']
         helpers = ('hyprctl', 'wtype') if delivery == 'type' else ('hyprctl', 'wtype', 'wl-copy', 'wl-paste')
         available = delivery == 'recover' or (config['delivery'].get('allow_unknown_secure_field') is True
@@ -110,6 +114,9 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
             notifications = which('notify-send') is not None
             add('notifications', 'ok' if notifications else 'warning', 'Notification helper checked; display is unverified.',
                 '' if notifications else 'Optional: install libnotify or disable notifications in linux.json.')
+    add('python', 'ok' if sys.version_info >= (3, 10) else 'error',
+        'Python ' + '.'.join(map(str, sys.version_info[:3])) + ' runs this client.',
+        '' if sys.version_info >= (3, 10) else 'Install Python 3.10 or newer.')
     try:
         status = service_check(Path(runtime) / 'session.sock')
         if not isinstance(status, dict) or 'state' not in status:
@@ -117,7 +124,8 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
         add('service', 'ok', 'Existing session service answered status. No recording was started.')
     except (OSError, ValueError):
         add('service', 'warning', 'Session service is not answering.',
-            'Start mouthtype-linux with the same --config PATH and serve command when ready.')
+            'Start it with: systemctl --user start mouthtype-linux (after the Omarchy plugin install enables it), '
+            'or run mouthtype-linux serve in a terminal.')
     add('physical_acceptance', 'warning', 'Microphone, model inference and actual compositor delivery were not tested.',
         'Run the coordinated Arch/Omarchy acceptance checks separately.')
     return dict(ready=not any(item['status'] == 'error' for item in checks), physical_tested=False, checks=checks)

@@ -15,7 +15,12 @@ import time
 
 
 HOME = Path.home()
-LAUNCHER = HOME / ".local/bin/mouthtype-linux"
+def _first_existing(*paths):
+    """A user-local install shadows the packaged one, as it does on PATH; with neither, name the user-local path."""
+    return next((path for path in paths if path.exists()), paths[0])
+
+
+LAUNCHER = _first_existing(HOME / ".local/bin/mouthtype-linux", Path("/usr/bin/mouthtype-linux"))
 CONFIG = HOME / ".local/share/mouthtype/speech-candidate/linux.json"
 RECOVERY = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/recovery"
 LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/omarchy-control.log"
@@ -24,7 +29,8 @@ UNIT = HOME / ".config/systemd/user/mouthtype-linux.service"
 BINDINGS = HOME / ".config/hypr/bindings.lua"
 BIND_BEGIN = "-- Mouthtype Omarchy plugin shortcut: begin"
 BIND_END = "-- Mouthtype Omarchy plugin shortcut: end"
-DESKTOP = HOME / ".local/lib/mouthtype-linux/tools/linux-desktop"
+DESKTOP = _first_existing(HOME / ".local/lib/mouthtype-linux/tools/linux-desktop",
+                          Path("/usr/lib/mouthtype-linux/tools/linux-desktop"))
 ASSETS = Path(__file__).resolve().parent / "assets"
 SAVE_DIALOG = Path(__file__).resolve().parent / "save_dialog.py"
 CLEANUP_DIR = HOME / ".local/share/mouthtype/cleanup-candidate"
@@ -972,6 +978,17 @@ def unit_quote(value):
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
 
 
+def systemctl_user(*arguments, timeout=10, quiet=False):
+    """Run systemctl --user, turning a failure into a message that says why (usually: no systemd user session)."""
+    result = subprocess.run(["systemctl", "--user", *arguments], capture_output=True, text=True, timeout=timeout)
+    if result.returncode and not quiet:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        reason = detail[-1] if detail else f"exit status {result.returncode}"
+        raise RuntimeError(f"systemctl --user {arguments[0]} failed: {reason}. "
+                           "It needs a logged-in systemd user session (a graphical Omarchy login).")
+    return result
+
+
 def set_autostart(value):
     if value not in {"on", "off"}:
         raise RuntimeError("Unsupported login setting")
@@ -982,8 +999,8 @@ def set_autostart(value):
             raise RuntimeError("systemd user services are unavailable")
         if legacy_unit_enabled():
             # Older installs linked into default.target; unlink it while the old unit still names that target.
-            subprocess.run(["systemctl", "--user", "disable", UNIT.name], check=True, timeout=10,
-                           stdout=subprocess.DEVNULL)
+            systemctl_user("disable", UNIT.name)
+        existed = UNIT.exists()
         UNIT.parent.mkdir(parents=True, exist_ok=True)
         unit = ("[Unit]\nDescription=Mouthtype Linux dictation service\n"
                 "PartOf=graphical-session.target\n"
@@ -993,13 +1010,16 @@ def set_autostart(value):
                 "Restart=always\nRestartSec=2\n\n"
                 "[Install]\nWantedBy=graphical-session.target\n")
         UNIT.write_text(unit, encoding="utf-8")
-        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True, timeout=10)
-        subprocess.run(["systemctl", "--user", "enable", UNIT.name], check=True, timeout=10,
-                       stdout=subprocess.DEVNULL)
+        try:
+            systemctl_user("daemon-reload")
+            systemctl_user("enable", UNIT.name)
+        except (RuntimeError, subprocess.SubprocessError):
+            if not existed:
+                UNIT.unlink(missing_ok=True)  # Leave nothing half-installed when systemd was not reachable.
+            raise
     else:
         if UNIT.exists():
-            subprocess.run(["systemctl", "--user", "disable", UNIT.name], check=True, timeout=10,
-                           stdout=subprocess.DEVNULL)
+            systemctl_user("disable", UNIT.name)
     return state()
 
 

@@ -1703,6 +1703,31 @@ def requested_action(tokens, parser, commands):
 CLIENT_VERBS = ('start', 'stop', 'toggle', 'cancel', 'status', 'capabilities')
 
 
+def default_config():
+    """The documented config path, else the one setup_speech.py writes, so a prepared install works without --config."""
+    preferred = Path.home() / '.config/mouthtype/linux.json'
+    prepared = Path.home() / '.local/share/mouthtype/speech-candidate/linux.json'
+    return prepared if prepared.is_file() and not preferred.exists() else preferred
+
+
+def failure_hint(runtime):
+    """A path-free next step for the two setup failures every first run can hit, or None."""
+    runtime = Path(runtime)
+    if not runtime.parent.is_dir() or not os.access(runtime.parent, os.W_OK):
+        return 'XDG_RUNTIME_DIR is missing or not writable. Run this from a logged-in graphical session.'
+    if not (runtime / 'session.sock').exists():
+        return 'The dictation service is not running. Start it with: systemctl --user start mouthtype-linux'
+    return None
+
+
+def unavailable_report(error, runtime):
+    report = {'error': 'unavailable', 'error_class': type(error).__name__}
+    hint = failure_hint(runtime)
+    if hint:
+        report['hint'] = hint
+    return report
+
+
 def client_verb(tokens):
     """(verb, runtime directory) when argv is just global path options and one plain socket verb or capabilities, else None.
 
@@ -1738,10 +1763,10 @@ def main(argv=None, *, cli_directory=None):
             print(json.dumps(request(plain[1] / 'session.sock', plain[0], None)))
             return 0
         except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
-            print(json.dumps({'error': 'unavailable', 'error_class': type(error).__name__}), file=sys.stderr)
+            print(json.dumps(unavailable_report(error, plain[1])), file=sys.stderr)
             return 2
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--config', type=Path, default=Path.home() / '.config/mouthtype/linux.json')
+    parser.add_argument('--config', type=Path, default=default_config())
     runtime_base = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid())))
     state_base = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
     parser.add_argument('--runtime', type=Path, default=runtime_base / 'mouthtype')
@@ -1906,7 +1931,8 @@ def main(argv=None, *, cli_directory=None):
         if not isinstance(error, (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError)):
             raise
         # Config paths, model errors and transcripts never go into routine diagnostics.
-        print(json.dumps({'error': 'unavailable', 'error_class': type(error).__name__}), file=sys.stderr)
+        print(json.dumps(unavailable_report(error, getattr(locals().get('args'), 'runtime', runtime_base / 'mouthtype'))),
+              file=sys.stderr)
         return 2
 
 

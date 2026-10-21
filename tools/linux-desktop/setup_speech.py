@@ -32,7 +32,9 @@ def bounded_run(command, seconds):
 
 
 def download_archive(source, destination):
-    bounded_run(['curl', '--fail', '--location', '--silent', '--show-error',
+    # A terminal gets curl's progress bar for the ~465 MiB download; logs and agents get a quiet transfer.
+    meter = ['--progress-bar'] if sys.stderr.isatty() else ['--silent', '--show-error']
+    bounded_run(['curl', '--fail', '--location', *meter,
                  '--proto', '=https', '--proto-redir', '=https', '--connect-timeout', '20',
                  '--speed-limit', '1024', '--speed-time', '60',
                  '--max-time', '3600', '--output', str(destination), source], 3610)
@@ -43,7 +45,9 @@ def setup(destination, *, pins=None, download=None, run=None):
     destination = Path(destination).expanduser().resolve()
     destination.mkdir(mode=0o700, parents=True)
     archive = destination / 'parakeet.tar.bz2'
+    print('1/4 Downloading the Parakeet speech model (about 465 MiB, up to an hour on a slow link)...', flush=True)
     download(pins['parakeet']['source'], archive)
+    print('2/4 Verifying and extracting the model (a few minutes on a slow CPU)...', flush=True)
     if digest(archive) != pins['parakeet']['sha256']:
         raise ValueError('Parakeet archive SHA-256 mismatch')
     model = destination / 'model'
@@ -59,9 +63,11 @@ def setup(destination, *, pins=None, download=None, run=None):
                 shutil.copyfileobj(content, output, length=1024 * 1024)
     settings = prepare_settings(archive, model, None, None, pins=pins)
     venv = destination / 'venv'
+    print('3/4 Creating the Python environment...', flush=True)
     run([sys.executable, '-m', 'venv', str(venv)], 60)
     python = str(venv / 'bin/python')
     requirements = Path(__file__).resolve().parents[1] / 'linux-engine-proof/requirements.txt'
+    print('4/4 Installing the pinned speech runtime from PyPI...', flush=True)
     run([python, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-input',
          '--only-binary=:all:', '--require-hashes', '--index-url', 'https://pypi.org/simple',
          '--timeout', '30', '--retries', '1', '-r', str(requirements)], 240)
@@ -90,10 +96,11 @@ def main(argv=None):
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         print('Speech preparation requires Linux x86_64. Nothing was downloaded.', file=sys.stderr)
         return 2
-    missing = [command for command in ('curl', 'pw-record') if shutil.which(command) is None]
+    packages = {'curl': 'curl', 'pw-record': 'pipewire-audio'}
+    missing = [command for command in packages if shutil.which(command) is None]
     if missing:
-        print('Missing prerequisites: ' + ', '.join(missing) +
-              '. Arch packages: python, python-pip, curl, pipewire-audio; optional libnotify and wtype.', file=sys.stderr)
+        print('Missing prerequisites: ' + ', '.join(missing) + '. Install with: sudo pacman -S --needed ' +
+              ' '.join(packages[command] for command in missing), file=sys.stderr)
         return 2
     def terminate(_event, _frame):
         raise SystemExit(143)
@@ -104,9 +111,20 @@ def main(argv=None):
         print('Prepared recover-only configuration: ' + str(config))
         print('Start explicitly with ' + shlex.join(['mouthtype-linux', '--config', str(config), 'serve']))
         return 0
+    except FileExistsError:
+        print('Speech preparation stopped: ' + str(args.destination) + ' already exists. Choose a new directory, '
+              'or use the existing setup with mouthtype-linux --config ' + str(Path(args.destination) / 'linux.json') + ' doctor.',
+              file=sys.stderr)
+        return 2
     except (OSError, ValueError, KeyError, tarfile.TarError, subprocess.SubprocessError) as error:
-        print('Speech preparation failed: ' + type(error).__name__ +
-              '. Existing directories were preserved; incomplete new setup files remain for inspection.', file=sys.stderr)
+        detail = ''
+        if isinstance(error, subprocess.CalledProcessError):
+            detail = ' (' + Path(str(error.cmd[0])).name + ' exited ' + str(error.returncode) + '; its output is above)'
+        elif isinstance(error, (ValueError, subprocess.TimeoutExpired)):
+            detail = ': ' + str(error)
+        print('Speech preparation failed: ' + type(error).__name__ + detail +
+              '. Existing directories were preserved; incomplete new setup files remain in ' + str(args.destination) +
+              ' for inspection. Remove that directory (or pick another) and run again.', file=sys.stderr)
         return 2
     finally:
         signal.signal(signal.SIGTERM, previous)
