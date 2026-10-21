@@ -4,6 +4,7 @@ from array import array
 import http.client
 import importlib.metadata
 import json
+import os
 from pathlib import Path
 import resource
 import re
@@ -132,10 +133,38 @@ def stop_server(server):
         server.wait(timeout=.25)
 
 
-def cleanup_engine(config):
+def server_description(config):
+    """The server's --version text. With config["version_cache"], a probe is skipped while the binary's stat is unchanged."""
+    cache = config.get("version_cache")
+    key = None
+    if cache:
+        try:
+            real = os.path.realpath(config["server"])
+            info = os.stat(real)
+            key = {"path": real, "size": info.st_size, "mtime_ns": info.st_mtime_ns, "ino": info.st_ino,
+                   "dev": info.st_dev, "ctime_ns": info.st_ctime_ns}
+            stored = json.loads(Path(cache).read_text())
+            if stored.get("key") == key and isinstance(stored.get("description"), str):
+                return stored["description"]
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
     version = subprocess.run([config["server"], "--version"], capture_output=True,
                              timeout=5, check=True, text=True)
     description = version.stdout + version.stderr
+    if cache and key is not None:
+        try:
+            temporary = str(cache) + "." + str(os.getpid()) + ".tmp"
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                json.dump({"key": key, "description": description}, output)
+            os.replace(temporary, cache)
+        except OSError:
+            pass
+    return description
+
+
+def cleanup_engine(config):
+    description = server_description(config)
     if not any(PINS["llama"]["revision"].startswith(revision)
                for revision in re.findall(r"\b[0-9a-f]{7,40}\b", description)):
         raise ValueError("Unexpected llama.cpp revision")

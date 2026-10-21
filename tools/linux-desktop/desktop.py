@@ -25,7 +25,7 @@ import wave
 PROOF = Path(__file__).resolve().parents[1] / 'linux-engine-proof'
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(PROOF))
-from proof import Stopped, Worker, verify_artifacts
+from proof import Stopped, VerifiedHashes, Worker, verify_artifacts
 from spellings import load_spellings
 from phrases import load_phrases, PhraseContextUnavailable
 from cleanup import BasicCleanup
@@ -34,6 +34,7 @@ from imports import FileError, FileTranscription
 import smart
 import styles as style_contexts
 import tone as tone_stage
+import transform_host
 
 INTERFACE = 1
 CAPABILITIES = {
@@ -52,6 +53,14 @@ CAPABILITIES = {
         'secure_field_detection': False, 'delivery_verification': False,
     },
 }
+
+
+def hash_cache(*, environ=None):
+    """The verified-model-hash cache in the state directory. MOUTHTYPE_VERIFY_FULL=1 forces a full SHA-256 every load."""
+    environ = os.environ if environ is None else environ
+    base = Path(environ.get('XDG_STATE_HOME') or Path.home() / '.local/state')
+    return VerifiedHashes(base / 'mouthtype/verified-models.json',
+                          force=environ.get('MOUTHTYPE_VERIFY_FULL', '') not in ('', '0'))
 
 
 def private_write(path, data):
@@ -964,7 +973,8 @@ class PipeWireCapture:
         stop_process(process)
 
 class SpeechEngine:
-    def __init__(self, settings, *, python=sys.executable, worker=None, request_seconds=30, startup_seconds=120):
+    def __init__(self, settings, *, python=sys.executable, worker=None, request_seconds=30, startup_seconds=120,
+                 hash_cache=None):
         if not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict):
             raise ValueError('Invalid speech artifact configuration')
         for item in settings['artifacts'].values():
@@ -976,19 +986,49 @@ class SpeechEngine:
         self.script = worker or PROOF / 'worker.py'
         self.request_seconds, self.startup_seconds = request_seconds, startup_seconds
         self.worker = None
+        self.hash_cache = hash_cache
         self.lock = threading.Lock()
+        self.shutdown = threading.Event()
+        self.warming = None
+        self.warm_guard = threading.Lock()
+
+    def _ensure_loaded(self, cancelled):
+        if self.worker is None:
+            verify_artifacts(self.settings, self.hash_cache)
+            self.worker = Worker(guarded_command([self.python, str(self.script), 'speech']))
+            remaining = self.worker.send({'configuration': self.settings}, self.startup_seconds, cancelled)
+            ready = self.worker.receive(remaining, cancelled)
+            if ready.get('event') != 'ready':
+                raise ValueError('Speech engine is unavailable')
+
+    def warm(self):
+        """Load in the background so the first take does not pay the hash and model load. A failure just leaves the
+        engine cold; the first take retries and reports its own error."""
+        def run():
+            with self.lock:
+                if self.shutdown.is_set():
+                    return
+                try:
+                    self._ensure_loaded(self.shutdown)
+                except (OSError, ValueError, KeyError, TypeError, Stopped):
+                    self.close()
+        with self.warm_guard:
+            if self.warming is not None and self.warming.is_alive():
+                return self.warming
+            self.warming = threading.Thread(target=run, daemon=True)
+            self.warming.start()
+            return self.warming
+
+    def stop(self):
+        self.shutdown.set()
+        with self.lock:
+            self.close()
 
     def transcribe(self, path, cancelled, *, seconds=None):
         seconds = self.request_seconds if seconds is None else seconds
         with self.lock:
             try:
-                if self.worker is None:
-                    verify_artifacts(self.settings)
-                    self.worker = Worker(guarded_command([self.python, str(self.script), 'speech']))
-                    remaining = self.worker.send({'configuration': self.settings}, self.startup_seconds, cancelled)
-                    ready = self.worker.receive(remaining, cancelled)
-                    if ready.get('event') != 'ready':
-                        raise ValueError('Speech engine is unavailable')
+                self._ensure_loaded(cancelled)
                 identity = uuid.uuid4().hex
                 remaining = self.worker.send({'id': identity, 'wav': str(path)}, seconds, cancelled)
                 result = self.worker.receive(remaining, cancelled)
@@ -1011,7 +1051,8 @@ class CleanupEngine:
     RETRY_SECONDS = (30, 120, 480, 1800)
     ABSENT_RECHECK_SECONDS = 30
 
-    def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic):
+    def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic,
+                 hash_cache=None):
         if (not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict) or
                 not isinstance(settings.get('server'), str) or settings.get('prompt', 's1') not in ('s1', 'shared')):
             raise ValueError('Invalid cleanup engine configuration')
@@ -1022,6 +1063,7 @@ class CleanupEngine:
         self.settings, self.python = settings, python
         self.script = worker or PROOF / 'worker.py'
         self.startup_seconds = startup_seconds
+        self.hash_cache = hash_cache
         self.worker = None
         self.lock = threading.Lock()
         # close() sets this so a load in progress stops promptly instead of holding the lock for minutes.
@@ -1062,10 +1104,12 @@ class CleanupEngine:
             return
         self.state = 'loading'
         started = time.monotonic()
-        verify_artifacts(self.settings)
+        verify_artifacts(self.settings, self.hash_cache)
+        configuration = {**self.settings, 'startup_seconds': self.startup_seconds}
+        if self.hash_cache is not None and not self.hash_cache.force:
+            configuration['version_cache'] = str(self.hash_cache.path.with_name('llama-version.json'))
         self.worker = Worker(guarded_command([self.python, str(self.script), 'cleanup']))
-        remaining = self.worker.send({'configuration': {**self.settings, 'startup_seconds': self.startup_seconds}},
-                                     self.startup_seconds, cancelled)
+        remaining = self.worker.send({'configuration': configuration}, self.startup_seconds, cancelled)
         ready = self.worker.receive(remaining, cancelled)
         if ready.get('event') != 'ready':
             raise ValueError('Cleanup engine is unavailable')
@@ -1234,7 +1278,7 @@ def read_message(connection, maximum=4096):
     return json.loads(line)
 
 
-def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup=None):
+def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup=None, bound=None):
     path = Path(path)
     # The lock owns this one runtime socket, including cleanup after an interrupted session.
     with open(str(path) + '.lock', 'a') as ownership:
@@ -1253,6 +1297,8 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
             os.chmod(path, 0o600)
             server.listen(4)
             server.settimeout(.1)
+            if bound is not None:
+                bound()
             end = time.monotonic() + lifetime_seconds
             watchers = []
             last_snapshot = None
@@ -1603,22 +1649,23 @@ def main(argv=None, *, cli_directory=None):
         info = args.runtime.stat()
         if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise ValueError('Runtime directory must be owned by you with mode 0700')
+        verified = hash_cache()
         engine = SpeechEngine(settings, python=config.get('python', sys.executable),
-                              request_seconds=config['request_seconds'])
+                              request_seconds=config['request_seconds'], hash_cache=verified)
         cleanup_engine = None
         if config['cleanup'] in ('fast', 'thorough'):
             cleanup_path = Path(config['cleanup_engine']).expanduser()
             if not cleanup_path.is_absolute():
                 cleanup_path = args.config.resolve().parent / cleanup_path
             cleanup_settings = json.loads(cleanup_path.read_text())['engines'][config['cleanup']]
-            cleanup_engine = CleanupEngine(cleanup_settings)
+            cleanup_engine = CleanupEngine(cleanup_settings, hash_cache=verified)
         def load_engine(level):
             if not isinstance(config.get('cleanup_engine'), str) or not config['cleanup_engine']:
                 return None
             path = Path(config['cleanup_engine']).expanduser()
             if not path.is_absolute():
                 path = args.config.resolve().parent / path
-            return CleanupEngine(json.loads(path.read_text())['engines'][level])
+            return CleanupEngine(json.loads(path.read_text())['engines'][level], hash_cache=verified)
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
                           HyprlandDelivery(config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
@@ -1637,7 +1684,8 @@ def main(argv=None, *, cli_directory=None):
             signal.signal(event, lambda *_: stopped.set())
         try:
             serve(path, session, stopped, lifetime_seconds=args.lifetime_seconds, files=files,
-                  startup=lambda: (session.retire_completed_audio(), session.prune_history()))
+                  startup=lambda: (session.retire_completed_audio(), session.prune_history()),
+                  bound=engine.warm)
         finally:
             try:
                 files.close()
@@ -1645,8 +1693,14 @@ def main(argv=None, *, cli_directory=None):
                 try:
                     session.close()
                 finally:
-                    for loaded in {id(e): e for e in (cleanup_engine, *session.cleanup_engines.values()) if e is not None}.values():
-                        loaded.close()
+                    try:
+                        engine.stop()
+                    finally:
+                        try:
+                            transform_host.stop(args.runtime)
+                        finally:
+                            for loaded in {id(e): e for e in (cleanup_engine, *session.cleanup_engines.values()) if e is not None}.values():
+                                loaded.close()
         return 0
     except FileError as error:
         print(json.dumps({'error': error.code}), file=sys.stderr)

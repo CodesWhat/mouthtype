@@ -48,6 +48,10 @@ class Engine:
                 if cancelled.is_set():
                     raise RuntimeError('cancelled')
         return self.text
+    def warm(self):
+        pass
+    def stop(self):
+        pass
     def close(self):
         pass
 

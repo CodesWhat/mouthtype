@@ -23,6 +23,7 @@ import uuid
 from pathlib import Path
 
 from cleanup import BasicCleanup
+import transform_host
 from vendor.grapheme import graphemes
 
 INTERFACE = 1
@@ -298,7 +299,8 @@ class TransformService:
     """The five verbs behind `transform`. Each returns the JSON-serialisable dict the panel renders."""
 
     def __init__(self, config, runtime, *, busy=None, cancelled=None, clock=time.time, run=None, worker=None,
-                 focus_wait=FOCUS_WAIT_SECONDS, load_seconds=LOAD_SECONDS, deadline_seconds=None):
+                 focus_wait=FOCUS_WAIT_SECONDS, load_seconds=LOAD_SECONDS, deadline_seconds=None,
+                 idle_seconds=0, hash_cache=None):
         self.config, self.runtime = Path(config), Path(runtime)
         self.busy = busy or (lambda: False)
         self.cancelled = cancelled if cancelled is not None else threading.Event()
@@ -306,6 +308,8 @@ class TransformService:
         self.run = run or subprocess.run
         self.worker = worker
         self.focus_wait, self.load_seconds, self.deadline_seconds = focus_wait, load_seconds, deadline_seconds
+        # idle_seconds > 0 keeps the model resident in transform_host that long after a transform; 0 loads per run.
+        self.idle_seconds, self.hash_cache = idle_seconds, hash_cache
         self.store = CaptureStore(self.runtime, clock)
 
     # -- model status
@@ -427,6 +431,8 @@ class TransformService:
         desktop = _desktop()
         words = len(text.split())
         seconds = min(180.0, 5.0 + 0.4 * words)
+        if self.idle_seconds > 0:
+            return self._model_resident(kind, text, settings, seconds)
 
         class Engine(desktop.CleanupEngine):
             def _prime(self):
@@ -437,7 +443,7 @@ class TransformService:
                     self._ensure_loaded(cancelled)
 
         engine = Engine(settings, worker=self.worker or Path(__file__).with_name('transform_worker.py'),
-                        startup_seconds=self.load_seconds)
+                        startup_seconds=self.load_seconds, hash_cache=self.hash_cache)
         box = {}
 
         def work():
@@ -462,6 +468,19 @@ class TransformService:
                 return None
             raise box['error']
         return box['text']
+
+    def _model_resident(self, kind, text, settings, seconds):
+        """Same contract as _model, served by the resident host so the hash, the load and the warm server are shared."""
+        command = transform_host.host_command(
+            self.runtime, worker=self.worker or Path(__file__).with_name('transform_worker.py'),
+            idle=self.idle_seconds, load_seconds=self.load_seconds, hash_cache=self.hash_cache)
+        reply = transform_host.ask(self.runtime, {'settings': settings, 'kind': kind, 'text': text, 'seconds': seconds},
+                                   self.cancelled, command=command, seconds=self.load_seconds + seconds + 10)
+        if reply is None or reply.get('timeout'):
+            return None
+        if isinstance(reply.get('text'), str):
+            return reply['text']
+        raise RuntimeError('Transform model unavailable')
 
     def transform(self, identity, kind):
         record, problem = self._record(identity)
