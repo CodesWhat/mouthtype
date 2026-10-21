@@ -1,7 +1,7 @@
 """Style page verbs for the Omarchy panel: tone, swearing softening and Style contexts.
 
 Every verb prints one JSON object. Edits write the `styles` block of linux.json and return the same shape as
-`style-state` plus restart_required (the service reads its config when it starts). The logic lives in
+`style-state`; the service picks the change up at the start of its next take. The logic lives in
 tools/linux-desktop/styles.py and tone.py; this file only locates them and parses arguments.
 """
 
@@ -40,9 +40,7 @@ def _none(value, allowed, label):
 
 def _edit(change):
     config, styles, _ = _modules()
-    output = styles.describe(styles.update_config(config, lambda block: change(styles, block)))
-    output["restart_required"] = True
-    return output
+    return styles.describe(styles.update_config(config, lambda block: change(styles, block)))
 
 
 def style_state():

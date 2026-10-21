@@ -26,9 +26,9 @@ class ControlStyleTests(unittest.TestCase):
         self.assertIsNone(state['default_tone'])
         self.assertNotIn('styles', json.loads(self.config.read_text()))
 
-    def test_edits_round_trip_and_report_restart(self):
+    def test_edits_round_trip(self):
         state = control_style.style_set_tone('work', 'casual')
-        self.assertTrue(state['restart_required'])
+        self.assertNotIn('restart_required', state)
         self.assertEqual(state['contexts'][1]['tone'], 'casual')
         control_style.style_set_cleanup('other', 'basic')
         control_style.style_add_app('personal', 'foot', 'Terminal')

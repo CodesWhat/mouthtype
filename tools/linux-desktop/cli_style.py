@@ -67,7 +67,6 @@ def run(args, context):
                 'rule': lambda b: styles.set_rule(b, args.app, args.name, _none(args.tone), _none(args.cleanup)),
             }
             output = styles.describe(styles.update_config(context.config, changes[action]))
-            output['restart_required'] = True
     except (OSError, ValueError) as error:
         print(json.dumps({'error': str(error)}), file=sys.stderr)
         return 1
