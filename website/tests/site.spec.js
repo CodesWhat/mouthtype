@@ -110,7 +110,7 @@ test("hero cycles examples at labelled paces without moving its layout", async (
   await page.goto("/");
   await page.locator(".product-preview").scrollIntoViewIfNeeded();
   await expect(page.locator("#voice-copy")).toBeVisible();
-  await expect(page.locator(".voice-lane .pace-label")).toContainText("180 WPM");
+  await expect(page.locator(".voice-lane .pace-label")).toContainText("150 WPM");
   await expect(page.locator(".typing-lane .pace-label")).toContainText("40 WPM");
   const regions = [".preview-paper", ".voice-lane", ".typing-lane", ".pill-slot", ".shortcut-hint", ".skin-controls"];
   const bounds = await Promise.all(regions.map((selector) => page.locator(selector).boundingBox()));
