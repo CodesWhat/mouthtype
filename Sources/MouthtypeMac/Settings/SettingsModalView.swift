@@ -114,26 +114,3 @@ struct SettingsModalView: View {
         }
     }
 }
-
-/// The Transcribe a file sheet, opened from Home. Choosing and saving attach on top of it.
-struct TranscribeFileSheet: View {
-    var model: SettingsModel
-    var actions: SettingsActions
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
-                DesignPageHeader(title: "Transcribe a file", summary: "Transcribe one audio file on this Mac. Nothing is pasted for you.", titleSize: 24)
-                Spacer(minLength: 0)
-                DesignCloseButton(label: "Close") { model.transcribeOpen = false }
-                    .keyboardShortcut(.cancelAction).accessibilityIdentifier("transcribe-close")
-            }.padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 4)
-            FileTranscriptionHostPage(model: model, actions: actions)
-        }
-        .frame(width: 560, height: 520)
-        .background(DesignPalette.bg)
-        .font(DesignFont.sans(DesignFont.body))
-        .foregroundStyle(DesignPalette.ink)
-        .tint(SettingsTheme.control)
-    }
-}

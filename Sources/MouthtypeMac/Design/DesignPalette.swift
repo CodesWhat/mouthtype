@@ -46,6 +46,8 @@ enum DesignPalette {
         /// The two translucent stops of the `--side` 165deg gradient.
         static let sideTop = pair(light: (168, 186, 204, 0.42), dark: (70, 92, 112, 0.38), bytes: true)
         static let sideBottom = pair(light: (214, 206, 198, 0.42), dark: (92, 80, 70, 0.38), bytes: true)
+        /// Small secondary text on the sidebar wash. `ink2` light is 4.48:1 at the gradient's top end, so this steps just darker to hold 4.5:1.
+        static let sideInk = pair(light: 0x58585C, dark: 0xB0B0B5, contrastLight: 0x3A3A3E, contrastDark: 0xD8D8DC)
     }
 
     static let bg = Color(nsColor: NS.bg)
@@ -53,6 +55,7 @@ enum DesignPalette {
     static let ink = Color(nsColor: NS.ink)
     static let ink2 = Color(nsColor: NS.ink2)
     static let ink3 = Color(nsColor: NS.ink3)
+    static let sideInk = Color(nsColor: NS.sideInk)
     static let hair = Color(nsColor: NS.hair)
     static let hair2 = Color(nsColor: NS.hair2)
     static let accent = Color(nsColor: NS.accent)

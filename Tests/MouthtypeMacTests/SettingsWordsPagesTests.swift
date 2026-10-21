@@ -154,11 +154,22 @@ import MouthtypeCore
         #expect(f.suggestions.isActive)
     }
 
-    @Test func phraseKindsFollowTheClipboardPlaceholder() {
+    @Test func phraseKindsFollowThePlaceholdersAndLineCount() {
         #expect(TransformKind.of(Snippet(trigger: "my email", expansion: "me@example.com")) == .text)
         #expect(TransformKind.of(Snippet(trigger: "paste quote", expansion: "> {clipboard}")) == .clipboard)
-        #expect(TransformKind.of(Snippet(trigger: "today", expansion: "{date}")) == .text)
-        #expect(TransformKind.allCases.map(\.title) == ["text", "clipboard", "clean selection"])
+        #expect(TransformKind.of(Snippet(trigger: "today", expansion: "{date}")) == .date)
+        #expect(TransformKind.of(Snippet(trigger: "both", expansion: "{date}\n{clipboard}")) == .clipboard)
+        #expect(TransformKind.of(Snippet(trigger: "sign off", expansion: "Thanks,\nScott")) == .lines(2))
+        #expect(TransformKind.of(Snippet(trigger: "three", expansion: "a\nb\nc")).title == "3 LINES")
+        #expect([TransformKind.text, .clipboard, .date].map(\.title) == ["TEXT", "CLIPBOARD", "DATE"])
+    }
+
+    @Test func rowTextShowsPlaceholdersAsDescriptionsAndLineBreaksAsReturnSigns() {
+        #expect(PhraseEditorView.display("{clipboard}").placeholder)
+        #expect(PhraseEditorView.display("{date}").text.hasPrefix("Today\u{2019}s date"))
+        let signOff = PhraseEditorView.display("Thanks,\nScott")
+        #expect(signOff.text == "Thanks, \u{23CE} Scott" && !signOff.placeholder)
+        #expect(PhraseEditorView.display("me@example.com").text == "me@example.com")
     }
 
     @Test func phraseSearchMatchesTriggerTextAndKind() throws {

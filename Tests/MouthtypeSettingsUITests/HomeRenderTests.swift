@@ -37,9 +37,5 @@ import SwiftUI
         try SettingsRender.save(bitmap, name: "home-light")
         try SettingsRender.save(try SettingsRender.render(model: model, actions: actions, dark: true), name: "home-dark")
         try SettingsRender.save(try SettingsRender.renderModal(model: model, actions: actions, dark: false), name: "general-light")
-        for dark in [false, true] {
-            let sheet = try SettingsRender.render(TranscribeFileSheet(model: model, actions: actions), dark: dark, size: NSSize(width: 560, height: 520))
-            try SettingsRender.save(sheet, name: dark ? "transcribe-sheet-dark" : "transcribe-sheet-light")
-        }
     }
 }

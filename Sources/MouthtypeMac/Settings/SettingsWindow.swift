@@ -33,12 +33,6 @@ import MouthtypeCore
         window.contentMinSize = Self.minimumContentSize
         window.isReleasedWhenClosed = false
         super.init(window: window)
-        self.actions.chooseAudioFile = { [weak self] in
-            if let transcription = self?.model.fileTranscription { FileTranscriptionPanels.chooseFile(model: transcription, over: self?.topmostWindow) }
-        }
-        self.actions.saveTranscript = { [weak self] in
-            if let transcription = self?.model.fileTranscription { FileTranscriptionPanels.saveText(model: transcription, over: self?.topmostWindow) }
-        }
         applyContent()
         window.setContentSize(Self.contentSize)
         window.delegate = self
@@ -88,6 +82,8 @@ import MouthtypeCore
 
     /// Shows the window and goes to `destination`. A page goes through `select`, so an unsaved draft still asks first.
     func present(destination: SettingsDestination?) {
+        // The Transcribe window opens by itself; the Mouthtype window isn't brought up behind it.
+        if destination == .transcribeFile { model.open(.transcribeFile); return }
         startObservingTransparency()
         if let destination { model.open(destination) }
         refreshDiagnostics()
@@ -105,16 +101,14 @@ import MouthtypeCore
         reloadHome()
     }
 
-    /// The Home log and the stats are watched only while the window is open on their pages. Closing the window cancels a running
-    /// file transcription, as closing the old Transcribe Audio File window did. Switching pages does not.
+    /// The Home log and the stats are watched only while the window is open on their pages.
     func windowWillClose(_ notification: Notification) {
-        model.fileTranscription?.cancel()
         model.home.deactivate()
         model.stats.deactivate()
         model.deactivateWords()
     }
 
-    /// The window a new sheet or panel should attach to: the Mouthtype window, or the Settings or Transcribe sheet when one is up,
+    /// The window a new sheet or panel should attach to: the Mouthtype window, or the Settings sheet when one is up,
     /// so nested editors open on top of it rather than queueing behind it.
     var topmostWindow: NSWindow? {
         var top = window
@@ -231,8 +225,6 @@ final class SettingsNSWindow: NSWindow {
 @MainActor struct SettingsActions {
     var openSetup: () -> Void = {}
     var changeShortcut: () -> Void = {}
-    var chooseAudioFile: () -> Void = {}
-    var saveTranscript: () -> Void = {}
     var cleaner: (any CleanupModelManaging)?
     var diagnostics: SettingsDiagnostics?
     var retrySpeech: () -> Void = {}

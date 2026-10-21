@@ -23,7 +23,7 @@ Saved spellings now suggest spellings from your recent takes: names it keeps mis
 
 In Settings, with Keyboard navigation on, the page scrolls to follow Tab and Shift-Tab.
 
-Saved spellings, Phrases and file transcription are now pages in the Mouthtype window instead of separate windows, and the shortcut recorder is a sheet on it. Only Set Up Mouthtype keeps its own window. Leaving a page or closing the window with an unsaved draft still asks first.
+Saved spellings and Phrases are now pages in the Mouthtype window instead of separate windows, and the shortcut recorder is a sheet on it. Set Up Mouthtype and Transcribe Audio File keep their own windows, since the menu bar opens them when no Mouthtype window is up. Leaving a page or closing the window with an unsaved draft still asks first.
 
 Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
 
@@ -85,7 +85,7 @@ Select text in an accessible editable field, then choose **Transform Selection**
 
 ## Transcribe an audio file
 
-Choose **Transcribe Audio File…** in the menu (it opens the Transcribe a file sheet on Home, which also has a button for it), then select one WAV, AIFF or M4A file up to 10 minutes and 512 MB. Mouthtype uses the speech model already loaded on your Mac. Your original file stays unchanged.
+Choose **Transcribe Audio File…** in the menu (it opens the Transcribe Audio File window, and Home has a button for it too), then select one WAV, AIFF or M4A file up to 10 minutes and 512 MB. Mouthtype uses the speech model already loaded on your Mac. Your original file stays unchanged.
 
 Preparing and Transcribing show actual work stages. Cancel, or close the Mouthtype window, to cancel the import. Switching to another page keeps it running. Cancellation may wait for the current recognition operation to return. The full raw result is selectable: explicitly use **Copy** or **Save Text…** to export UTF-8 text. Saving over the original audio is refused.
 

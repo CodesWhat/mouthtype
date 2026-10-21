@@ -106,7 +106,8 @@ final class CleanupSelection: CleanupModelManaging {
 
 /// Explicit selected-text transforms run on the Thorough model. S1-mini only normalizes transcripts.
 extension CleanupSelection: SelectionTransforming {
-    var transformUnavailableReason: String? { TransformAvailability.reason(for: thorough.state, modelName: thorough.modelName) }
+    var transformModelStatus: TransformModelStatus { TransformModelStatus(state: thorough.state, modelName: thorough.modelName) }
+    var transformUnavailableReason: String? { transformModelStatus.unavailableReason }
 
     func transform(_ transform: TextTransform, text: String) async throws -> String {
         if let reason = transformUnavailableReason { throw CleanerError.unavailable(reason: reason) }

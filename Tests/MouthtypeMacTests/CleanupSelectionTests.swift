@@ -186,3 +186,43 @@ import MouthtypeCore
         #expect(menu.items.contains { $0.title == "Thorough" })
     }
 }
+
+@MainActor
+@Suite struct TransformModelStatusTests {
+    private func selection(fast: Bool, thorough: Bool, level: CleanupLevel) -> CleanupSelection {
+        CleanupSelection(fast: FakeSmartModel(downloaded: fast, id: "fast", name: "S1-mini"),
+                         thorough: FakeSmartModel(downloaded: thorough, id: "thorough", name: "Gemma"), level: { level })
+    }
+
+    @Test func fastOnlyWithFastSelectedStillReportsThoroughMissing() {
+        let selection = selection(fast: true, thorough: false, level: .light)
+        selection.start()
+        #expect(selection.state != .absent)
+        let status = selection.transformModelStatus
+        #expect(status.state == .absent)
+        #expect(status.modelName == "Gemma")
+        #expect(!status.isReady)
+        #expect(status.stateWord == "NOT DOWNLOADED")
+        #expect(selection.transformUnavailableReason == status.unavailableReason)
+    }
+
+    @Test func thoroughOnlyWithThoroughNotSelectedStillReportsReady() {
+        let selection = selection(fast: false, thorough: true, level: .light)
+        selection.start()
+        #expect(selection.state == .absent)
+        let status = selection.transformModelStatus
+        #expect(status.state != .absent)
+        #expect(status.modelName == "Gemma")
+        #expect(status.isReady)
+        #expect(status.stateWord == "READY")
+        #expect(selection.transformUnavailableReason == nil)
+    }
+
+    @Test func downloadingStateShowsPercentAndBlocks() {
+        let status = TransformModelStatus(state: .downloading(fraction: 0.4), modelName: "Gemma")
+        #expect(!status.isReady)
+        #expect(status.stateWord == "DOWNLOADING 40%")
+        #expect(status.unavailableReason?.contains("downloading") == true)
+        #expect(TransformModelStatus(state: .downloading(fraction: 2), modelName: "Gemma").stateWord == "DOWNLOADING 100%")
+    }
+}
