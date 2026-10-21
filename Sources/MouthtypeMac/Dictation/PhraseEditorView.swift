@@ -8,7 +8,7 @@ import MouthtypeCore
 struct PhraseEditorView: View {
     @Bindable var editor: PhraseEditor
     /// The Thorough model's state, for the status on each AI transform. Nil where the page is built without a model, as in most tests.
-    var cleaner: (any CleanupModelManaging)?
+    var transformModel: CleanupSelection?
     @State private var sheetOpen = false
 
     private static let triggerColumn: CGFloat = 150
@@ -135,8 +135,7 @@ struct PhraseEditorView: View {
 
     /// Why the AI transforms can't run, or nil when the model is ready (or the page has no model to ask).
     private var unavailableReason: String? {
-        guard let cleaner else { return nil }
-        return TransformAvailability.reason(for: cleaner.state, modelName: cleaner.modelName)
+        transformModel?.transformModelStatus.unavailableReason
     }
 
     private var onSelectedText: some View {
@@ -161,24 +160,15 @@ struct PhraseEditorView: View {
     @ViewBuilder private func status(_ transform: MenuTransform) -> some View {
         if !transform.usesModel {
             Text("NO MODEL \u{00B7} INSTANT").font(DesignFont.mono(9.5)).tracking(0.95).foregroundStyle(DesignPalette.ink3).fixedSize()
-        } else if let cleaner {
-            let ready = TransformAvailability.reason(for: cleaner.state, modelName: cleaner.modelName) == nil
+        } else if let status = transformModel?.transformModelStatus {
+            let ready = status.isReady
             HStack(spacing: 5) {
                 Circle().fill(ready ? DesignPalette.accent : DesignPalette.orange).frame(width: 6, height: 6).accessibilityHidden(true)
-                Text("THOROUGH \u{00B7} \(Self.stateWord(cleaner.state))").font(DesignFont.mono(9.5)).tracking(0.95)
+                Text("THOROUGH \u{00B7} \(status.stateWord)").font(DesignFont.mono(9.5)).tracking(0.95)
                     .foregroundStyle(DesignPalette.ink3).fixedSize()
             }
         } else {
             Text("NEEDS THOROUGH").font(DesignFont.mono(9.5)).tracking(0.95).foregroundStyle(DesignPalette.ink3).fixedSize()
-        }
-    }
-
-    private static func stateWord(_ state: CleanerState) -> String {
-        switch state {
-        case .absent: "NOT DOWNLOADED"
-        case let .downloading(fraction): "DOWNLOADING \(Int(min(max(fraction, 0), 1) * 100))%"
-        case .failed: "UNAVAILABLE"
-        case .loading, .unloaded, .ready: "READY"
         }
     }
 }

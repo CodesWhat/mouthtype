@@ -28,7 +28,7 @@ struct PhrasesPage: View {
 
     var body: some View {
         if let editor = model.phrases {
-            PhraseEditorView(editor: editor, cleaner: cleaner)
+            PhraseEditorView(editor: editor, transformModel: cleaner as? CleanupSelection)
         } else {
             Text("Phrases are unavailable.").font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
         }
