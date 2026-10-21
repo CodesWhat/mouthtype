@@ -289,7 +289,7 @@ public enum SmartCleanupGuard {
             return values
         }
         if !timeOfDay(output).isSubset(of: timeOfDay(input)) { return "time of day added or changed" }
-        if !meridiemPairs(output).isSubset(of: meridiemPairs(input).union(wildcardMeridiems(in: input))) {
+        if !meridiemPairs(output).isSubset(of: meridiemPairs(input).union(spokenMeridiemPairs(in: input))) {
             return "time of day added or changed"
         }
         let questions = ["what", "what's", "who", "who's", "where", "where's", "when", "why", "how", "which"]
@@ -301,7 +301,7 @@ public enum SmartCleanupGuard {
     }
 
     /// Each clock time that carries its own AM or PM, as "9:00a" or "5:30p", so a meridiem can't move to another time.
-    /// A time spoken in words ("three p m") has no digits to pair with; it is listed by `wildcardMeridiems`.
+    /// A time spoken in words ("three p m") has no digits to pair with; it is listed by `spokenMeridiemPairs`.
     static func meridiemPairs(_ text: String) -> Set<String> {
         guard let expression = try? NSRegularExpression(
             pattern: #"(?i)(?<![\p{L}\p{N}:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b"#) else { return [] }
@@ -312,16 +312,30 @@ public enum SmartCleanupGuard {
         })
     }
 
-    /// The AM or PM letters that follow a number word, which any output time may carry.
-    private static func wildcardMeridiems(in text: String) -> Set<String> {
+    /// Times spoken in words ("nine a m", "three thirty p m", "three oh five p m"), as the same "H:MMl" pairs. The hour
+    /// and minutes come from the number words right before the AM or PM, so the letter belongs to that time only.
+    private static func spokenMeridiemPairs(in text: String) -> Set<String> {
         guard let expression = try? NSRegularExpression(pattern: #"(?i)(?<!\p{L})([ap])[. \t]*m\b"#) else { return [] }
         let source = text as NSString
         var found = Set<String>()
         for match in expression.matches(in: text, range: NSRange(location: 0, length: source.length)) {
-            let before = source.substring(to: match.range.location).split(whereSeparator: \.isWhitespace).last.map(String.init) ?? ""
-            guard NumberWords.isNumberWord(before.lowercased()) else { continue }
-            let letter = source.substring(with: match.range(at: 1)).lowercased()
-            found.formUnion((0...12).flatMap { hour in ["00", "15", "30", "45"].map { "\(hour):\($0)\(letter)" } })
+            let before = source.substring(to: match.range.location).split(whereSeparator: \.isWhitespace)
+                .suffix(3).map { stripped($0).lowercased() }
+            func value(_ back: Int) -> Int? { back <= before.count ? numberWords[before[before.count - back]] : nil }
+            func isHour(_ number: Int?) -> Bool { number.map { (1...12).contains($0) } ?? false }
+            var hour: Int?
+            var minutes = 0
+            if before.count >= 3, before[before.count - 2] == "oh", let digit = value(1), (1...9).contains(digit), isHour(value(3)) {
+                hour = value(3); minutes = digit
+            } else if let ones = value(1), (1...9).contains(ones), let tens = value(2), tens >= 20, isHour(value(3)) {
+                hour = value(3); minutes = tens + ones
+            } else if let minute = value(1), minute >= 10, isHour(value(2)) {
+                hour = value(2); minutes = minute
+            } else if isHour(value(1)) {
+                hour = value(1)
+            }
+            guard let hour else { continue }
+            found.insert("\(hour):\(String(format: "%02d", minutes))\(source.substring(with: match.range(at: 1)).lowercased())")
         }
         return found
     }
@@ -474,7 +488,14 @@ public enum SmartCleanupGuard {
             }
         }
         func hasYearCue(start: Int, end: Int) -> Bool {
-            if (max(0, start - 3)..<start).contains(where: { months.contains(words[$0]) }) { return true }
+            // "may" is a month only when written "May" in the middle of a sentence, never the verb.
+            func isMonth(_ index: Int) -> Bool {
+                guard months.contains(words[index]) else { return false }
+                guard words[index] == "may" else { return true }
+                return tokens[index].first?.isUppercase == true && index > 0
+                    && !(tokens[index - 1].last.map { ".!?".contains($0) } ?? true)
+            }
+            if (max(0, start - 3)..<start).contains(where: isMonth) { return true }
             guard start > 0, ["in", "since", "by", "year"].contains(words[start - 1]) else { return false }
             return breaks(end) || end == words.count - 1
         }
@@ -536,7 +557,8 @@ public enum SmartCleanupGuard {
             if let start, !scales.isEmpty { phrases.append((total + current, scales, start..<(last + 1))) }
             total = 0; current = 0; scales = []; start = nil
         }
-        for (position, token) in text.split(whereSeparator: \.isWhitespace).enumerated() {
+        let allTokens = text.split(whereSeparator: \.isWhitespace)
+        for (position, token) in allTokens.enumerated() {
             let word = stripped(token).lowercased()
             let digits = word.replacingOccurrences(of: ",", with: "")
             if let scale = scaleWords[word] {
@@ -550,6 +572,14 @@ public enum SmartCleanupGuard {
             } else if let number = numberWords[word] ?? Int(digits) {
                 current += number
             } else if word == "and", start != nil {
+                // "five hundred and twelve" is one number; "five hundred and two thousand" is two.
+                func number(_ offset: Int) -> Int? {
+                    position + offset < allTokens.count ? numberWords[stripped(allTokens[position + offset]).lowercased()] : nil
+                }
+                func scale(_ offset: Int) -> Bool {
+                    position + offset < allTokens.count && scaleWords[stripped(allTokens[position + offset]).lowercased()] != nil
+                }
+                if number(1) != nil, scale(2) || ((number(1) ?? 0) >= 20 && number(2) != nil && scale(3)) { finish() }
                 continue
             } else {
                 finish()
@@ -566,11 +596,20 @@ public enum SmartCleanupGuard {
     /// A scale word ("hundred", "thousand", "million", "billion") the output neither keeps nor folds into the value
     /// of the number it scales, such as "five hundred thousand dollars" written "$500".
     static func droppedScale(input: String, output: String) -> String? {
-        let outputWords = Set(output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
-        let outputValues = Set(wordsAndDigits(in: output).flatMap { $0.accepted }.compactMap { Int($0) })
+        var words: [String: Int] = [:]
+        for token in output.split(whereSeparator: \.isWhitespace) { words[stripped(token).lowercased(), default: 0] += 1 }
+        var values: [Int: Int] = [:]
+        for value in wordsAndDigits(in: output).flatMap({ $0.accepted }).compactMap({ Int($0) }) { values[value, default: 0] += 1 }
+        // Each scale phrase in the input needs its own written value or its own scale words in the output. One
+        // "thousand" elsewhere in the text can't stand in for a second dropped one.
         for phrase in scalePhrases(in: input) {
-            if phrase.scales.allSatisfy(outputWords.contains) || outputValues.contains(phrase.value) { continue }
-            return phrase.scales.first { !outputWords.contains($0) }
+            if let count = values[phrase.value], count > 0 {
+                values[phrase.value] = count - 1
+            } else if phrase.scales.allSatisfy({ (words[$0] ?? 0) > 0 }) {
+                for scale in phrase.scales { words[scale, default: 0] -= 1 }
+            } else {
+                return phrase.scales.first { (words[$0] ?? 0) <= 0 }
+            }
         }
         return nil
     }

@@ -954,6 +954,44 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(reason("we shipped in twenty thirty minutes late", "We shipped in 2030 minutes late.") != nil)
     }
 
+    @Test func theVerbMayIsNotAMonthForAYear() {
+        #expect(reason("it may take twenty thirty minutes", "It may take 2030 minutes.") != nil)
+        #expect(reason("it may take twenty thirty minutes", "It may take twenty thirty minutes.") == nil)
+        #expect(reason("we shipped in May twenty twenty six.", "We shipped in May 2026.") == nil)
+        #expect(reason("May twenty thirty minutes later it ended", "May 2030 minutes later it ended.") != nil)
+    }
+
+    @Test func eachScaleWordNeedsItsOwnValueOrItsOwnWords() {
+        let people = "it costs five thousand dollars for a thousand people"
+        #expect(reason(people, "It costs $5,000 for a thousand people.") == nil)
+        #expect(reason(people, "It costs five thousand dollars for a thousand people.") == nil)
+        #expect(reason(people, "It costs $5 for a thousand people.") != nil)
+        #expect(reason(people, "It costs $5,000 for 1,000 people.") == nil)
+        let million = "two million dollars and we hired a million users"
+        #expect(reason(million, "$2 and we hired a million users.") != nil)
+        #expect(reason(million, "$2 million and we hired a million users.") == nil)
+        #expect(reason(million, "$2,000,000 and we hired a million users.") == nil)
+    }
+
+    @Test func aRangeOfTwoScaledNumbersIsTwoNumbers() {
+        let range = "the range is between five hundred and two thousand dollars for most people"
+        #expect(reason(range, "The range is between 500 and 2,000 dollars for most people.") == nil)
+        #expect(reason(range, "The range is between 500 and 2 dollars for most people.") != nil)
+        #expect(reason(range, "The range is between 5 and 2,000 dollars for most people.") != nil)
+        #expect(reason("it takes four hundred and twelve days", "It takes 412 days.") == nil)
+    }
+
+    @Test func aSpokenMeridiemStaysWithItsOwnHour() {
+        let day = "meet from nine a m to five p m tomorrow"
+        #expect(reason(day, "Meet from 9 AM to 5 PM tomorrow.") == nil)
+        #expect(reason(day, "Meet from 9 PM to 5 AM tomorrow.") != nil)
+        #expect(reason(day, "Meet from 5 AM to 9 PM tomorrow.") != nil)
+        #expect(reason(day, "Meet from 9 AM to 6 PM tomorrow.") != nil)
+        let half = "call at three thirty p m then at nine oh five a m"
+        #expect(reason(half, "Call at 3:30 PM, then at 9:05 AM.") == nil)
+        #expect(reason(half, "Call at 3:30 AM, then at 9:05 PM.") != nil)
+    }
+
     @Test func spokenDigitStringsMayBecomeWrittenOnesWithoutChangingADigit() {
         let phone = "my number is five five five, oh one two three and I'm home"
         #expect(reason(phone, "My number is 555-0123 and I'm home.") == nil)
