@@ -31,6 +31,8 @@ VENDOR_UNIT = Path("/usr/lib/systemd/user/mouthtype-linux.service")
 BINDINGS = HOME / ".config/hypr/bindings.lua"
 BIND_BEGIN = "-- Mouthtype Omarchy plugin shortcut: begin"
 BIND_END = "-- Mouthtype Omarchy plugin shortcut: end"
+TRANSFORM_BEGIN = "-- Mouthtype Omarchy plugin transform shortcut: begin"
+TRANSFORM_END = "-- Mouthtype Omarchy plugin transform shortcut: end"
 DESKTOP = _first_existing(HOME / ".local/lib/mouthtype-linux/tools/linux-desktop",
                           Path("/usr/lib/mouthtype-linux/tools/linux-desktop"))
 ASSETS = Path(__file__).resolve().parent / "assets"
@@ -357,6 +359,7 @@ MODIFIER_KEYSYMS = {"Control_L": "CTRL", "Control_R": "CTRL", "Shift_L": "SHIFT"
                     "Alt_L": "ALT", "Alt_R": "ALT", "Super_L": "SUPER", "Super_R": "SUPER"}
 MODIFIER_KEYSYM_LOOKUP = {name.lower(): name for name in MODIFIER_KEYSYMS}
 DEFAULT_SHORTCUTS = {"toggle": "SUPER + ALT + M", "hold": "F10"}
+DEFAULT_TRANSFORM_SHORTCUT = "SUPER + SHIFT + T"
 
 
 def parse_shortcut(spec):
@@ -1028,6 +1031,17 @@ def set_autostart(value):
     return state()
 
 
+def assert_key_free(spec, mask, key, ours):
+    """Refuse a key Hyprland already binds, unless the existing binding is the Mouthtype block being rewritten."""
+    result = subprocess.run(["hyprctl", "-j", "binds"], text=True, capture_output=True,
+                            check=True, timeout=5)
+    for binding in json.loads(result.stdout):
+        bound = str(binding.get("key", ""))
+        same_key = bound.upper() == key.upper() or (key.startswith("code:") and str(binding.get("keycode")) == key[5:])
+        if same_key and binding.get("modmask") == mask and not ours:
+            raise RuntimeError(spec + " is already bound in Hyprland; choose another key")
+
+
 def set_shortcut(value, keys=None):
     if value not in {"off", "toggle", "hold"}:
         raise RuntimeError("Unsupported shortcut")
@@ -1046,13 +1060,7 @@ def set_shortcut(value, keys=None):
         base = original.rstrip() + "\n"
     if value != "off":
         ours = current["mode"] != "off" and parse_shortcut(current["keys"])[0] == spec if current["keys"] else False
-        result = subprocess.run(["hyprctl", "-j", "binds"], text=True, capture_output=True,
-                                check=True, timeout=5)
-        for binding in json.loads(result.stdout):
-            bound = str(binding.get("key", ""))
-            same_key = bound.upper() == key.upper() or (key.startswith("code:") and str(binding.get("keycode")) == key[5:])
-            if same_key and binding.get("modmask") == mask and not ours:
-                raise RuntimeError(spec + " is already bound in Hyprland; choose another key")
+        assert_key_free(spec, mask, key, ours)
         command = Path(__file__).resolve()
         if value == "toggle":
             # Omarchy's `o` helper is not guaranteed to exist in every bindings.lua; fall back to a plain Hyprland bind.
@@ -1085,6 +1093,64 @@ def set_shortcut(value, keys=None):
     output = state()
     output["page"] = "shortcut"
     return output
+
+
+def transform_shortcut_keys():
+    if not BINDINGS.is_file():
+        return ""
+    contents = BINDINGS.read_text(encoding="utf-8")
+    if TRANSFORM_BEGIN not in contents or TRANSFORM_END not in contents:
+        return ""
+    match = re.search(r'bind\("([^"]+)"', contents.split(TRANSFORM_BEGIN, 1)[1].split(TRANSFORM_END, 1)[0])
+    return match.group(1) if match else ""
+
+
+def set_transform_shortcut(value, keys=None):
+    """Bind (on) or unbind (off) the key that opens the Transform Selection panel, in its own marked block."""
+    if value not in {"off", "on"}:
+        raise RuntimeError("Unsupported transform shortcut")
+    if not BINDINGS.is_file():
+        raise RuntimeError("Hyprland bindings file is missing")
+    spec, mask, key = parse_shortcut(keys or DEFAULT_TRANSFORM_SHORTCUT) if value == "on" else ("", 0, "")
+    original = BINDINGS.read_text(encoding="utf-8")
+    before, separator, after = original.partition(TRANSFORM_BEGIN)
+    if separator:
+        if TRANSFORM_END not in after:
+            raise RuntimeError("Existing Mouthtype transform shortcut block is incomplete")
+        base = before.rstrip() + after.split(TRANSFORM_END, 1)[1]
+    else:
+        base = original.rstrip() + "\n"
+    if value == "on":
+        current = transform_shortcut_keys()
+        assert_key_free(spec, mask, key, bool(current) and parse_shortcut(current)[0] == spec)
+        dictation = shortcut_info()["keys"]
+        if dictation and parse_shortcut(dictation)[0] == spec:
+            raise RuntimeError(spec + " is already the dictation shortcut; choose another key")
+        command = Path(__file__).resolve()
+        block = (f'if type(o) == "table" and type(o.bind) == "function" then\n'
+                 f'  o.bind("{spec}", "Mouthtype transform selection", "{command} transform-open")\n'
+                 f'else\n'
+                 f'  hl.bind("{spec}", hl.dsp.exec_cmd("{command} transform-open"))\n'
+                 f'end')
+        updated = base.rstrip() + "\n\n" + TRANSFORM_BEGIN + "\n" + block + "\n" + TRANSFORM_END + "\n"
+    else:
+        updated = base.rstrip() + "\n"
+    if updated == original:
+        return state()
+    backup = BINDINGS.with_name(f"bindings.lua.bak.mouthtype.{int(time.time())}")
+    shutil.copy2(BINDINGS, backup)
+    BINDINGS.write_text(updated, encoding="utf-8")
+    try:
+        subprocess.run(["hyprctl", "reload"], check=True, timeout=10, capture_output=True)
+        errors = subprocess.run(["hyprctl", "configerrors"], check=True, timeout=10,
+                                text=True, capture_output=True).stdout.strip()
+        if errors and errors.lower() not in {"no errors", "ok"}:
+            raise RuntimeError("Hyprland reported configuration errors")
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        shutil.copy2(backup, BINDINGS)
+        subprocess.run(["hyprctl", "reload"], timeout=10, capture_output=True)
+        raise RuntimeError("Transform shortcut change was reverted because Hyprland rejected it")
+    return state()
 
 
 def forget(identity):
@@ -1276,7 +1342,7 @@ def import_save():
 VALID_ACTIONS = {
     "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
     "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
-    "set-autostart", "set-shortcut", "import-pick", "import-start", "import-cancel",
+    "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
     "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
 ,
     "forget", "prune"
@@ -1365,7 +1431,7 @@ def main():
         sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "import-start", "cleanup-setup", "forget"}
         and len(sys.argv) != 3
     ) or (sys.argv[1] == "prune" and len(sys.argv) != 4
-    ) or (sys.argv[1] == "set-shortcut" and len(sys.argv) not in {3, 4}
+    ) or (sys.argv[1] in {"set-shortcut", "set-transform-shortcut"} and len(sys.argv) not in {3, 4}
     ) or (sys.argv[1] == "copy" and len(sys.argv) not in {2, 3}) or (
         sys.argv[1] in {"set-config", "set-font"} and len(sys.argv) not in {4, 5}
     ) or (
@@ -1417,6 +1483,8 @@ def main():
             output = set_sounds(sys.argv[2])
         elif action == "set-autostart" and len(sys.argv) == 3:
             output = set_autostart(sys.argv[2])
+        elif action == "set-transform-shortcut":
+            output = set_transform_shortcut(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
         elif action == "set-shortcut":
             output = set_shortcut(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
         elif len(sys.argv) == 2:

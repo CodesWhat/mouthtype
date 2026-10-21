@@ -545,6 +545,41 @@ class ShortcutBlockTests(unittest.TestCase):
         self.assertNotIn("Mouthtype", self.bindings.read_text(encoding="utf-8"))
 
 
+class TransformShortcutTests(ShortcutBlockTests):
+    def test_on_writes_its_own_block_and_leaves_the_dictation_block_alone(self):
+        control.set_shortcut("toggle", "super+alt+m")
+        control.set_transform_shortcut("on")
+        text = self.bindings.read_text(encoding="utf-8")
+        self.assertIn(control.TRANSFORM_BEGIN, text)
+        self.assertRegex(text, r'o\.bind\("SUPER \+ SHIFT \+ T", "Mouthtype transform selection", ".*control\.py transform-open"\)')
+        self.assertEqual(control.shortcut_info(), {"mode": "toggle", "keys": "SUPER + ALT + M"})
+        self.assertEqual(control.transform_shortcut_keys(), "SUPER + SHIFT + T")
+
+    def test_on_twice_is_idempotent_and_off_removes_only_the_transform_block(self):
+        control.set_shortcut("toggle", "F10")
+        control.set_transform_shortcut("on")
+        once = self.bindings.read_text(encoding="utf-8")
+        control.set_transform_shortcut("on")
+        self.assertEqual(self.bindings.read_text(encoding="utf-8"), once)
+        control.set_transform_shortcut("off")
+        text = self.bindings.read_text(encoding="utf-8")
+        self.assertNotIn("transform", text)
+        self.assertEqual(control.shortcut_info()["keys"], "F10")
+
+    def test_a_key_hyprland_already_uses_is_refused_and_the_file_is_unchanged(self):
+        before = self.bindings.read_text(encoding="utf-8")
+        taken = '[{"key": "T", "modmask": %d}]' % (control.MODIFIER_MASKS["SUPER"] + control.MODIFIER_MASKS["SHIFT"])
+        with mock.patch.object(control.subprocess, "run", lambda c, **k: mock.Mock(returncode=0, stdout=taken if "binds" in c else "", stderr="")):
+            with self.assertRaisesRegex(RuntimeError, "already bound"):
+                control.set_transform_shortcut("on")
+        self.assertEqual(self.bindings.read_text(encoding="utf-8"), before)
+
+    def test_the_dictation_key_is_refused_for_transform(self):
+        control.set_shortcut("toggle", "super+shift+t")
+        with self.assertRaisesRegex(RuntimeError, "dictation shortcut"):
+            control.set_transform_shortcut("on")
+
+
 class VersionTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
