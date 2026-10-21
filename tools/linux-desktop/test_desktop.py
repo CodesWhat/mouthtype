@@ -1470,7 +1470,7 @@ class WatcherRaceTests(unittest.TestCase):
             self.state = 'transcribing'
         def tick(self):
             pass
-        def status(self):
+        def live_status(self):
             return {'state': self.state, 'error': None, 'delivery': 'x', 'recovery': None}
         def elapsed(self):
             return None
