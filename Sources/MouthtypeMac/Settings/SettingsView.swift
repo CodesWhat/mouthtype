@@ -33,6 +33,8 @@ struct SettingsView: View {
             // The stats are watched only on their own page.
             if page == .stats { model.stats.activate() } else { model.stats.deactivate() }
             model.syncWords()
+            // A page change from outside the sidebar (URL route, menu) would leave the ring on the old row.
+            if let follow = SettingsPage.focusFollowing(focused: sidebarFocus, selected: page), sidebarFocus != follow { sidebarFocus = follow }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }

@@ -314,6 +314,12 @@ import Testing
         #expect(SettingsPage.arrowTarget(focused: nil, selected: .appearance, offset: 1) == .appearance)
     }
 
+    @Test func sidebarFocusFollowsTheSelectionOnlyWhenARowHasFocus() {
+        #expect(SettingsPage.focusFollowing(focused: .home, selected: .stats) == .stats)
+        #expect(SettingsPage.focusFollowing(focused: .stats, selected: .stats) == .stats)
+        #expect(SettingsPage.focusFollowing(focused: nil, selected: .stats) == nil)
+    }
+
     @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {
         #expect(SettingsPage.style.moved(by: 1) == .appearance)
         #expect(SettingsPage.appearance.moved(by: 1) == .appearance)
