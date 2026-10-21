@@ -23,3 +23,14 @@ The installed plugin is at `~/.config/omarchy/plugins/dstahl.mouthtype`. Its sou
 `control.py` loads every sibling `control_<name>.py` that defines `COMMANDS = {"verb": function}` and runs the verb as `control.py verb [args...]`. The function takes the remaining arguments as strings and returns a JSON-serialisable dict, or raises `RuntimeError`, `OSError` or `ValueError` with a message the panel can show. A verb cannot replace a built-in action or one from an earlier module (alphabetical), and a module that fails to import is noted in `omarchy-control.log` and skipped.
 
 `install.py` writes `version.json` (`plugin` from `manifest.json`, `app` from `packaging/Version.plist` when installing from a checkout) next to the installed files. `control.py state` reports both under `versions`; they are `null` when unknown.
+
+## Panel layout and pages
+
+The panel is one window: a sidebar (Home, Stats, Dictionary, Transforms, Style, Appearance, Settings) and a page. Settings opens a modal with General, Linux, Health and, while its footer switch is on, Advanced. `Panel.qml` owns the state and the `control.py` processes; `MouthtypeShell.qml` lays out the window; each page is a file in `pages/`. `shell-render/render_shell.sh <dir>` renders every page and the modal, light and dark, offscreen on the NAS testbed and runs `shell-render/tst_shell.qml`.
+
+Stats, Dictionary, Transforms and Style are placeholders until their backends land. A slice that builds one replaces `pages/<Name>Page.qml` and keeps this contract, which is also written at the top of `MouthtypeShell.qml`:
+
+- The root is an `Item` with an `implicitHeight`. The shell sets its width and scrolls it.
+- `property var backend` is set by the shell to `{ state, results, busy, error, dark }`. `state` is the last `control.py state` reply, `results[verb]` is the last parsed reply of each verb the page requested, `busy` is true while a request runs, and `error` is the last request's message or `""`. The shell assigns a new object on every change.
+- `property bool active` is true while the page is shown and no modal is open.
+- `signal request(string command, var args)` asks the shell to run `control.py <command> <args...>`. Requests run one at a time, in order, and any verb `control.py` accepts works, including those from a `control_<name>.py` module.

@@ -166,10 +166,12 @@ class RetainedImportResultTests(unittest.TestCase):
 
     def test_panel_offers_copy_and_save_for_a_retained_result(self):
         panel = (HERE / "Panel.qml").read_text(encoding="utf-8")
+        page = (HERE / "pages" / "TranscribeFilePage.qml").read_text(encoding="utf-8")
         self.assertIn("fileImport.retained", panel)
+        self.assertIn("root.host.importRetained", page)
         for action in ("import-copy", "import-save"):
-            row = next(line for line in panel.splitlines() if 'root.run(["%s"])' % action in line)
-            self.assertIn("importRetained", row)
+            row = next(line for line in page.splitlines() if 'root.host.run(["%s"])' % action in line)
+            self.assertIn("importCanExport", row)
 
 
 class HoldToTalkTests(unittest.TestCase):
@@ -646,8 +648,9 @@ class ControlModuleTests(unittest.TestCase):
 
 class PanelActionTests(unittest.TestCase):
     def test_every_action_the_panel_runs_is_accepted_by_the_dispatcher(self):
-        panel = (HERE / "Panel.qml").read_text(encoding="utf-8")
-        actions = set(re.findall(r'root\.run\(\["([^"]+)"', panel))
+        sources = [HERE / "Panel.qml", *sorted(HERE.glob("Mouthtype*.qml")), *sorted((HERE / "pages").glob("*.qml"))]
+        panel = "\n".join(path.read_text(encoding="utf-8") for path in sources)
+        actions = set(re.findall(r'(?:root|host)\.run\(\["([^"]+)"', panel))
         self.assertIn("cleanup-setup", actions)
         self.assertEqual(sorted(actions - control.available_actions()), [])
         self.assertNotIn("cleanup-cleanupPage", panel)
