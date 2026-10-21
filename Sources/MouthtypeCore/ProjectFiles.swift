@@ -50,6 +50,9 @@ public enum ProjectFiles {
         ].first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
+    /// `GIT_NO_LAZY_FETCH` keeps a promisor remote from fetching missing objects, which could run the repo's `core.sshCommand`.
+    static let gitEnvironment = ["GIT_OPTIONAL_LOCKS": "0", "GIT_NO_LAZY_FETCH": "1", "PATH": "/usr/bin:/bin"]
+
     /// A repo's own `.git/config` can name an fsmonitor command that git runs on `ls-files`, so it is switched off here.
     static func lsFilesArguments(root: URL) -> [String] {
         ["-c", "core.fsmonitor=false", "-C", root.path, "ls-files", "-z"]
@@ -60,7 +63,7 @@ public enum ProjectFiles {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: git)
         process.arguments = lsFilesArguments(root: root)
-        process.environment = ["GIT_OPTIONAL_LOCKS": "0", "PATH": "/usr/bin:/bin"]
+        process.environment = gitEnvironment
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice

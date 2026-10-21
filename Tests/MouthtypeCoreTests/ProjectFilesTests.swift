@@ -58,6 +58,11 @@ import Testing
         #expect(ProjectFiles.lsFilesArguments(root: root) == ["-c", "core.fsmonitor=false", "-C", "/tmp/some repo", "ls-files", "-z"])
     }
 
+    @Test func gitRunsWithLazyFetchDisabled() {
+        #expect(ProjectFiles.gitEnvironment["GIT_NO_LAZY_FETCH"] == "1")
+        #expect(ProjectFiles.gitEnvironment["GIT_OPTIONAL_LOCKS"] == "0")
+    }
+
     @Test(.enabled(if: ProjectFiles.gitExecutable() != nil)) func aRepoFsmonitorCommandIsNeverRun() async throws {
         ProjectFiles.resetCache()
         let root = try makeRepo()
