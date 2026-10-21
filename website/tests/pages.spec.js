@@ -3,7 +3,6 @@ import { test, expect } from "@playwright/test";
 const pages = [
   ["/start/", "Your first words."],
   ["/linux/", "Mouthtype for Linux."],
-  ["/docs/", "The useful details."],
   ["/why-mouthtype/", "A little less between you and your words."],
   ["/compare/", "Find your fit."],
   ["/compare/apple-dictation/", "Mouthtype and Apple Dictation."],
@@ -20,7 +19,7 @@ for (const width of [1440, 320]) {
     for (const [name, path] of [
       ["Why Mouthtype", "/why-mouthtype/"],
       ["Compare", "/compare/"],
-      ["Docs", "/docs/"],
+      ["Docs", "https://docs.mouthtype.app/"],
       ["Get started", "/start/"],
     ]) {
       const link = nav.getByRole("link", { name });
@@ -36,12 +35,6 @@ for (const width of [1440, 320]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await nav.getByRole("link", { name: "Docs" }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "The useful details.",
-    );
-    await page.getByRole("link", { name: "Mouthtype home" }).click();
-    await expect(page.locator("#hero-title")).toBeVisible();
   });
 }
 
@@ -74,55 +67,81 @@ test("start describes the current release features", async ({ page }) => {
   await expect(page.locator("#your-build")).toContainText("Settings");
   await expect(page.locator("#your-build")).toContainText("Transcribe Audio File…");
   await expect(page.locator("#your-build")).toContainText("Live words");
-  await expect(page.locator('#your-build a[href="/docs/#file-transcription"]')).toBeVisible();
+  await expect(page.locator('#your-build a[href="https://docs.mouthtype.app/transcribe-audio-files/"]')).toBeVisible();
   await page.getByRole("link", { name: "If something gets stuck" }).click();
   await expect(page.locator("#help")).toBeInViewport();
   await expect(page.locator("#help")).toContainText("already appeared");
   await expect(page.locator('input, form, [href$=".zip"]')).toHaveCount(0);
 });
 
-test("reference help covers everyday tasks with explicit build labels", async ({
+test("start links into the docs site and the old /docs/ page redirects there", async ({
   page,
 }) => {
   await page.goto("/start/");
-  await page.getByRole("link", { name: "Read the documentation" }).click();
-  await expect(page).toHaveURL(/\/docs\/$/);
-  for (const id of [
-    "shortcuts",
-    "cleanup",
-    "recording-options",
-    "file-transcription",
-    "linux",
-    "spellings-phrases",
-    "recovery",
-    "local-data",
-    "permissions",
+  const docs = "https://docs.mouthtype.app";
+  await expect(page.getByRole("link", { name: "Read the documentation" })).toHaveAttribute(
+    "href",
+    `${docs}/`,
+  );
+  for (const [name, href] of [
+    ["app and website tone rules", `${docs}/cleanup-and-style/`],
+    ["microphone priorities", `${docs}/dictating/#choose-a-microphone`],
+    ["file transcription guide", `${docs}/transcribe-audio-files/`],
+    ["saved audio", `${docs}/privacy-and-data/`],
+    ["Check for Updates…", `${docs}/getting-started/install-notes/#updates`],
+    ["Linux source testing", `${docs}/linux/`],
   ]) {
-    await expect(page.locator(`#${id}`)).toBeVisible();
+    await expect(page.getByRole("link", { name: new RegExp(name) })).toHaveAttribute(
+      "href",
+      href,
+    );
   }
-  await expect(page.locator("#builds")).toContainText("0.4.0");
-  await expect(page.locator("#builds")).toContainText("Settings");
-  await expect(page.locator("#builds")).not.toContainText("reference describes alpha.5");
-  await expect(page.locator("#recording-options")).toContainText("Live words");
-  await expect(page.locator("#recording-options")).toContainText("off by default");
-  await expect(page.locator("#file-transcription")).toContainText("Transcribe Audio File…");
-  await expect(page.locator("#file-transcription")).toContainText("10 minutes");
-  await expect(page.locator("#file-transcription")).toContainText("512 MB");
-  await expect(page.locator("#file-transcription")).toContainText("Copy");
-  await expect(page.locator("#file-transcription")).toContainText("Save Text…");
-  await expect(page.locator("#linux")).toContainText("experimental");
-  await expect(page.locator("#linux")).toContainText("source-only");
-  await expect(page.locator("#linux")).toContainText("Arch/Omarchy");
-  await expect(page.locator("#cleanup")).toContainText("per-app");
-  await expect(page.locator("#local-data")).toContainText("90 days");
-  await expect(page.locator("#local-data")).toContainText("Saved audio");
-  await expect(page.locator("#local-data")).toContainText("14, 30 or 90 days");
-  await expect(page.locator("#local-data")).toContainText("10 GB");
-  await expect(page.locator("#local-data")).toContainText("Unfinished recordings");
-  await expect(page.locator("#linux")).toContainText("saved spellings and phrase replacements");
-  await expect(page.locator("#linux")).toContainText("multiline");
-  await page.getByRole("link", { name: "Start with your first take" }).click();
-  await expect(page).toHaveURL(/\/start\/$/);
+});
+
+for (const [anchor, target] of [
+  ["", "/"],
+  ["#builds", "/getting-started/"],
+  ["#shortcuts", "/dictating/#change-the-shortcut"],
+  ["#fn-key", "/troubleshooting/#fn-doesnt-start-dictation-or-the-emoji-picker-opens"],
+  ["#recording-options", "/dictating/#choose-a-microphone"],
+  ["#file-transcription", "/transcribe-audio-files/"],
+  ["#cleanup", "/cleanup-and-style/"],
+  ["#spellings-phrases", "/dictionary/"],
+  ["#recent-stats", "/reference/settings/"],
+  ["#learned-corrections", "/dictionary/#suggestions"],
+  ["#advanced-writing", "/reference/settings/"],
+  ["#recovery", "/dictating/#when-a-paste-doesnt-land"],
+  ["#updates", "/getting-started/install-notes/#updates"],
+  ["#local-data", "/privacy-and-data/"],
+  ["#permissions", "/getting-started/#allow-microphone-and-accessibility"],
+  ["#troubleshooting", "/troubleshooting/"],
+  ["#known-limits", "/reference/known-limits/"],
+  ["#linux", "/linux/"],
+  ["#not-an-old-anchor", "/"],
+]) {
+  test(`/docs/${anchor} redirects to docs.mouthtype.app${target}`, async ({ page }) => {
+    await page.route("https://docs.mouthtype.app/**", (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: "<h1>docs</h1>" }),
+    );
+    await page.goto(`/docs/${anchor}`);
+    await page.waitForURL(`https://docs.mouthtype.app${target}`);
+  });
+}
+
+test.describe("without JavaScript", () => {
+  test.use({ javaScriptEnabled: false });
+
+  test("/docs/ keeps a meta refresh and a plain link to the docs site", async ({ page }) => {
+    await page.goto("/docs/");
+    await expect(page.locator('meta[http-equiv="refresh"]')).toHaveAttribute(
+      "content",
+      /url=https:\/\/docs\.mouthtype\.app\//,
+    );
+    await expect(page.getByRole("link", { name: /Open the documentation/ })).toHaveAttribute(
+      "href",
+      "https://docs.mouthtype.app/",
+    );
+  });
 });
 
 test("comparison pages cite official sources and keep the tradeoffs visible", async ({

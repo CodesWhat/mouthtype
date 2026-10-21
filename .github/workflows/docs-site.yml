@@ -28,5 +28,10 @@ jobs:
           cache-dependency-path: apps/docs/package-lock.json
       - run: npm ci
       - run: npm run check
-      - run: npm run test:scripts
+      - run: npm run type-check
       - run: npm run build
+      # Needs out/ from the build: asserts script-src has no 'unsafe-inline', every page's inline
+      # scripts are covered by hashes, and the committed vercel.json matches a fresh build.
+      - run: npm run test:scripts
+        env:
+          REQUIRE_OUT: "1"

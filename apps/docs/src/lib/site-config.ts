@@ -12,3 +12,8 @@ export const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.moutht
 
 /** "" at the root, "/docs" when built with DOCS_BASE_PATH=/docs. Prefix for URLs Next doesn't rewrite. */
 export const BASE_PATH = process.env.NEXT_PUBLIC_DOCS_BASE_PATH ?? "";
+
+/** Absolute canonical URL for a page path. The export uses trailing slashes. */
+export function absoluteUrl(path: string) {
+  return path === "/" ? BASE_URL : `${BASE_URL}${path.replace(/\/?$/, "/")}`;
+}

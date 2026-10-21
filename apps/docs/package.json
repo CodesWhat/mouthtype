@@ -8,7 +8,7 @@
   "private": true,
   "scripts": {
     "dev": "npm run sync:docs && next dev",
-    "build": "npm run sync:docs && next build",
+    "build": "npm run sync:docs && next build && node scripts/security-headers.mjs",
     "start": "next start",
     "sync:docs": "node scripts/sync-docs.mjs",
     "lint": "biome check .",
