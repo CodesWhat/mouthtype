@@ -30,12 +30,8 @@ jobs:
       - run: npm run check
       - run: npm run type-check
       - run: npm run build
-      # The build rewrites vercel.json. If that changes the committed file, the hashes in it are
-      # stale and the deployed pages would block their own inline scripts.
-      - run: git diff --exit-code -- apps/docs/vercel.json
-        working-directory: .
-      # Needs out/ from the build: asserts script-src has no 'unsafe-inline', every page's inline
-      # scripts are covered by hashes, and the committed vercel.json matches a fresh build.
+      # Needs out/ from the build: asserts every page has a meta CSP that covers its inline scripts
+      # and that the static header in vercel.json has no 'unsafe-inline' in script-src.
       - run: npm run test:scripts
         env:
           REQUIRE_OUT: "1"

@@ -123,7 +123,8 @@ import Testing
         "I mean it, three times.",
         "Make that three.",
         "I said no to three.",
-        // The pronoun "one" after a bare cue is not a corrected value (DR-F7).
+        // The pronoun "one" after a bare cue is not a corrected value (DR-F7). No comma is required: "one of/else"
+        // is excluded, and "no one" stays a pronoun when more clause follows it.
         "I'll be there at two, no one else can make it.",
         "We sold 500, no one believed it.",
         "I have 2, actually one of them is broken.",

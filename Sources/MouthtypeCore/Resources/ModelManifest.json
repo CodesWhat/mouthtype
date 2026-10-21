@@ -1,0 +1,360 @@
+{
+ "repos": {
+  "FluidInference/parakeet-ctc-110m-coreml": {
+   "files": [
+    {
+     "path": "AudioEncoder.mlmodelc/analytics/coremldata.bin",
+     "sha256": "8906c823e9bb3bf6b16d9f0308f98cd70573526333ad85dd767dc3f9ae6b25fa",
+     "size": 243
+    },
+    {
+     "path": "AudioEncoder.mlmodelc/coremldata.bin",
+     "sha256": "a88b002b58193b4c31211754cdfdf220a85f9651dc61caf336ab84400cbc191a",
+     "size": 505
+    },
+    {
+     "blob": "d8cc3094ea923273b3870c1418c982eb8c518704",
+     "path": "AudioEncoder.mlmodelc/metadata.json",
+     "size": 3456
+    },
+    {
+     "blob": "f394aeed7e0f3e8b25ae16e713f2a80558435158",
+     "path": "AudioEncoder.mlmodelc/model.mil",
+     "size": 1060924
+    },
+    {
+     "path": "AudioEncoder.mlmodelc/weights/weight.bin",
+     "sha256": "af0734b4a5d7465ad9e8bb170f0c53c5e6b91ebb75a9bdf88d3f59ae4ad6aebd",
+     "size": 100778304
+    },
+    {
+     "path": "MelSpectrogram.mlmodelc/analytics/coremldata.bin",
+     "sha256": "22f2a8cba1de25c984050566b534a1d8caf22a82f9fe6c1c6f3149a0dd7e8ae3",
+     "size": 243
+    },
+    {
+     "path": "MelSpectrogram.mlmodelc/coremldata.bin",
+     "sha256": "3a32ec67c76aa0aa2faef518413c311493e89aeb7fa11289fa4b8653ab8a160c",
+     "size": 330
+    },
+    {
+     "blob": "944c0c11d0e59dff561e97c44e5e47127a9e953b",
+     "path": "MelSpectrogram.mlmodelc/metadata.json",
+     "size": 1962
+    },
+    {
+     "blob": "d1ef7d81e60edf7bc921ade3f5b602a471e8609b",
+     "path": "MelSpectrogram.mlmodelc/model.mil",
+     "size": 12584
+    },
+    {
+     "path": "MelSpectrogram.mlmodelc/weights/weight.bin",
+     "sha256": "0a89c055bfde9022029d3cc59a23e949385e063974460d8eaec3a7614c3eaaa8",
+     "size": 567712
+    },
+    {
+     "blob": "601ee835ed23ea5b6c10bdfcb3c9a44ef622ac9d",
+     "path": "config.json",
+     "size": 121
+    },
+    {
+     "blob": "f8b394115e5054ef0e25effacafae998742c8abc",
+     "path": "ctc_head_metadata.json",
+     "size": 382
+    },
+    {
+     "blob": "815fbdc56abc60a0f29e51ff2373c998d7779805",
+     "path": "special_tokens_map.json",
+     "size": 279
+    },
+    {
+     "blob": "21e87f185d71820f5089456aa9c79c97c0a0ce8b",
+     "path": "tokenizer.json",
+     "size": 360106
+    },
+    {
+     "blob": "d9eaa0fb393ab6e3ac6890fe99efb6191cded97c",
+     "path": "tokenizer_config.json",
+     "size": 632
+    },
+    {
+     "blob": "33b95831722563db5362641673b37885e25fb47a",
+     "path": "vocab.json",
+     "size": 16086
+    }
+   ],
+   "revision": "accdafd8cf8a2ff1cabe3c11e54416b405d409aa"
+  },
+  "FluidInference/parakeet-tdt-0.6b-v2-coreml": {
+   "files": [
+    {
+     "path": "Decoder.mlmodelc/analytics/coremldata.bin",
+     "sha256": "46de1a6fe2e49d19a2125bc91acf020df7f2aea84ba821532aade8427a440b05",
+     "size": 243
+    },
+    {
+     "path": "Decoder.mlmodelc/coremldata.bin",
+     "sha256": "d200ca07694a347f6d02a3886a062ae839831e094e443222f2e48a14945966a8",
+     "size": 554
+    },
+    {
+     "blob": "e3a08d21a5d1577db2bedd1749ea0ddae5d21b73",
+     "path": "Decoder.mlmodelc/metadata.json",
+     "size": 3427
+    },
+    {
+     "blob": "167cc9db34dd7828e0e61eab40d6a09f8a234d30",
+     "path": "Decoder.mlmodelc/model.mil",
+     "size": 13106
+    },
+    {
+     "path": "Decoder.mlmodelc/weights/weight.bin",
+     "sha256": "27d26890221d82322c1092fd99d7b40578e435d5cf4b83c887c42603caf97aba",
+     "size": 14429952
+    },
+    {
+     "path": "Encoder.mlmodelc/analytics/coremldata.bin",
+     "sha256": "42e638870d73f26b332918a3496ce36793fbb413a81cbd3d16ba01328637a105",
+     "size": 243
+    },
+    {
+     "path": "Encoder.mlmodelc/coremldata.bin",
+     "sha256": "4def7aa848599ad0e17a8b9a982edcdbf33cf92e1f4b798de32e2ca0bc74b030",
+     "size": 485
+    },
+    {
+     "blob": "c87f9eb24e76b8e518dc1fbead46c8c0029d3925",
+     "path": "Encoder.mlmodelc/metadata.json",
+     "size": 2926
+    },
+    {
+     "blob": "93d1301ccde7c2ca447af6c01ab05bfda5a5dd2c",
+     "path": "Encoder.mlmodelc/model.mil",
+     "size": 959769
+    },
+    {
+     "path": "Encoder.mlmodelc/weights/weight.bin",
+     "sha256": "4adc7ad44f9d05e1bffeb2b06d3bb02861a5c7602dff63a6b494aed3bf8a6c3e",
+     "size": 445187200
+    },
+    {
+     "path": "JointDecision.mlmodelc/analytics/coremldata.bin",
+     "sha256": "f1183ba213bb94a918c8d2cad19ab045320618f97f6ca662245b3936d7b090f7",
+     "size": 243
+    },
+    {
+     "path": "JointDecision.mlmodelc/coremldata.bin",
+     "sha256": "e2c6752f1c8cf2d3f6f26ec93195c9bfa759ad59edf9f806696a138154f96f11",
+     "size": 534
+    },
+    {
+     "blob": "db3b2bc33cfda6f7cd1073d21182446180e53f94",
+     "path": "JointDecision.mlmodelc/metadata.json",
+     "size": 2936
+    },
+    {
+     "blob": "339c35b303b074de7fe047bb099311a4cc08cf53",
+     "path": "JointDecision.mlmodelc/model.mil",
+     "size": 9722
+    },
+    {
+     "path": "JointDecision.mlmodelc/weights/weight.bin",
+     "sha256": "ca22a65903a05e64137677da608077578a8606090a598abf4875fa6199aaa19d",
+     "size": 3453388
+    },
+    {
+     "path": "Preprocessor.mlmodelc/analytics/coremldata.bin",
+     "sha256": "03ab3c1327a054c54c07a40325db967ec574f2c91dcc8192bfa44aa561bcf2d8",
+     "size": 243
+    },
+    {
+     "path": "Preprocessor.mlmodelc/coremldata.bin",
+     "sha256": "d88ea1fc349459c9e100d6a96688c5b29a1f0d865f544be103001724b986b6d6",
+     "size": 494
+    },
+    {
+     "blob": "887f7d4adc6d7f933686f7b984e23a47b45f57e3",
+     "path": "Preprocessor.mlmodelc/metadata.json",
+     "size": 2974
+    },
+    {
+     "blob": "e94cce4bc7fbf55e55788449bf067ffe09a5ca91",
+     "path": "Preprocessor.mlmodelc/model.mil",
+     "size": 27166
+    },
+    {
+     "path": "Preprocessor.mlmodelc/weights/weight.bin",
+     "sha256": "a5f7df6c7f47147ae9486fe18cc7792f9a44d093ec3c6a11e91ef2dc363c48dc",
+     "size": 298880
+    },
+    {
+     "blob": "0967ef424bce6791893e9a57bb952f80fd536e93",
+     "path": "config.json",
+     "size": 3
+    },
+    {
+     "blob": "a111d3bd29d44781c4588447c3eac1ea549cb1f1",
+     "path": "parakeet_vocab.json",
+     "size": 18762
+    }
+   ],
+   "revision": "ee09c569f73759e6d44c9bd16766f477b2b36d39"
+  },
+  "FluidInference/parakeet-tdt-0.6b-v3-coreml": {
+   "files": [
+    {
+     "path": "Decoder.mlmodelc/analytics/coremldata.bin",
+     "sha256": "4238c4e81ecd0dc94bd7dfbb60f7e2cc824107c1ffe0387b8607b72833dba350",
+     "size": 243
+    },
+    {
+     "path": "Decoder.mlmodelc/coremldata.bin",
+     "sha256": "18647af085d87bd8f3121c8a9b4d4564c1ede038dab63d295b4e745cf2d7fb99",
+     "size": 554
+    },
+    {
+     "blob": "781350d40ed83511afc3bc31a804e6a543e69d04",
+     "path": "Decoder.mlmodelc/metadata.json",
+     "size": 3427
+    },
+    {
+     "blob": "95328ba81ca8dceb16c039e62f1a7d447ede43c2",
+     "path": "Decoder.mlmodelc/model.mil",
+     "size": 13110
+    },
+    {
+     "path": "Decoder.mlmodelc/weights/weight.bin",
+     "sha256": "48adf0f0d47c406c8253d4f7fef967436a39da14f5a65e66d5a4b407be355d41",
+     "size": 23604992
+    },
+    {
+     "path": "Encoder.mlmodelc/analytics/coremldata.bin",
+     "sha256": "42e638870d73f26b332918a3496ce36793fbb413a81cbd3d16ba01328637a105",
+     "size": 243
+    },
+    {
+     "path": "Encoder.mlmodelc/coremldata.bin",
+     "sha256": "d48034a167a82e88fc3df64f60af963ab3983538271175b8319e7d5720a0fb86",
+     "size": 485
+    },
+    {
+     "blob": "aecde9a8c4ff70c5b5d227a079650fcf5033caee",
+     "path": "Encoder.mlmodelc/metadata.json",
+     "size": 2921
+    },
+    {
+     "blob": "93d1301ccde7c2ca447af6c01ab05bfda5a5dd2c",
+     "path": "Encoder.mlmodelc/model.mil",
+     "size": 959769
+    },
+    {
+     "path": "Encoder.mlmodelc/weights/weight.bin",
+     "sha256": "e2020f323703477a5b21d7c2d282c403e371afb5962e79877e3033e73ba6f421",
+     "size": 445187200
+    },
+    {
+     "path": "JointDecisionv3.mlmodelc/analytics/coremldata.bin",
+     "sha256": "26def4bf73dd56d29dee21c8ef97cb8969e62f6120ed1adc91e46828e2737b6c",
+     "size": 243
+    },
+    {
+     "path": "JointDecisionv3.mlmodelc/coremldata.bin",
+     "sha256": "f5fc08b741400f0088492c9e839418b1e18522f19cba28d361dd030c5f398342",
+     "size": 521
+    },
+    {
+     "blob": "0461ef9e55ba8e8ba0d2cb33b6e1a031b0d481d7",
+     "path": "JointDecisionv3.mlmodelc/metadata.json",
+     "size": 3453
+    },
+    {
+     "blob": "0a80fde4b1ec61093a03fc0fc3431172db34a4d2",
+     "path": "JointDecisionv3.mlmodelc/model.mil",
+     "size": 11775
+    },
+    {
+     "path": "JointDecisionv3.mlmodelc/weights/weight.bin",
+     "sha256": "4e0e63d840032f7f07ddb1d64446051166281e5491bf22da8a945c41f6eedb3e",
+     "size": 12642764
+    },
+    {
+     "path": "Preprocessor.mlmodelc/analytics/coremldata.bin",
+     "sha256": "c9beeb989c8d66f8be11df59bc6df277ec76cee404f6865b46243835ef562f6d",
+     "size": 243
+    },
+    {
+     "path": "Preprocessor.mlmodelc/coremldata.bin",
+     "sha256": "dbde3f2300842c1fd51ef3ff948a0bcffe65ffd2dca10707f2509f32c1d65b1d",
+     "size": 486
+    },
+    {
+     "blob": "06162c58cf2f5343a0e60f36f843bcdf3cc58527",
+     "path": "Preprocessor.mlmodelc/metadata.json",
+     "size": 2841
+    },
+    {
+     "blob": "f987e2479228436c49189aa47edb376db74dcff5",
+     "path": "Preprocessor.mlmodelc/model.mil",
+     "size": 28181
+    },
+    {
+     "path": "Preprocessor.mlmodelc/weights/weight.bin",
+     "sha256": "129b76e3aeafa8afa3ea76d995b964b145fe83700d579f6ff42c4c38fa0968ea",
+     "size": 491072
+    },
+    {
+     "blob": "b6a1d442c414a219be5332e5b9a011631aff1515",
+     "path": "config.json",
+     "size": 475
+    },
+    {
+     "blob": "c684822ec3b671ebc449c433a7012398d39b8bb0",
+     "path": "parakeet_v3_vocab.json",
+     "size": 151122
+    },
+    {
+     "blob": "c684822ec3b671ebc449c433a7012398d39b8bb0",
+     "path": "parakeet_vocab.json",
+     "size": 151122
+    }
+   ],
+   "revision": "7dd20fe6b1797d35f5e3307e8b1732d9a178edfe"
+  },
+  "FluidInference/silero-vad-coreml": {
+   "files": [
+    {
+     "blob": "9e26dfeeb6e641a33dae4961196235bdb965b21b",
+     "path": "config.json",
+     "size": 2
+    },
+    {
+     "path": "silero-vad-unified-256ms-v6.2.1.mlmodelc/analytics/coremldata.bin",
+     "sha256": "8067594eb3126ab8318af507f0c00cabfed40d5fedb8a0ee5075dd02e903d909",
+     "size": 243
+    },
+    {
+     "path": "silero-vad-unified-256ms-v6.2.1.mlmodelc/coremldata.bin",
+     "sha256": "7db35a4fd995222a7fb0129713473b15d1462572ab4a2e5e4d56bcaad9e40f41",
+     "size": 625
+    },
+    {
+     "blob": "8ecdc26edff98896279d325d0dfffc46a65f5f53",
+     "path": "silero-vad-unified-256ms-v6.2.1.mlmodelc/metadata.json",
+     "size": 3335
+    },
+    {
+     "blob": "adf9d2a7d9a4c02164644ff7c5d864d08eb409a9",
+     "path": "silero-vad-unified-256ms-v6.2.1.mlmodelc/model.mil",
+     "size": 176918
+    },
+    {
+     "path": "silero-vad-unified-256ms-v6.2.1.mlmodelc/weights/weight.bin",
+     "sha256": "53ecc8b5081146140ab654c89109cf001f2183abddd7a2411c5081feeffff063",
+     "size": 882304
+    }
+   ],
+   "revision": "b419383c55c110e2c9271fa6ee0ea83d03c70d96"
+  }
+ },
+ "schema": 1
+}

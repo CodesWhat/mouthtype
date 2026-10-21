@@ -91,3 +91,40 @@ class PublicReleaseTests(unittest.TestCase):
             public.retain_public_assets(staged, retained)
         self.assertEqual((retained / 'releases/same/app.zip').read_bytes(), b'published bytes')
         self.assertEqual((retained / 'updates/appcast.xml').read_bytes(), b'published feed')
+
+
+class DiskImageTests(PublicReleaseTests):
+    def setUp(self):
+        super().setUp()
+        self.image = self.directory / 'Mouthtype-0.1.0-alpha.4-macos-arm64.dmg'
+        self.image.write_bytes(b'verified disk image')
+        self.manifest.update({
+            'dmg': self.image.name, 'dmgSHA256': hashlib.sha256(self.image.read_bytes()).hexdigest(),
+            'dmgBytes': self.image.stat().st_size, 'dmgNotarizationStatus': 'Accepted',
+            'dmgSignatureVerified': True, 'dmgStapleVerified': True, 'dmgGatekeeperAccepted': True,
+        })
+
+    def test_accepts_the_checked_disk_image(self):
+        self.assertEqual(self.validate(), self.manifest)
+
+    def test_staging_requires_a_disk_image(self):
+        for key in [key for key in self.manifest if key.startswith('dmg')]:
+            del self.manifest[key]
+        (self.directory / 'release-manifest.json').write_text(json.dumps(self.manifest))
+        public.validate_archive(self.directory)
+        with self.assertRaisesRegex(RuntimeError, 'DMG filename'):
+            public.validate_archive(self.directory, require_dmg=True)
+
+    def test_rejects_changed_disk_image(self):
+        self.image.write_bytes(b'verified disk imagE')
+        with self.assertRaisesRegex(RuntimeError, 'DMG checksum'):
+            self.validate()
+
+    def test_rejects_unaccepted_or_unchecked_disk_image(self):
+        self.manifest['dmgNotarizationStatus'] = 'Invalid'
+        with self.assertRaisesRegex(RuntimeError, 'DMG notarization'):
+            self.validate()
+        self.manifest['dmgNotarizationStatus'] = 'Accepted'
+        self.manifest['dmgStapleVerified'] = False
+        with self.assertRaisesRegex(RuntimeError, 'DMG distribution checks'):
+            self.validate()
