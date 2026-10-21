@@ -47,6 +47,12 @@ function groupSpellings(entries) {
   return groups
 }
 
+// The cap to use after fresh library data lands. A small expansion survives a reload or an edit so the user keeps their place;
+// a large one resets, because rebuilding every revealed row at once is the freeze the cap exists to prevent.
+function capAfterReload(shown) {
+  return shown <= PAGE_ROWS * 2 ? shown : PAGE_ROWS
+}
+
 // The groups whose written form or any heard form contains the query, case-insensitive. An empty query keeps them all.
 function filterGroups(groups, query) {
   var needle = String(query || "").trim().toLowerCase()

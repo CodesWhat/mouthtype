@@ -737,4 +737,32 @@ TestCase {
     wait(30)
     compare(phraseRows(), 240)
   }
+
+  function test_a_reload_resets_a_large_expansion_and_keeps_a_small_one() {
+    var p = openDictionary(lists("spellings-empty", "phrases-list", "ready"), false)
+    var big = bigSpellings(600)
+    p.absorb(big)
+    p.shown = 360
+    wait(30)
+    compare(wordRows(), 360)
+    p.absorb(copy(big))
+    wait(30)
+    compare(wordRows(), 120, "a reload after a large expansion drops back to the cap")
+    p.shown = 240
+    p.absorb(copy(big))
+    wait(30)
+    compare(wordRows(), 240, "a small expansion keeps its place")
+  }
+
+  function test_transforms_reload_resets_a_large_expansion() {
+    var big = bigPhrases(600)
+    var map = lists("spellings-list", "phrases-empty", "ready")
+    map["phrases-list"] = function() { return big }
+    var p = openTransforms(map, false)
+    p.shown = 360
+    wait(30)
+    compare(phraseRows(), 360)
+    p.refresh()
+    tryVerify(function() { return phraseRows() === 120 }, 3000, "reload did not reset the cap")
+  }
 }

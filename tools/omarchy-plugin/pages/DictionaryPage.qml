@@ -70,7 +70,10 @@ Item {
 
   function absorb(reply) {
     var next = Model.libraryFrom(reply, "spellings")
-    if (next) library = next
+    if (next) {
+      shown = Model.capAfterReload(shown)
+      library = next
+    }
     return next !== null
   }
 

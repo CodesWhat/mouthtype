@@ -81,6 +81,7 @@ Item {
         else if (current) root.sheetError = "Mouthtype did not confirm the change"
         return
       }
+      root.shown = Model.capAfterReload(root.shown)
       root.library = next
       root.listError = ""
       if (command === "phrases-list") tracker.send("transform-status", [])
