@@ -70,6 +70,8 @@ In a terminal, code editor or agent app, saying "slash" or "forward slash" and a
 
 - The word is lowercased and joined with no space: "slash Research" becomes "/research".
 - "dash", "hyphen" and "underscore" join more words: "slash code dash review" becomes "/code-review", "slash pr underscore comments" becomes "/pr_comments".
+- A standalone "Slash research." drops the engine's closing punctuation and types "/research". Inside a sentence the punctuation stays after the name.
+- Talk about the character is left alone: "the slash key", "a forward slash separates paths", "double slash".
 - A bare "slash", "slash 2", or "slash" before a plain function word ("and slash or") stays as spoken. So does a command already typed with "/", text in backticks, and anything your dictionary covers.
 - It runs only for these targets: Terminal, iTerm2, Ghostty, Warp, kitty, WezTerm, Alacritty, VS Code, Cursor, Zed, Xcode, Windsurf, the JetBrains IDEs, the Claude, ChatGPT, Codex and Orca apps, and claude.ai or chatgpt.com in Safari, Chrome, Edge or Brave. Everywhere else the words are left alone.
 

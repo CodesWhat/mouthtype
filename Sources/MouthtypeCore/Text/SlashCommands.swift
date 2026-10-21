@@ -5,8 +5,10 @@ import Foundation
 /// "slash" or "forward slash" followed by one word makes "/" plus that word, lowercased, with no space. The word may
 /// continue with spoken "dash", "hyphen" or "underscore" joins ("slash code dash review" becomes "/code-review").
 /// Punctuation after the command stays ("slash research?" becomes "/research?"). A bare "slash", one followed by a
-/// number ("slash 2"), one followed by a function word ("and slash or"), a command already written with "/", text
-/// inside backticks and anything a protected phrase covers are left as spoken.
+/// number ("slash 2"), one followed by a function word ("and slash or"), a noun use ("press the slash key", "a
+/// forward slash separates paths"), a command already written with "/", text inside backticks and anything a
+/// protected phrase covers are left as spoken. When the command is the whole utterance, the sentence punctuation the
+/// engine attached ("Slash research.") is dropped; inside prose it stays after the name.
 ///
 /// Runs before spoken commands so it sees "dash" and "hyphen" as words. The caller runs it only for a coding target.
 public struct SlashCommands: Sendable {
@@ -24,6 +26,22 @@ public struct SlashCommands: Sendable {
     private static let functionWords: Set<String> = [
         "a", "an", "and", "or", "the", "of", "to", "in", "is", "it", "as", "at", "on", "for", "but", "if", "so",
         "we", "you", "i", "that", "this", "then", "not", "with", "by", "be",
+    ]
+
+    /// Before "slash": the word is a noun being talked about ("a forward slash", "double slash", "my slash key").
+    /// "a", "an" and "the" are not here: "a slash research" is the sentence this stage exists for, and the noun
+    /// uses of a bare "the slash" are caught by `nounFollowers`.
+    private static let modifiers: Set<String> = [
+        "this", "that", "these", "those", "my", "your", "our", "its", "their", "his", "her",
+        "each", "every", "any", "no", "back", "double", "trailing", "leading", "forward",
+    ]
+    /// Before "forward slash": a determiner makes it the character ("a forward slash separates paths").
+    private static let determiners: Set<String> = ["the", "a", "an"]
+
+    /// After "slash": it is a noun being described ("slash key", "slash character").
+    private static let nounFollowers: Set<String> = [
+        "key", "keys", "character", "characters", "symbol", "symbols", "sign", "signs", "mark", "marks",
+        "separator", "separators", "delimiter", "delimiters", "button",
     ]
 
     public func apply(_ text: String) -> StageResult {
@@ -49,8 +67,16 @@ public struct SlashCommands: Sendable {
             if i > 0, words[i - 1].lower == "forward", joined(words[i - 1], words[i]) { start = words[i - 1].start }
             let next = i + 1
             guard next < words.count, joined(words[i], words[next]), plain(words[next]),
-                  chars[words[next].start].isLetter, !Self.functionWords.contains(words[next].lower)
+                  chars[words[next].start].isLetter, !Self.functionWords.contains(words[next].lower),
+                  !Self.nounFollowers.contains(words[next].lower)
             else { i += 1; continue }
+            let forward = start != words[i].start
+            let head = forward ? i - 1 : i
+            let blockers = forward ? Self.modifiers.union(Self.determiners) : Self.modifiers
+            if head > 0, joined(words[head - 1], words[head]), blockers.contains(words[head - 1].lower) {
+                i += 1
+                continue
+            }
             var command = "/" + words[next].lower
             var last = next
             while last + 2 < words.count, let glue = Self.joiners[words[last + 1].lower],
@@ -65,7 +91,13 @@ public struct SlashCommands: Sendable {
             if end < chars.count, chars[end] == "/" { continue }
             if start > 0, chars[start - 1] == "/" { continue }
             guard !shielded[start..<end].contains(true) else { continue }
-            spans.append(TextSpan(range: start..<end, replacement: command))
+            var spanEnd = end
+            if chars[..<start].allSatisfy(\.isWhitespace) {
+                var tail = end
+                while tail < chars.count, ".!?,".contains(chars[tail]) { tail += 1 }
+                if chars[tail...].allSatisfy(\.isWhitespace) { spanEnd = tail }
+            }
+            spans.append(TextSpan(range: start..<spanEnd, replacement: command))
         }
         return SpanRewriter.apply(spans, to: chars, stage: Self.stageName)
     }

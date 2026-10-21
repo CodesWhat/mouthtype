@@ -60,6 +60,12 @@ public struct SpokenCommands: Sendable {
                 }
                 if ok { found = Match(entry: entry, firstWord: w, lastWord: w + entry.words.count - 1); break }
             }
+            // A word inside a token that starts with "/" is part of a typed slash command ("/newline"), not a command.
+            if found != nil {
+                var tokenStart = words[w].start
+                while tokenStart > 0, !chars[tokenStart - 1].isWhitespace { tokenStart -= 1 }
+                if tokenStart < words[w].start, chars[tokenStart] == "/" { found = nil }
+            }
             if let found { raw.append(found); w = found.lastWord + 1 } else { w += 1 }
         }
         guard !raw.isEmpty else { return StageResult(text: text) }

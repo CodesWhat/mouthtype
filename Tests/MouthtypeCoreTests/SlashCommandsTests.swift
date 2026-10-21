@@ -20,7 +20,12 @@ import Testing
         TextCase("run slash review now", "run /review now"),
         TextCase("ok. slash compact", "ok. /compact"),
         TextCase("ok, slash compact, then go", "ok, /compact, then go"),
-        TextCase("slash research.", "/research."),
+        TextCase("slash research.", "/research"),
+        TextCase("Slash research.", "/research"),
+        TextCase("Slash research?", "/research"),
+        TextCase("slash research!  ", "/research  "),
+        TextCase("do slash research.", "do /research."),
+        TextCase("slash research. then go", "/research. then go"),
         TextCase("slash code dash review", "/code-review"),
         TextCase("slash code hyphen review", "/code-review"),
         TextCase("slash pr underscore comments", "/pr_comments"),
@@ -36,7 +41,9 @@ import Testing
     @Test(arguments: [
         "slash", "go to the slash", "slash 2", "slash 2fa", "and slash or", "a slash of paint",
         "slash\nresearch", "/research", "run /research now", "slash /research", "slash src/app.swift",
-        "use `slash research` literally", "slashing prices", "slash, research",
+        "use `slash research` literally", "slashing prices", "Press the slash key", "A forward slash separates paths", "the slash character", "type a slash symbol",
+        "a back slash fixes it", "a forward slash separates paths", "the forward slash key", "double slash comments", "trailing slash redirects",
+        "slash the budget", "press slash key", "this slash mark", "slash, research",
     ])
     func leavesEverythingElseAlone(_ input: String) {
         #expect(run(input) == input)
@@ -63,6 +70,25 @@ import Testing
         #expect(pipeline("and slash or", coding: false) == "And slash or")
         let off = TextPipelineOptions(slashCommands: false)
         #expect(pipeline("slash research", coding: true, options: off) == "Slash research")
+    }
+
+    @Test func nonCodingTargetsNeverConvert() {
+        for text in ["and slash or", "Slash research.", "slash code dash review", "slash newline"] {
+            let out = pipeline(text, coding: false)
+            #expect(!out.contains("/"), Comment(rawValue: text))
+        }
+        #expect(pipeline("Slash research.", coding: false) == "Slash research.")
+    }
+
+    @Test func generatedNamesSurviveLaterStages() {
+        #expect(pipeline("slash newline", coding: true) == "/newline")
+        #expect(pipeline("slash new line", coding: true) == "/new line")
+        #expect(pipeline("run slash newline now", coding: true) == "Run /newline now")
+        #expect(pipeline("slash new dash line", coding: true) == "/new-line")
+        #expect(pipeline("slash new underscore paragraph", coding: true) == "/new_paragraph")
+        #expect(pipeline("slash code dash review", coding: true) == "/code-review")
+        #expect(pipeline("slash research dash comma", coding: true) == "/research-comma")
+        #expect(pipeline("slash period", coding: true) == "/period")
     }
 
     @Test func pipelineRunsItBeforeSpokenCommandsAndNumbers() {
