@@ -158,6 +158,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dictation: DictationController?
     private var recovery: CrashRecovery?
     private var recoveryChecked = false
+    private var draftOffer: DraftOffer?
     private let launchedAt = Date()
     private var inputStarted = false
     private var isTerminating = false
@@ -263,6 +264,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 launchedAt: launchedAt
             )
         }
+        draftOffer = DraftOffer(recovery: .standard, cards: presenter)
         let watcher = CorrectionWatcher(
             reader: AccessibilityFieldReader(), dictionary: dictionary, ledger: CorrectionLedger(),
             store: store.map(CorrectionStoreWriter.init), cards: presenter, clock: SystemDictationClock(),
@@ -618,7 +620,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Once the engine is up, offers the dictation a crash cut off. Looks once per launch.
     private func offerRecoveryWhenReady() {
-        guard let recovery, !recoveryChecked else { return }
+        guard !recoveryChecked else { return }
         guard case .ready = engineHost.state else {
             withObservationTracking {
                 _ = engineHost.state
@@ -628,7 +630,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         recoveryChecked = true
-        Task { await recovery.offerIfNeeded() }
+        let recovery = recovery, draftOffer = draftOffer
+        Task {
+            // One card at a time: a dictation a crash cut off goes first, and drafts wait on disk for the next launch.
+            let scan = await recovery?.offerIfNeeded()
+            if scan?.newest == nil { draftOffer?.offerIfNeeded() }
+        }
     }
 
     private func accessibilityChanged(_ granted: Bool) {
