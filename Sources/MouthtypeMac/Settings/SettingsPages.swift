@@ -79,6 +79,6 @@ enum SettingsDestination: Equatable {
     case page(SettingsPage)
     /// The Settings modal on one of its pages.
     case settings(SettingsModalPage)
-    /// Home with the Transcribe a file sheet up.
+    /// The Transcribe Audio File window. It is not a page, so the Mouthtype window stays where it is.
     case transcribeFile
 }

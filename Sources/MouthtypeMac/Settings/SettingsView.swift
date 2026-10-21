@@ -29,9 +29,6 @@ struct SettingsView: View {
         .sheet(isPresented: $model.settingsOpen) {
             SettingsModalView(model: model, actions: actions, fullKeyboardAccess: fullKeyboardAccess)
         }
-        .sheet(isPresented: $model.transcribeOpen) {
-            TranscribeFileSheet(model: model, actions: actions)
-        }
         .onChange(of: model.page) { _, page in
             // The stats are watched only on their own page.
             if page == .stats { model.stats.activate() } else { model.stats.deactivate() }

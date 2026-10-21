@@ -10,7 +10,7 @@ extension SettingsView {
         switch page {
         case .home:
             DesignPage(title: page.headline, summary: page.summary, trailing: {
-                Button("Transcribe a file…") { model.transcribeOpen = true }
+                Button("Transcribe a file…") { model.open(.transcribeFile) }
                     .buttonStyle(.designSecondary).fixedSize().accessibilityIdentifier("home-transcribe")
             }, content: { HomePage(model: model.home) })
         case .stats:
