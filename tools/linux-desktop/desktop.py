@@ -1079,6 +1079,7 @@ class CleanupEngine:
         # A failed load retries from clean() on a growing delay; a reload of the config builds a fresh engine.
         self.failures, self.retry_at = 0, 0.0
         self.artifacts_checked = clock()
+        self.endpoint = None
         self.state = 'idle' if self._artifacts_present() else 'absent'
         self.error = None
         self.load_ms = None
@@ -1119,6 +1120,8 @@ class CleanupEngine:
         if ready.get('event') != 'ready':
             raise ValueError('Cleanup engine is unavailable')
         self.load_ms = int((time.monotonic() - started) * 1000)
+        port, alias = ready.get('port'), ready.get('alias')
+        self.endpoint = {'port': port, 'alias': alias} if type(port) is int and isinstance(alias, str) else None
         self.state = 'ready'
         self.error = None
         self.failures, self.retry_at = 0, 0.0
@@ -1153,6 +1156,7 @@ class CleanupEngine:
         self.state, self.error = 'failed', type(error).__name__
         self.retry_at = self.clock() + self.RETRY_SECONDS[min(self.failures, len(self.RETRY_SECONDS) - 1)]
         self.failures += 1
+        self.endpoint = None
         worker, self.worker = self.worker, None
         if worker:
             worker.close()
@@ -1196,9 +1200,17 @@ class CleanupEngine:
         finally:
             self.lock.release()
 
+    def info(self):
+        """What another local process needs to share this engine's running server instead of loading the model again."""
+        model = self.settings['artifacts']['model']
+        return {'state': self.state, 'sha256': model['sha256'], 'server': os.path.realpath(self.settings['server']),
+                'port': self.endpoint['port'] if self.endpoint and self.state == 'ready' else None,
+                'alias': self.endpoint['alias'] if self.endpoint and self.state == 'ready' else None}
+
     def close(self):
         self.shutdown.set()
         with self.lock:
+            self.endpoint = None
             worker, self.worker = self.worker, None
             if worker:
                 worker.close()
@@ -1338,6 +1350,8 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                                     raise ValueError('Too many watchers')
                                 result = state_snapshot(session, files)
                                 keep = True
+                            elif action == 'engine':
+                                result = engine_info(session)
                             elif action == 'import':
                                 if files is None:
                                     raise ValueError('File transcription is unavailable')
@@ -1391,6 +1405,16 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                         pass
                     watcher.close()
                 path.unlink(missing_ok=True)
+
+
+def engine_info(session):
+    """The cleanup engines this service runs. A configured engine that is not loaded yet starts loading, so a caller
+    that wants its model waits for it instead of loading a second copy."""
+    engines = {id(e): e for e in session.cleanup_engines.values() if e is not None}
+    for engine in engines.values():
+        if engine.state == 'idle':
+            engine.warm()
+    return {'engines': [engine.info() for engine in engines.values()]}
 
 
 def state_snapshot(session, files=None):

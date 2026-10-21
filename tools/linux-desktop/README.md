@@ -154,7 +154,7 @@ On this machine (Ryzen 5 3600, 6 threads, CPU only) the pinned S1-mini loaded in
 
 ### Model load time and integrity
 
-The service loads the speech model in the background once its socket is bound, and Transform Selection keeps its Thorough server resident for 5 minutes after the last transform (`MOUTHTYPE_TRANSFORM_IDLE_SECONDS`, `0` loads per run). To avoid rehashing gigabytes on every load, a model file that passed a full SHA-256 check is remembered in `$XDG_STATE_HOME/mouthtype/verified-models.json` and skipped while its path, size, mtime, inode, device and ctime all match exactly. The tradeoff is that a file edited by someone who can also restore all of those fields goes unnoticed until the full re-verify that runs at least once a day. Set `MOUTHTYPE_VERIFY_FULL=1` to hash every file on every load.
+The service loads the speech model in the background once its socket is bound, and Transform Selection uses the running service's server when it already has the Thorough model loaded, so that model is never in memory twice. Otherwise it keeps its own Thorough server for 60 seconds after the last transform (`MOUTHTYPE_TRANSFORM_IDLE_SECONDS`, `0` loads per run). To avoid rehashing gigabytes on every load, a model file that passed a full SHA-256 check is remembered in `$XDG_STATE_HOME/mouthtype/verified-models.json` and skipped while its path, size, mtime, inode, device and ctime all match exactly. The tradeoff is that a file edited by someone who can also restore all of those fields goes unnoticed until the full re-verify that runs at least once a day. Set `MOUTHTYPE_VERIFY_FULL=1` to hash every file on every load.
 
 ## Tone, swearing softening and Style contexts
 

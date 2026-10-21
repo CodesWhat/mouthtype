@@ -431,6 +431,12 @@ class TransformService:
         desktop = _desktop()
         words = len(text.split())
         seconds = min(180.0, 5.0 + 0.4 * words)
+        # The same model is never loaded twice: when the daemon already runs it, use that server.
+        shared = self._daemon_server(settings)
+        if shared is not None:
+            return self._model_shared(shared, kind, text, seconds)
+        if self.cancelled.is_set():
+            return None
         if self.idle_seconds > 0:
             return self._model_resident(kind, text, settings, seconds)
 
@@ -467,6 +473,56 @@ class TransformService:
             if self.cancelled.is_set():
                 return None
             raise box['error']
+        return box['text']
+
+    def _daemon_server(self, settings):
+        """The daemon's running server (port, alias) for this model file, or None when it has none to share.
+
+        A matching engine that is still loading is waited for; one that failed or is absent is not, since then no
+        copy of the model is in memory and loading it here duplicates nothing."""
+        desktop = _desktop()
+        socket_path = self.runtime / 'session.sock'
+        wanted = (settings['artifacts']['model']['sha256'], os.path.realpath(settings['server']))
+        end = time.monotonic() + self.load_seconds
+        while not self.cancelled.is_set():
+            try:
+                reply = desktop.request(socket_path, 'engine')
+                engines = reply['engines']
+                match = next((item for item in engines if (item.get('sha256'), item.get('server')) == wanted), None)
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                return None
+            if match is None:
+                return None
+            if match.get('state') == 'ready' and type(match.get('port')) is int and isinstance(match.get('alias'), str):
+                return match
+            if match.get('state') not in ('idle', 'loading') or time.monotonic() >= end:
+                return None
+            self.cancelled.wait(.25)
+        return None
+
+    def _model_shared(self, server, kind, text, seconds):
+        """Same contract as _model, sent straight to the daemon's llama-server. It serves one request at a time, so a
+        dictation in flight just makes this wait its turn."""
+        import transform_worker
+        box = {}
+
+        def work():
+            try:
+                box['text'] = transform_worker.complete(server['port'], server['alias'], text, kind, seconds)
+            except BaseException as error:
+                box['error'] = error
+
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
+        while thread.is_alive() and not self.cancelled.is_set():
+            thread.join(.05)
+        if thread.is_alive():
+            # Leaving the request makes the server stop generating once this process exits and drops the connection.
+            return None
+        if 'error' in box:
+            if self.cancelled.is_set():
+                return None
+            raise RuntimeError('Transform model unavailable')
         return box['text']
 
     def _model_resident(self, kind, text, settings, seconds):

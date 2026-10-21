@@ -1,7 +1,8 @@
 """Resident model host for Transform Selection.
 
 Each `transform run` is its own short-lived CLI process, so a llama-server started there dies with it and every
-transform pays the full load. This host keeps one cleanup engine (the same CleanupEngine, worker and llama-server
+transform pays the full load. When the daemon already runs this model, transforms use its server and this host never starts. Otherwise this
+host keeps one cleanup engine (the same CleanupEngine, worker and llama-server
 the dictation cleanup uses) alive between transforms and exits on its own after an idle timeout.
 
 Lifetime, so a server is never left orphaned:
@@ -28,7 +29,7 @@ import time
 SOCKET = 'transform-host.sock'
 LOCK = 'transform-host.lock'
 PIDFILE = 'transform-host.pid'
-DEFAULT_IDLE_SECONDS = 300.0
+DEFAULT_IDLE_SECONDS = 60.0
 MAXIMUM_IDLE_SECONDS = 24 * 60 * 60.0
 MAXIMUM_REQUEST = 256 * 1024
 IDLE_VARIABLE = 'MOUTHTYPE_TRANSFORM_IDLE_SECONDS'

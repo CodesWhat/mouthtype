@@ -217,7 +217,8 @@ def cleanup_engine(config):
             raise ValueError("Unexpected thinking output")
         return sanitize(text) if prompt == "shared" else text
 
-    metadata = {"runtime": description.strip(), "revision": PINS["llama"]["revision"], "server_pid": server.pid}
+    metadata = {"runtime": description.strip(), "revision": PINS["llama"]["revision"], "server_pid": server.pid,
+                "port": port, "alias": alias}
     return infer, metadata, server
 
 
