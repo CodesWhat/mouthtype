@@ -383,10 +383,11 @@ final class CleanerHost: CleanupModelManaging {
         for id in Array(loadWaiters.keys) { resumeLoadWaiter(id) }
     }
 
-    nonisolated func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
-        await beginUse()
+    /// MainActor-isolated so a caller already on the main actor takes its use count before its first suspension.
+    func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
+        beginUse()
         let result = await smart.run(request)
-        await endUse()
+        endUse()
         return result
     }
 
