@@ -106,6 +106,9 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
     private let appName: (pid_t) -> String?
     private let captureBudget: TimeInterval
     private var captured: SelectedText?
+    /// What the menu read when it opened. The panel's own capture has to match it, or the user clicked on one selection and
+    /// would be shown another.
+    @ObservationIgnored private var menuSnapshot: SelectedText?
     /// The tone behind the deterministic cleanup of the captured selection.
     @ObservationIgnored private var style = StyleOptions.formal
     @ObservationIgnored private var transformTask: Task<Void, Never>?
@@ -118,11 +121,15 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
     private(set) var sourceApp: String?
     /// True once Accept was refused because the selection changed or the app wouldn't take the write.
     private(set) var refused = false
+    /// True when the panel opened because the selection differed from the one the menu captured.
+    private(set) var selectionChanged = false
     var refusalTitle: String {
-        "The selection changed, or \(sourceApp ?? "the app") refused the replacement."
+        if selectionChanged { return "The selection changed in \(sourceApp ?? "the app")." }
+        return "The selection changed, or \(sourceApp ?? "the app") refused the replacement."
     }
     var refusalDetail: String {
-        "Select the text again and reopen Transform Selection, or copy the result and paste it yourself."
+        if selectionChanged { return "Select the text again and reopen Transform Selection." }
+        return "Select the text again and reopen Transform Selection, or copy the result and paste it yourself."
     }
     /// The AI transform behind the current preview, or nil for Basic cleanup.
     private(set) var transform: TextTransform?
@@ -160,10 +167,13 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
     /// Time-boxed: the AX calls each get a shrinking timeout, and a capture that still ran past `budget` is discarded.
     func captureForMenu(budget: TimeInterval = 0.15) -> MenuCapture {
         let start = ContinuousClock.now
-        do { _ = try editor.capture(budget: budget) }
+        menuSnapshot = nil
+        let selection: SelectedText
+        do { selection = try editor.capture(budget: budget) }
         catch SelectionCleanupError.timedOut { return .timedOut }
         catch { return .unavailable }
         if start.duration(to: .now) > .seconds(budget) { return .timedOut }
+        menuSnapshot = selection
         return .ready
     }
 
@@ -171,6 +181,8 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
     /// an AI transform. Basic cleanup runs the pipeline with the focused app's tone.
     func prepare(transform requested: TextTransform? = nil) {
         cancel()
+        let expected = menuSnapshot
+        menuSnapshot = nil
         guard !busy() else { message = "Finish the current dictation or file job first."; return }
         if requested != nil, let reason = transformUnavailableReason {
             message = reason
@@ -181,6 +193,13 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
             do { selection = try editor.capture(budget: captureBudget) }
             catch SelectionCleanupError.timedOut {
                 message = "Couldn’t read the selection in time. Try again."
+                return
+            }
+            if let expected, selection != expected {
+                sourceApp = appName(expected.pid)
+                selectionChanged = true
+                refused = true
+                changed()
                 return
             }
             guard !selection.text.isEmpty, selection.text.utf16.count <= 16_000 else { throw SelectionCleanupError.unavailable }
@@ -198,7 +217,7 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
             captured = selection
             sourceApp = appName(selection.pid)
             original = selection.text
-            result = cleaned
+            result = Self.restoringBoundaryWhitespace(of: selection.text, in: cleaned)
             message = Self.basicMessage
             changed()
         } catch {
@@ -220,7 +239,7 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
         transformTask?.cancel()
         transform = nil
         let cleaned = Self.basicCleanup(original, style: style)
-        result = cleaned
+        result = cleaned.isEmpty ? cleaned : Self.restoringBoundaryWhitespace(of: original, in: cleaned)
         message = cleaned.isEmpty ? "Basic cleanup left nothing. Pick a transform or cancel." : Self.basicMessage
     }
 
@@ -260,7 +279,7 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
             } else if text.utf16.count > 16_000 {
                 message = "The result is over 16,000 characters. Retry or cancel."
             } else {
-                result = text
+                result = Self.restoringBoundaryWhitespace(of: original, in: text)
                 message = "\(kind.title) preview from the local model. Review and edit it before accepting."
             }
         case let .failure(error):
@@ -301,8 +320,7 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
             message = "Finish the current dictation or file job first."
             return
         }
-        let replacement = Self.restoringBoundaryWhitespace(of: captured.text, in: result)
-        guard editor.replace(captured, with: replacement) else {
+        guard editor.replace(captured, with: result) else {
             refused = true
             return
         }
@@ -324,6 +342,7 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
         transform = nil
         sourceApp = nil
         refused = false
+        selectionChanged = false
         isTransforming = false
         changed()
     }

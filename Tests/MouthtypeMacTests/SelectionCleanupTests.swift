@@ -7,6 +7,7 @@ import MouthtypeCore
     var selected = SelectedText(pid: 123, element: nil, range: NSRange(location: 3, length: 9), text: "um hello  world")
     var current: SelectedText?
     var attempts = 0
+    var replacements: [String] = []
     var unavailable = false
     func capture() throws -> SelectedText {
         if unavailable { throw SelectionCleanupError.unavailable }
@@ -15,6 +16,7 @@ import MouthtypeCore
     func replace(_ original: SelectedText, with replacement: String) -> Bool {
         guard original == (current ?? selected) else { return false }
         attempts += 1
+        replacements.append(replacement)
         return true
     }
 }
@@ -159,6 +161,60 @@ import MouthtypeCore
         editor.unavailable = true
         #expect(model.captureForMenu() == .unavailable)
     }
+
+    @Test func panelAdoptsTheSelectionWhenItMatchesTheMenuSnapshot() {
+        let editor = SelectionFixture()
+        let model = SelectionCleanupModel(editor: editor)
+        #expect(model.captureForMenu() == .ready)
+        model.prepare()
+        #expect(model.hasPreview && !model.refused && model.original == "um hello  world")
+    }
+
+    @Test func panelRefusesWhenTheSelectionChangedSinceTheMenu() {
+        for change in [
+            { (s: inout SelectedText) in s.text = "other text here" },
+            { (s: inout SelectedText) in s.range.location += 1 },
+            { (s: inout SelectedText) in s.pid = 9 },
+        ] {
+            let editor = SelectionFixture()
+            let model = SelectionCleanupModel(editor: editor, appName: { _ in "Notes" })
+            #expect(model.captureForMenu() == .ready)
+            var changed = editor.selected
+            change(&changed)
+            editor.current = changed
+            model.prepare()
+            #expect(model.refused && !model.hasPreview && !model.canAccept)
+            #expect(model.original.isEmpty && model.result.isEmpty)
+            #expect(model.refusalTitle == "The selection changed in Notes.")
+            model.accept()
+            #expect(editor.attempts == 0)
+        }
+    }
+
+    @Test func panelWithoutAMenuSnapshotCapturesOnce() {
+        let editor = SelectionFixture()
+        let model = SelectionCleanupModel(editor: editor)
+        model.prepare()
+        #expect(model.hasPreview && !model.refused)
+        // The snapshot is consumed by one prepare, so a later open compares against nothing.
+        #expect(model.captureForMenu() == .ready)
+        model.prepare()
+        editor.current = SelectedText(pid: 123, element: nil, range: NSRange(location: 0, length: 5), text: "later")
+        model.prepare()
+        #expect(model.hasPreview && !model.refused && model.original == "later")
+    }
+
+    @Test func acceptAndCopyUseTheEditedResultWithTheOriginalsBoundaryWhitespaceAppliedOnce() {
+        let editor = SelectionFixture()
+        editor.selected = SelectedText(pid: 123, element: nil, range: NSRange(location: 0, length: 12), text: "um hello \nx\n")
+        editor.selected.range.length = editor.selected.text.utf16.count
+        let model = SelectionCleanupModel(editor: editor)
+        model.prepare()
+        #expect(model.result.hasSuffix("\n") && !model.result.hasPrefix(" "))
+        model.result = "Hello there.\n\n"
+        model.accept()
+        #expect(editor.replacements == ["Hello there.\n\n"])
+    }
 }
 
 @Suite struct SelectionDiffTests {
@@ -180,6 +236,16 @@ import MouthtypeCore
         #expect(SelectionDiff.original("same", result: "same").allSatisfy { !$0.marked })
         let long = String(repeating: "word ", count: 1_000)
         #expect(SelectionDiff.result(long + "x", original: long).allSatisfy { !$0.marked })
+    }
+
+    @Test func oneCutoffAppliesToBothInputs() {
+        let big = String(repeating: "word ", count: 500) // 2,500 characters
+        let small = "word one two"
+        // A big original used to diff up to 4,000 characters, and a big result was never checked by original().
+        #expect(SelectionDiff.original(big + "gone", result: "word").allSatisfy { !$0.marked })
+        #expect(SelectionDiff.original(small, result: big).allSatisfy { !$0.marked })
+        #expect(SelectionDiff.result(big, original: small).allSatisfy { !$0.marked })
+        #expect(SelectionDiff.original("a b", result: "b").filter(\.marked).map(\.text) == ["a"])
     }
 
     @Test func emptyResultMarksNothingWhileATransformRuns() {
