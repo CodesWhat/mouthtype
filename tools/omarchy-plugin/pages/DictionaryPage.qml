@@ -16,10 +16,15 @@ Item {
 
   readonly property var results: backend && backend.results ? backend.results : ({})
   readonly property bool editing: sheetKind !== ""
-  readonly property var groups: library ? Model.groupSpellings(library.entries) : []
+  readonly property var allGroups: library ? Model.groupSpellings(library.entries) : []
+  readonly property var groups: Model.filterGroups(allGroups, query)
+  // Only the first `shown` matches get rows. The rest wait behind the Show more row.
+  readonly property var shownGroups: groups.length > shown ? groups.slice(0, shown) : groups
   readonly property bool writable: library !== null && library.writable !== false
   readonly property bool restartNeeded: Model.adoptedConfig(results, ["spellings-add", "spellings-edit", "spellings-remove", "spellings-import"])
   property var library: null
+  property string query: ""
+  property int shown: Model.PAGE_ROWS
   property string listError: ""
   property string sheetKind: ""
   property string sheetError: ""
@@ -31,6 +36,8 @@ Item {
   property string previewRequested: ""
 
   implicitHeight: content.implicitHeight
+
+  onQueryChanged: shown = Model.PAGE_ROWS
 
   function refresh() { tracker.send("spellings-list", []) }
 
@@ -118,10 +125,21 @@ Item {
 
     Item {
       width: parent.width
-      height: toolbar.height
+      height: Math.max(toolbar.height, search.height)
+      FieldBox {
+        id: search
+        visible: root.allGroups.length > 0
+        anchors.left: parent.left
+        anchors.verticalCenter: parent.verticalCenter
+        width: Math.min(280, Math.max(120, parent.width - toolbar.width - 12))
+        hint: root.library ? "Search " + root.library.count + (root.library.count === 1 ? " word" : " words") : "Search words"
+        Accessible.name: "Search words"
+        onTextChanged: root.query = text
+      }
       Row {
         id: toolbar
         anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
         spacing: 8
         DesignSecondaryButton {
           text: "Import CSV…"
@@ -158,11 +176,20 @@ Item {
     }
 
     DesignCard {
-      visible: root.library !== null && !root.library.problem && root.groups.length === 0
+      visible: root.library !== null && !root.library.problem && root.allGroups.length === 0
       width: parent.width
       DesignRow {
         title: "No saved spellings yet"
         detail: "Add a word Mouthtype keeps getting wrong, or import a CSV of names."
+      }
+    }
+
+    DesignCard {
+      visible: root.allGroups.length > 0 && root.groups.length === 0
+      width: parent.width
+      DesignRow {
+        title: "No matches"
+        detail: "No saved spelling matches \u201c" + root.query.trim() + "\u201d."
       }
     }
 
@@ -185,12 +212,19 @@ Item {
       }
 
       Repeater {
-        model: root.groups
+        model: root.shownGroups
         delegate: WordRow {
           required property var modelData
           group: modelData
           onEditRequested: function(pair) { root.openWord(pair) }
         }
+      }
+
+      ShowMoreRow {
+        visible: root.groups.length > root.shown
+        hidden: root.groups.length - root.shown
+        batch: Model.PAGE_ROWS
+        onActivated: root.shown += Model.PAGE_ROWS
       }
     }
 
