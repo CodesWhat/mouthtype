@@ -235,7 +235,7 @@ struct SetupView: View {
         case .speech:
             model.engine.statusText + "\nDownloaded once. Recognition runs on your Mac."
         case .shortcut:
-            model.inputDetail + "\nCheck your shortcut in Input settings to continue."
+            model.inputDetail + "\nCheck your shortcut with Change shortcut to continue."
         case .ready:
             model.instructions
         }
@@ -258,7 +258,7 @@ struct SetupView: View {
                 ProgressView().controlSize(.small).accessibilityLabel("Preparing speech model")
             }
         case .shortcut:
-            action("Input settings…", identifier: "setup-input-settings", perform: actions.inputSettings)
+            action("Change shortcut…", identifier: "setup-input-settings", perform: actions.inputSettings)
         case .ready:
             EmptyView()
         }

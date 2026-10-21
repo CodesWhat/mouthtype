@@ -231,7 +231,7 @@ import MouthtypeCore
         let section = CleanupMenuSection(defaults: defaults, cleaner: selection, confirmDownload: { _, _ in
             choice.level = .medium; return true
         })
-        let item = section.items[0].submenu!.items.first { $0.title.hasPrefix("Download Smart Cleanup") }!
+        let item = section.items[0].submenu!.items.first { $0.title.hasPrefix("Download Cleanup") }!
         _ = item.target?.perform(item.action, with: item)
         for _ in 0..<6000 where fast.downloads + thorough.downloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(fast.downloads == 1)
@@ -250,7 +250,7 @@ import MouthtypeCore
         var names: [String] = []
         let section = CleanupMenuSection(defaults: defaults, cleaner: selection, confirmDownload: { name, _ in names.append(name); return false })
         let menu = section.items[0].submenu!
-        let download = menu.items.first { $0.title.hasPrefix("Download Smart Cleanup") }!
+        let download = menu.items.first { $0.title.hasPrefix("Download Cleanup") }!
         _ = download.target?.perform(download.action, with: download)
         choice.level = .medium
         var settings = CleanupSettings.load(defaults); settings.level = .medium; settings.save(to: defaults)

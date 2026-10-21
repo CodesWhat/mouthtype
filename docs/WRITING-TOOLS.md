@@ -70,7 +70,7 @@ What the priority policy doesn't do:
 
 ## Clean selected text
 
-Select text in an accessible editable field, then choose **Transform Selection** from Mouthtype's menu. A floating panel that doesn't take focus from your app shows the original with removed words struck through and a result with the added or changed characters highlighted. You can edit the result, and the eyebrow names the app the text came from.
+Select text in an accessible editable field, then choose **Transform Selection** from Mouthtype's menu. A floating panel that doesn't take focus from your app shows the original with removed words struck through and a result with the added or changed characters highlighted. You can edit the result.
 
 - **Clean up** uses the tone that applies to the app you're in. It's deterministic basic cleanup: filler removal, spoken punctuation and whitespace/capitalization. It does not expand phrases, rewrite numbers or use surrounding text.
 - **Edit Transforms…** opens the Transforms page.
