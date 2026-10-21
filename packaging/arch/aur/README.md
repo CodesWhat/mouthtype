@@ -7,7 +7,11 @@ installs the client under `/usr`, the Omarchy bar plugin under
 `/usr/lib/systemd/user`, and the `mouthtype-linux-setup` helper.
 
 User flow once published: `yay -S mouthtype-linux-git` (or `omarchy-pkg-add` through the AUR
-menu), then `mouthtype-linux-setup`. Removal: `mouthtype-linux-setup --uninstall`, then
+menu), then log in. The package enables `mouthtype-linux-firstrun.service` for every user
+(a symlink in `graphical-session.target.wants`), which sets up speech, the bar plugin and the two
+shortcuts at the first graphical login and reports through notifications. `mouthtype-linux-setup`
+remains the manual and repair path; `systemctl --user start mouthtype-linux-firstrun` runs it
+without logging out. Removal: `mouthtype-linux-setup --uninstall`, then
 `sudo pacman -R mouthtype-linux-git`.
 
 `packaging/arch/PKGBUILD.in` and `scripts/prepare-linux-arch.py` stay as the CI-tested local
@@ -26,4 +30,6 @@ bundle. They are separate on purpose and do not carry the plugin.
    push to the `master` branch of the AUR repo.
 6. Once a tagged Linux release exists, add a stable `mouthtype-linux` package pinned to the tag
    with a real checksum, and keep `-git` as the development variant.
-7. Keep the plugin copy in step: `post_upgrade` tells users to re-run `mouthtype-linux-setup`.
+7. The first-run logic is in the client (`tools/linux-desktop/firstrun.py`); a package only installs
+   `tools/linux-desktop/systemd/mouthtype-linux-firstrun.service` and enables it for all users.
+8. Keep the plugin copy in step: `post_upgrade` tells users to re-run `mouthtype-linux-setup`.

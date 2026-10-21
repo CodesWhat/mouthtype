@@ -42,7 +42,7 @@ Check: `mouthtype-linux capabilities` prints JSON with `"interface": 1` and a `f
 python3 tools/linux-desktop/setup.py
 ```
 
-Checks the required helpers and that the Omarchy shell config exists (before any download), prepares the speech model if it is not prepared yet, runs `doctor`, then installs or updates the Omarchy plugin with the login service. Add `--shortcut toggle` (Super+Alt+M) or `--shortcut hold` (F10) to bind a dictation key too, `--no-autostart` to skip the login service, `--skip-plugin` to prepare speech only. If it succeeds, jump to the checks at the end of step 5, then step 6. Steps 4 and 5 below are the same work done one piece at a time.
+Checks the required helpers and that the Omarchy shell config exists (before any download), prepares the speech model if it is not prepared yet, runs `doctor`, then installs or updates the Omarchy plugin with the login service. Add `--shortcut toggle` (Super+Alt+M) or `--shortcut hold` (F10) to bind a dictation key too, `--no-autostart` to skip the login service, `--skip-plugin` to prepare speech only. `--no-transform-shortcut` skips the Super+Shift+T Transform Selection key that install otherwise binds (a key Hyprland already uses is refused, not overwritten). On a terminal it also offers AI cleanup with size and time estimates; `--cleanup fast|thorough|skip` answers that up front. If it succeeds, jump to the checks at the end of step 5, then step 6. With the Arch package installed none of this is needed by hand: the first graphical login runs the same steps and reports with notifications. Steps 4 and 5 below are the same work done one piece at a time.
 
 ## 4. Speech model
 
@@ -66,7 +66,7 @@ reports `checks passed` (a stopped service is a warning, not an error).
 python3 tools/omarchy-plugin/install.py
 ```
 
-Copies the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype`, adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with the graphical session (after the Wayland session is up, not at bare login) and is restarted if it stops, starts it now, and restarts the Omarchy shell. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
+Installs the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype` through Omarchy's `omarchy plugin add` when it exists (otherwise by copying the files; `--copy` forces that), adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with the graphical session (after the Wayland session is up, not at bare login) and is restarted if it stops, starts it now, and restarts the Omarchy shell. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
 
 If a `mouthtype-linux.service` user unit already exists that the installer didn't create, it stops with "An existing Mouthtype user service was not changed"; remove or rename that unit and run it again.
 
