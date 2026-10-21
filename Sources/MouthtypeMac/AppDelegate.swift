@@ -477,6 +477,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             await inserter?.prepareForTermination()
         }, reply: { [self] ready in
             if !ready { isTerminating = false }
+            // The draft the user agreed to discard goes only once the quit is certain; a delayed quit keeps it.
+            if ready, !signalShutdown { builtSettingsWindow?.discardDraftForQuit() }
             replyToTermination(sender, ready)
             if !ready, !signalShutdown {
                 let alert = NSAlert()

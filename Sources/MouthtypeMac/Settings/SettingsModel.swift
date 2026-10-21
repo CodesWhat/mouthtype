@@ -165,14 +165,22 @@ import UniformTypeIdentifiers
     static let advancedOptionsKey = "settingsAdvancedOptions"
 
     /// True when it is fine to leave the current page or close the window: there is no unsaved draft, or the user chose to discard it.
-    func resolveDraft(_ exit: DraftExit) -> Bool {
+    func resolveDraft(_ exit: DraftExit, discard: Bool = true) -> Bool {
         guard let kind = unsavedDraft else { return true }
         guard confirmDiscard(exit, kind) else { return false }
+        if discard { discardDraft(kind) }
+        return true
+    }
+
+    func discardUnsavedDraft() {
+        if let kind = unsavedDraft { discardDraft(kind) }
+    }
+
+    private func discardDraft(_ kind: DraftKind) {
         switch kind {
         case .spelling: spellings?.cancel()
         case .phrase: phrases?.cancel()
         }
-        return true
     }
 
     static func askToDiscard(_ exit: DraftExit, _ kind: DraftKind) -> Bool {
