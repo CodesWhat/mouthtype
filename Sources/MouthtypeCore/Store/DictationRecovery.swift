@@ -43,7 +43,7 @@ public enum DictationRecovery {
     /// The kept audio of finished takes, from each row's own `audio_path`: the file must exist and be a valid
     /// WAV. Retention maintenance owns expiry under the current policy, so the expiry stamped at record time is not
     /// checked here. Rows without usable audio are skipped.
-    public static func completed(rows: [DictationRecord], now: Date) -> [RecoverableDictation] {
+    public static func completed(rows: [TakeRecord], now: Date) -> [RecoverableDictation] {
         rows.compactMap { row in
             guard let path = row.audioPath else { return nil }
             guard let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int, size > 44 else { return nil }

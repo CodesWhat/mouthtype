@@ -425,6 +425,7 @@ import UniformTypeIdentifiers
     func setFillers(_ value: Bool) { update { $0.fillers = value } }
     func setSpokenCommands(_ value: Bool) { update { $0.spokenCommands = value } }
     func setNumbers(_ value: Bool) { update { $0.numbers = value } }
+    func setSlashCommands(_ value: Bool) { update { $0.slashCommands = value } }
     func setQuietOtherAudio(_ value: Bool) {
         QuietAudioPreference.set(value, in: defaults)
         quietOtherAudio = value

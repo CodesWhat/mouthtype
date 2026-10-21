@@ -35,7 +35,6 @@ public final class TextInserter {
     private var deliveryGeneration = 0
     private var verification: Task<Void, Never>?
     private var onVerified: (@MainActor (PasteVerification) -> Void)?
-
     /// What the last successful paste put in the field and where.
     private struct LastPaste {
         var pid: pid_t
@@ -121,7 +120,7 @@ public final class TextInserter {
     /// The text around the cursor in the focused field, for the cleanup pass. Nil for a secure field or when the app
     /// won't say. The text is used for one cleanup run and neither stored nor logged.
     public func insertionContext() -> InsertionContext? {
-        let now = focus.snapshot()
+        let now = focus.recheck()
         guard !now.isSecure, !focus.isSecureInputEnabled, let element = now.element else { return nil }
         return focus.insertionContext(of: element)
     }
@@ -233,7 +232,9 @@ public final class TextInserter {
                 return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
             }
             let reliableReadBack = PasteTargetPolicy.unchangedProvesFailure(bundleID: now.bundleID)
-            var before = now.element.map { focus.textBeforeCursor(of: $0) } ?? .unknown
+            // Read fresh here: the cleanup pass awaited since its read, and the field can change without any key or click.
+            var axReads = now.element != nil
+            var before = now.element.map { element in focus.prePaste { focus.textBeforeCursor(of: element) } } ?? .unknown
             var continuation = PasteBoundaryDiagnostic.Continuation.notNeeded
             if !reliableReadBack || before == .unknown {
                 continuation = continuationCheck(for: now)
@@ -245,10 +246,28 @@ public final class TextInserter {
             ))
             let keyCode = keys.pasteKeyCode()
             // Accessibility reads can wait on another app. Recheck before borrowing the clipboard or posting keys.
-            let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
-                ? now.element.map { focus.readField(of: $0) } : nil
-            var checked = focus.snapshot()
+            // The baseline only feeds the read-back, so it is read only when someone is listening for the verdict.
+            let fieldBefore = onVerified != nil && PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
+                ? now.element.map { element in focus.prePaste { focus.readField(of: element) } } : nil
+            axReads = axReads || fieldBefore != nil
             let checkedSecureInput = focus.isSecureInputEnabled
+            var checked = now
+            if axReads {
+                let light = focus.prePaste { focus.recheck() }
+                let steady = light.pid == now.pid && light.bundleID == now.bundleID && light.element == now.element
+                    && !light.isSecure && !light.focusOwnerDiffersFromFrontmost && !checkedSecureInput
+                // Anything unsteady gets the full read, so the guards and the reported target see the whole snapshot.
+                if !steady {
+                    checked = focus.snapshot()
+                    // The full read can only add detail. A secure field or owner mismatch the light read saw stands
+                    // even if the full read's secure or ancestry lookups fail.
+                    checked.isSecure = checked.isSecure || light.isSecure
+                    if light.focusOwnerDiffersFromFrontmost {
+                        checked.focusedOwnerPID = light.focusedOwnerPID
+                        checked.focusedApplicationPID = light.focusedApplicationPID
+                    }
+                }
+            }
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
                 checked.isSecure = checked.isSecure || checkedSecureInput
                 return DeliveryResult(method: .none, outcome: .secureDiscard,

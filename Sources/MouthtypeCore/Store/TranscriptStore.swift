@@ -342,13 +342,13 @@ public final class TranscriptStore: Sendable {
     }
 
     /// The newest takes with usable text, secure-field rows excluded, filtered in SQL so the limit is the row count.
-    public func recentTakes(limit: Int) throws -> [DictationRecord] {
+    public func recentTakes(limit: Int) throws -> [TakeRecord] {
         try pool.read { db in try Self.fetchRecentTakes(db, limit: limit) }
     }
 
-    private static func fetchRecentTakes(_ db: Database, limit: Int) throws -> [DictationRecord] {
-        try DictationRecord.fetchAll(db, sql: """
-            SELECT * FROM dictation
+    private static func fetchRecentTakes(_ db: Database, limit: Int) throws -> [TakeRecord] {
+        try TakeRecord.fetchAll(db, sql: """
+            SELECT \(TakeRecord.columns) FROM dictation
             WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0
             ORDER BY started_at DESC LIMIT ?
             """, arguments: [limit])
@@ -357,7 +357,7 @@ public final class TranscriptStore: Sendable {
     /// Calls `onChange` on the main queue now and again whenever the dictation table changes: a new take, a status
     /// change, or audio saved, expired or purged. Reads happen off the main thread.
     public func observeRecentTakes(limit: Int, onError: @escaping @Sendable (Error) -> Void,
-                                   onChange: @escaping @Sendable ([DictationRecord]) -> Void) -> TakesObservation {
+                                   onChange: @escaping @Sendable ([TakeRecord]) -> Void) -> TakesObservation {
         let observation = ValueObservation.tracking { db in try Self.fetchRecentTakes(db, limit: limit) }
         let cancellable = observation.start(in: pool, scheduling: .async(onQueue: .main), onError: onError, onChange: onChange)
         return TakesObservation(cancellable)
@@ -405,7 +405,10 @@ public final class TranscriptStore: Sendable {
             let wpm = durationMs > 0 ? Double(words) / (Double(durationMs) / 60_000) : 0
 
             let days = try String.fetchAll(
-                db, sql: "SELECT DISTINCT local_day FROM dictation WHERE words_final > 0 ORDER BY local_day"
+                db, sql: """
+                SELECT DISTINCT local_day FROM dictation
+                WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0 ORDER BY local_day
+                """
             )
             let streaks = Streaks.compute(days: days, today: today)
             return StatsSummary(

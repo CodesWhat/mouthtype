@@ -4,6 +4,9 @@ import Foundation
 public struct TextPipelineOptions: Sendable, Equatable {
     public var fillers: Bool
     public var spokenCommands: Bool
+    /// "slash research" becomes "/research". Runs only when the input's `codingTarget` is true, and before spoken
+    /// commands so it sees "dash", "hyphen" and "underscore" as words.
+    public var slashCommands: Bool
     /// "At two, actually three" becomes "at three". Runs after spoken commands, so it sees number words.
     public var selfCorrection: Bool
     /// Lists the speaker counts ("first, second", "one, two") become numbered lists. Runs right after spoken commands.
@@ -22,6 +25,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
     public init(
         fillers: Bool = true,
         spokenCommands: Bool = true,
+        slashCommands: Bool = true,
         selfCorrection: Bool = true,
         countedLists: Bool = true,
         notation: Bool = true,
@@ -35,6 +39,7 @@ public struct TextPipelineOptions: Sendable, Equatable {
     ) {
         self.fillers = fillers
         self.spokenCommands = spokenCommands
+        self.slashCommands = slashCommands
         self.selfCorrection = selfCorrection
         self.countedLists = countedLists
         self.notation = notation
@@ -49,7 +54,8 @@ public struct TextPipelineOptions: Sendable, Equatable {
 
     public static let all = TextPipelineOptions()
     public static let none = TextPipelineOptions(
-        fillers: false, spokenCommands: false, selfCorrection: false, countedLists: false, notation: false, numbers: false, dictionary: false,
+        fillers: false, spokenCommands: false, slashCommands: false, selfCorrection: false, countedLists: false, notation: false,
+        numbers: false, dictionary: false,
         snippets: false, blend: false, whitespace: false, profanity: false
     )
 
@@ -70,6 +76,8 @@ public struct TextPipelineInput: Sendable {
     /// Words the profanity stage leaves alone and whose case a removal keeps, on top of the dictionary and snippets
     /// given here (written spellings and snippet text of rules this run does not apply).
     public var protectedWords: [String]
+    /// True when the text is going into a terminal, code editor or agent app. Gates the slash command stage.
+    public var codingTarget: Bool
 
     public init(
         text: String,
@@ -80,7 +88,8 @@ public struct TextPipelineInput: Sendable {
         clipboard: String? = nil,
         options: TextPipelineOptions = .all,
         protectedPhrases: [String] = [],
-        protectedWords: [String] = []
+        protectedWords: [String] = [],
+        codingTarget: Bool = false
     ) {
         self.text = text
         self.dictionary = dictionary
@@ -91,6 +100,7 @@ public struct TextPipelineInput: Sendable {
         self.options = options
         self.protectedPhrases = protectedPhrases
         self.protectedWords = protectedWords
+        self.codingTarget = codingTarget
     }
 }
 
@@ -114,7 +124,7 @@ public struct TextPipelineResult: Sendable, Equatable {
 
 /// The deterministic cleanup pass: no model, a few milliseconds, every change logged.
 ///
-/// Stages run in this fixed order: fillers, spoken commands, self-corrections, counted lists, notation, numbers, dictionary, snippets, profanity (Formal only), blend, style, whitespace.
+/// Stages run in this fixed order: fillers, slash commands (coding targets only), spoken commands, self-corrections, counted lists, notation, numbers, dictionary, snippets, profanity (Formal only), blend, style, whitespace.
 /// Style edits are logged under the `blend` stage name, the store's vocabulary has no separate one.
 /// Each is its own small type and takes the previous stage's output; the edit `position` is a Character offset
 /// into the text as it entered that stage.
@@ -172,6 +182,12 @@ public struct TextPipeline: Sendable {
 
         if options.fillers {
             run(FillerRemover.stageName) { FillerRemover().apply($0) }
+        }
+        if options.slashCommands, input.codingTarget {
+            let phrases = input.protectedPhrases
+                + (options.dictionary ? input.dictionary.flatMap { [$0.heard, $0.written] } : [])
+                + (options.snippets ? input.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
+            run(SlashCommands.stageName) { SlashCommands(protectedPhrases: phrases).apply($0) }
         }
         if options.spokenCommands {
             run(SpokenCommands.stageName) { SpokenCommands().apply($0) }

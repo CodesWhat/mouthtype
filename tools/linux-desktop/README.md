@@ -111,7 +111,7 @@ Recovered takes never replay on startup. `mouthtype-linux transcribe ID` is for 
 New takes save original engine text in `raw-recognition.txt` and final text in `transcript.txt`, both mode 0600. `mouthtype-linux recover ID --raw` prints the original exactly, including its line endings. An older take without a raw file reports unavailable rather than substituting its final result. If final saving failed after raw recognition was saved, explicit `transcribe ID` finishes from that saved raw text using the current dictionary; it does not run recognition again or deliver automatically. Forget removes both text files and the audio. Cancelling a recovered take preserves its existing audio/raw text.
 
 > [!WARNING]
-> Automatic delivery is opt-in. Set `delivery.mode` to `paste` or `type`, then either provide a nonempty `allowed_classes` array of **exact** Hyprland window classes or set `any_window` to `true`, and set `allow_unknown_secure_field` to `true` only after considering the limitation below.
+> Automatic delivery is opt-in. Set `delivery.mode` to `paste` or `type`, then either provide a nonempty `delivery.allowed_classes` array of **exact** Hyprland window classes or set `delivery.any_window` to `true`, and set `delivery.allow_unknown_secure_field` to `true` only after considering the limitation below.
 
 `paste` is the Mac-like path: the transcript is placed on the Wayland clipboard with `wl-copy` and one Ctrl+V chord is sent to the window captured at recording start, through Hyprland's `send_shortcut` dispatcher first (falling back to the legacy `sendshortcut` form, then to `wtype`), after checking that it is still the unlocked active window. Line breaks and tabs travel as text, so multiline Basic cleanup results can be pasted. Windows whose class is in `terminal_classes` (a built-in list of common terminals plus Omarchy's `org.omarchy.agent`, overridable) or whose owning process name is in `terminal_executables` (ghostty, alacritty, kitty, foot and other terminals, so a terminal launched with a custom class is still recognised) receive Ctrl+Shift+V instead, and a transcript containing a line break is refused for a terminal as `unsupported_text` unless `allow_terminal_multiline` is `true`, because a pasted line break runs a command. With `restore_clipboard` (default `true`) the previous **text** clipboard is read once before the paste and put back about half a second later, only if the clipboard still holds the pasted transcript; a clipboard holding an image or other non-text content is not restored. Successful helper exits mean the paste was requested, not that the field received it; the `delivered` cue says so.
 
@@ -129,12 +129,12 @@ These keys live in `linux.json`. Relative paths resolve beside that file.
 | Key | Values | Default |
 | --- | --- | --- |
 | `delivery.mode` | `recover`, `paste`, `type` | `recover` |
-| `allowed_classes` | Nonempty array of exact Hyprland window classes | Not set |
-| `any_window` | `true` or `false` | Not set |
-| `allow_unknown_secure_field` | `true` only after considering the typing limitation | Off |
-| `restore_clipboard` | `true` or `false` | `true` |
-| `terminal_classes`, `terminal_executables` | Lists that select Ctrl+Shift+V | Built-in lists |
-| `allow_terminal_multiline` | `true` lets a multiline transcript paste into a terminal | Off |
+| `delivery.allowed_classes` | Nonempty array of exact Hyprland window classes | Not set |
+| `delivery.any_window` | `true` or `false` | Not set |
+| `delivery.allow_unknown_secure_field` | `true` only after considering the typing limitation | Off |
+| `delivery.restore_clipboard` | `true` or `false` | `true` |
+| `delivery.terminal_classes`, `delivery.terminal_executables` | Lists that select Ctrl+Shift+V | Built-in lists |
+| `delivery.allow_terminal_multiline` | `true` lets a multiline transcript paste into a terminal | Off |
 | `capture_target` | A PipeWire node name or serial | Not set |
 | `maximum_recovery_takes` | 1 to 5000 | 200 |
 | `audio_retention_days` | A number of days, or `null` for no age limit | 90 |

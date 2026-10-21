@@ -1,18 +1,23 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 
-@source "../node_modules/fumadocs-ui/dist/**/*.js";
+/* Scan only our own code and fumadocs-ui. Automatic source detection depends on .gitignore and on
+   what else sits in the working tree, so the CSS (and its hashed filename, which lands in the
+   inline scripts the CSP hashes) came out different on Vercel than locally. */
+@source "../";
+@source "../../node_modules/fumadocs-ui/dist/**/*.js";
 
 :root {
   --mt-serif: var(--font-instrument-serif), Georgia, serif;
   --mt-sans: var(--font-instrument-sans), system-ui, sans-serif;
   --mt-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
-  /* Lime accent from the app palette: #76A11A light, #A6CD52 dark. Link text uses
-     the darker #4A6A12 in light mode so it stays readable on white. */
-  --color-fd-primary: #76a11a;
-  --color-fd-primary-foreground: #111827;
+  /* Lime accent from the app palette: #76A11A light, #A6CD52 dark. Anything that
+     renders as text in light mode (links, list markers, the active sidebar and
+     TOC entries) uses the darker #4A6A12: 6.25:1 on white, 5.88:1 on #F7F8FA. */
+  --color-fd-primary: #4a6a12;
+  --color-fd-primary-foreground: #ffffff;
   --color-fd-ring: #76a11a;
   --mt-link: #4a6a12;
 }
@@ -161,7 +166,7 @@ body {
 }
 
 .prose li::marker {
-  color: #76a11a;
+  color: var(--mt-link);
 }
 
 .dark .prose li::marker {

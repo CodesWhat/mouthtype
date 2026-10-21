@@ -13,12 +13,17 @@ Work on `dev/v0.5.0`, merged since 0.4.0.
 
 ### Added
 
+- Spoken slash commands in coding apps. Saying "slash research" types `/research`, and "dash", "hyphen" and "underscore" join more words ("slash code dash review" is `/code-review`). It only runs in terminals, editors, JetBrains, and the Claude, ChatGPT, Codex and Orca apps (plus claude.ai and chatgpt.com in a supported browser). There's an Advanced toggle, on by default.
+- Show in Dock in Settings > General: Never, While a window is open (the default) or Always. The menu bar icon stays in every mode.
+- A docs site at docs.mouthtype.app.
 - Real app icons in the Style lists. Built-in apps that aren't installed are hidden from the Counts as lists.
 
 ### Changed
 
 - Launch is faster. The status item appears before anything draws with a bundled font, bundled fonts register off the launch path, the Settings window is built on first present, and unchanged phrase files aren't re-read.
 - Dictation is faster. Voice activity detection and Parakeet transcription run concurrently, and the editor-hint bias build starts at key-down.
+- Thorough cleanup is faster. The unchanging part of the cleanup prompt is cached between takes, so each take only processes what follows it. In one benchmark the median per-case time went from 823 ms to 435 ms.
+- The cleanup model unloads after 10 minutes without use and reloads when you start your next take.
 - Per-take dictionary setup is cached on the rule list.
 - The Transform Selection panel no longer shows an eyebrow header.
 - The website hero puts the mouth first in the menu bar.

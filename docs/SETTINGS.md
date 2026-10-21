@@ -219,7 +219,7 @@ Rules you made before the redesign keep working unchanged as explicit overrides.
 **Advanced** holds the set-once options:
 
 - Boost saved words, Learn from my corrections, Code names from your editor and the microphone priority list.
-- Remove fillers, Spoken commands and lists, Format numbers, Lowercase sentence starts and Drop the final full stop.
+- Remove fillers, Spoken commands and lists, Slash commands in coding apps (on by default; "slash research" types /research in terminals, editors and agent apps), Format numbers, Lowercase sentence starts and Drop the final full stop.
 - Split long pastes per supported terminal. It starts off, applies to the chosen terminal's windows and does not identify the command-line program inside them.
 - Keep finished audio for, Dictionary file, and Remap Fn.
 

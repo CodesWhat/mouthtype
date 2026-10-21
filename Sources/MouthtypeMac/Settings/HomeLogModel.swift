@@ -29,10 +29,10 @@ struct HomeTake: Identifiable, Equatable {
         didSet { refreshRecoverability() }
     }
     /// Kept audio behind finished takes, from each row's own audio path. Runs off the main thread.
-    @ObservationIgnored var completedAudio: @MainActor ([DictationRecord]) async -> [RecoverableDictation] = { _ in [] }
+    @ObservationIgnored var completedAudio: @MainActor ([TakeRecord]) async -> [RecoverableDictation] = { _ in [] }
     @ObservationIgnored var recoverTake: @MainActor (RecoverableDictation) -> Void
     @ObservationIgnored private let copyText: @MainActor (String) -> Void
-    @ObservationIgnored private var records: [DictationRecord] = []
+    @ObservationIgnored private var records: [TakeRecord] = []
     @ObservationIgnored private var savedGeneration = 0
     @ObservationIgnored private(set) var isActive: Bool
     @ObservationIgnored private var textTakes: [HomeTake] = []
@@ -44,7 +44,7 @@ struct HomeTake: Identifiable, Equatable {
     @ObservationIgnored private var lifecycleGeneration = 0
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     /// The off-main read behind `loadText()`. Replaceable so a test can make it slow.
-    @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [DictationRecord] = { store, limit in
+    @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [TakeRecord] = { store, limit in
         try store.recentTakes(limit: limit)
     }
     private(set) var takes: [HomeTake] = []
@@ -164,7 +164,7 @@ struct HomeTake: Identifiable, Equatable {
         })
     }
 
-    private func apply(_ records: [DictationRecord]?, failure: String?) {
+    private func apply(_ records: [TakeRecord]?, failure: String?) {
         self.records = records ?? []
         textTakes = records.map(Self.takes(from:)) ?? []
         error = failure
@@ -188,7 +188,7 @@ struct HomeTake: Identifiable, Equatable {
     }
 
     /// Newest first. Secure rows and blank transcripts are dropped.
-    static func takes(from records: [DictationRecord]) -> [HomeTake] {
+    static func takes(from records: [TakeRecord]) -> [HomeTake] {
         records
             .filter { $0.isSecure != true && !($0.finalText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .sorted { $0.startedAt > $1.startedAt }

@@ -243,6 +243,15 @@ private let maya = VocabularyBias(terms: ["Maya"])
         MouthtypeCore.WordTiming(word: text, start: start, end: end, confidence: confidence)
     }
 
+    @Test func repeatedWordsKeepTheOriginalPunctuationAndTimings() {
+        #expect(VocabularyBooster.restoringPunctuation(original: "Jon, yes", boosted: "John yes yes") == "John, yes yes")
+        #expect(VocabularyBooster.restoringPunctuation(original: "Jon, Jon Jon Jon", boosted: "John Jon John") == "John Jon John")
+        let words = [word("Jon", 0, 1), word("Jon", 1, 2), word("Jon", 2, 3)]
+        let out = VocabularyBooster.realign(words, to: "John Jon John")
+        #expect(out.map(\.start) == [0, 2, 3])
+        #expect(out.map(\.end) == [2, 3, 3])
+    }
+
     @Test func untouchedWordsKeepTheirTimes() {
         let words = [word("hi", 0, 0.2), word("Maia", 0.2, 0.6, 0.4), word("there", 0.6, 1)]
         let out = VocabularyBooster.realign(words, to: "hi Maya there")

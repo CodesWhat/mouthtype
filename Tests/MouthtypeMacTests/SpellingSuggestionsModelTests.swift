@@ -178,6 +178,55 @@ import Testing
         #expect(reopened.suggestions.contains { $0.id == suggestion.id })
     }
 
+    @Test func aReloadWithUnchangedTakesAndRulesReusesTheLastResult() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        try seed(f.store)
+        let model = model(f)
+        let probe = CheckProbe()
+        model.isKnownWord = { _ in probe.hit(); return false }
+        await model.reload()
+        let first = model.suggestions
+        let after = probe.count
+        #expect(!first.isEmpty && after > 0)
+        await model.reload()
+        #expect(probe.count == after)
+        #expect(model.suggestions == first)
+        // A new take, or a rule edit, recomputes.
+        try dictate(f.store, 70, raw: "another take entirely")
+        await model.reload()
+        #expect(probe.count > after)
+        let beforeRule = model.suggestions
+        #expect(beforeRule.contains { $0.kind == .misheardVariant })
+        try f.vocabulary.save(heard: "shaban", written: "Siobhan")
+        await model.reload()
+        #expect(!model.suggestions.contains { $0.kind == .misheardVariant })
+    }
+
+    @Test func aReloadAfterATakeEditOrDeleteRecomputes() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        try seed(f.store)
+        let model = model(f)
+        let probe = CheckProbe()
+        model.isKnownWord = { _ in probe.hit(); return false }
+        await model.reload()
+        let first = model.suggestions
+        var count = probe.count
+        #expect(first.contains { $0.kind == .misheardVariant })
+        // Same take count and latest start, but a take's final text changed.
+        let edited = try f.store.recentTakes(limit: 100).first { $0.rawText == "Shaban took a minute 0" }
+        try f.store.recordInsertion(try #require(edited).id, InsertionRecord(finalText: "Siobhan took a minute 0"))
+        await model.reload()
+        #expect(probe.count > count)
+        count = probe.count
+        // Deleting an older take keeps the latest start, and the count when a newer one replaces it in the window.
+        let doomed = try f.store.recentTakes(limit: 100).first { $0.rawText == "Shaban took a minute 1" }
+        try f.store.delete(try #require(doomed).id)
+        await model.reload()
+        #expect(probe.count > count)
+    }
+
     @Test func aReloadThatFinishesAfterDeactivateIsDropped() async throws {
         let f = try fixture()
         defer { try? FileManager.default.removeItem(at: f.dir) }
@@ -416,4 +465,11 @@ private final class CancelProbe: @unchecked Sendable {
     var cancelled: Bool? { lock.lock(); defer { lock.unlock() }; return _cancelled }
     func started() { lock.lock(); _started = true; lock.unlock() }
     func finished(cancelled: Bool) { lock.lock(); _cancelled = cancelled; lock.unlock() }
+}
+
+private final class CheckProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hits = 0
+    func hit() { lock.lock(); hits += 1; lock.unlock() }
+    var count: Int { lock.lock(); defer { lock.unlock() }; return hits }
 }
