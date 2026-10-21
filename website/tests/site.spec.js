@@ -290,7 +290,7 @@ test("example card auto-alternates until the user touches it", async ({ page }) 
   await page.clock.install();
   await page.goto("/");
   const text = page.locator("#example-text");
-  await page.locator(".example").scrollIntoViewIfNeeded();
+  await page.locator("#demo .example").scrollIntoViewIfNeeded();
   await expect(text).toContainText("Send the mockups");
   await page.clock.runFor(6000 + 400);
   await expect(text).toContainText("um send");
@@ -311,7 +311,7 @@ test("example card does not auto-cycle with reduced motion", async ({ page }) =>
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.clock.install();
   await page.goto("/");
-  await page.locator(".example").scrollIntoViewIfNeeded();
+  await page.locator("#demo .example").scrollIntoViewIfNeeded();
   await page.clock.runFor(20000);
   await expect(page.locator("#example-text")).toContainText("Send the mockups");
 });
@@ -321,7 +321,7 @@ test("example card does not cycle while offscreen", async ({ page }) => {
   await page.goto("/");
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.clock.runFor(20000);
-  await page.locator(".example").scrollIntoViewIfNeeded();
+  await page.locator("#demo .example").scrollIntoViewIfNeeded();
   await expect(page.locator("#example-text")).toContainText("Send the mockups");
 });
 
