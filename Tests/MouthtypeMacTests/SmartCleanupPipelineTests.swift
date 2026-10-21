@@ -328,6 +328,32 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         }
     }
 
+    private struct Boom: Error {}
+
+    /// DR-F8: the joined spelling is held back for the model, so any outcome but .ok must still apply it.
+    @Test(arguments: [CleanupLevel.light, .medium], ["timeout", "failed", "guard-rejected", "skipped"])
+    func joinedSpellingsApplyWhenTheModelResultIsNotUsed(level: CleanupLevel, outcome: String) async {
+        let cleaner: ScriptedCleaner
+        var text = "the mouth type build is green"
+        var budgetMs = 2000
+        switch outcome {
+        case "timeout":
+            cleaner = ScriptedCleaner { t, _ in try await Task.sleep(for: .seconds(5)); return t }
+            budgetMs = 50
+        case "failed": cleaner = ScriptedCleaner { _, _ in throw Boom() }
+        case "guard-rejected": cleaner = ScriptedCleaner(returning: "We shipped nothing about quarterly invoices yesterday afternoon.")
+        default:
+            cleaner = ScriptedCleaner(returning: "must not run")
+            text = "the mouth type build is green " + String(repeating: "and so it goes ", count: 135)
+        }
+        let rules = [DictionaryRule(heard: "mouth type", written: "Mouthtype")]
+        let (pipeline, _) = pipeline(cleaner, level: level, budgetMs: budgetMs, rules: rules)
+        let cleaned = await clean(pipeline, text: text)
+        #expect(cleaned.cleanup.outcome == outcome)
+        #expect(cleaned.text.contains("Mouthtype") && !cleaned.text.lowercased().contains("mouth type"))
+        #expect(cleaned.edits.contains { $0.stage == "dictionary" })
+    }
+
     @Test func mediumIsRecordedAsMedium() async {
         let cleaner = ScriptedCleaner(returning: "Let's grab coffee at 2.")
         let (pipeline, _) = pipeline(cleaner, level: .medium)

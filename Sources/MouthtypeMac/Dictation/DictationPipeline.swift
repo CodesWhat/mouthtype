@@ -313,24 +313,28 @@ struct DictationPipeline: Sendable {
         guard level.needsModel, !result.text.isEmpty, let smart else {
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
+        // Joined saved spellings were held back for the model. Whenever its text isn't used, redo the
+        // deterministic pass with the full dictionary so they still apply.
+        func fullDictionaryFallback(modelMs: Int = 0) -> CleanedDictation? {
+            guard dictionary.count != inputs.dictionary.count else { return nil }
+            let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
+            let totalMs = ms + fallback.ms
+            record.ms = Int(totalMs.rounded()) + modelMs
+            if totalMs > cleanupBudget {
+                Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
+                record.outcome = "timeout"
+                let heard = asHeard(transcribed.text)
+                return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
+            }
+            return CleanedDictation(text: fallback.expanded.text,
+                edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)
+        }
         guard let delivery = await smart.runReady(SmartCleanupRequest(
             text: result.text, level: level, style: settings.style, destination: destination,
             dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
             protectedPhrases: protectedPhrases
         ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
-            if dictionary.count != inputs.dictionary.count {
-                let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
-                let totalMs = ms + fallback.ms
-                record.ms = Int(totalMs.rounded())
-                if totalMs > cleanupBudget {
-                    Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
-                    record.outcome = "timeout"
-                    let heard = asHeard(transcribed.text)
-                    return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
-                }
-                return CleanedDictation(text: fallback.expanded.text,
-                    edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)
-            }
+            if let fallback = fullDictionaryFallback() { return fallback }
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         let model = delivery.model
@@ -342,9 +346,13 @@ struct DictationPipeline: Sendable {
         record.outcome = modelResult.outcome.rawValue
         record.promptSha = modelResult.promptSHA
         smartDiagnostic("smart cleanup \(modelResult.outcome.rawValue) ms=\(modelResult.milliseconds)")
+        if modelResult.outcome != .ok, let fallback = fullDictionaryFallback(modelMs: modelResult.milliseconds) {
+            return fallback
+        }
         let final = phrases.apply(modelResult.text)
         guard phrases.matchingTriggers(in: modelResult.text) == expected else {
             record.outcome = "guard-rejected"
+            if let fallback = fullDictionaryFallback(modelMs: modelResult.milliseconds) { return fallback }
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         let modelEdits = (modelResult.edit(from: result.text).map { [$0] } ?? []) + modelResult.postEdits
