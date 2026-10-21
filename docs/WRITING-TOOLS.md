@@ -66,7 +66,7 @@ What the priority policy doesn't do:
 - It doesn't infer clamshell availability or claim verified Bluetooth/sleep behavior.
 
 > [!WARNING]
-> RC.1 keeps fallback enabled while the priority list is empty. Add an input before turning it off. Removing the final input requires keeping fallback enabled so the saved list still has a usable policy.
+> Fallback stays enabled while the priority list is empty. Add an input before turning it off. Removing the final input requires keeping fallback enabled so the saved list still has a usable policy.
 
 ## Clean selected text
 

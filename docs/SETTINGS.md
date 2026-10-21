@@ -3,7 +3,7 @@
 Everything you can change in Mouthtype, page by page, in sidebar order.
 
 > [!NOTE]
-> RC.1 includes **Settings…** in the Mouthtype menu. <kbd>Command</kbd>+<kbd>,</kbd> opens the same window while Mouthtype is active.
+> The Mouthtype menu has **Settings…**. <kbd>Command</kbd>+<kbd>,</kbd> opens the same window while Mouthtype is active.
 
 The Mouthtype window has six pages in the sidebar: **Home**, **Stats**, **Dictionary**, **Transforms**, **Style** and **Appearance**. A **Settings** row at the foot of the sidebar opens the Settings modal. The modal has General, Mac and Health pages, plus an Advanced page while the Advanced options switch in its footer is on.
 
@@ -112,7 +112,7 @@ Changing the setting applies to the next dictation and does not replace an activ
 **Priority list** is an opt-in microphone choice. Order connected inputs and separately choose whether System Default may be used when none are available. The first connected listed input is chosen at the start of a take. Fixed-device choices keep their explicit missing-input behavior. See [writing tools](WRITING-TOOLS.md) for limits.
 
 > [!NOTE]
-> RC.1 keeps System Default fallback enabled while the microphone priority list is empty. Add an input before turning fallback off.
+> System Default fallback stays enabled while the microphone priority list is empty. Add an input before turning fallback off.
 
 ### Live words
 

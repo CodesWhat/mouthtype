@@ -348,7 +348,8 @@ body {
   color: var(--mt-link);
 }
 
-a[data-card] {
+/* Fumadocs also tags heading anchors with data-card; only real cards get the box. */
+a[data-card]:not(:is(h1, h2, h3, h4, h5, h6) > a) {
   background: var(--color-fd-card);
   border: 1px solid var(--color-fd-border);
   border-radius: 12px;
@@ -357,12 +358,12 @@ a[data-card] {
     box-shadow 0.15s;
 }
 
-a[data-card]:hover {
+a[data-card]:not(:is(h1, h2, h3, h4, h5, h6) > a):hover {
   border-color: #76a11a;
   box-shadow: 0 12px 24px -18px #233f2980;
 }
 
-.dark a[data-card]:hover {
+.dark a[data-card]:not(:is(h1, h2, h3, h4, h5, h6) > a):hover {
   border-color: #a6cd52;
   box-shadow: none;
 }

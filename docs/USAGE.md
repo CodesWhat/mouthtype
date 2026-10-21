@@ -110,7 +110,7 @@ For a terminal that loses text from large pastes, open **Settings > Advanced > D
 
 Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanup styles are available on the **Style** page. Rules start empty and preserve the global fallback.
 
-RC.1 also waits for the preceding ordinary paste’s clipboard read before replacing its text. A missing read leaves the next take recoverable instead of overwriting the unread clipboard. A newer user copy remains untouched. Normal Quit first preserves active and queued capture audio, then settles the clipboard change Mouthtype still owns. If preservation fails, the app stays open for a Quit retry. Shutdown blocks late transcription delivery. These checks do not prove that the destination inserted the text; inspect the field before retrying.
+Mouthtype also waits for the preceding ordinary paste’s clipboard read before replacing its text. A missing read leaves the next take recoverable instead of overwriting the unread clipboard. A newer user copy remains untouched. Normal Quit first preserves active and queued capture audio, then settles the clipboard change Mouthtype still owns. If preservation fails, the app stays open for a Quit retry. Shutdown blocks late transcription delivery. These checks do not prove that the destination inserted the text; inspect the field before retrying.
 
 ## Choose cleanup strength and writing style
 
