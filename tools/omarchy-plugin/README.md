@@ -36,3 +36,17 @@ Stats, Dictionary, Transforms and Style are placeholders until their backends la
 - `signal request(string command, var args)` asks the shell to run `control.py <command> <args...>`. Requests run one at a time, in order, and any verb `control.py` accepts works, including those from a `control_<name>.py` module.
 
 `control_library.py` adds the Dictionary and Transforms verbs. They print the same JSON as the `mouthtype-linux spellings` and `phrases` commands documented in `tools/linux-desktop/README.md`: `spellings-list`, `spellings-add HEARD WRITTEN`, `spellings-edit HEARD NEW_HEARD NEW_WRITTEN [EXPECT_WRITTEN]`, `spellings-remove HEARD [EXPECT_WRITTEN]`, `spellings-import-preview FILE`, `spellings-import FILE [DIGEST] [CSV_DIGEST]`, `phrases-list`, `phrases-add TRIGGER EXPANSION`, `phrases-edit TRIGGER NEW_TRIGGER NEW_EXPANSION [EXPECT_EXPANSION]` and `phrases-remove TRIGGER [EXPECT_EXPANSION]`. An optional argument may be passed as an empty string to leave it unset.
+
+## Transform Selection panel
+
+`TransformWindow.qml` is the floating Transform Selection card, loaded by `Service.qml` once the file exists. The card, its chips and its text views live in `transform/`; `transform/TransformModel.js` holds every decision as plain functions so the card is a view. `transform-render/render_transform.sh <dir>` renders eight scenes in light and dark (normal, AI ready, AI busy, refused, model missing, over the 2,000 character highlight cap, accepted, capture error) on the NAS testbed and runs `transform-render/tst_transform.qml`. `transform-render/make_fixtures.py` rewrites `transform/fixtures/*.json` from the real backend.
+
+Open it with a key bound to `control.py transform-open`. That verb captures the selection (primary selection, clipboard as fallback) in its own process, before focus moves, and writes the reply to `$XDG_RUNTIME_DIR/mouthtype/panel-transform.json`. The window polls that file every 400 ms and shows the card for a reply less than 30 seconds old. Add a binding (choose an unused key; this one is only an example):
+
+```
+hl.bind("SUPER + SHIFT + T", hl.dsp.exec_cmd("~/.config/omarchy/plugins/dstahl.mouthtype/control.py transform-open"))
+```
+
+or, on Hyprland 0.54 and older, `bind = SUPER SHIFT, T, exec, ~/.config/omarchy/plugins/dstahl.mouthtype/control.py transform-open`.
+
+The layer surface asks for keyboard focus on demand only, so it does not take focus when it appears and gets it when you click into the result box. Before Accept, the window runs `control.py transform-focus ADDRESS`, which is `hyprctl dispatch focuswindow address:ADDRESS` on the window the selection came from, because `transform accept` refuses unless that window is focused. Cancel while an AI transform runs sends SIGTERM to the running verb, which `control_transform.py` passes to the CLI so the model worker stops.

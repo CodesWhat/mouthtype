@@ -1,0 +1,176 @@
+{
+ "name": "refused",
+ "steps": [
+  {
+   "op": "capture",
+   "reply": {
+    "state": "captured",
+    "id": "0123456789abcdef0123456789abcdef",
+    "source": "primary",
+    "fallback": false,
+    "app": {
+     "class": "Slack",
+     "name": "Slack",
+     "pid": 4242,
+     "address": "0x55d1c0a3b2f0"
+    },
+    "text": "um so the meeting is uh at three pm tomorrow. i think we should bring the report.",
+    "units": 81,
+    "expires_in": 600
+   }
+  },
+  {
+   "op": "status",
+   "reply": {
+    "state": "status",
+    "interface": 1,
+    "kinds": [
+     {
+      "id": "clean-up",
+      "title": "Clean up",
+      "description": "",
+      "needs_model": false,
+      "available": true,
+      "reason": null
+     },
+     {
+      "id": "fix-grammar",
+      "title": "Fix grammar",
+      "description": "",
+      "needs_model": true,
+      "available": true,
+      "reason": null
+     },
+     {
+      "id": "make-shorter",
+      "title": "Make shorter",
+      "description": "",
+      "needs_model": true,
+      "available": true,
+      "reason": null
+     },
+     {
+      "id": "more-formal",
+      "title": "More formal",
+      "description": "",
+      "needs_model": true,
+      "available": true,
+      "reason": null
+     },
+     {
+      "id": "more-casual",
+      "title": "More casual",
+      "description": "",
+      "needs_model": true,
+      "available": true,
+      "reason": null
+     }
+    ],
+    "model": {
+     "level": "thorough",
+     "name": "Thorough",
+     "state": "ready",
+     "reason": null
+    },
+    "limits": {
+     "source_units": 16000,
+     "diff_characters": 2000,
+     "capture_seconds": 600
+    }
+   }
+  },
+  {
+   "op": "run",
+   "reply": {
+    "state": "ready",
+    "id": "0123456789abcdef0123456789abcdef",
+    "kind": "clean-up",
+    "title": "Clean up",
+    "model": false,
+    "text": "So the meeting is at three pm tomorrow. I think we should bring the report.",
+    "original": "um so the meeting is uh at three pm tomorrow. i think we should bring the report.",
+    "changed": true,
+    "diff": {
+     "highlight": true,
+     "reason": null,
+     "limit": 2000,
+     "original": [
+      {
+       "text": "um so",
+       "kind": "removed"
+      },
+      {
+       "text": " the meeting is",
+       "kind": "equal"
+      },
+      {
+       "text": " uh",
+       "kind": "removed"
+      },
+      {
+       "text": " at three pm tomorrow. ",
+       "kind": "equal"
+      },
+      {
+       "text": "i",
+       "kind": "removed"
+      },
+      {
+       "text": " think we should bring the report.",
+       "kind": "equal"
+      }
+     ],
+     "result": [
+      {
+       "text": "So",
+       "kind": "added"
+      },
+      {
+       "text": " the meeting is at three pm tomorrow. ",
+       "kind": "equal"
+      },
+      {
+       "text": "I",
+       "kind": "added"
+      },
+      {
+       "text": " think we should bring the report.",
+       "kind": "equal"
+      }
+     ]
+    },
+    "app": {
+     "class": "Slack",
+     "name": "Slack",
+     "pid": 4242,
+     "address": "0x55d1c0a3b2f0"
+    },
+    "source": "primary",
+    "elapsed_ms": 420,
+    "message": "Basic cleanup preview. Review it before accepting. Names and numbers are not rewritten."
+   }
+  },
+  {
+   "op": "accepting"
+  },
+  {
+   "op": "accept",
+   "reply": {
+    "state": "refused",
+    "id": "0123456789abcdef0123456789abcdef",
+    "reason": "window_changed",
+    "message": "The focused window changed since the selection was captured, so Mouthtype won't write into Slack. Copy the result instead.",
+    "app": {
+     "class": "Slack",
+     "name": "Slack",
+     "pid": 4242,
+     "address": "0x55d1c0a3b2f0"
+    },
+    "primary_action": "copy-result",
+    "offer": [
+     "copy-result"
+    ]
+   }
+  }
+ ]
+}
