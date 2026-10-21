@@ -12,7 +12,7 @@ Item {
   signal activated()
 
   implicitWidth: 200
-  implicitHeight: rowHeight
+  implicitHeight: Math.max(rowHeight, navLabel.height + 16)
   width: parent ? parent.width : implicitWidth
   height: implicitHeight
   activeFocusOnTab: true
@@ -40,6 +40,7 @@ Item {
     color: Theme.ink2
   }
   Text {
+    id: navLabel
     x: 10 + 24 + 12
     width: parent.width - x - 10
     anchors.verticalCenter: parent.verticalCenter

@@ -66,6 +66,7 @@ Item {
 
   Popup {
     id: menu
+    focus: true
     y: root.height + 4
     padding: 4
     width: Math.max(root.width, list.implicitWidth + 8)

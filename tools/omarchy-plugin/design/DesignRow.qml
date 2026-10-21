@@ -15,6 +15,9 @@ Item {
   default property alias controls: controlRow.data
   signal activated()
 
+  // The sel tint composed over the card surface into one opaque colour, so the corner repair below cannot double the alpha.
+  readonly property color fillColor: Qt.tint(Theme.surface, Theme.sel)
+
   readonly property bool stacked: controlRow.visibleChildrenWidth > 0 && width - 28 - 16 - controlRow.visibleChildrenWidth < 180
 
   width: parent ? parent.width : 320
@@ -32,7 +35,7 @@ Item {
       id: fill
       property real amount: root.selected ? 1 : (hover.containsMouse && root.clickable && root.enabled ? 1 : 0)
       anchors.fill: parent
-      color: Theme.sel
+      color: root.fillColor
       radius: (root.cardFirst || root.cardLast) ? Theme.cardRadius - 1 : 0
       opacity: amount
     }
@@ -44,7 +47,7 @@ Item {
       anchors.top: root.cardFirst ? undefined : parent.top
       anchors.bottom: root.cardFirst ? parent.bottom : undefined
       height: Theme.cardRadius
-      color: Theme.sel
+      color: root.fillColor
       opacity: fill.opacity
     }
   }

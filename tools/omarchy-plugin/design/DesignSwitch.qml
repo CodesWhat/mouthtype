@@ -1,5 +1,6 @@
 import QtQuick
 
+// Like QtQuick Controls, user input assigns `checked` (which replaces a binding on it); listen to `toggled` to mirror it.
 // 42 by 24 switch (36 by 20 compact). The track is the accent when on and `track` when off; the knob is white. Space and
 // Return toggle it when it has focus, and the focus ring uses Theme.focus.
 Item {
