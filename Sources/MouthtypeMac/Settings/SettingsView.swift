@@ -14,10 +14,13 @@ struct SettingsView: View {
     @State private var keyboardNavigation: Bool?
     @State var previewWidth: CGFloat = 0
     @FocusState private var sidebarFocus: SettingsPage?
+    @State private var seededSidebarFocus = false
 
     var body: some View {
         HStack(spacing: 0) {
+            // The window can open already on the selected page (URL route), so no onChange fires; start focus on that row, not the first.
             sidebar.frame(width: SettingsTheme.sidebarWidth)
+                .defaultFocus($sidebarFocus, model.page)
             pageContent.frame(maxWidth: .infinity, maxHeight: .infinity).background(DesignPalette.bg)
                 .focusSection()
         }
@@ -33,8 +36,19 @@ struct SettingsView: View {
             // The stats are watched only on their own page.
             if page == .stats { model.stats.activate() } else { model.stats.deactivate() }
             model.syncWords()
+            // A page change from outside the sidebar (URL route, menu) would leave the ring on the old row. AppKit draws that ring, and the
+            // @FocusState can be nil while it is on a row, so the window's first responder decides, not sidebarFocus.
+            let ringMoved = NSApp.keyWindow.map { SettingsView.moveSidebarRing(in: $0, to: page) } ?? false
+            if ringMoved || sidebarFocus != nil, sidebarFocus != page { sidebarFocus = page }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            keyboardNavigation = fullKeyboardAccess()
+            // AppKit hands the first row focus when the window first becomes key, after any default focus; move it to the selected page.
+            // Only the first time, so a row the user Tabbed to isn't pulled back on every return to the window.
+            guard !seededSidebarFocus else { return }
+            seededSidebarFocus = true
+            DispatchQueue.main.async { if let follow = SettingsPage.focusFollowing(focused: sidebarFocus, selected: model.page) { sidebarFocus = follow } }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }
     }
 
@@ -81,6 +95,29 @@ struct SettingsView: View {
         let target = SettingsPage.arrowTarget(focused: sidebarFocus, selected: model.page, offset: offset)
         if model.select(target), sidebarFocus != nil { sidebarFocus = target }
         return .handled
+    }
+
+    /// The page rows' key view proxies, top to bottom. Empty when the rows are not Tab stops (Keyboard navigation off).
+    static func sidebarRowProxies(in window: NSWindow) -> [NSView] {
+        var proxies: [NSView] = []
+        func collect(_ view: NSView) {
+            if String(describing: type(of: view)) == "KeyViewProxy", view.convert(view.bounds, to: nil).minX < SettingsTheme.sidebarWidth { proxies.append(view) }
+            view.subviews.forEach(collect)
+        }
+        if let content = window.contentView { collect(content) }
+        guard let rowHeight = proxies.map({ $0.bounds.height }).min() else { return [] }
+        let rows = proxies.filter { $0.bounds.height < rowHeight * 2 }
+            .sorted { $0.convert($0.bounds, to: nil).minY > $1.convert($1.bounds, to: nil).minY }
+        return Array(rows.prefix(SettingsPage.allCases.count))
+    }
+
+    /// Moves the focus ring to `page`'s row when a sidebar row currently has it. Anything else holding focus (a text field's editor, a page
+    /// control) is left alone. Returns whether the ring moved.
+    @discardableResult @MainActor static func moveSidebarRing(in window: NSWindow, to page: SettingsPage) -> Bool {
+        guard let responder = window.firstResponder as? NSView, !(responder is NSText) else { return false }
+        let rows = sidebarRowProxies(in: window)
+        guard rows.contains(where: { $0 === responder }), let index = SettingsPage.allCases.firstIndex(of: page), index < rows.count else { return false }
+        return rows[index] === responder || window.makeFirstResponder(rows[index])
     }
 
     /// With Full Keyboard Access the rows are Tab stops themselves, so the list must not also be one or Tab cycles in the sidebar.
