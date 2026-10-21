@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -139,7 +140,7 @@ class RetainedImportResultTests(unittest.TestCase):
             mock.patch.object(control, "LAUNCHER", root / "launcher"),
             mock.patch.object(control, "CONFIG", root / "linux.json"),
             mock.patch.object(control, "cli", lambda *a, **k: mock.Mock(returncode=0, stdout=json.dumps(self.status))),
-            mock.patch.object(control, "recent_dictations", lambda limit=None: []),
+            mock.patch.object(control, "recent_dictations", lambda limit=None, previews=True: []),
             mock.patch.object(control, "words_today", lambda entries: 0),
             mock.patch.object(control, "capabilities", lambda: {}),
             mock.patch.object(control, "config_summary", lambda: {}),
@@ -854,6 +855,134 @@ class SessionSocketTests(unittest.TestCase):
                  % str(HERE / "control.py")
         out = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True, text=True, check=True)
         self.assertEqual(out.stdout.strip(), "False")
+
+
+def reference_recent_dictations(root, limit=5):
+    """The pre-scandir implementation, kept as the oracle the new scan must match."""
+    if not root.is_dir():
+        return []
+    takes = [p for p in root.iterdir()
+             if p.is_dir() and not p.is_symlink() and len(p.name) == 32
+             and all(c in "0123456789abcdef" for c in p.name)]
+    recent = []
+    for path in sorted(takes, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
+        transcript = path / "transcript.txt"
+        preview = ""
+        if transcript.is_file():
+            preview = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
+        recent.append({"id": path.name, "transcript": transcript.is_file(),
+                       "audio": (path / "recording.wav").is_file(),
+                       "preview": preview, "mtime": path.stat().st_mtime})
+    return recent
+
+
+class TakeScanTests(unittest.TestCase):
+    COUNT = 2000
+
+    @classmethod
+    def setUpClass(cls):
+        cls.directory = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.directory.name)
+        cls.build(cls.root, cls.COUNT)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.directory.cleanup()
+
+    def setUp(self):
+        patcher = mock.patch.object(control, "RECOVERY", self.root)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def build(root, count):
+        now = time.time()
+        for index in range(count):
+            path = root / ("%032x" % index)
+            path.mkdir()
+            kind = index % 3
+            if kind != 2:
+                (path / "transcript.txt").write_text("word " * (index % 7 + 1) + "\n tail", encoding="utf-8")
+            if kind != 0:
+                (path / "recording.wav").write_bytes(b"\0" * 44)
+            stamp = now - (count - index) * 700
+            os.utime(path, (stamp, stamp))
+        (root / "not-a-take").mkdir()
+        (root / ("f" * 32)).write_text("a file named like a take")
+        (root / ("e" * 32)).symlink_to(root / ("%032x" % 0), target_is_directory=True)
+
+    def test_matches_the_old_implementation_on_two_thousand_takes(self):
+        self.assertEqual(control.recent_dictations(limit=None), reference_recent_dictations(self.root, None))
+        self.assertEqual(control.recent_dictations(), reference_recent_dictations(self.root, 5))
+        self.assertEqual(control.recent_dictations(limit=3), reference_recent_dictations(self.root, 3))
+        old = reference_recent_dictations(self.root, None)
+        light = control.recent_dictations(limit=None, previews=False)
+        self.assertEqual([{**entry, "preview": ""} for entry in old if True][0]["id"], light[0]["id"])
+        self.assertEqual([(e["id"], e["transcript"], e["audio"], e["mtime"]) for e in light],
+                         [(e["id"], e["transcript"], e["audio"], e["mtime"]) for e in old])
+
+    def test_words_today_matches_the_old_count(self):
+        old = reference_recent_dictations(self.root, None)
+        self.assertEqual(control.words_today(), control.words_today(old))
+        self.assertGreater(control.words_today(), 0)
+
+    def test_only_the_rows_shown_have_their_transcript_read(self):
+        reads = []
+        real = Path.read_text
+        with mock.patch.object(Path, "read_text", lambda path, *a, **k: reads.append(path) or real(path, *a, **k)):
+            control.recent_dictations(limit=5)
+            self.assertLessEqual(len(reads), 5)
+            reads.clear()
+            control.recent_dictations(limit=None, previews=False)
+            self.assertEqual(reads, [])
+
+    def test_state_reads_five_previews_not_the_whole_history(self):
+        reads = []
+        real = Path.read_text
+        files = self.root / "files"
+        files.mkdir()
+        (files / "l").write_text("")
+        (files / "c").write_text("{}")
+        with mock.patch.object(control, "LAUNCHER", files / "l"), mock.patch.object(control, "CONFIG", files / "c"), \
+                mock.patch.object(control, "session_call", lambda *a, **k: subprocess.CompletedProcess(a, 2, "", "")), \
+                mock.patch.object(control, "capabilities", lambda: {}), \
+                mock.patch.object(control, "config_summary", lambda: {}), \
+                mock.patch.object(control, "preferences", lambda: {"sounds": False, "pill": {}, "font": {}}), \
+                mock.patch.object(control, "cleanup_models", lambda: {}), \
+                mock.patch.object(control, "unit_enabled", lambda: False), \
+                mock.patch.object(control, "shortcut_mode", lambda: "off"), \
+                mock.patch.object(control, "shortcut_info", lambda: {"keys": ""}), \
+                mock.patch.object(control, "versions", lambda: {}), \
+                mock.patch.object(Path, "read_text", lambda path, *a, **k: reads.append(path) or real(path, *a, **k)):
+            report = control.state()
+        old = reference_recent_dictations(self.root, None)
+        self.assertEqual(report["history"]["takes"], len(old))
+        self.assertEqual(report["recent"], [e for e in old if e["transcript"]][:5])
+        self.assertEqual(report["saved"], [{**e, "preview": ""} for e in old if e["audio"] and not e["transcript"]])
+        self.assertEqual(report["words_today"], control.words_today(old))
+        previews = [p for p in reads if p.parent.parent == self.root]
+        # Five previews, plus the transcripts of takes made today for the word count.
+        self.assertLessEqual(len(previews), 5 + sum(1 for e in old if e["transcript"] and time.localtime(e["mtime"]).tm_yday == time.localtime().tm_yday))
+
+    def test_latest_transcript_stops_at_the_newest_take_with_text(self):
+        newest = next(e for e in reference_recent_dictations(self.root, None) if e["transcript"])
+        checked = []
+        real = Path.is_file
+        with mock.patch.object(Path, "is_file", lambda path: checked.append(path) or real(path)), \
+                mock.patch.object(control, "recover", lambda identity: {"text": identity}):
+            self.assertEqual(control.latest_transcript(), newest["id"])
+        self.assertLessEqual(len(checked), 3)
+
+    def test_prune_selects_targets_from_the_scan(self):
+        small = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(shutil.rmtree, small)
+        self.build(small, 10)
+        forgotten = []
+        with mock.patch.object(control, "RECOVERY", small), mock.patch.object(control, "cli", lambda *a, **k: forgotten.append(a[1]) or subprocess.CompletedProcess(a, 0, "", "")), \
+                mock.patch.object(control, "state", lambda: {}):
+            control.prune("keep", "4")
+        oldest = [e["id"] for e in reversed(reference_recent_dictations(small, None))][:6]
+        self.assertEqual(forgotten, oldest)
 
 
 if __name__ == "__main__":

@@ -406,11 +406,42 @@ def shortcut_mode():
     return shortcut_info()["mode"]
 
 
+def take_rows():
+    """(id, mtime) of every take directory, newest first, from one scandir pass. DirEntry supplies the type and the
+    directory mtime, so no take costs more than one stat."""
+    rows = []
+    try:
+        with os.scandir(RECOVERY) as entries:
+            for entry in entries:
+                name = entry.name
+                if len(name) != 32 or not all(c in "0123456789abcdef" for c in name):
+                    continue
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        rows.append((name, entry.stat(follow_symlinks=False).st_mtime))
+                except OSError:
+                    continue
+    except OSError:
+        return []
+    rows.sort(key=lambda row: row[1], reverse=True)
+    return rows
+
+
+def take_entry(name, mtime, preview=True):
+    transcript = RECOVERY / name / "transcript.txt"
+    has_transcript = transcript.is_file()
+    text = ""
+    if preview and has_transcript:
+        text = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
+    return {"id": name, "transcript": has_transcript, "audio": (RECOVERY / name / "recording.wav").is_file(),
+            "preview": text, "mtime": mtime}
+
+
 def words_today(entries=None):
     today = time.localtime().tm_yday
     year = time.localtime().tm_year
     total = 0
-    for entry in entries if entries is not None else recent_dictations(limit=None):
+    for entry in entries if entries is not None else recent_dictations(limit=None, previews=False):
         if not entry["transcript"]:
             continue
         stamp = time.localtime(entry["mtime"])
@@ -420,22 +451,9 @@ def words_today(entries=None):
     return total
 
 
-def recent_dictations(limit=5):
-    if not RECOVERY.is_dir():
-        return []
-    takes = [p for p in RECOVERY.iterdir()
-             if p.is_dir() and not p.is_symlink() and len(p.name) == 32
-             and all(c in "0123456789abcdef" for c in p.name)]
-    recent = []
-    for path in sorted(takes, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
-        transcript = path / "transcript.txt"
-        preview = ""
-        if transcript.is_file():
-            preview = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
-        recent.append({"id": path.name, "transcript": transcript.is_file(),
-                       "audio": (path / "recording.wav").is_file(),
-                       "preview": preview, "mtime": path.stat().st_mtime})
-    return recent
+def recent_dictations(limit=5, previews=True):
+    """Newest takes first. Only the rows returned are opened: file flags for each, transcript text for the preview."""
+    return [take_entry(name, mtime, previews) for name, mtime in (take_rows() if limit is None else take_rows()[:limit])]
 
 
 def versions():
@@ -463,8 +481,10 @@ def state():
     except json.JSONDecodeError:
         status = {}
     running = result.returncode == 0 and status.get("error") != "unavailable"
-    entries = recent_dictations(limit=None)
+    entries = recent_dictations(limit=None, previews=False)
     transcripts = [entry for entry in entries if entry["transcript"]]
+    for entry in transcripts[:5]:
+        entry["preview"] = " ".join((RECOVERY / entry["id"] / "transcript.txt").read_text(encoding="utf-8").split())[:36]
     report = capabilities()
     file_import = status.get("file_import") if running else None
     if not isinstance(file_import, dict):
@@ -987,8 +1007,7 @@ def forget(identity):
 
 def prune(rule, value):
     """Forget saved dictations by rule: keep-N newest, older-N days, or all. The active take is never touched."""
-    entries = recent_dictations(limit=None)
-    entries.sort(key=lambda e: e["mtime"])
+    entries = [{"id": name, "mtime": mtime} for name, mtime in reversed(take_rows())]
     try:
         number = int(value)
     except (TypeError, ValueError):
@@ -1023,8 +1042,8 @@ def recover(identity):
 
 def latest_transcript(identity=None):
     if identity is None:
-        identity = next((entry["id"] for entry in recent_dictations(limit=None)
-                         if entry["transcript"]), None)
+        # Newest by directory mtime; only takes newer than the answer are opened, never the whole history.
+        identity = next((name for name, _ in take_rows() if (RECOVERY / name / "transcript.txt").is_file()), None)
     if identity is None:
         raise RuntimeError("No saved dictation is available")
     return recover(identity)["text"]
