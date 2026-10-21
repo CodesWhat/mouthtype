@@ -39,7 +39,14 @@ export const metadata: Metadata = {
     siteName: SITE_CONFIG.name,
     type: "website",
   },
-  icons: { icon: `${BASE_PATH}/assets/mouthtype-icon.png` },
+  icons: {
+    icon: [
+      { url: `${BASE_PATH}/assets/favicon.ico`, sizes: "any" },
+      { url: `${BASE_PATH}/assets/favicon-32.png`, type: "image/png", sizes: "32x32" },
+      { url: `${BASE_PATH}/assets/favicon-16.png`, type: "image/png", sizes: "16x16" },
+    ],
+    apple: `${BASE_PATH}/assets/apple-touch-icon.png`,
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
