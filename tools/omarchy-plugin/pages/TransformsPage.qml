@@ -16,10 +16,13 @@ Item {
   readonly property var results: backend && backend.results ? backend.results : ({})
   readonly property bool editing: sheetOpen
   readonly property var entries: library ? library.entries : []
+  // Only the first `shown` entries get rows. The rest wait behind the Show more row.
+  readonly property var shownEntries: entries.length > shown ? entries.slice(0, shown) : entries
   readonly property bool writable: library !== null && library.writable !== false
   readonly property bool restartNeeded: Model.adoptedConfig(results, ["phrases-add", "phrases-edit", "phrases-remove"])
   readonly property var kinds: Model.transformKinds(status)
   property var library: null
+  property int shown: Model.PAGE_ROWS
   property var status: null
   property string listError: ""
   property bool sheetOpen: false
@@ -78,6 +81,7 @@ Item {
         else if (current) root.sheetError = "Mouthtype did not confirm the change"
         return
       }
+      root.shown = Model.capAfterReload(root.shown)
       root.library = next
       root.listError = ""
       if (command === "phrases-list") tracker.send("transform-status", [])
@@ -125,7 +129,7 @@ Item {
         width: parent.width
 
         Repeater {
-          model: root.entries
+          model: root.shownEntries
           delegate: PhraseRow {
             required property var modelData
             required property int index
@@ -133,6 +137,13 @@ Item {
             first: index === 0
             onActivated: root.openSheet(modelData)
           }
+        }
+
+        ShowMoreRow {
+          visible: root.entries.length > root.shown
+          hidden: root.entries.length - root.shown
+          batch: Model.PAGE_ROWS
+          onActivated: root.shown += Model.PAGE_ROWS
         }
 
         DesignRow {
