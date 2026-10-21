@@ -28,7 +28,7 @@ The installed plugin is at `~/.config/omarchy/plugins/dstahl.mouthtype`. Its sou
 
 The panel is one window: a sidebar (Home, Stats, Dictionary, Transforms, Style, Appearance, Settings) and a page. Settings opens a modal with General, Linux, Health and, while its footer switch is on, Advanced. `Panel.qml` owns the state and the `control.py` processes; `MouthtypeShell.qml` lays out the window; each page is a file in `pages/`. `shell-render/render_shell.sh <dir>` renders every page and the modal, light and dark, offscreen on the NAS testbed and runs `shell-render/tst_shell.qml`.
 
-Stats, Dictionary, Transforms and Style are placeholders until their backends land. A slice that builds one replaces `pages/<Name>Page.qml` and keeps this contract, which is also written at the top of `MouthtypeShell.qml`:
+Stats, Dictionary and Transforms are placeholders until their backends land (Style is built, see below). A slice that builds one replaces `pages/<Name>Page.qml` and keeps this contract, which is also written at the top of `MouthtypeShell.qml`:
 
 - The root is an `Item` with an `implicitHeight`. The shell sets its width and scrolls it.
 - `property var backend` is set by the shell to `{ state, results, busy, error, dark }`. `state` is the last `control.py state` reply, `results[verb]` is the last parsed reply of each verb the page requested, `busy` is true while a request runs, and `error` is the last request's message or `""`. The shell assigns a new object on every change.
@@ -36,3 +36,11 @@ Stats, Dictionary, Transforms and Style are placeholders until their backends la
 - `signal request(string command, var args)` asks the shell to run `control.py <command> <args...>`. Requests run one at a time, in order, and any verb `control.py` accepts works, including those from a `control_<name>.py` module.
 
 `control_library.py` adds the Dictionary and Transforms verbs. They print the same JSON as the `mouthtype-linux spellings` and `phrases` commands documented in `tools/linux-desktop/README.md`: `spellings-list`, `spellings-add HEARD WRITTEN`, `spellings-edit HEARD NEW_HEARD NEW_WRITTEN [EXPECT_WRITTEN]`, `spellings-remove HEARD [EXPECT_WRITTEN]`, `spellings-import-preview FILE`, `spellings-import FILE [DIGEST] [CSV_DIGEST]`, `phrases-list`, `phrases-add TRIGGER EXPANSION`, `phrases-edit TRIGGER NEW_TRIGGER NEW_EXPANSION [EXPECT_EXPANSION]` and `phrases-remove TRIGGER [EXPECT_EXPANSION]`. An optional argument may be passed as an empty string to leave it unset.
+
+## Style page
+
+`pages/StylePage.qml` has five tabs: Personal messages, Work messages, Email, Other and Cleanup. Each context tab shows three tone cards (the sample lines and the highlighted characters come from the `samples` in `style-state`, not from the page), the apps that count as that context tagged BUILT IN or ADDED BY YOU with a tone popup and a cleanup popup each, a row that adds an app by window class (find it with `hyprctl clients`), and a "Cleanup here" popup. A context with no tone yet shows `suggested_tone` as a quiet hint. Other holds the default tone, a cleanup level and the per-app rules that no list claims. Linux has no website rows: Wayland does not tell Mouthtype which site is open.
+
+The Cleanup tab is where the global cleanup level (Off, Basic, Fast, Thorough) is chosen, through `set-config cleanup`. Settings, Health keeps the model status and the Prepare buttons and points here for the level. Edits are written to `linux.json` and the dictation service reads them when it starts, so a reply with `restart_required` makes the page show a restart note.
+
+Every edit verb replies with the full Style state, so the page treats the newest reply as current and does not re-read after an edit. Per-app tone and cleanup popups write a per-app rule with `style-rule` for each window class the app ships under. `pages/style/fixtures/gen_fixtures.py` regenerates the fixtures the render scenes use from the real `styles.describe`; `test_style_page.py` fails when they are stale.

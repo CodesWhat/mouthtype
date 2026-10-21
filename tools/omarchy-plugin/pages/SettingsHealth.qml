@@ -3,8 +3,7 @@ import "../design"
 import "../parts"
 
 // Settings, Health: service status, cleanup models and their setup, history, and About with both versions.
-// Cleanup level is chosen here for now through host.config.cleanup and set-config. The Style slice moves the level chooser to
-// its Cleanup tab and leaves the model status and Prepare rows here.
+// The cleanup level is chosen on the Style page, Cleanup tab. The model status and Prepare rows stay here.
 Column {
   id: root
 
@@ -73,25 +72,18 @@ Column {
     DesignEyebrow { text: "Cleanup" }
     DesignCard {
       width: parent.width
-      Repeater {
-        model: [
-          { key: "off", title: "Off", detail: "Text exactly as recognised." },
-          { key: "basic", title: "Basic", detail: "Spoken punctuation, lists and paragraphs." },
-          { key: "fast", title: "Fast", detail: "S1-mini model on the CPU." },
-          { key: "thorough", title: "Thorough", detail: "Qwen3 4B model on the CPU." }
-        ]
-        delegate: DesignRow {
-          required property var modelData
-          readonly property bool needsModel: modelData.key === "fast" || modelData.key === "thorough"
-          readonly property bool ready: !needsModel || root.models[modelData.key] === "prepared"
-          title: modelData.title
-          detail: modelData.detail + (needsModel ? " " + root.modelDetail(modelData.key) + "." : "")
-          clickable: ready
-          selected: root.level === modelData.key
-          opacity: ready ? 1 : 0.55
-          onActivated: root.host.run(["set-config", "cleanup", modelData.key])
-          Icon { visible: root.level === modelData.key; name: "check"; size: 24; color: Theme.ink }
-        }
+      DesignRow {
+        title: "Cleanup level: " + (root.level === "off" ? "Off" : root.level === "basic" ? "Basic" : root.level === "fast" ? "Fast" : "Thorough")
+        detail: "Choose it on the Style page, under Cleanup."
+        DesignSecondaryButton { text: "Open Style"; onActivated: root.host.openPage("style") }
+      }
+      DesignRow {
+        title: "Fast model"
+        detail: root.modelDetail("fast")
+      }
+      DesignRow {
+        title: "Thorough model"
+        detail: root.modelDetail("thorough")
       }
     }
     DesignCard {

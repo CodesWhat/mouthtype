@@ -1,8 +1,14 @@
 import QtQuick
-import "../parts"
+import "../design"
+import "style"
+import "style/StyleLogic.js" as Logic
 
-// Placeholder for the Style page until its Linux backend lands. The slice that builds it replaces this file and keeps the
-// page contract in MouthtypeShell.qml: `backend`, `active`, and the `request(command, args)` signal.
+// Style: a tone for each kind of writing, the apps that count as each kind, and how much cleanup runs. Five tabs: Personal
+// messages, Work messages, Email, Other and Cleanup. Page contract: see MouthtypeShell.qml.
+//
+// Every number and sample on the page comes from `style-state` (control_style.py). An edit verb replies with the same shape
+// plus restart_required, so the newest reply of any style verb is the current state and the page does not re-read after an
+// edit. The global cleanup level is state.config.cleanup, set through set-config as Settings, Health used to do.
 Item {
   id: root
 
@@ -10,13 +16,158 @@ Item {
   property bool active: false
   signal request(string command, var args)
 
-  implicitHeight: body.implicitHeight
+  // "personal", "work", "email", "other" or "cleanup".
+  property string tab: "personal"
+  property var styles: null
+  property bool restartNeeded: false
+  property string editError: ""
+  property var seen: ({})
 
-  PagePlaceholder {
-    id: body
+  readonly property var watched: ["style-state", "style-set-default-tone", "style-set-tone", "style-set-cleanup", "style-add-app",
+    "style-remove-app", "style-rule", "set-config", "cleanup-setup"]
+  readonly property var tabIds: ["personal", "work", "email", "other", "cleanup"]
+  readonly property var contexts: styles ? styles.contexts : []
+  readonly property var tones: styles ? styles.tones : []
+  readonly property var appState: backend && backend.state ? backend.state : ({})
+  readonly property var config: appState.config ? appState.config : ({})
+  readonly property string globalLevel: config.cleanup === "basic" || config.cleanup === "fast" || config.cleanup === "thorough" ? config.cleanup : "off"
+  readonly property var cleanupInfo: appState.cleanup ? appState.cleanup : ({ models: {}, setup: null, service: null })
+  readonly property var current: contextById(tab)
+
+  implicitHeight: column.implicitHeight
+
+  function contextById(id) {
+    for (var i = 0; i < contexts.length; i++) if (contexts[i].id === id) return contexts[i]
+    return null
+  }
+
+  function titles() {
+    var out = []
+    for (var i = 0; i < tabIds.length - 1; i++) {
+      var context = contextById(tabIds[i])
+      out.push(context ? context.title : tabIds[i])
+    }
+    out.push("Cleanup")
+    return out
+  }
+
+  function refresh() { request("style-state", []) }
+
+  // Send a list of [verb, args] control.py requests in order.
+  function send(requests) {
+    editError = ""
+    for (var i = 0; i < requests.length; i++) request(requests[i][0], requests[i][1])
+  }
+
+  // Take in whatever style replies arrived since the last look. A reply with `contexts` is a full state; one with `error`
+  // leaves the state alone and shows its message. set-config and cleanup-setup are watched only for their errors.
+  function absorb() {
+    var results = backend && backend.results ? backend.results : ({})
+    var next = {}
+    for (var key in seen) next[key] = seen[key]
+    for (var i = 0; i < watched.length; i++) {
+      var verb = watched[i]
+      var reply = results[verb]
+      if (reply === undefined || reply === null || reply === seen[verb]) continue
+      next[verb] = reply
+      if (reply.error) { editError = String(reply.error); continue }
+      editError = ""
+      if (reply.contexts !== undefined) styles = reply
+      if (reply.restart_required === true) restartNeeded = true
+    }
+    seen = next
+  }
+
+  onBackendChanged: absorb()
+  onActiveChanged: if (active) refresh()
+  Component.onCompleted: { absorb(); startup.start() }
+
+  // The shell wires `request` and `active` after the page is created, so the first read waits a beat.
+  Timer {
+    id: startup
+    interval: 80
+    onTriggered: if (root.active && root.styles === null) root.refresh()
+  }
+
+  Column {
+    id: column
     width: parent.width
-    title: "Style"
-    summary: "Tone per context, and how much cleanup runs."
-    note: "Tone and per-app rules are not on Linux yet. The cleanup level is in Settings, under Health."
+    spacing: 18
+
+    DesignPageHeader {
+      width: parent.width
+      title: "Style"
+      summary: "A tone for each kind of writing, and the apps that count as each kind."
+    }
+
+    DesignCard {
+      width: parent.width
+      visible: root.restartNeeded
+      DesignRow {
+        title: "Restart Mouthtype to use this"
+        detail: "The dictation service reads its Style settings when it starts. Restart it (systemctl --user restart mouthtype-linux) and the change applies to the next take."
+        Icon { name: "clock"; size: 24; color: Theme.ink3 }
+      }
+    }
+
+    DesignCard {
+      width: parent.width
+      visible: root.editError !== ""
+      DesignRow {
+        title: root.editError
+        Icon { name: "warning"; size: 24; color: Theme.danger }
+      }
+    }
+
+    DesignCard {
+      width: parent.width
+      visible: root.styles === null
+      DesignRow {
+        title: root.editError !== "" ? "Style could not be read" : "Reading your Style settings…"
+        detail: root.editError !== "" ? "The rest of the panel still works." : ""
+      }
+    }
+
+    Column {
+      width: parent.width
+      spacing: 18
+      visible: root.styles !== null
+
+      StyleTabs {
+        id: tabs
+        width: parent.width
+        titles: root.titles()
+        currentIndex: Math.max(0, root.tabIds.indexOf(root.tab))
+        onActivated: function(index) { root.tab = root.tabIds[index] }
+      }
+
+      ContextTab {
+        id: contextTab
+        visible: root.tab !== "cleanup" && root.current !== null
+        width: parent.width
+        context: root.current ? root.current : ({})
+        tones: root.tones
+        rules: root.styles ? root.styles.rules : []
+        ownRules: root.styles ? Logic.ownRules(root.styles) : []
+        globalLevel: root.globalLevel
+        onEdit: function(requests) { root.send(requests) }
+      }
+
+      CleanupTab {
+        id: cleanupTab
+        visible: root.tab === "cleanup"
+        width: parent.width
+        contexts: root.contexts
+        overrides: root.styles ? root.styles.cleanup_overrides : []
+        rules: root.styles ? root.styles.rules : []
+        level: root.globalLevel
+        models: root.cleanupInfo.models ? root.cleanupInfo.models : ({})
+        service: root.cleanupInfo.service ? root.cleanupInfo.service : null
+        setup: root.cleanupInfo.setup ? root.cleanupInfo.setup : null
+        onChooseLevel: function(level) { root.send([["set-config", ["cleanup", level]]]) }
+        onPrepare: function(level) { root.send([["cleanup-setup", [level]]]) }
+        onOpenContext: function(id) { root.tab = id }
+      }
+    }
   }
 }
