@@ -29,7 +29,7 @@ Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verifie
 
 ## What changed in 0.2.0
 
-The Transform button in the Clean Up Selection preview rewrites a selection with Fix grammar, Make shorter, Make more formal or Make more casual on the Thorough model. You get an editable preview with Accept, Retry and Cancel. Accept replaces the text only if the original app, field and selection still match, and Cmd-Z or Copy original gets the old text back.
+The Fix grammar, Make shorter, More formal and More casual chips in the Transform Selection panel rewrite a selection on the Thorough model. You get an editable result with Accept, Retry and Cancel. Accept replaces the text only if the original app, field and selection still match, and Cmd-Z or Copy original gets the old text back.
 
 Boost my saved words while recognising is off by default. It favours your saved spellings during recognition. First use downloads an English speech model of about 100 MB, and dictation never waits for it.
 
@@ -81,7 +81,7 @@ In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. 
 
 ## Clean selected text
 
-Select text in an accessible editable field, then choose **Clean Up Selection**, then **Clean Up** (it uses the tone that applies to the app you're in), or pick **Formal**, **Casual** or **Very Casual** to apply that tone to the selection. Review or edit the deterministic Basic preview, then explicitly choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. Unsupported or changed selections keep **Copy result** available. Password fields are excluded. The AI rewrites are in the preview's Transform button. There is no automatic paste. A saved phrase in the same submenu replaces the selection straight away with the text it normally inserts; **Edit Transforms…** opens the Phrases page. Check the original field after Accept. See [writing tools](https://mouthtype.app/docs/#cleanup) for browser, device and selection limits.
+Select text in an accessible editable field, then choose **Transform Selection**, then **Clean up** (it uses the tone that applies to the app you're in) or one of the AI transforms. The panel names the app the text came from, strikes through removed words in the original and highlights what changed in the result, which you can edit. Choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. If they don't, the panel says so, disables Accept and makes **Copy result** the main button. Password fields are excluded. The chips switch transforms inside the panel. There is no automatic paste. **Edit Transforms…** opens the Transforms page. Saved phrases are no longer in this menu; they're inserted by voice. Check the original field after Accept. See [writing tools](https://mouthtype.app/docs/#cleanup) for browser, device and selection limits.
 
 ## Transcribe an audio file
 

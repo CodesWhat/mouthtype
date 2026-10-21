@@ -228,12 +228,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
         menuBar.add(section: history, startsGroup: false)
-        menuBar.add(section: SelectionCleanupMenuSection(
-            cleanUp: { [weak self] in self?.selectionCleanupWindow.present() },
-            applyTone: { [weak self] in self?.selectionCleanupWindow.present(tone: $0) },
-            insertPhrase: { [weak self] in self?.insertPhraseOverSelection($0) },
+        menuBar.add(section: TransformSelectionMenuSection(
+            open: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
             editTransforms: { [weak self] in self?.settingsWindow.present(page: .transforms) },
-            phrases: { [weak self] in self?.phrases.snippets() ?? [] },
+            aiUnavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason },
             capture: { [weak self] in
                 guard let self, AXIsProcessTrusted() else { return .unavailable }
                 return self.selectionCleanupModel.captureForMenu()
@@ -413,22 +411,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 return
             }
             if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") { cardPresenter.present(card) }
-        }
-    }
-
-    /// A saved phrase from the menu replaces the selection directly. When it can't, the phrase text goes to the clipboard.
-    private func insertPhraseOverSelection(_ phrase: Snippet) {
-        let clipboard = NSPasteboard.general.string(forType: .string)
-        switch selectionCleanupModel.insert(phrase: phrase, clipboard: clipboard) {
-        case .replaced:
-            break
-        case .busy:
-            showNotice(PillMessage("Finish the current dictation or file job first"))
-        case .unavailable:
-            showNotice(PillMessage("Select text in an accessible field first"))
-        case let .refused(text):
-            SystemClipboard().write(text)
-            showNotice(PillMessage("Couldn’t replace the selection", detail: "Phrase copied instead"))
         }
     }
 
