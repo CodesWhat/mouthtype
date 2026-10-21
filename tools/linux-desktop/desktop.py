@@ -655,6 +655,9 @@ class HyprlandDelivery:
         if self.ipc is not None:
             try:
                 reply = self.ipc.request('/' + ' '.join(argv[1:]), limit)
+                if reply.strip() != 'ok' and 'ok'.startswith(reply.strip()):
+                    # Sent, but the answer is empty or cut short: the chord may have run, so no other form may follow.
+                    raise subprocess.TimeoutExpired('hyprctl', limit)
                 return type('Result', (), {'returncode': 0, 'stdout': reply, 'stderr': ''})()
             except IPCError as error:
                 if error.sent:

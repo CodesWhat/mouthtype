@@ -196,6 +196,25 @@ class DeliveryOverSocketTests(IPCTestCase):
         self.assertEqual(delivery.submit('text', TARGET), 'unknown')
         self.assertEqual([r for r in fake.requests if r.startswith('/dispatch ')][1], '/dispatch sendshortcut CTRL,v,address:0xabc')
 
+    def test_uncertain_dispatch_reply_is_unknown_and_never_retried(self):
+        dispatch = '/dispatch hl.dsp.send_shortcut({mods="CTRL", key="v", window="address:0xabc"})'
+        for reply in ('', 'o'):
+            with self.subTest(reply=reply):
+                fake, env = self.serve(replies={**self.replies(), dispatch: reply})
+                delivery, calls = self.delivery(env)
+                delivery.clipboard = lambda: 'text'
+                self.assertEqual(delivery.submit('text', TARGET), 'unknown')
+                self.assertEqual(len([r for r in fake.requests if r.startswith('/dispatch ')]), 1)
+                self.assertFalse([argv for argv in calls if argv[0] in ('hyprctl', 'wtype')])
+
+    def test_explicit_error_reply_may_fall_back(self):
+        fake, env = self.serve(replies={**self.replies(),
+                                        '/dispatch hl.dsp.send_shortcut({mods="CTRL", key="v", window="address:0xabc"})': 'Invalid dispatcher'})
+        delivery, calls = self.delivery(env)
+        delivery.clipboard = lambda: 'text'
+        self.assertEqual(delivery.submit('text', TARGET), 'unknown')
+        self.assertEqual(len([r for r in fake.requests if r.startswith('/dispatch ')]), 2)
+
     def test_dispatch_timeout_is_unknown_and_never_retried(self):
         fake, env = self.serve(replies=self.replies())
         delivery, calls = self.delivery(env)
