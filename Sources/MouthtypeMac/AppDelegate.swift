@@ -115,13 +115,48 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var launchComplete = false
     var pendingOpenCount: Int { pendingOpenURLs.count }
 
-    /// Re-wires a settings window built early, then replays what arrived during launch.
+    /// Re-wires a settings window built early, then replays what arrived during launch. A quit that arrived meanwhile runs after the replay.
     func finishLaunch() {
         if settingsWindowBuilt { wireSettingsModels(settingsWindow.model) }
         launchComplete = true
         let pending = pendingOpenURLs
         pendingOpenURLs = []
         for urls in pending { application(NSApp, open: urls) }
+        resumeDeferredQuit()
+    }
+
+    /// Drops the queue and releases a waiting quit. For a launch that can't finish; the quit deadline is the only caller so far.
+    func abandonLaunch(reason: String) {
+        if !pendingOpenURLs.isEmpty { Log.app.error("dropped \(self.pendingOpenURLs.count, privacy: .public) queued URL event(s): \(reason, privacy: .public)") }
+        pendingOpenURLs = []
+        resumeDeferredQuit()
+    }
+
+    /// How long a quit waits for the launch gap to close before the queue is dropped and the quit goes ahead.
+    var quitDeadline: Duration = .seconds(3)
+    private var deferredQuit: (sender: NSApplication, deadline: Task<Void, Never>)?
+    /// Answers the system's pending applicationShouldTerminate.
+    var replyToTermination: @MainActor (NSApplication, Bool) -> Void = { sender, ready in sender.reply(toApplicationShouldTerminate: ready) }
+
+    /// A quit while URLs are still queued waits for them to replay first. Returns true when the quit is being held.
+    func deferQuitForQueuedURLs(sender: NSApplication) -> Bool {
+        guard !launchComplete, !pendingOpenURLs.isEmpty else { return false }
+        if deferredQuit != nil { return true }
+        let deadline = Task { [weak self] in
+            try? await Task.sleep(for: self?.quitDeadline ?? .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.abandonLaunch(reason: "launch didn't finish before quit")
+        }
+        deferredQuit = (sender, deadline)
+        return true
+    }
+
+    /// Answers the held terminateLater exactly once, through the same path as an undeferred quit.
+    private func resumeDeferredQuit() {
+        guard let held = deferredQuit else { return }
+        deferredQuit = nil
+        held.deadline.cancel()
+        if beginTermination(sender: held.sender) == .terminateCancel { replyToTermination(held.sender, false) }
     }
 
     /// Hands the engine the current bias now, so turning the setting on starts the model download without waiting for a take.
@@ -142,7 +177,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap, guardian: FnGuardLauncher(), requestTermination: { [unowned self] in
         // A signal can't wait on a person: no unsaved-draft prompt and no failure alert on this path.
         signalShutdown = true
-        NSApp.terminate(nil)
+        FnRemap.requestQuit { NSApp.terminate(nil) }
     })
     private let shortcuts = GlobalShortcuts()
     private var menuBar: MenuBarController?
@@ -158,6 +193,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var dictation: DictationController?
     private var recovery: CrashRecovery?
     private var recoveryChecked = false
+    private var draftOffer: DraftOffer?
     private let launchedAt = Date()
     private var inputStarted = false
     private var isTerminating = false
@@ -263,6 +299,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 launchedAt: launchedAt
             )
         }
+        draftOffer = DraftOffer(recovery: .standard, cards: presenter)
         let watcher = CorrectionWatcher(
             reader: AccessibilityFieldReader(), dictionary: dictionary, ledger: CorrectionLedger(),
             store: store.map(CorrectionStoreWriter.init), cards: presenter, clock: SystemDictationClock(),
@@ -298,7 +335,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             aiUnavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason },
             capture: { [weak self] in
                 guard let self, AXIsProcessTrusted() else { return .unavailable }
-                return self.selectionCleanupModel.captureForMenu()
+                return await self.selectionCleanupModel.captureForMenuOffMain()
             }))
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(destination: .transcribeFile) }, startsGroup: false)
         if let recovery {
@@ -427,6 +464,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
+        if deferQuitForQueuedURLs(sender: sender) { return .terminateLater }
+        return beginTermination(sender: sender)
+    }
+
+    private func beginTermination(sender: NSApplication) -> NSApplication.TerminateReply {
         guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : (builtSettingsWindow?.resolveDraftForQuit() ?? true) }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
@@ -435,7 +477,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             await inserter?.prepareForTermination()
         }, reply: { [self] ready in
             if !ready { isTerminating = false }
-            sender.reply(toApplicationShouldTerminate: ready)
+            replyToTermination(sender, ready)
             if !ready, !signalShutdown {
                 let alert = NSAlert()
                 alert.messageText = "Couldn't finish saving the recording"
@@ -618,7 +660,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Once the engine is up, offers the dictation a crash cut off. Looks once per launch.
     private func offerRecoveryWhenReady() {
-        guard let recovery, !recoveryChecked else { return }
+        guard !recoveryChecked else { return }
         guard case .ready = engineHost.state else {
             withObservationTracking {
                 _ = engineHost.state
@@ -628,7 +670,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
         recoveryChecked = true
-        Task { await recovery.offerIfNeeded() }
+        let recovery = recovery, draftOffer = draftOffer
+        Task {
+            // One card at a time: a dictation a crash cut off goes first, and drafts wait on disk for the next launch.
+            let scan = await recovery?.offerIfNeeded()
+            if scan?.newest == nil { draftOffer?.offerIfNeeded() }
+        }
     }
 
     private func accessibilityChanged(_ granted: Bool) {

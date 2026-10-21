@@ -58,7 +58,10 @@ final class CleanupSelection: CleanupModelManaging {
     nonisolated func recordingStarted(level: CleanupLevel, take: String) {
         Task { @MainActor in
             let previous = self.holds.removeValue(forKey: take)
-            if let previous { self.adjust(previous, by: -1) }
+            if let previous {
+                self.adjust(previous, by: -1)
+                self.host(for: previous).endRecordingHold()
+            }
             guard level.needsModel else {
                 if let previous, previous != level { self.host(for: previous).demandDropped() }
                 self.selected.recordingStarted()
@@ -66,6 +69,7 @@ final class CleanupSelection: CleanupModelManaging {
             }
             self.holds[take] = level
             self.adjust(level, by: 1)
+            self.host(for: level).beginRecordingHold()
             self.host(for: level).levelChanged()
             if let previous, previous != level { self.host(for: previous).demandDropped() }
         }
@@ -77,6 +81,7 @@ final class CleanupSelection: CleanupModelManaging {
         Task { @MainActor in
             guard let level = self.holds.removeValue(forKey: take) else { return }
             self.adjust(level, by: -1)
+            self.host(for: level).endRecordingHold()
             self.host(for: level).demandDropped()
         }
     }

@@ -2,9 +2,12 @@
 
 Mouthtype is local dictation for Apple Silicon Macs running macOS 26 or later. You hold Fn, speak, let go, and clean text shows up where you're typing. Speech recognition and cleanup run on your Mac.
 
-New here? Start with [Getting started](getting-started.md). It takes you from download to your first dictation.
+> [!TIP]
+> New here? Start with [Getting started](getting-started.md). It takes you from download to your first dictation.
 
 ## Using Mouthtype
+
+<!-- docs:cards -->
 
 - [Getting started](getting-started.md): install, permissions and your first take.
 - [Dictating](dictating.md): hold or hands-free, shortcuts, live words, sounds, recovery.
@@ -17,6 +20,8 @@ New here? Start with [Getting started](getting-started.md). It takes you from do
 - [Appearance](appearance.md): pill styles and sizes.
 
 ## Good to know
+
+<!-- docs:cards -->
 
 - [Privacy and data](privacy-and-data.md): where your data lives and what touches the network.
 - [Troubleshooting](../TROUBLESHOOTING.md): fixes for permissions, Fn, models and paste problems.
