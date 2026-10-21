@@ -41,6 +41,27 @@ private final class FakeKeyStore: KeyMappingStore {
         #expect(coordinator.isActive && store.mapping == [ours])
     }
 
+    @Test func verifyRepairsALostMappingAndStaysRemapped() {
+        let store = FakeKeyStore()
+        let (coordinator, _, _) = make(store)
+        _ = coordinator.initialSource()
+        store.mapping = []
+        #expect(coordinator.verify())
+        #expect(coordinator.isActive && coordinator.source == remapped)
+        #expect(store.mapping == [ours])
+    }
+
+    @Test func verifyFallsBackToTheFnFlagWhenRepairFails() {
+        let store = FakeKeyStore()
+        let (coordinator, marker, _) = make(store)
+        _ = coordinator.initialSource()
+        store.mapping = []
+        store.refuseWrites = true
+        #expect(!coordinator.verify())
+        #expect(!coordinator.isActive && coordinator.source == .fnFlag)
+        _ = marker
+    }
+
     @Test func disabledPreferenceKeepsTheFnFlagSourceAndWritesNothing() {
         let store = FakeKeyStore()
         let (coordinator, _, _) = make(store, preferred: false)

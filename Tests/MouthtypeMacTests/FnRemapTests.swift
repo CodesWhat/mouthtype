@@ -116,4 +116,35 @@ private final class FakeStore: KeyMappingStore {
         #expect(remap.restore() == .clean)
         #expect(store.writes.isEmpty)
     }
+
+    @Test func applyRepairsAMappingSomethingElseReplaced() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        // A login agent runs `hidutil property --set` with its own mapping.
+        store.mapping = [capsToEscape]
+        #expect(remap.apply() == .repaired)
+        #expect(store.mapping == [capsToEscape, FnRemapMapping.entry()])
+        #expect(remap.apply() == .alreadyApplied)
+        // Restore keeps the replacement mapping rather than the stale original.
+        #expect(remap.restore() == .restored)
+        #expect(store.mapping == [capsToEscape])
+    }
+
+    @Test func repairFailsWhenTheWriteIsRefused() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        store.mapping = []
+        store.refuseWrites = true
+        guard case .failed = remap.apply() else { Issue.record("expected failure"); return }
+    }
+
+    @Test func repairFailsWhenTheMappingIsUnreadable() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        store.unreadable = true
+        guard case .failed = remap.apply() else { Issue.record("expected failure"); return }
+    }
 }

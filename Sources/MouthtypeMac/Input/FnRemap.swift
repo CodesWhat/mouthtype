@@ -14,6 +14,8 @@ public final class FnRemap {
     public enum Outcome: Equatable, Sendable {
         case applied
         case alreadyApplied
+        /// The marker said applied but the live mapping had lost our entry (something else rewrote it); it was put back.
+        case repaired
         case restored
         /// Nothing to undo.
         case clean
@@ -49,7 +51,7 @@ public final class FnRemap {
     }
 
     public func apply() -> Outcome {
-        if isApplied { return .alreadyApplied }
+        if isApplied { return verifyLive() }
         let original: [FnRemapMapping.Entry]?
         do {
             original = try store.read()
@@ -69,6 +71,29 @@ public final class FnRemap {
         }
         Log.hotkey.info("fn remap applied")
         return .applied
+    }
+
+    /// The marker only says we applied once. Another process can rewrite `UserKeyMapping` afterwards, so read the
+    /// live mapping, and if our entry is gone put it back. Whatever is live then is what we now displace, so the
+    /// bookkeeping for `restore()` is rebuilt from it.
+    private func verifyLive() -> Outcome {
+        let live: [FnRemapMapping.Entry]
+        do {
+            live = try store.read() ?? []
+        } catch {
+            return .failed("could not read the current mapping: \(error)")
+        }
+        if live.contains(ours) { return .alreadyApplied }
+        Log.hotkey.warning("fn remap entry was removed by something else; reapplying")
+        saveMarker(original: live)
+        guard store.write(FnRemapMapping.merging(existing: live, ours: ours)) else {
+            return .failed("the HID system refused the write")
+        }
+        guard let readBack = try? store.read(), readBack.contains(ours) else {
+            _ = restore()
+            return .failed("the mapping did not read back after writing")
+        }
+        return .repaired
     }
 
     /// Removes our entry and puts back whatever it displaced. Verified by reading back; the marker stays if that fails.
