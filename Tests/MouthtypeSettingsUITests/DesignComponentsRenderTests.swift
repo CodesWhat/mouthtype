@@ -40,7 +40,7 @@ import Testing
                         RoundedRectangle(cornerRadius: 6).fill(color).frame(width: 36, height: 24)
                     }
                     Button("Save") {}.buttonStyle(.designPrimary)
-                    ForEach(DesignIcon.allCases) { DesignIconView(icon: $0) }
+                    ForEach(SettingsPage.allCases) { Image(systemName: $0.symbol) }
                 }
             })
         }
@@ -135,53 +135,10 @@ import Testing
         #expect(ratio(0x1F1F21, 0xA6CD52) >= 4.5)
     }
 
-    @Test func everyPixelIconIsBundledAsATemplateImage() {
-        for icon in DesignIcon.allCases {
-            let image = icon.image
-            #expect(image?.isTemplate == true, "\(icon.rawValue) missing")
-            #expect(image?.representations.count == 3, "\(icon.rawValue) should carry 1x, 2x and 4x")
-            #expect(image?.size == NSSize(width: 24, height: 24))
-            // Pixelarticons drawn one grid pixel per point: 24, 48 and 96 px, every pixel fully on or fully off, so each stays crisp.
-            let sizes = (image?.representations.compactMap { ($0 as? NSBitmapImageRep).map { $0.pixelsWide } } ?? []).sorted()
-            #expect(sizes == [24, 48, 96], "\(icon.rawValue) scales")
-            for case let rep as NSBitmapImageRep in image?.representations ?? [] {
-                var partial = 0, lit = 0
-                for y in 0..<rep.pixelsHigh {
-                    for x in 0..<rep.pixelsWide {
-                        let alpha = rep.colorAt(x: x, y: y)?.alphaComponent ?? 0
-                        if alpha > 0.001 && alpha < 0.999 { partial += 1 }
-                        if alpha >= 0.999 { lit += 1 }
-                    }
-                }
-                #expect(partial == 0 && lit > 0, "\(icon.rawValue) \(rep.pixelsWide) px has smoothed or empty pixels")
-            }
+    @Test func everyNavigationSymbolExistsInTheSystemSet() {
+        for symbol in SettingsPage.allCases.map(\.symbol) + SettingsModalPage.allCases.map(\.symbol) + ["gearshape"] {
+            #expect(NSImage(systemSymbolName: symbol, accessibilityDescription: nil) != nil, "\(symbol) is not an SF Symbol")
         }
-    }
-
-    @Test func everyIconScaleIsAnExactBlockEnlargementOfTheGrid() {
-        for icon in DesignIcon.allCases {
-            let reps = (icon.image?.representations.compactMap { $0 as? NSBitmapImageRep } ?? []).sorted { $0.pixelsWide < $1.pixelsWide }
-            guard let base = reps.first, reps.count == 3 else { Issue.record("\(icon.rawValue) lacks three scales"); continue }
-            #expect(base.pixelsWide == 24 && base.pixelsHigh == 24)
-            for rep in reps.dropFirst() {
-                let factor = rep.pixelsWide / 24
-                var mismatches = 0
-                for y in 0..<rep.pixelsHigh {
-                    for x in 0..<rep.pixelsWide where (rep.colorAt(x: x, y: y)?.alphaComponent ?? 0) != (base.colorAt(x: x / factor, y: y / factor)?.alphaComponent ?? 0) {
-                        mismatches += 1
-                    }
-                }
-                #expect(mismatches == 0, "\(icon.rawValue) \(rep.pixelsWide) px is not a \(factor)x block enlargement of the 24 grid")
-            }
-        }
-    }
-
-    @Test func pixelarticonsLicenceShipsWithTheFontLicences() throws {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let licence = root.appendingPathComponent("Sources/MouthtypeMac/Resources/Fonts/MIT-Pixelarticons.txt")
-        let text = try String(contentsOf: licence, encoding: .utf8)
-        #expect(try String(contentsOf: root.appendingPathComponent("THIRD_PARTY_NOTICES.md"), encoding: .utf8).contains("MIT-Pixelarticons.txt"))
-        #expect(text.contains("MIT License") && text.contains("Gerrit Halfmann"))
     }
 
     @Test func bundledFontsRegisterOrTheSystemFallbackStillGivesTypography() {

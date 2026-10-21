@@ -148,14 +148,6 @@ Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/
 - Source: https://github.com/JetBrains/JetBrainsMono, tag v2.304 (commit cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9), `fonts/ttf/JetBrainsMono-Medium.ttf`
 - Used for: the Systema set's clocks and countdowns
 
-## Pixelarticons
-
-Copyright (c) 2019 Gerrit Halfmann (https://github.com/halfmage/pixelarticons)
-
-- Licence: MIT, `Sources/MouthtypeMac/Resources/Fonts/MIT-Pixelarticons.txt`
-- Source: https://github.com/halfmage/pixelarticons, v2.4.2, `svg/{home,chart,book-open,arrows-horizontal,a-arrow-up,picture-in-picture,settings-cog}.svg`
-- Used for: the seven sidebar icons in `Sources/MouthtypeMac/Resources/Settings/Icons/`, rasterised unchanged at one grid pixel per point to 24, 48 and 96 px template PNGs
-
 ## S1-mini by Superwhisper
 
 https://huggingface.co/superwhisper/s1-mini, revision 88f6b15896c73bbb13a3b596e0afe8ea0d5150b4

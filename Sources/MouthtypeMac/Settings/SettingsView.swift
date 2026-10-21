@@ -60,7 +60,7 @@ struct SettingsView: View {
             .onKeyPress(.upArrow) { moveSidebar(by: -1) }
             .onKeyPress(.downArrow) { moveSidebar(by: 1) }
             Spacer(minLength: 12)
-            DesignNavRow(title: "Settings", icon: .pixel(.settings), selected: model.settingsOpen) { model.openSettings() }
+            DesignNavRow(title: "Settings", symbol: "gearshape", selected: model.settingsOpen) { model.openSettings() }
                 .accessibilityIdentifier("settings-open")
             Text(AppInfo.version.first?.isNumber == true ? "v\(AppInfo.version)" : AppInfo.version).font(DesignFont.mono(DesignFont.eyebrow)).tracking(1).foregroundStyle(DesignPalette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
@@ -72,7 +72,7 @@ struct SettingsView: View {
     }
 
     private func sidebarPageRow(_ page: SettingsPage) -> some View {
-        DesignNavRow(title: page.title, icon: .pixel(page.icon), selected: model.page == page) { model.select(page) }
+        DesignNavRow(title: page.title, symbol: page.symbol, selected: model.page == page) { model.select(page) }
             .accessibilityIdentifier("settings-page-" + page.rawValue)
             .focused($sidebarFocus, equals: page)
     }

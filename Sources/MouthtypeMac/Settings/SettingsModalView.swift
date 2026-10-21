@@ -44,7 +44,7 @@ struct SettingsModalView: View {
                 .accessibilityAddTraits(.isHeader)
             VStack(alignment: .leading, spacing: 2) {
                 ForEach(pages) { page in
-                    DesignNavRow(title: page.title, icon: .symbol(page.symbol), selected: model.modalPage == page, height: 34) { model.selectModal(page) }
+                    DesignNavRow(title: page.title, symbol: page.symbol, selected: model.modalPage == page, height: 34) { model.selectModal(page) }
                         .accessibilityIdentifier("settings-modal-" + page.rawValue)
                         .focused($navFocus, equals: page)
                 }
