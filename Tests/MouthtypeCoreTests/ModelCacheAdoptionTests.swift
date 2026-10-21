@@ -19,16 +19,12 @@ import Testing
         return hex(hasher.finalize())
     }
 
-    /// A tree listing with an LFS file, a plain file, and one file the cache doesn't hold.
-    private func tree(weightsSHA: String? = nil) -> Data {
-        let sha = weightsSHA ?? hex(SHA256.hash(data: weights))
-        let json = """
-        [{"type":"directory","oid":"d","size":0,"path":"Model.mlmodelc"},
-         {"type":"file","oid":"x","size":\(weights.count),"lfs":{"oid":"\(sha)","size":\(weights.count)},"path":"Model.mlmodelc/weights/weight.bin"},
-         {"type":"file","oid":"\(gitBlobID(config))","size":\(config.count),"path":"config.json"},
-         {"type":"file","oid":"y","size":5,"lfs":{"oid":"\(String(repeating: "0", count: 64))","size":5},"path":"NotDownloaded.mlpackage/Data/other.bin"}]
-        """
-        return Data(json.utf8)
+    /// An LFS weights file inside a bundle and a plain root file.
+    private var manifest: ModelCacheAdoption.Manifest {
+        ModelCacheAdoption.Manifest(schema: 1, repos: [pin.repo: .init(revision: pin.revision, files: [
+            .init(path: "Model.mlmodelc/weights/weight.bin", size: weights.count, sha256: hex(SHA256.hash(data: weights)), blob: nil),
+            .init(path: "config.json", size: config.count, sha256: nil, blob: gitBlobID(config)),
+        ])])
     }
 
     private func makeCache() throws -> URL {
@@ -44,82 +40,85 @@ import Testing
         try? String(contentsOf: folder.appendingPathComponent(ModelCacheAdoption.markerName), encoding: .utf8)
     }
 
-    @Test func matchingCacheIsAdoptedAndGetsFluidAudiosMarker() async throws {
+    @Test func completeCacheIsAdoptedWithoutAnyNetworkAndGetsFluidAudiosMarker() async throws {
         let folder = try makeCache()
         defer { try? FileManager.default.removeItem(at: folder) }
-        let requested = Requested()
-        let outcome = await ModelCacheAdoption.adopt(pin, folder: folder) { repo, revision in
-            await requested.record("\(repo)@\(revision)")
-            return tree()
-        }
-        #expect(outcome == .adopted)
+        // adopt takes no network dependency at all, so this is the offline first launch.
+        #expect(await ModelCacheAdoption.adopt(pin, folder: folder, manifest: manifest) == .adopted)
         #expect(marker(folder) == pin.revision + "\n")
-        #expect(await requested.values == ["owner/model@\(pin.revision)"])
-
-        // A second launch sees the marker and never asks the Hub or rehashes.
-        let again = await ModelCacheAdoption.adopt(pin, folder: folder) { _, _ in
-            Issue.record("fetched the tree for an adopted cache")
-            return Data()
-        }
-        #expect(again == .hasMarker)
+        #expect(await ModelCacheAdoption.adopt(pin, folder: folder, manifest: manifest) == .hasMarker)
     }
 
-    @Test func aChangedFileIsAMismatchAndLeavesNoMarker() async throws {
+    @Test func extraFilesFluidAudioNeverLoadsDoNotBlockAdoption() async throws {
         let folder = try makeCache()
         defer { try? FileManager.default.removeItem(at: folder) }
-        let outcome = await ModelCacheAdoption.adopt(pin, folder: folder) { _, _ in tree(weightsSHA: String(repeating: "1", count: 64)) }
-        #expect(outcome == .mismatch)
+        try Data("other".utf8).write(to: folder.appendingPathComponent("stray.bin"))
+        #expect(await ModelCacheAdoption.adopt(pin, folder: folder, manifest: manifest) == .adopted)
+    }
+
+    @Test func aMissingListedFileDoesNotAdopt() async throws {
+        let folder = try makeCache()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try FileManager.default.removeItem(at: folder.appendingPathComponent("Model.mlmodelc/weights/weight.bin"))
+        #expect(await ModelCacheAdoption.adopt(pin, folder: folder, manifest: manifest) == .incomplete)
         #expect(marker(folder) == nil)
     }
 
-    @Test func aSameSizeEditToAPlainFileIsAMismatch() async throws {
+    @Test func aChangedFileDoesNotAdopt() async throws {
         let folder = try makeCache()
         defer { try? FileManager.default.removeItem(at: folder) }
+        // Same size, different content, for both the LFS and the plain file.
+        try Data("compiled model weightz".utf8).write(to: folder.appendingPathComponent("Model.mlmodelc/weights/weight.bin"))
+        #expect(await ModelCacheAdoption.adopt(pin, folder: folder, manifest: manifest) == .incomplete)
+        try weights.write(to: folder.appendingPathComponent("Model.mlmodelc/weights/weight.bin"))
         try Data("{\"a\":2}".utf8).write(to: folder.appendingPathComponent("config.json"))
-        let outcome = await ModelCacheAdoption.adopt(pin, folder: folder) { _, _ in tree() }
-        #expect(outcome == .mismatch)
-    }
-
-    @Test func aLocalFileMissingFromTheListingIsAMismatch() async throws {
-        let folder = try makeCache()
-        defer { try? FileManager.default.removeItem(at: folder) }
-        try Data("extra".utf8).write(to: folder.appendingPathComponent("stray.bin"))
-        #expect(await ModelCacheAdoption.adopt(pin, folder: folder) { _, _ in tree() } == .mismatch)
-    }
-
-    @Test func anUnreachableHubKeepsTheCacheAndRetriesNextLaunch() async throws {
-        let folder = try makeCache()
-        defer { try? FileManager.default.removeItem(at: folder) }
-        let offline = await ModelCacheAdoption.adopt(pin, folder: folder) { _, _ in throw URLError(.notConnectedToInternet) }
-        #expect(offline == .unreachable)
+        #expect(await ModelCacheAdoption.adopt(pin, folder: folder, manifest: manifest) == .incomplete)
         #expect(marker(folder) == nil)
-        #expect(FileManager.default.fileExists(atPath: folder.appendingPathComponent("config.json").path))
+    }
 
-        let garbled = await ModelCacheAdoption.adopt(pin, folder: folder) { _, _ in Data("<html>".utf8) }
-        #expect(garbled == .unreachable)
+    @Test func aLeftoverPartialFileDoesNotAdopt() async throws {
+        let folder = try makeCache()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        try Data("half".utf8).write(to: folder.appendingPathComponent("Model.mlmodelc/weights/other.bin.partial"))
+        #expect(await ModelCacheAdoption.adopt(pin, folder: folder, manifest: manifest) == .incomplete)
+        #expect(marker(folder) == nil)
+    }
 
-        let online = await ModelCacheAdoption.adopt(pin, folder: folder) { _, _ in tree() }
-        #expect(online == .adopted)
+    @Test func aManifestForAnotherRevisionDoesNotAdopt() async throws {
+        let folder = try makeCache()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let other = ModelPins.Pin(repo: pin.repo, revision: String(repeating: "d", count: 40))
+        #expect(await ModelCacheAdoption.adopt(other, folder: folder, manifest: manifest) == .noManifest)
+        #expect(marker(folder) == nil)
     }
 
     @Test func noCacheMeansNothingToAdopt() async {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent("adopt-\(UUID().uuidString)")
-        let outcome = await ModelCacheAdoption.adopt(pin, folder: missing) { _, _ in
-            Issue.record("fetched the tree with no cache")
-            return Data()
+        #expect(await ModelCacheAdoption.adopt(pin, folder: missing, manifest: manifest) == .noCache)
+    }
+
+    @Test func gitBlobIDMatchesGitsOwnVector() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("blob-\(UUID().uuidString)")
+        try Data("hello\n".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        #expect(ModelCacheAdoption.gitBlobSHA1Hex(url) == "ce013625030ba8dba906f756967f9e9ca394464a")
+    }
+
+    @Test func bundledManifestCoversEveryFluidAudioPinAtItsRevision() throws {
+        let manifest = try #require(ModelCacheAdoption.bundledManifest)
+        let required: [(ModelPins.Pin, [String])] = [
+            (ModelPins.parakeetV3, ["Preprocessor", "Encoder", "Decoder", "JointDecisionv3"]),
+            (ModelPins.parakeetV2, ["Preprocessor", "Encoder", "Decoder", "JointDecision"]),
+            (ModelPins.ctc110m, ["MelSpectrogram", "AudioEncoder"]),
+            (ModelPins.sileroVAD, ["silero-vad-unified-256ms-v6.2.1"]),
+        ]
+        for (pin, bundles) in required {
+            let entry = try #require(manifest.repos[pin.repo], "no manifest entry for \(pin.repo)")
+            #expect(entry.revision == pin.revision, "\(pin.repo) manifest is at \(entry.revision)")
+            for bundle in bundles {
+                #expect(entry.files.contains { $0.path.hasPrefix(bundle + ".mlmodelc/") }, "\(pin.repo) lacks \(bundle)")
+            }
+            #expect(entry.files.allSatisfy { ($0.sha256?.count == 64) != ($0.blob?.count == 40) })
         }
-        #expect(outcome == .noCache)
     }
-
-    @Test func nextPageComesFromTheLinkHeader() {
-        let link = "<https://huggingface.co/api/models/o/m/tree/abc?recursive=1&cursor=x>; rel=\"next\""
-        #expect(ModelCacheAdoption.nextPageURL(link)?.absoluteString == "https://huggingface.co/api/models/o/m/tree/abc?recursive=1&cursor=x")
-        #expect(ModelCacheAdoption.nextPageURL(nil) == nil)
-        #expect(ModelCacheAdoption.nextPageURL("<https://x>; rel=\"prev\"") == nil)
-    }
-}
-
-private actor Requested {
-    private(set) var values: [String] = []
-    func record(_ value: String) { values.append(value) }
 }
