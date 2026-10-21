@@ -87,7 +87,7 @@ public actor SmartCleanup {
     public static let budgetCap = Duration.seconds(5)
     public static let qualityBase = Duration.milliseconds(1200)
     public static let qualityPerWord = Duration.milliseconds(45)
-    public static let qualityCap = Duration.seconds(20)
+    public static let qualityCap = Duration.seconds(16)
 
     /// 400 ms plus 16 ms a word, at most 5 s. The native model decodes about 8 ms a word on a quiet machine, so this
     /// leaves room for a loaded one. A take that finishes early returns early; the budget only bounds a stall.
@@ -95,10 +95,17 @@ public actor SmartCleanup {
         min(budgetBase + budgetPerWord * words, budgetCap)
     }
 
-    /// 1.2 s plus 45 ms a word, at most 20 s. Gemma decodes about 14 ms a token (roughly 20 ms a word) with the shared
+    /// 1.2 s plus 45 ms a word, at most 16 s. Gemma decodes about 14 ms a token (roughly 20 ms a word) with the shared
     /// prompt prefix cached, so N words need about 20 ms times N when quiet and two to three times that when busy.
     public static func qualityBudget(words: Int) -> Duration {
         min(qualityBase + qualityPerWord * words, qualityCap)
+    }
+
+    /// The whole take's allowance when it runs `passes` generations one after another (a correction pass, then the
+    /// cleanup pass). Each generation gets the full single-pass budget, so a take with a correction pass never has
+    /// less time per generation than one without. The total tops out at `passes` times the cap.
+    public static func qualityAllowance(words: Int, passes: Int) -> Duration {
+        qualityBudget(words: words) * max(passes, 1)
     }
 
     /// Native cleanup preserves the spoken register; casing and punctuation are applied afterward.
@@ -209,7 +216,7 @@ public actor SmartCleanup {
             of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
             options: [.regularExpression, .caseInsensitive]) != nil
         let allowance = customBudget || cleaner.usesNativeControls ? budget(words)
-            : min(budget(words) * (settleCorrections ? 2 : 1), Self.qualityCap)
+            : Self.qualityAllowance(words: words, passes: settleCorrections ? 2 : 1)
         let deadline = start + allowance
         // A generation that outlived its own timeout still holds the model; wait for it, within this budget.
         while true {

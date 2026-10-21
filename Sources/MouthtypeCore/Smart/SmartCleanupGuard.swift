@@ -203,6 +203,7 @@ public enum SmartCleanupGuard {
         }
 
         if let missing = missingNumber(input: comparableInput, output: comparableOutput) { return "number \(missing) missing or changed" }
+        if let scale = droppedScale(input: comparableInput, output: comparableOutput) { return "scale word \(scale) missing or changed" }
         for source in [input, resolvedInput].compactMap({ $0 }) {
             if let added = DictionaryReplacer.introducedAlias(input: source, output: trimmed, rules: dictionary) {
                 return "dictionary spelling \"\(added)\" added without an exact match"
@@ -288,12 +289,41 @@ public enum SmartCleanupGuard {
             return values
         }
         if !timeOfDay(output).isSubset(of: timeOfDay(input)) { return "time of day added or changed" }
+        if !meridiemPairs(output).isSubset(of: meridiemPairs(input).union(wildcardMeridiems(in: input))) {
+            return "time of day added or changed"
+        }
         let questions = ["what", "what's", "who", "who's", "where", "where's", "when", "why", "how", "which"]
         if let first = TextMetrics.normalizedWords(input).first, questions.contains(first),
            let next = TextMetrics.normalizedWords(output).first, !questions.contains(next) {
             return "question changed into a statement"
         }
         return nil
+    }
+
+    /// Each clock time that carries its own AM or PM, as "9:00a" or "5:30p", so a meridiem can't move to another time.
+    /// A time spoken in words ("three p m") has no digits to pair with; it is listed by `wildcardMeridiems`.
+    static func meridiemPairs(_ text: String) -> Set<String> {
+        guard let expression = try? NSRegularExpression(
+            pattern: #"(?i)(?<![\p{L}\p{N}:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b"#) else { return [] }
+        let source = text as NSString
+        return Set(expression.matches(in: text, range: NSRange(location: 0, length: source.length)).map { match in
+            let minutes = match.range(at: 2).location == NSNotFound ? "00" : source.substring(with: match.range(at: 2))
+            return "\(Int(source.substring(with: match.range(at: 1))) ?? 0):\(minutes)\(source.substring(with: match.range(at: 3)).lowercased())"
+        })
+    }
+
+    /// The AM or PM letters that follow a number word, which any output time may carry.
+    private static func wildcardMeridiems(in text: String) -> Set<String> {
+        guard let expression = try? NSRegularExpression(pattern: #"(?i)(?<!\p{L})([ap])[. \t]*m\b"#) else { return [] }
+        let source = text as NSString
+        var found = Set<String>()
+        for match in expression.matches(in: text, range: NSRange(location: 0, length: source.length)) {
+            let before = source.substring(to: match.range.location).split(whereSeparator: \.isWhitespace).last.map(String.init) ?? ""
+            guard NumberWords.isNumberWord(before.lowercased()) else { continue }
+            let letter = source.substring(with: match.range(at: 1)).lowercased()
+            found.formUnion((0...12).flatMap { hour in ["00", "15", "30", "45"].map { "\(hour):\($0)\(letter)" } })
+        }
+        return found
     }
 
     /// Equivalent spoken and written spellings for comparison, never for delivery.
@@ -320,14 +350,24 @@ public enum SmartCleanupGuard {
         result = replace(result, pattern: #"\bUSB[ \t]+([ABC])\b"#) { match, source in
             "USB" + source.substring(with: match.range(at: 1))
         }
-        // "nine oh five" may be written 9:05. Both sides compare as 905, so "four oh four" and 404 still agree.
-        result = replace(result, pattern: #"(?<![\p{N}:.])(\d{1,2}):(0\d)(?![\p{N}:])"#) { match, source in
-            source.substring(with: match.range(at: 1)) + source.substring(with: match.range(at: 2))
+        // "at nine oh five" and "nine oh five p m" are the clock time 9:05. Without a time cue "nine oh five" stays the
+        // digit string 905, and the colon form never compares equal to the form without one.
+        let hours = "(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+        func clockTime(_ match: NSTextCheckingResult, _ source: NSString, hour: Int, digit: Int) -> String? {
+            guard let hourDigits = numberWords[source.substring(with: match.range(at: hour)).lowercased()],
+                  let minuteDigit = digits[source.substring(with: match.range(at: digit)).lowercased()] else { return nil }
+            return "\(hourDigits):0\(minuteDigit)"
         }
-        // "A/B" is the written form of the spoken letters "A B".
-        result = replace(result, pattern: #"(?<![\p{L}\p{N}])([A-Z])/([A-Z])(?![\p{L}\p{N}])"#) { match, source in
-            source.substring(with: match.range(at: 1)) + source.substring(with: match.range(at: 2))
+        let notBeforeDigit = "(?!\\s+\(digitPattern))"
+        result = replace(result, pattern: "(?i)\\b(at)\\s+(\(hours))\\s+oh\\s+(\(digitPattern))\\b\(notBeforeDigit)") { match, source in
+            guard let time = clockTime(match, source, hour: 2, digit: 3) else { return source.substring(with: match.range) }
+            return source.substring(with: match.range(at: 1)) + " " + time
         }
+        result = replace(result, pattern: "(?i)\\b(\(hours))\\s+oh\\s+(\(digitPattern))(?=\\s+[ap][. \\t]*m\\b)") { match, source in
+            clockTime(match, source, hour: 1, digit: 2) ?? source.substring(with: match.range)
+        }
+        // Only the standard "A/B test" pair stands for the spoken letters "A B"; initials are left alone.
+        result = replace(result, pattern: #"(?<![\p{L}\p{N}/])A/B(?=[ \t]+tests?\b|[ \t]+testing\b)"#) { _, _ in "AB" }
         // Spoken digit strings such as a phone number, with the speaker's pauses (commas) between groups.
         result = replace(result, pattern: "(?i)\\b\(digitPattern)(?:,?\\s+\(digitPattern))+\\b") { match, source in
             let words = source.substring(with: match.range).lowercased().split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init)
@@ -393,23 +433,50 @@ public enum SmartCleanupGuard {
         "ninth": 9, "tenth": 10,
     ]
 
-    static let magnitudeWords: [String: Int] = ["hundred": 100, "thousand": 1000]
+    static let scaleWords: [String: Int] = ["hundred": 100, "thousand": 1_000, "million": 1_000_000, "billion": 1_000_000_000]
 
-    /// Spoken numbers that read as one value: "twenty four" is 24, "twenty second" is 22, "fifteen hundred" is 1500 and
-    /// "twenty twenty six" is 2026. Each word of the phrase accepts itself or the phrase's digits, so "24/7" can stand for
-    /// "twenty four seven". Only the exact value is accepted: "25/7", "2025" and "15" for "fifteen hundred" all fail.
+    private static let months: Set<String> = [
+        "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december",
+    ]
+
+    private static func ordinalSuffix(_ value: Int) -> String {
+        if (11...13).contains(value % 100) { return "th" }
+        switch value % 10 {
+        case 1: return "st"
+        case 2: return "nd"
+        case 3: return "rd"
+        default: return "th"
+        }
+    }
+
+    /// Spoken numbers that read as one value. Every word keeps its own spelling and digits, and the phrase adds one
+    /// more accepted spelling, so a wrong value for the phrase still fails.
+    /// - "twenty four" also accepts 24, so "twenty four seven" can be "24/7".
+    /// - "twenty second" also accepts only "22nd", so "22-second" and "22" fail.
+    /// - "fifteen hundred" also accepts 1500. Scale words are checked separately by `droppedScale`.
+    /// - "twenty twenty six" also accepts 2026, but only next to a date cue: a month name before it, or "in", "since",
+    ///   "by", "year" or "back in" right before it with the phrase ending its clause.
     private static func addPhraseValues(to found: inout [Quantity], tokens: [Substring]) {
         let words = tokens.map { stripped($0).lowercased() }
         func breaks(_ index: Int) -> Bool { tokens[index].last.map { !$0.isLetter && !$0.isNumber } ?? true }
-        func ones(_ word: String) -> Int? {
-            guard let value = numberWords[word] ?? ordinalWords[word], (1...9).contains(value) else { return nil }
+        func cardinalOnes(_ word: String) -> Int? {
+            guard let value = numberWords[word], (1...9).contains(value) else { return nil }
+            return value
+        }
+        func ordinalOnes(_ word: String) -> Int? {
+            guard let value = ordinalWords[word], (1...9).contains(value) else { return nil }
             return value
         }
         func isTens(_ word: String) -> Bool { (numberWords[word] ?? 0) >= 20 }
-        func record(_ value: Int, positions: Range<Int>) {
+        func accept(_ spelling: String, positions: Range<Int>) {
             for index in found.indices where positions.contains(found[index].position) {
-                found[index].accepted = [found[index].label, String(value)]
+                found[index].accepted.insert(spelling)
             }
+        }
+        func hasYearCue(start: Int, end: Int) -> Bool {
+            if (max(0, start - 3)..<start).contains(where: { months.contains(words[$0]) }) { return true }
+            guard start > 0, ["in", "since", "by", "year"].contains(words[start - 1]) else { return false }
+            return breaks(end) || end == words.count - 1
         }
         var index = 0
         while index < words.count {
@@ -419,36 +486,93 @@ public enum SmartCleanupGuard {
                 var year: Int?
                 var length = 0
                 let next = words[index + 1]
-                if next == "oh", index + 2 < words.count, let digit = ones(words[index + 2]) {
+                if next == "oh", index + 2 < words.count, let digit = cardinalOnes(words[index + 2]) {
                     year = first * 100 + digit
                     length = 3
                 } else if let second = numberWords[next], (10...99).contains(second) {
                     year = first * 100 + second
                     length = 2
-                    if isTens(next), !breaks(index + 1), index + 2 < words.count, let digit = ones(words[index + 2]) {
+                    if isTens(next), !breaks(index + 1), index + 2 < words.count, let digit = cardinalOnes(words[index + 2]) {
                         year = first * 100 + second + digit
                         length = 3
                     }
                 }
-                if let year {
-                    record(year, positions: index..<(index + length))
+                if let year, hasYearCue(start: index, end: index + length - 1) {
+                    accept(String(year), positions: index..<(index + length))
                     index += length
                     continue
                 }
             }
             var value = first
             var length = 1
-            if isTens(words[index]), !breaks(index), index + 1 < words.count, let digit = ones(words[index + 1]) {
-                value += digit
-                length = 2
+            if isTens(words[index]), !breaks(index), index + 1 < words.count {
+                if let digit = cardinalOnes(words[index + 1]) {
+                    value += digit
+                    length = 2
+                } else if let digit = ordinalOnes(words[index + 1]) {
+                    accept(String(value + digit) + ordinalSuffix(value + digit), positions: index..<(index + 2))
+                    index += 2
+                    continue
+                }
             }
-            if !breaks(index + length - 1), index + length < words.count, let scale = magnitudeWords[words[index + length]] {
-                value *= scale
-                length += 1
-            }
-            if length > 1 { record(value, positions: index..<(index + length)) }
+            if length > 1 { accept(String(value), positions: index..<(index + length)) }
             index += length
         }
+        for phrase in scalePhrases(in: tokens.joined(separator: " ")) {
+            accept(String(phrase.value), positions: phrase.positions)
+        }
+    }
+
+    /// The scale phrases a text states ("fifteen hundred", "five hundred thousand"): each one's value, its scale words and
+    /// the word positions it covers.
+    private static func scalePhrases(in text: String) -> [(value: Int, scales: [String], positions: Range<Int>)] {
+        var phrases: [(value: Int, scales: [String], positions: Range<Int>)] = []
+        var total = 0
+        var current = 0
+        var scales: [String] = []
+        var start: Int?
+        var last = 0
+        func finish() {
+            if let start, !scales.isEmpty { phrases.append((total + current, scales, start..<(last + 1))) }
+            total = 0; current = 0; scales = []; start = nil
+        }
+        for (position, token) in text.split(whereSeparator: \.isWhitespace).enumerated() {
+            let word = stripped(token).lowercased()
+            let digits = word.replacingOccurrences(of: ",", with: "")
+            if let scale = scaleWords[word] {
+                scales.append(word)
+                if scale == 100 {
+                    current = max(current, 1) * 100
+                } else {
+                    total += max(current, 1) * scale
+                    current = 0
+                }
+            } else if let number = numberWords[word] ?? Int(digits) {
+                current += number
+            } else if word == "and", start != nil {
+                continue
+            } else {
+                finish()
+                continue
+            }
+            if start == nil { start = position }
+            last = position
+            if token.last.map({ !$0.isLetter && !$0.isNumber }) ?? false { finish() }
+        }
+        finish()
+        return phrases
+    }
+
+    /// A scale word ("hundred", "thousand", "million", "billion") the output neither keeps nor folds into the value
+    /// of the number it scales, such as "five hundred thousand dollars" written "$500".
+    static func droppedScale(input: String, output: String) -> String? {
+        let outputWords = Set(output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
+        let outputValues = Set(wordsAndDigits(in: output).flatMap { $0.accepted }.compactMap { Int($0) })
+        for phrase in scalePhrases(in: input) {
+            if phrase.scales.allSatisfy(outputWords.contains) || outputValues.contains(phrase.value) { continue }
+            return phrase.scales.first { !outputWords.contains($0) }
+        }
+        return nil
     }
 
     /// Digit groups ("1,000" is 1000, "3:30" is 3 and 30) and small spoken numbers, each with its word position.
@@ -488,7 +612,8 @@ public enum SmartCleanupGuard {
 
     static func missingNumber(input: String, output: String) -> String? {
         var spellings = Set<String>()
-        for quantity in quantities(in: output) { spellings.formUnion(quantity.accepted) }
+        // The output's own phrase values are left out, or "500 thousand" would vouch for "five hundred thousand".
+        for quantity in wordsAndDigits(in: output) { spellings.formUnion(quantity.accepted) }
         spellings.formUnion(output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
         let tokens = input.split(whereSeparator: \.isWhitespace).map(String.init)
         for quantity in quantities(in: input) where quantity.accepted.isDisjoint(with: spellings) {
