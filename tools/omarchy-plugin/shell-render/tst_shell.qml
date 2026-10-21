@@ -125,11 +125,11 @@ TestCase {
     compare(shell.page, "home")
     shell.navigate("dictionary")
     compare(shell.page, "dictionary")
-    tryVerify(function() { return pageTitle() === "Dictionary" }, 2000)
+    tryVerify(function() { return pageTitle() === "Your names, spelled right." }, 2000)
     shell.navigate("stats")
     tryVerify(function() { return pageTitle() === "Stats" }, 2000)
     shell.navigate("transforms")
-    tryVerify(function() { return pageTitle() === "Transforms" }, 2000)
+    tryVerify(function() { return pageTitle() === "Say this, get that." }, 2000)
     shell.navigate("style")
     tryVerify(function() { return pageTitle() === "Style" }, 2000)
   }
@@ -155,7 +155,7 @@ TestCase {
 
   function test_data_page_contract() {
     setScene("dictionary")
-    tryVerify(function() { return pageTitle() === "Dictionary" }, 2000)
+    tryVerify(function() { return pageTitle() === "Your names, spelled right." }, 2000)
     var requests = []
     shell.pageRequested.connect(function(command, args) { requests.push([command, args]) })
     var page = null
