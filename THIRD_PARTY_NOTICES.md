@@ -120,7 +120,7 @@ SOFTWARE.
 
 ## Fonts
 
-Three typefaces are bundled in `Sources/MouthtypeMac/Resources/Fonts/` and embedded in `design/board/prototype.html`.
+Three typefaces are bundled in `Sources/MouthtypeMac/Resources/Fonts/`.
 All three are licensed under the SIL Open Font License, Version 1.1. They are bundled unmodified and stay under the
 OFL; they are not sold on their own. The full licence text for each sits beside its font files.
 
