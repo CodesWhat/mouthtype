@@ -203,6 +203,30 @@ import Testing
         #expect(!model.suggestions.contains { $0.kind == .misheardVariant })
     }
 
+    @Test func aReloadAfterATakeEditOrDeleteRecomputes() async throws {
+        let f = try fixture()
+        defer { try? FileManager.default.removeItem(at: f.dir) }
+        try seed(f.store)
+        let model = model(f)
+        let probe = CheckProbe()
+        model.isKnownWord = { _ in probe.hit(); return false }
+        await model.reload()
+        let first = model.suggestions
+        var count = probe.count
+        #expect(first.contains { $0.kind == .misheardVariant })
+        // Same take count and latest start, but a take's final text changed.
+        let edited = try f.store.recentTakes(limit: 100).first { $0.rawText == "Shaban took a minute 0" }
+        try f.store.recordInsertion(try #require(edited).id, InsertionRecord(finalText: "Siobhan took a minute 0"))
+        await model.reload()
+        #expect(probe.count > count)
+        count = probe.count
+        // Deleting an older take keeps the latest start, and the count when a newer one replaces it in the window.
+        let doomed = try f.store.recentTakes(limit: 100).first { $0.rawText == "Shaban took a minute 1" }
+        try f.store.delete(try #require(doomed).id)
+        await model.reload()
+        #expect(probe.count > count)
+    }
+
     @Test func aReloadThatFinishesAfterDeactivateIsDropped() async throws {
         let f = try fixture()
         defer { try? FileManager.default.removeItem(at: f.dir) }

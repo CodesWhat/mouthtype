@@ -73,8 +73,7 @@ struct DismissedSuggestions: Codable, Equatable {
     @ObservationIgnored private var undoTask: Task<Void, Never>?
 
     struct Computed: Sendable {
-        var count: Int
-        var latestStartedAt: Double?
+        var records: [TakeRecord]
         var rules: [DictionaryRule]
         var found: [SpellingSuggestion]
     }
@@ -137,12 +136,11 @@ struct DismissedSuggestions: Codable, Equatable {
         computeTask?.cancel()
         let work = Task.detached { () -> Computed? in
             guard let records = try? fetch(store, limit), let rules = try? vocabulary.allRules(), !Task.isCancelled else { return nil }
-            let latest = records.map(\.startedAt).max()
-            if let previous, previous.count == records.count, previous.latestStartedAt == latest, previous.rules == rules {
+            if let previous, previous.records == records, previous.rules == rules {
                 return previous
             }
             let found = SpellingSuggester.suggest(takes: Self.takes(from: records), rules: rules, isKnownWord: isKnownWord)
-            return Task.isCancelled ? nil : Computed(count: records.count, latestStartedAt: latest, rules: rules, found: found)
+            return Task.isCancelled ? nil : Computed(records: records, rules: rules, found: found)
         }
         computeTask = work
         let computed = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
