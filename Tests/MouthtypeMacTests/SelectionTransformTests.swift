@@ -99,7 +99,7 @@ import MouthtypeCore
         changed.range.location += 2
         editor.current = changed
         model.accept()
-        #expect(editor.replaced.isEmpty && !model.submitted && model.acceptanceErrorPresented)
+        #expect(editor.replaced.isEmpty && !model.submitted && model.refused)
         #expect(model.result == "He and I go.")
     }
 
