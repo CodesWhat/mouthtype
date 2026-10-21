@@ -1337,14 +1337,35 @@ private final class FakeCorrections: CorrectionObserving {
 
         let undo = Task { await rig.controller.undoCancel() }
         await rig.settle()
-        // Queued behind the first take: nothing reopened or delivered yet, and the audio is no longer pending.
-        #expect(rig.inserter.delivered.isEmpty && rig.store.reopens == 0)
+        // Queued behind the first take: reopened and archived already, but nothing delivered yet.
+        #expect(rig.inserter.delivered.isEmpty && rig.store.reopens == 1)
 
         rig.engine.releaseHeld()
         await undo.value
         await rig.controller.waitForProcessing()
         #expect(rig.store.reopens == 1)
         #expect(rig.inserter.delivered == ["First one.", "Second one."])
+    }
+
+    @Test func quitBehindALongTakeFindsAnUndoneTakeAlreadySaved() async {
+        let rig = Rig()
+        rig.engine.holds = 1
+        rig.engine.texts = ["First one.", "Second one."]
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.engine.waitForHeld()
+        await rig.controller.handle(.pressed(at: keyUp + 1))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        let undo = Task { await rig.controller.undoCancel() }
+        await rig.settle()
+
+        // The first take is still held. Quit must not wait on it to see the second take's audio saved.
+        #expect(await rig.controller.prepareForTermination())
+        #expect(rig.store.reopens == 1)
+
+        rig.engine.releaseHeld()
+        await undo.value
+        await rig.controller.waitForProcessing()
     }
 
     @Test func undoDeliversToACardWhenThePasteCannotLand() async {
