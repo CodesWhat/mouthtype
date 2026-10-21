@@ -341,13 +341,28 @@ def whitespace(text, protected=None):
 
 
 class BasicCleanup:
-    def __init__(self, mode='off'):
+    def __init__(self, mode='off', styles=None):
         if not isinstance(mode, str) or mode not in ('off', 'basic'):
             raise ValueError('cleanup must be off or basic')
         self.mode = mode
+        if styles is not None:
+            import styles as style_contexts
+            styles = style_contexts.validate(styles)
+            if style_contexts.to_config(styles) is None:
+                styles = None
+        self.styles = styles
 
-    def apply(self, text):
-        if self.mode == 'off':
+    def apply(self, text, target=None):
+        """Basic cleanup. `target` is the window snapshot captured at record start; with a `styles` block it picks the
+        context whose cleanup level and tone apply (see styles.py). Without one, behavior is unchanged."""
+        mode, tone_name = self.mode, None
+        if self.styles is not None:
+            import styles as style_contexts
+            choice = style_contexts.resolve(self.styles, target.get('class') if isinstance(target, dict) else None)
+            tone_name = choice['tone']
+            if choice['cleanup'] is not None:
+                mode = 'off' if choice['cleanup'] == 'off' else 'basic'
+        if mode == 'off':
             return text
         if len(text.encode('utf-8')) > MAX_TEXT_BYTES:
             raise ValueError('Cleanup text exceeds its input limit')
@@ -364,6 +379,9 @@ class BasicCleanup:
                     text = _rewrite(chars, [(word[0], word[1], word[0], word[1], capital)])
         chars = list(graphemes(text))
         result = whitespace(text, _literal_mask(chars))
+        if tone_name:
+            import tone
+            result = tone.apply(result, tone_name)
         if len(result.encode('utf-8')) > MAX_TEXT_BYTES:
             raise ValueError('Cleanup text exceeds its output limit')
         return result

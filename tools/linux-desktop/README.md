@@ -152,6 +152,26 @@ At each take the raw recognition is saved first, Basic cleanup runs, then the mo
 
 On this machine (Ryzen 5 3600, 6 threads, CPU only) the pinned S1-mini loaded in about 0.9 s and answered the 75 Mac cleanup fixtures with a median of 0.4 s, under 1 s up to about 30 words and about 7 s at 220 words, with 2.2 GiB resident; 39 of 75 matched the Mac reference exactly, the differences being S1's habit of keeping spoken register. The Thorough candidate on the same CPU loaded in about 2.3 s and answered the same fixtures with a median of 2.7 s, about 3 s at 10 to 19 words, 11 s at 50 words and 38 s at 220 words, with 5.3 GiB resident; 42 of 75 matched exactly and, on the 19 smart-correction fixtures, 8 against S1-mini's 11. Thorough is therefore selectable but slow here: its budget of 2 s plus 200 ms a word, capped at 30 s, means takes over roughly 140 words keep the Basic text. It is a different model with a different prompt, evaluated separately, not Fast under another name. GPU offload is possible through `gpu_layers` in `cleanup.json` with a Vulkan build of the same revision, which this setup script does not produce.
 
+## Tone, swearing softening and Style contexts
+
+`tone.py` ports Core's tone stage (Formal, Casual, Very casual) and `profanity.py` ports ProfanityRemover, which is what Formal does: it removes or swaps swearing used as an exclamation or intensifier, with Core's word lists and rules. Casual drops the final full stop of a short message. Very casual also lowercases safe sentence starts. Core's part-of-speech tagger is Apple's NLTagger, which Linux does not have, so `lexical.py` answers those few questions from word lists and suffix rules. `tone-fixtures.json` holds Core's output for 791 sentences and records the 2 the guesser gets differently.
+
+`styles.py` holds the Style contexts: Personal, Work, Email and Other. Each has a tone and an optional cleanup level. Built-in members are apps by window class (Signal, Telegram, Discord; Slack, Teams; Thunderbird, Evolution, Geary), and you can add apps, remove built-ins, or set a per-app rule. Your rules beat your added apps, which beat built-ins, and Other covers everything unlisted. Websites are not supported on Linux. The `styles` block in `linux.json` is optional. With no block, no tone applies anywhere and cleanup runs at the global level, so existing installs behave as before.
+
+```
+mouthtype-linux style show
+mouthtype-linux style set-tone work casual
+mouthtype-linux style set-cleanup other off
+mouthtype-linux style add-app personal org.example.Chat --name Chat
+mouthtype-linux style rule foot --cleanup off
+mouthtype-linux style resolve Slack
+mouthtype-linux style preview casual "See you Friday."
+```
+
+Window classes come from `hyprctl clients`. The built-in classes were checked against: the Telegram Desktop desktop file (`StartupWMClass=TelegramDesktop`, icon and id `org.telegram.desktop`), Arch's signal-desktop packaging requests (Signal sets Wayland app_id `signal`), the Flathub manifests for Signal (`org.signal.Signal`), Thunderbird (`org.mozilla.Thunderbird`), Evolution (`org.gnome.Evolution`), Geary (`org.gnome.Geary`) and Discord (`com.discordapp.Discord`), the Flathub Slack desktop file (`StartupWMClass=Slack`) and the teams-for-linux docs (the app takes a `--class`). Discord's plain `discord` and Teams' `teams-for-linux` are the usual Electron names and were not confirmed in a desktop file; check yours with `hyprctl clients`.
+
+`python3 tools/linux-desktop/check_tone.py` (Mac with the Swift compiler) compares the word lists with Core's source and replays the fixtures through Core; `--write-fixtures` regenerates them.
+
 ## Checks and development archive
 
 Run `python3 -W error::ResourceWarning -m unittest discover -s tools/linux-desktop -p 'test_*.py'`. No test opens a microphone, launches a compositor or loads/downloads a model.
