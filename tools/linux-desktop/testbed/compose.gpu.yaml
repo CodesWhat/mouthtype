@@ -1,0 +1,7 @@
+# Added by testbed.sh when the NAS exposes /dev/dri. RENDER_GID is the render node's group on the NAS.
+services:
+  desktop:
+    devices:
+      - /dev/dri:/dev/dri
+    group_add:
+      - "${RENDER_GID:-937}"
