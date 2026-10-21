@@ -78,6 +78,14 @@ class AutostartTests(unittest.TestCase):
         verbs = [call[0] for call in self.calls]
         self.assertEqual(verbs, ["disable", "daemon-reload", "enable"])
 
+    def test_failed_enable_explains_why_and_leaves_no_unit_behind(self):
+        def failing(command, **kwargs):
+            return mock.Mock(returncode=1, stdout="", stderr="Failed to connect to bus: No medium found\n")
+        with mock.patch.object(control.subprocess, "run", failing):
+            with self.assertRaisesRegex(RuntimeError, "daemon-reload failed: Failed to connect to bus.*systemd user session"):
+                control.set_autostart("on")
+        self.assertFalse(self.unit.exists())
+
     def test_off_refuses_unmanaged_unit(self):
         self.unit.parent.mkdir(parents=True)
         self.unit.write_text("[Service]\nExecStart=/bin/true\n", encoding="utf-8")

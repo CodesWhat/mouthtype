@@ -760,6 +760,34 @@ class ShutdownFeedbackTests(unittest.TestCase):
             session.close()
             self.assertEqual(feedback.events,['recording','cancelled'])
 
+
+class FailureHintTests(unittest.TestCase):
+    def test_hint_names_the_runtime_directory_or_the_service_without_paths(self):
+        import desktop
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertIn('XDG_RUNTIME_DIR', desktop.failure_hint(Path(temp) / 'missing' / 'mouthtype'))
+            self.assertIn('systemctl --user start mouthtype-linux', desktop.failure_hint(Path(temp) / 'mouthtype'))
+            report = desktop.unavailable_report(FileNotFoundError(), Path(temp) / 'mouthtype')
+            self.assertEqual(report['error'], 'unavailable')
+            self.assertNotIn(temp, json.dumps(report))
+            (Path(temp) / 'mouthtype').mkdir()
+            (Path(temp) / 'mouthtype/session.sock').touch()
+            self.assertIsNone(desktop.failure_hint(Path(temp) / 'mouthtype'))
+
+    def test_default_config_prefers_the_documented_path_then_the_prepared_one(self):
+        import desktop
+        with tempfile.TemporaryDirectory() as temp, unittest.mock.patch.object(Path, 'home', classmethod(lambda cls: Path(temp))):
+            documented = Path(temp) / '.config/mouthtype/linux.json'
+            prepared = Path(temp) / '.local/share/mouthtype/speech-candidate/linux.json'
+            self.assertEqual(desktop.default_config(), documented)
+            prepared.parent.mkdir(parents=True)
+            prepared.write_text('{}')
+            self.assertEqual(desktop.default_config(), prepared)
+            documented.parent.mkdir(parents=True)
+            documented.write_text('{}')
+            self.assertEqual(desktop.default_config(), documented)
+
+
 if __name__ == '__main__':
     unittest.main()
 

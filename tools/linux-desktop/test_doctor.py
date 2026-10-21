@@ -44,6 +44,12 @@ class DoctorTests(unittest.TestCase):
         self.assertFalse(self.runtime.exists())
         self.assertEqual(before, {str(p): p.read_bytes() for p in self.root.iterdir() if p.is_file()})
 
+    def test_missing_hyprctl_is_a_warning_in_recovery_mode_not_an_error(self):
+        report = self.diagnose(which=lambda command: None if command == 'hyprctl' else '/usr/bin/' + command)
+        self.assertTrue(report['ready'])
+        self.assertEqual(self.check(report, 'hyprland')['status'], 'warning')
+        self.assertEqual(self.check(self.diagnose(), 'python')['status'], 'ok')
+
     def test_missing_configuration_explains_setup(self):
         self.config.unlink()
         report = self.diagnose()

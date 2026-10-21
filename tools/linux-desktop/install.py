@@ -45,7 +45,26 @@ def payload_files(source):
                     if 'tools/linux-desktop/' + name not in FILES]
 
 
-def install(source, prefix, *, destdir=None):
+LAUNCHER_MARKER = 'import desktop\nsys.exit(desktop.main())\n'
+
+
+def uninstall(prefix):
+    """Remove the launcher and payload this installer made below prefix. Config, models and recordings are not touched."""
+    prefix = Path(prefix).expanduser().resolve()
+    payload, launcher = prefix / 'lib/mouthtype-linux', prefix / 'bin/mouthtype-linux'
+    if launcher.exists() and LAUNCHER_MARKER not in launcher.read_text():
+        raise FileExistsError('Not removing ' + str(launcher) + ': it is not a Mouthtype launcher')
+    removed = []
+    if launcher.exists() or launcher.is_symlink():
+        launcher.unlink()
+        removed.append(launcher)
+    if payload.exists():
+        shutil.rmtree(payload)
+        removed.append(payload)
+    return removed
+
+
+def install(source, prefix, *, destdir=None, update=False):
     source, prefix = Path(source).resolve(), Path(prefix).expanduser()
     if destdir is not None and not prefix.is_absolute():
         raise ValueError('A staged runtime prefix must be absolute')
@@ -54,7 +73,9 @@ def install(source, prefix, *, destdir=None):
                    if destdir is not None else runtime_prefix)
     payload, launcher = destination / 'lib/mouthtype-linux', destination / 'bin/mouthtype-linux'
     if payload.exists() or launcher.exists() or launcher.is_symlink():
-        raise FileExistsError('Existing Linux client is preserved')
+        if not update or destdir is not None:
+            raise FileExistsError('Existing Linux client is preserved')
+        uninstall(runtime_prefix)
     staged_parents = set()
     if destdir is not None:
         staged_root = Path(destdir).expanduser().resolve()
@@ -118,14 +139,29 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--archive', type=Path)
     mode.add_argument('--destdir', type=Path, help='Stage files below this root, retaining the final --prefix')
+    mode.add_argument('--uninstall', action='store_true', help='Remove the launcher and payload below --prefix')
+    parser.add_argument('--update', action='store_true', help='Replace an existing installation below --prefix')
     args = parser.parse_args()
     source = Path(__file__).resolve().parents[2]
     try:
-        result = package(source, args.archive) if args.archive else install(source, args.prefix, destdir=args.destdir)
+        if args.uninstall:
+            removed = uninstall(args.prefix)
+            print('\n'.join(map(str, removed)) if removed else 'Nothing to remove below ' + str(args.prefix))
+            print('Models, configuration and recordings were left in place.')
+            return 0
+        result = package(source, args.archive) if args.archive else install(source, args.prefix, destdir=args.destdir, update=args.update)
         print(result)
+        if not args.archive and args.destdir is None:
+            print('Next: python3 ' + str(Path(__file__).resolve().with_name('setup.py')))
+            if str(Path(result).parent) not in os.environ.get('PATH', '').split(os.pathsep):
+                print('Note: ' + str(Path(result).parent) + ' is not on PATH in this shell; Omarchy sessions include ~/.local/bin.')
         return 0
+    except FileExistsError as error:
+        print('Linux client install failed: ' + (str(error) or 'a file already exists') +
+              '. Re-run with --update to replace it, or --uninstall to remove it.', file=sys.stderr)
+        return 2
     except (OSError, ValueError) as error:
-        print('Linux client packaging failed: ' + type(error).__name__, file=sys.stderr)
+        print('Linux client packaging failed: ' + type(error).__name__ + ': ' + str(error), file=sys.stderr)
         return 2
 
 
