@@ -39,6 +39,64 @@ import MouthtypeCore
         #expect(fast.unloads == 1)
     }
 
+    private func idleSelection(_ delay: Duration) -> (CleanupSelection, FakeSmartModel) {
+        let choice = Choice()
+        let fast = FakeSmartModel(downloaded: true, id: "fast")
+        let selection = CleanupSelection(
+            fast: fast, thorough: FakeSmartModel(downloaded: true, id: "thorough"), level: { choice.level },
+            idleUnloadDelay: delay)
+        return (selection, fast)
+    }
+
+    @Test func theModelStaysLoadedPastTheIdleDelayWhileARecordingIsActive() async {
+        let (selection, fast) = idleSelection(.milliseconds(300))
+        selection.start()
+        selection.recordingStarted(level: .light, take: "long")
+        for _ in 0..<500 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(fast.isLoaded)
+        // Several times the delay with the take still recording.
+        try? await Task.sleep(for: .milliseconds(1500))
+        #expect(fast.isLoaded && fast.unloads == 0)
+        selection.releasePrewarm(for: "long")
+    }
+
+    @Test func theModelUnloadsAfterTheIdleDelayOnceTheRecordingEnds() async {
+        let (selection, fast) = idleSelection(.milliseconds(300))
+        selection.start()
+        selection.recordingStarted(level: .light, take: "take")
+        for _ in 0..<500 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        try? await Task.sleep(for: .milliseconds(900))
+        #expect(fast.unloads == 0)
+        selection.releasePrewarm(for: "take")
+        for _ in 0..<1000 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(fast.unloads == 1 && !fast.isLoaded)
+    }
+
+    @Test func aCancelledRecordingReleasesItsHold() async {
+        let (selection, fast) = idleSelection(.milliseconds(300))
+        selection.start()
+        selection.recordingStarted(level: .light, take: "cancelled")
+        for _ in 0..<500 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        try? await Task.sleep(for: .milliseconds(600))
+        #expect(fast.unloads == 0)
+        // A cancelled take releases the same way a finished one does, and a second release changes nothing.
+        selection.releasePrewarm(for: "cancelled")
+        selection.releasePrewarm(for: "cancelled")
+        for _ in 0..<1000 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(fast.unloads == 1 && !fast.isLoaded)
+    }
+
+    @Test func aTakeReplacingItsLevelDoesNotLeakTheEarlierHold() async {
+        let (selection, fast) = idleSelection(.milliseconds(300))
+        selection.start()
+        selection.recordingStarted(level: .light, take: "a")
+        selection.recordingStarted(level: .light, take: "a")
+        for _ in 0..<500 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        selection.releasePrewarm(for: "a")
+        for _ in 0..<1000 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(fast.unloads == 1)
+    }
+
     @Test func readinessAndGenerationUseTheCapturedLevel() async {
         let choice = Choice()
         let fast = FakeSmartModel(downloaded: true, id: "fast", name: "S1-mini by Superwhisper")
