@@ -231,6 +231,19 @@ import MouthtypeCore
         #expect(segments.map(\.text).joined() == "So the meeting is at three. I think so")
     }
 
+    @Test func cacheKeepsCanonicallyEquivalentInputsApart() {
+        let composed = "caf\u{E9} au lait"
+        let decomposed = "cafe\u{301} au lait"
+        #expect(composed == decomposed)
+        let bytes = { (segments: [SelectionDiff.Segment]) in Array(segments.map(\.text).joined().utf8) }
+        for (first, second) in [(composed, decomposed), (decomposed, composed)] {
+            _ = SelectionDiff.result(first, original: "cafe au lait")
+            #expect(bytes(SelectionDiff.result(second, original: "cafe au lait")) == Array(second.utf8))
+            _ = SelectionDiff.original(first, result: "cafe")
+            #expect(bytes(SelectionDiff.original(second, result: "cafe")) == Array(second.utf8))
+        }
+    }
+
     @Test func identicalTextAndOversizedTextHaveNoMarks() {
         #expect(SelectionDiff.result("same", original: "same").allSatisfy { !$0.marked })
         #expect(SelectionDiff.original("same", result: "same").allSatisfy { !$0.marked })

@@ -11,8 +11,10 @@ enum SelectionDiff {
     }
 
     private struct Cache {
-        var original: (old: String, new: String, segments: [Segment])?
-        var result: (new: String, old: String, segments: [Segment])?
+        // Keys are exact UTF-8 bytes: `String ==` treats canonically equivalent text (composed vs decomposed é) as equal,
+        // and a hit would hand back segments built from the other byte representation.
+        var original: (old: [UInt8], new: [UInt8], segments: [Segment])?
+        var result: (new: [UInt8], old: [UInt8], segments: [Segment])?
     }
     private static let cache = Locked(Cache())
 
@@ -36,9 +38,10 @@ enum SelectionDiff {
     /// punctuation, so "i" becoming "I" or "tomorrow." losing its full stop is not a removal. An empty result (a transform
     /// still running) marks nothing.
     static func original(_ old: String, result new: String) -> [Segment] {
-        if let hit = cache.withValue({ $0.original }), hit.old == old, hit.new == new { return hit.segments }
+        let oldKey = Array(old.utf8), newKey = Array(new.utf8)
+        if let hit = cache.withValue({ $0.original }), hit.old == oldKey, hit.new == newKey { return hit.segments }
         let segments = computeOriginal(old, result: new)
-        cache.withValue { $0.original = (old, new, segments) }
+        cache.withValue { $0.original = (oldKey, newKey, segments) }
         return segments
     }
 
@@ -66,9 +69,10 @@ enum SelectionDiff {
 
     /// The result split into runs, with `marked` on characters that are not in the original.
     static func result(_ new: String, original old: String) -> [Segment] {
-        if let hit = cache.withValue({ $0.result }), hit.new == new, hit.old == old { return hit.segments }
+        let newKey = Array(new.utf8), oldKey = Array(old.utf8)
+        if let hit = cache.withValue({ $0.result }), hit.new == newKey, hit.old == oldKey { return hit.segments }
         let segments = computeResult(new, original: old)
-        cache.withValue { $0.result = (new, old, segments) }
+        cache.withValue { $0.result = (newKey, oldKey, segments) }
         return segments
     }
 
