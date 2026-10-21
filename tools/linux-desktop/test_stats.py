@@ -217,6 +217,10 @@ class StatsTests(unittest.TestCase):
         self.assertIsNone(take.duration_ms)
 
     def test_latest_transcript_is_the_newest_take_with_text(self):
+        # Newest is by directory mtime; a real take's directory was last written when it was made.
+        for path in self.root.iterdir():
+            created = json.loads((path / 'take.json').read_text())['created'] if (path / 'take.json').exists() else NOW
+            os.utime(path, (created, created))
         self.assertEqual(stats.latest_transcript(self.root), (hexid(2), 'word word word'))
         self.assertIsNone(stats.latest_transcript(self.root / 'absent'))
 
@@ -237,6 +241,84 @@ class StatsVerbTests(unittest.TestCase):
         result = json.loads(text)
         self.assertEqual(result['words']['all_time'], 12)
         self.assertEqual(result['takes'], 1)
+
+
+def reference_read_takes(root, *, now):
+    """The pre-scandir implementation, kept as the oracle the new scan must match."""
+    root = Path(root)
+    takes = []
+    for entry in sorted(root.iterdir()):
+        if not stats.TAKE_ID.fullmatch(entry.name) or entry.is_symlink():
+            continue
+        try:
+            if not entry.is_dir():
+                continue
+            started = stats.take_started(entry)
+            transcript, audio = entry / 'transcript.txt', entry / 'recording.wav'
+            words = 0
+            has_transcript = transcript.is_file() and not transcript.is_symlink()
+            if has_transcript:
+                with open(transcript, 'rb') as source:
+                    words = len(source.read(stats.TRANSCRIPT_LIMIT).decode('utf-8', 'ignore').split())
+            has_audio = audio.is_file() and not audio.is_symlink()
+            if words == 0:
+                if not has_audio:
+                    continue
+                if not has_transcript and now - audio.stat().st_mtime < stats.ACTIVE_AUDIO_SECONDS:
+                    continue
+            duration = stats.wav_duration_ms(audio) if has_audio else None
+        except OSError:
+            continue
+        takes.append(stats.Take(entry.name, started, words, duration, words == 0))
+    return takes
+
+
+class ScanTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def test_read_takes_matches_the_old_implementation_on_two_thousand_takes(self):
+        for index in range(2000):
+            kind = index % 5
+            path = make_take(self.root, hexid(index), stamp(1 + index % 19, index % 24), 
+                             None if kind in (2, 4) else index % 11, 
+                             None if kind in (0, 1) else 0.01 * (index % 4 + 1),
+                             age=3600 if index % 7 else 1, metadata=kind != 3)
+            if kind == 4:
+                (path / 'transcript.txt').write_text('')
+        (self.root / 'not-a-take').mkdir()
+        (self.root / hexid(5000)).write_text('a file named like a take')
+        (self.root / hexid(5001)).symlink_to(self.root / hexid(0), target_is_directory=True)
+        (self.root / hexid(0) / 'extra.bin').write_bytes(b'x')
+        new = stats.read_takes(self.root, now=NOW)
+        self.assertEqual(new, reference_read_takes(self.root, now=NOW))
+        self.assertGreater(len(new), 1500)
+
+    def test_read_takes_ignores_a_symlinked_transcript_and_a_missing_root(self):
+        path = make_take(self.root, hexid(1), stamp(20, 9), None, 1)
+        (self.root / 'outside.txt').write_text('secret words here')
+        (path / 'transcript.txt').symlink_to(self.root / 'outside.txt')
+        self.assertEqual([take.words for take in stats.read_takes(self.root, now=NOW)], [0])
+        self.assertEqual(stats.read_takes(self.root / 'absent', now=NOW), [])
+
+    def test_latest_transcript_stops_at_the_newest_take_with_words(self):
+        for index in range(300):
+            path = make_take(self.root, hexid(index), stamp(1 + index % 19), (index + 1) % 4)
+            os.utime(path, (NOW - (300 - index) * 60, NOW - (300 - index) * 60))
+        # The newest take is empty, the one before it has text.
+        newest = [hexid(i) for i in range(300) if (i + 1) % 4][-1]
+        opened = []
+        real = open
+        def spy(path, *args, **kwargs):
+            opened.append(str(path))
+            return real(path, *args, **kwargs)
+        from unittest import mock
+        with mock.patch('builtins.open', spy):
+            found = stats.latest_transcript(self.root)
+        self.assertEqual(found[0], newest)
+        self.assertEqual(len([p for p in opened if p.endswith('transcript.txt')]), 2)  # the empty newest, then the answer
 
 
 if __name__ == '__main__':

@@ -22,6 +22,7 @@ Differences from the Mac, all forced by the data on disk:
 from dataclasses import dataclass
 from datetime import date, datetime
 import json
+import os
 import re
 import struct
 import time
@@ -50,8 +51,10 @@ class Take:
     audio_only: bool
 
 
-def take_started(path):
-    """When the take was made: take.json, else the earliest surviving file (expiring the WAV can't move it)."""
+def take_started(path, children=None):
+    """When the take was made: take.json, else the earliest surviving file (expiring the WAV can't move it).
+
+    `children` is an optional {name: DirEntry} listing of the take that the caller already read."""
     path = Path(path)
     try:
         created = json.loads((path / 'take.json').read_text())['created']
@@ -60,7 +63,12 @@ def take_started(path):
     except (OSError, ValueError, KeyError, TypeError):
         pass
     stamps = []
-    for child in path.iterdir():
+    if children is None:
+        with os.scandir(path) as scan:
+            children = list(scan)
+    else:
+        children = list(children.values())
+    for child in children:
         try:
             if child.is_file():
                 stamps.append(child.stat().st_mtime)
@@ -80,35 +88,47 @@ def wav_duration_ms(path):
     return int(frames * 1000 / rate)
 
 
+def _regular(children, name):
+    """The DirEntry for a regular file called `name` in the take, or None. A symlink never counts."""
+    child = children.get(name)
+    try:
+        return child if child is not None and child.is_file(follow_symlinks=False) else None
+    except OSError:
+        return None
+
+
 def read_takes(root, *, now=None):
-    """Every take under the recovery directory that produced words or kept audio. Text is counted, never kept."""
+    """Every take under the recovery directory that produced words or kept audio. Text is counted, never kept.
+
+    One scandir pass over the root and one per take: the DirEntry objects carry the file types and stats, so a take
+    costs two directory reads plus the files it actually needs (take.json, the transcript, the WAV header)."""
     root = Path(root)
     now = time.time() if now is None else now
     takes = []
     try:
-        entries = sorted(root.iterdir())
+        with os.scandir(root) as scan:
+            entries = sorted((entry for entry in scan if TAKE_ID.fullmatch(entry.name)), key=lambda entry: entry.name)
     except OSError:
         return takes
     for entry in entries:
-        if not TAKE_ID.fullmatch(entry.name) or entry.is_symlink():
-            continue
         try:
-            if not entry.is_dir():
+            if entry.is_symlink() or not entry.is_dir():
                 continue
-            started = take_started(entry)
-            transcript, audio = entry / 'transcript.txt', entry / 'recording.wav'
+            with os.scandir(entry.path) as inner:
+                children = {child.name: child for child in inner}
+            path = Path(entry.path)
+            started = take_started(path, children)
+            transcript, audio = _regular(children, 'transcript.txt'), _regular(children, 'recording.wav')
             words = 0
-            has_transcript = transcript.is_file() and not transcript.is_symlink()
-            if has_transcript:
-                with open(transcript, 'rb') as source:
+            if transcript is not None:
+                with open(transcript.path, 'rb') as source:
                     words = len(source.read(TRANSCRIPT_LIMIT).decode('utf-8', 'ignore').split())
-            has_audio = audio.is_file() and not audio.is_symlink()
             if words == 0:
-                if not has_audio:
+                if audio is None:
                     continue
-                if not has_transcript and now - audio.stat().st_mtime < ACTIVE_AUDIO_SECONDS:
+                if transcript is None and now - audio.stat().st_mtime < ACTIVE_AUDIO_SECONDS:
                     continue
-            duration = wav_duration_ms(audio) if has_audio else None
+            duration = wav_duration_ms(audio.path) if audio is not None else None
         except OSError:
             continue
         takes.append(Take(entry.name, started, words, duration, words == 0))
@@ -290,17 +310,34 @@ def compute(root, *, now=None, tz=None):
 
 
 def latest_transcript(root):
-    """(id, text) of the newest take with a non-empty transcript, or None."""
-    best = None
-    for take in read_takes(root):
-        if take.words == 0:
-            continue
-        if best is None or (take.started, take.id) > (best.started, best.id):
-            best = take
-    if best is None:
-        return None
+    """(id, text) of the newest take with a non-empty transcript, or None.
+
+    Newest means the take directory's mtime, which moves when its transcript is written. Takes are visited newest
+    first and the walk stops at the first one with words, so the rest of the history is never opened."""
+    candidates = []
     try:
-        with open(Path(root) / best.id / 'transcript.txt', 'rb') as source:
-            return best.id, source.read(TRANSCRIPT_LIMIT).decode('utf-8')
-    except (OSError, UnicodeDecodeError):
+        with os.scandir(root) as scan:
+            for entry in scan:
+                try:
+                    if TAKE_ID.fullmatch(entry.name) and not entry.is_symlink() and entry.is_dir():
+                        candidates.append((entry.stat().st_mtime, entry.name))
+                except OSError:
+                    continue
+    except OSError:
         return None
+    candidates.sort(reverse=True)
+    for _, name in candidates:
+        transcript = Path(root) / name / 'transcript.txt'
+        try:
+            if transcript.is_symlink() or not transcript.is_file():
+                continue
+            with open(transcript, 'rb') as source:
+                raw = source.read(TRANSCRIPT_LIMIT)
+            if not raw.decode('utf-8', 'ignore').split():
+                continue
+            return name, raw.decode('utf-8')
+        except UnicodeDecodeError:
+            return None
+        except OSError:
+            continue
+    return None
