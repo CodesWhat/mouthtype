@@ -149,11 +149,12 @@ Column {
     spacing: 8
     DesignPrimaryButton { text: "Copy"; enabled: !!root.host && root.host.importCanExport; onActivated: root.host.run(["import-copy"]) }
     DesignSecondaryButton { text: "Save Text…"; enabled: !!root.host && root.host.importCanExport; onActivated: root.host.run(["import-save"]) }
-    DesignSecondaryButton {
-      visible: !!root.host && !root.host.importActive && root.file.state !== "idle" && root.file.state !== "off"
-      text: "Clear Result"
-      onActivated: root.host.run(["import-forget"])
-    }
+  }
+
+  DesignSecondaryButton {
+    visible: !!root.host && !root.host.importActive && root.file.state !== "idle" && root.file.state !== "off"
+    text: "Clear Result"
+    onActivated: root.host.run(["import-forget"])
   }
 
   Text {

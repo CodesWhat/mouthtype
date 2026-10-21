@@ -107,7 +107,7 @@ Panel {
     }
     if (result.message) notice = String(result.message)
     if (result.error) errorText = String(result.error)
-    if (result.page) { openPage(String(result.page)); if (!opened) open() }
+    if (result.page) { shellView.navigate(String(result.page)); if (!opened) open() }
   }
 
   function loadImportText() {

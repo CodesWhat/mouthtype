@@ -9,4 +9,8 @@ DesignSwitch {
   property bool value: false
 
   Binding { target: root; property: "checked"; value: root.value }
+
+  // If the daemon refuses a change the value never moves, so settle back on it once the action has had time to finish.
+  Timer { id: settle; interval: 2000; onTriggered: root.checked = root.value }
+  Connections { target: root; function onToggled() { settle.restart() } }
 }

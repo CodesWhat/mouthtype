@@ -127,7 +127,7 @@ Item {
 
       onLoaded: {
         if (item.host !== undefined) item.host = root.host
-        if (item.backend !== undefined) item.backend = Qt.binding(function() { return root.backend })
+        if (item.request !== undefined) item.backend = Qt.binding(function() { return root.backend })
         if (item.active !== undefined) item.active = Qt.binding(function() { return !root.settingsOpen })
       }
     }

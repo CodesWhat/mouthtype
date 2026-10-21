@@ -18,12 +18,16 @@ Column {
   width: parent ? parent.width : 520
   spacing: 18
 
-  Component.onCompleted: classDraft = config.allowed_classes && config.allowed_classes.length ? config.allowed_classes[0] : ""
+  function syncClass() {
+    if (!classField.activeFocus) classDraft = config.allowed_classes && config.allowed_classes.length ? config.allowed_classes[0] : ""
+  }
+  onConfigChanged: syncClass()
+  Component.onCompleted: syncClass()
 
   function setMode(index) {
     if (index === 0) host.run(["set-shortcut", "off"])
-    else if (index === 1) host.run(["set-shortcut", "hold", mode === "hold" ? host.shortcutKeys : "F10"])
-    else host.run(["set-shortcut", "toggle", mode === "toggle" ? host.shortcutKeys : "SUPER + ALT + M"])
+    else if (index === 1) host.run(["set-shortcut", "hold", host.shortcutKeys || "F10"])
+    else host.run(["set-shortcut", "toggle", host.shortcutKeys || "SUPER + ALT + M"])
   }
 
   Column {
