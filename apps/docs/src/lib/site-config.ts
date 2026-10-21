@@ -3,11 +3,10 @@ export const SITE_CONFIG = {
   tagline: "Local dictation for Mac",
   description:
     "Documentation for Mouthtype, local dictation for Apple Silicon Macs running macOS 26 or later.",
-  github: "https://mouthtype.app",
+  github: "https://github.com/CodesWhat/mouthtype",
 } as const;
 
-// Where the site is served. docs.mouthtype.app is the working assumption until the
-// deploy target is decided. Override with NEXT_PUBLIC_SITE_URL.
+// Where the site is served. Defaults to docs.mouthtype.app. Override with NEXT_PUBLIC_SITE_URL.
 export const BASE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "https://docs.mouthtype.app";
 
 /** "" at the root, "/docs" when built with DOCS_BASE_PATH=/docs. Prefix for URLs Next doesn't rewrite. */
