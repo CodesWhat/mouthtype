@@ -1,0 +1,84 @@
+{
+  "kind": "spellings",
+  "path": "/home/david/.local/share/mouthtype/speech-candidate/dictionary.json",
+  "configured": true,
+  "exists": true,
+  "digest": "494f90e405b1d8e898ce12ab8b7462c4d7484bd40c4df74b2b71519b5dd1b461",
+  "count": 12,
+  "entries": [
+    {
+      "heard": "priya",
+      "written": "Priya",
+      "starred": true,
+      "warning": null
+    },
+    {
+      "heard": "pre ya",
+      "written": "Priya",
+      "starred": true,
+      "warning": null
+    },
+    {
+      "heard": "mouth type",
+      "written": "Mouthtype",
+      "starred": true,
+      "warning": null
+    },
+    {
+      "heard": "mouse type",
+      "written": "Mouthtype",
+      "starred": true,
+      "warning": null
+    },
+    {
+      "heard": "tahoe",
+      "written": "Tahoe",
+      "starred": false,
+      "warning": null
+    },
+    {
+      "heard": "oh marky",
+      "written": "Omarchy",
+      "starred": false,
+      "warning": null
+    },
+    {
+      "heard": "omar key",
+      "written": "Omarchy",
+      "starred": false,
+      "warning": null
+    },
+    {
+      "heard": "pair of keet",
+      "written": "Parakeet",
+      "starred": false,
+      "warning": null
+    },
+    {
+      "heard": "win",
+      "written": "Winn",
+      "starred": false,
+      "warning": "‘win’ is an everyday word, so every ‘win’ you say becomes Winn."
+    },
+    {
+      "heard": "hyper land",
+      "written": "Hyprland",
+      "starred": false,
+      "warning": null
+    },
+    {
+      "heard": "dry doc",
+      "written": "Drydock",
+      "starred": false,
+      "warning": null
+    },
+    {
+      "heard": "shawn",
+      "written": "Sean",
+      "starred": false,
+      "warning": null
+    }
+  ],
+  "problem": null,
+  "writable": true
+}

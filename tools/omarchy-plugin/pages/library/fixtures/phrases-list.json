@@ -1,0 +1,40 @@
+{
+  "kind": "phrases",
+  "path": "/home/david/.local/share/mouthtype/speech-candidate/phrases.json",
+  "configured": true,
+  "exists": true,
+  "digest": "9d8ea16f90d1726dcbcee395875081ec264d3680ab60ebb7d50989f5d2d36b19",
+  "count": 7,
+  "entries": [
+    {
+      "trigger": "my work email",
+      "expansion": "scott@mouthtype.app"
+    },
+    {
+      "trigger": "sign off",
+      "expansion": "Thanks,\nScott"
+    },
+    {
+      "trigger": "meeting link",
+      "expansion": "https://meet.google.com/kqp-vwxa-hhz?authuser=0&pli=1&hs=122&utm_source=calendar_invite_long_link_for_the_weekly_planning_sync"
+    },
+    {
+      "trigger": "paste link",
+      "expansion": "{clipboard}"
+    },
+    {
+      "trigger": "today's date",
+      "expansion": "{date}"
+    },
+    {
+      "trigger": "the very long phrase that somebody decided to use as a spoken trigger for a snippet",
+      "expansion": "Bonjour, ça va très bien ✓ 你好 مرحبا — résumé"
+    },
+    {
+      "trigger": "status update",
+      "expansion": "Hi all,\nQuick update on {date}: the build is green and the release notes are in the PR.\n\nBest,\nScott"
+    }
+  ],
+  "problem": null,
+  "writable": true
+}
