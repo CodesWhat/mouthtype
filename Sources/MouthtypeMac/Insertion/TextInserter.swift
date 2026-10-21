@@ -35,6 +35,17 @@ public final class TextInserter {
     private var deliveryGeneration = 0
     private var verification: Task<Void, Never>?
     private var onVerified: (@MainActor (PasteVerification) -> Void)?
+    /// What `insertionContext()` already read for the cleanup pass, so `deliver` needn't read it again.
+    private var prefetch: Prefetch?
+
+    /// The character before the cursor as the cleanup read left it, and where it was read. Used once, and only
+    /// while the same element is focused and no real key or click has happened since.
+    private struct Prefetch {
+        var pid: pid_t?
+        var element: FocusedElement
+        var before: TextBeforeCursor
+        var input: UInt64
+    }
 
     /// What the last successful paste put in the field and where.
     private struct LastPaste {
@@ -121,9 +132,23 @@ public final class TextInserter {
     /// The text around the cursor in the focused field, for the cleanup pass. Nil for a secure field or when the app
     /// won't say. The text is used for one cleanup run and neither stored nor logged.
     public func insertionContext() -> InsertionContext? {
-        let now = focus.snapshot()
+        prefetch = nil
+        let now = focus.recheck()
         guard !now.isSecure, !focus.isSecureInputEnabled, let element = now.element else { return nil }
-        return focus.insertionContext(of: element)
+        let context = focus.insertionContext(of: element)
+        if let context, let before = context.before, let input = inputGeneration() {
+            let char: TextBeforeCursor = before.last.map(TextBeforeCursor.character) ?? .start
+            prefetch = Prefetch(pid: now.pid, element: element, before: char, input: input)
+        }
+        return context
+    }
+
+    /// The prefetched character before the cursor when it still describes `now`; consumed either way.
+    private func takePrefetchedBefore(for now: FocusSnapshot) -> TextBeforeCursor? {
+        defer { prefetch = nil }
+        guard let prefetch, let element = now.element, prefetch.element == element, prefetch.pid == now.pid,
+              inputGeneration() == prefetch.input else { return nil }
+        return prefetch.before
     }
 
     func clipboardText() -> String? {
@@ -160,6 +185,7 @@ public final class TextInserter {
             return DeliveryResult(method: .none, outcome: .unknown, focusMoved: false, target: nil, finalText: "")
         }
         var now = focus.snapshot()
+        defer { prefetch = nil }
         var secureInput = focus.isSecureInputEnabled
         let moved = startFocus?.hasChanged(to: now) ?? false
         if DeliveryDecision.decide(now: now, secureInput: secureInput) == .discardSecure {
@@ -233,7 +259,14 @@ public final class TextInserter {
                 return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
             }
             let reliableReadBack = PasteTargetPolicy.unchangedProvesFailure(bundleID: now.bundleID)
-            var before = now.element.map { focus.textBeforeCursor(of: $0) } ?? .unknown
+            var axReads = false
+            var before: TextBeforeCursor
+            if let prefetched = takePrefetchedBefore(for: now) {
+                before = prefetched
+            } else {
+                axReads = now.element != nil
+                before = now.element.map { element in focus.prePaste { focus.textBeforeCursor(of: element) } } ?? .unknown
+            }
             var continuation = PasteBoundaryDiagnostic.Continuation.notNeeded
             if !reliableReadBack || before == .unknown {
                 continuation = continuationCheck(for: now)
@@ -245,10 +278,19 @@ public final class TextInserter {
             ))
             let keyCode = keys.pasteKeyCode()
             // Accessibility reads can wait on another app. Recheck before borrowing the clipboard or posting keys.
-            let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
-                ? now.element.map { focus.readField(of: $0) } : nil
-            var checked = focus.snapshot()
+            // The baseline only feeds the read-back, so it is read only when someone is listening for the verdict.
+            let fieldBefore = onVerified != nil && PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
+                ? now.element.map { element in focus.prePaste { focus.readField(of: element) } } : nil
+            axReads = axReads || fieldBefore != nil
             let checkedSecureInput = focus.isSecureInputEnabled
+            var checked = now
+            if axReads {
+                let light = focus.prePaste { focus.recheck() }
+                let steady = light.pid == now.pid && light.bundleID == now.bundleID && light.element == now.element
+                    && !light.isSecure && !light.focusOwnerDiffersFromFrontmost && !checkedSecureInput
+                // Anything unsteady gets the full read, so the guards and the reported target see the whole snapshot.
+                if !steady { checked = focus.snapshot() }
+            }
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
                 checked.isSecure = checked.isSecure || checkedSecureInput
                 return DeliveryResult(method: .none, outcome: .secureDiscard,

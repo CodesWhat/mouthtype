@@ -101,9 +101,16 @@ protocol FocusReading: AnyObject {
     /// The value, length and selection a paste is verified against. Never call on a secure field.
     func readField(of element: FocusedElement) -> FieldReading
     var isSecureInputEnabled: Bool { get }
+    /// The cheap read right before the paste: only what the focus guards compare (app, element, owner, secure).
+    /// Skips role, settable and window title, which the guards never look at.
+    func recheck() -> FocusSnapshot
+    /// Runs `body` with a shorter bound on each Accessibility call, for reads that sit between the last guard and the paste.
+    func prePaste<T>(_ body: () -> T) -> T
 }
 
 extension FocusReading {
+    func recheck() -> FocusSnapshot { snapshot() }
+    func prePaste<T>(_ body: () -> T) -> T { body() }
     func snapshotApplication() -> FocusSnapshot { snapshot() }
     func selectionSnapshot() -> FocusSnapshot { snapshot() }
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? { nil }
@@ -118,9 +125,35 @@ final class AccessibilityFocusReader: FocusReading {
     /// Set while a time-boxed read runs (the menu capture). Each call's timeout shrinks to what's left, so the reads together stay near the budget.
     static var deadline: Date?
     static var deadlinePassed: Bool { deadline.map { $0.timeIntervalSinceNow <= 0 } ?? false }
+    /// The bound for reads between the last focus guard and the paste. A slow app costs this much per call, not 250 ms.
+    nonisolated static let prePasteTimeout: Float = 0.1
+    /// Set inside `prePaste`; tightens `callTimeout()` without ever loosening it.
+    static var cap: Float?
     static func callTimeout() -> Float {
-        guard let deadline else { return messagingTimeout }
-        return max(0.005, min(messagingTimeout, Float(deadline.timeIntervalSinceNow)))
+        let limit = min(messagingTimeout, cap ?? messagingTimeout)
+        guard let deadline else { return limit }
+        return max(0.005, min(limit, Float(deadline.timeIntervalSinceNow)))
+    }
+
+    func prePaste<T>(_ body: () -> T) -> T {
+        let previous = Self.cap
+        Self.cap = Self.prePasteTimeout
+        defer { Self.cap = previous }
+        return body()
+    }
+
+    func recheck() -> FocusSnapshot {
+        var snapshot = snapshotApplication()
+        guard let element = elementValue(bounded(AXUIElementCreateSystemWide()), kAXFocusedUIElementAttribute) else { return snapshot }
+        let focused = FocusedElement(element)
+        snapshot.element = focused
+        snapshot.focusedOwnerPID = ownerPID(of: focused)
+        if let owner = snapshot.focusedOwnerPID, owner != snapshot.pid {
+            snapshot.focusedApplicationPID = applicationPID(ofElement: element)
+        }
+        snapshot.subrole = stringValue(bounded(element), kAXSubroleAttribute)
+        snapshot.isSecure = isSecure(bounded(element), subrole: snapshot.subrole)
+        return snapshot
     }
 
     var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
