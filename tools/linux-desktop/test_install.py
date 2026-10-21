@@ -127,11 +127,11 @@ class InstallTests(unittest.TestCase):
             path.write_text('x')
         desktop = root / 'tools/linux-desktop'
         for name in ('library.py', 'stats.py', 'tone.py', 'profanity.py', 'cli_library.py', 'cli_style.py',
-                     'cli_transform.py', 'test_library.py', 'test_tone.py', 'check_tone.py',
-                     'verify_tone.py', 'conftest.py', 'notes.txt'):
+                     'cli_transform.py', 'transform_worker.py', 'test_transform.py', 'test_arch_bundle.py',
+                     'check_tone.py', 'verify_tone.py', 'conftest.py', 'notes.txt'):
             (desktop / name).write_text('x')
 
-    def test_install_ships_runtime_modules_and_never_new_tests(self):
+    def test_install_ships_runtime_modules_and_their_tests_but_not_dev_scripts(self):
         with tempfile.TemporaryDirectory() as temp:
             source = Path(temp) / 'src'
             self.fake_source(source)
@@ -139,10 +139,10 @@ class InstallTests(unittest.TestCase):
             installer.install(source, prefix)
             installed = prefix / 'lib/mouthtype-linux/tools/linux-desktop'
             for name in ('library.py', 'stats.py', 'tone.py', 'profanity.py', 'cli_library.py',
-                         'cli_style.py', 'cli_transform.py'):
+                         'cli_style.py', 'cli_transform.py', 'transform_worker.py', 'test_transform.py'):
                 self.assertTrue((installed / name).is_file(), name)
                 self.assertEqual((installed / name).stat().st_mode, (installed / 'desktop.py').stat().st_mode, name)
-            for name in ('test_tone.py', 'check_tone.py', 'verify_tone.py', 'conftest.py', 'notes.txt'):
+            for name in ('test_arch_bundle.py', 'check_tone.py', 'verify_tone.py', 'conftest.py', 'notes.txt'):
                 self.assertFalse((installed / name).exists(), name)
             output = Path(temp) / 'linux.tar.gz'
             installer.package(source, output)
@@ -151,7 +151,9 @@ class InstallTests(unittest.TestCase):
             self.assertIn('mouthtype-linux/tools/linux-desktop/tone.py', names)
             self.assertIn('mouthtype-linux/tools/linux-desktop/cli_transform.py', names)
             self.assertNotIn('mouthtype-linux/tools/linux-desktop/check_tone.py', names)
-            self.assertNotIn('mouthtype-linux/tools/linux-desktop/test_tone.py', names)
+            self.assertIn('mouthtype-linux/tools/linux-desktop/transform_worker.py', names)
+            self.assertIn('mouthtype-linux/tools/linux-desktop/test_transform.py', names)
+            self.assertNotIn('mouthtype-linux/tools/linux-desktop/test_arch_bundle.py', names)
 
     def test_package_has_runtime_license_and_no_private_or_model_files(self):
         with tempfile.TemporaryDirectory() as temp:
