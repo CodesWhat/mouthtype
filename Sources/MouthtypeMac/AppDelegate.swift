@@ -70,6 +70,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
             onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
             onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
+            onDockIconModeChanged: { [weak self] _ in self?.dockPresence.refresh() },
             spellings: spellingEditor, spellingSuggestions: spellingSuggestions, phrases: PhraseEditor(store: phrases),
             openTranscribeWindow: { [weak self] in self?.fileTranscriptionWindow.present() }),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
@@ -161,6 +162,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inputStarted = false
     private var isTerminating = false
     private let termination = AppTermination()
+    private lazy var dockPresence = DockPresence()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.info("launch \(AppInfo.version, privacy: .public)")
@@ -206,6 +208,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // The status item goes up first and fonts start registering off the main thread. Everything that builds a pill or
         // card (and so draws with a bundled font) waits for the next run-loop turn, after the item has been committed.
+        dockPresence.start()
         beginLaunch { [weak self] menuBar in self?.completeLaunch(arguments: arguments, menuBar: menuBar) }
     }
 
@@ -393,6 +396,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             open: { [weak self] page in self?.settingsWindow.present(destination: page.destination) }
         ))
     }
+
+    /// Clicking the Dock icon with nothing open brings up the main window. Not in Never, where there is no Dock icon to click.
+    public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard launchComplete, !flag, DockIconMode.current() != .never else { return true }
+        settingsWindow.present(page: .home)
+        return false
+    }
+
+    public func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        guard launchComplete else { return nil }
+        let menu = NSMenu()
+        let item = NSMenuItem(title: "Open Mouthtype", action: #selector(openFromDockMenu), keyEquivalent: "")
+        item.target = self
+        menu.addItem(item)
+        return menu
+    }
+
+    @objc private func openFromDockMenu() { settingsWindow.present(page: .home) }
 
     public func applicationDidBecomeActive(_ notification: Notification) {
         guard menuBar != nil else { return }
