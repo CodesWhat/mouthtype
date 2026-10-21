@@ -91,6 +91,13 @@ def _check_level(value, label):
 
 def validate(value):
     """Return the normalised styles block. None or {} is the inert default. Raises ValueError for anything malformed."""
+    try:
+        return _validate(value)
+    except (TypeError, AttributeError, KeyError) as error:
+        raise ValueError('styles is malformed') from error
+
+
+def _validate(value):
     if value is None:
         value = {}
     if not isinstance(value, dict):
@@ -122,7 +129,7 @@ def validate(value):
                                    'name': _check_name(app['name'], label + '.added name')})
         known = {member[0] for member in BUILT_INS[name]} | {'key:' + _key(c) for m in BUILT_INS[name] for c in m[2]}
         for member in removed:
-            if member not in known:
+            if not isinstance(member, str) or member not in known:
                 raise ValueError(label + '.removed holds an unknown built-in: ' + str(member))
         entry['removed'] = sorted(set(removed))
         if entry != {'tone': None, 'cleanup': None, 'added': [], 'removed': []}:

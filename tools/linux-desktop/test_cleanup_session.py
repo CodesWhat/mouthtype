@@ -77,7 +77,7 @@ class CleanupSessionTests(unittest.TestCase):
         import threading
         entered, release, cancelled = threading.Event(), threading.Event(), threading.Event()
         class Paused:
-            def apply(self, text):
+            def apply(self, text, target=None):
                 entered.set()
                 if not release.wait(3):
                     raise RuntimeError('Fixture deadline')
