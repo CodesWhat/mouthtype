@@ -115,10 +115,16 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
         guard let range = text.range(of: preamble, options: [.regularExpression, .caseInsensitive]) else { return text }
         let lead = text[range].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard range.upperBound < text.endIndex else { return text }
-        // The input may have said the same words without the colon or capital ("here is the cleaned text we ...").
+        // The input may have said the same words without the colon or capital ("here is the cleaned text we ..."),
+        // at its start or after a self-correction ("here is the transcript no wait here is the cleaned transcript").
         let leadWords = words(lead)
-        guard !leadWords.isEmpty, !words(source).starts(with: leadWords) else { return text }
+        guard !leadWords.isEmpty, !contains(words(source), leadWords) else { return text }
         return String(text[range.upperBound...])
+    }
+
+    private static func contains(_ haystack: [String], _ needle: [String]) -> Bool {
+        guard needle.count <= haystack.count else { return false }
+        return (0...(haystack.count - needle.count)).contains { haystack[$0..<($0 + needle.count)].elementsEqual(needle) }
     }
 
     private static func words(_ text: String) -> [String] {

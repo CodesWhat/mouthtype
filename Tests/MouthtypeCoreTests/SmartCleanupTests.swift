@@ -252,6 +252,20 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         }
     }
 
+    @Test func aPreambleDictatedAfterASelfCorrectionSurvives() async {
+        let said = "here is the transcript no wait here is the cleaned transcript we should leave earlier to beat the traffic"
+        let cleaner = FakeCleaner(returning: "Here is the cleaned transcript: We should leave earlier to beat the traffic.")
+        let result = await smart(cleaner).run(request(said))
+        #expect(result.text.hasPrefix("Here is the cleaned transcript"), "became \(result.text)")
+    }
+
+    @Test func modelFramingIsStillStrippedWhenOnlyUnrelatedFramingWasDictated() async {
+        let said = "we should leave earlier no wait we should leave earlier to beat the traffic"
+        let cleaner = FakeCleaner(returning: "Here is the cleaned text: We should leave earlier to beat the traffic.")
+        let result = await smart(cleaner).run(request(said))
+        #expect(result.text == "We should leave earlier to beat the traffic.", "became \(result.text)")
+    }
+
     @Test func aDictatedPreambleSurvivesPunctuationAndCapitalCleanup() async {
         let cleaner = FakeCleaner(returning: "Here is the cleaned transcript: We should leave earlier to beat the traffic.")
         let result = await smart(cleaner).run(request("here is the cleaned transcript we should leave earlier to beat the traffic"))
