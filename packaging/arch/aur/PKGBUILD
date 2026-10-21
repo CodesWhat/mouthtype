@@ -46,8 +46,8 @@ package() {
     install -Dm755 packaging/arch/aur/mouthtype-linux-setup "$pkgdir/usr/bin/mouthtype-linux-setup"
     install -Dm644 packaging/arch/aur/mouthtype-linux.service "$pkgdir/usr/lib/systemd/user/mouthtype-linux.service"
 
-    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/${pkgname%-git}/LICENSE"
-    install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/${pkgname%-git}/THIRD_PARTY_NOTICES.md"
-    install -Dm644 tools/linux-desktop/vendor/grapheme/LICENSE "$pkgdir/usr/share/licenses/${pkgname%-git}/grapheme-MIT"
-    install -Dm644 tools/linux-desktop/vendor/grapheme/UNICODE-LICENSE "$pkgdir/usr/share/licenses/${pkgname%-git}/Unicode-LICENSE"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+    install -Dm644 tools/linux-desktop/vendor/grapheme/LICENSE "$pkgdir/usr/share/licenses/$pkgname/grapheme-MIT"
+    install -Dm644 tools/linux-desktop/vendor/grapheme/UNICODE-LICENSE "$pkgdir/usr/share/licenses/$pkgname/Unicode-LICENSE"
 }
