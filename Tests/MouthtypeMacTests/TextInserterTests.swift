@@ -126,8 +126,10 @@ private func element(_ pid: pid_t) -> FocusedElement {
 
 @MainActor
 private final class TestClock {
-    var date = Date(timeIntervalSince1970: 1_000_000)
-    func advance(_ seconds: TimeInterval) { date = date.addingTimeInterval(seconds) }
+    var instant = ContinuousClock.now
+    /// A wall clock the inserter never sees; tests move it to prove the deadlines don't follow it.
+    var wall = Date(timeIntervalSince1970: 1_000_000)
+    func advance(_ seconds: TimeInterval) { instant = instant + .seconds(seconds) }
 }
 
 @MainActor
@@ -200,7 +202,7 @@ private struct Rig {
         let input = input
         inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, keys: keys, schedule: { delay, work in
             pending.add(delay, work)
-        }, sleep: { delay in if chunks { await pauses.pause(delay) } }, now: { clock.date }, inputGeneration: { input.value },
+        }, sleep: { delay in if chunks { await pauses.pause(delay) } }, now: { clock.instant }, inputGeneration: { input.value },
                                 restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, observeBoundary: observeBoundary)
     }
 }
@@ -332,6 +334,29 @@ private struct Rig {
         #expect(next.method == .none && next.finalText == "second")
         #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
         #expect(rig.pasteboard.publishedText == "original")
+    }
+
+    @Test(arguments: [-3600.0, 3600.0])
+    func wallClockJumpDuringTheTerminationWaitNeitherExpiresNorStretchesTheDeadline(jump: TimeInterval) async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original")]])
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        var waits = 0
+        var waitsAtExpiry = 0
+        rig.pauses.observe = { delay in
+            guard delay == 0.02 else { return }
+            waits += 1
+            if waits == 1 { rig.clock.wall = rig.clock.wall.addingTimeInterval(jump) }
+            if waits == 5 {
+                waitsAtExpiry = waits
+                rig.clock.advance(PasteboardSession.receiptCap + 1)
+            }
+        }
+        await rig.inserter.prepareForTermination()
+        // Five polls ran despite a forward jump, and the wait ended right after the monotonic deadline despite a backward one.
+        #expect(waitsAtExpiry == 5)
+        #expect(waits <= 6)
     }
 
     @Test func terminationWaitsForAnUnreadPasteThenRestoresAndInvalidatesCallbacks() async {
