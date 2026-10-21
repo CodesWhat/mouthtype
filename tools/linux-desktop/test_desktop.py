@@ -1423,6 +1423,20 @@ class CancelDuringDeliveryTests(unittest.TestCase):
         self.assertFalse([a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch'] or a[0] == 'wtype'])
         self.assertEqual(restored, [('earlier text', 'text')])
 
+    def test_cancel_while_the_first_dispatch_runs_skips_the_fallbacks(self):
+        delivery, target, calls, restored = PasteDeliveryTests().make({'any_window': True}, hyprland=False)
+        cancelled = threading.Event()
+        inner = delivery.run
+        def run(argv, **kwargs):
+            result = inner(argv, **kwargs)
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                cancelled.set()
+            return result
+        delivery.run = run
+        self.assertEqual(delivery.submit('text', target, cancelled=cancelled), 'not_attempted')
+        self.assertEqual(len([a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']]), 1)
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+
     def test_type_mode_honours_a_cancel_before_wtype(self):
         from desktop import HyprlandDelivery
         calls = []

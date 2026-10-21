@@ -666,7 +666,7 @@ class HyprlandDelivery:
             if cancelled is not None and cancelled.is_set():
                 # Our text is already on the clipboard; the finally block puts the earlier one back.
                 return 'not_attempted'
-            outcome = self.send_paste_chord(target, terminal)
+            outcome = self.send_paste_chord(target, terminal, cancelled)
             if outcome:
                 return outcome
         except (OSError, subprocess.SubprocessError):
@@ -714,7 +714,7 @@ class HyprlandDelivery:
                 return False
             time.sleep(.05)
 
-    def send_paste_chord(self, target, terminal):
+    def send_paste_chord(self, target, terminal, cancelled=None):
         """Hyprland delivers the chord to the captured window itself; wtype is the fallback for other compositors.
 
         Returns None once sent, or an outcome string when the chord must not be sent blindly."""
@@ -725,6 +725,8 @@ class HyprlandDelivery:
             ['hyprctl', 'dispatch', 'sendshortcut', mods.replace(' ', '+') + ',v,' + window],
         )
         for argv in attempts:
+            if cancelled is not None and cancelled.is_set():
+                return 'not_attempted'
             try:
                 result = self.run(argv, capture_output=True, text=True, check=False, timeout=5)
             except subprocess.TimeoutExpired:
@@ -738,6 +740,8 @@ class HyprlandDelivery:
         # wtype is untargeted, so only use it while the captured window is still the active one.
         if self.snapshot() != target:
             return 'target_changed'
+        if cancelled is not None and cancelled.is_set():
+            return 'not_attempted'
         chord = (['wtype', '-M', 'ctrl', '-M', 'shift', '-k', 'v', '-m', 'shift', '-m', 'ctrl'] if terminal
                  else ['wtype', '-M', 'ctrl', '-k', 'v', '-m', 'ctrl'])
         self.run(chord, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=15)
