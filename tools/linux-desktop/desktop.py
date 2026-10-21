@@ -1631,7 +1631,46 @@ def requested_action(tokens, parser, commands):
     return None
 
 
+CLIENT_VERBS = ('start', 'stop', 'toggle', 'cancel', 'status', 'capabilities')
+
+
+def client_verb(tokens):
+    """(verb, runtime directory) when argv is just global path options and one plain socket verb or capabilities, else None.
+
+    Python 3.14's argparse imports dataclasses and inspect when a parser is built, which a hotkey-path client should
+    not pay for. Anything this does not recognise goes to the full parser, so behaviour is unchanged."""
+    runtime = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid()))) / 'mouthtype'
+    verb = None
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in ('--config', '--recovery', '--imports') and index + 1 < len(tokens):
+            index += 2
+        elif token == '--runtime' and index + 1 < len(tokens):
+            runtime, index = Path(tokens[index + 1]), index + 2
+        elif token.startswith('--runtime='):
+            runtime, index = Path(token.split('=', 1)[1]), index + 1
+        elif token.startswith(('--config=', '--recovery=', '--imports=')):
+            index += 1
+        elif token in CLIENT_VERBS and verb is None:
+            verb, index = token, index + 1
+        else:
+            return None
+    return (verb, runtime) if verb else None
+
+
 def main(argv=None, *, cli_directory=None):
+    plain = client_verb(sys.argv[1:] if argv is None else list(argv))
+    if plain is not None and plain[0] == 'capabilities':
+        print(json.dumps(capabilities_report()))
+        return 0
+    if plain is not None:
+        try:
+            print(json.dumps(request(plain[1] / 'session.sock', plain[0], None)))
+            return 0
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
+            print(json.dumps({'error': 'unavailable', 'error_class': type(error).__name__}), file=sys.stderr)
+            return 2
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=Path.home() / '.config/mouthtype/linux.json')
     runtime_base = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid())))

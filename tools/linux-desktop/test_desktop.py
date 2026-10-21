@@ -367,6 +367,20 @@ class LightClientTests(unittest.TestCase):
         # capabilities reads the file-import limits, which pulls in the imports module and its proof dependency.
         self.assertEqual(self.loaded_after(['capabilities']), "['imports', 'proof']")
 
+    def test_plain_verbs_take_the_light_path_and_match_the_full_parser(self):
+        import contextlib, io, desktop
+        self.assertEqual(desktop.client_verb(['--runtime', '/r', 'status']), ('status', Path('/r')))
+        self.assertEqual(desktop.client_verb(['--config', 'c', 'start'])[0], 'start')
+        for argv in (['recover', 'x'], ['status', 'extra'], ['--bogus', 'status'], ['--runtime'], []):
+            self.assertIsNone(desktop.client_verb(argv), argv)
+        with tempfile.TemporaryDirectory() as temp:
+            outputs = []
+            for argv in (['--runtime', temp, 'status'], ['--runtime=' + temp, 'status']):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    outputs.append((desktop.main(argv), json.loads(err.getvalue())['error']))
+            self.assertEqual(outputs, [(2, 'unavailable')] * 2)
+
     def test_public_names_still_resolve_lazily(self):
         import desktop
         self.assertTrue(issubclass(desktop.ClipboardTooLarge, desktop.PhraseContextUnavailable))
