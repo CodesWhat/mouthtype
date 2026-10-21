@@ -158,6 +158,14 @@ import MouthtypeCore
         #expect(editor.everydayWarning == nil)
     }
 
+    @Test func strayWhitespaceDoesNotMakeAnEverydayWordAPhrase() {
+        let padded = SpellingWord(written: "Nguyen", rules: [DictionaryRule(heard: " win ", written: "Nguyen")])
+        #expect(padded.warning != nil)
+        #expect(!padded.hasEverydayPhrase)
+        let phrase = SpellingWord(written: "Nguyen", rules: [DictionaryRule(heard: "win win", written: "Nguyen")])
+        #expect(phrase.hasEverydayPhrase)
+    }
+
     @Test func draftAndLibrarySurviveOutsideChanges() throws {
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }

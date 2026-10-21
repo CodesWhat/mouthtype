@@ -225,5 +225,5 @@ struct SpellingWord: Identifiable, Equatable {
     var starred: Bool { !rules.isEmpty && rules.allSatisfy(\.starred) }
     /// Everyday-word warning for the first heard form that needs one.
     var warning: String? { rules.lazy.compactMap { OrdinaryWords.warning(for: $0) }.first }
-    var hasEverydayPhrase: Bool { rules.contains { OrdinaryWords.warning(for: $0) != nil && $0.heard.contains(where: \.isWhitespace) } }
+    var hasEverydayPhrase: Bool { rules.contains { OrdinaryWords.warning(for: $0) != nil && $0.heard.trimmingCharacters(in: .whitespacesAndNewlines).contains(where: \.isWhitespace) } }
 }
