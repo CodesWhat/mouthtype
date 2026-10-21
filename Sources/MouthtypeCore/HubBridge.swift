@@ -72,6 +72,29 @@ struct HubDownloader: MLXLMCommon.Downloader {
             contents: { try? Data(contentsOf: snapshot.appendingPathComponent($0)) }) ? snapshot : nil
     }
 
+    /// Removes what a stopped download left in a repo cache: unfinished blobs, the pinned snapshot folder, and the finished
+    /// blobs only that snapshot linked to. Other snapshots and their blobs stay.
+    static func discardPartialSnapshot(repoDirectory: URL, commit: String) {
+        let fm = FileManager.default
+        let blobs = repoDirectory.appendingPathComponent("blobs")
+        let snapshots = repoDirectory.appendingPathComponent("snapshots")
+        func linkedBlobs(in snapshot: URL) -> Set<String> {
+            let files = (fm.enumerator(at: snapshot, includingPropertiesForKeys: nil)?.allObjects as? [URL]) ?? []
+            return Set(files.compactMap { try? fm.destinationOfSymbolicLink(atPath: $0.path) }
+                .map { URL(fileURLWithPath: $0, relativeTo: snapshot).standardizedFileURL.lastPathComponent })
+        }
+        let target = snapshots.appendingPathComponent(commit)
+        let mine = linkedBlobs(in: target)
+        let others = ((try? fm.contentsOfDirectory(at: snapshots, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.lastPathComponent != commit }
+            .reduce(into: Set<String>()) { $0.formUnion(linkedBlobs(in: $1)) }
+        for blob in mine.subtracting(others) { try? fm.removeItem(at: blobs.appendingPathComponent(blob)) }
+        try? fm.removeItem(at: target)
+        for file in (try? fm.contentsOfDirectory(at: blobs, includingPropertiesForKeys: nil)) ?? [] where file.pathExtension == "incomplete" {
+            try? fm.removeItem(at: file)
+        }
+    }
+
     static func fileIsNonempty(_ url: URL) -> Bool {
         let fm = FileManager.default
         let path = url.resolvingSymlinksInPath().path
