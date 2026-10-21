@@ -145,6 +145,8 @@ final class CleanerHost: CleanupModelManaging {
         if level().needsModel {
             if case .failed = state { state = model.isDownloaded ? .unloaded : .absent }
             ensureLoaded()
+            // Selection routes a take's key-down and its cleanup here, so asking for the model counts as use.
+            if case .ready = state { scheduleIdleUnload() }
         } else {
             unload(reason: "level \(level().rawValue)")
         }
