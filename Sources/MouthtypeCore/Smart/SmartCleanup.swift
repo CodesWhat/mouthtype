@@ -233,7 +233,7 @@ public actor SmartCleanup {
                 var resolvedInput: String?
                 if settleCorrections {
                     try Task.checkCancellation()
-                    output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: correctionContext))
+                    output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: correctionContext), input: guardInput)
                     resolvedInput = output
                     if output.isEmpty { return .success(Draft(text: output, guardInput: guardInput, resolvedInput: resolvedInput, ordinary: ordinary)) }
                 }
@@ -241,7 +241,7 @@ public actor SmartCleanup {
                     try Task.checkCancellation()
                     var passContext = context
                     passContext.s1Controls = controls
-                    output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: passContext))
+                    output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: passContext), input: guardInput)
                     if output.isEmpty { break }
                 }
                 return .success(Draft(text: output, guardInput: guardInput, resolvedInput: resolvedInput, ordinary: ordinary))
@@ -266,7 +266,7 @@ public actor SmartCleanup {
         case let .failure(error):
             return finish(.failed, rejection: String(describing: error), sha: sha)
         case let .success(draft):
-            let model = SmartCleanupGuard.restoringTerminal(input: request.text, output: CleanupPrompt.sanitize(draft.text))
+            let model = SmartCleanupGuard.restoringTerminal(input: request.text, output: CleanupPrompt.sanitize(draft.text, input: request.text))
             if SmartCleanupGuard.copiesSurroundingText(input: request.text, output: model,
                 references: [context.before, context.after].compactMap { $0 }) {
                 return finish(.guardRejected, rejection: "surrounding text copied into output", sha: sha)
