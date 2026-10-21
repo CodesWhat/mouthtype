@@ -323,7 +323,5 @@
   "env": {
     "NEXT_TELEMETRY_DISABLED": "1"
   },
-  "regions": [
-    "iad1"
-  ]
+  "regions": ["iad1"]
 }
