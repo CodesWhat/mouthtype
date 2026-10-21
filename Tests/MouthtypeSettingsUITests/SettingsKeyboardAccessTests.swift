@@ -254,7 +254,12 @@ import Testing
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let (scroll, target) = try pageScrollAndOffscreenStop(window)
         let document = try #require(scroll.documentView)
-        #expect(window.focusByKeyboard(target))
+        let chain = try keyViewChain(window)
+        let index = try #require(chain.firstIndex { $0 === target })
+        #expect(index > 0)
+        #expect(window.makeFirstResponder(chain[index - 1]))
+        window.selectNextKeyView(nil)
+        #expect(window.firstResponder === target, "Tab moved focus to \(String(describing: window.firstResponder))")
         scroll.layoutSubtreeIfNeeded()
         let frame = target.convert(target.bounds, to: document)
         #expect(scroll.documentVisibleRect.contains(frame), "frame \(frame) outside visible \(scroll.documentVisibleRect)")
