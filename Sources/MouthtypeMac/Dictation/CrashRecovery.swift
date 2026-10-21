@@ -127,7 +127,7 @@ final class CrashRecovery {
     }
 
     /// The kept audio behind finished takes, for the Home log.
-    func loadCompletedRecordings(for rows: [DictationRecord]) async -> [RecoverableDictation] {
+    func loadCompletedRecordings(for rows: [TakeRecord]) async -> [RecoverableDictation] {
         let now = clock.now()
         return await Task.detached { DictationRecovery.completed(rows: rows, now: now) }.value
     }

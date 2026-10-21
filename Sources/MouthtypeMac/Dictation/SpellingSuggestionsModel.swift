@@ -53,12 +53,12 @@ struct DismissedSuggestions: Codable, Equatable {
     }
 
     @ObservationIgnored var store: TranscriptStore? {
-        didSet { if store !== oldValue, isActive { startReload() } }
+        didSet { if store !== oldValue { lastRun = nil; if isActive { startReload() } } }
     }
     @ObservationIgnored private let vocabulary: FileVocabulary
     @ObservationIgnored private let dismissedURL: URL
     @ObservationIgnored var onRulesChanged: @MainActor () -> Void = {}
-    @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [DictationRecord] = { store, limit in
+    @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [TakeRecord] = { store, limit in
         try store.recentTakes(limit: limit)
     }
     @ObservationIgnored var isKnownWord: @Sendable (String) -> Bool = { SystemWordChecker.shared.isKnown($0) }
@@ -67,8 +67,16 @@ struct DismissedSuggestions: Codable, Equatable {
     @ObservationIgnored private(set) var isActive = false
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
-    @ObservationIgnored private var computeTask: Task<[SpellingSuggestion]?, Never>?
+    @ObservationIgnored private var computeTask: Task<Computed?, Never>?
+    /// The inputs the last finished run saw. An identical read (same take count, newest take and rules) reuses its result.
+    @ObservationIgnored private var lastRun: Computed?
     @ObservationIgnored private var undoTask: Task<Void, Never>?
+
+    struct Computed: Sendable {
+        var records: [TakeRecord]
+        var rules: [DictionaryRule]
+        var found: [SpellingSuggestion]
+    }
 
     private(set) var suggestions: [SpellingSuggestion] = []
     private(set) var undo: Undo?
@@ -117,27 +125,32 @@ struct DismissedSuggestions: Codable, Equatable {
 
     /// Reads the takes and current rules off the main thread, then keeps what hasn't been dismissed.
     func reload() async {
-        guard let store else { all = []; publish(); return }
+        guard let store else { all = []; lastRun = nil; publish(); return }
         generation += 1
         let mine = generation
         let fetch = fetchRecent
         let vocabulary = vocabulary
         let limit = Self.takeLimit
         let isKnownWord = isKnownWord
+        let previous = lastRun
         computeTask?.cancel()
-        let work = Task.detached { () -> [SpellingSuggestion]? in
+        let work = Task.detached { () -> Computed? in
             guard let records = try? fetch(store, limit), let rules = try? vocabulary.allRules(), !Task.isCancelled else { return nil }
+            if let previous, previous.records == records, previous.rules == rules {
+                return previous
+            }
             let found = SpellingSuggester.suggest(takes: Self.takes(from: records), rules: rules, isKnownWord: isKnownWord)
-            return Task.isCancelled ? nil : found
+            return Task.isCancelled ? nil : Computed(records: records, rules: rules, found: found)
         }
         computeTask = work
-        let found = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
-        guard mine == generation, !Task.isCancelled, let found else { return }
-        all = found
+        let computed = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+        guard mine == generation, !Task.isCancelled, let computed else { return }
+        lastRun = computed
+        all = computed.found
         publish()
     }
 
-    nonisolated static func takes(from records: [DictationRecord]) -> [SuggestionTake] {
+    nonisolated static func takes(from records: [TakeRecord]) -> [SuggestionTake] {
         records.compactMap { record in
             guard record.isSecure != true, let raw = record.rawText, let final = record.finalText,
                   !final.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
