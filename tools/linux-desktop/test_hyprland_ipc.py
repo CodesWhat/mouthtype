@@ -244,6 +244,49 @@ class DeliveryOverSocketTests(IPCTestCase):
         self.assertEqual(delivery.submit('text', TARGET), 'unknown')
         self.assertEqual([argv[:2] for argv in calls if argv[1] == 'dispatch'], [['hyprctl', 'dispatch']])
 
+    def hyprctl_dispatch_delivery(self, stdout, stderr='', returncode=0):
+        calls = []
+        def run(argv, **kwargs):
+            calls.append(list(argv))
+            if argv[:2] == ['hyprctl', '-j']:
+                return type('Result', (), {'stdout': json.dumps({'locked': False} if argv[-1] == 'locked' else TARGET)})()
+            return type('Result', (), {'returncode': returncode, 'stdout': stdout, 'stderr': stderr})()
+        delivery = HyprlandDelivery({'mode': 'paste', 'any_window': True, 'allow_unknown_secure_field': True,
+                                     'restore_clipboard': False}, run=run)
+        delivery.settle_seconds = 0
+        delivery.clipboard = lambda: 'text'
+        return delivery, calls
+
+    def test_hyprctl_dispatch_with_empty_or_truncated_reply_is_unknown_and_never_retried(self):
+        for stdout, stderr in (('', ''), ('o', ''), ('', 'o')):
+            with self.subTest(stdout=stdout, stderr=stderr):
+                delivery, calls = self.hyprctl_dispatch_delivery(stdout, stderr)
+                self.assertEqual(delivery.submit('text', TARGET), 'unknown')
+                self.assertEqual(len([a for a in calls if a[:2] == ['hyprctl', 'dispatch']]), 1)
+                self.assertFalse([a for a in calls if a[0] == 'wtype'])
+
+    def test_hyprctl_dispatch_with_explicit_error_reply_may_fall_back(self):
+        delivery, calls = self.hyprctl_dispatch_delivery('Invalid dispatcher', '', 0)
+        self.assertEqual(delivery.submit('text', TARGET), 'unknown')
+        self.assertEqual(len([a for a in calls if a[:2] == ['hyprctl', 'dispatch']]), 2)
+        self.assertTrue([a for a in calls if a[0] == 'wtype'])
+
+    def test_failure_before_the_hyprctl_dispatch_runs_may_fall_back(self):
+        calls = []
+        def run(argv, **kwargs):
+            calls.append(list(argv))
+            if argv[:2] == ['hyprctl', '-j']:
+                return type('Result', (), {'stdout': json.dumps({'locked': False} if argv[-1] == 'locked' else TARGET)})()
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                raise FileNotFoundError('hyprctl')
+            return type('Result', (), {'returncode': 0})()
+        delivery = HyprlandDelivery({'mode': 'paste', 'any_window': True, 'allow_unknown_secure_field': True,
+                                     'restore_clipboard': False}, run=run)
+        delivery.settle_seconds = 0
+        delivery.clipboard = lambda: 'text'
+        self.assertEqual(delivery.submit('text', TARGET), 'unknown')
+        self.assertTrue([a for a in calls if a[0] == 'wtype'])
+
     def stop_path_spawns(self, env, verified, ipc):
         delivery, calls = self.delivery(env, ipc=ipc)
         delivery.clipboard = lambda: 'text'

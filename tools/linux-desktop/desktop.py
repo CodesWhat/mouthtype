@@ -663,7 +663,12 @@ class HyprlandDelivery:
                 if error.sent:
                     # The dispatcher may have run it; a retry could paste twice.
                     raise subprocess.TimeoutExpired('hyprctl', limit) from None
-        return self.run(argv, capture_output=True, text=True, check=False, timeout=limit)
+        result = self.run(argv, capture_output=True, text=True, check=False, timeout=limit)
+        output = ((getattr(result, 'stdout', '') or '') + (getattr(result, 'stderr', '') or '')).strip()
+        if output != 'ok' and 'ok'.startswith(output):
+            # The dispatch was issued but nothing, or half an answer, came back: it may have run.
+            raise subprocess.TimeoutExpired('hyprctl', limit)
+        return result
 
     def snapshot(self):
         if self.config.get('mode') not in ('type', 'paste'):
