@@ -70,25 +70,70 @@ def create_update_archive(app, archive):
     run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(archive)], timeout=180)
 
 
-def notarize(path, profile, output, prefix=''):
+ASC_DIRECTORY = Path.home() / '.appstoreconnect'
+
+
+def read_asc_config(config):
+    """Parse KEY=VALUE lines (optionally prefixed with export) without evaluating the file."""
+    values = {}
+    for line in Path(config).read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if line.startswith('export '):
+            line = line[len('export '):].strip()
+        name, separator, value = line.partition('=')
+        if separator:
+            values[name.strip()] = value.strip().strip('"\'')
+    return values
+
+
+def api_key_auth(directory=ASC_DIRECTORY):
+    """Return notarytool API-key arguments, or None when no key file is stored. Values are never printed."""
+    directory = Path(directory)
+    config = directory / 'config.env'
+    if not config.is_file():
+        return None
+    values = read_asc_config(config)
+    key_id, issuer = values.get('ASC_KEY_ID'), values.get('ASC_ISSUER_ID')
+    if not key_id or not issuer:
+        return None
+    key = directory / 'private_keys' / f'AuthKey_{key_id}.p8'
+    if not key.is_file():
+        return None
+    return ['--key', str(key), '--key-id', key_id, '--issuer', issuer]
+
+
+def notary_auth(profile=None, directory=ASC_DIRECTORY):
+    """An explicit Keychain profile overrides; otherwise the App Store Connect API key is the default."""
+    if profile:
+        return ['--keychain-profile', profile]
+    auth = api_key_auth(directory)
+    if auth is None:
+        raise RuntimeError(f'No notarization credentials: add ASC_KEY_ID, ASC_ISSUER_ID and the matching '
+                           f'AuthKey_<id>.p8 under {directory}, or pass --notary-profile')
+    return auth
+
+
+def notarize(path, auth, output, prefix=''):
     """Submit, wait (ten-minute limit), and require Accepted. Returns (submission id, result)."""
-    submitted = run(['xcrun', 'notarytool', 'submit', str(path), '--keychain-profile',
-                     profile, '--output-format', 'json'], timeout=300)
+    submitted = run(['xcrun', 'notarytool', 'submit', str(path), *auth,
+                     '--output-format', 'json'], timeout=300)
     (output / f'{prefix}notarization-submit-output.json').write_text(submitted)
     submission = json.loads(submitted)
     (output / f'{prefix}notarization-submission.json').write_text(json.dumps(submission, indent=2) + '\n')
     submission_id = submission['id']
     print(f'Apple submission {submission_id}; waiting up to ten minutes', flush=True)
     try:
-        status = json.loads(run(['xcrun', 'notarytool', 'wait', submission_id, '--keychain-profile',
-                                 profile, '--output-format', 'json', '--timeout', '10m'], timeout=630))
+        status = json.loads(run(['xcrun', 'notarytool', 'wait', submission_id, *auth,
+                                 '--output-format', 'json', '--timeout', '10m'], timeout=630))
     except Exception:
-        run(['xcrun', 'notarytool', 'info', submission_id, '--keychain-profile', profile,
+        run(['xcrun', 'notarytool', 'info', submission_id, *auth,
              '--output-format', 'json'], log=output / f'{prefix}notarization-last-status.json')
         raise
     (output / f'{prefix}notarization-result.json').write_text(json.dumps(status, indent=2) + '\n')
     if status.get('status') != 'Accepted':
-        run(['xcrun', 'notarytool', 'log', submission_id, '--keychain-profile', profile],
+        run(['xcrun', 'notarytool', 'log', submission_id, *auth],
             log=output / f'{prefix}notarization-rejection.json')
         raise RuntimeError(f'Apple did not accept this file: {status.get("status")}')
     return submission_id, status
@@ -121,9 +166,10 @@ def create_disk_image(app, image, identity):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--notary-profile', required=True)
+    parser.add_argument('--notary-profile', help='Keychain profile; overrides the default App Store Connect API key')
     parser.add_argument('--output-dir', required=True, type=Path)
     args = parser.parse_args()
+    auth = notary_auth(args.notary_profile)
     root = Path(__file__).resolve().parent.parent
     metadata = release_metadata(root)
     version = metadata['MouthtypeDisplayVersion']
@@ -152,7 +198,7 @@ def main():
     upload = output / 'notarization-upload.zip'
     run(['ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(upload)], timeout=180)
     print('Submitting the signed app to Apple', flush=True)
-    submission_id, status = notarize(upload, args.notary_profile, output)
+    submission_id, status = notarize(upload, auth, output)
     run(['xcrun', 'stapler', 'staple', str(app)], log=output / 'stapling.log')
     verify_app(app, output, 'original')
     print('Apple accepted the app; building and checking the final ZIP', flush=True)
@@ -168,7 +214,7 @@ def main():
     image_name = f'Mouthtype-{version}-macos-arm64.dmg'
     image = create_disk_image(app, output / image_name, dmg_identity(identity))
     print('Submitting the signed DMG to Apple', flush=True)
-    image_submission_id, image_status = notarize(image, args.notary_profile, output, 'dmg-')
+    image_submission_id, image_status = notarize(image, auth, output, 'dmg-')
     run(['xcrun', 'stapler', 'staple', str(image)], log=output / 'dmg-stapling.log')
     verify_disk_image(image, output, 'dmg')
     image_digest = hashlib.sha256(image.read_bytes()).hexdigest()

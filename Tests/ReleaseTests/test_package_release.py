@@ -93,5 +93,40 @@ class ReleaseGuardsTests(unittest.TestCase):
         self.assertEqual(marker.read_text(), 'preserve this artifact')
 
 
+class NotaryAuthTests(unittest.TestCase):
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.directory = pathlib.Path(self._temp.name)
+
+    def store(self, config, key_id=None):
+        (self.directory / 'config.env').write_text(config)
+        if key_id:
+            (self.directory / 'private_keys').mkdir(exist_ok=True)
+            (self.directory / 'private_keys' / f'AuthKey_{key_id}.p8').write_text('fake key')
+
+    def test_api_key_is_the_default_when_the_key_file_exists(self):
+        self.store('# comment\nexport ASC_KEY_ID=FAKEKEY123\nexport ASC_ISSUER_ID="fake-issuer-id"\n', 'FAKEKEY123')
+        self.assertEqual(release.notary_auth(None, self.directory), [
+            '--key', str(self.directory / 'private_keys/AuthKey_FAKEKEY123.p8'),
+            '--key-id', 'FAKEKEY123', '--issuer', 'fake-issuer-id'])
+
+    def test_keychain_profile_overrides_the_api_key(self):
+        self.store('ASC_KEY_ID=FAKEKEY123\nASC_ISSUER_ID=fake-issuer-id\n', 'FAKEKEY123')
+        self.assertEqual(release.notary_auth('some-profile', self.directory), ['--keychain-profile', 'some-profile'])
+
+    def test_missing_key_file_or_config_is_rejected_without_a_profile(self):
+        self.store('ASC_KEY_ID=FAKEKEY123\nASC_ISSUER_ID=fake-issuer-id\n')
+        with self.assertRaises(RuntimeError):
+            release.notary_auth(None, self.directory)
+        with self.assertRaises(RuntimeError):
+            release.notary_auth(None, self.directory / 'absent')
+
+    def test_incomplete_config_is_rejected(self):
+        self.store('ASC_KEY_ID=FAKEKEY123\n', 'FAKEKEY123')
+        with self.assertRaises(RuntimeError):
+            release.notary_auth(None, self.directory)
+
+
 if __name__ == '__main__':
     unittest.main()
