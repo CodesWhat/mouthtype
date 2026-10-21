@@ -1,6 +1,10 @@
+import contextlib
 import importlib.util
+import io
 import json
 import re
+import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -14,6 +18,9 @@ spec = importlib.util.spec_from_file_location("omarchy_control", HERE / "control
 control = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(control)
 ORIGINAL_EVENT_TIME = control.event_time
+install_spec = importlib.util.spec_from_file_location("omarchy_install", HERE / "install.py")
+install = importlib.util.module_from_spec(install_spec)
+install_spec.loader.exec_module(install)
 
 
 class AutostartTests(unittest.TestCase):
@@ -175,6 +182,8 @@ class HoldToTalkTests(unittest.TestCase):
         self.recording = False
         self.calls = []
         self.start_gates = []
+        self.stop_gates = []
+        self.stop_errors = []
         self.lock = threading.Lock()
         self.local = threading.local()
         self.boot = "boot-a"
@@ -198,6 +207,10 @@ class HoldToTalkTests(unittest.TestCase):
                 self.recording = True
                 gate = self.start_gates.pop(0) if self.start_gates else None
             elif command == "stop":
+                gate = self.stop_gates.pop(0) if self.stop_gates else None
+                error = self.stop_errors.pop(0) if self.stop_errors else None
+                if error is not None:
+                    raise error
                 self.recording = False
             reply = mock.Mock(returncode=0, stdout=json.dumps({"state": "recording" if self.recording else "idle"}),
                               stderr="")
@@ -337,6 +350,78 @@ class HoldToTalkTests(unittest.TestCase):
                 self.release(11)
                 self.assertFalse(self.recording)
 
+    def test_stop_for_a_released_hold_finishes_before_a_new_press_can_start(self):
+        gate = threading.Event()
+        self.press(10)
+        self.stop_gates = [gate]
+        stopper = self.threaded("stop", 20)
+        self.wait_for(lambda: self.calls.count("stop") == 1)
+        # The next press is launched after the release but reaches the lock while the stop is still in flight.
+        starter = self.threaded("start", 30)
+        time.sleep(.2)
+        self.assertEqual(self.service_calls(), ["start", "stop"])
+        gate.set()
+        stopper.join(5)
+        starter.join(5)
+        self.assertEqual(self.service_calls(), ["start", "stop", "start"])
+        self.assertTrue(self.recording)
+        self.release(40)
+        self.assertFalse(self.recording)
+
+    def test_failed_stop_is_reported_and_leaves_the_lock_and_state_usable(self):
+        self.press(10)
+        self.stop_errors = [subprocess.TimeoutExpired(["mouthtype-linux", "stop"], 35)]
+        with self.assertRaises(RuntimeError):
+            self.release(20)
+        saved = json.loads(control.HOLD.read_text())
+        self.assertTrue(saved["press"]["released"])
+        self.press(30)
+        self.assertTrue(self.recording)
+        self.release(40)
+        self.assertFalse(self.recording)
+
+    def test_hung_daemon_during_cleanup_stop_clears_skipped_and_frees_the_lock(self):
+        gate = threading.Event()
+        self.start_gates = [gate]
+        errors = []
+
+        def first():
+            try:
+                self.event("start", 10)
+            except Exception as error:
+                errors.append(error)
+        thread = threading.Thread(target=first)
+        thread.start()
+        self.addCleanup(thread.join, 5)
+        self.wait_for(lambda: "start" in self.calls)
+        self.wait_for(lambda: json.loads(control.HOLD.read_text()).get("press"))
+        # Its stop (30) runs normally, then the tap (20) arrives late and is marked skipped.
+        self.stop_errors = [None, subprocess.TimeoutExpired(["mouthtype-linux", "stop"], 35)]
+        self.release(30)
+        self.press(20)
+        self.assertTrue(json.loads(control.HOLD.read_text())["press"].get("skipped"))
+        gate.set()
+        thread.join(5)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertFalse(json.loads(control.HOLD.read_text())["press"].get("skipped"))
+        self.press(50)
+        self.assertTrue(self.recording)
+
+    def test_oserror_from_the_cleanup_stop_is_also_contained(self):
+        gate = threading.Event()
+        self.start_gates = [gate]
+        thread = self.threaded("start", 10)
+        self.wait_for(lambda: "start" in self.calls)
+        self.wait_for(lambda: json.loads(control.HOLD.read_text()).get("press"))
+        self.stop_errors = [None, OSError("launcher vanished")]
+        self.release(30)
+        self.press(20)
+        gate.set()
+        thread.join(5)
+        self.assertFalse(thread.is_alive())
+        self.assertFalse(json.loads(control.HOLD.read_text())["press"].get("skipped"))
+
     def test_event_time_reads_process_start_after_the_last_parenthesis(self):
         fields = ["S"] + ["0"] * 18 + ["4242"] + ["0"] * 10
         line = "123 (odd ) name (x) " + " ".join(fields) + "\n"
@@ -348,12 +433,223 @@ class HoldToTalkTests(unittest.TestCase):
             self.assertEqual(ORIGINAL_EVENT_TIME(), control.PROCESS_FALLBACK_TIME)
 
 
+class SetupRunningTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.pidfile = Path(self.directory.name) / "cleanup-setup.pid"
+        self.alive = {4242: (777, "/usr/bin/python3 /x/setup_cleanup.py --destination /y --level fast")}
+        patches = [
+            mock.patch.object(control, "SETUP_PID", self.pidfile),
+            mock.patch.object(control, "process_start", lambda pid: self.alive.get(pid, (None, ""))[0]),
+            mock.patch.object(control, "process_command", lambda pid: self.alive.get(pid, (None, ""))[1]),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def write(self, value):
+        self.pidfile.write_text(value if isinstance(value, str) else json.dumps(value), encoding="utf-8")
+
+    def test_no_pidfile_means_not_running(self):
+        self.assertFalse(control.setup_running())
+
+    def test_matching_pid_start_time_and_command_is_running(self):
+        self.write({"pid": 4242, "start": 777})
+        self.assertTrue(control.setup_running())
+
+    def test_reused_pid_with_a_different_start_time_is_not_running(self):
+        self.write({"pid": 4242, "start": 700})
+        self.assertFalse(control.setup_running())
+
+    def test_unrelated_process_on_the_pid_is_not_running(self):
+        self.alive[4242] = (777, "/usr/bin/vim notes.txt")
+        self.write({"pid": 4242, "start": 777})
+        self.assertFalse(control.setup_running())
+
+    def test_exited_process_is_not_running(self):
+        self.write({"pid": 999, "start": 777})
+        self.assertFalse(control.setup_running())
+
+    def test_malformed_pidfile_is_not_running(self):
+        for content in ["", "nope", "[]", "{}", {"pid": "4242", "start": 777}, {"pid": True, "start": 777},
+                        {"pid": 4242}]:
+            with self.subTest(content=content):
+                self.write(content)
+                self.assertFalse(control.setup_running())
+
+
+class ShortcutBlockTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.bindings = Path(self.directory.name) / "bindings.lua"
+        self.bindings.write_text('local o = require("omarchy")\n', encoding="utf-8")
+        patches = [
+            mock.patch.object(control, "BINDINGS", self.bindings),
+            mock.patch.object(control, "state", lambda: {}),
+            mock.patch.object(control.subprocess, "run", self.fake_run),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def fake_run(self, command, **kwargs):
+        return mock.Mock(returncode=0, stdout="[]" if "binds" in command else "", stderr="")
+
+    def test_toggle_uses_the_omarchy_helper_only_when_it_exists(self):
+        control.set_shortcut("toggle", "super+alt+m")
+        text = self.bindings.read_text(encoding="utf-8")
+        self.assertIn('if type(o) == "table" and type(o.bind) == "function" then', text)
+        self.assertIn('o.bind("SUPER + ALT + M", "Toggle Mouthtype dictation"', text)
+        self.assertRegex(text, r'else\n  hl\.bind\("SUPER \+ ALT \+ M", hl\.dsp\.exec_cmd\(".* toggle"\)\)\nend')
+        info = control.shortcut_info()
+        self.assertEqual(info, {"mode": "toggle", "keys": "SUPER + ALT + M"})
+
+    def test_hold_block_is_still_recognised_as_hold(self):
+        control.set_shortcut("hold", "F9")
+        self.assertEqual(control.shortcut_info(), {"mode": "hold", "keys": "F9"})
+        self.assertIn("release = true", self.bindings.read_text(encoding="utf-8"))
+
+    def test_switching_back_to_off_removes_the_block(self):
+        control.set_shortcut("toggle", "F10")
+        control.set_shortcut("off")
+        self.assertEqual(control.shortcut_info()["mode"], "off")
+        self.assertNotIn("Mouthtype", self.bindings.read_text(encoding="utf-8"))
+
+
+class VersionTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def test_install_reads_plugin_and_app_versions_from_a_checkout(self):
+        source = self.root / "tools/omarchy-plugin"
+        (self.root / "packaging").mkdir()
+        source.mkdir(parents=True)
+        (source / "manifest.json").write_text('{"version": "1.3.0"}', encoding="utf-8")
+        (self.root / "packaging/Version.plist").write_bytes(
+            b'<?xml version="1.0"?><plist version="1.0"><dict><key>MouthtypeDisplayVersion</key>'
+            b'<string>0.3.0</string></dict></plist>')
+        self.assertEqual(install.read_versions(source), {"plugin": "1.3.0", "app": "0.3.0"})
+
+    def test_install_leaves_app_version_empty_without_the_repository(self):
+        source = self.root / "tools/omarchy-plugin"
+        source.mkdir(parents=True)
+        (source / "manifest.json").write_text('{"version": "1.3.0"}', encoding="utf-8")
+        self.assertEqual(install.read_versions(source), {"plugin": "1.3.0", "app": None})
+
+    def test_install_survives_unreadable_inputs(self):
+        source = self.root / "tools/omarchy-plugin"
+        (self.root / "packaging").mkdir()
+        source.mkdir(parents=True)
+        (source / "manifest.json").write_text("[", encoding="utf-8")
+        (self.root / "packaging/Version.plist").write_text("not a plist", encoding="utf-8")
+        self.assertEqual(install.read_versions(source), {"plugin": None, "app": None})
+
+    def test_written_version_file_is_what_the_plugin_reports(self):
+        installed = self.root / "installed"
+        installed.mkdir()
+        install.write_versions(installed, {"plugin": "1.3.0", "app": "0.3.0"})
+        (installed / "manifest.json").write_text('{"version": "9.9.9"}', encoding="utf-8")
+        with mock.patch.object(control, "PLUGIN_DIR", installed):
+            self.assertEqual(control.versions(), {"plugin": "1.3.0", "app": "0.3.0"})
+
+    def test_a_source_checkout_falls_back_to_the_manifest(self):
+        (self.root / "manifest.json").write_text('{"version": "1.3.0"}', encoding="utf-8")
+        with mock.patch.object(control, "PLUGIN_DIR", self.root):
+            self.assertEqual(control.versions(), {"plugin": "1.3.0", "app": None})
+
+    def test_missing_files_give_empty_versions(self):
+        with mock.patch.object(control, "PLUGIN_DIR", self.root):
+            self.assertEqual(control.versions(), {"plugin": None, "app": None})
+
+
+class ControlModuleTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        (self.root / "control_example.py").write_text(
+            "def echo(*words):\n    return {'words': list(words)}\n"
+            "def boom():\n    raise RuntimeError('no thanks')\n"
+            "def state():\n    return {'hijacked': True}\n"
+            "COMMANDS = {'echo': echo, 'boom': boom, 'state': state, 'Bad Name': echo}\n", encoding="utf-8")
+        (self.root / "control_broken.py").write_text("COMMANDS = {\n", encoding="utf-8")
+        (self.root / "control_nocommands.py").write_text("X = 1\n", encoding="utf-8")
+        (self.root / "control_Upper.py").write_text("COMMANDS = {'upper': lambda: {}}\n", encoding="utf-8")
+        (self.root / "control_later.py").write_text("COMMANDS = {'echo': lambda: {'later': True}, 'late-only': lambda: {'ok': 1}}\n",
+                                                    encoding="utf-8")
+        (self.root / "control_data.py").write_text(
+            "from __future__ import annotations\nfrom dataclasses import dataclass\n@dataclass\nclass R:\n    m: str\n"
+            "def data():\n    return {'m': R('ok').m}\nCOMMANDS = {'data': data}\n", encoding="utf-8")
+        (self.root / "notcontrol.py").write_text("COMMANDS = {'sneaky': lambda: {}}\n", encoding="utf-8")
+        patches = [
+            mock.patch.object(control, "PLUGIN_DIR", self.root),
+            mock.patch.object(control, "LOG", self.root / "state" / "control.log"),
+            mock.patch.object(control, "_module_commands", None),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def run_main(self, *argv):
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", ["control.py", *argv]), contextlib.redirect_stdout(out):
+            code = control.main()
+        return code, json.loads(out.getvalue())
+
+    def test_modules_are_loaded_by_name_and_bad_ones_are_skipped(self):
+        commands = control.module_commands()
+        self.assertEqual(sorted(commands), ["boom", "data", "echo", "late-only"])
+        log = control.LOG.read_text(encoding="utf-8")
+        self.assertIn("control_broken.py was not loaded", log)
+        self.assertIn("control_nocommands.py was not loaded", log)
+        self.assertIn("ignored command 'state'", log)
+        self.assertIn("ignored invalid command 'Bad Name'", log)
+        self.assertIn("ignored command 'echo'", log)
+
+    def test_module_using_dataclasses_with_postponed_annotations_loads(self):
+        self.assertEqual(control.module_commands()["data"](), {"m": "ok"})
+        self.assertNotIn("mouthtype_control_broken", sys.modules)
+
+    def test_first_module_alphabetically_owns_a_clashing_verb(self):
+        self.assertEqual(control.module_commands()["echo"]("x"), {"words": ["x"]})
+
+    def test_available_actions_include_module_verbs_and_the_built_ins(self):
+        actions = control.available_actions()
+        self.assertTrue({"echo", "late-only", "toggle", "state"} <= actions)
+        self.assertNotIn("sneaky", actions)
+        self.assertNotIn("upper", actions)
+
+    def test_main_runs_a_module_verb_with_its_arguments(self):
+        self.assertEqual(self.run_main("echo", "a", "b"), (0, {"words": ["a", "b"]}))
+
+    def test_module_error_is_reported_as_json(self):
+        self.assertEqual(self.run_main("boom"), (1, {"error": "no thanks"}))
+
+    def test_wrong_argument_count_is_refused_without_calling_the_verb(self):
+        self.assertEqual(self.run_main("boom", "extra"), (1, {"error": "Invalid control arguments"}))
+
+    def test_built_in_actions_are_not_shadowed(self):
+        with mock.patch.object(control, "state", lambda: {"built_in": True}):
+            self.assertEqual(self.run_main("state"), (0, {"built_in": True}))
+
+    def test_unknown_verb_is_still_rejected(self):
+        self.assertEqual(self.run_main("nothing"), (2, {"error": "Unknown control action"}))
+
+    def test_missing_plugin_directory_loads_nothing(self):
+        with mock.patch.object(control, "PLUGIN_DIR", self.root / "absent"), mock.patch.object(control, "_module_commands", None):
+            self.assertEqual(control.module_commands(), {})
+
+
 class PanelActionTests(unittest.TestCase):
     def test_every_action_the_panel_runs_is_accepted_by_the_dispatcher(self):
         panel = (HERE / "Panel.qml").read_text(encoding="utf-8")
         actions = set(re.findall(r'root\.run\(\["([^"]+)"', panel))
         self.assertIn("cleanup-setup", actions)
-        self.assertEqual(sorted(actions - control.VALID_ACTIONS), [])
+        self.assertEqual(sorted(actions - control.available_actions()), [])
         self.assertNotIn("cleanup-cleanupPage", panel)
         self.assertNotIn("cleanup cleanupPage", panel)
 

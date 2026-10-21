@@ -2,6 +2,8 @@
 """Small JSON bridge between the Omarchy panel and Mouthtype's local CLI."""
 
 import fcntl
+import importlib.util
+import inspect
 import json
 import os
 import re
@@ -28,6 +30,8 @@ ASSETS = Path(__file__).resolve().parent / "assets"
 SAVE_DIALOG = Path(__file__).resolve().parent / "save_dialog.py"
 CLEANUP_DIR = HOME / ".local/share/mouthtype/cleanup-candidate"
 CLEANUP_LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/cleanup-setup.log"
+SETUP_PID = LOG.parent / "cleanup-setup.pid"
+PLUGIN_DIR = Path(__file__).resolve().parent
 CLEANUP_SIZES = {"fast": "about 480 MB", "thorough": "about 2.5 GB"}
 
 IMPORT_ACTIVE = ("preparing", "transcribing", "cancelling")
@@ -201,12 +205,34 @@ def cleanup_models():
     return {"models": models, "setup": progress, "path": str(path)}
 
 
-def setup_running():
+def process_start(pid):
+    """Start time of a process in clock ticks since boot, or None when it is gone or /proc is unreadable."""
     try:
-        result = subprocess.run(["pgrep", "-f", "setup_cleanup.py --destination"], capture_output=True, text=True, timeout=5)
-        return result.returncode == 0
-    except (OSError, subprocess.SubprocessError):
+        stat = Path(f"/proc/{int(pid)}/stat").read_text(encoding="utf-8")
+        return int(stat[stat.rindex(")") + 2:].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def process_command(pid):
+    try:
+        return Path(f"/proc/{int(pid)}/cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace")
+    except (OSError, ValueError):
+        return ""
+
+
+def setup_running():
+    """Whether the cleanup setup this plugin started is still alive, judged from the pidfile it wrote.
+
+    The pid alone can be reused by an unrelated process, so the start time and command line must match too."""
+    try:
+        recorded = json.loads(SETUP_PID.read_text(encoding="utf-8"))
+        pid, started = recorded["pid"], recorded["start"]
+    except (OSError, ValueError, KeyError, TypeError):
         return False
+    if not (isinstance(pid, int) and isinstance(started, int)) or isinstance(pid, bool):
+        return False
+    return process_start(pid) == started and "setup_cleanup.py" in process_command(pid)
 
 
 def config_summary():
@@ -326,6 +352,22 @@ def recent_dictations(limit=5):
     return recent
 
 
+def versions():
+    """Plugin and app versions. install.py writes version.json beside the plugin; a source checkout falls back to manifest.json."""
+    found = {"plugin": None, "app": None}
+    for name in ("version.json", "manifest.json"):
+        try:
+            data = json.loads((PLUGIN_DIR / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for key, field in (("plugin", "plugin" if name == "version.json" else "version"), ("app", "app")):
+            if found[key] is None and isinstance(data.get(field), str):
+                found[key] = data[field]
+    return found
+
+
 def state():
     if not LAUNCHER.is_file() or not CONFIG.is_file():
         return {"running": False, "state": "unavailable", "error": "Mouthtype installation is missing"}
@@ -357,7 +399,7 @@ def state():
             "autostart": unit_enabled(),
             "shortcut": shortcut_mode(), "shortcut_keys": shortcut_info()["keys"],
             "interface": report.get("interface"), "capabilities": report.get("features", {}),
-            "file_import": file_import}
+            "file_import": file_import, "versions": versions()}
 
 
 def unit_enabled():
@@ -499,19 +541,21 @@ def hold_press(t):
     return hold_update(change)
 
 
+def release_change(data, t):
+    last = data["last_release_t"]
+    data["last_release_t"] = t if last is None else max(last, t)
+    press = data["press"]
+    if press is None:
+        return True
+    if press["t"] > t:
+        return False  # a late release for an older press; the current press is still held
+    press["released"] = True
+    return True
+
+
 def hold_release(t):
     """Register a release launched at t. Returns False when it belongs to a press that is already over."""
-    def change(data):
-        last = data["last_release_t"]
-        data["last_release_t"] = t if last is None else max(last, t)
-        press = data["press"]
-        if press is None:
-            return True
-        if press["t"] > t:
-            return False  # a late release for an older press; the current press is still held
-        press["released"] = True
-        return True
-    return hold_update(change)
+    return hold_update(lambda data: release_change(data, t))
 
 
 def hold_alive(mine):
@@ -521,8 +565,26 @@ def hold_alive(mine):
     return hold_update(change)
 
 
+# A stop sent while the hold lock is held must not wedge the next key event behind a hung daemon.
+HOLD_STOP_TIMEOUT = 10
+DAEMON_ERRORS = (RuntimeError, OSError, subprocess.SubprocessError)
+
+
+def stop_under_lock(failures):
+    """Send stop while the hold lock is held, so a newer press cannot start in between and get stopped.
+
+    Failures are collected rather than raised: the caller is inside hold_update, which must still save the state."""
+    try:
+        return deliver("stop", timeout=HOLD_STOP_TIMEOUT)
+    except DAEMON_ERRORS as error:
+        failures.append(error if isinstance(error, RuntimeError) else RuntimeError("Mouthtype did not respond to the stop request"))
+        return None
+
+
 def hold_settle(mine):
-    """After the start request returned: True when the key already came up and the recording must stop."""
+    """After the start request returned: True when the key already came up and the recording was stopped."""
+    failures = []
+
     def change(data):
         press = data["press"]
         if press is None:
@@ -531,21 +593,40 @@ def hold_settle(mine):
             if press["released"] and press.get("skipped"):
                 # The newest press came and went without starting; this start would otherwise leak.
                 press["skipped"] = False
-                try:
-                    deliver("stop")
-                except RuntimeError:
-                    pass
+                stop_under_lock([])
                 cue("stop")
             return False
         if press["released"]:
+            # The key came up before the recording began, so its stop was a no-op. Stop now.
+            stop_under_lock(failures)
             return True
         press["started"] = True
         return False
-    return hold_update(change)
+    settled = hold_update(change)
+    if failures:
+        raise failures[0]
+    return settled
 
 
-def deliver(command, identity=None):
-    result = cli(command, *([identity] if identity else []))
+def hold_stop(t):
+    """Handle a release launched at t. Returns the daemon's reply, or None when the release was stale.
+
+    The stop goes out under the hold lock. Sent after the lock was freed, it could land on a press that
+    began in between and end that recording."""
+    failures = []
+
+    def change(data):
+        if not release_change(data, t):
+            return None
+        return stop_under_lock(failures) or {}
+    response = hold_update(change)
+    if failures:
+        raise failures[0]
+    return response
+
+
+def deliver(command, identity=None, timeout=35):
+    result = cli(command, *([identity] if identity else []), timeout=timeout)
     if result.returncode:
         raise RuntimeError("Mouthtype command failed")
     try:
@@ -573,8 +654,6 @@ def hold_start(t):
             return state()
         response = deliver("start")
     if hold_settle(mine):
-        # The key came up before the recording began, so its stop was a no-op. Stop now.
-        deliver("stop")
         cue("stop")
         return state()
     if response.get("state") == "recording":
@@ -588,7 +667,12 @@ def act(command, identity=None):
         raise RuntimeError("Invalid recording ID")
     if command == "start":
         return hold_start(t)
-    if command == "stop" and not hold_release(t):
+    if command == "stop":
+        response = hold_stop(t)
+        if response is None:
+            return state()
+        if response.get("state") != "recording":
+            cue("stop")
         return state()
     if command in {"toggle", "transcribe"} and not state()["running"]:
         start_service()
@@ -684,7 +768,10 @@ def cleanup_setup(level):
         except (OSError, json.JSONDecodeError):
             pass
     with os.fdopen(fd, "w") as log:
-        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+        child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+    started = process_start(child.pid)
+    if started is not None:
+        atomic_json(SETUP_PID, {"pid": child.pid, "start": started})
     time.sleep(0.5)
     output = state()
     output["page"] = "cleanup"
@@ -769,7 +856,12 @@ def set_shortcut(value, keys=None):
                 raise RuntimeError(spec + " is already bound in Hyprland; choose another key")
         command = Path(__file__).resolve()
         if value == "toggle":
-            block = f'o.bind("{spec}", "Toggle Mouthtype dictation", "{command} toggle")'
+            # Omarchy's `o` helper is not guaranteed to exist in every bindings.lua; fall back to a plain Hyprland bind.
+            block = (f'if type(o) == "table" and type(o.bind) == "function" then\n'
+                     f'  o.bind("{spec}", "Toggle Mouthtype dictation", "{command} toggle")\n'
+                     f'else\n'
+                     f'  hl.bind("{spec}", hl.dsp.exec_cmd("{command} toggle"))\n'
+                     f'end')
         else:
             block = (f'hl.bind("{spec}", hl.dsp.exec_cmd("{command} start"))\n'
                      f'hl.bind("{spec}", hl.dsp.exec_cmd("{command} stop"), {{ release = true }})')
@@ -992,8 +1084,84 @@ VALID_ACTIONS = {
     "forget", "prune"
 }
 
+MODULE_PATTERN = re.compile(r"control_[a-z0-9_]+\.py")
+_module_commands = None
+
+
+def log_note(message):
+    """Best-effort line in the local control log; never lets logging break a command."""
+    try:
+        LOG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd = os.open(LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as log:
+            log.write(time.strftime("%Y-%m-%d %H:%M:%S ") + message + "\n")
+    except OSError:
+        pass
+
+
+def module_commands():
+    """Verbs contributed by sibling control_<name>.py modules, as {verb: function}.
+
+    A module exposes COMMANDS = {"verb": function}. The function takes the remaining command-line
+    arguments as strings and returns a JSON-serialisable dict, or raises RuntimeError, OSError or
+    ValueError with a message the panel can show. A verb cannot shadow a built-in action or a verb
+    from an earlier module (alphabetical). A module that fails to import is logged and skipped."""
+    global _module_commands
+    if _module_commands is not None:
+        return _module_commands
+    commands = {}
+    for path in sorted(PLUGIN_DIR.glob("control_*.py")):
+        if not MODULE_PATTERN.fullmatch(path.name) or path.is_symlink() or not path.is_file():
+            continue
+        try:
+            name = "mouthtype_" + path.stem
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            # dataclasses and typing look the module up by name while it executes.
+            sys.modules[name] = module
+            try:
+                spec.loader.exec_module(module)
+                table = module.COMMANDS
+                if not isinstance(table, dict):
+                    raise TypeError("COMMANDS must be a dict")
+            except BaseException:
+                sys.modules.pop(name, None)
+                raise
+        except Exception as error:
+            log_note(f"{path.name} was not loaded: {type(error).__name__}: {error}")
+            continue
+        for verb, function in table.items():
+            if not isinstance(verb, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", verb) or not callable(function):
+                log_note(f"{path.name}: ignored invalid command {verb!r}")
+            elif verb in VALID_ACTIONS or verb in commands:
+                log_note(f"{path.name}: ignored command {verb!r}, already defined")
+            else:
+                commands[verb] = function
+    _module_commands = commands
+    return commands
+
+
+def available_actions():
+    return VALID_ACTIONS | set(module_commands())
+
+
+def run_module_command(verb, args):
+    function = module_commands()[verb]
+    try:
+        inspect.signature(function).bind(*args)
+    except TypeError:
+        raise RuntimeError("Invalid control arguments")
+    return function(*args)
+
 
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] not in VALID_ACTIONS and sys.argv[1] in module_commands():
+        try:
+            print(json.dumps(run_module_command(sys.argv[1], sys.argv[2:])))
+            return 0
+        except (OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError) as error:
+            print(json.dumps({"error": str(error)}))
+            return 1
     if len(sys.argv) < 2 or sys.argv[1] not in VALID_ACTIONS or (
         sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "import-start", "cleanup-setup", "forget"}
         and len(sys.argv) != 3
