@@ -1,5 +1,6 @@
 import "./hero-demo.js";
 import "./menubar-mouth.js";
+import "./wpm.js";
 
 const principles = document.querySelector(".principles-group");
 const repeatedPrinciples = principles.cloneNode(true);
@@ -65,20 +66,83 @@ const examples = {
     note: "Filler removed. Punctuation added. Saved spelling applied.",
   },
 };
-document.querySelectorAll("[data-copy]").forEach((button) => {
+const card = document.querySelector("#demo .example");
+const exampleText = document.querySelector("#example-text");
+const exampleNote = document.querySelector("#example-note");
+const exampleLive = document.querySelector("#example-live");
+const copyButtons = document.querySelectorAll("[data-copy]");
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)");
+const fadeMs = 350;
+const cycleMs = 6000;
+let current = "clean";
+let swapTimer;
+let cycleTimer;
+let stopped = false;
+let cardVisible = false;
+
+function paint(key) {
+  copyButtons.forEach((item) =>
+    item.setAttribute("aria-pressed", String(item.dataset.copy === key)),
+  );
+  if (key === "clean") {
+    const spelling = document.createElement("mark");
+    spelling.textContent = "Sean";
+    exampleText.replaceChildren("Send the mockups to ", spelling, " before Friday.");
+  } else exampleText.textContent = examples.heard.text;
+  exampleNote.lastChild.textContent = examples[key].note;
+}
+
+function show(key, { announce = false } = {}) {
+  clearTimeout(swapTimer);
+  current = key;
+  if (reduceMotion.matches) {
+    paint(key);
+  } else {
+    exampleText.classList.add("is-fading");
+    swapTimer = setTimeout(() => {
+      paint(key);
+      exampleText.classList.remove("is-fading");
+    }, fadeMs);
+  }
+  if (announce) exampleLive.textContent = `${examples[key].label}: ${examples[key].text}`;
+}
+
+function syncCycle() {
+  const run =
+    !stopped && cardVisible && !document.hidden && !reduceMotion.matches;
+  if (run && !cycleTimer) {
+    cycleTimer = setInterval(
+      () => show(current === "clean" ? "heard" : "clean"),
+      cycleMs,
+    );
+  } else if (!run && cycleTimer) {
+    clearInterval(cycleTimer);
+    cycleTimer = undefined;
+  }
+}
+
+function stopCycling() {
+  stopped = true;
+  syncCycle();
+}
+
+examples.heard.label = "As spoken";
+examples.clean.label = "Cleaned up";
+copyButtons.forEach((button) => {
   button.addEventListener("click", () => {
-    document
-      .querySelectorAll("[data-copy]")
-      .forEach((item) =>
-        item.setAttribute("aria-pressed", String(item === button)),
-      );
-    const text = document.querySelector("#example-text");
-    if (button.dataset.copy === "clean") {
-      const spelling = document.createElement("mark");
-      spelling.textContent = "Sean";
-      text.replaceChildren("Send the mockups to ", spelling, " before Friday.");
-    } else text.textContent = examples.heard.text;
-    document.querySelector("#example-note").textContent =
-      examples[button.dataset.copy].note;
+    stopCycling();
+    show(button.dataset.copy, { announce: true });
   });
 });
+["pointerenter", "pointerdown", "focusin"].forEach((type) =>
+  card.addEventListener(type, stopCycling),
+);
+document.addEventListener("visibilitychange", syncCycle);
+reduceMotion.addEventListener("change", syncCycle);
+new IntersectionObserver(
+  ([entry]) => {
+    cardVisible = entry.isIntersecting;
+    syncCycle();
+  },
+  { threshold: 0.4 },
+).observe(card);

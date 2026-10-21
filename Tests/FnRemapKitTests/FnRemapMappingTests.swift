@@ -33,4 +33,9 @@ import Testing
         let restored = FnRemapMapping.restoring(current: [capsToEscape, ours, addedLater], ours: ours, original: [theirFn, capsToEscape])
         #expect(restored == [capsToEscape, addedLater, theirFn])
     }
+
+    @Test func restoreDoesNotDuplicateAnEntryAlreadyPutBack() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0039]
+        #expect(FnRemapMapping.restoring(current: [theirFn], ours: ours, original: [theirFn]) == [theirFn])
+    }
 }

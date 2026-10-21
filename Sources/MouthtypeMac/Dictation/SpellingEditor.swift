@@ -191,6 +191,11 @@ import Observation
         } catch { self.error = error.localizedDescription }
     }
 
+    func draftSnapshot() -> DraftRecovery.Draft? {
+        guard isDirty else { return nil }
+        return DraftRecovery.Draft(kind: .spelling, heardForms: heardForms, heardInput: heardInput, written: written, starred: starred)
+    }
+
     private func setDraft(_ rules: [DictionaryRule], editing: Bool) {
         original = rules
         isEditing = editing
@@ -220,5 +225,5 @@ struct SpellingWord: Identifiable, Equatable {
     var starred: Bool { !rules.isEmpty && rules.allSatisfy(\.starred) }
     /// Everyday-word warning for the first heard form that needs one.
     var warning: String? { rules.lazy.compactMap { OrdinaryWords.warning(for: $0) }.first }
-    var hasEverydayPhrase: Bool { rules.contains { OrdinaryWords.warning(for: $0) != nil && $0.heard.contains(where: \.isWhitespace) } }
+    var hasEverydayPhrase: Bool { rules.contains { OrdinaryWords.warning(for: $0) != nil && $0.heard.trimmingCharacters(in: .whitespacesAndNewlines).contains(where: \.isWhitespace) } }
 }

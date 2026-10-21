@@ -36,6 +36,8 @@ public final class HotkeyService {
         didSet { if health != oldValue { onHealthChange?(health) } }
     }
     public var onHealthChange: (@MainActor (HotkeyHealth) -> Void)?
+    /// Runs on every watchdog tick, for checks that live outside the taps (the Fn remap still being in the HID mapping).
+    public var onWatchdog: (@MainActor () -> Void)?
     /// Every sample either tap delivers, before it reaches the processor. For the probes.
     public var sampleObserver: (@MainActor (TapSample) -> Void)?
 
@@ -430,6 +432,7 @@ public final class HotkeyService {
             for (role, slot) in slots where slot.retry == nil {
                 if let tap = slot.tap, !tap.isEnabled { noteDisabled(role) }
             }
+            onWatchdog?()
         }
         if !engine.isRecording { secureInput = IsSecureEventInputEnabled() }
         refreshHealth()

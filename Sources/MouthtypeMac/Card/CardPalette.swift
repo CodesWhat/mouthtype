@@ -81,6 +81,8 @@ struct CardPalette {
     /// appearance, so these are fixed per appearance rather than the adaptive colours.
     /// Minimal's lime takes dark ink, so hover and press lighten it (more contrast) where the other skins darken on press.
     var primaryLightens = false
+    /// A 1px edge on the primary button where the lime sits on a light body (about 1.4:1 there); nil on a dark body.
+    var primaryEdge: NSColor?
 
     /// The primary button's fill for a state, as the button draws it.
     func primaryFill(hovered: Bool, pressed: Bool) -> NSColor {
@@ -91,7 +93,7 @@ struct CardPalette {
             : hovered ? primaryFill.blended(withFraction: 0.5, of: .white) ?? primaryFill : primaryFill
     }
 
-    static func lime(dark: Bool) -> NSColor { NSColor(hex: dark ? 0xA6CD52 : 0x76A11A) }
+    static func lime(dark: Bool) -> NSColor { NSColor(hex: 0xD3E58B) }
     static func onLime(dark: Bool) -> NSColor { NSColor(hex: dark ? 0x1F1F21 : 0x1D1D1F) }
 
     func accent(for kind: DeliveryCard.Kind) -> NSColor {
@@ -155,7 +157,8 @@ struct CardPalette {
                 bodyFill: nil, border: nil, shadowFill: .clear,
                 rowShade: dark ? NSColor.black.withAlphaComponent(0.25) : NSColor.black.withAlphaComponent(0.04),
                 rowRule: dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.08),
-                primaryLightens: flavor == .minimal
+                primaryLightens: flavor == .minimal,
+                primaryEdge: flavor == .minimal && !dark ? NSColor(hex: 0x4A6A12) : nil
             )
         }
     }

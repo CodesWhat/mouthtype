@@ -74,7 +74,7 @@ struct Typography: Sendable {
     let choice: TextFontChoice
     var overrides: TextFontOverrides
     /// Whether a family is present, injectable so a missing family is testable.
-    var isInstalled: @Sendable (String) -> Bool = { NSFontManager.shared.availableFontFamilies.contains($0) }
+    var isInstalled: @Sendable (String) -> Bool = { FontRegistry.ensureRegistered(); return NSFontManager.shared.availableFontFamilies.contains($0) }
 
     init(choice: TextFontChoice, overrides: TextFontOverrides = TextFontOverrides(), isInstalled: (@Sendable (String) -> Bool)? = nil) {
         self.choice = choice
@@ -97,7 +97,8 @@ struct Typography: Sendable {
     }
 
     static var systemaAvailable: Bool {
-        NSFont(name: FontRegistry.serifName, size: 12) != nil && NSFont(name: FontRegistry.monoName, size: 12) != nil
+        FontRegistry.ensureRegistered()
+        return         NSFont(name: FontRegistry.serifName, size: 12) != nil && NSFont(name: FontRegistry.monoName, size: 12) != nil
             && FontRegistry.sansNames.allSatisfy { NSFont(name: $0, size: 12) != nil }
     }
 
@@ -142,6 +143,7 @@ struct Typography: Sendable {
     }
 
     private static func systema(_ role: TextRole, _ spec: Spec) -> NSFont {
+        FontRegistry.ensureRegistered()
         let name: String
         switch role {
         case .header, .pillMessage: name = FontRegistry.serifName
@@ -161,6 +163,7 @@ struct Typography: Sendable {
     }
 
     private static func family(_ family: String, _ spec: Spec) -> NSFont {
+        FontRegistry.ensureRegistered()
         let manager = NSFontManager.shared
         let weight: Int = switch spec.weight {
         case .semibold: 8

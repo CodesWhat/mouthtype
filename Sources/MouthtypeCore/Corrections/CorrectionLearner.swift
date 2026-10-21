@@ -40,6 +40,8 @@ public struct CorrectionAnalysis: Sendable, Equatable {
 /// changed, which is rewriting rather than correcting.
 public enum CorrectionLearner {
     public static let maxDistanceRatio = 0.65
+    /// Longest squashed side `similar` will compare. Edit distance is quadratic, and no vocabulary fix is this long.
+    static let maxSimilarLength = 64
     public static let maxPhraseWords = 3
     /// Largest alignment table (dictated words times field words) worth filling; a bigger field gives up.
     static let maxCells = 12_000_000
@@ -220,6 +222,7 @@ public enum CorrectionLearner {
     static func similar(_ a: String, _ b: String) -> Bool {
         let left = squash(a), right = squash(b)
         guard !left.isEmpty, !right.isEmpty else { return false }
+        guard left.count <= maxSimilarLength, right.count <= maxSimilarLength else { return false }
         let ratio = Double(TextMetrics.editDistance(left, right)) / Double(max(left.count, right.count))
         if ratio <= maxDistanceRatio { return true }
         return left.count >= 3 && right.count >= 3 && soundex(left) == soundex(right) && soundex(left) != nil

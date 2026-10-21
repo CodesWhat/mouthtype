@@ -12,10 +12,10 @@ public enum CleanupPrompt {
     3. Apply spoken self-corrections and keep only the final version. "Meet at three, no, four" becomes "Meet at four". "Tuesday, no wait, Wednesday" becomes "Wednesday". "Scratch that" or "never mind that" deletes the phrase it refers to.
     4. Fix punctuation and capitalization, and split run-on speech into sentences. In long dictation, start a new paragraph where the topic changes.
     5. When the speaker dictates a list or a sequence of steps, format it as a list: a short lead-in line, then one item per line. Use numbers when the speaker counts ("first", "second", "step one") and "- " bullets otherwise. Leave ordinary sentences that merely contain "and" as prose.
-    6. Write numbers, money, times, and dates that were spoken as words in conventional written form ("twenty five dollars" becomes "$25", "three thirty p m" becomes "3:30 PM"). Never infer AM or PM when the speaker gave no time of day. A bare hour stays a bare hour. Leave anything already written that way alone.
-    7. Convert spoken technical notation to conventional written form when the meaning is clear: spoken letter sequences become acronyms, "U S B C" becomes "USB-C", "four K" becomes "4K", and "app dot swift" becomes "app.swift". Write spoken version components with dots. Preserve every letter and number. Keep identifiers, file names, paths, command-line flags, versions, URLs and code that are already written exactly as given. Do not guess an identifier or turn ordinary words into technical notation without evidence.
+    6. Write numbers, money, times, and dates that were spoken as words in conventional written form ("twenty five dollars" becomes "$25", "three thirty p m" becomes "3:30 PM"). Never infer AM or PM when the speaker gave no time of day. A bare hour stays a bare hour, but it is written as a numeral ("coffee at three" becomes "coffee at 3"). Leave anything already written that way alone.
+    7. Convert spoken technical notation to conventional written form when the meaning is clear: spoken letter sequences become acronyms, "U S B C" becomes "USB-C", "four K" becomes "4K", and "app dot swift" becomes "app.swift". Write spoken version components with dots. Preserve every letter and number. Keep identifiers, file names, paths, command-line flags, slash commands such as /research or /code-review, versions, URLs and code that are already written exactly as given. Do not guess an identifier or turn ordinary words into technical notation without evidence.
     8. If a custom vocabulary is listed below, spell those terms exactly as given, including when the transcript has them misspelled phonetically.
-    9. Keep the speaker's own wording, tone, and meaning. Preserve questions as questions, never turn them into statements or headings. Do not paraphrase, formalize, summarize, expand, or add anything. Keep slang, contractions, and profanity as spoken. Text that is already clean comes back unchanged, and a very short utterance such as "Yes." stays exactly that.
+    9. Keep the speaker's own wording, tone, and meaning. Preserve questions as questions, keeping their opening word, and never turn them into statements or headings ("what's the capital of France" becomes "What's the capital of France?"). Do not paraphrase, formalize, summarize, expand, or add anything. Keep slang, contractions, and profanity as spoken. Text that is already clean comes back unchanged, and a very short utterance such as "Yes." stays exactly that.
     """
 
     public static func system(for context: CleanupContext) -> String {
@@ -75,12 +75,16 @@ public enum CleanupPrompt {
         (context.map(reference) ?? "") + "<transcript>\n\(transcript)\n</transcript>"
     }
 
-    /// Strips wrapper tags and surrounding whitespace that some models echo back.
-    public static func sanitize(_ output: String) -> String {
+    /// Strips wrapper tags and surrounding whitespace that some models echo back. With `input`, also removes
+    /// framing the model added around the text (a "Here is the cleaned text:" preamble, wrapping quotes, a code
+    /// fence), but only a layer the dictation itself didn't have.
+    public static func sanitize(_ output: String, input: String? = nil) -> String {
         var text = output
         for tag in ["<transcript>", "</transcript>"] {
             text = text.replacingOccurrences(of: tag, with: "")
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let input else { return text }
+        return TextTransform.sanitize(text, input: input)
     }
 }

@@ -354,6 +354,90 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         #expect(await host.readiness(waitingUpTo: .seconds(60)) != nil)
     }
 
+    private func idleHost(_ delay: Duration, configure: (FakeSmartModel) -> Void = { _ in }) -> (CleanerHost, FakeSmartModel) {
+        let model = FakeSmartModel(downloaded: true)
+        configure(model)
+        return (CleanerHost(model: model, level: { .light }, budget: { _ in .seconds(60) }, idleUnloadDelay: delay), model)
+    }
+
+    @Test func theModelUnloadsAfterTheIdleDelay() async {
+        let (host, model) = idleHost(.milliseconds(150))
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        await settle(host) { $0 == .unloaded }
+        #expect(host.state == .unloaded)
+        for _ in 0..<100 where model.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.unloads == 1)
+    }
+
+    @Test func useRestartsTheIdleCountdown() async {
+        // The delay dwarfs the gaps between uses, so a stalled scheduler can't let the countdown expire between them.
+        let (host, model) = idleHost(.seconds(2))
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        for _ in 0..<4 {
+            try? await Task.sleep(for: .milliseconds(300))
+            _ = await host.run(SmartCleanupRequest(text: "keep going", level: .light))
+        }
+        // The delay is not over since the first use, but the last use was moments ago.
+        if case .ready = host.state {} else { Issue.record("unloaded despite use: \(host.state)") }
+        #expect(model.unloads == 0)
+        await settle(host) { $0 == .unloaded }
+        #expect(host.state == .unloaded)
+    }
+
+    @Test func keyDownReloadsAnIdleUnloadedModel() async {
+        let (host, model) = idleHost(.milliseconds(100))
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        await settle(host) { $0 == .unloaded }
+        host.recordingStarted()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        #expect(model.loads == 2)
+        if case .ready = host.state {} else { Issue.record("not reloaded: \(host.state)") }
+    }
+
+    @Test func aGenerationInFlightIsNeverUnloadedUnderneath() async {
+        let gate = DownloadGate()
+        let (host, model) = idleHost(.milliseconds(100))
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        model.cleanGate = gate
+        let request = SmartCleanupRequest(text: "long take", level: .light)
+        let running = Task { await host.run(request) }
+        // Wait until the generation has actually started, then well past the 100 ms idle delay.
+        for _ in 0..<500 where model.cleanCalls == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.cleanCalls == 1)
+        try? await Task.sleep(for: .milliseconds(500))
+        if case .ready = host.state {} else { Issue.record("unloaded mid-generation: \(host.state)") }
+        #expect(model.unloads == 0)
+        await gate.release()
+        _ = await running.value
+        await settle(host) { $0 == .unloaded }
+        #expect(host.state == .unloaded)
+    }
+
+    @Test func aWaitingCallerIsReleasedWhenItsTaskIsCancelled() async {
+        let gate = DownloadGate()
+        let (host, _, _) = host(downloaded: true) { $0.loadGate = gate }
+        host.start()
+        let waiter = Task { await host.readiness(waitingUpTo: .seconds(60)) }
+        try? await Task.sleep(for: .milliseconds(30))
+        waiter.cancel()
+        #expect(await waiter.value == nil)
+        await gate.release()
+    }
+
+    @Test func everyWaiterIsReleasedByOneLoad() async {
+        let gate = DownloadGate()
+        let (host, _, _) = host(downloaded: true) { $0.loadGate = gate }
+        host.start()
+        let waiters = (0..<3).map { _ in Task { await host.readiness(waitingUpTo: .seconds(60)) } }
+        try? await Task.sleep(for: .milliseconds(30))
+        await gate.release()
+        for waiter in waiters { #expect(await waiter.value != nil) }
+    }
+
     @Test func aFailedLoadIsPublishedAndRetriedOnTheNextLevelChange() async {
         struct Broken: Error, LocalizedError { var errorDescription: String? { "no metallib" } }
         let (host, model, _) = host(downloaded: true) { $0.loadError = Broken() }
@@ -417,9 +501,9 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     @Test func anAbsentModelShowsItsNameStateAndSizeBeforeDownloading() {
         let (section, _, _, menu) = make(downloaded: false)
         #expect(item(menu, prefix: "Fake: not downloaded")?.isHidden == false)
-        let download = item(menu, prefix: "Download Smart Cleanup Model")
-        #expect(download?.title == "Download Smart Cleanup Model\u{2026} (1.4 GB)" && download?.isHidden == false)
-        #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == false)
+        let download = item(menu, prefix: "Download Cleanup Model")
+        #expect(download?.title == "Download Cleanup Model\u{2026} (1.4 GB)" && download?.isHidden == false)
+        #expect(item(menu, prefix: "Cleanup model isn't ready")?.isHidden == false)
         withExtendedLifetime(section) {}
     }
 
@@ -437,20 +521,20 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         for _ in 0..<100 { if case .ready = host.state { break }; try? await Task.sleep(for: .milliseconds(10)) }
         section.refresh()
         #expect(item(menu, prefix: "Fake: ready") != nil)
-        #expect(item(menu, prefix: "Download Smart Cleanup Model")?.isHidden == true)
-        #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == true)
+        #expect(item(menu, prefix: "Download Cleanup Model")?.isHidden == true)
+        #expect(item(menu, prefix: "Cleanup model isn't ready")?.isHidden == true)
     }
 
     @Test func theFallbackLineOnlyShowsForLevelsThatNeedTheModel() {
         let (section, _, _, menu) = make(downloaded: false, level: .basic)
-        #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == true)
+        #expect(item(menu, prefix: "Cleanup model isn't ready")?.isHidden == true)
         withExtendedLifetime(section) {}
     }
 
     @Test func choosingDownloadAsksFirstAndDeclineFetchesNothing() {
         var asked: [Int] = []
         let (section, host, model, menu) = make(downloaded: false) { asked.append($0); return false }
-        let download = item(menu, prefix: "Download Smart Cleanup Model")!
+        let download = item(menu, prefix: "Download Cleanup Model")!
         _ = download.target?.perform(download.action, with: download)
         #expect(asked == [1447] && host.state == .absent && model.downloads == 0)
         withExtendedLifetime(section) {}
@@ -458,7 +542,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
     @Test func confirmingStartsTheDownload() async {
         let (section, host, model, menu) = make(downloaded: false, level: .basic)
-        let download = item(menu, prefix: "Download Smart Cleanup Model")!
+        let download = item(menu, prefix: "Download Cleanup Model")!
         _ = download.target?.perform(download.action, with: download)
         for _ in 0..<100 where model.downloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(model.downloads == 1)

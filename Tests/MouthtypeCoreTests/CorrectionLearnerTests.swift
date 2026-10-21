@@ -22,6 +22,14 @@ import Testing
         #expect(pairs(pasted, field) == expected)
     }
 
+    @Test func anOversizedWordIsSkippedQuickly() {
+        let huge = String(repeating: "a", count: 100_000)
+        let start = ContinuousClock.now
+        #expect(pairs("alpha \(huge) omega", "alpha \(huge)b omega").isEmpty)
+        #expect(!CorrectionLearner.similar(huge, huge + "b"))
+        #expect(ContinuousClock.now - start < .seconds(2))
+    }
+
     @Test func textTypedBeforeAndAfterTheSpanIsSkipped() {
         let field = "Hi team, quick note. Hov said the new build is ready for review today. Thanks, Sam"
         #expect(pairs(sentence, field) == ["Hove>Hov"])

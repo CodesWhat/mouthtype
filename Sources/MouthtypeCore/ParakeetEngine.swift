@@ -1,5 +1,6 @@
 import FluidAudio
 import Foundation
+import os
 
 public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPreview, VocabularyBiasing {
     static let v3ID = "parakeet-tdt-v3"
@@ -11,6 +12,15 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     public nonisolated let displayName: String
     public nonisolated let modelDirectory: URL
 
+    /// Download size of each model FluidAudio fetches, in the order it fetches them: preprocessor, encoder, decoder, joint.
+    /// From the Hugging Face repo trees, so the bar has a total before the first byte arrives.
+    static func downloadStageBytes(for version: AsrModelVersion) -> [Int64] {
+        switch version {
+        case .v2: [300_000, 446_200_000, 14_400_000, 3_500_000]
+        default: [500_000, 446_200_000, 23_600_000, 12_700_000]
+        }
+    }
+
     private let version: AsrModelVersion
     private let language: Language?
     private var manager: AsrManager?
@@ -21,6 +31,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     private let booster: VocabularyBooster
 
     init(version: AsrModelVersion, language: Language? = nil) {
+        ModelPins.installFluidAudioRevisions()
         self.version = version
         self.language = language
         switch version {
@@ -78,19 +89,29 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
             return PrepareTimings(downloadSeconds: 0, loadSeconds: 0, downloaded: false)
         }
         let clock = ContinuousClock()
+        await ModelCacheAdoption.adoptCache(of: version == .v2 ? .parakeetV2 : .parakeetV3, pin: version == .v2 ? ModelPins.parakeetV2 : ModelPins.parakeetV3)
+        await ModelCacheAdoption.adoptCache(of: .vad, pin: ModelPins.sileroVAD)
         let alreadyPresent = AsrModels.modelsExist(at: modelDirectory, version: version)
-        if !alreadyPresent { await report?(.downloading(fraction: 0)) }
+        let tracker = OSAllocatedUnfairLock(initialState: StagedDownloadTracker(stageBytes: Self.downloadStageBytes(for: version)))
+        if alreadyPresent {
+            await report?(.cached)
+        } else {
+            await report?(.progress(tracker.withLock { $0.initial }))
+        }
 
         var directory = modelDirectory
         let downloadTime = try await clock.measure {
             directory = try await AsrModels.download(version: version, progressHandler: { progress in
                 guard let report else { return }
-                let stage: EnginePreparation
+                let event: StagedDownloadTracker.Event
                 switch progress.phase {
-                case .listing: stage = .downloading(fraction: 0)
-                case .downloading: stage = .downloading(fraction: progress.fractionCompleted)
-                case .compiling: stage = .compiling
+                case .listing: event = .listing
+                case .downloading: event = .downloading
+                case let .compiling(modelName): event = modelName.isEmpty ? .finished : .compiling
                 }
+                let (update, complete) = tracker.withLock { ($0.update(fraction: progress.fractionCompleted, event: event), $0.isComplete) }
+                // Compiling one model while the next still downloads is not the compile stage the user waits on.
+                let stage: EnginePreparation = complete ? .compiling : .progress(update)
                 Task { await report(stage) }
             })
         }
@@ -175,6 +196,17 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
                                      startedAt: ContinuousClock.Instant) async throws -> Transcription {
         let clock = ContinuousClock()
         let start = startedAt
+        // VAD and ASR run together. VAD stays the filter for noise the recogniser would turn into words: with no speech
+        // the ASR result is dropped, and an ASR failure only matters when there was speech.
+        let language = version == .v3 ? language : nil
+        async let asr: Result<ASRResult, Error> = {
+            do {
+                var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+                return .success(try await manager.transcribe(samples, decoderState: &state, language: language))
+            } catch {
+                return .failure(error)
+            }
+        }()
         let speech = try await detector.process(samples)
         guard speech.contains(where: { $0.isVoiceActive }) else {
             return Transcription(
@@ -184,8 +216,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
                 modelRevision: version == .v2 ? Repo.parakeetV2.rawValue : Repo.parakeetV3.rawValue
             )
         }
-        var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-        let result = try await manager.transcribe(samples, decoderState: &state, language: version == .v3 ? language : nil)
+        let result = try await asr.get()
         let units = (result.tokenTimings ?? []).map {
             SubwordUnit(text: $0.token, start: $0.startTime, end: $0.endTime, confidence: $0.confidence)
         }

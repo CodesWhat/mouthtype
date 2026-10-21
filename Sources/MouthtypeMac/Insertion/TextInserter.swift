@@ -20,7 +20,8 @@ public final class TextInserter {
     private let clipboard: PasteboardSession
     private let keys: PasteKeyResolving
     private let sleep: @Sendable (TimeInterval) async throws -> Void
-    private let now: @MainActor () -> Date
+    /// Monotonic, so a wall-clock jump (sleep/wake, NTP) can neither expire nor stretch a deadline.
+    private let now: @MainActor () -> ContinuousClock.Instant
     /// How many real key presses and clicks have happened, or nil when that isn't known.
     private let inputGeneration: @MainActor () -> UInt64?
     private let observeBoundary: @MainActor (PasteBoundaryDiagnostic) -> Void
@@ -35,14 +36,13 @@ public final class TextInserter {
     private var deliveryGeneration = 0
     private var verification: Task<Void, Never>?
     private var onVerified: (@MainActor (PasteVerification) -> Void)?
-
     /// What the last successful paste put in the field and where.
     private struct LastPaste {
         var pid: pid_t
         var bundleID: String?
         var element: FocusedElement?
         var finalCharacter: Character
-        var date: Date
+        var date: ContinuousClock.Instant
         /// The input count right after the paste; nil when unknown.
         var inputGeneration: UInt64?
     }
@@ -51,7 +51,7 @@ public final class TextInserter {
     public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
         self.observeBoundary = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
         self.chunkedPaste = { PasteSettings.chunksEnabled($0) }
-        self.now = { Date() }
+        self.now = { ContinuousClock.now }
         self.inputGeneration = inputGeneration
         self.restrictedToPID = restrictedToPID
         self.focus = AccessibilityFocusReader()
@@ -66,7 +66,7 @@ public final class TextInserter {
     init(
         focus: FocusReading, pasteboard: PasteboardAccess, poster: PasteEventPosting, keys: PasteKeyResolving,
         schedule: @escaping PasteboardSession.Schedule, sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
-        now: @escaping @MainActor () -> Date = { Date() }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
+        now: @escaping @MainActor () -> ContinuousClock.Instant = { ContinuousClock.now }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
         restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false },
         observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
     ) {
@@ -121,7 +121,7 @@ public final class TextInserter {
     /// The text around the cursor in the focused field, for the cleanup pass. Nil for a secure field or when the app
     /// won't say. The text is used for one cleanup run and neither stored nor logged.
     public func insertionContext() -> InsertionContext? {
-        let now = focus.snapshot()
+        let now = focus.recheck()
         guard !now.isSecure, !focus.isSecureInputEnabled, let element = now.element else { return nil }
         return focus.insertionContext(of: element)
     }
@@ -136,10 +136,9 @@ public final class TextInserter {
         batchGeneration += 1
         cancelVerification()
         let work = Task {
-            let clock = ContinuousClock()
-            let deadline = clock.now.advanced(by: .seconds(PasteboardSession.receiptCap))
+            let deadline = now() + .seconds(PasteboardSession.receiptCap)
             for _ in 0..<400 {
-                guard deliveryActive, clock.now < deadline else { break }
+                guard deliveryActive, now() < deadline else { break }
                 do { try await sleep(0.02) } catch { break }
             }
             if !deliveryActive, clipboard.holdsPaste(clipboard.pasteGeneration) {
@@ -223,6 +222,9 @@ public final class TextInserter {
             Log.app.info("nothing frontmost; transcript left on the clipboard")
             return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
         case .paste:
+            if now.focusOwnerDiffersFromFrontmost {
+                return leaveOnClipboard(text, because: "focus belongs to another process than the frontmost app", moved: moved, target: now)
+            }
             if PasteTargetPolicy.refuses(role: now.role, textSettable: now.isTextSettable) {
                 lastText = text
                 clipboard.copy(text)
@@ -230,7 +232,9 @@ public final class TextInserter {
                 return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
             }
             let reliableReadBack = PasteTargetPolicy.unchangedProvesFailure(bundleID: now.bundleID)
-            var before = now.element.map { focus.textBeforeCursor(of: $0) } ?? .unknown
+            // Read fresh here: the cleanup pass awaited since its read, and the field can change without any key or click.
+            var axReads = now.element != nil
+            var before = now.element.map { element in focus.prePaste { focus.textBeforeCursor(of: element) } } ?? .unknown
             var continuation = PasteBoundaryDiagnostic.Continuation.notNeeded
             if !reliableReadBack || before == .unknown {
                 continuation = continuationCheck(for: now)
@@ -242,14 +246,36 @@ public final class TextInserter {
             ))
             let keyCode = keys.pasteKeyCode()
             // Accessibility reads can wait on another app. Recheck before borrowing the clipboard or posting keys.
-            let fieldBefore = PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
-                ? now.element.map { focus.readField(of: $0) } : nil
-            var checked = focus.snapshot()
+            // The baseline only feeds the read-back, so it is read only when someone is listening for the verdict.
+            let fieldBefore = onVerified != nil && PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
+                ? now.element.map { element in focus.prePaste { focus.readField(of: element) } } : nil
+            axReads = axReads || fieldBefore != nil
             let checkedSecureInput = focus.isSecureInputEnabled
+            var checked = now
+            if axReads {
+                let light = focus.prePaste { focus.recheck() }
+                let steady = light.pid == now.pid && light.bundleID == now.bundleID && light.element == now.element
+                    && !light.isSecure && !light.focusOwnerDiffersFromFrontmost && !checkedSecureInput
+                // Anything unsteady gets the full read, so the guards and the reported target see the whole snapshot.
+                if !steady {
+                    checked = focus.snapshot()
+                    // The full read can only add detail. A secure field or owner mismatch the light read saw stands
+                    // even if the full read's secure or ancestry lookups fail.
+                    checked.isSecure = checked.isSecure || light.isSecure
+                    if light.focusOwnerDiffersFromFrontmost {
+                        checked.focusedOwnerPID = light.focusedOwnerPID
+                        checked.focusedApplicationPID = light.focusedApplicationPID
+                    }
+                }
+            }
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
                 checked.isSecure = checked.isSecure || checkedSecureInput
                 return DeliveryResult(method: .none, outcome: .secureDiscard,
                                       focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
+            }
+            if checked.focusOwnerDiffersFromFrontmost {
+                return leaveOnClipboard(text, because: "focus moved to another process during paste preparation",
+                                        moved: moved || now.hasChanged(to: checked), target: checked)
             }
             lastText = text
             guard checked.pid == now.pid, checked.bundleID == now.bundleID, checked.element == now.element else {
@@ -304,12 +330,18 @@ public final class TextInserter {
         }
     }
 
+    private func leaveOnClipboard(_ text: String, because reason: String, moved: Bool, target: FocusSnapshot) -> DeliveryResult {
+        lastText = text
+        clipboard.copy(text)
+        Log.app.info("\(reason, privacy: .public); transcript left on the clipboard")
+        return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: target, finalText: text)
+    }
+
     private func waitForPreviousPaste(_ lease: Int, deadline suppliedDeadline: ContinuousClock.Instant? = nil) async -> Bool {
         let generation = batchGeneration
-        let clock = ContinuousClock()
-        let deadline = suppliedDeadline ?? clock.now.advanced(by: .seconds(PasteboardSession.receiptCap))
+        let deadline = suppliedDeadline ?? now() + .seconds(PasteboardSession.receiptCap)
         func mayContinue() -> Bool {
-            !Task.isCancelled && batchGeneration == generation && clock.now < deadline
+            !Task.isCancelled && batchGeneration == generation && now() < deadline
                 && (clipboard.holdsPaste(lease) || clipboard.wasRestored(lease))
         }
         do {
@@ -347,12 +379,13 @@ public final class TextInserter {
         }
         let input = inputGeneration()
         let generation = batchGeneration
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(8))
+        // The injected clock, so a stalled main thread in a test can't spend the budget.
+        let deadline = now() + .seconds(8)
         func mayContinue() -> Bool {
             let current = focus.snapshot()
-            return !Task.isCancelled && generation == batchGeneration && clock.now < deadline
+            return !Task.isCancelled && generation == batchGeneration && now() < deadline
                 && input != nil && inputGeneration() == input && !focus.isSecureInputEnabled && !current.isSecure
+                && !current.focusOwnerDiffersFromFrontmost
                 && current.pid == target.pid && current.bundleID == target.bundleID
                 && current.windowTitle == target.windowTitle && current.element == target.element
         }
@@ -420,8 +453,8 @@ public final class TextInserter {
         guard let last = lastPaste else { return .noPreviousPaste }
         guard let pid = target.pid, last.pid == pid, last.bundleID == target.bundleID else { return .targetChanged }
         if let element = last.element, let other = target.element, element != other { return .elementChanged }
-        let age = now().timeIntervalSince(last.date)
-        guard age >= 0, age <= Self.continuationWindow else { return .outsideWindow }
+        let age = last.date.duration(to: now())
+        guard age >= .zero, age <= .seconds(Self.continuationWindow) else { return .outsideWindow }
         guard let recorded = last.inputGeneration, let current = inputGeneration() else { return .inputUnavailable }
         guard current == recorded else { return .inputChanged }
         return .available(last.finalCharacter)

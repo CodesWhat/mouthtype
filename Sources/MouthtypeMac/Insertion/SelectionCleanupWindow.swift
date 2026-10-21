@@ -53,13 +53,6 @@ struct SelectionCleanupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 6 : 12) {
-            if !compact {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(model.sourceApp.map { "Transform selection · from \($0)" } ?? "Transform selection").designEyebrow()
-                    Spacer(minLength: 0)
-                    Text("AI transforms run on this Mac").designEyebrow()
-                }.fixedSize(horizontal: false, vertical: true)
-            }
             chips
             if let reason = model.transformUnavailableReason {
                 Text(reason).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
@@ -167,8 +160,7 @@ struct SelectionCleanupView: View {
     }
 
     private func copyOriginal() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(model.original, forType: .string)
+        SystemClipboard().write(model.original)
     }
 
     private func copyResult() {
@@ -195,7 +187,7 @@ private struct TransformChip: View {
             .foregroundStyle(active ? DesignPalette.accentText : DesignPalette.ink2)
             .padding(.horizontal, 12).frame(height: 28)
             .background(RoundedRectangle(cornerRadius: 14).fill(active ? DesignPalette.accentSoft : DesignPalette.surface))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(active ? DesignPalette.accent : DesignPalette.hair, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(active ? DesignPalette.accentMark : DesignPalette.hair, lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 14))
             .onTapGesture { if enabled { action() } }
             .opacity(enabled || active ? 1 : 0.45)

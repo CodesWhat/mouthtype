@@ -25,10 +25,18 @@ private final class FakeStore: KeyMappingStore {
         #expect(parsed == FnGuardArguments(parent: 4242, entry: FnRemapMapping.entry()))
     }
 
+    @Test func parsesTheDisplacedMappingsDestination() {
+        let parsed = FnGuardArguments.parse(["guard", "4242", "1095216660483", "0x70000006E", "0x700000029"])
+        let displaced = FnRemapMapping.entry(src: 1095216660483, dst: 0x7_0000_0029)
+        #expect(parsed == FnGuardArguments(parent: 4242, entry: FnRemapMapping.entry(), displaced: displaced))
+        #expect(FnGuardArguments.parse(["guard", "4242", "1", "2", "x"]) == nil)
+        #expect(FnGuardArguments.parse(["guard", "4242", "1", "2", "3", "4"]) == nil)
+    }
+
     @Test func rejectsWrongCountsAndNonNumbers() {
         #expect(FnGuardArguments.parse(["guard"]) == nil)
         #expect(FnGuardArguments.parse(["guard", "4242", "1"]) == nil)
-        #expect(FnGuardArguments.parse(["guard", "4242", "1", "2", "3"]) == nil)
+        #expect(FnGuardArguments.parse(["guard", "4242", "1", "2", "3", "4", "5"]) == nil)
         #expect(FnGuardArguments.parse(["guard", "abc", "1", "2"]) == nil)
         #expect(FnGuardArguments.parse(["guard", "4242", "x", "2"]) == nil)
     }
@@ -48,6 +56,21 @@ private final class FakeStore: KeyMappingStore {
         let store = FakeStore([capsToEscape, ours])
         #expect(FnGuard.removeOurs(ours, from: store) == .removed)
         #expect(store.mapping == [capsToEscape])
+    }
+
+    @Test func restoresTheMappingOursDisplaced() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0029]
+        let store = FakeStore([capsToEscape, ours])
+        #expect(FnGuard.removeOurs(ours, restoring: theirFn, from: store) == .removed)
+        #expect(store.mapping == [capsToEscape, theirFn])
+    }
+
+    @Test func aSecondCleanupAfterARestoreDoesNothing() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0029]
+        let store = FakeStore([ours])
+        #expect(FnGuard.removeOurs(ours, restoring: theirFn, from: store) == .removed)
+        #expect(FnGuard.removeOurs(ours, restoring: theirFn, from: store) == .alreadyGone)
+        #expect(store.mapping == [theirFn])
     }
 
     @Test func aMappingOfOurSourceToAnotherDestinationIsNotOurs() {

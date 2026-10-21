@@ -184,6 +184,28 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(await b.isReady)
     }
 
+    @Test func settleOnAnUnchangedBiasAlreadyBuildingWaitsWithoutRebuilding() async {
+        let gate = Counter()
+        let started = Counter()
+        let b = gatedBooster(gate: gate, started: started)
+        await b.setBias(maya)
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) { _ = gate.next() }
+        await b.setBias(maya, settleWithin: .seconds(5))
+        #expect(await b.isReady)
+        #expect(started.count == 1)
+    }
+
+    @Test func settleOnAnUnchangedBiasStillBuildingGivesUpAtTheCap() async {
+        let gate = Counter()
+        let b = gatedBooster(gate: gate, started: Counter())
+        await b.setBias(maya)
+        await b.setBias(maya, settleWithin: .milliseconds(50))
+        #expect(await b.isReady == false)
+        _ = gate.next()
+        await b.waitUntilSettled()
+        #expect(await b.isReady)
+    }
+
     @Test func rescoringPastTheLimitKeepsTheUnboostedText() async {
         let b = booster(delay: .seconds(5), timeout: .milliseconds(50))
         await b.setBias(maya)
@@ -219,6 +241,15 @@ private let maya = VocabularyBias(terms: ["Maya"])
 @Suite struct VocabularyRealignTests {
     private func word(_ text: String, _ start: Double, _ end: Double, _ confidence: Float = 0.9) -> MouthtypeCore.WordTiming {
         MouthtypeCore.WordTiming(word: text, start: start, end: end, confidence: confidence)
+    }
+
+    @Test func repeatedWordsKeepTheOriginalPunctuationAndTimings() {
+        #expect(VocabularyBooster.restoringPunctuation(original: "Jon, yes", boosted: "John yes yes") == "John, yes yes")
+        #expect(VocabularyBooster.restoringPunctuation(original: "Jon, Jon Jon Jon", boosted: "John Jon John") == "John Jon John")
+        let words = [word("Jon", 0, 1), word("Jon", 1, 2), word("Jon", 2, 3)]
+        let out = VocabularyBooster.realign(words, to: "John Jon John")
+        #expect(out.map(\.start) == [0, 2, 3])
+        #expect(out.map(\.end) == [2, 3, 3])
     }
 
     @Test func untouchedWordsKeepTheirTimes() {

@@ -13,6 +13,7 @@ import MouthtypeCore
     private let fullKeyboardAccess: @MainActor () -> Bool
     private let notifications: NotificationCenter
     private nonisolated(unsafe) var transparencyObserver: NSObjectProtocol?
+    private var presentedThisTurn = false
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
     init(model: SettingsModel, actions: SettingsActions = SettingsActions(),
@@ -89,13 +90,34 @@ import MouthtypeCore
         refreshDiagnostics()
         model.refresh()
         reloadHome()
+        // The window becoming key a moment later would repeat all three; skip it within this run-loop turn.
+        presentedThisTurn = true
+        DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.presentedThisTurn = false } }
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        // A link or menu open shows no ring, like the cold path. AppKit restores the old sidebar row as first responder when the window
+        // becomes key and SettingsView's page-change handler can move it, so clear it now and once more after both have run.
+        clearSidebarFocus()
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                self?.clearSidebarFocus()
+                DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.clearSidebarFocus() } }
+            }
+        }
+    }
+
+    /// Drops first responder when a sidebar row or the sidebar list holds it, which is what draws the ring. Focus in a text field or
+    /// page control is left alone. The next Tab or arrow key starts keyboard navigation again.
+    func clearSidebarFocus() {
+        guard let window, let responder = window.firstResponder as? NSView, !(responder is NSText) else { return }
+        guard responder.convert(responder.bounds, to: nil).minX < SettingsTheme.sidebarWidth, responder !== window.contentView else { return }
+        _ = window.makeFirstResponder(nil)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
         startObservingTransparency()
+        guard !presentedThisTurn else { return }
         refreshDiagnostics()
         model.refresh()
         reloadHome()
@@ -120,13 +142,18 @@ import MouthtypeCore
     func windowShouldClose(_ sender: NSWindow) -> Bool { model.resolveDraft(.closing) }
 
     /// Quit never reaches windowShouldClose, so the app asks here. With an unsaved draft the window comes forward on its page first.
+    /// Saying yes doesn't discard the draft: the quit may still be delayed or cancelled while the recording is preserved, so
+    /// `discardDraftForQuit` runs once the quit is certain.
     func resolveDraftForQuit() -> Bool {
         guard model.unsavedDraft != nil else { return true }
         if window?.isMiniaturized == true { window?.deminiaturize(nil) }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
-        return model.resolveDraft(.quitting)
+        return model.resolveDraft(.quitting, discard: false)
     }
+
+    /// Drops the draft the user agreed to discard, so the closing windows don't ask again.
+    func discardDraftForQuit() { model.discardUnsavedDraft() }
 
     private func reloadHome() {
         let home = model.home
@@ -148,6 +175,12 @@ import MouthtypeCore
 
 /// The Settings window. The app runs without a main menu, so nothing supplies Cmd-W; handle it here.
 final class SettingsNSWindow: NSWindow {
+    /// The Mouthtype settings window, whichever window happens to be key. Sheets that belong to a page attach here.
+    @MainActor static var existing: SettingsNSWindow? {
+        let all = NSApp.windows.compactMap { $0 as? SettingsNSWindow }
+        return all.first { $0.isVisible } ?? all.first
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if event.type == .keyDown, flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {

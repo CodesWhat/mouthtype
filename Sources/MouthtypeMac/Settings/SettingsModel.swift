@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import MouthtypeCore
 import Observation
 import UniformTypeIdentifiers
@@ -11,6 +12,7 @@ import UniformTypeIdentifiers
     private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
+    private let onDockIconModeChanged: @MainActor (DockIconMode) -> Void
     private var capsLockShortcut = false
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
@@ -35,6 +37,7 @@ import UniformTypeIdentifiers
     var websiteLevel: CleanupLevel?
     private(set) var cleanup: CleanupSettings
     private(set) var livePreview = false
+    private(set) var dockIconMode = DockIconMode.fallback
     private(set) var audioRetention = AudioRetentionPolicy()
     /// The Settings modal's footer switch. Adds the Advanced page to its nav.
     private(set) var advancedOptions = false
@@ -65,11 +68,13 @@ import UniformTypeIdentifiers
          microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
          onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
          onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+         onDockIconModeChanged: @escaping @MainActor (DockIconMode) -> Void = { _ in },
          home: HomeLogModel = HomeLogModel(observing: false),
          stats: StatsModel = StatsModel(observing: false),
          spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil,
          openTranscribeWindow: @escaping @MainActor () -> Void = {}) {
         self.openTranscribeWindow = openTranscribeWindow
+        self.onDockIconModeChanged = onDockIconModeChanged
         self.home = home
         self.stats = stats
         self.spellings = spellings
@@ -160,14 +165,22 @@ import UniformTypeIdentifiers
     static let advancedOptionsKey = "settingsAdvancedOptions"
 
     /// True when it is fine to leave the current page or close the window: there is no unsaved draft, or the user chose to discard it.
-    func resolveDraft(_ exit: DraftExit) -> Bool {
+    func resolveDraft(_ exit: DraftExit, discard: Bool = true) -> Bool {
         guard let kind = unsavedDraft else { return true }
         guard confirmDiscard(exit, kind) else { return false }
+        if discard { discardDraft(kind) }
+        return true
+    }
+
+    func discardUnsavedDraft() {
+        if let kind = unsavedDraft { discardDraft(kind) }
+    }
+
+    private func discardDraft(_ kind: DraftKind) {
         switch kind {
         case .spelling: spellings?.cancel()
         case .phrase: phrases?.cancel()
         }
-        return true
     }
 
     static func askToDiscard(_ exit: DraftExit, _ kind: DraftKind) -> Bool {
@@ -196,16 +209,42 @@ import UniformTypeIdentifiers
 
     func deactivateWords() { spellingSuggestions?.deactivate() }
 
+    func setDockIconMode(_ mode: DockIconMode) {
+        DockIconMode.set(mode, in: defaults)
+        dockIconMode = mode
+        onDockIconModeChanged(mode)
+    }
+
     func setLivePreview(_ enabled: Bool) {
         LivePreviewPreference.set(enabled, in: defaults)
         livePreview = enabled
     }
 
+    /// How many times `refresh()` has run. Lets a test check that bursts coalesce.
+    @ObservationIgnored private(set) var refreshCount = 0
+    @ObservationIgnored private var refreshPending = false
+
+    /// Refreshes once on the next run-loop turn however many callers ask before then. A `refresh()` that runs first
+    /// covers every request made before it, so it cancels the pending one.
+    func scheduleRefresh() {
+        guard !refreshPending else { return }
+        refreshPending = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.refreshPending else { return }
+                self.refresh()
+            }
+        }
+    }
+
     func refresh() {
+        refreshPending = false
+        refreshCount += 1
         microphone.refresh()
         advancedOptions = defaults.bool(forKey: Self.advancedOptionsKey)
         audioRetention = AudioRetentionPreference.load(defaults)
         livePreview = LivePreviewPreference.isEnabled(defaults)
+        dockIconMode = DockIconMode.current(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
@@ -215,8 +254,8 @@ import UniformTypeIdentifiers
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
-        FontRegistry.registerBundledFonts()
-        fontFamilies = Array(Set(NSFontManager.shared.availableFontFamilies)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        FontRegistry.ensureRegistered()
+        fontFamilies = FontFamilyCache.families()
         let savedShortcut = ShortcutSettings.load(defaults)
         shortcut = savedShortcut?.displayName ?? "Fn"
         capsLockShortcut = savedShortcut?.isCapsLock == true
@@ -394,6 +433,7 @@ import UniformTypeIdentifiers
     func setFillers(_ value: Bool) { update { $0.fillers = value } }
     func setSpokenCommands(_ value: Bool) { update { $0.spokenCommands = value } }
     func setNumbers(_ value: Bool) { update { $0.numbers = value } }
+    func setSlashCommands(_ value: Bool) { update { $0.slashCommands = value } }
     func setQuietOtherAudio(_ value: Bool) {
         QuietAudioPreference.set(value, in: defaults)
         quietOtherAudio = value
@@ -436,4 +476,37 @@ import UniformTypeIdentifiers
         fontOverrides = TextFontOverrides.load(defaults)
     }
 
+}
+
+/// The installed font families, sorted for the pickers. Listing them costs milliseconds and `SettingsModel.refresh()`
+/// runs on every defaults change, so the list is kept until the system's font set changes.
+@MainActor enum FontFamilyCache {
+    private static var cached: [String]?
+    private(set) static var loads = 0
+    private static var observers: [NSObjectProtocol] = []
+
+    static let changeNotifications: [Notification.Name] = [
+        Notification.Name("NSFontSetChangedNotification"),
+        Notification.Name(kCTFontManagerRegisteredFontsChangedNotification as String),
+    ]
+
+    static func families(list: () -> [String] = { NSFontManager.shared.availableFontFamilies }) -> [String] {
+        observeIfNeeded()
+        if let cached { return cached }
+        loads += 1
+        let sorted = Array(Set(list())).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        cached = sorted
+        return sorted
+    }
+
+    static func invalidate() { cached = nil }
+
+    private static func observeIfNeeded() {
+        guard observers.isEmpty else { return }
+        observers = changeNotifications.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { invalidate() }
+            }
+        }
+    }
 }

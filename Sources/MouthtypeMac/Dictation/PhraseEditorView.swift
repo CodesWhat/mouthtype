@@ -163,7 +163,7 @@ struct PhraseEditorView: View {
         } else if let status = transformModel?.transformModelStatus {
             let ready = status.isReady
             HStack(spacing: 5) {
-                Circle().fill(ready ? DesignPalette.accent : DesignPalette.orange).frame(width: 6, height: 6).accessibilityHidden(true)
+                Circle().fill(ready ? DesignPalette.accentMark : DesignPalette.orange).frame(width: 6, height: 6).accessibilityHidden(true)
                 Text("THOROUGH \u{00B7} \(status.stateWord)").font(DesignFont.mono(10)).tracking(0.95)
                     .foregroundStyle(DesignPalette.ink3).fixedSize()
             }

@@ -210,8 +210,9 @@ private final class CardRig {
             // The status colour against the card body: the readout holds 3:1 for non-text marks.
             let body = dark ? SquirclePalette.darkBody.bottom : SquirclePalette.lightBody.bottom
             #expect(ratio(palette.quiet, body) >= 3 && ratio(palette.warn, body) >= 3)
-            // The lime fill on the card keeps the 3:1 an interactive shape needs on the light body.
-            if !dark { #expect(ratio(palette.primaryFill, SquirclePalette.lightBody.top) >= 2.5) }
+            // On the light body lime is ~1.4:1, so the button's 1px edge carries the 3:1 an interactive shape needs.
+            if !dark, let edge = palette.primaryEdge { #expect(ratio(edge, SquirclePalette.lightBody.top) >= 3) }
+            #expect((palette.primaryEdge != nil) == !dark)
         }
     }
 
@@ -219,9 +220,9 @@ private final class CardRig {
         let light = CardPalette.resolve(style: .minimal, dark: false)
         #expect(light.ink == hex(0x1D1D1F) && light.warn == hex(0xD70015) && light.quiet == hex(0x1D1D1F))
         #expect(light.accent(for: .recovered) == hex(0x1D1D1F) && light.accent(for: .pasteFailed) == hex(0xD70015))
-        #expect(light.primaryFill == hex(0x76A11A) && light.primaryText == hex(0x1D1D1F))
+        #expect(light.primaryFill == hex(0xD3E58B) && light.primaryText == hex(0x1D1D1F))
         let dark = CardPalette.resolve(style: .minimal, dark: true)
-        #expect(dark.ink == hex(0xF4F3E8) && dark.primaryFill == hex(0xA6CD52) && dark.primaryText == hex(0x1F1F21))
+        #expect(dark.ink == hex(0xF4F3E8) && dark.primaryFill == hex(0xD3E58B) && dark.primaryText == hex(0x1F1F21))
         #expect(SquirclePalette.lightBody.top == hex(0xFBFBFC))
     }
 }

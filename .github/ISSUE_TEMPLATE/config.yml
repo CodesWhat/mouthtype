@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Feature Request
+    url: https://github.com/CodesWhat/mouthtype/discussions/categories/ideas
+    about: Suggest a new feature or improvement in Discussions
+  - name: Question / Help
+    url: https://github.com/CodesWhat/mouthtype/discussions/categories/q-a
+    about: Ask how to set up or use Mouthtype in Discussions
+  - name: Report a vulnerability
+    url: https://github.com/CodesWhat/mouthtype/security/advisories/new
+    about: Report security problems privately, not in a public issue

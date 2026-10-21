@@ -39,6 +39,8 @@ public struct SelfCorrection: Sendable {
     static let commaCues: Set<[String]> = [["no", "wait"], ["no", "sorry"]]
     /// A bare "wait" is also an instruction ("step two, wait ten seconds"), so it needs a comma after it.
     static let commaAfterCues: Set<[String]> = [["wait"]]
+    /// Words that make a following "one" a pronoun ("actually one of them", "sorry one else"), not a value.
+    static let pronounOneFollowers: Set<String> = ["of", "else"]
 
     static let prepositions: Set<String> = [
         "at", "on", "in", "by", "for", "to", "from", "until", "till", "around", "about", "the", "a", "an",
@@ -435,7 +437,16 @@ public struct SelfCorrection: Sendable {
                 b += 1
             }
             let values = candidates(at: b)
-            if let best = values.filter({ kinds.contains($0.kind) }).map(\.end).max() { return (b, best, nil) }
+            // "one"/"1" before "of" or "else" is a pronoun or a count, not a corrected value ("actually one of them").
+            let nextWord = b + 1 < tokens.count && gap(b, b + 1) == .space ? tokens[b + 1].lower : nil
+            let isOne = tokens[b].lower == "one" || tokens[b].lower == "1"
+            if isOne, let nextWord, SelfCorrection.pronounOneFollowers.contains(nextWord) { return nil }
+            if let best = values.filter({ kinds.contains($0.kind) }).map(\.end).max() {
+                // "no one" is a pronoun when a bare "one" is followed by more clause ("two, no one else can make it").
+                // A longer value ("no one thirty", "no one dollar") is still a correction.
+                if tokens[cueEnd].lower == "no", tokens[b].lower == "one", best == b + 1, nextWord != nil { return nil }
+                return (b, best, nil)
+            }
             let sentenceEnd = b + 1 == tokens.count || chars[tokens[b].end..<tokens[b + 1].start]
                 .contains(where: { $0 == "." || $0 == "!" || $0 == "?" })
             if kinds.contains(.time), values.contains(where: { $0.kind == .number && $0.end == b + 1 }),

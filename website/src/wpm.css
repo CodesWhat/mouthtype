@@ -1,0 +1,428 @@
+/* How fast are you? Typing and speaking check. Reuses the example-card styles. */
+.wpm-a {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 68px;
+  padding: 80px 0 70px;
+  align-items: start;
+}
+.wpm-a > * {
+  min-width: 0;
+}
+.wpm-a .section-heading > p {
+  margin-bottom: 26px;
+}
+.wpm-a .section-heading .eyebrow {
+  margin-bottom: 18px;
+}
+.wpm-a .section-heading .wpm-a-fine {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font: 9px/1.7 var(--mono);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wpm-a-fine img {
+  width: 18px;
+  height: 18px;
+  image-rendering: pixelated;
+}
+.wpm-a .compare-switch button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+.wpm-a .compare-switch button::before {
+  content: attr(data-n);
+  content: attr(data-n) / "";
+  font: 9px var(--mono);
+  color: var(--muted);
+}
+.wpm-a .compare-switch button[aria-pressed="true"]::before {
+  color: var(--action);
+}
+.wpm-a .example-text {
+  min-height: 190px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.wpm-sentence {
+  color: var(--muted);
+}
+.wpm-a-live {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 10px/1.5 var(--mono);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wpm-a-live strong {
+  font: 34px/1 var(--serif);
+  letter-spacing: -0.5px;
+  color: var(--ink);
+  font-weight: 400;
+}
+.wpm-a-live[data-empty] strong {
+  color: var(--line);
+}
+.wpm-a-input {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+  font: 13px/1.6 var(--sans);
+  color: var(--muted);
+}
+.wpm-a-input kbd {
+  font: 11px var(--mono);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  background: var(--panel);
+  padding: 1px 6px;
+  border-radius: 4px;
+  color: var(--ink);
+}
+
+/* Result layout inside the card body. */
+.wpm-a-result {
+  padding: 26px 25px 24px;
+  display: grid;
+  gap: 22px;
+}
+.wpm-a-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.wpm-a-stat {
+  display: grid;
+  gap: 6px;
+}
+.wpm-a-stat .mono {
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wpm-a-stat .mono img {
+  width: 16px;
+  height: 16px;
+  image-rendering: pixelated;
+}
+.wpm-a-stat strong {
+  font: 64px/1 var(--serif);
+  letter-spacing: -1.5px;
+  font-weight: 400;
+}
+.wpm-a-stat strong small {
+  font-size: 18px;
+  letter-spacing: 0;
+  margin-left: 6px;
+  color: var(--muted);
+}
+.wpm-a-bar {
+  position: relative;
+  height: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  overflow: visible;
+}
+.wpm-a-bar b {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: var(--lime);
+}
+.wpm-a-bar i {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 1px;
+  background: var(--ink);
+}
+.wpm-a-stat em {
+  font: 9px/1.6 var(--mono);
+  letter-spacing: 0.5px;
+  font-style: normal;
+  color: var(--muted);
+}
+.wpm-a-verdict {
+  font: 30px/1.15 var(--serif);
+  margin: 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+.wpm-a-verdict mark {
+  background: var(--lime);
+  padding: 0 3px;
+}
+.wpm-a-verdict span {
+  display: block;
+  font: 14px/1.6 var(--sans);
+  color: var(--muted);
+  margin-top: 8px;
+}
+/* Easter egg: "vs the pros". Three bars on one 0-350 scale. */
+.wpm-a-pros {
+  display: grid;
+  gap: 14px;
+}
+.wpm-a-pro {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) 54px;
+  gap: 14px;
+  align-items: center;
+  font: 9px/1.4 var(--mono);
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.wpm-a-pro > span:first-child b {
+  display: block;
+  color: var(--ink);
+  font-weight: 500;
+}
+.wpm-a-pro > span:last-child {
+  text-align: right;
+  font: 22px/1 var(--serif);
+  color: var(--ink);
+  letter-spacing: -0.3px;
+}
+.wpm-a-pro .wpm-a-bar {
+  height: 14px;
+}
+.wpm-a-pro[data-founder] .wpm-a-bar b {
+  background: var(--lime);
+}
+.wpm-a-pro[data-founder-avg] .wpm-a-bar b {
+  background: repeating-linear-gradient(-45deg, var(--orange) 0 3px, transparent 3px 6px);
+}
+.zoom {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 28px;
+  height: 28px;
+  image-rendering: pixelated;
+}
+.zoom::before,
+.zoom::after {
+  content: "";
+  position: absolute;
+  right: 100%;
+  height: 2px;
+  width: 46px;
+  background: repeating-linear-gradient(90deg, var(--ink) 0 7px, transparent 7px 11px);
+  opacity: 0.55;
+}
+.zoom::before {
+  top: 30%;
+}
+.zoom::after {
+  top: 62%;
+  width: 32px;
+}
+.zoom img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: pixelated;
+}
+.wpm-a-egglink {
+  margin-left: auto;
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .wpm-a-pro {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .wpm-a-pro > span:last-child {
+    text-align: left;
+  }
+}
+@media (max-width: 1100px) {
+  .wpm-a {
+    gap: 35px;
+  }
+}
+@media (max-width: 850px) {
+  .wpm-a {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 30px;
+    padding: 60px 0 45px;
+  }
+}
+@media (max-width: 600px) {
+  .wpm-a {
+    padding: 44px 0 36px;
+  }
+  .wpm-a .example-text {
+    font-size: 26px;
+    min-height: 170px;
+  }
+  .wpm-a-stat strong {
+    font-size: 48px;
+  }
+  .wpm-a-verdict {
+    font-size: 24px;
+  }
+  .wpm-a-result {
+    padding: 22px 20px;
+  }
+  .wpm-a-stats {
+    gap: 14px;
+  }
+}
+/* Shared button pair used by every version's result state. */
+.wpm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.wpm-again {
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  padding: 13px 18px;
+  border-radius: 4px;
+  font-size: 14px;
+}
+.wpm-again:hover {
+  background: var(--ink);
+  color: var(--paper);
+}
+.wpm-download {
+  background: var(--lime);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 28px;
+  border-radius: 4px;
+  padding: 13px 18px;
+  font-size: 14px;
+}
+.wpm-download:hover {
+  background: #c6dc70;
+}
+
+/* The typed sentence. Every character is a span so right, wrong and
+   untouched characters can be coloured separately. */
+.wpm-sentence i {
+  font-style: normal;
+}
+.wpm-sentence i[data-ok] {
+  color: var(--ink);
+}
+.wpm-sentence i[data-bad] {
+  color: var(--orange);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+.wpm-sentence i[data-next]::before {
+  content: "";
+  display: inline-block;
+  width: 2px;
+  height: 0.9em;
+  vertical-align: -0.12em;
+  background: var(--ink);
+  margin-right: 1px;
+  animation: wpm-blink 1s steps(2) infinite;
+}
+@keyframes wpm-blink {
+  to {
+    opacity: 0;
+  }
+}
+
+/* Behaviour added on top of the mockup. */
+.wpm-a {
+  scroll-margin-top: 24px;
+}
+.wpm-a [hidden] {
+  display: none !important;
+}
+.wpm-a-input textarea {
+  display: block;
+  width: 100%;
+  min-height: 3.4em;
+  resize: none;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 10px 12px;
+  background: var(--panel);
+  color: var(--ink);
+  font: 15px/1.5 var(--sans);
+}
+.wpm-a-input textarea:focus-visible {
+  outline: 2px solid var(--orange);
+  outline-offset: 2px;
+}
+.wpm-a-input textarea:disabled {
+  opacity: 0.6;
+}
+.wpm-a-input p {
+  margin: 8px 0 0;
+}
+.wpm-a .wpm-speak-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+}
+.wpm-a .compare-switch button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.wpm-a button.wpm-a-egglink {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+}
+.wpm-a-sentence-read {
+  color: var(--ink);
+}
+.wpm-a-note {
+  color: var(--orange);
+}
+@media (prefers-reduced-motion: reduce) {
+  .wpm-sentence i[data-next]::before {
+    animation: none;
+  }
+  .wpm-a *,
+  .wpm-a *::before,
+  .wpm-a *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+.wpm-a-verdict .wpm-verdict-main {
+  display: inline;
+  font: inherit;
+  color: inherit;
+  margin: 0;
+}
+.wpm-a-verdict .wpm-verdict-main + span {
+  display: block;
+  font: 14px/1.6 var(--sans);
+  color: var(--muted);
+  margin-top: 8px;
+}
+.wpm-a-result:focus {
+  outline: none;
+}

@@ -77,4 +77,22 @@ private final class DownloadProbe: Downloader, @unchecked Sendable {
         try await cleaner.download { _ in }
         #expect(!probe.latest.isEmpty && probe.latest.allSatisfy { $0 })
     }
+
+    @Test func discardingAPartialSnapshotKeepsOtherSnapshotsAndTheirBlobs() throws {
+        let fm = FileManager.default
+        let repo = fm.temporaryDirectory.appendingPathComponent("discard-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: repo) }
+        let blobs = repo.appendingPathComponent("blobs")
+        let mine = repo.appendingPathComponent("snapshots/aaaa"), other = repo.appendingPathComponent("snapshots/bbbb")
+        for directory in [blobs, mine, other] { try fm.createDirectory(at: directory, withIntermediateDirectories: true) }
+        for name in ["mine-only", "shared", "other-only", "half.incomplete"] { try Data("x".utf8).write(to: blobs.appendingPathComponent(name)) }
+        try fm.createSymbolicLink(atPath: mine.appendingPathComponent("a.json").path, withDestinationPath: "../../blobs/mine-only")
+        try fm.createSymbolicLink(atPath: mine.appendingPathComponent("b.json").path, withDestinationPath: "../../blobs/shared")
+        try fm.createSymbolicLink(atPath: other.appendingPathComponent("b.json").path, withDestinationPath: "../../blobs/shared")
+        try fm.createSymbolicLink(atPath: other.appendingPathComponent("c.json").path, withDestinationPath: "../../blobs/other-only")
+        HubDownloader.discardPartialSnapshot(repoDirectory: repo, commit: "aaaa")
+        let left = Set(try fm.contentsOfDirectory(atPath: blobs.path))
+        #expect(left == ["shared", "other-only"])
+        #expect(!fm.fileExists(atPath: mine.path) && fm.fileExists(atPath: other.path))
+    }
 }

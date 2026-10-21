@@ -18,7 +18,7 @@ private final class CleanupDemand {
 }
 
 @MainActor
-final class CleanupSelection: CleanupModelManaging {
+final class CleanupSelection: CleanupModelManaging, CleanupModelListing {
     private let fast: CleanerHost
     private let thorough: CleanerHost
     private let demand: CleanupDemand
@@ -26,11 +26,12 @@ final class CleanupSelection: CleanupModelManaging {
     private var holds: [String: CleanupLevel] = [:]
 
     init(fast: any SmartModel, thorough: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-         budget: (@Sendable (Int) -> Duration)? = nil) {
+         budget: (@Sendable (Int) -> Duration)? = nil,
+         idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay) {
         let demand = CleanupDemand(level: level)
         self.demand = demand
-        self.fast = CleanerHost(model: fast, level: { demand.wanted(.light) }, budget: budget)
-        self.thorough = CleanerHost(model: thorough, level: { demand.wanted(.medium) }, budget: budget)
+        self.fast = CleanerHost(model: fast, level: { demand.wanted(.light) }, budget: budget, idleUnloadDelay: idleUnloadDelay)
+        self.thorough = CleanerHost(model: thorough, level: { demand.wanted(.medium) }, budget: budget, idleUnloadDelay: idleUnloadDelay)
     }
 
     private func host(for level: CleanupLevel) -> CleanerHost { level == .medium ? thorough : fast }
@@ -43,6 +44,17 @@ final class CleanupSelection: CleanupModelManaging {
     var modelName: String { selected.modelName }
     var downloadSizeMB: Int { selected.downloadSizeMB }
     var downloadTarget: any CleanupModelManaging { selected }
+
+    func cleanupModels() -> [CleanupModelStatus] {
+        [CleanupLevel.light, .medium].map { level in
+            let host = host(for: level)
+            return CleanupModelStatus(level: level, name: host.modelName, sizeMB: host.downloadSizeMB,
+                status: host.downloadStatus, selected: demand.level() == level)
+        }
+    }
+
+    func downloadCleanupModel(_ level: CleanupLevel) { host(for: level).startDownload() }
+    func cancelCleanupDownload(_ level: CleanupLevel) { host(for: level).cancelDownload() }
 
     func unloadThoroughForMemoryPressure() { thorough.unloadForMemoryPressure() }
     func start() { fast.start(); thorough.start() }
@@ -57,7 +69,10 @@ final class CleanupSelection: CleanupModelManaging {
     nonisolated func recordingStarted(level: CleanupLevel, take: String) {
         Task { @MainActor in
             let previous = self.holds.removeValue(forKey: take)
-            if let previous { self.adjust(previous, by: -1) }
+            if let previous {
+                self.adjust(previous, by: -1)
+                self.host(for: previous).endRecordingHold()
+            }
             guard level.needsModel else {
                 if let previous, previous != level { self.host(for: previous).demandDropped() }
                 self.selected.recordingStarted()
@@ -65,6 +80,7 @@ final class CleanupSelection: CleanupModelManaging {
             }
             self.holds[take] = level
             self.adjust(level, by: 1)
+            self.host(for: level).beginRecordingHold()
             self.host(for: level).levelChanged()
             if let previous, previous != level { self.host(for: previous).demandDropped() }
         }
@@ -76,6 +92,7 @@ final class CleanupSelection: CleanupModelManaging {
         Task { @MainActor in
             guard let level = self.holds.removeValue(forKey: take) else { return }
             self.adjust(level, by: -1)
+            self.host(for: level).endRecordingHold()
             self.host(for: level).demandDropped()
         }
     }

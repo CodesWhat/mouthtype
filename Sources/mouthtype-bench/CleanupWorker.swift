@@ -23,7 +23,7 @@ struct CleanupWorker: AsyncParsableCommand {
             output.license = instance.license
             output.prepare = try await instance.prepareMeasured()
             if let directory = instance.modelDirectory {
-                output.modelPath = directory.path
+                output.modelPath = (directory.path as NSString).abbreviatingWithTildeInPath
                 output.modelBytes = EngineWorker.directorySize(directory)
             }
             if mode == "full" {

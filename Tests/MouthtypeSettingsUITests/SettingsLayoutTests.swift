@@ -174,8 +174,8 @@ import MouthtypeCore
             }
             return hex
         }
-        #expect(resolve(SettingsTheme.controlNS, .aqua) == "76A11A")
-        #expect(resolve(SettingsTheme.controlNS, .darkAqua) == "A6CD52")
+        #expect(resolve(SettingsTheme.controlNS, .aqua) == "4A6A12")
+        #expect(resolve(SettingsTheme.controlNS, .darkAqua) == "D3E58B")
     }
 
     // MARK: Layout
@@ -286,12 +286,6 @@ import MouthtypeCore
     }
 
     // MARK: Every old control is still reachable
-
-    @Test func everySettingFromTheOldWindowHasAHomeOnItsPage() throws {
-        let (model, cleanup) = try makeModel()
-        defer { cleanup() }
-        // The Settings modal pages draw their own popups and switches, so their controls are checked by identifier in ModalPagesTests.
-    }
 
     @Test func everyOldControlIdentifierStillExistsInTheSettingsSources() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

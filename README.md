@@ -11,16 +11,18 @@ Natural speech in, clean text out.
 </div>
 
 <p align="center">
-  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.4.0-2ea44f" alt="Version 0.4.0"></a>
+  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.5.0-2ea44f" alt="Version 0.5.0"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later"></a>
-  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-555555?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
+  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-000000?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
+  <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
+  <a href="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml"><img src="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml/badge.svg" alt="Security CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
 </p>
 
 <hr>
 
 > [!IMPORTANT]
-> **Not verified on a device for 0.4.0:** fresh installation, VoiceOver, and Bluetooth and USB microphones. See [known limits](docs/KNOWN-LIMITS.md).
+> **Not verified on a device for 0.5.0:** fresh installation, VoiceOver, and Bluetooth and USB microphones. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 
 <h2 align="center">Contents</h2>
 
@@ -47,25 +49,28 @@ Natural speech in, clean text out.
 | --- | --- |
 | Website | [mouthtype.app](https://mouthtype.app/) |
 | Download | [mouthtype.app/download](https://mouthtype.app/download) |
-| Getting started | [mouthtype.app/start](https://mouthtype.app/start/) |
-| Docs | [mouthtype.app/docs](https://mouthtype.app/docs/) |
-| Install, update and remove | [`docs/READ-ME.md`](docs/READ-ME.md) |
-| Usage and cleanup reference | [`docs/USAGE.md`](docs/USAGE.md) |
-| Settings, tone rules and input selection | [`docs/SETTINGS.md`](docs/SETTINGS.md) |
-| Spoken commands and counted lists | [`docs/SPOKEN-COMMANDS.md`](docs/SPOKEN-COMMANDS.md) |
-| File transcription | [`docs/FILE-TRANSCRIPTION.md`](docs/FILE-TRANSCRIPTION.md) |
-| Saved audio and retention | [`docs/AUDIO-RETENTION.md`](docs/AUDIO-RETENTION.md) |
-| Automation (`mouthtype://` and the command-line script) | [`docs/AUTOMATION.md`](docs/AUTOMATION.md) |
-| Troubleshooting | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) |
-| Known limits for 0.4.0 | [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md) |
+| Getting started | [docs.mouthtype.app/getting-started](https://docs.mouthtype.app/getting-started/) |
+| Docs | [docs.mouthtype.app](https://docs.mouthtype.app/) |
+| Dictating | [docs.mouthtype.app/dictating](https://docs.mouthtype.app/dictating/) |
+| Install, update and remove | [docs.mouthtype.app/getting-started/install-notes](https://docs.mouthtype.app/getting-started/install-notes/) |
+| Usage and cleanup reference | [docs.mouthtype.app/reference/usage-overview](https://docs.mouthtype.app/reference/usage-overview/) |
+| Settings, tone rules and input selection | [docs.mouthtype.app/reference/settings](https://docs.mouthtype.app/reference/settings/) |
+| Spoken commands and counted lists | [docs.mouthtype.app/reference/spoken-commands](https://docs.mouthtype.app/reference/spoken-commands/) |
+| File transcription | [docs.mouthtype.app/transcribe-audio-files](https://docs.mouthtype.app/transcribe-audio-files/) |
+| Saved audio and retention | [docs.mouthtype.app/privacy-and-data/saved-audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/) |
+| Automation (`mouthtype://` and the command-line script) | [docs.mouthtype.app/automation/url-scheme-and-cli](https://docs.mouthtype.app/automation/url-scheme-and-cli/) |
+| Troubleshooting | [docs.mouthtype.app/troubleshooting](https://docs.mouthtype.app/troubleshooting/) |
+| Known limits for 0.5.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
 | Release notes | [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) |
 | Roadmap | See [Roadmap](#roadmap) below |
+| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Code of conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
 | Security policy | [`SECURITY.md`](SECURITY.md) |
-| Security controls and limits | [`docs/SECURITY.md`](docs/SECURITY.md) |
+| Security controls and limits | [docs.mouthtype.app/reference/security](https://docs.mouthtype.app/reference/security/) |
 | Third-party notices | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) |
 | Website development | [`website/README.md`](website/README.md) |
-| Release procedure | [`docs/RELEASING.md`](docs/RELEASING.md) |
+| Release procedure | [docs.mouthtype.app/maintainers/releasing](https://docs.mouthtype.app/maintainers/releasing/) |
 | Corresponding release source | [mouthtype.app/source](https://mouthtype.app/source) |
 
 <hr>
@@ -74,7 +79,7 @@ Natural speech in, clean text out.
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.4.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The repository is private; the signed app and corresponding release source are available without repository access.
+The Mac app is at 0.5.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
 
 1. Download the signed, notarized ZIP from [mouthtype.app/download](https://mouthtype.app/download).
 2. Extract Mouthtype, move it to Applications and open it.
@@ -83,7 +88,7 @@ The Mac app is at 0.4.0, a stable release. It supports **Apple Silicon and macOS
 
 Hold Fn, double-tap Fn, or use Fn+Space. **Control+Command+V** pastes the last delivered take and **Control+Command+C** copies it. A single recording stops after 20 minutes, with a warning at 19.
 
-See the [install notes](docs/READ-ME.md) and the [getting-started guide](https://mouthtype.app/start/) for the full walkthrough. What changed in each release is in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
+See the [install notes](https://docs.mouthtype.app/getting-started/install-notes/) and the [getting-started guide](https://docs.mouthtype.app/getting-started/) for the full walkthrough. What changed in each release is in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
 <hr>
 
@@ -95,12 +100,10 @@ See the [install notes](docs/READ-ME.md) and the [getting-started guide](https:/
 <td width="50%" align="center"><strong>Dark</strong></td>
 </tr>
 <tr>
-<td><img src="docs/assets/mouthtype-home-light.png" alt="Mouthtype's Home page in light mode, listing recent takes"></td>
-<td><img src="docs/assets/mouthtype-home-dark.png" alt="Mouthtype's Home page in dark mode, listing recent takes"></td>
+<td align="center"><img src="docs/assets/mouthtype-home-light.png" alt="Mouthtype's Home page in light mode, listing recent takes" width="440"></td>
+<td align="center"><img src="docs/assets/mouthtype-home-dark.png" alt="Mouthtype's Home page in dark mode, listing recent takes" width="440"></td>
 </tr>
 </table>
-
-<p align="center"><em>The Home page, rendered with sample takes. Each take has Copy and Recover.</em></p>
 
 <table>
 <tr>
@@ -112,8 +115,6 @@ See the [install notes](docs/READ-ME.md) and the [getting-started guide](https:/
 <td align="center"><img src="website/public/assets/hifi-recording.png" alt="Mouthtype's Hi-Fi recording pill showing an active take" width="360"></td>
 </tr>
 </table>
-
-<p align="center"><em>Pick a pill style on the Appearance page: Classic, Hi-Fi, Glass, Matrix or Minimal.</em></p>
 
 <hr>
 
@@ -145,7 +146,7 @@ It's early days. App compatibility, clipboard behavior and fresh-install setup s
 | 🤖 | **Automation** | `mouthtype://` URLs and a `mouthtype` command-line script can start, stop, toggle, cancel, copy and paste the last take, and open a page. Dictation commands are off until you turn on the automation switch. |
 | 🔄 | **Built-in Updates** | Signed update checks through Sparkle, with optional automatic checking. |
 
-See [the usage reference](docs/USAGE.md) for cleanup behavior, delivery limits and current caveats. **Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Split pastes preserve text and never synthesize a Return key press.
+See [the usage reference](https://docs.mouthtype.app/reference/usage-overview/) for cleanup behavior, delivery limits and current caveats. **Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Split pastes preserve text and never synthesize a Return key press.
 
 <hr>
 
@@ -155,7 +156,7 @@ Audio, transcripts, settings, spellings and phrases stay on this Mac. The defaul
 
 Microphone access records a take. Accessibility access handles the global shortcut, examines the destination and inserts text. Cleanup can read a small amount of nearby text for formatting and spelling hints, excluding secure fields. Phrase rules can explicitly insert the clipboard's text. These are powerful permissions; grant them only to a build you trust.
 
-Model downloads and optional update checks use the network. Dictation and cleanup run locally. The [security policy](SECURITY.md) and [security controls and limits](docs/SECURITY.md) describe reporting, distribution integrity and the boundaries of those claims.
+Model downloads and optional update checks use the network. Dictation and cleanup run locally. The [security policy](SECURITY.md) and [security controls and limits](https://docs.mouthtype.app/reference/security/) describe reporting, distribution integrity and the boundaries of those claims.
 
 <hr>
 
@@ -200,7 +201,7 @@ Model downloads and optional update checks use the network. Dictation and cleanu
 <details>
 <summary><strong>Shipped and planned</strong></summary>
 
-High-level themes only, with no dates. [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) has per-release detail.
+High-level themes only, with no dates. [`CHANGELOG.md`](CHANGELOG.md) has per-release detail.
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
@@ -208,9 +209,10 @@ High-level themes only, with no dates. [`packaging/ReleaseNotes.txt`](packaging/
 | **0.2.x** ✅ | Transform and boost | Transform selected text, optional Boost my saved words, cleanup level in app and website rules |
 | **0.3.x** ✅ | Home and Stats | Home page with recent takes and Recover, Stats page, suggested spellings |
 | **0.4.0** ✅ | One window | Single redesigned window, Transform Selection preview, Transforms page, separate Transcribe Audio File window, automation, editor hints |
+| **0.5.0** ✅ | Speed and slash commands | Launch and dictation speed, spoken slash commands in coding apps, Show in Dock, a docs site, Fn remap and quit-path hardening, cleanup fixes, real app icons in Style lists |
 | **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style, custom tones |
 
-**Still open:** fresh-install, VoiceOver, and Bluetooth and USB microphone verification, and wider app-compatibility testing. See [known limits](docs/KNOWN-LIMITS.md).
+**Still open:** fresh-install, VoiceOver, and Bluetooth and USB microphone verification, and wider app-compatibility testing. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 
 </details>
 
@@ -228,13 +230,33 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks, dependency maintenance and t
 
 <h2 align="center" id="experimental-linux-source">Experimental Linux Source</h2>
 
-Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI, setup diagnostics, an Omarchy bar plugin with a floating pill, single-file audio transcription, optional paste or typing delivery and optional local Fast and Thorough cleanup models. Delivery is recovery-only and cleanup is off by default. **There is no supported Linux desktop release.** Physical acceptance remains open, and the Linux cleanup models differ from the Mac ones (Thorough is Qwen3 4B, not Gemma). Follow the [Linux setup and testing guide](tools/linux-desktop/README.md) or the [Omarchy plugin guide](tools/omarchy-plugin/README.md). Coding agents can follow the ordered checklist at [mouthtype.app/linux/agent-install.md](website/public/linux/agent-install.md).
+Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI, setup diagnostics, an Omarchy bar plugin with a floating pill, single-file audio transcription, optional paste or typing delivery and optional local Fast and Thorough cleanup models. Delivery is recovery-only and cleanup is off by default. **There is no supported Linux desktop release.** Physical acceptance remains open, and the Linux cleanup models differ from the Mac ones (Thorough is Qwen3 4B, not Gemma). Follow the [Linux setup and testing guide](https://docs.mouthtype.app/linux/linux-desktop-setup/) or the [Omarchy plugin guide](https://docs.mouthtype.app/linux/linux-omarchy-plugin/).
 
 <hr>
 
 <div align="center">
 
 <h2 align="center" id="built-with">Built With</h2>
+
+[![Swift 6](https://img.shields.io/badge/Swift_6-F05138?logo=swift&logoColor=fff)](https://www.swift.org/)
+[![macOS 26](https://img.shields.io/badge/macOS_26-000?logo=apple&logoColor=fff)](https://developer.apple.com/macos/)
+[![Core ML](https://img.shields.io/badge/Core_ML-0A84FF?logo=apple&logoColor=fff)](https://developer.apple.com/machine-learning/core-ml/)
+[![MLX](https://img.shields.io/badge/MLX_3.32-6D28D9)](https://github.com/ml-explore/mlx-swift-lm)
+[![FluidAudio](https://img.shields.io/badge/FluidAudio_0.17-0F766E)](https://github.com/FluidInference/FluidAudio)
+[![WhisperKit](https://img.shields.io/badge/WhisperKit_1.1-2563EB)](https://github.com/argmaxinc/WhisperKit)
+[![Sparkle](https://img.shields.io/badge/Sparkle_2.10-D9480F)](https://github.com/sparkle-project/Sparkle)
+[![GRDB](https://img.shields.io/badge/GRDB_7.11-003B57?logo=sqlite&logoColor=fff)](https://github.com/groue/GRDB.swift)
+
+[![Parakeet TDT v3](https://img.shields.io/badge/Parakeet_TDT_v3-76B900?logo=nvidia&logoColor=fff)](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
+[![Silero VAD](https://img.shields.io/badge/Silero_VAD-3D5AFE)](https://huggingface.co/FluidInference/silero-vad-coreml)
+[![S1-mini](https://img.shields.io/badge/S1--mini-E8590C)](https://huggingface.co/superwhisper/s1-mini)
+[![Gemma 4](https://img.shields.io/badge/Gemma_4-4285F4?logo=google&logoColor=fff)](https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit)
+[![Hugging Face](https://img.shields.io/badge/Hugging_Face-FFD21E?logo=huggingface&logoColor=000)](https://huggingface.co/)
+
+Licenses for each component are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+<details>
+<summary><strong>Components and licenses</strong></summary>
 
 | Component | What it does | License |
 | --- | --- | --- |
@@ -248,11 +270,13 @@ Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includ
 | [S1-mini](https://huggingface.co/superwhisper/s1-mini) | Fast cleanup | Apache-2.0 plus a naming clause |
 | [Gemma 4 E4B](https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit) | Thorough cleanup | Apache-2.0 |
 
-Speech recognition uses NVIDIA's Parakeet models, converted to Core ML by FluidInference. No model is bundled; each downloads on request. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every dependency and model with its license.
+</details>
+
+Speech recognition uses NVIDIA's Parakeet models, converted to Core ML by FluidInference. No model is bundled; each downloads on request.
 
 <h2 align="center" id="community-and-support">Community and Support</h2>
 
-Bug reports from repository collaborators belong in private issues. Include the app version, macOS version, destination app and reproduction steps; omit personal transcripts and recordings. Report vulnerabilities through [SECURITY.md](SECURITY.md), not in an issue. The [troubleshooting guide](docs/TROUBLESHOOTING.md) covers the problems you can hit today.
+Open an [issue](https://github.com/CodesWhat/mouthtype/issues) for bugs, or ask in [Discussions](https://github.com/CodesWhat/mouthtype/discussions). Include the app version, macOS version, destination app and reproduction steps; omit personal transcripts and recordings. Report vulnerabilities through [SECURITY.md](SECURITY.md), not in an issue. The [troubleshooting guide](https://docs.mouthtype.app/troubleshooting/) covers the problems you can hit today.
 
 <h2 align="center" id="codeswhat-ecosystem">CodesWhat Ecosystem</h2>
 
@@ -270,6 +294,14 @@ Mouthtype is the one desktop app here. The other three tools are for Docker host
 
 Mouthtype is licensed under [GPL-3.0](LICENSE). [Corresponding release source](https://mouthtype.app/source) is available separately from the app download. Dependencies, fonts, adapted code and downloaded models have their own terms. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) records adapted code, fonts, the S1-mini model, the Swift package dependencies and the downloaded models.
 
+
+<a href="https://github.com/CodesWhat">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/codeswhat-logo-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/codeswhat-logo-original.svg" />
+    <img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28">
+  </picture>
+</a>
 
 <a href="#mouthtype">Back to top</a>
 
