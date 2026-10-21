@@ -4,10 +4,14 @@ import AppKit
 public protocol MenuSection {
     var items: [NSMenuItem] { get }
     func refresh()
+    /// Called as the menu is about to open, before it starts tracking. Anything that reads another app's state through
+    /// Accessibility has to do it here: once the menu is tracking, the system focus belongs to the menu.
+    func prepareForMenuOpen()
 }
 
 extension MenuSection {
     public func refresh() {}
+    public func prepareForMenuOpen() {}
 }
 
 @MainActor final class DailyMenu: NSObject, NSMenuDelegate {
@@ -46,7 +50,10 @@ extension MenuSection {
         sections.forEach { $0.section.refresh() }
         rebuild()
     }
-    func menuNeedsUpdate(_ menu: NSMenu) { refresh() }
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        sections.forEach { $0.section.prepareForMenuOpen() }
+        refresh()
+    }
 
     private func rebuild() {
         menu.removeAllItems()

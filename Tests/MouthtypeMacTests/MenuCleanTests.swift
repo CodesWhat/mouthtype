@@ -184,16 +184,16 @@ import MouthtypeCore
         for item in menu.items where !item.isSeparatorItem { _ = item.target?.perform(item.action, with: item) }
         #expect(edited == 1 && opened == [nil, .fixGrammar, .shorter, .moreFormal, .moreCasual])
         state = .unavailable
-        section.menuNeedsUpdate(menu)
+        section.prepareForMenuOpen()
         #expect(menu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title) == ["Edit Transforms…"])
         state = .ready
         reason = "AI transforms need the model."
-        section.menuNeedsUpdate(menu)
+        section.prepareForMenuOpen()
         #expect(menu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title) == ["Clean up", "Edit Transforms…"])
         #expect(menu.items.first { $0.title == "Fix grammar" }?.toolTip == reason)
     }
 
-    @Test func topLevelMenuNeverCapturesAndSubmenuCapturesOncePerOpen() throws {
+    @Test func selectionIsReadOncePerMenuOpenBeforeTrackingNotOnRefreshOrSubmenuOpen() throws {
         var captures = 0
         let section = TransformSelectionMenuSection(
             open: { _ in }, editTransforms: {}, capture: { captures += 1; return .ready })
@@ -201,8 +201,9 @@ import MouthtypeCore
         daily.add(section: SettingsMenuSection {})
         daily.add(section: section)
         daily.refresh()
-        daily.menuNeedsUpdate(daily.menu)
         #expect(captures == 0)
+        daily.menuNeedsUpdate(daily.menu)
+        #expect(captures == 1)
         let submenu = try #require(section.items.first?.submenu)
         section.menuNeedsUpdate(submenu)
         #expect(captures == 1)
@@ -221,7 +222,7 @@ import MouthtypeCore
         let section = TransformSelectionMenuSection(
             open: { _ in }, editTransforms: {}, capture: { model.captureForMenu(budget: 0.05) })
         let submenu = try #require(section.items.first?.submenu)
-        section.menuNeedsUpdate(submenu)
+        section.prepareForMenuOpen()
         #expect(submenu.items.first?.title == "Couldn’t read the selection")
         #expect(submenu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title) == ["Edit Transforms…"])
     }
