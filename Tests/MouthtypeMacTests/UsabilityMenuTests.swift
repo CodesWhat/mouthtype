@@ -30,7 +30,7 @@ import MouthtypeCore
     @Test func helpExplainsTheGesturesAndLocalStorage() {
         let section = HelpMenuSection(onShow: {})
         #expect(section.items.first?.title == "How to Use Mouthtype…")
-        for text in ["hold Fn", "double-tap", "Fn+Space", "Esc", "90 days", "2 GB", "on this Mac"] {
+        for text in ["hold Fn", "double-tap", "Fn+Space", "Esc", "90 days", "2 GB", "Settings", "on this Mac"] {
             #expect(HelpMenuSection.instructions.contains(text))
         }
     }

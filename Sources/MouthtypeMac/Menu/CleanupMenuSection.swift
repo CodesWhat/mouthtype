@@ -147,10 +147,10 @@ final class CleanupMenuSection: NSObject, MenuSection {
             absent = true
             modelStatusItem.title = "\(name): failed (\(message))"
         }
-        downloadItem.title = "Download Smart Cleanup Model\u{2026} (\(Self.sizeText(cleaner.downloadSizeMB)))"
+        downloadItem.title = "Download Cleanup Model\u{2026} (\(Self.sizeText(cleaner.downloadSizeMB)))"
         downloadItem.isHidden = !absent
         cancelDownloadItem.isHidden = !downloading
-        fallbackItem.title = "Smart cleanup isn't ready, so dictations use Basic"
+        fallbackItem.title = "Cleanup model isn't ready, so dictations use Basic"
         fallbackItem.isHidden = !(level.needsModel && !ready)
     }
 

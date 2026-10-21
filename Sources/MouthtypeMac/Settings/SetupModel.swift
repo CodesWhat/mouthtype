@@ -29,7 +29,7 @@ import Observation
 
     var inputDetail: String {
         if diagnostics.hotkeyHealth == .secureInputOn { return "Leave the password or other secure field to use dictation." }
-        if readiness.globeConflict { return "Fn also opens a system action. Choose Fn remapping or another shortcut in Input settings." }
+        if readiness.globeConflict { return "Fn also opens a system action. Choose Fn remapping or another shortcut with Change shortcut." }
         return diagnostics.inputDescription
     }
 

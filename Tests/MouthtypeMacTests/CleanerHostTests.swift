@@ -497,9 +497,9 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     @Test func anAbsentModelShowsItsNameStateAndSizeBeforeDownloading() {
         let (section, _, _, menu) = make(downloaded: false)
         #expect(item(menu, prefix: "Fake: not downloaded")?.isHidden == false)
-        let download = item(menu, prefix: "Download Smart Cleanup Model")
-        #expect(download?.title == "Download Smart Cleanup Model\u{2026} (1.4 GB)" && download?.isHidden == false)
-        #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == false)
+        let download = item(menu, prefix: "Download Cleanup Model")
+        #expect(download?.title == "Download Cleanup Model\u{2026} (1.4 GB)" && download?.isHidden == false)
+        #expect(item(menu, prefix: "Cleanup model isn't ready")?.isHidden == false)
         withExtendedLifetime(section) {}
     }
 
@@ -517,20 +517,20 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         for _ in 0..<100 { if case .ready = host.state { break }; try? await Task.sleep(for: .milliseconds(10)) }
         section.refresh()
         #expect(item(menu, prefix: "Fake: ready") != nil)
-        #expect(item(menu, prefix: "Download Smart Cleanup Model")?.isHidden == true)
-        #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == true)
+        #expect(item(menu, prefix: "Download Cleanup Model")?.isHidden == true)
+        #expect(item(menu, prefix: "Cleanup model isn't ready")?.isHidden == true)
     }
 
     @Test func theFallbackLineOnlyShowsForLevelsThatNeedTheModel() {
         let (section, _, _, menu) = make(downloaded: false, level: .basic)
-        #expect(item(menu, prefix: "Smart cleanup isn't ready")?.isHidden == true)
+        #expect(item(menu, prefix: "Cleanup model isn't ready")?.isHidden == true)
         withExtendedLifetime(section) {}
     }
 
     @Test func choosingDownloadAsksFirstAndDeclineFetchesNothing() {
         var asked: [Int] = []
         let (section, host, model, menu) = make(downloaded: false) { asked.append($0); return false }
-        let download = item(menu, prefix: "Download Smart Cleanup Model")!
+        let download = item(menu, prefix: "Download Cleanup Model")!
         _ = download.target?.perform(download.action, with: download)
         #expect(asked == [1447] && host.state == .absent && model.downloads == 0)
         withExtendedLifetime(section) {}
@@ -538,7 +538,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
     @Test func confirmingStartsTheDownload() async {
         let (section, host, model, menu) = make(downloaded: false, level: .basic)
-        let download = item(menu, prefix: "Download Smart Cleanup Model")!
+        let download = item(menu, prefix: "Download Cleanup Model")!
         _ = download.target?.perform(download.action, with: download)
         for _ in 0..<100 where model.downloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(model.downloads == 1)
