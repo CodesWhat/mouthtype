@@ -120,7 +120,7 @@ def validate(value):
                 raise ValueError(label + '.added entries need app and name')
             entry['added'].append({'app': _check_class(app['app'], label + '.added app'),
                                    'name': _check_name(app['name'], label + '.added name')})
-        known = {member[0] for member in BUILT_INS[name]}
+        known = {member[0] for member in BUILT_INS[name]} | {'key:' + _key(c) for m in BUILT_INS[name] for c in m[2]}
         for member in removed:
             if member not in known:
                 raise ValueError(label + '.removed holds an unknown built-in: ' + str(member))
@@ -167,8 +167,11 @@ def _context_config(styles, name):
 def members(styles, name):
     """The apps in a context: built-ins you haven't removed, then the ones you added. Other has none."""
     config = _context_config(validate(styles), name)
-    result = [{'id': member_id, 'name': title, 'apps': list(classes), 'built_in': True}
-              for member_id, title, classes in BUILT_INS[name] if member_id not in config['removed']]
+    result = []
+    for member_id, title, classes in BUILT_INS[name]:
+        kept = [c for c in classes if 'key:' + _key(c) not in config['removed']]
+        if member_id not in config['removed'] and kept:
+            result.append({'id': member_id, 'name': title, 'apps': kept, 'built_in': True})
     result += [{'id': 'app:' + app['app'], 'name': app['name'], 'apps': [app['app']], 'built_in': False}
                for app in config['added']]
     return result
@@ -283,14 +286,13 @@ def add_app(styles, name, window_class, display_name=None):
         config = dict(_context_config(result, other))
         config['added'] = [app for app in config['added'] if _key(app['app']) != wanted]
         config['removed'] = list(config['removed'])
-        for member_id, _, classes in BUILT_INS[other]:
-            if any(_key(c) == wanted for c in classes) and member_id not in config['removed'] and other != name:
-                config['removed'].append(member_id)
+        if other != name and any(_key(c) == wanted for m in BUILT_INS[other] for c in m[2]):
+            config['removed'] = sorted(set(config['removed']) | {'key:' + wanted})
         result['contexts'][other] = config
     config = result['contexts'][name]
     built_in = next((m for m in BUILT_INS[name] if any(_key(c) == wanted for c in m[2])), None)
     if built_in is not None:
-        config['removed'] = [m for m in config['removed'] if m != built_in[0]]
+        config['removed'] = [m for m in config['removed'] if m not in (built_in[0], 'key:' + wanted)]
     else:
         config['added'].append({'app': window_class, 'name': _check_name(display_name or window_class, 'Name')})
     return validate(result)
@@ -362,7 +364,12 @@ def update_config(config_path, change):
         updated['styles'] = stored
     if updated == config:
         return validate(block)
-    shutil.copy2(path, path.with_name('linux.json.bak.%d' % int(time.time())))
+    backup = path.with_name('linux.json.bak.%d' % int(time.time()))
+    for attempt in range(1, 1000):
+        if not backup.exists():
+            break
+        backup = path.with_name('linux.json.bak.%d-%d' % (int(time.time()), attempt))
+    shutil.copy2(path, backup)
     fd, temporary = tempfile.mkstemp(prefix='.mouthtype-', dir=path.parent)
     try:
         os.fchmod(fd, 0o600)

@@ -67,6 +67,15 @@ class ResolutionTests(unittest.TestCase):
         self.assertEqual(styles.context_of(block, 'Slack'), 'work')
         self.assertTrue(styles.is_default(block))
 
+    def test_moving_one_alias_leaves_its_siblings(self):
+        block = styles.add_app(None, 'email', 'Slack')
+        block = styles.set_context(block, 'work', 'tone', 'casual')
+        self.assertEqual(styles.context_of(block, 'Slack'), 'email')
+        self.assertEqual(styles.context_of(block, 'com.slack.Slack'), 'work')
+        block = styles.add_app(block, 'work', 'Slack')
+        self.assertEqual(styles.context_of(block, 'Slack'), 'work')
+        self.assertEqual(styles.validate(block)['contexts']['work']['removed'], [])
+
     def test_removing_a_built_in_falls_back_to_other(self):
         block = styles.remove_app(None, 'personal', 'discord')
         self.assertIsNone(styles.context_of(block, 'discord'))
@@ -152,6 +161,13 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(len(list(self.path.parent.glob('linux.json.bak.*'))), 1)
         styles.update_config(self.path, lambda block: styles.set_context(block, 'work', 'tone', None))
         self.assertEqual(json.loads(self.path.read_text()), self.original)
+
+    def test_rapid_edits_keep_every_backup(self):
+        styles.update_config(self.path, lambda block: styles.set_default_tone(block, 'casual'))
+        styles.update_config(self.path, lambda block: styles.set_context(block, 'work', 'tone', 'formal'))
+        backups = sorted(self.path.parent.glob('linux.json.bak.*'))
+        self.assertEqual(len(backups), 2)
+        self.assertIn(self.original, [json.loads(b.read_text()) for b in backups])
 
     def test_no_write_when_nothing_changes(self):
         styles.update_config(self.path, lambda block: block)
