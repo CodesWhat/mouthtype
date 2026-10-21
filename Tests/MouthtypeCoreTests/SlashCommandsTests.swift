@@ -91,6 +91,17 @@ import Testing
         #expect(pipeline("slash period", coding: true) == "/period")
     }
 
+    @Test func wrappedNamesSurviveLaterStages() {
+        #expect(pipeline("Run (slash newline) now", coding: true) == "Run (/newline) now")
+        #expect(pipeline("Run [slash newline] now", coding: true) == "Run [/newline] now")
+        #expect(pipeline("Run \"slash newline\" now", coding: true) == "Run \"/newline\" now")
+        #expect(pipeline("Run \u{201C}slash newline\u{201D} now", coding: true) == "Run \u{201C}/newline\u{201D} now")
+        #expect(pipeline("Run 'slash newline' now", coding: true) == "Run '/newline' now")
+        #expect(pipeline("Run (slash new dash line) now", coding: true) == "Run (/new-line) now")
+        // An already typed command inside backticks is left as it is.
+        #expect(pipeline("Run `/newline` now", coding: true) == "Run `/newline` now")
+    }
+
     @Test func pipelineRunsItBeforeSpokenCommandsAndNumbers() {
         // Spoken commands would otherwise turn "dash" into " - " and break the join.
         #expect(pipeline("slash code dash review", coding: true) == "/code-review")

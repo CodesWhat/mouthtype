@@ -64,6 +64,7 @@ public struct SpokenCommands: Sendable {
             if found != nil {
                 var tokenStart = words[w].start
                 while tokenStart > 0, !chars[tokenStart - 1].isWhitespace { tokenStart -= 1 }
+                while tokenStart < words[w].start, "([{\"'`\u{201C}\u{2018}<".contains(chars[tokenStart]) { tokenStart += 1 }
                 if tokenStart < words[w].start, chars[tokenStart] == "/" { found = nil }
             }
             if let found { raw.append(found); w = found.lastWord + 1 } else { w += 1 }
