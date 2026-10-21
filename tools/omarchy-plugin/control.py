@@ -411,22 +411,34 @@ def created_cache_path():
 
 
 def read_created(name):
-    """take.json's created time for one take, or None when it is missing or unusable."""
+    """(created, identity) from take.json, or None when it is missing or unusable. The identity is the file's inode,
+    mtime and size, which tells a reused take name from the take the cache entry was made for."""
     try:
-        created = json.loads((RECOVERY / name / "take.json").read_text(encoding="utf-8"))["created"]
+        path = RECOVERY / name / "take.json"
+        info = path.stat()
+        created = json.loads(path.read_text(encoding="utf-8"))["created"]
         if type(created) in (int, float) and created == created and abs(created) != float("inf"):
-            return float(created)
+            return float(created), [info.st_ino, info.st_mtime_ns, info.st_size]
     except (OSError, ValueError, KeyError, TypeError):
         pass
     return None
+
+
+def take_identity(name):
+    try:
+        info = (RECOVERY / name / "take.json").stat()
+        return [info.st_ino, info.st_mtime_ns, info.st_size]
+    except OSError:
+        return None
 
 
 def take_rows():
     """(id, mtime) of every take directory, newest first by creation time, from one scandir pass.
 
     A take's creation time never changes, so take.json is read once per take and remembered in a small cache file
-    (each poll is a fresh process). The directory mtime is only the fallback for a take without take.json, because
-    retiring a WAV rewrites it."""
+    (each poll is a fresh process). An entry also carries take.json's inode, mtime and size, and is re-read when
+    they differ, so a reused take name never inherits a stale time. The directory mtime is only the fallback for a
+    take without take.json, because retiring a WAV rewrites it."""
     rows = []
     try:
         with os.scandir(RECOVERY) as entries:
@@ -453,12 +465,22 @@ def take_rows():
     live = set()
     for name, mtime in rows:
         live.add(name)
-        created = cache.get(name)
-        if type(created) not in (int, float):
-            created = read_created(name)
-            if created is not None:
-                cache[name] = created
-                changed = True
+        entry = cache.get(name)
+        identity = take_identity(name)
+        created = None
+        if identity is not None:
+            if (isinstance(entry, list) and len(entry) == 2 and type(entry[0]) in (int, float)
+                    and entry[1] == identity):
+                created = entry[0]
+            else:
+                found = read_created(name)
+                if found is not None:
+                    created = found[0]
+                    cache[name] = [found[0], found[1]]
+                    changed = True
+        if created is None and name in cache:
+            del cache[name]
+            changed = True
         keyed.append((created if created is not None else mtime, name, mtime))
     for name in [name for name in cache if name not in live]:
         del cache[name]

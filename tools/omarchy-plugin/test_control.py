@@ -1002,6 +1002,26 @@ class TakeScanTests(unittest.TestCase):
             cached = json.loads(control.created_cache_path().read_text())
             self.assertEqual(sorted(name[0] for name in cached), ["a", "b"])
 
+    def test_a_reused_take_name_does_not_keep_the_old_creation_time(self):
+        small = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(shutil.rmtree, small)
+        now = time.time()
+        def make(name, created):
+            (small / name).mkdir()
+            (small / name / "take.json").write_text(json.dumps({"created": created}))
+            (small / name / "transcript.txt").write_text(name[0] + " words")
+        make("a" * 32, now - 1000)
+        make("b" * 32, now - 500)
+        with mock.patch.object(control, "RECOVERY", small):
+            self.assertEqual([n[0] for n, _ in control.take_rows()], ["b", "a"])
+            # The name "a" is reused by a newer take (forgotten, then a new take drew the same name).
+            shutil.rmtree(small / ("a" * 32))
+            make("a" * 32, now - 10)
+            self.assertEqual([n[0] for n, _ in control.take_rows()], ["a", "b"])
+            # Same size, same second: only the inode or mtime can tell them apart; a rewrite in place is caught too.
+            (small / ("b" * 32) / "take.json").write_text(json.dumps({"created": now + 50}))
+            self.assertEqual([n[0] for n, _ in control.take_rows()], ["b", "a"])
+
     def test_latest_transcript_uses_creation_time_not_directory_mtime(self):
         small = Path(tempfile.mkdtemp(dir=self.root.parent))
         self.addCleanup(shutil.rmtree, small)
