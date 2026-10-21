@@ -38,6 +38,23 @@ private final class CapturingStore: DictationStoring, @unchecked Sendable {
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws {}
 }
 
+/// Blocks inside `transcribe` until released, so a second take can start while the first is still in the engine.
+@MainActor
+private final class GatedEngine: DictationEngine {
+    var readiness: EngineReadiness { .ready }
+    var biases: [VocabularyBias?] = []
+    var inTranscribe = false
+    var gate: CheckedContinuation<Void, Never>?
+    func setVocabularyBias(_ bias: VocabularyBias?) async { biases.append(bias) }
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async { biases.append(bias) }
+    func transcribe(samples: [Float]) async throws -> Transcription {
+        inTranscribe = true
+        await withCheckedContinuation { gate = $0 }
+        inTranscribe = false
+        return Transcription(text: "hi", processingSeconds: 0, engineID: "gated")
+    }
+}
+
 private struct Rules: VocabularyProviding {
     var rules: [DictionaryRule]
     func dictionary() -> [DictionaryRule] { rules }
@@ -414,5 +431,28 @@ private struct FakeSource: BoundedTextSource {
         let warm = try #require(pipeline.warmEditorBias(Task { [] }))
         await warm.value
         #expect(engine.budgets.isEmpty)
+    }
+
+    @Test func keyDownWarmUpWaitsOutAnEarlierTakeStillInTheEngine() async throws {
+        let clock = SystemDictationClock()
+        let engine = GatedEngine()
+        var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: clock)
+        pipeline.boostSavedWords = { true }
+        let first = DictationSession(id: "a", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        let take = Task { try await pipeline.transcribe(audio(), session: first, voicedMs: 1000) }
+        for _ in 0..<1_000 where !engine.inTranscribe { await Task.yield() }
+        #expect(engine.inTranscribe)
+
+        // Take B starts in another editor while A is still being recognised: its names must not reach the engine yet.
+        let warm = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
+        await warm.value
+        #expect(engine.biases.allSatisfy { $0 == nil })
+
+        engine.gate?.resume()
+        _ = try await take.value
+        // Once A is done, B's warm-up goes through.
+        let later = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
+        await later.value
+        #expect(engine.biases.last??.terms == ["otherEditorName"])
     }
 }

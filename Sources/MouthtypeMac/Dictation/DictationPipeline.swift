@@ -49,6 +49,16 @@ struct CleanedDictation: Sendable {
     var deterministicText: String?
 }
 
+/// How many takes are between "audio in hand" and "engine done". The engine holds one bias for all takes, so a key-down
+/// warm-up for a new take must not replace it while an earlier take is still being recognised or boosted.
+final class TranscribeActivity: @unchecked Sendable {
+    private let lock = NSLock()
+    private var active = 0
+    func enter() { lock.withLock { active += 1 } }
+    func leave() { lock.withLock { active -= 1 } }
+    var isIdle: Bool { lock.withLock { active == 0 } }
+}
+
 /// Everything after the audio is in hand, off the main actor: features, the WAV, the trim, the engine call, the
 /// timing shift and the store writes. The controller adds the paste; `--pipeline-selftest` runs it without one.
 /// A store or archive failure is logged and never stops the dictation.
@@ -57,6 +67,7 @@ struct DictationPipeline: Sendable {
     let archive: (any DictationArchiving)?
     let engine: any DictationEngine
     let clock: any DictationClock
+    let transcribing = TranscribeActivity()
 
     var audioRetention: @Sendable () -> AudioRetentionPolicy = { AudioRetentionPreference.load() }
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
@@ -148,13 +159,15 @@ struct DictationPipeline: Sendable {
 
     /// Starts the editor-name bias building once the hints are in, so the key-up `transcribe` finds the model built
     /// (or already part way) instead of starting it. Never waits for the build; `transcribe` still applies its own
-    /// settle cap, which then covers only what is left. Does nothing without editor names.
+    /// settle cap, which then covers only what is left. Does nothing without editor names, or while an earlier take is still being transcribed.
     @discardableResult
     func warmEditorBias(_ hints: Task<[VocabularyBias.Term], Never>?) -> Task<Void, Never>? {
         guard let hints else { return nil }
         return Task {
             let editorTerms = await hints.value
-            guard !editorTerms.isEmpty, !Task.isCancelled else { return }
+            // An earlier take still in recognition or boosting would be rescored with these names (or lose its own
+            // while this build starts), so this take falls back to the release-time path.
+            guard !editorTerms.isEmpty, !Task.isCancelled, transcribing.isIdle else { return }
             await engine.setVocabularyBias(
                 VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary(), editorTerms: editorTerms),
                 settleWithin: nil
@@ -192,6 +205,8 @@ struct DictationPipeline: Sendable {
     func transcribe(
         _ audio: CapturedAudio, session: DictationSession, voicedMs: Double? = nil
     ) async throws -> TranscribedDictation? {
+        transcribing.enter()
+        defer { transcribing.leave() }
         guard SilenceTrimmer.voicedRange(audio.samples) != nil else {
             await finish(session, .empty)
             return nil
