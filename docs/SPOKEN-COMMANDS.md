@@ -1,6 +1,6 @@
 # Spoken commands and counted lists
 
-**Settings → Writing → Spoken commands and lists** controls this and is on by default. You can say punctuation, line breaks and lists instead of typing them. The one switch drives both the commands and counted lists. This page lists what exists today; nothing else is a command.
+**Settings → Advanced → Spoken commands and lists** controls this and is on by default. You can say punctuation, line breaks and lists instead of typing them. The one switch drives both the commands and counted lists. This page lists what exists today; nothing else is a command.
 
 Commands run in the text rules of the cleanup pass, so Cleanup Off bypasses them. Mouthtype only treats a phrase as a command when the surrounding words say it is one. Ordinary speech like "the period ended" or "a new line of products" stays as written. Check the result when a command word is also a real word.
 
@@ -70,4 +70,4 @@ Counting that is just counting stays as it is. "One, two, three apples" has no i
 - Prose that happens to count ("First, thanks. Second, I'm late.") reads as a list.
 - A list item that really contains "next" as prose can be split.
 
-Turn the switch off in Writing if a command word keeps getting in your way.
+Turn the switch off in Settings → Advanced if a command word keeps getting in your way.

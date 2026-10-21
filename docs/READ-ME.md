@@ -89,7 +89,7 @@ In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. 
 
 ## Clean selected text
 
-Select text in an accessible editable field, then choose **Transform Selection**, then **Clean up** (it uses the tone that applies to the app you're in) or one of the AI transforms. The panel names the app the text came from, strikes through removed words in the original and highlights what changed in the result, which you can edit. Choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. If they don't, the panel says so, disables Accept and makes **Copy result** the main button. Password fields are excluded. The chips switch transforms inside the panel. There is no automatic paste. **Edit Transforms…** opens the Transforms page. Saved phrases are no longer in this menu; they're inserted by voice. Check the original field after Accept. See [writing tools](https://mouthtype.app/docs/#cleanup) for browser, device and selection limits.
+Select text in an accessible editable field, then choose **Transform Selection**, then **Clean up** (it uses the tone that applies to the app you're in) or one of the AI transforms. The panel names the app the text came from, strikes through removed words in the original and highlights what changed in the result, which you can edit. Choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. If they don't, the panel says so, disables Accept and makes **Copy result** the main button. Password fields are excluded. The chips switch transforms inside the panel. There is no automatic paste. **Edit Transforms…** opens the Transforms page. Saved phrases are no longer in this menu; they're inserted by voice. Check the original field after Accept. See [writing tools](https://docs.mouthtype.app/cleanup-and-style/writing-tools/) for browser, device and selection limits.
 
 ## Transcribe an audio file
 
@@ -123,7 +123,7 @@ Earlier physical native checks covered microphone dictation, consecutive-take sp
 
 ## Known limitations
 
-For fixes to common problems and the full list of what this release doesn't cover, see https://mouthtype.app/docs/#troubleshooting and https://mouthtype.app/docs/#known-limits.
+For fixes to common problems and the full list of what this release doesn't cover, see https://docs.mouthtype.app/troubleshooting/ and https://docs.mouthtype.app/reference/known-limits/.
 
 - Names and context-dependent recognition can be wrong. A real example was testing recognized as dusting across takes. Check text before sending. Mouthtype does not read previous chat messages to resolve it.
 - Broader browser/terminal/Electron behavior, clipboard restoration, microphone removal, silence, stop-cue counts and explicit Undo need more live coverage. The false-failure warning behavior is not fully verified.
@@ -144,7 +144,7 @@ Synthetic audio, process/IPC, real headless Wayland components and remote speech
 
 ## Local data and removal
 
-History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely. In **Settings > Advanced > Storage**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch to completed Mouthtype recordings only; unfinished recordings and recovery audio are exempt. Text and timings stay. No age limit still has a size limit. Removed audio cannot be restored. See [saved audio](https://mouthtype.app/docs/#local-data). The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it. Quit Mouthtype before removing the app. Delete the data folder only if you intend to erase it.
+History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely. In **Settings > Advanced > Storage**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch to completed Mouthtype recordings only; unfinished recordings and recovery audio are exempt. Text and timings stay. No age limit still has a size limit. Removed audio cannot be restored. See [saved audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/). The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it. Quit Mouthtype before removing the app. Delete the data folder only if you intend to erase it.
 
 ## Report a problem
 

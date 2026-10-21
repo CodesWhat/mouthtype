@@ -74,21 +74,9 @@ test("installation and update help cover 0.4.0 and the manual first upgrade", as
   await expect(page.locator("#your-build")).toContainText(
     "General, Writing, Appearance and Diagnostics",
   );
-  await page.goto("/docs/#updates");
-  await expect(page.locator("#updates")).toContainText("manually");
-  await expect(page.locator("#updates")).toContainText("Alpha.1–3");
-  await expect(page.locator("#updates")).toContainText("Check for Updates…");
-  await expect(page.locator("#updates")).toContainText(
-    "Automatically check for updates",
-  );
-  await expect(page.locator('#updates a[href="/download/"]')).toBeVisible();
-  await expect(page.locator('#updates a[href="/source"]')).toBeVisible();
-  await expect(page.locator("#local-data")).toContainText(
-    "do not upload transcripts or audio",
-  );
-  await expect(page.locator("#permissions")).toContainText(
-    "observed installing on one",
-  );
+  await expect(
+    page.locator('a[href="https://docs.mouthtype.app/getting-started/install-notes/#updates"]'),
+  ).toBeVisible();
 });
 
 test("Download now cancels the countdown and remains available for a retry", async ({ page }) => {

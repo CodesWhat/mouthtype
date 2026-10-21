@@ -29,3 +29,7 @@ website/test-results/
 website/playwright-report/
 .vercel/
 .playwright-mcp/
+
+# docs site (apps/docs)
+apps/docs/node_modules/
+apps/docs/.next/
