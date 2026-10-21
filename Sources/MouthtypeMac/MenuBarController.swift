@@ -7,11 +7,14 @@ public protocol MenuSection {
     /// Called as the menu is about to open, before it starts tracking. Anything that reads another app's state through
     /// Accessibility has to do it here: once the menu is tracking, the system-wide focused element is empty.
     func prepareForMenuOpen()
+    /// Called when the menu closes, so a read still in flight can be dropped.
+    func menuDidClose()
 }
 
 extension MenuSection {
     public func refresh() {}
     public func prepareForMenuOpen() {}
+    public func menuDidClose() {}
 }
 
 @MainActor final class DailyMenu: NSObject, NSMenuDelegate {
@@ -53,6 +56,11 @@ extension MenuSection {
     func menuNeedsUpdate(_ menu: NSMenu) {
         sections.forEach { $0.section.prepareForMenuOpen() }
         refresh()
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === self.menu else { return }
+        sections.forEach { $0.section.menuDidClose() }
     }
 
     private func rebuild() {
