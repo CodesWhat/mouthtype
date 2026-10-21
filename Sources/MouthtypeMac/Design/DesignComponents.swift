@@ -348,10 +348,6 @@ struct DesignNavRow: View {
             }
             .padding(.horizontal, 10).frame(minHeight: height)
             .background { if selected { RoundedRectangle(cornerRadius: 8).fill(DesignPalette.sel) } }
-            .overlay(alignment: .leading) {
-                // The one place the accent marks "you are here": a thin bar on the selected row.
-                if selected { Capsule().fill(DesignPalette.accent).frame(width: 3, height: 20).padding(.leading, 1).accessibilityHidden(true) }
-            }
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
