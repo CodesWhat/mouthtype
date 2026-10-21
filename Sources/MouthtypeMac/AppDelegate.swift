@@ -439,6 +439,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         systemSection.update(shortcut: ShortcutSettings.load())
         diagnostics.globe = remapCoordinator.isActive ? nil : check
         diagnostics.remapChecked = remapCoordinator.menuChecked
+        diagnostics.remapConflict = remapCoordinator.conflict
         diagnostics.shortcut = ShortcutSettings.load()
         guard log else { return }
         Log.permissions.info("globe key action \(String(describing: check.action), privacy: .public), fn key present \(check.fnKeyPresent, privacy: .public), conflict \(check.hasConflict, privacy: .public)")

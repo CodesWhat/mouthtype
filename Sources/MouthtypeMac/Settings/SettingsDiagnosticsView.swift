@@ -51,6 +51,9 @@ struct SettingsDiagnosticsView: View {
                 if state.hotkeyHealth == .secureInputOn {
                     ModalCardNote(text: "Leave the password or other secure field to use dictation. Mouthtype won\u{2019}t bypass Secure Input.")
                 }
+                if state.canRemapFn, state.remapConflict {
+                    ModalCardNote(text: "Another app keeps changing the Fn key mapping, so Remap Fn was turned off for this session. Dictation is using the plain Fn key.")
+                }
                 if state.canRemapFn, !state.remapChecked, let globe = state.globe, globe.hasConflict {
                     row("Globe key", (globe.menuText ?? "Keyboard action conflicts with Fn.") + " Remap Fn, under Advanced options, hides the emoji picker instead.") {
                         Button("Keyboard Settings…", action: actions.openKeyboardSettings).buttonStyle(.designSecondary).fixedSize()

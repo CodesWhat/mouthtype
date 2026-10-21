@@ -16,6 +16,8 @@ public final class FnRemap {
         case alreadyApplied
         /// The marker said applied but the live mapping had lost our entry (something else rewrote it); it was put back.
         case repaired
+        /// Repairs kept being undone: another app is rewriting the mapping. Repairing stopped.
+        case conflict
         case restored
         /// Nothing to undo.
         case clean
@@ -25,6 +27,10 @@ public final class FnRemap {
     private let store: any KeyMappingStore
     private let defaults: UserDefaults
     private let ours = FnRemapMapping.entry()
+    static let maxRepairs = 3
+    static let repairWindow: TimeInterval = 600
+    private var repairTimes: [Date] = []
+    var now: () -> Date = Date.init
     private var signalSources: [DispatchSourceSignal] = []
 
     public convenience init(defaults: UserDefaults = .standard) {
@@ -90,6 +96,13 @@ public final class FnRemap {
             return .failed("could not read the current mapping: \(error)")
         }
         if live.contains(ours) { return .alreadyApplied }
+        let current = now()
+        repairTimes.removeAll { current.timeIntervalSince($0) > Self.repairWindow }
+        guard repairTimes.count < Self.maxRepairs else {
+            Log.hotkey.error("fn remap keeps being removed by something else; not repairing again")
+            return .conflict
+        }
+        repairTimes.append(current)
         Log.hotkey.warning("fn remap entry was removed by something else; reapplying")
         saveMarker(original: live)
         guard store.write(FnRemapMapping.merging(existing: live, ours: ours)) else {

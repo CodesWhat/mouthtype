@@ -53,13 +53,42 @@ private final class FakeKeyStore: KeyMappingStore {
 
     @Test func verifyFallsBackToTheFnFlagWhenRepairFails() {
         let store = FakeKeyStore()
-        let (coordinator, marker, _) = make(store)
+        let (coordinator, _, _) = make(store)
         _ = coordinator.initialSource()
         store.mapping = []
         store.refuseWrites = true
+        // The write is refused, so removal can't be confirmed: stay remapped and keep checking.
+        #expect(coordinator.verify())
+        #expect(coordinator.isActive && coordinator.source == remapped)
+        store.refuseWrites = false
+        store.mapping = []
+        // Repair is possible again here, so it recovers instead of falling back.
+        #expect(coordinator.verify())
+        #expect(coordinator.isActive && store.mapping == [ours])
+    }
+
+    @Test func verifyStaysRemappedWhileOurEntryIsStillInstalledAndTheRestoreFails() {
+        let store = FakeKeyStore()
+        let (coordinator, _, _) = make(store)
+        _ = coordinator.initialSource()
+        // Unreadable-in-effect: our entry is present but the guard rail refuses writes. verify() sees it alive.
+        store.refuseWrites = true
+        #expect(coordinator.verify())
+        #expect(coordinator.isActive && store.mapping == [ours])
+    }
+
+    @Test func repeatedDriftStopsRepairingAndFallsBackWithAConflict() {
+        let store = FakeKeyStore()
+        let (coordinator, _, _) = make(store)
+        _ = coordinator.initialSource()
+        for _ in 0..<FnRemap.maxRepairs {
+            store.mapping = []
+            #expect(coordinator.verify())
+        }
+        store.mapping = []
         #expect(!coordinator.verify())
-        #expect(!coordinator.isActive && coordinator.source == .fnFlag)
-        _ = marker
+        #expect(!coordinator.isActive && coordinator.conflict && coordinator.source == .fnFlag)
+        #expect((store.mapping ?? []).isEmpty)
     }
 
     @Test func disabledPreferenceKeepsTheFnFlagSourceAndWritesNothing() {
@@ -198,6 +227,21 @@ private final class FakeGuardian: FnGuarding {
         store.mapping = [theirFn]
         #expect(coordinator.verify())
         #expect(guardian.stops == 1 && guardian.restorings == [nil, theirFn])
+    }
+
+    @Test func aRepairAtLaunchRestartsTheGuardWithTheCurrentDisplacedMapping() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0029]
+        let marker = UserDefaults(suiteName: "remap-guardian-marker-\(UUID().uuidString)")!
+        let store = FakeKeyStore()
+        let dead = FnRemap(store: store, defaults: marker)
+        _ = dead.apply()
+        store.mapping = [theirFn]   // rewritten while the app was down; marker still says applied
+        let guardian = FakeGuardian()
+        let coordinator = FnRemapCoordinator(
+            remap: FnRemap(store: store, defaults: marker),
+            preferences: UserDefaults(suiteName: "remap-guardian-prefs-\(UUID().uuidString)")!, guardian: guardian)
+        _ = coordinator.initialSource()
+        #expect(guardian.stops == 1 && guardian.restorings == [theirFn])
     }
 
     @Test func noGuardWhenTheRemapIsRefused() {

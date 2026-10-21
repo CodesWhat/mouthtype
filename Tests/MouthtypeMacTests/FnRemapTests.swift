@@ -165,4 +165,21 @@ private final class FakeStore: KeyMappingStore {
         #expect(store.mapping?.count == 2 && Set(store.mapping ?? []) == [capsToEscape, theirFn])
         #expect(next.restoreIfStale() == .clean)
     }
+
+    @Test func repairsAreCappedWithinTheWindowAndResumeAfterIt() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        remap.now = { clock }
+        #expect(remap.apply() == .applied)
+        for _ in 0..<FnRemap.maxRepairs {
+            store.mapping = []
+            #expect(remap.apply() == .repaired)
+        }
+        store.mapping = []
+        #expect(remap.apply() == .conflict)
+        #expect(store.mapping == [])
+        clock = clock.addingTimeInterval(FnRemap.repairWindow + 1)
+        #expect(remap.apply() == .repaired)
+    }
 }
