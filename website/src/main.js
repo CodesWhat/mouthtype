@@ -1,5 +1,6 @@
 import "./hero-demo.js";
 import "./menubar-mouth.js";
+import "./wpm.js";
 
 const principles = document.querySelector(".principles-group");
 const repeatedPrinciples = principles.cloneNode(true);
@@ -65,7 +66,7 @@ const examples = {
     note: "Filler removed. Punctuation added. Saved spelling applied.",
   },
 };
-const card = document.querySelector(".example");
+const card = document.querySelector("#demo .example");
 const exampleText = document.querySelector("#example-text");
 const exampleNote = document.querySelector("#example-note");
 const exampleLive = document.querySelector("#example-live");

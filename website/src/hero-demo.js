@@ -1,3 +1,5 @@
+import { SPEAKING_WPM, TYPING_WPM } from "./wpm-constants.js";
+
 const preview = document.querySelector(".product-preview");
 const voice = document.querySelector("#voice-copy");
 const typing = document.querySelector("#typing-copy");
@@ -7,8 +9,8 @@ const phrases = [
   "The blue notebook is on my desk.",
 ];
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-const spokenWordMs = 60000 / 150;
-const typedCharacterMs = 60000 / (40 * 5);
+const spokenWordMs = 60000 / SPEAKING_WPM;
+const typedCharacterMs = 60000 / (TYPING_WPM * 5);
 let frame;
 let visible = false;
 let suspended = false;
