@@ -86,7 +86,8 @@ def app_name(target):
 def app_summary(target):
     if not isinstance(target, dict):
         return None
-    return {'class': target.get('class'), 'name': app_name(target), 'pid': target.get('pid')}
+    return {'class': target.get('class'), 'name': app_name(target), 'pid': target.get('pid'),
+            'address': target.get('address')}
 
 
 # ---- model output clean-up, ported from TextTransform.sanitize --------------------------------------------------

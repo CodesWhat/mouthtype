@@ -343,7 +343,8 @@ class CaptureTests(Harness):
         result = self.service().capture()
         self.assertEqual((result['state'], result['source'], result['fallback']), ('captured', 'primary', False))
         self.assertEqual((result['text'], result['units']), ('hello world', 11))
-        self.assertEqual(result['app'], {'class': 'org.example.Editor', 'name': 'Editor', 'pid': os.getpid()})
+        self.assertEqual(result['app'], {'class': 'org.example.Editor', 'name': 'Editor', 'pid': os.getpid(),
+                                         'address': WINDOW['address']})
         stored = json.loads(next(self.runtime.glob('transform-*.json')).read_text())
         self.assertEqual(stored['target'], WINDOW)
 

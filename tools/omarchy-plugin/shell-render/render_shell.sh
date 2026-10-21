@@ -27,6 +27,6 @@ COPY plugin /work/plugin
 DOCKER
 "${nas[@]}" build -t "$image-shell" "$tmp"
 
-"${nas[@]}" run --name "$name" "$image-shell" sh -c 'mkdir -p /tmp/mouthtype-shell && cd /work/plugin/shell-render && QML_XHR_ALLOW_FILE_READ=1 /usr/lib/qt6/bin/qmltestrunner -input tst_shell.qml -input tst_library.qml' 2>&1 | tee "$out/harness.log" || true
+  "${nas[@]}" run --name "$name" "$image-shell" sh -c 'mkdir -p /tmp/mouthtype-shell && cd /work/plugin/shell-render && QML_XHR_ALLOW_FILE_READ=1 /usr/lib/qt6/bin/qmltestrunner -input .' 2>&1 | tee "$out/harness.log" || true
 "${nas[@]}" cp "$name:/tmp/mouthtype-shell/." "$out/"
 grep -q 'Totals: .* 0 failed' "$out/harness.log" && ! grep 'Totals:' "$out/harness.log" | grep -qv ' 0 failed' || { echo 'Shell checks reported failures.' >&2; exit 1; }

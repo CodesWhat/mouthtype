@@ -1,0 +1,13 @@
+{
+ "name": "capture-error",
+ "steps": [
+  {
+   "op": "capture",
+   "reply": {
+    "state": "error",
+    "error": "nothing_selected",
+    "message": "Select up to 16,000 characters of text, then try again. Apps that don't set the primary selection need the text copied first."
+   }
+  }
+ ]
+}
