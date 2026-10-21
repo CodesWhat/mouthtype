@@ -5,14 +5,18 @@ on:
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"
+      - "tools/omarchy-plugin/**"
+      - "tools/qml-render/**"
       - "scripts/prepare-linux-arch.py"
       - "packaging/arch/**"
       - ".github/workflows/linux-desktop.yml"
   push:
-    branches: [main, dev/v0.1.0]
+    branches: [main, dev/v0.1.0, dev/v0.4.0, feat/linux-parity]
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"
+      - "tools/omarchy-plugin/**"
+      - "tools/qml-render/**"
       - "scripts/prepare-linux-arch.py"
       - "packaging/arch/**"
       - ".github/workflows/linux-desktop.yml"
@@ -188,5 +192,49 @@ jobs:
         with:
           name: linux-desktop-arch-components
           path: linux-desktop-evidence/
+          retention-days: 14
+          if-no-files-found: warn
+
+  qml-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: archlinux:base-20261011.0.609700@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+      options: --init
+    steps:
+      - name: Install signed Arch render prerequisites
+        run: |
+          pacman -Syu --noconfirm --needed git qt6-declarative qt6-svg ttf-dejavu perl
+          useradd --create-home --shell /bin/bash mouthtype-ci
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record actual Arch package and host versions
+        run: |
+          mkdir qml-render-evidence
+          chown mouthtype-ci:mouthtype-ci qml-render-evidence
+          {
+            cat /etc/os-release
+            uname -srm
+            pacman -Q qt6-base qt6-declarative qt6-svg ttf-dejavu perl
+          } > qml-render-evidence/environment.txt
+      - name: Render QML cases offscreen in light and dark
+        run: timeout --kill-after=5s 600s runuser -u mouthtype-ci -- bash tools/qml-render/run.sh "$GITHUB_WORKSPACE/qml-render-evidence"
+      - name: Verify and clean remaining owned test processes
+        if: always()
+        run: |
+          if id mouthtype-ci >/dev/null 2>&1; then
+            if pgrep -a -u mouthtype-ci; then
+              pkill -TERM -u mouthtype-ci || true
+              sleep 1
+              pkill -KILL -u mouthtype-ci || true
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: linux-qml-renders
+          path: qml-render-evidence/
           retention-days: 14
           if-no-files-found: warn
