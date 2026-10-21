@@ -1,0 +1,16 @@
+[Unit]
+Description=Mouthtype first-run setup (speech model, bar plugin, shortcuts)
+After=graphical-session.target network-online.target
+Wants=network-online.target
+# Does nothing once setup has finished, was removed on purpose, or failed three times.
+# Run `mouthtype-linux-setup` to repeat or repair it by hand.
+
+[Service]
+Type=oneshot
+# The model download can be slow. Runs once per login and never restarts itself, so a failure cannot loop.
+TimeoutStartSec=2h
+Nice=10
+ExecStart=/usr/bin/mouthtype-linux firstrun
+
+[Install]
+WantedBy=graphical-session.target

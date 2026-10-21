@@ -44,6 +44,48 @@ class DoctorTests(unittest.TestCase):
         self.assertFalse(self.runtime.exists())
         self.assertEqual(before, {str(p): p.read_bytes() for p in self.root.iterdir() if p.is_file()})
 
+    def test_llama_server_missing_is_a_warning_with_the_build_command(self):
+        report = self.diagnose(which=lambda command: None if command == 'llama-server' else '/usr/bin/' + command)
+        item = self.check(report, 'llama_server')
+        self.assertEqual(item['status'], 'warning')
+        self.assertIn('setup_cleanup.py', item['action'])
+        self.assertTrue(report['ready'])
+
+    def test_llama_server_reports_version_and_backend(self):
+        from setup_cleanup import PINS
+        version = 'version: 1 (commit ' + PINS['llama']['revision'][:9] + ')'
+        report = self.diagnose(llama_probe=lambda server: (version, [], ''))
+        item = self.check(report, 'llama_server')
+        self.assertEqual(item['status'], 'ok')
+        self.assertIn('backend: CPU', item['detail'])
+
+    def test_llama_server_other_revision_is_a_warning(self):
+        report = self.diagnose(llama_probe=lambda server: ('version: 0.6.0-dev (build 11429, commit d812350493)', [], ''))
+        item = self.check(report, 'llama_server')
+        self.assertEqual(item['status'], 'warning')
+        self.assertIn('not the pinned revision', item['detail'])
+
+    def test_llama_server_without_a_backend_is_not_usable(self):
+        report = self.diagnose(llama_probe=lambda server: ('v', [], 'no compute backend loaded'))
+        self.assertEqual(self.check(report, 'llama_server')['status'], 'warning')
+
+    def test_probe_reads_version_and_flags_missing_backends(self):
+        from doctor import probe_llama_server
+        from unittest.mock import Mock
+
+        def fake(output):
+            def run(command, **kwargs):
+                if '--version' in command:
+                    return Mock(returncode=0, stdout='version: 1 (commit abcdef1)\n', stderr='')
+                return output
+            return run
+        ok = probe_llama_server('/x', run=fake(Mock(returncode=0, stdout='Available devices:\n  Vulkan0: GPU (8000 MiB)\n', stderr='')))
+        self.assertEqual(ok, ('version: 1 (commit abcdef1)', ['Vulkan0: GPU (8000 MiB)'], ''))
+        none = probe_llama_server('/x', run=fake(Mock(returncode=0, stdout='Available devices:\n  (none)\n', stderr='')))
+        self.assertEqual(none[1:], ([], ''))
+        broken = probe_llama_server('/x', run=fake(Mock(returncode=1, stdout='', stderr='load_backend: no backends are loaded')))
+        self.assertIn('no compute backend', broken[2])
+
     def test_missing_hyprctl_is_a_warning_in_recovery_mode_not_an_error(self):
         report = self.diagnose(which=lambda command: None if command == 'hyprctl' else '/usr/bin/' + command)
         self.assertTrue(report['ready'])
