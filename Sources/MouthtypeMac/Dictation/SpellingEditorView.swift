@@ -146,7 +146,7 @@ struct SpellingEditorView: View {
             editor.previewImport(fileURL: url)
         }
         // A sheet blocks the window, so the page can't change while the picker is open.
-        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+        if let window = SettingsNSWindow.existing {
             panel.beginSheetModal(for: window, completionHandler: handle)
         } else {
             panel.begin(completionHandler: handle)

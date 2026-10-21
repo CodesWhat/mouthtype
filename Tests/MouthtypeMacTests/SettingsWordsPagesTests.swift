@@ -94,7 +94,22 @@ import MouthtypeCore
         #expect(exits == [.quitting] && f.spellings.isDirty && f.model.page == .dictionary)
         answer = true
         #expect(window.resolveDraftForQuit())
+        #expect(f.spellings.isDirty, "the draft survives until the quit is certain")
+        window.discardDraftForQuit()
         #expect(!f.spellings.isDirty)
+    }
+
+    @Test func settingsSheetsTargetTheMouthtypeWindowDirectly() throws {
+        let f = try fixture()
+        defer { f.cleanup() }
+        let window = SettingsWindow(model: f.model, reduceTransparency: { true })
+        defer { window.close() }
+        window.window?.orderFront(nil)
+        let other = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        other.isReleasedWhenClosed = false
+        other.makeKeyAndOrderFront(nil)
+        defer { other.close() }
+        #expect(SettingsNSWindow.existing === window.window)
     }
 
     @Test func refusedQuitNeverAsksAboutTheDraft() throws {

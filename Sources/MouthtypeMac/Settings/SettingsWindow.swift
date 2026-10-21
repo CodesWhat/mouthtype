@@ -142,13 +142,18 @@ import MouthtypeCore
     func windowShouldClose(_ sender: NSWindow) -> Bool { model.resolveDraft(.closing) }
 
     /// Quit never reaches windowShouldClose, so the app asks here. With an unsaved draft the window comes forward on its page first.
+    /// Saying yes doesn't discard the draft: the quit may still be delayed or cancelled while the recording is preserved, so
+    /// `discardDraftForQuit` runs once the quit is certain.
     func resolveDraftForQuit() -> Bool {
         guard model.unsavedDraft != nil else { return true }
         if window?.isMiniaturized == true { window?.deminiaturize(nil) }
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
-        return model.resolveDraft(.quitting)
+        return model.resolveDraft(.quitting, discard: false)
     }
+
+    /// Drops the draft the user agreed to discard, so the closing windows don't ask again.
+    func discardDraftForQuit() { model.discardUnsavedDraft() }
 
     private func reloadHome() {
         let home = model.home
@@ -170,6 +175,12 @@ import MouthtypeCore
 
 /// The Settings window. The app runs without a main menu, so nothing supplies Cmd-W; handle it here.
 final class SettingsNSWindow: NSWindow {
+    /// The Mouthtype settings window, whichever window happens to be key. Sheets that belong to a page attach here.
+    @MainActor static var existing: SettingsNSWindow? {
+        let all = NSApp.windows.compactMap { $0 as? SettingsNSWindow }
+        return all.first { $0.isVisible } ?? all.first
+    }
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
         if event.type == .keyDown, flags == .command, event.charactersIgnoringModifiers?.lowercased() == "w" {
