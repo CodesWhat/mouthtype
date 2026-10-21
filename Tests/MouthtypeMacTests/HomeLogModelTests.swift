@@ -293,7 +293,7 @@ import Testing
         #expect(model.takes.first?.recoverable == audio)
     }
 
-    @Test func completedAudioFollowsEachRowsPathAndExpiry() throws {
+    @Test func completedAudioFollowsEachRowsPathAndIgnoresTheStampedExpiry() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         let archive = AudioArchive(supportDirectory: dir)
@@ -308,6 +308,8 @@ import Testing
         }
         try store.recordCapture(missing, CaptureRecord(audioMs: 1000, audioPath: dir.appendingPathComponent("gone.wav").path))
         let found = DictationRecovery.completed(rows: try store.recentTakes(limit: 10), now: base)
-        #expect(found.map(\.id) == [kept] && found.first?.isCompleted == true)
+        // The stamped expiry is stale once the policy changes; maintenance deletes expired files, so a file still
+        // on disk is recoverable.
+        #expect(Set(found.map(\.id)) == [kept, expired] && found.allSatisfy(\.isCompleted))
     }
 }

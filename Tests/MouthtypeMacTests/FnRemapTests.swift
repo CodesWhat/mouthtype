@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import FnRemapKit
 import Testing
 @testable import MouthtypeMac
@@ -115,5 +116,153 @@ private final class FakeStore: KeyMappingStore {
         let remap = FnRemap(store: store, defaults: makeDefaults())
         #expect(remap.restore() == .clean)
         #expect(store.writes.isEmpty)
+    }
+
+    @Test func signalRoutesIntoTheQuitPathWithoutRestoringOrExiting() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        var exits: [Int32] = []
+        remap.exitProcess = { exits.append($0) }
+        remap.hardExit = { _ in }
+        _ = remap.apply()
+        var requests = 0
+        remap.handleSignal(requestTermination: { requests += 1 }, fallbackDelay: 60)
+        #expect(requests == 1)
+        #expect(exits.isEmpty && remap.isApplied)
+    }
+
+    @Test func aSecondSignalRestoresAndExitsAtOnce() {
+        let store = FakeStore([capsToEscape])
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        var exits: [Int32] = []
+        remap.exitProcess = { exits.append($0) }
+        remap.hardExit = { _ in }
+        _ = remap.apply()
+        remap.handleSignal(requestTermination: {}, fallbackDelay: 60)
+        remap.handleSignal(requestTermination: {}, fallbackDelay: 60)
+        #expect(exits == [0] && !remap.isApplied)
+        #expect(store.mapping == [capsToEscape])
+    }
+
+    @Test func withoutARequestTheSignalRestoresThenExits() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        var exits: [Int32] = []
+        remap.exitProcess = { exits.append($0) }
+        remap.hardExit = { _ in }
+        _ = remap.apply()
+        remap.handleSignal(requestTermination: nil, fallbackDelay: 60)
+        #expect(exits == [0] && !remap.isApplied)
+    }
+
+    @Test func aStalledQuitFallsBackToRestoreAndExit() async {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        var exits: [Int32] = []
+        remap.exitProcess = { exits.append($0) }
+        remap.hardExit = { _ in }
+        _ = remap.apply()
+        remap.handleSignal(requestTermination: {}, fallbackDelay: 0.05)
+        for _ in 0..<200 where exits.isEmpty { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(exits.first == 0 && !remap.isApplied)
+    }
+
+    @Test func aRealSignalReachesTheQuitRequestOnTheMainQueue() async {
+        let remap = FnRemap(store: FakeStore(nil), defaults: makeDefaults())
+        var requests = 0
+        remap.exitProcess = { _ in }
+        remap.hardExit = { _ in }
+        remap.installSignalHandlers(signals: [SIGUSR2], requestTermination: { requests += 1 }, fallbackDelay: 60)
+        kill(getpid(), SIGUSR2)
+        for _ in 0..<200 where requests == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(requests == 1)
+    }
+
+    @Test func theHardExitFiresWhileAModalBlocksTheMainThread() {
+        let remap = FnRemap(store: FakeStore(nil), defaults: makeDefaults())
+        let hard = Mutex(false)
+        remap.exitProcess = { _ in }
+        remap.hardExit = { _ in hard.withLock { $0 = true } }
+        // Stands in for NSApp.terminate sitting in an NSAlert.runModal that never returns in time.
+        remap.handleSignal(requestTermination: { Thread.sleep(forTimeInterval: 0.6) }, fallbackDelay: 0.05, hardGrace: 0.05)
+        #expect(hard.withLock { $0 })
+    }
+
+    @Test func theHardExitRestoresTheMappingItselfWithoutTheGuard() {
+        let store = FakeStore([capsToEscape])
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        _ = remap.apply()
+        nonisolated(unsafe) let unsafeStore = store
+        let restoredAtExit = Mutex<[FnRemapMapping.Entry]?>(nil)
+        remap.exitProcess = { _ in }
+        remap.hardExit = { _ in restoredAtExit.withLock { $0 = unsafeStore.mapping } }
+        remap.handleSignal(requestTermination: { Thread.sleep(forTimeInterval: 0.6) }, fallbackDelay: 0.05, hardGrace: 0.05)
+        #expect(restoredAtExit.withLock { $0 } == [capsToEscape])
+    }
+
+    @Test func applyRepairsAMappingSomethingElseReplaced() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        // A login agent runs `hidutil property --set` with its own mapping.
+        store.mapping = [capsToEscape]
+        #expect(remap.apply() == .repaired)
+        #expect(store.mapping == [capsToEscape, FnRemapMapping.entry()])
+        #expect(remap.apply() == .alreadyApplied)
+        // Restore keeps the replacement mapping rather than the stale original.
+        #expect(remap.restore() == .restored)
+        #expect(store.mapping == [capsToEscape])
+    }
+
+    @Test func repairFailsWhenTheWriteIsRefused() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        store.mapping = []
+        store.refuseWrites = true
+        guard case .failed = remap.apply() else { Issue.record("expected failure"); return }
+    }
+
+    @Test func repairFailsWhenTheMappingIsUnreadable() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        store.unreadable = true
+        guard case .failed = remap.apply() else { Issue.record("expected failure"); return }
+    }
+
+    @Test func crashCleanupPutsBackTheDisplacedFnMappingAndRelaunchStaysIdempotent() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0029]
+        let defaults = makeDefaults()
+        let store = FakeStore([capsToEscape, theirFn])
+        let dead = FnRemap(store: store, defaults: defaults)
+        #expect(dead.apply() == .applied)
+        #expect(dead.displacedEntry == theirFn)
+        // The app is killed. The guard runs with what the app told it.
+        let arguments = FnGuardArguments(parent: 4242, entry: FnRemapMapping.entry(), displaced: dead.displacedEntry)
+        #expect(FnGuard.run(arguments, store: store, wait: { _ in }) == .removed)
+        #expect(Set(store.mapping ?? []) == [capsToEscape, theirFn])
+        // Next launch finds the stale marker and must not duplicate or lose anything.
+        let next = FnRemap(store: store, defaults: defaults)
+        #expect(next.restoreIfStale() == .restored)
+        #expect(store.mapping?.count == 2 && Set(store.mapping ?? []) == [capsToEscape, theirFn])
+        #expect(next.restoreIfStale() == .clean)
+    }
+
+    @Test func repairsAreCappedWithinTheWindowAndResumeAfterIt() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        remap.now = { clock }
+        #expect(remap.apply() == .applied)
+        for _ in 0..<FnRemap.maxRepairs {
+            store.mapping = []
+            #expect(remap.apply() == .repaired)
+        }
+        store.mapping = []
+        #expect(remap.apply() == .conflict)
+        #expect(store.mapping == [])
+        clock = clock.addingTimeInterval(FnRemap.repairWindow + 1)
+        #expect(remap.apply() == .repaired)
     }
 }

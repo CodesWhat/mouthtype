@@ -76,10 +76,25 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
     /// The text between `open` and `close` when they wrap all of it, and the input didn't start or end with them.
     private static func enclosed(_ text: String, source: String, open: String, close: String) -> String? {
         guard text.count >= open.count + close.count, text.hasPrefix(open), text.hasSuffix(close),
-              !source.hasPrefix(open), !source.hasSuffix(close) else { return nil }
+              !startsWithQuote(source, open), !endsWithQuote(source, close) else { return nil }
         let inner = String(text.dropFirst(open.count).dropLast(close.count))
         guard !inner.contains(open), !inner.contains(close) else { return nil }
         return inner
+    }
+
+    private static let quoteMarks: [Character: Character] = ["\u{201C}": "\"", "\u{201D}": "\"", "\u{2018}": "'", "\u{2019}": "'"]
+
+    /// Straight and curly quotes count as the same mark, so a model swapping styles can't hide that the input was quoted.
+    private static func quoteKey(_ c: Character) -> Character { quoteMarks[c] ?? c }
+
+    private static func startsWithQuote(_ source: String, _ open: String) -> Bool {
+        guard let a = source.first, let b = open.first else { return false }
+        return source.hasPrefix(open) || (quoteMarks[b] != nil || b == "\"") && quoteKey(a) == quoteKey(b)
+    }
+
+    private static func endsWithQuote(_ source: String, _ close: String) -> Bool {
+        guard let a = source.last, let b = close.last else { return false }
+        return source.hasSuffix(close) || (quoteMarks[b] != nil || b == "\"") && quoteKey(a) == quoteKey(b)
     }
 
     private static func unfenced(_ text: String, source: String) -> String? {
@@ -94,12 +109,20 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
     /// Only framing that names the output ("Here's the rewritten text:", "Here is a more formal version of the selected text:").
     /// "Here is the plan for Alice:" is content, so anything past the closed noun set stays.
     private static let preamble =
-        #"^(?:(?:sure|certainly|of course|okay|ok)[,!.]?\s+)?(?:here(?:'s|’s| is| are)[ \t]+(?:(?:the|a|an|your)[ \t]+)?(?:[a-z-]+[ \t]+){0,3}(?:text|version|rewrite|result|output|translation|summary|draft|revision|edit)(?:[ \t]+(?:(?:of|for)[ \t]+(?:your|the)[ \t]+(?:selected[ \t]+)?(?:text|selection)|(?:in|with)[ \t]+(?:an?[ \t]+)?[a-z-]+[ \t]+tone))?|(?:the )?(?:corrected|edited|revised|rewritten|updated) (?:text|version)):[ \t]*(?:\n\s*|\s+)"#
+        #"^(?:(?:sure|certainly|of course|okay|ok)[,!.]?\s+)?(?:here(?:'s|’s| is| are)[ \t]+(?:(?:the|a|an|your)[ \t]+)?(?:[a-z-]+[ \t]+){0,3}(?:text|version|rewrite|result|output|translation|transcript|transcription|dictation|summary|draft|revision|edit)(?:[ \t]+(?:(?:of|for)[ \t]+(?:your|the)[ \t]+(?:selected[ \t]+)?(?:text|selection)|(?:in|with)[ \t]+(?:an?[ \t]+)?[a-z-]+[ \t]+tone))?|(?:the )?(?:corrected|edited|revised|rewritten|updated) (?:text|version)):[ \t]*(?:\n\s*|\s+)"#
 
     private static func withoutPreamble(_ text: String, source: String) -> String {
         guard let range = text.range(of: preamble, options: [.regularExpression, .caseInsensitive]) else { return text }
         let lead = text[range].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !source.lowercased().hasPrefix(lead), range.upperBound < text.endIndex else { return text }
+        guard range.upperBound < text.endIndex else { return text }
+        // The input may have said the same words without the colon or capital ("here is the cleaned text we ...").
+        let leadWords = words(lead)
+        guard !leadWords.isEmpty, !words(source).starts(with: leadWords) else { return text }
         return String(text[range.upperBound...])
+    }
+
+    private static func words(_ text: String) -> [String] {
+        text.lowercased().split { !$0.isLetter && !$0.isNumber && $0 != "'" && $0 != "\u{2019}" }
+            .map { $0.replacingOccurrences(of: "\u{2019}", with: "'") }
     }
 }

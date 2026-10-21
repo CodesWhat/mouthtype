@@ -38,13 +38,17 @@ public struct DictionaryReplacer: Sendable {
     public static let stageName = "dictionary"
 
     public let rules: [DictionaryRule]
-    private let matcher: PhraseMatcher
+    private let setup: DictionarySetup
 
+    /// The matcher and derived lists come from `DictionarySetup`, so a take with the same rules as the last one
+    /// rebuilds nothing. Any edit to the rule list is a different key and builds fresh.
     public init(rules: [DictionaryRule]) {
-        let usable = rules.filter { !$0.written.isEmpty }
-        self.rules = usable
-        self.matcher = PhraseMatcher(patterns: usable.map(\.heard))
+        let setup = DictionarySetup.shared(for: rules)
+        self.setup = setup
+        self.rules = setup.usable
     }
+
+    private var matcher: PhraseMatcher { setup.matcher }
 
     public func apply(_ text: String) -> StageResult {
         guard !matcher.isEmpty, !text.isEmpty else { return StageResult(text: text) }
@@ -56,29 +60,107 @@ public struct DictionaryReplacer: Sendable {
     }
 
     /// Exact aliases are handled by replacement, not by broad phonetic hints.
-    func cleanupVocabulary() -> [String] {
-        rules.filter { !$0.heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.allowsSpellingHints }.map(\.written)
-    }
+    func cleanupVocabulary() -> [String] { setup.cleanupVocabulary }
 
     /// The model cannot introduce an exact alias target without a matching source or target phrase.
     static func introducedAlias(input: String, output: String, rules: [DictionaryRule]) -> String? {
+        guard let plan = DictionarySetup.shared(for: rules).aliasPlan else { return nil }
         let key = PhraseKey.normalized
-        let usable = rules.filter { !key($0.heard).isEmpty && !key($0.written).isEmpty }
-        let hints = Set(usable.filter(\.allowsSpellingHints).map { key($0.written) })
-        let exact = usable.filter { !hints.contains(key($0.written)) }
-        guard !exact.isEmpty else { return nil }
-        let sources = exact.flatMap { [$0.heard, $0.written] }
-        let destinations = exact.flatMap { [key($0.written), key($0.written)] }
-        func counts(_ text: String, patterns: [String], destinations: [String]) -> [String: Int] {
+        func counts(_ text: String, matcher: PhraseMatcher, destinations: [String]) -> [String: Int] {
             let chars = Array(text)
-            let matches = PhraseMatcher(patterns: patterns).matches(chars, lower: TextScan.lowered(chars))
+            let matches = matcher.matches(chars, lower: TextScan.lowered(chars))
             return matches.reduce(into: [:]) { $0[destinations[$1.pattern], default: 0] += 1 }
         }
-        let allowed = counts(input, patterns: sources, destinations: destinations)
-        let produced = counts(output, patterns: exact.map(\.written), destinations: exact.map { key($0.written) })
-        return exact.first { produced[key($0.written), default: 0] > allowed[key($0.written), default: 0] }?.written
+        let allowed = counts(input, matcher: plan.sourceMatcher, destinations: plan.sourceDestinations)
+        let produced = counts(output, matcher: plan.writtenMatcher, destinations: plan.writtenKeys)
+        return plan.exact.first { produced[key($0.written), default: 0] > allowed[key($0.written), default: 0] }?.written
     }
 
     /// Convenience used by tests and callers that only want the text.
     public func apply(to text: String) -> String { apply(text).text }
+}
+
+/// Everything derived from one rule list, built once and shared. `shared(for:)` keeps the few most recent lists,
+/// matched by value, so the same dictionary across takes (the array usually shares one buffer, which makes the
+/// comparison immediate) skips the rebuild, and a changed dictionary file produces a different list and a miss.
+final class DictionarySetup: @unchecked Sendable {
+    struct AliasPlan {
+        let exact: [DictionaryRule]
+        let sourceMatcher: PhraseMatcher
+        let sourceDestinations: [String]
+        let writtenMatcher: PhraseMatcher
+        let writtenKeys: [String]
+    }
+
+    let source: [DictionaryRule]
+    let usable: [DictionaryRule]
+    let matcher: PhraseMatcher
+    private let lock = NSLock()
+    private var _cleanupVocabulary: [String]?
+    private var _aliasPlan: AliasPlan??
+    private var _bias: VocabularyBias?
+
+    private init(rules: [DictionaryRule]) {
+        source = rules
+        usable = rules.filter { !$0.written.isEmpty }
+        matcher = PhraseMatcher(patterns: usable.map(\.heard))
+    }
+
+    var cleanupVocabulary: [String] {
+        lock.lock(); defer { lock.unlock() }
+        if let cached = _cleanupVocabulary { return cached }
+        let built = usable.filter { !$0.heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && $0.allowsSpellingHints }.map(\.written)
+        _cleanupVocabulary = built
+        return built
+    }
+
+    var aliasPlan: AliasPlan? {
+        lock.lock(); defer { lock.unlock() }
+        if let cached = _aliasPlan { return cached }
+        let built = buildAliasPlan()
+        _aliasPlan = .some(built)
+        return built
+    }
+
+    /// Rules here are the raw list, not `usable`: alias checks have always keyed off non-blank heard and written.
+    private func buildAliasPlan() -> AliasPlan? {
+        let key = PhraseKey.normalized
+        let rules = source.filter { !key($0.heard).isEmpty && !key($0.written).isEmpty }
+        let hints = Set(rules.filter(\.allowsSpellingHints).map { key($0.written) })
+        let exact = rules.filter { !hints.contains(key($0.written)) }
+        guard !exact.isEmpty else { return nil }
+        let keys = exact.map { key($0.written) }
+        return AliasPlan(
+            exact: exact,
+            sourceMatcher: PhraseMatcher(patterns: exact.flatMap { [$0.heard, $0.written] }),
+            sourceDestinations: keys.flatMap { [$0, $0] },
+            writtenMatcher: PhraseMatcher(patterns: exact.map(\.written)),
+            writtenKeys: keys
+        )
+    }
+
+    var vocabularyBias: VocabularyBias {
+        lock.lock(); defer { lock.unlock() }
+        if let cached = _bias { return cached }
+        let built = VocabularyBias.build(from: source)
+        _bias = built
+        return built
+    }
+
+    private static let cacheLock = NSLock()
+    nonisolated(unsafe) private static var recent: [DictionarySetup] = []
+    private static let capacity = 4
+
+    static func shared(for rules: [DictionaryRule]) -> DictionarySetup {
+        cacheLock.lock(); defer { cacheLock.unlock() }
+        if let at = recent.firstIndex(where: { $0.source == rules }) {
+            let hit = recent.remove(at: at)
+            recent.insert(hit, at: 0)
+            return hit
+        }
+        let fresh = DictionarySetup(rules: rules)
+        recent.insert(fresh, at: 0)
+        if recent.count > capacity { recent.removeLast() }
+        return fresh
+    }
 }

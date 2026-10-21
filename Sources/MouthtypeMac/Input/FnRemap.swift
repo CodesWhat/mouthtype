@@ -14,6 +14,10 @@ public final class FnRemap {
     public enum Outcome: Equatable, Sendable {
         case applied
         case alreadyApplied
+        /// The marker said applied but the live mapping had lost our entry (something else rewrote it); it was put back.
+        case repaired
+        /// Repairs kept being undone: another app is rewriting the mapping. Repairing stopped.
+        case conflict
         case restored
         /// Nothing to undo.
         case clean
@@ -23,7 +27,16 @@ public final class FnRemap {
     private let store: any KeyMappingStore
     private let defaults: UserDefaults
     private let ours = FnRemapMapping.entry()
+    static let maxRepairs = 3
+    static let repairWindow: TimeInterval = 600
+    private var repairTimes: [Date] = []
+    var now: () -> Date = Date.init
     private var signalSources: [DispatchSourceSignal] = []
+    private var terminationRequested = false
+    /// Replaced in tests; the real thing ends the process.
+    var exitProcess: (Int32) -> Void = { exit($0) }
+    /// The last resort when the main queue is wedged, so it can't touch the actor. Replaced in tests.
+    var hardExit: @Sendable (Int32) -> Void = { exit($0) }
 
     public convenience init(defaults: UserDefaults = .standard) {
         self.init(store: HIDKeyMappingStore(), defaults: defaults)
@@ -32,6 +45,12 @@ public final class FnRemap {
     init(store: any KeyMappingStore, defaults: UserDefaults) {
         self.store = store
         self.defaults = defaults
+    }
+
+    /// The user's own mapping of Fn that ours displaced, if any. The crash guardian puts it back.
+    var displacedEntry: FnRemapMapping.Entry? {
+        guard isApplied else { return nil }
+        return savedOriginal()?.first { $0[FnRemapMapping.srcKey] == ours[FnRemapMapping.srcKey] && $0 != ours }
     }
 
     public var isApplied: Bool { defaults.bool(forKey: Self.markerKey) }
@@ -49,7 +68,7 @@ public final class FnRemap {
     }
 
     public func apply() -> Outcome {
-        if isApplied { return .alreadyApplied }
+        if isApplied { return verifyLive() }
         let original: [FnRemapMapping.Entry]?
         do {
             original = try store.read()
@@ -69,6 +88,36 @@ public final class FnRemap {
         }
         Log.hotkey.info("fn remap applied")
         return .applied
+    }
+
+    /// The marker only says we applied once. Another process can rewrite `UserKeyMapping` afterwards, so read the
+    /// live mapping, and if our entry is gone put it back. Whatever is live then is what we now displace, so the
+    /// bookkeeping for `restore()` is rebuilt from it.
+    private func verifyLive() -> Outcome {
+        let live: [FnRemapMapping.Entry]
+        do {
+            live = try store.read() ?? []
+        } catch {
+            return .failed("could not read the current mapping: \(error)")
+        }
+        if live.contains(ours) { return .alreadyApplied }
+        let current = now()
+        repairTimes.removeAll { current.timeIntervalSince($0) > Self.repairWindow }
+        guard repairTimes.count < Self.maxRepairs else {
+            Log.hotkey.error("fn remap keeps being removed by something else; not repairing again")
+            return .conflict
+        }
+        repairTimes.append(current)
+        Log.hotkey.warning("fn remap entry was removed by something else; reapplying")
+        saveMarker(original: live)
+        guard store.write(FnRemapMapping.merging(existing: live, ours: ours)) else {
+            return .failed("the HID system refused the write")
+        }
+        guard let readBack = try? store.read(), readBack.contains(ours) else {
+            _ = restore()
+            return .failed("the mapping did not read back after writing")
+        }
+        return .repaired
     }
 
     /// Removes our entry and puts back whatever it displaced. Verified by reading back; the marker stays if that fails.
@@ -99,20 +148,68 @@ public final class FnRemap {
         return restore()
     }
 
-    /// Restore on SIGTERM and SIGINT, then quit. Call once the remap is applied.
-    public func installSignalHandlers() {
+    /// Handles SIGTERM and SIGINT on the main queue. Call once the remap is applied.
+    ///
+    /// With `requestTermination` (the app) the signal goes into the normal quit path, so take preservation, the
+    /// clipboard lease and the audio unmute all run, and Fn is restored by that teardown. If the quit stalls or is
+    /// cancelled, after `fallbackDelay` the mapping is restored and the process exits anyway; if the main queue is
+    /// blocked (a modal alert) or wedged too, a background timer exits and the fn guard restores the mapping. A second signal does the same
+    /// immediately. Without it (the diagnostic probes) the handler restores and exits at once.
+    public func installSignalHandlers(
+        signals: [Int32] = [SIGTERM, SIGINT],
+        requestTermination: (@MainActor () -> Void)? = nil,
+        fallbackDelay: TimeInterval = 10
+    ) {
         guard signalSources.isEmpty else { return }
-        for number in [SIGTERM, SIGINT] {
+        for number in signals {
             signal(number, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
             source.setEventHandler { [weak self] in
                 MainActor.assumeIsolated {
-                    _ = self?.restore()
-                    exit(0)
+                    self?.handleSignal(requestTermination: requestTermination, fallbackDelay: fallbackDelay)
                 }
             }
             source.resume()
             signalSources.append(source)
+        }
+    }
+
+    func handleSignal(requestTermination: (@MainActor () -> Void)?, fallbackDelay: TimeInterval, hardGrace: TimeInterval = 5) {
+        guard let requestTermination, !terminationRequested else {
+            _ = restore()
+            exitProcess(0)
+            return
+        }
+        terminationRequested = true
+        // Both deadlines are armed before the request: NSApp.terminate can block this thread in a modal alert or
+        // wait on a stalled save, and nothing after it would run. The background one doesn't need the main queue.
+        let hardExit = self.hardExit
+        let hardRestore = backgroundRestore()
+        DispatchQueue.main.asyncAfter(deadline: .now() + fallbackDelay) { [weak self] in
+            MainActor.assumeIsolated {
+                Log.hotkey.error("quit after signal stalled, restoring the fn mapping and exiting")
+                _ = self?.restore()
+                self?.exitProcess(0)
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + fallbackDelay + hardGrace) {
+            hardRestore()
+            hardExit(0)
+        }
+        requestTermination()
+    }
+
+    /// A restore that needs no actor, for the hard exit when the main thread is blocked. It carries a snapshot of the
+    /// saved original and uses the same read, merge and write the main-actor restore does, so it works whether or not
+    /// the fn guard is running (it may be missing or have failed to spawn).
+    private func backgroundRestore() -> @Sendable () -> Void {
+        guard isApplied else { return {} }
+        nonisolated(unsafe) let store = self.store
+        let original = savedOriginal() ?? []
+        let ours = self.ours
+        return {
+            guard let current = try? store.read() ?? [] else { return }
+            _ = store.write(FnRemapMapping.restoring(current: current, ours: ours, original: original))
         }
     }
 

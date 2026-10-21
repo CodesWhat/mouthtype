@@ -4,7 +4,8 @@ import Foundation
 /// Starts and stops the helper that clears the Fn remap if the app dies without restoring it.
 @MainActor
 protocol FnGuarding: AnyObject {
-    func start()
+    /// `restoring` is the user's own Fn mapping that the remap displaced, put back if the app dies.
+    func start(restoring: FnRemapMapping.Entry?)
     func stop()
 }
 
@@ -34,14 +35,14 @@ final class FnGuardLauncher: FnGuarding {
         return false
     }
 
-    func start() {
+    func start(restoring: FnRemapMapping.Entry?) {
         guard !isRunning else { return }
         guard let executable, FileManager.default.isExecutableFile(atPath: executable.path) else {
             if !warnedMissing { Log.hotkey.error("fn guard not found, the remap has no safety net") }
             warnedMissing = true
             return
         }
-        pid = Self.spawn(executable, parent: getpid())
+        pid = Self.spawn(executable, parent: getpid(), displaced: restoring?[FnRemapMapping.dstKey])
         if let pid {
             Log.hotkey.info("fn guard started, pid \(pid, privacy: .public)")
         } else {
@@ -61,7 +62,7 @@ final class FnGuardLauncher: FnGuarding {
         Log.hotkey.info("fn guard stopped, pid \(pid, privacy: .public)")
     }
 
-    private nonisolated static func spawn(_ executable: URL, parent: pid_t) -> pid_t? {
+    private nonisolated static func spawn(_ executable: URL, parent: pid_t, displaced: Int64?) -> pid_t? {
         var attributes: posix_spawnattr_t?
         var actions: posix_spawn_file_actions_t?
         guard posix_spawnattr_init(&attributes) == 0 else { return nil }
@@ -80,10 +81,11 @@ final class FnGuardLauncher: FnGuarding {
             let mode = descriptor == 0 ? O_RDONLY : O_WRONLY
             guard posix_spawn_file_actions_addopen(&actions, descriptor, "/dev/null", mode, 0) == 0 else { return nil }
         }
-        let arguments = [
+        var arguments = [
             executable.path, String(parent),
             String(FnRemapMapping.fnSource), String(FnRemapMapping.fnDestination),
         ]
+        if let displaced { arguments.append(String(displaced)) }
         let argv: [UnsafeMutablePointer<CChar>?] = arguments.map { strdup($0) } + [nil]
         defer { argv.forEach { free($0) } }
         var child: pid_t = 0
