@@ -56,7 +56,8 @@ import MouthtypeCore
         #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Dictionary", "Transforms", "Style", "Appearance"])
         #expect(SettingsModalPage.visible(advanced: false).map(\.title) == ["General", "Mac", "Health"])
         #expect(SettingsModalPage.visible(advanced: true).map(\.title) == ["General", "Mac", "Health", "Advanced"])
-        #expect(DesignIcon.allCases.map(\.rawValue) == ["home", "stats", "dictionary", "transforms", "style", "appearance", "settings"])
+        #expect(SettingsPage.allCases.map(\.symbol) == ["house", "chart.bar", "book.closed", "wand.and.stars", "textformat", "capsule"])
+        #expect(SettingsModalPage.allCases.map(\.symbol) == ["gearshape", "laptopcomputer", "heart.text.square", "slider.horizontal.3"])
     }
 
     @Test func advancedSwitchPersistsAndAddsThePage() throws {
