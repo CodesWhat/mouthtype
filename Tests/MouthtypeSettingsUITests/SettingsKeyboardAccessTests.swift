@@ -13,6 +13,12 @@ import Testing
         defaults.removePersistentDomain(forName: name)
         let model = SettingsModel(defaults: defaults, home: home)
         model.page = page
+        // Uninstalled built-in apps are hidden from the Style lists, so pad every list with sites to keep the page taller than the fold on any machine.
+        if page == .style {
+            for context in StyleContextID.allCases where context.hasList {
+                for n in 0..<8 { model.addContextSite(context, domain: "filler\(n).\(context.rawValue).example.com") }
+            }
+        }
         let controller = SettingsWindow(model: model, reduceTransparency: { true }, fullKeyboardAccess: { fullKeyboardAccess })
         controller.window?.contentView?.layoutSubtreeIfNeeded()
         return controller
