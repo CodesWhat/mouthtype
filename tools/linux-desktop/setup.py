@@ -47,6 +47,18 @@ def missing_packages(table, which=shutil.which):
     return sorted({package for command, package in table.items() if which(command) is None})
 
 
+def set_aside_incomplete(destination):
+    """A speech directory with no linux.json is what an interrupted or failed download leaves, and setup_speech.py refuses to
+    reuse it, which would make every retry fail the same way. Move it to <name>.incomplete (replacing an older one)."""
+    if destination.name != 'speech-candidate' or not destination.is_dir() or (destination / 'linux.json').exists():
+        return
+    parked = destination.with_name(destination.name + '.incomplete')
+    if parked.exists():
+        shutil.rmtree(parked)
+    destination.rename(parked)
+    print('Moved the incomplete earlier speech setup aside to ' + str(parked) + ' (delete it when you like).')
+
+
 def record_firstrun(state):
     """Tell the login first-run unit that setup was finished or removed on purpose, so it does not redo or undo that."""
     try:
@@ -162,6 +174,7 @@ def main(argv=None, *, run=subprocess.run, speech=None):
     if config.is_file():
         print('Speech is already prepared: ' + str(config))
     else:
+        set_aside_incomplete(args.destination.expanduser())
         if speech is None:
             import setup_speech
             speech = setup_speech.main

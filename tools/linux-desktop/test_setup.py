@@ -128,6 +128,20 @@ class SetupTests(unittest.TestCase):
             self.assertIn('--no-transform-shortcut', commands[-1])
             self.record.assert_called_with('done')
 
+    def test_an_incomplete_speech_directory_is_moved_aside_so_a_retry_can_run(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp) / 'speech-candidate'
+            target.mkdir()
+            (target / 'partial.tar.bz2').write_text('x')
+            (Path(temp) / 'speech-candidate.incomplete').mkdir()
+            setup.set_aside_incomplete(target)
+            self.assertFalse(target.exists())
+            self.assertTrue((Path(temp) / 'speech-candidate.incomplete/partial.tar.bz2').is_file())
+            complete = Path(temp) / 'other'
+            complete.mkdir()
+            setup.set_aside_incomplete(complete)
+            self.assertTrue(complete.is_dir(), 'only the default setup directory is ever moved')
+
     def test_cleanup_offer_asks_only_on_a_terminal_and_wires_linux_json(self):
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / 'linux.json'
