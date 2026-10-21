@@ -312,6 +312,11 @@ class Session:
                             'model': self.cleanup_engine.status() if self.cleanup_engine is not None else None},
                 'feedback': getattr(self.feedback, 'status', 'unavailable') if self.feedback else 'disabled'}
 
+    def live_status(self):
+        """The fields a watcher snapshot needs, without the take-directory walk that status() does."""
+        return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
+                'recovery': self.take.name if self.take else None}
+
     def _notify(self, state):
         if self.feedback:
             try:
@@ -1390,7 +1395,7 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
 
 def state_snapshot(session, files=None):
     """Text-free state for live frontends: session state, outcome, elapsed time, coarse level."""
-    status = session.status()
+    status = session.live_status()
     return {'event': 'state', 'state': status['state'], 'error': status['error'], 'delivery': status['delivery'],
             'recovery': status['recovery'], 'elapsed': session.elapsed(), 'level': session.level(),
             'file_import': files.status()['state'] if files is not None else None}

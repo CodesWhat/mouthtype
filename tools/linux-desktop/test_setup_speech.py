@@ -57,6 +57,11 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(Path(value['engine_config']).stat().st_mode & 0o777, 0o600)
         commands = [call for call in self.calls if isinstance(call, list)]
         self.assertTrue(any(call[1:4] == ['-m', 'pip', 'install'] for call in commands))
+        install = next(call for call in commands if call[1:4] == ['-m', 'pip', 'install'])
+        self.assertIn('--require-hashes', install)
+        requirements = (Path(setup_speech.__file__).resolve().parents[1] / 'linux-engine-proof/requirements.txt').read_text()
+        for package in ('sherpa-onnx', 'sherpa-onnx-core'):
+            self.assertRegex(requirements, r'(?m)^' + package + r'==1\.13\.8 \\\n(    --hash=sha256:[0-9a-f]{64}( \\)?\n)+')
         self.assertFalse(any('serve' in call or 'sudo' in call or 'pacman' in call for call in commands))
         receipt = json.loads((self.destination / 'setup-receipt.json').read_text())
         self.assertEqual(receipt['model_sha256'], self.pins['parakeet']['sha256'])

@@ -84,15 +84,65 @@ def cli_error(result):
         return None
 
 
+CAPABILITIES_TTL = 60
+
+
+def capabilities_cache_path():
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    base = Path(runtime) if runtime else Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache"))
+    return base / "mouthtype" / "capabilities.json"
+
+
+def read_capabilities_cache(stamp):
+    try:
+        entry = json.loads(capabilities_cache_path().read_text(encoding="utf-8"))
+        age = time.time() - entry["at"]
+        if (entry["launcher"] == str(LAUNCHER) and entry["mtime_ns"] == stamp
+                and 0 <= age < CAPABILITIES_TTL and isinstance(entry["report"], dict) and entry["report"]):
+            return entry["report"]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def write_capabilities_cache(stamp, report):
+    path = capabilities_cache_path()
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(path.parent, 0o700)
+        fd, temporary = tempfile.mkstemp(prefix=".capabilities-", dir=path.parent)
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                json.dump({"launcher": str(LAUNCHER), "mtime_ns": stamp, "at": time.time(), "report": report}, output)
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+    except OSError:
+        pass
+
+
 def capabilities():
-    if not LAUNCHER.is_file():
+    """The widget runs a fresh helper process per poll, so the cache lives in a file: launcher path + mtime, 60 s TTL.
+    Only a non-empty answer is stored, and any cache read error falls back to asking the launcher."""
+    try:
+        stamp = LAUNCHER.stat().st_mtime_ns
+    except OSError:
         return {}
+    cached = read_capabilities_cache(stamp)
+    if cached is not None:
+        return cached
     try:
         result = cli("capabilities", timeout=10)
         report = json.loads(result.stdout) if result.returncode == 0 else {}
     except (OSError, json.JSONDecodeError, subprocess.SubprocessError):
         report = {}
-    return report if isinstance(report, dict) else {}
+    if not isinstance(report, dict):
+        return {}
+    if report:
+        write_capabilities_cache(stamp, report)
+    return report
 
 
 def atomic_json(path, value):
