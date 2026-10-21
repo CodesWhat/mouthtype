@@ -4,7 +4,7 @@ Editor hints help Mouthtype recognize code names like `viewDidLoad` or `AppDeleg
 
 ## Turn it on
 
-Editor hints build on **Boost my saved words while recognising**, so turn that on first. Then enable **Code names from your editor** in **Settings → Advanced**.
+Editor hints build on **Boost saved words**, which is off by default, so turn that on first. Then enable **Code names from your editor** in **Settings → Advanced**.
 
 ## What it does
 

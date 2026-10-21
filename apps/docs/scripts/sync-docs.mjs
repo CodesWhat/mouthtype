@@ -1,6 +1,14 @@
 #!/usr/bin/env node
 
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -16,6 +24,14 @@ const tmpDir = join(docsRoot, "content", "docs.tmp");
 
 const urlMap = buildUrlMap(pages);
 
+const isDirectory = (repoPath) => {
+  try {
+    return statSync(join(repoRoot, repoPath)).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
 // Build into a temp directory so a mid-run crash can't leave an empty docs site.
 if (existsSync(tmpDir)) {
   rmSync(tmpDir, { recursive: true, force: true });
@@ -29,7 +45,12 @@ for (const page of pages) {
     process.exit(1);
   }
 
-  const body = rewriteLinks(stripLeadingH1(readFileSync(srcFile, "utf8")), page.src, urlMap);
+  const body = rewriteLinks(
+    stripLeadingH1(readFileSync(srcFile, "utf8")),
+    page.src,
+    urlMap,
+    isDirectory,
+  );
   const destFile = join(tmpDir, `${page.dest}.md`);
   mkdirSync(dirname(destFile), { recursive: true });
   writeFileSync(destFile, frontmatter(page) + body);

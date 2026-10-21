@@ -30,7 +30,7 @@ Takes from secure fields are never shown and never counted in stats. Audio you i
 
 ## What uses the network
 
-- **Model downloads.** The speech model and detector on first launch, the optional Fast and Thorough cleanup models when you ask, and a roughly 100 MB extra model the first time you use Boost my saved words. These need internet access.
+- **Model downloads.** The speech model and detector on first launch, the optional Fast and Thorough cleanup models when you ask, and a roughly 100 MB extra model the first time you turn on Boost saved words (off by default). These need internet access.
 - **Update checks.** On by default and switchable in Settings → Mac. They and update downloads go over HTTPS, include no transcripts or recordings, and anonymous system profiling is disabled. Installation is always your choice.
 
 Ordinary request metadata is visible to the hosting providers, like any download.

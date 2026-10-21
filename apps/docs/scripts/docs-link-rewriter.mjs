@@ -14,12 +14,13 @@ export function buildUrlMap(pages) {
  * Rewrites relative Markdown links in one source file.
  * - Links to another synced doc become site URLs.
  * - Links to anything else in the repo (source files, workflows, directories)
- *   lose the link and keep the label, because the repo is private and the
- *   target wouldn't resolve on the site.
+ *   point at GitHub: blob/ for files, tree/ for directories.
  * - External URLs and in-page anchors are left alone.
  * Fenced code blocks are skipped.
  */
-export function rewriteLinks(text, srcPath, urlMap) {
+export const GITHUB_BASE = "https://github.com/CodesWhat/mouthtype";
+
+export function rewriteLinks(text, srcPath, urlMap, isDirectory = () => false) {
   const srcDir = posix.dirname(srcPath);
   let inFence = false;
 
@@ -45,7 +46,12 @@ export function rewriteLinks(text, srcPath, urlMap) {
         if (url) {
           return `[${label}](${url}${fragment})`;
         }
-        return label;
+        if (resolved.startsWith("..")) {
+          return label;
+        }
+        const clean = resolved.replace(/\/$/, "");
+        const kind = pathPart.endsWith("/") || isDirectory(clean) ? "tree" : "blob";
+        return `[${label}](${GITHUB_BASE}/${kind}/main/${clean}${fragment})`;
       });
     })
     .join("\n");

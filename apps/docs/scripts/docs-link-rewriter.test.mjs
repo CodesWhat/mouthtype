@@ -21,9 +21,21 @@ test("folder index pages map to the folder URL", () => {
   assert.equal(out, "[go](/getting-started)");
 });
 
-test("unlinks repo paths that aren't docs", () => {
-  const out = rewriteLinks("[Tests](../Tests/Foo.swift)", "docs/SECURITY.md", urlMap);
-  assert.equal(out, "Tests");
+test("points non-doc repo files at GitHub blob URLs", () => {
+  const out = rewriteLinks("[Tests](../Tests/Foo.swift#L3)", "docs/SECURITY.md", urlMap);
+  assert.equal(out, "[Tests](https://github.com/CodesWhat/mouthtype/blob/main/Tests/Foo.swift#L3)");
+});
+
+test("points directories at GitHub tree URLs", () => {
+  const trailing = rewriteLinks("[src](../Sources/X/)", "docs/SECURITY.md", urlMap);
+  assert.equal(trailing, "[src](https://github.com/CodesWhat/mouthtype/tree/main/Sources/X)");
+  const detected = rewriteLinks(
+    "[web](../website)",
+    "docs/USAGE.md",
+    urlMap,
+    (p) => p === "website",
+  );
+  assert.equal(detected, "[web](https://github.com/CodesWhat/mouthtype/tree/main/website)");
 });
 
 test("leaves external links and anchors alone", () => {

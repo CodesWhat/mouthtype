@@ -15,9 +15,9 @@ The editor rejects blank or duplicate rules, keeps your other entries, and holds
 
 When a saved word is an everyday word, like "win", Mouthtype warns you, because a rule like that rewrites normal speech.
 
-## Boost my saved words
+## Boost saved words
 
-With **Boost my saved words while recognising** on, the speech model favors your saved spellings while it recognizes, so a saved name comes out right instead of being fixed afterwards. It uses up to 200 saved words, starred ones first. The first time you use it Mouthtype downloads an extra speech model of about 100 MB, and dictation never waits for it. It's English, so it helps English names best. If it can't load or answer in time, you get the ordinary transcript.
+**Boost saved words** is off by default. Turn it on in **Settings → Advanced**, and the speech model favors your saved spellings while it recognizes, so a saved name comes out right instead of being fixed afterwards. It uses up to 200 saved words, starred ones first. The first time you use it Mouthtype downloads an extra speech model of about 100 MB, and dictation never waits for it. It's English, so it helps English names best. If it can't load or answer in time, you get the ordinary transcript.
 
 ## Suggestions
 
