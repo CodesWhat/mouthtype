@@ -320,6 +320,21 @@ import Testing
         #expect(SettingsPage.arrowTarget(focused: nil, selected: .appearance, offset: 1) == .appearance)
     }
 
+    /// Warm open: the window already exists with the ring on one row, and a URL or menu route reopens it on another page.
+    @Test func warmPresentMovesTheRingToTheSelectedRow() throws {
+        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let rows = SettingsView.sidebarRowProxies(in: window)
+        let home = try #require(SettingsPage.allCases.firstIndex(of: .home)), stats = try #require(SettingsPage.allCases.firstIndex(of: .stats))
+        #expect(window.makeFirstResponder(rows[home]))
+        controller.present(page: .stats)
+        for _ in 0..<3 {
+            while let event = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+        }
+        #expect(controller.model.page == .stats)
+        #expect(window.firstResponder === rows[stats])
+    }
+
     /// The ring is AppKit's first responder, not the @FocusState, so a page change has to move the responder itself.
     @Test func ringMovesToTheNewPageRowOnlyWhenASidebarRowHasIt() throws {
         let (controller, window) = try keyWindow(page: .stats, fullKeyboardAccess: true)

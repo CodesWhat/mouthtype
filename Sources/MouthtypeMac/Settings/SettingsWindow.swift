@@ -96,6 +96,17 @@ import MouthtypeCore
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
+        // The page change above ran before this window was key, so SettingsView's own ring move found no key window and AppKit
+        // restores the old row as first responder on becoming key. Move it here, against this window, now and once AppKit settles.
+        syncSidebarRing()
+        DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.syncSidebarRing() } }
+    }
+
+    /// Puts the sidebar ring on the selected page's row when a sidebar row holds it. Leaves focus alone otherwise, so a cold open
+    /// (no row focused) stays ringless and a text field or page control keeps its focus.
+    func syncSidebarRing() {
+        guard let window else { return }
+        SettingsView.moveSidebarRing(in: window, to: model.page)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
