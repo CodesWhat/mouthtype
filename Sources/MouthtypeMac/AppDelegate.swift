@@ -70,6 +70,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
             onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
             onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
+            onDockIconModeChanged: { [weak self] _ in self?.dockPresence.refresh() },
             spellings: spellingEditor, spellingSuggestions: spellingSuggestions, phrases: PhraseEditor(store: phrases),
             openTranscribeWindow: { [weak self] in self?.fileTranscriptionWindow.present() }),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
@@ -136,8 +137,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let systemSection = SystemAccessMenuSection()
     private let accessibility = AccessibilityAccess()
     private let fnRemap = FnRemap()
+    private var signalShutdown = false
     private var wakeObserver: NSObjectProtocol?
-    private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap, guardian: FnGuardLauncher())
+    private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap, guardian: FnGuardLauncher(), requestTermination: { [unowned self] in
+        // A signal can't wait on a person: no unsaved-draft prompt and no failure alert on this path.
+        signalShutdown = true
+        NSApp.terminate(nil)
+    })
     private let shortcuts = GlobalShortcuts()
     private var menuBar: MenuBarController?
     private var historySection: HistoryMenuSection?
@@ -156,6 +162,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inputStarted = false
     private var isTerminating = false
     private let termination = AppTermination()
+    private lazy var dockPresence = DockPresence()
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.info("launch \(AppInfo.version, privacy: .public)")
@@ -201,6 +208,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // The status item goes up first and fonts start registering off the main thread. Everything that builds a pill or
         // card (and so draws with a bundled font) waits for the next run-loop turn, after the item has been committed.
+        dockPresence.start()
         beginLaunch { [weak self] menuBar in self?.completeLaunch(arguments: arguments, menuBar: menuBar) }
     }
 
@@ -389,6 +397,24 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         ))
     }
 
+    /// Clicking the Dock icon with nothing open brings up the main window. Not in Never, where there is no Dock icon to click.
+    public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        guard launchComplete, !flag, DockIconMode.current() != .never else { return true }
+        settingsWindow.present(page: .home)
+        return false
+    }
+
+    public func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        guard launchComplete else { return nil }
+        let menu = NSMenu()
+        let item = NSMenuItem(title: "Open Mouthtype", action: #selector(openFromDockMenu), keyEquivalent: "")
+        item.target = self
+        menu.addItem(item)
+        return menu
+    }
+
+    @objc private func openFromDockMenu() { settingsWindow.present(page: .home) }
+
     public func applicationDidBecomeActive(_ notification: Notification) {
         guard menuBar != nil else { return }
         refreshDiagnostics()
@@ -401,7 +427,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
-        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { builtSettingsWindow?.resolveDraftForQuit() ?? true }) else { return .terminateCancel }
+        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : (builtSettingsWindow?.resolveDraftForQuit() ?? true) }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
             await dictation?.prepareForTermination() ?? true
@@ -410,7 +436,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }, reply: { [self] ready in
             if !ready { isTerminating = false }
             sender.reply(toApplicationShouldTerminate: ready)
-            if !ready {
+            if !ready, !signalShutdown {
                 let alert = NSAlert()
                 alert.messageText = "Couldn't finish saving the recording"
                 alert.informativeText = "Mouthtype stayed open because the recording hasn't been fully saved. Resolve the storage or microphone problem, then try Quit again."
@@ -419,6 +445,15 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         })
         return .terminateLater
+    }
+
+    /// A signal can't ask whether to keep a draft, so both editors' drafts go to disk and stay in Application Support/Mouthtype/drafts.
+    private func saveDraftsForSignal() -> Bool {
+        // Drafts live in the settings window's editors; if it was never built there is nothing to save.
+        guard let window = builtSettingsWindow else { return true }
+        let saved = DraftRecovery.standard.saveDrafts(spellings: window.model.spellings, phrases: window.model.phrases)
+        if !saved.isEmpty { Log.app.info("saved \(saved.count, privacy: .public) unsaved draft(s) before quitting on a signal") }
+        return true
     }
 
     static func mayQuit(allowsTermination: Bool, resolveDraft: () -> Bool) -> Bool {

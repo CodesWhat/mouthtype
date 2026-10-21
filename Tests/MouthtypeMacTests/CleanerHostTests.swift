@@ -354,6 +354,86 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         #expect(await host.readiness(waitingUpTo: .seconds(60)) != nil)
     }
 
+    private func idleHost(_ delay: Duration, configure: (FakeSmartModel) -> Void = { _ in }) -> (CleanerHost, FakeSmartModel) {
+        let model = FakeSmartModel(downloaded: true)
+        configure(model)
+        return (CleanerHost(model: model, level: { .light }, budget: { _ in .seconds(60) }, idleUnloadDelay: delay), model)
+    }
+
+    @Test func theModelUnloadsAfterTheIdleDelay() async {
+        let (host, model) = idleHost(.milliseconds(150))
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        await settle(host) { $0 == .unloaded }
+        #expect(host.state == .unloaded)
+        for _ in 0..<100 where model.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.unloads == 1)
+    }
+
+    @Test func useRestartsTheIdleCountdown() async {
+        let (host, model) = idleHost(.milliseconds(400))
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        for _ in 0..<4 {
+            try? await Task.sleep(for: .milliseconds(200))
+            _ = await host.run(SmartCleanupRequest(text: "keep going", level: .light))
+        }
+        // 800 ms have passed, twice the delay, but the last use was moments ago.
+        if case .ready = host.state {} else { Issue.record("unloaded despite use: \(host.state)") }
+        #expect(model.unloads == 0)
+        await settle(host) { $0 == .unloaded }
+        #expect(host.state == .unloaded)
+    }
+
+    @Test func keyDownReloadsAnIdleUnloadedModel() async {
+        let (host, model) = idleHost(.milliseconds(100))
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        await settle(host) { $0 == .unloaded }
+        host.recordingStarted()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        #expect(model.loads == 2)
+        if case .ready = host.state {} else { Issue.record("not reloaded: \(host.state)") }
+    }
+
+    @Test func aGenerationInFlightIsNeverUnloadedUnderneath() async {
+        let gate = DownloadGate()
+        let (host, model) = idleHost(.milliseconds(100))
+        host.start()
+        await settle(host) { if case .ready = $0 { true } else { false } }
+        model.cleanGate = gate
+        let request = SmartCleanupRequest(text: "long take", level: .light)
+        let running = Task { await host.run(request) }
+        try? await Task.sleep(for: .milliseconds(400))
+        if case .ready = host.state {} else { Issue.record("unloaded mid-generation: \(host.state)") }
+        #expect(model.unloads == 0)
+        await gate.release()
+        _ = await running.value
+        await settle(host) { $0 == .unloaded }
+        #expect(host.state == .unloaded)
+    }
+
+    @Test func aWaitingCallerIsReleasedWhenItsTaskIsCancelled() async {
+        let gate = DownloadGate()
+        let (host, _, _) = host(downloaded: true) { $0.loadGate = gate }
+        host.start()
+        let waiter = Task { await host.readiness(waitingUpTo: .seconds(60)) }
+        try? await Task.sleep(for: .milliseconds(30))
+        waiter.cancel()
+        #expect(await waiter.value == nil)
+        await gate.release()
+    }
+
+    @Test func everyWaiterIsReleasedByOneLoad() async {
+        let gate = DownloadGate()
+        let (host, _, _) = host(downloaded: true) { $0.loadGate = gate }
+        host.start()
+        let waiters = (0..<3).map { _ in Task { await host.readiness(waitingUpTo: .seconds(60)) } }
+        try? await Task.sleep(for: .milliseconds(30))
+        await gate.release()
+        for waiter in waiters { #expect(await waiter.value != nil) }
+    }
+
     @Test func aFailedLoadIsPublishedAndRetriedOnTheNextLevelChange() async {
         struct Broken: Error, LocalizedError { var errorDescription: String? { "no metallib" } }
         let (host, model, _) = host(downloaded: true) { $0.loadError = Broken() }

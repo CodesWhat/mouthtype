@@ -792,6 +792,17 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         SmartCleanupGuard.rejection(input: input, output: output, level: level, dictionary: rules)
     }
 
+    @Test func slashCommandsSurviveTheGuard() {
+        #expect(reason("Do we want to do a /research?", "Do we want to do a /research?") == nil)
+        #expect(reason("run /code-review on the branch", "Run /code-review on the branch.") == nil)
+        #expect(reason("Do we want to do a /research?", "Do we want to do a research?") != nil)
+        #expect(reason("run /code-review on the branch", "Run code review on the branch.") != nil)
+    }
+
+    @Test func theCleanupPromptKeepsSlashCommands() {
+        #expect(CleanupPrompt.systemPrompt.contains("/research"))
+    }
+
     @Test func emptyOutputIsRejected() {
         #expect(reason("we should leave earlier today", "") != nil)
         #expect(reason("we should leave earlier today", " \n ") != nil)

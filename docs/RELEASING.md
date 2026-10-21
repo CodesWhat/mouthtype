@@ -8,7 +8,7 @@ Run `python3 scripts/package-release.py --notary-profile mouthtype-notary --outp
 
 The notarization profile must already be stored in Keychain. Never commit private keys or passwords. If Apple rejects a submission, inspect the saved notarization result and log rather than forcing acceptance. If the bounded wait expires, the submission continues at Apple; inspect its saved submission ID before attempting another upload.
 
-Attach the final ZIP, SHA-256 file and release manifest to the private GitHub prerelease for provenance. The website provides public downloads without changing repository visibility. Read the uploaded release back and compare a downloaded artifact’s checksum. Keep first-install, third-party-app and recognition limitations visible in release notes; do not describe unperformed checks as passed.
+Attach the final ZIP, SHA-256 file and release manifest to the GitHub release for provenance. The website provides the public downloads. Read the uploaded release back and compare a downloaded artifact’s checksum. Keep first-install, third-party-app and recognition limitations visible in release notes; do not describe unperformed checks as passed.
 
 ## Signed updates and public website
 

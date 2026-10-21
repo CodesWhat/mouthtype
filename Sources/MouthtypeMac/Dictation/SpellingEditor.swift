@@ -191,6 +191,11 @@ import Observation
         } catch { self.error = error.localizedDescription }
     }
 
+    func draftSnapshot() -> DraftRecovery.Draft? {
+        guard isDirty else { return nil }
+        return DraftRecovery.Draft(kind: .spelling, heardForms: heardForms, heardInput: heardInput, written: written, starred: starred)
+    }
+
     private func setDraft(_ rules: [DictionaryRule], editing: Bool) {
         original = rules
         isEditing = editing

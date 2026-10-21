@@ -1,0 +1,55 @@
+{
+  "name": "mouthtype-docs",
+  "version": "0.1.0",
+  "engines": {
+    "node": "24.x"
+  },
+  "description": "Mouthtype documentation site",
+  "private": true,
+  "scripts": {
+    "dev": "npm run sync:docs && next dev",
+    "build": "npm run sync:docs && next build && node scripts/security-headers.mjs",
+    "start": "next start",
+    "sync:docs": "node scripts/sync-docs.mjs",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix .",
+    "format": "biome format --write .",
+    "format:check": "biome check .",
+    "check": "biome check .",
+    "check:fix": "biome check --fix .",
+    "type-check": "tsc --noEmit",
+    "test:scripts": "node --test scripts/*.test.mjs",
+    "vercel-build": "npm run build",
+    "postinstall": "npm run sync:docs && fumadocs-mdx"
+  },
+  "dependencies": {
+    "@types/mdx": "^2.0.14",
+    "fumadocs-core": "^16.10.5",
+    "fumadocs-mdx": "^15.0.12",
+    "fumadocs-ui": "^16.10.5",
+    "next": "16.3.8",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remark-custom-heading-id": "^2.0.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.12",
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "25.9.5",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "tailwindcss": "4.3.3",
+    "typescript": "6.0.3"
+  },
+  "overrides": {
+    "postcss": "8.5.28",
+    "esbuild": "0.28.2",
+    "js-yaml": "5.4.1",
+    "sharp": "0.35.5",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.7",
+    "nanoid": "6.0.1",
+    "dompurify": "3.4.16",
+    "source-map-js": "1.2.2"
+  }
+}
