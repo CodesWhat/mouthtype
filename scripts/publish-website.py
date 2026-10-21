@@ -38,12 +38,13 @@ def main():
         if source_file.name != manifest['sourceArchive'] or hashlib.sha256(source_file.read_bytes()).hexdigest() != manifest['sourceSHA256']:
             raise RuntimeError('Corresponding source archive checksum must match')
         prefix = f"/releases/{manifest['version']}/"
-        if redirects.get('/download/file') == prefix + manifest['archive']:
+        # Releases with a DMG advertise it; the ZIP stays in the release for Sparkle only.
+        if redirects.get('/download/file') == prefix + manifest.get('dmg', manifest['archive']):
             if redirects.get('/source') != prefix + source_file.name:
                 raise RuntimeError('Download and source routes must describe the same release')
             selected = manifest
     if selected is None:
-        raise RuntimeError('The advertised download is not among the checked artifacts')
+        raise RuntimeError('The advertised download is not among the checked artifacts (a release with a DMG must advertise the DMG)')
     feed = assets / 'updates/appcast.xml'
     public.validate_feed_build(feed, selected['build'])
     tools = ROOT / '.build/artifacts/sparkle/Sparkle/bin'
