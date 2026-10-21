@@ -1,4 +1,26 @@
-Mouthtype 0.3.0
+Mouthtype 0.4.0
+
+One window. Mouthtype now lives in a single redesigned window with a new palette and pixel icons: Home, Stats, Dictionary, Transforms, Style, Appearance and a Settings modal. Saved spellings and Phrases are pages in that window instead of separate windows, and the shortcut recorder is a sheet on it. Leaving a page or closing the window with an unsaved draft still asks first. Set Up Mouthtype and Transcribe Audio File keep their own windows, since the menu bar opens them when no Mouthtype window is up. The Import CSV sheet for the dictionary and Set Up Mouthtype use the new look too.
+
+Transform Selection. Choose it from the menu bar to clean up a selection or run Fix grammar, Make shorter, More formal or More casual on the local Thorough model. A preview panel shows your original with removed words struck through and an editable result, and you choose Accept, Copy result, Retry or Cancel. Accept replaces the text only if the app, field and selection are still the same. Clean up runs without the model. The panel doesn't take focus from the app that owns the selection. Saved phrases and Very Casual are no longer in this menu.
+
+Transforms page. It lists your phrases, each with a kind tag (text, lines, clipboard or date), and the five selection transforms with their model status. New transform opens a sheet with + Date and + Clipboard.
+
+Transcribe Audio File now opens in its own window, from the menu or from Home. It shows the file's name, length and size, the raw transcript with a word count, and Copy and Save Text. A failed import keeps the previous transcript.
+
+Automation. mouthtype:// URLs and a mouthtype command-line script can start, stop, toggle, cancel, copy-last and paste-last, and open a page of the window. The dictation commands are off until you turn on the automation switch, because any web page can open a mouthtype:// link. Opening a page works without it.
+
+Editor hints. With Boost my saved words on, Mouthtype can add up to 40 code names from VS Code, Cursor, Xcode and Terminal (identifiers near the cursor, the file and project names) to the boost for one take. It's off by default and nothing is kept after the take.
+
+Quiet other audio is now on by default. If you turned it off before, it stays off.
+
+Menu bar: the menu is plain text now, with Open Mouthtype, Settings, Paste Last Take, Copy Last Take, Recent Takes, Transform Selection, Transcribe Audio File and Saved Recordings.
+
+The corresponding source also adds a history limit and audio retention to the experimental Linux client. Linux remains source-only and is not a supported release.
+
+Not verified on a device for this release: fresh installation, VoiceOver, and Bluetooth and USB microphones.
+
+Earlier in 0.3.0:
 
 Home. Open Mouthtype from the menu to get a new Home page with your last 50 takes, newest first. Each take has Copy and Recover. Recover works for any take whose audio is still saved. It offers the text again without changing the history entry. Home updates as you dictate.
 
