@@ -9,7 +9,7 @@ public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
     static let smallEnDisplayName = "Whisper small.en"
     static let smallEnVariant = "small.en"
 
-    private static let modelRepo = "argmaxinc/whisperkit-coreml"
+    private static let modelRepo = ModelPins.whisperKit.repo
 
     public nonisolated let id: String
     public nonisolated let displayName: String
@@ -41,7 +41,7 @@ public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
 
         var folder = modelDirectory
         let downloadTime = try await clock.measure {
-            folder = try await WhisperKit.download(variant: variant, from: Self.modelRepo)
+            folder = try await WhisperModelFetch.download(variant: variant)
         }
         var loaded: WhisperKit?
         let loadTime = try await clock.measure {

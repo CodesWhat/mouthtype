@@ -21,6 +21,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     private let booster: VocabularyBooster
 
     init(version: AsrModelVersion, language: Language? = nil) {
+        ModelPins.installFluidAudioRevisions()
         self.version = version
         self.language = language
         switch version {

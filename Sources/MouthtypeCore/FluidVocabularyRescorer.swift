@@ -107,6 +107,7 @@ typealias CtcModelStore = ModelStore<CtcModels>
 extension ModelStore where Model == CtcModels {
     init() {
         self.init(loader: { report in
+            ModelPins.installFluidAudioRevisions()
             let directory = CtcModels.defaultCacheDirectory(for: .ctc110m)
             report(CtcModels.modelsExist(at: directory) ? .preparing : .downloading(fraction: nil))
             return try await CtcModels.downloadAndLoad(variant: .ctc110m)
