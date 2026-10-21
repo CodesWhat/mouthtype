@@ -1,0 +1,122 @@
+{
+ "name": "over-cap",
+ "steps": [
+  {
+   "op": "capture",
+   "reply": {
+    "state": "captured",
+    "id": "0123456789abcdef0123456789abcdef",
+    "source": "primary",
+    "fallback": false,
+    "app": {
+     "class": "Slack",
+     "name": "Slack",
+     "pid": 4242,
+     "address": "0x55d1c0a3b2f0"
+    },
+    "text": "um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. ",
+    "units": 2160,
+    "expires_in": 600
+   }
+  },
+  {
+   "op": "status",
+   "reply": {
+    "state": "status",
+    "interface": 1,
+    "kinds": [
+     {
+      "id": "clean-up",
+      "title": "Clean up",
+      "description": "",
+      "needs_model": false,
+      "available": true,
+      "reason": null
+     },
+     {
+      "id": "fix-grammar",
+      "title": "Fix grammar",
+      "description": "",
+      "needs_model": true,
+      "available": true,
+      "reason": null
+     },
+     {
+      "id": "make-shorter",
+      "title": "Make shorter",
+      "description": "",
+      "needs_model": true,
+      "available": true,
+      "reason": null
+     },
+     {
+      "id": "more-formal",
+      "title": "More formal",
+      "description": "",
+      "needs_model": true,
+      "available": true,
+      "reason": null
+     },
+     {
+      "id": "more-casual",
+      "title": "More casual",
+      "description": "",
+      "needs_model": true,
+      "available": true,
+      "reason": null
+     }
+    ],
+    "model": {
+     "level": "thorough",
+     "name": "Thorough",
+     "state": "ready",
+     "reason": null
+    },
+    "limits": {
+     "source_units": 16000,
+     "diff_characters": 2000,
+     "capture_seconds": 600
+    }
+   }
+  },
+  {
+   "op": "run",
+   "reply": {
+    "state": "ready",
+    "id": "0123456789abcdef0123456789abcdef",
+    "kind": "clean-up",
+    "title": "Clean up",
+    "model": false,
+    "text": "So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. ",
+    "original": "um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. ",
+    "changed": true,
+    "diff": {
+     "highlight": false,
+     "reason": "over_limit",
+     "limit": 2000,
+     "original": [
+      {
+       "text": "um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. um so we shipped the build uh on friday and the team was happy with it. ",
+       "kind": "equal"
+      }
+     ],
+     "result": [
+      {
+       "text": "So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. So we shipped the build on friday and the team was happy with it. ",
+       "kind": "equal"
+      }
+     ]
+    },
+    "app": {
+     "class": "Slack",
+     "name": "Slack",
+     "pid": 4242,
+     "address": "0x55d1c0a3b2f0"
+    },
+    "source": "primary",
+    "elapsed_ms": 420,
+    "message": "Basic cleanup preview. Review it before accepting. Names and numbers are not rewritten."
+   }
+  }
+ ]
+}

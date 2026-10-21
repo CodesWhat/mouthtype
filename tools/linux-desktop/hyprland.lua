@@ -8,3 +8,6 @@ hl.bind("F11", hl.dsp.exec_cmd("mouthtype-linux cancel"))
 -- With the Omarchy plugin installed, use its Change Dictation Shortcut menu, or bind its ordered wrapper:
 -- hl.bind("F9", hl.dsp.exec_cmd("~/.config/omarchy/plugins/dstahl.mouthtype/control.py start"))
 -- hl.bind("F9", hl.dsp.exec_cmd("~/.config/omarchy/plugins/dstahl.mouthtype/control.py stop"), { release = true })
+
+-- Transform Selection panel (Omarchy plugin installed). Captures the selection, then opens the floating card.
+-- hl.bind("SUPER + SHIFT + T", hl.dsp.exec_cmd("~/.config/omarchy/plugins/dstahl.mouthtype/control.py transform-open"))
