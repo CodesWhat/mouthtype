@@ -1,4 +1,4 @@
-# Mouthtype 0.3.0
+# Mouthtype 0.4.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
 
@@ -13,6 +13,16 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
 
+## What changed in 0.4.0
+
+Mouthtype is now one redesigned window with a new palette and SF Symbols in the sidebar: Home, Stats, Dictionary, Transforms, Style, Appearance and a Settings modal. Saved spellings and Phrases are now pages in the Mouthtype window instead of separate windows, and the shortcut recorder is a sheet on it. Set Up Mouthtype and Transcribe Audio File keep their own windows, since the menu bar opens them when no Mouthtype window is up. Leaving a page or closing the window with an unsaved draft still asks first.
+
+Transform Selection in the menu bar cleans up a selection or runs Fix grammar, Make shorter, More formal or More casual on the Thorough model. A preview panel shows the original and an editable result; choose Accept, Copy result, Retry or Cancel. Accept replaces the text only if the app, field and selection are the same. The Transforms page lists your phrases and these transforms, and Transcribe Audio File opens in its own window.
+
+mouthtype:// URLs and a mouthtype command-line script can start, stop, toggle, cancel, copy-last and paste-last, and open a page. Those dictation commands are off until you turn on the automation switch. With Boost my saved words on, an optional setting adds code names from VS Code, Cursor, Xcode and Terminal for one take. Quiet other audio is on by default, and stays off if you turned it off before.
+
+Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
+
 ## What changed in 0.3.0
 
 Open Mouthtype from the menu to a new Home page with your last 50 takes, newest first. Each take has Copy and Recover. Recover works for any take whose audio is still saved, and it offers the text again without changing the history entry. Home updates as you dictate.
@@ -22,8 +32,6 @@ Home also shows your stats: words today, this week and all time, a 30-day view, 
 Saved spellings now suggest spellings from your recent takes: names it keeps mishearing, brand names that come out lowercase, and words that get split apart, each with examples. Add, Remove or Dismiss a suggestion, and Undo right after. It also flags saved heard forms that rewrite everyday words.
 
 In Settings, with Keyboard navigation on, the page scrolls to follow Tab and Shift-Tab.
-
-Saved spellings and Phrases are now pages in the Mouthtype window instead of separate windows, and the shortcut recorder is a sheet on it. Set Up Mouthtype and Transcribe Audio File keep their own windows, since the menu bar opens them when no Mouthtype window is up. Leaving a page or closing the window with an unsaved draft still asks first.
 
 Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
 
