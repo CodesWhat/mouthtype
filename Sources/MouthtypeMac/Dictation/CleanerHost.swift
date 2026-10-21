@@ -252,6 +252,13 @@ final class CleanerHost: CleanupModelManaging {
         if activeUses == 0 { scheduleIdleUnload() }
     }
 
+    /// A recording that will need this model is in progress. Counts as use, so a take longer than the idle delay
+    /// can't have the model unloaded before its cleanup runs. Every call is paired with `endRecordingHold()`.
+    func beginRecordingHold() { beginUse() }
+
+    /// The take ended, cleaned up or was cancelled. The last release restarts the idle countdown.
+    func endRecordingHold() { endUse() }
+
     // MARK: Download
 
     /// Fetches the model from Hugging Face. Runs only when the user asks; a stopped download resumes.
