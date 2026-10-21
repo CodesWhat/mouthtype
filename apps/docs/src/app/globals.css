@@ -1,0 +1,123 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+@source "../node_modules/fumadocs-ui/dist/**/*.js";
+
+/* Mouthtype fonts, same files as the product site (website/public/fonts). */
+@font-face {
+  font-family: "Instrument Sans";
+  src: url("/fonts/instrument-sans-latin-wght-normal.woff2") format("woff2");
+  font-weight: 400 700;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/instrument-serif-latin-400-normal.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Serif";
+  src: url("/fonts/instrument-serif-latin-400-italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  --mt-serif: "Instrument Serif", Georgia, serif;
+  --mt-sans: "Instrument Sans", system-ui, sans-serif;
+  --mt-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Lime accent from the app palette: #76A11A light, #A6CD52 dark. Link text uses
+     the darker #4A6A12 in light mode so it stays readable on white. */
+  --color-fd-primary: #76a11a;
+  --color-fd-primary-foreground: #111827;
+  --color-fd-ring: #76a11a;
+  --mt-link: #4a6a12;
+}
+
+.dark {
+  --color-fd-primary: #a6cd52;
+  --color-fd-primary-foreground: #111827;
+  --color-fd-ring: #a6cd52;
+  --mt-link: #a6cd52;
+}
+
+body {
+  font-family: var(--mt-sans);
+}
+
+::selection {
+  background: #d3e58b;
+  color: #111827;
+}
+
+/* Instrument Serif headlines. It only ships a 400 weight, so keep bold off. */
+.prose h1,
+.prose h2,
+.prose h3,
+#nd-page h1 {
+  font-family: var(--mt-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+#nd-page h1 {
+  font-size: 2.75rem;
+  line-height: 1.05;
+}
+
+.prose h2 {
+  font-size: 1.9rem;
+}
+
+.prose h3 {
+  font-size: 1.45rem;
+}
+
+.prose code,
+.prose pre {
+  font-family: var(--mt-mono);
+}
+
+.prose a:not([data-card]) {
+  color: var(--mt-link);
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in srgb, var(--mt-link) 40%, transparent);
+  text-underline-offset: 3px;
+}
+
+/* JetBrains Mono eyebrows: sidebar section labels and the table-of-contents title. */
+#nd-sidebar [data-sidebar-section-title],
+#nd-toc h3 {
+  font-family: var(--mt-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.mt-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.mt-brand-icon {
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
+.mt-brand-name {
+  font-family: var(--mt-serif);
+  font-size: 1.5rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
