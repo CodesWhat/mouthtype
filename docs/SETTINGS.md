@@ -68,6 +68,16 @@ For native checks without running Core model replays, run `swift test --jobs 4 -
 
 To save the actual-view PNGs, run `MOUTHTYPE_SETTINGS_PREVIEWS=/tmp/mouthtype-settings-previews swift test --jobs 4 --filter MouthtypeSettingsUITests`. Change the output directory as needed. The settings render cases cover all six pages and the General, Mac, Health and Advanced pages of the Settings modal in light and dark, plus the Style tabs, Large pill size and a Health attention state at 860×590pt. The Import CSV sheet adds all-valid, invalid-with-warnings and many-row cases in light and dark. Setup uses the app palette, type and buttons, and adds individual permission, microphone preparation/failure, speech loading/failure, shortcut and ready cards, including the minimum window, without invoking permission or hardware actions. Font overrides add Default, Custom, unavailable-family/minimum-width and disabled-state renders without opening the font panel. Functional settings model/menu/setup/font tests remain in `MouthtypeMacTests`.
 
+## Show in Dock
+
+**Settings > General > Show in Dock** chooses when Mouthtype has a Dock icon. The menu bar icon stays in every mode.
+
+- **Never** keeps Mouthtype out of the Dock, as before.
+- **While a window is open** (the default, including for existing users) shows the Dock icon while the Mouthtype window, Transcribe Audio File or Set Up Mouthtype is open, and drops it when the last one closes. A minimized window still counts. The Transform Selection panel never brings the icon up. Opening a window activates the app and keeps that window key; closing the last one doesn't take focus from the app in front.
+- **Always** keeps the icon in the Dock from launch. Clicking it with no window open opens the Mouthtype window, and the Dock menu has Open Mouthtype above the standard Quit.
+
+The choice applies as soon as you change it and is stored as `dockIconMode` (`never`, `whileWindowOpen`, `always`); a missing value means While a window is open. Mouthtype still launches as a menu bar app (`LSUIElement`) and switches at runtime.
+
 ## Quiet other audio
 
 **Settings > General > Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before). Capture starts immediately. With recording sounds enabled, Mouthtype lets the start cue finish before muting the current default output. It waits for the decoded cue duration and checks playback for at most one additional second; a cue that remains active skips quieting for that take. Ending the recording cancels any pending mute. With sounds disabled there is no cue delay. On supported outputs it restores the same device after capture ends, including Stop, Escape, a discarded tap, microphone interruption and capture failure. Transcription and delivery do not keep other audio muted. Turning the option off or normally quitting Mouthtype also ends its mute.

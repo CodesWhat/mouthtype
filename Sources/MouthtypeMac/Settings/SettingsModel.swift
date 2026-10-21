@@ -12,6 +12,7 @@ import UniformTypeIdentifiers
     private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
+    private let onDockIconModeChanged: @MainActor (DockIconMode) -> Void
     private var capsLockShortcut = false
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
@@ -36,6 +37,7 @@ import UniformTypeIdentifiers
     var websiteLevel: CleanupLevel?
     private(set) var cleanup: CleanupSettings
     private(set) var livePreview = false
+    private(set) var dockIconMode = DockIconMode.fallback
     private(set) var audioRetention = AudioRetentionPolicy()
     /// The Settings modal's footer switch. Adds the Advanced page to its nav.
     private(set) var advancedOptions = false
@@ -66,11 +68,13 @@ import UniformTypeIdentifiers
          microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
          onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
          onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+         onDockIconModeChanged: @escaping @MainActor (DockIconMode) -> Void = { _ in },
          home: HomeLogModel = HomeLogModel(observing: false),
          stats: StatsModel = StatsModel(observing: false),
          spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil,
          openTranscribeWindow: @escaping @MainActor () -> Void = {}) {
         self.openTranscribeWindow = openTranscribeWindow
+        self.onDockIconModeChanged = onDockIconModeChanged
         self.home = home
         self.stats = stats
         self.spellings = spellings
@@ -197,6 +201,12 @@ import UniformTypeIdentifiers
 
     func deactivateWords() { spellingSuggestions?.deactivate() }
 
+    func setDockIconMode(_ mode: DockIconMode) {
+        DockIconMode.set(mode, in: defaults)
+        dockIconMode = mode
+        onDockIconModeChanged(mode)
+    }
+
     func setLivePreview(_ enabled: Bool) {
         LivePreviewPreference.set(enabled, in: defaults)
         livePreview = enabled
@@ -226,6 +236,7 @@ import UniformTypeIdentifiers
         advancedOptions = defaults.bool(forKey: Self.advancedOptionsKey)
         audioRetention = AudioRetentionPreference.load(defaults)
         livePreview = LivePreviewPreference.isEnabled(defaults)
+        dockIconMode = DockIconMode.current(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
