@@ -243,12 +243,19 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         for text in [
             "\"we should leave earlier to beat the traffic\"",
             "here is the cleaned text: we should leave earlier to beat the traffic",
+            "Here's the cleaned text we should leave earlier to beat the traffic",
             "```we should leave earlier to beat the traffic```",
         ] {
             let cleaner = FakeCleaner { t, _ in t }
             let result = await smart(cleaner).run(request(text))
             #expect(result.outcome == .ok && result.text == text, "\(text) became \(result.text)")
         }
+    }
+
+    @Test func aDictatedPreambleSurvivesPunctuationAndCapitalCleanup() async {
+        let cleaner = FakeCleaner(returning: "Here is the cleaned transcript: We should leave earlier to beat the traffic.")
+        let result = await smart(cleaner).run(request("here is the cleaned transcript we should leave earlier to beat the traffic"))
+        #expect(result.text.hasPrefix("Here is the cleaned transcript"), "became \(result.text)")
     }
 
     @Test func contentThatMerelyLooksLikeFramingIsKept() async {

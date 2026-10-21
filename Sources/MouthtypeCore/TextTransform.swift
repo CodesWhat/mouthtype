@@ -99,7 +99,15 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
     private static func withoutPreamble(_ text: String, source: String) -> String {
         guard let range = text.range(of: preamble, options: [.regularExpression, .caseInsensitive]) else { return text }
         let lead = text[range].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !source.lowercased().hasPrefix(lead), range.upperBound < text.endIndex else { return text }
+        guard range.upperBound < text.endIndex else { return text }
+        // The input may have said the same words without the colon or capital ("here is the cleaned text we ...").
+        let leadWords = words(lead)
+        guard !leadWords.isEmpty, !words(source).starts(with: leadWords) else { return text }
         return String(text[range.upperBound...])
+    }
+
+    private static func words(_ text: String) -> [String] {
+        text.lowercased().split { !$0.isLetter && !$0.isNumber && $0 != "'" && $0 != "\u{2019}" }
+            .map { $0.replacingOccurrences(of: "\u{2019}", with: "'") }
     }
 }
