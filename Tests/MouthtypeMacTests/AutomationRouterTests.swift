@@ -128,9 +128,11 @@ import MouthtypeCore
         }
         let vocabulary = FileVocabulary(url: dir.appendingPathComponent("dictionary.json"))
         let spellings = SpellingEditor(store: vocabulary)
+        var transcribeOpens = 0
         let model = SettingsModel(defaults: defaults, spellings: spellings,
             spellingSuggestions: SpellingSuggestionsModel(vocabulary: vocabulary, dismissedURL: dir.appendingPathComponent("dismissed.json")),
-            phrases: PhraseEditor(store: FilePhrases(url: dir.appendingPathComponent("phrases.json"))))
+            phrases: PhraseEditor(store: FilePhrases(url: dir.appendingPathComponent("phrases.json"))),
+            openTranscribeWindow: { transcribeOpens += 1 })
         var asked = 0
         var answer = false
         model.confirmDiscard = { _, _ in asked += 1; return answer }
@@ -157,6 +159,6 @@ import MouthtypeCore
         router.handle(url("mouthtype://open?page=records"))
         #expect(model.page == .stats && !model.settingsOpen)
         router.handle(url("mouthtype://open?page=transcribe"))
-        #expect(model.page == .home && model.transcribeOpen)
+        #expect(model.page == .stats && !model.settingsOpen && transcribeOpens == 1)
     }
 }

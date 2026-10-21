@@ -6,7 +6,7 @@ enum AutomationPage: String, CaseIterable, Equatable {
 
     /// Where this opens in the Mouthtype window. Old page names map to their new homes: Records is part of Stats, spellings is the
     /// Dictionary, phrases is Transforms, writing is Style, and General and Diagnostics are pages of the Settings modal (the latter
-    /// renamed Health). `transcribe` is the sheet on Home. `settings` has no destination of its own: it shows the window where it is.
+    /// renamed Health). `transcribe` is the Transcribe Audio File window. `settings` has no destination of its own: it shows the window where it is.
     var destination: SettingsDestination? {
         switch self {
         case .settings: nil
