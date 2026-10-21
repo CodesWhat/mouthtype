@@ -1,8 +1,12 @@
-@import "tailwindcss";
+@import "tailwindcss" source(none);
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 
-@source "../node_modules/fumadocs-ui/dist/**/*.js";
+/* Scan only our own code and fumadocs-ui. Automatic source detection depends on .gitignore and on
+   what else sits in the working tree, so the CSS (and its hashed filename, which lands in the
+   inline scripts the CSP hashes) came out different on Vercel than locally. */
+@source "../";
+@source "../../node_modules/fumadocs-ui/dist/**/*.js";
 
 :root {
   --mt-serif: var(--font-instrument-serif), Georgia, serif;
