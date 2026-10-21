@@ -1,7 +1,7 @@
 import QtQuick
 
-// A navigation row: a 24 px pixel icon, a title, selected on the sel tint only. There is no lime selection bar. Sidebar rows
-// are 40 high around the 24 px icon; the Settings modal nav uses 34.
+// A navigation row: an 18 px Phosphor icon, a title, selected on the sel tint only. There is no lime selection bar. Sidebar rows
+// are 40 high around the icon; the Settings modal nav uses 34.
 Item {
   id: root
 
@@ -36,12 +36,12 @@ Item {
     x: 10
     anchors.verticalCenter: parent.verticalCenter
     name: root.iconName
-    size: 24
+    size: 18
     color: Theme.ink2
   }
   Text {
     id: navLabel
-    x: 10 + 24 + 12
+    x: 10 + 18 + 12
     width: parent.width - x - 10
     anchors.verticalCenter: parent.verticalCenter
     text: root.title

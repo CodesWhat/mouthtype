@@ -156,6 +156,14 @@ Copyright (c) 2019 Gerrit Halfmann (https://github.com/halfmage/pixelarticons)
 - Source: https://github.com/halfmage/pixelarticons, v2.4.2, `svg/{home,chart,book-open,arrows-horizontal,a-arrow-up,picture-in-picture,settings-cog}.svg`
 - Used for: the seven sidebar icons in `Sources/MouthtypeMac/Resources/Settings/Icons/`, rasterised unchanged at one grid pixel per point to 24, 48 and 96 px template PNGs
 
+## Phosphor Icons
+
+Copyright (c) 2023 Phosphor Icons (https://github.com/phosphor-icons/core)
+
+- Licence: MIT, `tools/omarchy-plugin/design/icons/MIT-Phosphor.txt`
+- Source: https://github.com/phosphor-icons/core, tag v2.0.8, `assets/regular/*.svg` (regular weight, unchanged)
+- Used for: the Linux client's sidebar, Settings modal and in-page glyphs, in `tools/omarchy-plugin/design/icons/`, tinted with the theme colour at draw time
+
 ## S1-mini by Superwhisper
 
 Mac: https://huggingface.co/superwhisper/s1-mini, revision 88f6b15896c73bbb13a3b596e0afe8ea0d5150b4
