@@ -15,7 +15,7 @@ Update these together:
 - `SECURITY.md`
 - `docs/READ-ME.md`
 - Affected usage guides
-- Website build labels and redirects, and their existing browser checks
+- Website build labels and redirects (`/download/file` to the new `.dmg`), and their existing browser checks
 
 `SECURITY.md` must name the supported prerelease and retire the previous line. Keep publication on hold until the app, source, feed and website all select that exact version/build.
 
@@ -25,7 +25,9 @@ Follow the CodesWhat dev-branch, reviewed-PR and main-sync procedure. Keep defer
 
 ### 3. Package the release
 
-Run `python3 scripts/package-release.py --notary-profile mouthtype-notary --output-dir /absolute/path/to/release-output` from the exact tagged source. It builds, signs, submits to Apple, waits with a ten-minute limit, staples, makes the final ZIP, extracts it, and requires signature/staple/Gatekeeper checks to pass on the extracted app.
+Run `python3 scripts/package-release.py --notary-profile mouthtype-notary --output-dir /absolute/path/to/release-output` from the exact tagged source. It builds, signs, submits to Apple, waits with a ten-minute limit, staples, makes the final ZIP, extracts it, and requires signature/staple/Gatekeeper checks to pass on the extracted app. It then builds the DMG from the stapled app, signs it with the same Developer ID, notarizes and staples the DMG through the same submit/wait/log flow, mounts it read-only, and requires the signature, ticket and Gatekeeper (`spctl --type open`) checks to pass on the image and the app inside it.
+
+The DMG is the public first-install download and the ZIP is the Sparkle update archive; the appcast keeps pointing at the ZIP. `scripts/build-dmg.py` makes the DMG: dmgbuild (pinned in `scripts/dmg/requirements.txt`, installed into the git-ignored `build/dmg-venv` on first run) writes the window layout and runs hdiutil, so no Finder scripting is involved. The window background comes from `scripts/dmg/background.py` (stdlib, deterministic, 1x and 2x combined with `tiffutil`) and the volume icon is rendered from the built app's own system icon by `scripts/dmg/volume-icon.swift`, so it keeps the squircle. The volume is named Mouthtype and compressed UDZO. Preview one without the release flow: `MOUTHTYPE_TIMESTAMP=none python3 scripts/build-dmg.py --app build/Mouthtype.app --output build/dmg-preview/Mouthtype.dmg`.
 
 The ZIP contains only Mouthtype.app at its root so Finder expansion and Sparkle installation share the same artifact. Install notes and license are inside Contents/Resources. The helper never installs or launches the app and refuses to replace an existing release-output directory.
 
@@ -34,15 +36,15 @@ The notarization profile must already be stored in Keychain. Never commit privat
 > [!NOTE]
 > If Apple rejects a submission, inspect the saved notarization result and log rather than forcing acceptance. If the bounded wait expires, the submission continues at Apple; inspect its saved submission ID before attempting another upload.
 
-Attach the final ZIP, SHA-256 file and release manifest to the GitHub release for provenance. The website provides the public downloads. Read the uploaded release back and compare a downloaded artifact’s checksum. Keep first-install, third-party-app and recognition limitations visible in release notes; do not describe unperformed checks as passed.
+Attach the final DMG, ZIP, their SHA-256 files and release manifest to the GitHub release for provenance. The website provides the public downloads. Read the uploaded release back and compare a downloaded artifact’s checksum. Keep first-install, third-party-app and recognition limitations visible in release notes; do not describe unperformed checks as passed.
 
 ### 4. Stage the public release
 
-After the tagged release is packaged and checked, run `scripts/stage-public-release.py` with the release directory and `--public-dir` pointing at a retained artifact directory outside disposable worktrees, such as the root checkout’s `build/public-release-assets`. It checks the exact tag/source, archive digest, extracted signature/staple/Gatekeeper result and matching public key. It generates a corresponding source tarball and uses the pinned Sparkle tools to generate and verify the signed appcast.
+After the tagged release is packaged and checked, run `scripts/stage-public-release.py` with the release directory and `--public-dir` pointing at a retained artifact directory outside disposable worktrees, such as the root checkout’s `build/public-release-assets`. It requires the DMG and checks the exact tag/source, archive and DMG digests, DMG notarization evidence, extracted signature/staple/Gatekeeper result and matching public key. It generates a corresponding source tarball and uses the pinned Sparkle tools to generate and verify the signed appcast.
 
-The ZIP enclosure is EdDSA signed. The feed must remain byte-for-byte signed; re-sign after any change. New source archives contain committed source only, never local planning, credentials, recordings or worktrees.
+The ZIP enclosure is EdDSA signed; the DMG is not part of the feed. The feed must remain byte-for-byte signed; re-sign after any change. New source archives contain committed source only, never local planning, credentials, recordings or worktrees.
 
-Keep `build/public-release-assets` across releases. Staging preserves older versioned downloads, refuses changes to an existing versioned file and replaces only the current signed feed. Back up published release outputs; the retained directory is deployment state, not disposable compiler scratch. The website’s `/download/file` and `/source` redirects must select the same release and build as the signed appcast.
+Keep `build/public-release-assets` across releases. Staging preserves older versioned downloads, refuses changes to an existing versioned file and replaces only the current signed feed. Back up published release outputs; the retained directory is deployment state, not disposable compiler scratch. The website’s `/download/file` redirect must point at the release’s `.dmg` (not the ZIP), and `/source` at its source tarball, for the same release and build as the signed appcast. `publish-website.py` rejects a release whose manifest has a DMG when `/download/file` targets anything else, and validates every retained DMG’s checksum and notarization record.
 
 ### 5. Publish the website
 
@@ -58,8 +60,8 @@ Vercel preview/deployment authentication remains enabled; the public custom doma
 Verify each of these:
 
 - The `/download` landing page’s five-second request and manual fallback.
-- The actual custom-domain file/source redirects and complete ZIP/source bodies, fetched without GitHub authentication, with their digests compared.
-- The downloaded app’s signature/staple/Gatekeeper result.
+- The actual custom-domain file/source redirects and complete DMG/source bodies, fetched without GitHub authentication, with their digests compared.
+- The downloaded DMG’s signature/staple/Gatekeeper result, and the app inside it after mounting.
 - The hosted feed signature.
 - The visible website.
 
