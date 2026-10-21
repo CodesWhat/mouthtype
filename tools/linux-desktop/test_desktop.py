@@ -757,6 +757,9 @@ class PasteDeliveryTests(unittest.TestCase):
                 return type('Result', (), {'stdout': json.dumps({'locked': False})})()
             if argv[-1] == 'activewindow':
                 return type('Result', (), {'stdout': json.dumps({**target, 'title': 'private'})})()
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                # Hyprland answers a dispatch it can't run with an explicit error, which is what allows the wtype fallback.
+                return type('Result', (), {'returncode': 1, 'stdout': '', 'stderr': 'error: no dispatcher'})()
             return type('Result', (), {'returncode': 0})()
         delivery = HyprlandDelivery({'mode': 'paste', 'allow_unknown_secure_field': True, **config}, run=run)
         delivery.settle_seconds = 0
