@@ -54,6 +54,7 @@ final class CleanupSelection: CleanupModelManaging, CleanupModelListing {
     }
 
     func downloadCleanupModel(_ level: CleanupLevel) { host(for: level).startDownload() }
+    func cancelCleanupDownload(_ level: CleanupLevel) { host(for: level).cancelDownload() }
 
     func unloadThoroughForMemoryPressure() { thorough.unloadForMemoryPressure() }
     func start() { fast.start(); thorough.start() }

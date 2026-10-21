@@ -296,6 +296,8 @@ import Testing
         try save(try bitmap(model: ready, actions: actions, size: size, appearance: .aqua), name: "setup-progress-ready-done-failed-light")
         ready.downloadCleanupModel(.medium)
         #expect(listing.requested == [.medium])
+        ready.cancelCleanupDownload(.light)
+        #expect(listing.cancelled == [.light])
         await gate.release()
     }
 
@@ -391,4 +393,6 @@ private actor ProgressRenderEngine: PreparationReporting {
     init(models: [CleanupModelStatus]) { self.models = models }
     func cleanupModels() -> [CleanupModelStatus] { models }
     func downloadCleanupModel(_ level: CleanupLevel) { requested.append(level) }
+    func cancelCleanupDownload(_ level: CleanupLevel) { cancelled.append(level) }
+    private(set) var cancelled: [CleanupLevel] = []
 }

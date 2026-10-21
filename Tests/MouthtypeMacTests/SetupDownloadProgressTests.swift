@@ -31,12 +31,15 @@ private final class ScriptedModel: SmartModel, @unchecked Sendable {
         lock.withLock { downloads += 1 }
         for step in steps { report(step) }
         await gate?.wait()
+        try Task.checkCancellation()
         if let failure { throw failure }
         lock.withLock { downloaded = true }
     }
 
     func load() async throws {}
     func unload() async {}
+    private(set) var discards = 0
+    func discardPartialDownload() { lock.withLock { discards += 1 } }
 }
 
 private actor ScriptedEngine: PreparationReporting {
@@ -194,6 +197,22 @@ private actor ScriptedEngine: PreparationReporting {
         selection.downloadCleanupModel(.light)
         await waitUntil { selection.cleanupModels()[0].status == .done }
         #expect(fast.downloads == 2)
+    }
+
+    @Test func cancellingADownloadCleansUpAndReturnsTheRowToAvailable() async {
+        let gate = DownloadGate()
+        let fast = ScriptedModel(id: "superwhisper-s1-mini", sizeMB: 1447)
+        fast.steps = [ModelDownloadProgress(hubCompletedUnits: 300_000_000, hubTotalUnits: 1_447_000_000)]
+        fast.gate = gate
+        let selection = selection(fast: fast, thorough: ScriptedModel(id: "gemma-4-e4b-it-4bit", sizeMB: 5150))
+        selection.downloadCleanupModel(.light)
+        await waitUntil { if case .downloading = selection.cleanupModels()[0].status { true } else { false } }
+        selection.cancelCleanupDownload(.light)
+        await gate.release()
+        await waitUntil { selection.cleanupModels()[0].status == .available }
+        #expect(selection.cleanupModels()[0].status == .available)
+        #expect(fast.discards == 1)
+        #expect(!fast.isDownloaded)
     }
 
     @Test func aModelAlreadyOnDiskIsDone() {

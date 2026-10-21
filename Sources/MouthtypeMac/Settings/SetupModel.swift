@@ -28,6 +28,7 @@ import Observation
     var cleanupModels: [CleanupModelStatus] { cleanup?.cleanupModels() ?? [] }
 
     func downloadCleanupModel(_ level: CleanupLevel) { cleanup?.downloadCleanupModel(level) }
+    func cancelCleanupDownload(_ level: CleanupLevel) { cleanup?.cancelCleanupDownload(level) }
 
     var readiness: SetupReadiness {
         SetupReadiness(microphone: diagnostics.microphoneStatus, accessibility: diagnostics.accessibilityGranted,

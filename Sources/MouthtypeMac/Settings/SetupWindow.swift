@@ -278,7 +278,7 @@ struct SetupView: View {
         case .shortcut:
             action("Input settings…", identifier: "setup-input-settings", perform: actions.inputSettings)
         case .ready:
-            SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel)
+            SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel, cancel: model.cancelCleanupDownload)
         }
     }
 
@@ -338,12 +338,13 @@ struct SetupProgressBar: View {
 struct SetupCleanupModels: View {
     var models: [CleanupModelStatus]
     var download: (CleanupLevel) -> Void
+    var cancel: (CleanupLevel) -> Void
 
     var body: some View {
         if !models.isEmpty {
             DesignSection(eyebrow: "Cleanup models") {
                 ForEach(models) { model in
-                    SetupCleanupRow(model: model) { download(model.level) }
+                    SetupCleanupRow(model: model, download: { download(model.level) }, cancel: { cancel(model.level) })
                 }
             }
             .multilineTextAlignment(.leading)
@@ -355,6 +356,7 @@ struct SetupCleanupModels: View {
 struct SetupCleanupRow: View {
     var model: CleanupModelStatus
     var download: () -> Void
+    var cancel: () -> Void
 
     private var size: String { ModelDownloadFormat.size(Int64(model.sizeMB) * 1_000_000) }
 
@@ -401,7 +403,11 @@ struct SetupCleanupRow: View {
         case .available:
             Button("Download", action: download).buttonStyle(.designSecondary)
                 .accessibilityLabel("Download \(model.level.title) cleanup model, \(size)")
-        case .downloading, .preparing:
+        case .downloading:
+            Button("Cancel", action: cancel).buttonStyle(.designSecondary)
+                .accessibilityLabel("Cancel \(model.level.title) cleanup model download")
+                .accessibilityIdentifier("setup-cleanup-cancel-\(model.level.rawValue)")
+        case .preparing:
             Text("Downloading").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
         case .done:
             Label("Done", systemImage: "checkmark.circle.fill").font(DesignFont.sans(DesignFont.detail, .medium))

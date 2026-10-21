@@ -16,4 +16,5 @@ struct CleanupModelStatus: Equatable, Identifiable {
 @MainActor protocol CleanupModelListing {
     func cleanupModels() -> [CleanupModelStatus]
     func downloadCleanupModel(_ level: CleanupLevel)
+    func cancelCleanupDownload(_ level: CleanupLevel)
 }

@@ -79,6 +79,12 @@ public actor MLXCleaner: MeasuredCleaner {
             })
     }
 
+    /// After a cancelled download, deletes the partial snapshot. A complete one is left alone.
+    public nonisolated func discardPartialDownload() {
+        guard !isDownloaded, let directory = modelDirectory, HubDownloader.isCommitHash(spec.revision) else { return }
+        HubDownloader.discardPartialSnapshot(repoDirectory: directory, commit: spec.revision)
+    }
+
     /// Loads a downloaded snapshot into memory without touching the network.
     public func load() async throws {
         if container != nil { return }

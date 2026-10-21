@@ -11,6 +11,12 @@ protocol SmartModel: TextCleaner {
     func downloadReporting(report: @escaping @Sendable (ModelDownloadProgress) -> Void) async throws
     func load() async throws
     func unload() async
+    /// Deletes what a cancelled download left on disk.
+    func discardPartialDownload()
+}
+
+extension SmartModel {
+    func discardPartialDownload() {}
 }
 
 extension MLXCleaner: SmartModel {
@@ -304,6 +310,7 @@ final class CleanerHost: CleanupModelManaging {
                 Log.cleaner.info("model \(model.id, privacy: .public) downloaded")
                 levelChanged()
             } catch is CancellationError {
+                model.discardPartialDownload()
                 downloadTask = nil
                 downloadProgress = nil
                 state = model.isDownloaded ? .unloaded : .absent
