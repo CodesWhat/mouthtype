@@ -138,8 +138,16 @@ def run_first(*, setup_main=None, notifier=notify, plugin_dir=None):
         sys.stderr.write(log.getvalue())
         if status == 0:
             record('done', attempts=attempts, reason=reason)
-            notifier('Mouthtype is ready', 'Press Super+Alt+M to dictate' + (', Super+Shift+T to transform a selection.' if omarchy else '.')
-                     + ' Check anytime with: mouthtype-linux doctor')
+            try:
+                bindings = (home() / '.config/hypr/bindings.lua').read_text()
+            except OSError:
+                bindings = ''
+            keys = [text for marker, text in (('plugin shortcut: begin', 'Super+Alt+M to dictate'),
+                                              ('plugin transform shortcut: begin', 'Super+Shift+T to transform a selection'))
+                    if marker in bindings]
+            notifier('Mouthtype is ready', ('Press ' + ', '.join(keys) + '. ' if keys else
+                                            'Pick a dictation key from the Mouthtype menu in the bar. ')
+                     + 'Check anytime with: mouthtype-linux doctor')
             return 0
         lines = [line.strip() for line in log.getvalue().splitlines() if line.strip()]
         error = lines[-1] if lines else 'setup exited with status ' + str(status)

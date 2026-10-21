@@ -42,13 +42,22 @@ class FirstRunTests(unittest.TestCase):
         self.assertEqual(calls, [['--shortcut', 'toggle']])
         self.assertEqual(self.state()['state'], 'done')
         self.assertEqual([m[0] for m in self.messages], ['Setting up Mouthtype', 'Mouthtype is ready'])
-        self.assertIn('Super+Shift+T', self.messages[-1][1])
+
+    def test_ready_message_names_only_the_keys_that_were_bound(self):
+        self.omarchy()
+        bindings = self.home / '.config/hypr/bindings.lua'
+        bindings.parent.mkdir(parents=True)
+        bindings.write_text('-- Mouthtype Omarchy plugin shortcut: begin\nx\n-- Mouthtype Omarchy plugin shortcut: end\n')
+        firstrun.run_first(setup_main=lambda argv: 0, notifier=self.notifier)
+        self.assertIn('Super+Alt+M', self.messages[-1][1])
+        self.assertNotIn('Super+Shift+T', self.messages[-1][1])
 
     def test_without_omarchy_only_speech_is_prepared(self):
         calls = []
         firstrun.run_first(setup_main=lambda argv: calls.append(argv) or 0, notifier=self.notifier)
         self.assertIn('--skip-plugin', calls[0])
-        self.assertNotIn('Super+Shift+T', self.messages[-1][1])
+
+        self.assertIn('Pick a dictation key', self.messages[-1][1])
 
     def test_a_complete_setup_does_nothing_and_is_remembered(self):
         self.omarchy()
