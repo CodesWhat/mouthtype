@@ -4,37 +4,10 @@
 
 @source "../node_modules/fumadocs-ui/dist/**/*.js";
 
-/* Mouthtype fonts, same files as the product site (website/public/fonts). */
-@font-face {
-  font-family: "Instrument Sans";
-  src: url("/fonts/instrument-sans-latin-wght-normal.woff2") format("woff2");
-  font-weight: 400 700;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Instrument Serif";
-  src: url("/fonts/instrument-serif-latin-400-normal.woff2") format("woff2");
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Instrument Serif";
-  src: url("/fonts/instrument-serif-latin-400-italic.woff2") format("woff2");
-  font-style: italic;
-  font-weight: 400;
-  font-display: swap;
-}
-@font-face {
-  font-family: "JetBrains Mono";
-  src: url("/fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
-  font-weight: 100 800;
-  font-display: swap;
-}
-
 :root {
-  --mt-serif: "Instrument Serif", Georgia, serif;
-  --mt-sans: "Instrument Sans", system-ui, sans-serif;
-  --mt-mono: "JetBrains Mono", ui-monospace, monospace;
+  --mt-serif: var(--font-instrument-serif), Georgia, serif;
+  --mt-sans: var(--font-instrument-sans), system-ui, sans-serif;
+  --mt-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
 
   /* Lime accent from the app palette: #76A11A light, #A6CD52 dark. Link text uses
      the darker #4A6A12 in light mode so it stays readable on white. */

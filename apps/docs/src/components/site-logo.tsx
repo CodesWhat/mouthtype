@@ -1,11 +1,11 @@
-import { SITE_CONFIG } from "@/lib/site-config";
+import { BASE_PATH, SITE_CONFIG } from "@/lib/site-config";
 
 export function SiteLogo() {
   return (
     <span className="mt-brand">
       {/* biome-ignore lint/performance/noImgElement: static pixel-art icon, no optimization wanted */}
       <img
-        src="/assets/mouthtype-icon.png"
+        src={`${BASE_PATH}/assets/mouthtype-icon.png`}
         alt=""
         width={24}
         height={24}

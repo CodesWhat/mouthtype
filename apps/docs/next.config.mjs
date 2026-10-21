@@ -10,6 +10,8 @@ const basePath = process.env.DOCS_BASE_PATH || undefined;
 const nextConfig = {
   poweredByHeader: false,
   basePath,
+  // Client code needs the prefix for URLs Next does not rewrite (search API, static assets).
+  env: { NEXT_PUBLIC_DOCS_BASE_PATH: basePath ?? "" },
   turbopack: {
     root: import.meta.dirname,
   },

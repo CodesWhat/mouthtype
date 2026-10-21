@@ -24,11 +24,11 @@ const tmpDir = join(docsRoot, "content", "docs.tmp");
 
 const urlMap = buildUrlMap(pages);
 
-const isDirectory = (repoPath) => {
+const statPath = (repoPath) => {
   try {
-    return statSync(join(repoRoot, repoPath)).isDirectory();
+    return statSync(join(repoRoot, repoPath)).isDirectory() ? "dir" : "file";
   } catch {
-    return false;
+    return null;
   }
 };
 
@@ -49,7 +49,7 @@ for (const page of pages) {
     stripLeadingH1(readFileSync(srcFile, "utf8")),
     page.src,
     urlMap,
-    isDirectory,
+    statPath,
   );
   const destFile = join(tmpDir, `${page.dest}.md`);
   mkdirSync(dirname(destFile), { recursive: true });

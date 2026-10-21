@@ -15,8 +15,8 @@ The source includes a daemon and CLI aimed at Linux x86_64 on Arch or Omarchy, w
 
 The source archive is at [mouthtype.app/source](https://mouthtype.app/source). It includes the guides below, which are also copied into these docs.
 
-- [Linux desktop setup and testing](linux-desktop-setup.md) is `tools/linux-desktop/README.md`.
-- [Omarchy plugin](linux-omarchy-plugin.md) is `tools/omarchy-plugin/README.md`. It adds a bar menu, a floating pill and a choice of toggle or hold shortcut. Its installer enables a login service unless you pass `--no-autostart`.
+- [Linux desktop setup and testing](../../tools/linux-desktop/README.md) is `tools/linux-desktop/README.md`.
+- [Omarchy plugin](../../tools/omarchy-plugin/README.md) is `tools/omarchy-plugin/README.md`. It adds a bar menu, a floating pill and a choice of toggle or hold shortcut. Its installer enables a login service unless you pass `--no-autostart`.
 - An ordered install checklist for people and coding agents is at [mouthtype.app/linux/agent-install.md](https://mouthtype.app/linux/agent-install.md).
 
 The speech-preparation helper downloads pinned model files, verifies their hashes and builds a dedicated environment. It doesn't record, register shortcuts or start a service.

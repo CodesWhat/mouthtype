@@ -15,12 +15,14 @@ export function buildUrlMap(pages) {
  * - Links to another synced doc become site URLs.
  * - Links to anything else in the repo (source files, workflows, directories)
  *   point at GitHub: blob/ for files, tree/ for directories.
+ * - A relative link to a path that doesn't exist throws, so a typo fails the
+ *   sync instead of shipping a dead GitHub URL.
  * - External URLs and in-page anchors are left alone.
  * Fenced code blocks are skipped.
  */
 export const GITHUB_BASE = "https://github.com/CodesWhat/mouthtype";
 
-export function rewriteLinks(text, srcPath, urlMap, isDirectory = () => false) {
+export function rewriteLinks(text, srcPath, urlMap, statPath = () => "file") {
   const srcDir = posix.dirname(srcPath);
   let inFence = false;
 
@@ -46,11 +48,12 @@ export function rewriteLinks(text, srcPath, urlMap, isDirectory = () => false) {
         if (url) {
           return `[${label}](${url}${fragment})`;
         }
-        if (resolved.startsWith("..")) {
-          return label;
-        }
         const clean = resolved.replace(/\/$/, "");
-        const kind = pathPart.endsWith("/") || isDirectory(clean) ? "tree" : "blob";
+        const found = resolved.startsWith("..") ? null : statPath(clean);
+        if (!found) {
+          throw new Error(`${srcPath}: link "${target}" points at a missing file (${resolved})`);
+        }
+        const kind = pathPart.endsWith("/") || found === "dir" ? "tree" : "blob";
         return `[${label}](${GITHUB_BASE}/${kind}/main/${clean}${fragment})`;
       });
     })

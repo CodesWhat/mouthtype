@@ -29,11 +29,8 @@ test("points non-doc repo files at GitHub blob URLs", () => {
 test("points directories at GitHub tree URLs", () => {
   const trailing = rewriteLinks("[src](../Sources/X/)", "docs/SECURITY.md", urlMap);
   assert.equal(trailing, "[src](https://github.com/CodesWhat/mouthtype/tree/main/Sources/X)");
-  const detected = rewriteLinks(
-    "[web](../website)",
-    "docs/USAGE.md",
-    urlMap,
-    (p) => p === "website",
+  const detected = rewriteLinks("[web](../website)", "docs/USAGE.md", urlMap, (p) =>
+    p === "website" ? "dir" : "file",
   );
   assert.equal(detected, "[web](https://github.com/CodesWhat/mouthtype/tree/main/website)");
 });
@@ -59,4 +56,27 @@ test("strips the leading H1 and builds frontmatter", () => {
 test("every manifest source is unique", () => {
   assert.equal(new Set(pages.map((p) => p.src)).size, pages.length);
   assert.equal(new Set(pages.map((p) => p.dest)).size, pages.length);
+});
+
+test("a link to a missing file throws", () => {
+  assert.throws(
+    () => rewriteLinks("[x](nope.md)", "docs/USAGE.md", urlMap, () => null),
+    /missing file/,
+  );
+});
+
+test("every manifest page's links resolve against the real repo", async () => {
+  const { readFileSync, statSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const repoRoot = join(import.meta.dirname, "..", "..", "..");
+  const statPath = (p) => {
+    try {
+      return statSync(join(repoRoot, p)).isDirectory() ? "dir" : "file";
+    } catch {
+      return null;
+    }
+  };
+  for (const page of pages) {
+    rewriteLinks(readFileSync(join(repoRoot, page.src), "utf8"), page.src, urlMap, statPath);
+  }
 });
