@@ -163,6 +163,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
+        if FileManager.default.fileExists(atPath: DraftRecovery.standard.directory.path) {
+            DraftRecovery.standard.restoreDrafts(spellings: spellingEditor, phrases: settingsWindow.model.phrases)
+        }
         let store = openStore()
         let archive = AudioArchive(supportDirectory: TranscriptStore.defaultURL().deletingLastPathComponent())
         purgeAudio(archive: archive, store: store)
@@ -353,7 +356,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
-        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown || settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
+        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
             await dictation?.prepareForTermination() ?? true
@@ -371,6 +374,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         })
         return .terminateLater
+    }
+
+    /// A signal can't ask whether to keep a draft, so both editors' drafts go to disk and come back at the next launch.
+    private func saveDraftsForSignal() -> Bool {
+        let saved = DraftRecovery.standard.saveDrafts(spellings: spellingEditor, phrases: settingsWindow.model.phrases)
+        if !saved.isEmpty { Log.app.info("saved \(saved.count, privacy: .public) unsaved draft(s) before quitting on a signal") }
+        return true
     }
 
     static func mayQuit(allowsTermination: Bool, resolveDraft: () -> Bool) -> Bool {

@@ -191,6 +191,20 @@ import Observation
         } catch { self.error = error.localizedDescription }
     }
 
+    func draftSnapshot() -> DraftRecovery.Draft? {
+        guard isDirty else { return nil }
+        return DraftRecovery.Draft(kind: .spelling, heardForms: heardForms, heardInput: heardInput, written: written, starred: starred)
+    }
+
+    /// Reopens a recovered draft as a new word, so Save adds it and Discard drops it.
+    func restore(_ draft: DraftRecovery.Draft) {
+        setDraft([], editing: true)
+        heardForms = draft.heardForms
+        heardInput = draft.heardInput
+        written = draft.written
+        starred = draft.starred
+    }
+
     private func setDraft(_ rules: [DictionaryRule], editing: Bool) {
         original = rules
         isEditing = editing

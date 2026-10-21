@@ -187,4 +187,16 @@ private final class FakeStore: KeyMappingStore {
         remap.handleSignal(requestTermination: { Thread.sleep(forTimeInterval: 0.6) }, fallbackDelay: 0.05, hardGrace: 0.05)
         #expect(hard.withLock { $0 })
     }
+
+    @Test func theHardExitRestoresTheMappingItselfWithoutTheGuard() {
+        let store = FakeStore([capsToEscape])
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        _ = remap.apply()
+        nonisolated(unsafe) let unsafeStore = store
+        let restoredAtExit = Mutex<[FnRemapMapping.Entry]?>(nil)
+        remap.exitProcess = { _ in }
+        remap.hardExit = { _ in restoredAtExit.withLock { $0 = unsafeStore.mapping } }
+        remap.handleSignal(requestTermination: { Thread.sleep(forTimeInterval: 0.6) }, fallbackDelay: 0.05, hardGrace: 0.05)
+        #expect(restoredAtExit.withLock { $0 } == [capsToEscape])
+    }
 }

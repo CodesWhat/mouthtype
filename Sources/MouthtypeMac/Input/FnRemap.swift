@@ -140,6 +140,7 @@ public final class FnRemap {
         // Both deadlines are armed before the request: NSApp.terminate can block this thread in a modal alert or
         // wait on a stalled save, and nothing after it would run. The background one doesn't need the main queue.
         let hardExit = self.hardExit
+        let hardRestore = backgroundRestore()
         DispatchQueue.main.asyncAfter(deadline: .now() + fallbackDelay) { [weak self] in
             MainActor.assumeIsolated {
                 Log.hotkey.error("quit after signal stalled, restoring the fn mapping and exiting")
@@ -147,8 +148,25 @@ public final class FnRemap {
                 self?.exitProcess(0)
             }
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + fallbackDelay + hardGrace) { hardExit(0) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + fallbackDelay + hardGrace) {
+            hardRestore()
+            hardExit(0)
+        }
         requestTermination()
+    }
+
+    /// A restore that needs no actor, for the hard exit when the main thread is blocked. It carries a snapshot of the
+    /// saved original and uses the same read, merge and write the main-actor restore does, so it works whether or not
+    /// the fn guard is running (it may be missing or have failed to spawn).
+    private func backgroundRestore() -> @Sendable () -> Void {
+        guard isApplied else { return {} }
+        nonisolated(unsafe) let store = self.store
+        let original = savedOriginal() ?? []
+        let ours = self.ours
+        return {
+            guard let current = try? store.read() ?? [] else { return }
+            _ = store.write(FnRemapMapping.restoring(current: current, ours: ours, original: original))
+        }
     }
 
     // MARK: - Marker
