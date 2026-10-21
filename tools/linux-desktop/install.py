@@ -16,7 +16,7 @@ DESKTOP = ('doctor.py', 'test_doctor.py', 'imports.py', 'test_imports.py', 'smar
            'spellings.py', 'test_spellings.py', 'test_spelling_session.py',
            'phrases.py', 'test_phrases.py', 'test_phrase_session.py', 'test_phrase_context.py', 'phrase-fixtures.json',
            'spelling-fixtures.json', 'spelling-unicode.json',
-           'cleanup.py', 'cleanup-commands.json', 'cleanup-fixtures.json',
+           'cleanup.py', 'cleanup-commands.json', 'cleanup-fixtures.json', 'tone-fixtures.json',
            'test_cleanup.py', 'test_cleanup_session.py',
            'hyprland.lua', 'hyprland-legacy.conf', 'test_desktop.py',
            'setup_speech.py', 'test_setup_speech.py',
