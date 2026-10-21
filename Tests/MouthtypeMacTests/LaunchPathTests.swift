@@ -78,52 +78,57 @@ import Testing
         #expect(window.model.stats.store === store)
     }
 
-    private func queuedDelegate(quits: @escaping () -> Void) -> AppDelegate {
-        let delegate = AppDelegate()
-        delegate.quitAgain = { _ in quits() }
-        return delegate
-    }
+    private func url() -> [URL] { [URL(string: "mouthtype://record/start")!] }
 
-    @Test func aQuitAfterAQueuedURLWaitsForTheReplayThenQuits() {
-        var quits = 0
-        let delegate = queuedDelegate { quits += 1 }
-        delegate.application(NSApp, open: [URL(string: "mouthtype://record/start")!])
+    @Test func aQuitAfterAQueuedURLWaitsForTheReplayThenRepliesTrueOnce() async {
+        let delegate = AppDelegate()
+        var replies: [Bool] = []
+        delegate.application(NSApplication.shared, open: url())
         #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
-        #expect(quits == 0)
-        delegate.finishLaunch()
+        await withCheckedContinuation { done in
+            delegate.replyToTermination = { _, ready in replies.append(ready); done.resume() }
+            #expect(replies.isEmpty)
+            delegate.finishLaunch()
+        }
+        await Task.yield()
         #expect(delegate.pendingOpenCount == 0)
-        #expect(quits == 1)
+        #expect(replies == [true])
     }
 
     @Test func aQuitWithAnEmptyQueueIsImmediate() {
-        var quits = 0
-        let delegate = queuedDelegate { quits += 1 }
+        let delegate = AppDelegate()
         #expect(!delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
-        #expect(quits == 0)
     }
 
-    @Test func aQuitThatOutlastsTheDeadlineDropsTheQueueAndGoesAhead() async {
-        var quits = 0
-        let delegate = queuedDelegate { quits += 1 }
-        delegate.quitDeadline = .milliseconds(50)
-        delegate.application(NSApplication.shared, open: [URL(string: "mouthtype://record/start")!])
-        #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
-        try? await Task.sleep(for: .milliseconds(300))
+    @Test func aQuitThatOutlastsTheDeadlineDropsTheQueueAndRepliesOnce() async {
+        let delegate = AppDelegate()
+        var replies: [Bool] = []
+        delegate.quitDeadline = .zero
+        delegate.application(NSApplication.shared, open: url())
+        await withCheckedContinuation { done in
+            delegate.replyToTermination = { _, ready in replies.append(ready); done.resume() }
+            #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
+        }
+        await Task.yield()
         #expect(delegate.pendingOpenCount == 0)
-        #expect(quits == 1)
-        // A late finishLaunch has nothing to replay and doesn't quit twice.
+        #expect(replies == [true])
+        // A late finishLaunch has nothing held and doesn't reply again.
         delegate.finishLaunch()
-        #expect(quits == 1)
+        await Task.yield()
+        #expect(replies == [true])
     }
 
-    @Test func anAbandonedLaunchDropsTheQueueAndReleasesTheQuit() {
-        var quits = 0
-        let delegate = queuedDelegate { quits += 1 }
-        delegate.application(NSApplication.shared, open: [URL(string: "mouthtype://record/start")!])
+    @Test func anAbandonedLaunchDropsTheQueueAndReleasesTheQuit() async {
+        let delegate = AppDelegate()
+        var replies: [Bool] = []
+        delegate.application(NSApplication.shared, open: url())
         #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
-        delegate.abandonLaunch(reason: "test")
+        await withCheckedContinuation { done in
+            delegate.replyToTermination = { _, ready in replies.append(ready); done.resume() }
+            delegate.abandonLaunch(reason: "test")
+        }
         #expect(delegate.pendingOpenCount == 0)
-        #expect(quits == 1)
+        #expect(replies == [true])
     }
 
     @Test func burstsOfRefreshRequestsRunOnce() async {
