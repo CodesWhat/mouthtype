@@ -20,6 +20,19 @@ import Testing
         #expect(NSFont(name: FontRegistry.monoName, size: 9) != nil)
     }
 
+    @Test func theStatusItemStepNeverRegistersFontsOnTheMainThread() async {
+        FontRegistry.resetForTesting()
+        let delegate = AppDelegate()
+        var finished = false
+        delegate.beginLaunch(finish: { _ in finished = true })
+        // Straight after the status item: nothing has registered on main, and the rest of launch hasn't started.
+        #expect(!FontRegistry.registeredOnMain)
+        #expect(!finished)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(finished)
+        #expect(FontRegistry.registered == FontRegistry.families)
+    }
+
     @Test func registrationIsSafeFromOtherThreads() async {
         let results = await withTaskGroup(of: [String].self) { group in
             for _ in 0..<4 { group.addTask { FontRegistry.registerBundledFonts() } }

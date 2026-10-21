@@ -16,6 +16,17 @@ enum FontRegistry {
     private nonisolated static let lock = NSLock()
     private nonisolated(unsafe) static var result: [String]?
 
+    /// Whether registration ever ran on the main thread. A test seam for the launch path.
+    nonisolated(unsafe) static var registeredOnMain = false
+
+    /// Forgets the result so a test can watch a fresh registration. Fonts stay registered with the process.
+    nonisolated static func resetForTesting() {
+        lock.lock()
+        defer { lock.unlock() }
+        result = nil
+        registeredOnMain = false
+    }
+
     /// The families that came up, or nil until registration has finished.
     nonisolated static var registered: [String]? {
         lock.lock()
@@ -31,6 +42,7 @@ enum FontRegistry {
         lock.lock()
         defer { lock.unlock() }
         if let result { return result }
+        if Thread.isMainThread { registeredOnMain = true }
         var failed = false
         for url in fontURLs(in: bundle) {
             var error: Unmanaged<CFError>?

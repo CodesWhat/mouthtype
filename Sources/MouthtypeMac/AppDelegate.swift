@@ -179,6 +179,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // The status item goes up first and fonts start registering off the main thread. Everything that builds a pill or
+        // card (and so draws with a bundled font) waits for the next run-loop turn, after the item has been committed.
+        beginLaunch { [weak self] menuBar in self?.completeLaunch(arguments: arguments, menuBar: menuBar) }
+    }
+
+    /// Creates the status item and starts font registration without touching anything font-dependent, then runs `finish`
+    /// on the next main-queue turn.
+    func beginLaunch(statusItem: () -> MenuBarController = { MenuBarController() }, finish: @escaping @MainActor (MenuBarController) -> Void) {
+        let menuBar = statusItem()
+        FontRegistry.registerInBackground()
+        DispatchQueue.main.async { MainActor.assumeIsolated { finish(menuBar) } }
+    }
+
+    private func completeLaunch(arguments: [String], menuBar: MenuBarController) {
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
         let store = openStore()
@@ -231,9 +245,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictation.corrections = watcher
         correctionWatcher = watcher
 
-        let menuBar = MenuBarController()
-        // The status item is up; the bundled fonts register off the main thread. Every draw path waits on them first.
-        FontRegistry.registerInBackground()
         pill.onLevel = { [weak menuBar] level in menuBar?.setLevel(level) }
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
         settingsStore = store
