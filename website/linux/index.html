@@ -78,7 +78,8 @@
                 <h2>Install the client.</h2>
                 <p>The download is the GPL-3.0 source archive for the current Mac release. It includes the Linux client, the Omarchy plugin under <code>tools/omarchy-plugin</code> (in archives that contain that directory), the setup guides and license notices, with no models or personal data bundled. It is not a packaged desktop release.</p>
                 <p>Extract it and open a terminal in the extracted source directory. Read <code>tools/linux-desktop/README.md</code>, then run <code>python3 tools/linux-desktop/install.py --prefix "$HOME/.local"</code>.</p>
-                <p>This installs <code>~/.local/bin/mouthtype-linux</code> and its payload. The installer refuses to overwrite an existing installation; move an old one aside to upgrade. Check it with <code>mouthtype-linux capabilities</code>.</p>
+                <p>This installs <code>~/.local/bin/mouthtype-linux</code> and its payload. The installer refuses to overwrite an existing installation; add <code>--update</code> to replace it or <code>--uninstall</code> to remove it. Check it with <code>mouthtype-linux capabilities</code>.</p>
+                <p>Then run <code>python3 tools/linux-desktop/setup.py</code>. It prepares speech, checks your setup and installs the Omarchy plugin in one go. The steps below are the same work one piece at a time.</p>
               </div>
             </li>
             <li id="speech">
@@ -86,7 +87,7 @@
               <div>
                 <h2>Prepare speech explicitly.</h2>
                 <p>From the same source directory, run <code>python3 tools/linux-desktop/setup_speech.py --destination "$HOME/.local/share/mouthtype/speech-candidate"</code>. The destination must be new.</p>
-                <p>This downloads and verifies the pinned speech model, creates a dedicated Python environment and writes a local configuration. It does not record or start anything. Confirm the setup with <code>mouthtype-linux --config "$HOME/.local/share/mouthtype/speech-candidate/linux.json" doctor</code>.</p>
+                <p>This downloads and verifies the pinned speech model, creates a dedicated Python environment and writes a local configuration. It does not record or start anything. Confirm the setup with <code>mouthtype-linux doctor</code>.</p>
               </div>
             </li>
             <li id="plugin">
