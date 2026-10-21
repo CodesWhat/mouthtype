@@ -1,5 +1,6 @@
 import os
 import json
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -1201,3 +1202,401 @@ class RetentionTests(unittest.TestCase):
                        {'audio_retention_megabytes': -1}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 validate_config({**base, **change})
+
+
+class ClipboardGuardTests(unittest.TestCase):
+    """Paste must not destroy a clipboard it cannot put back."""
+
+    make = PasteDeliveryTests.make
+
+    def copies(self, calls):
+        return [a for a, _ in calls if a[0] in ('wl-copy', 'wtype') or a[:2] == ['hyprctl', 'dispatch']]
+
+    def test_image_clipboard_is_left_untouched_and_the_transcript_stays_recoverable(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        delivery.clipboard_types = lambda: ['image/png']
+        self.assertEqual(delivery.submit('text', target), 'recover_only')
+        self.assertFalse(self.copies(calls))
+        self.assertEqual(restored, [])
+
+    def test_file_list_and_images_with_a_text_flavour_are_also_left_alone(self):
+        for types in (['text/uri-list', 'text/plain', 'x-special/gnome-copied-files'],
+                      ['text/plain;charset=utf-8', 'image/png'], ['application/pdf']):
+            with self.subTest(types=types):
+                delivery, target, calls, restored = self.make({'any_window': True})
+                delivery.clipboard_types = lambda types=types: types
+                self.assertEqual(delivery.submit('text', target), 'recover_only')
+                self.assertFalse(self.copies(calls))
+
+    def test_oversized_text_clipboard_is_left_untouched(self):
+        from desktop import ClipboardTooLarge
+        delivery, target, calls, restored = self.make({'any_window': True}, clipboard=ClipboardTooLarge('big'))
+        delivery.clipboard_types = lambda: ['text/plain;charset=utf-8']
+        self.assertEqual(delivery.submit('text', target), 'recover_only')
+        self.assertFalse(self.copies(calls))
+
+    def test_rich_text_is_restored_as_plain_text_and_disabled_restore_skips_the_check(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        delivery.clipboard_types = lambda: ['text/html', 'text/plain;charset=utf-8', 'UTF8_STRING']
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(restored, [('earlier text', 'text')])
+        delivery, target, calls, restored = self.make({'any_window': True, 'restore_clipboard': False})
+        delivery.clipboard_types = lambda: self.fail('restore is off, so the clipboard is never inspected')
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+
+    def test_password_manager_hint_is_overwritten_but_never_restored(self):
+        delivery, target, calls, restored = self.make({'any_window': True}, clipboard='hunter2')
+        delivery.clipboard_types = lambda: ['text/plain;charset=utf-8', 'x-kde-passwordManagerHint']
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual([k['input'] for a, k in calls if a[0] == 'wl-copy'], [b'text'])
+        self.assertEqual(restored, [])
+
+    def test_empty_or_unlistable_clipboard_still_pastes(self):
+        for types in ([], None):
+            delivery, target, calls, restored = self.make({'any_window': True}, clipboard=OSError('nothing'))
+            delivery.clipboard_types = lambda types=types: types
+            self.assertEqual(delivery.submit('text', target), 'unknown')
+            self.assertEqual(restored, [])
+
+    def test_clipboard_types_reads_wl_paste_list_types(self):
+        from desktop import HyprlandDelivery
+        def runner(result=None, error=None):
+            def run(argv, **kwargs):
+                self.assertEqual(argv, ['wl-paste', '--list-types'])
+                if error:
+                    raise error
+                return result
+            return run
+        Result = lambda code, out='': type('Result', (), {'returncode': code, 'stdout': out})()
+        config = {'mode': 'paste'}
+        self.assertEqual(HyprlandDelivery(config, run=runner(Result(0, 'text/plain\nimage/png\n'))).clipboard_types(),
+                         ['text/plain', 'image/png'])
+        self.assertEqual(HyprlandDelivery(config, run=runner(Result(1))).clipboard_types(), [])
+        self.assertIsNone(HyprlandDelivery(config, run=runner(error=OSError())).clipboard_types())
+        self.assertIsNone(HyprlandDelivery(config, run=runner(error=subprocess.TimeoutExpired('wl-paste', 1))).clipboard_types())
+
+    def test_read_phrase_clipboard_over_the_cap_raises_the_too_large_error(self):
+        from desktop import ClipboardTooLarge, read_phrase_clipboard
+        with self.assertRaises(ClipboardTooLarge):
+            read_phrase_clipboard([sys.executable, '-c', 'print("x" * 100)'], maximum=10)
+
+    def test_restore_delay_comes_from_configuration_with_a_longer_default(self):
+        from desktop import HyprlandDelivery
+        for config, expected in (({'mode': 'paste'}, 1.5), ({'mode': 'paste', 'restore_delay_seconds': 3}, 3)):
+            delays = []
+            delivery = HyprlandDelivery(config, run=lambda *a, **k: None)
+            delivery.clipboard = lambda: 'other'
+            with unittest.mock.patch('desktop.time.sleep', side_effect=delays.append):
+                delivery.schedule_restore('before', 'ours')
+                delivery.restore_thread.join(2)
+            self.assertEqual(delays, [expected])
+
+    def test_restore_delay_is_validated(self):
+        from desktop import validate_config
+        base = {'engine_config': '/local/engines.json'}
+        validate_config({**base, 'delivery': {'mode': 'recover', 'restore_delay_seconds': 2.5}})
+        for bad in (0, .05, 31, 'soon', None, True, float('inf')):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate_config({**base, 'delivery': {'mode': 'recover', 'restore_delay_seconds': bad}})
+
+    def test_truncated_process_name_matches_gnome_terminal_server(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        probe = {'class': 'custom', 'pid': 7}
+        delivery.process_name = lambda pid: 'gnome-terminal-'
+        self.assertTrue(delivery.is_terminal(probe))
+        delivery.process_name = lambda pid: 'firefox'
+        self.assertFalse(delivery.is_terminal(probe))
+        delivery.process_name = lambda pid: None
+        self.assertFalse(delivery.is_terminal(probe))
+
+
+class BlockingDelivery(Delivery):
+    def __init__(self):
+        super().__init__()
+        self.inside, self.release = threading.Event(), threading.Event()
+
+    def submit(self, text, target):
+        self.calls.append((text, target))
+        self.inside.set()
+        self.release.wait(5)
+        return 'unknown'
+
+
+class DeliveryOutsideLockTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.delivery = BlockingDelivery()
+        self.session = Session(Capture(), Engine(), self.delivery, Path(self.temp.name))
+        self.addCleanup(self.session.close)
+        self.addCleanup(self.delivery.release.set)
+
+    def start_delivery(self):
+        self.session.command('start')
+        self.session.command('stop')
+        self.assertTrue(self.delivery.inside.wait(3))
+
+    def from_another_thread(self, call):
+        box = []
+        thread = threading.Thread(target=lambda: box.append(call()))
+        thread.start()
+        thread.join(1)
+        self.assertFalse(thread.is_alive(), 'the session lock is held during delivery')
+        return box[0]
+
+    def test_status_tick_and_level_do_not_wait_for_a_slow_paste(self):
+        self.start_delivery()
+        self.assertEqual(self.from_another_thread(self.session.status)['state'], 'transcribing')
+        self.from_another_thread(self.session.tick)
+        self.assertIsNone(self.from_another_thread(self.session.level))
+        self.assertIsNone(self.from_another_thread(self.session.elapsed))
+        self.delivery.release.set()
+        self.session.wait()
+        self.assertEqual((self.session.state, self.session.outcome), ('idle', 'unknown'))
+
+    def test_a_new_take_cannot_start_underneath_a_delivery(self):
+        self.start_delivery()
+        self.assertEqual(self.from_another_thread(lambda: self.session.command('start'))['state'], 'transcribing')
+        self.assertEqual(len(self.delivery.calls), 1)
+        self.delivery.release.set()
+        self.session.wait()
+
+    def test_cancel_during_delivery_settles_idle_and_keeps_the_transcript(self):
+        self.start_delivery()
+        self.from_another_thread(lambda: self.session.command('cancel'))
+        take = self.session.take
+        self.delivery.release.set()
+        self.session.wait()
+        self.assertEqual(self.session.state, 'idle')
+        self.assertEqual((take / 'transcript.txt').read_text(), Engine().text)
+        # The text did go out, so the outcome says so instead of claiming it was never attempted.
+        self.assertEqual(self.session.outcome, 'unknown')
+        self.assertEqual(self.session.command('start')['state'], 'recording')
+
+    def test_close_during_delivery_neither_hangs_nor_raises(self):
+        self.start_delivery()
+        closer = threading.Thread(target=self.session.close)
+        closer.start()
+        time.sleep(.1)
+        self.delivery.release.set()
+        closer.join(5)
+        self.assertFalse(closer.is_alive())
+        self.assertEqual(self.session.state, 'idle')
+
+
+class WatcherRaceTests(unittest.TestCase):
+    class StubSession:
+        def __init__(self):
+            self.state = 'transcribing'
+        def tick(self):
+            pass
+        def status(self):
+            return {'state': self.state, 'error': None, 'delivery': 'x', 'recovery': None}
+        def elapsed(self):
+            return None
+        def level(self):
+            return None
+
+    def read_events(self, connection, wanted, seconds=3):
+        connection.settimeout(.2)
+        buffer, events = b'', []
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and wanted not in [e.get('state') for e in events]:
+            try:
+                chunk = connection.recv(65536)
+            except socket.timeout:
+                continue
+            if not chunk:
+                break
+            buffer += chunk
+            while b'\n' in buffer:
+                line, buffer = buffer.split(b'\n', 1)
+                events.append(json.loads(line))
+        return [e.get('state') for e in events]
+
+    def test_idle_reaches_existing_watchers_when_a_new_one_connects_just_after_it(self):
+        from desktop import serve
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = self.StubSession()
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 10})
+            thread.start()
+            connections = []
+            try:
+                deadline = time.monotonic() + 3
+                while not path.exists() and time.monotonic() < deadline:
+                    time.sleep(.005)
+                def watch():
+                    connection = socket.socket(socket.AF_UNIX)
+                    connection.connect(str(path))
+                    connection.sendall(json.dumps({'action': 'watch'}).encode() + b'\n')
+                    connections.append(connection)
+                    return connection
+                first = watch()
+                self.assertEqual(self.read_events(first, 'transcribing'), ['transcribing'])
+                time.sleep(.3)
+                # The state flips and a second watcher connects before the loop's next broadcast.
+                session.state = 'idle'
+                second = watch()
+                self.assertIn('idle', self.read_events(second, 'idle'))
+                self.assertIn('idle', self.read_events(first, 'idle'))
+            finally:
+                stopped.set()
+                thread.join(3)
+                for connection in connections:
+                    connection.close()
+
+
+class CliModuleTests(unittest.TestCase):
+    EXAMPLE = '''import json
+
+def register(subparsers):
+    command = subparsers.add_parser('example')
+    command.add_argument('word')
+
+def run(args, context):
+    print(json.dumps({'word': args.word, 'config': str(context.config), 'recovery': str(context.recovery),
+                      'imports': str(context.imports), 'runtime': str(context.runtime),
+                      'socket': str(context.socket), 'callable': callable(context.request)}))
+    return 3
+'''
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.directory = Path(self.temp.name) / 'modules'
+        self.directory.mkdir()
+
+    def invoke(self, *arguments):
+        import contextlib
+        import io
+        from desktop import main
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(['--config', '/c/linux.json', '--runtime', '/r', '--recovery', '/rec', '--imports', '/imp',
+                         *arguments], cli_directory=self.directory)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_a_cli_module_is_loaded_registered_and_run_with_the_context(self):
+        (self.directory / 'cli_example.py').write_text(self.EXAMPLE)
+        code, out, _ = self.invoke('example', 'hello')
+        self.assertEqual(code, 3)
+        self.assertEqual(json.loads(out), {'word': 'hello', 'config': '/c/linux.json', 'recovery': '/rec',
+                                           'imports': '/imp', 'runtime': '/r', 'socket': '/r/session.sock',
+                                           'callable': True})
+
+    def test_the_request_helper_talks_to_the_service_socket(self):
+        from desktop import CliContext, serve
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 5})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 3
+                while not path.exists() and time.monotonic() < deadline:
+                    time.sleep(.005)
+                import desktop
+                context = CliContext(Path('c'), Path('r'), Path('i'), Path(temp), path,
+                                     lambda action, identity=None, **fields: desktop.request(path, action, identity, **fields))
+                self.assertEqual(context.request('status')['state'], 'idle')
+            finally:
+                stopped.set()
+                thread.join(3)
+                session.close()
+
+    def test_a_broken_module_is_skipped_and_core_commands_still_work(self):
+        (self.directory / 'cli_broken.py').write_text('def register(:\n')
+        (self.directory / 'cli_incomplete.py').write_text('def register(subparsers):\n    pass\n')
+        (self.directory / 'cli_explodes.py').write_text(
+            'def register(subparsers):\n    subparsers.add_parser("half")\n    raise RuntimeError("no")\n'
+            'def run(args, context):\n    return 0\n')
+        (self.directory / 'cli_example.py').write_text(self.EXAMPLE)
+        code, out, err = self.invoke('example', 'ok')
+        self.assertEqual(code, 3)
+        self.assertEqual(len(err.strip().splitlines()), 3)
+        self.assertEqual({json.loads(line)['module'] for line in err.splitlines()},
+                         {'cli_broken', 'cli_incomplete', 'cli_explodes'})
+        with self.assertRaises(SystemExit):
+            self.invoke('half')
+
+    def test_a_module_cannot_replace_a_core_command(self):
+        (self.directory / 'cli_hijack.py').write_text(
+            'import json\ndef register(subparsers):\n    subparsers.add_parser("capabilities")\n'
+            'def run(args, context):\n    print("hijacked")\n    return 9\n')
+        code, out, err = self.invoke('capabilities')
+        self.assertEqual(code, 0)
+        self.assertNotIn('hijacked', out)
+        self.assertIn('"interface"', out)
+
+    def test_without_modules_the_cli_is_unchanged(self):
+        code, out, _ = self.invoke('capabilities')
+        self.assertEqual(code, 0)
+
+    def test_the_default_directory_is_the_one_beside_desktop_py(self):
+        from desktop import load_cli_modules
+        self.assertEqual([m for m in load_cli_modules() if m.__file__ and Path(m.__file__).parent != Path(__file__).resolve().parent], [])
+
+
+class WorkerParentWatchTests(unittest.TestCase):
+    def test_workers_and_their_children_die_when_the_service_is_killed(self):
+        import signal
+        here = str(Path(__file__).resolve().parent)
+        child = ('import subprocess, sys, time\n'
+                 'grandchild = subprocess.Popen(["sleep", "60"])\n'
+                 'print(grandchild.pid, flush=True)\n'
+                 'time.sleep(60)\n')
+        parent = ('import subprocess, sys, time\n'
+                  'sys.path.insert(0, %r)\n'
+                  'from desktop import guarded_command\n'
+                  'worker = subprocess.Popen(guarded_command([sys.executable, "-c", sys.argv[1]]), stdout=subprocess.PIPE, text=True, start_new_session=True)\n'
+                  'print(worker.pid, flush=True)\n'
+                  'print(worker.stdout.readline().strip(), flush=True)\n'
+                  'time.sleep(60)\n') % here
+        script = Path(tempfile.mkdtemp()) / 'child.py'
+        script.write_text(child)
+        self.addCleanup(script.unlink)
+        # guarded_command runs a script path, so hand it the child file rather than inline code.
+        parent = parent.replace('[sys.executable, "-c", sys.argv[1]]', '[sys.executable, sys.argv[1]]')
+        service = subprocess.Popen([sys.executable, '-c', parent, str(script)], stdout=subprocess.PIPE, text=True)
+        pids = []
+        try:
+            pids = [int(service.stdout.readline()), int(service.stdout.readline())]
+            for pid in pids:
+                os.kill(pid, 0)
+            service.kill()
+            service.wait(5)
+            deadline = time.monotonic() + 8
+            alive = list(pids)
+            while alive and time.monotonic() < deadline:
+                time.sleep(.1)
+                alive = [pid for pid in alive if self.alive(pid)]
+            self.assertEqual(alive, [])
+        finally:
+            service.kill()
+            service.wait(5)
+            service.stdout.close()
+            for pid in pids:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    @staticmethod
+    def alive(pid):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
+
+    def test_a_guarded_worker_still_runs_its_script_with_its_arguments(self):
+        from desktop import guarded_command
+        with tempfile.TemporaryDirectory() as temp:
+            script = Path(temp) / 'echo.py'
+            script.write_text('import json, sys\nprint(json.dumps([sys.argv, __name__, __file__ == %r]))\n' % str(script))
+            out = subprocess.run(guarded_command([sys.executable, str(script), 'speech']), capture_output=True,
+                                 text=True, timeout=10, check=True).stdout
+        self.assertEqual(json.loads(out), [[str(script), 'speech'], '__main__', True])

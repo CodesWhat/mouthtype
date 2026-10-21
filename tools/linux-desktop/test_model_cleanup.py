@@ -168,7 +168,56 @@ for line in sys.stdin:
         with self.assertRaises(RuntimeError):
             engine.clean('hello there', threading.Event(), seconds=.05)
         self.assertIsNone(engine.worker)
+        # A hung engine is a fault: it backs off rather than reloading on the very next take.
+        self.assertEqual(engine.state, 'failed')
+        self.assertGreater(engine.retry_at, 0)
+
+    def test_request_failure_keeps_its_backoff_until_it_elapses(self):
+        settings, script = self.worker('''print(json.dumps({'event':'ready'}),flush=True)
+for line in sys.stdin:
+ r=json.loads(line)
+ if r['input']=='Warm up, please.': print(json.dumps({'id':r['id'],'text':'ok'}),flush=True)
+ else: sys.exit(1)
+''')
+        now = [1000.0]
+        engine = CleanupEngine(settings, worker=script, clock=lambda: now[0])
+        self.addCleanup(engine.close)
+        engine.warm().join(5)
+        with self.assertRaises(RuntimeError):
+            engine.clean('hello there', threading.Event(), seconds=2)
+        self.assertEqual((engine.state, engine.failures, engine.retry_at), ('failed', 1, 1030.0))
+        loaded = engine.warming
+        now[0] += 29
+        self.assertIsNone(engine.clean('hello there', threading.Event(), seconds=2))
+        self.assertIs(engine.warming, loaded)
+        self.assertEqual(engine.state, 'failed')
+        self.assertIsNone(engine.worker)
+
+    def test_cancelled_request_reloads_next_take_without_owing_backoff(self):
+        settings, script = self.worker('''print(json.dumps({'event':'ready'}),flush=True)
+for line in sys.stdin:
+ r=json.loads(line)
+ if r['input']=='Warm up, please.': print(json.dumps({'id':r['id'],'text':'ok'}),flush=True)
+ else: time.sleep(10)
+''')
+        engine = CleanupEngine(settings, worker=script)
+        self.addCleanup(engine.close)
+        engine.warm().join(5)
+        cancelled = threading.Event()
+        threading.Timer(.2, cancelled.set).start()
+        with self.assertRaises(RuntimeError):
+            engine.clean('hello there', cancelled, seconds=5)
+        self.assertEqual((engine.state, engine.failures, engine.retry_at), ('idle', 0, 0.0))
+        self.assertIsNone(engine.worker)
+
+    def test_recover_does_nothing_once_the_engine_is_closed(self):
+        settings, script = self.worker('print(json.dumps({"event":"ready"}),flush=True)\n')
+        engine = CleanupEngine(settings, worker=script)
+        engine.close()
         self.assertEqual(engine.state, 'idle')
+        self.assertIsNone(engine.clean('hello there', threading.Event(), seconds=2))
+        self.assertIsNone(engine.warming)
+        self.assertIsNone(engine.worker)
 
     def test_cold_engine_returns_none_at_once_and_warms_in_the_background(self):
         settings, script = self.worker('''time.sleep(.5)

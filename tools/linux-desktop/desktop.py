@@ -1,7 +1,9 @@
 """Mouthtype Linux session service and compositor command client."""
 
 import argparse
+from dataclasses import dataclass
 import fcntl
+import importlib.util
 import json
 import math
 import os
@@ -15,6 +17,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import Callable
 import uuid
 import wave
 
@@ -76,6 +79,31 @@ def level_db(data):
     if rms <= 0:
         return -120.0
     return round(max(-120.0, 20 * math.log10(rms)), 1)
+
+
+# Engine workers run in their own session, so nothing ties them to the service. PR_SET_PDEATHSIG fires when the
+# spawning *thread* exits, and the service spawns from short-lived threads, so the worker watches its parent instead.
+# Everything in the worker's process group (the speech worker, llama-server) goes down with it.
+PARENT_WATCH = '''
+import os, runpy, signal, sys, threading, time
+parent, script = int(sys.argv[1]), sys.argv[2]
+def watch():
+    while os.getppid() == parent:
+        time.sleep(.5)
+    try:
+        os.killpg(os.getpgrp(), signal.SIGKILL)
+    except OSError:
+        os._exit(1)
+threading.Thread(target=watch, daemon=True).start()
+sys.argv = sys.argv[2:]
+sys.path.insert(0, os.path.dirname(os.path.abspath(script)))
+runpy.run_path(script, run_name='__main__')
+'''
+
+
+def guarded_command(command):
+    """Run `python script args...` so it is killed, with its process group, if this process dies without cleaning up."""
+    return [command[0], '-c', PARENT_WATCH, str(os.getpid()), *command[1:]]
 
 
 class Session:
@@ -352,11 +380,22 @@ class Session:
                     private_write(take / 'cleanup.json', json.dumps({'level': self.cleanup, 'outcome': outcome[0],
                                                                       'milliseconds': milliseconds, 'reason': outcome[2]}))
                 self.outcome = 'empty' if not text else 'recover_only' if not allow_delivery else 'target_changed'
-                if allow_delivery and text and target == self.delivery.snapshot():
-                    self.outcome = self.delivery.submit(text, target)
-                # Audio remains available after delivery uncertainty; success is never inferred.
-                self.state = 'idle'
-                self._notify('delivered' if self.outcome == 'unknown' else 'saved' if text else 'empty')
+                deliver = bool(allow_delivery and text and target == self.delivery.snapshot())
+                if not deliver:
+                    self.state = 'idle'
+                    self._notify('saved' if text else 'empty')
+            if deliver:
+                # Delivery shells out and can take seconds, so status, tick and level must not wait on it. The state
+                # stays 'transcribing', which keeps a new take from starting underneath the paste.
+                outcome = self.delivery.submit(text, target)
+                with self.lock:
+                    if self.cancelled is cancelled:
+                        # The text was sent whatever happened meanwhile, so the outcome is recorded either way.
+                        self.outcome = outcome
+                        if not cancelled.is_set() and not self.closed:
+                            # Audio remains available after delivery uncertainty; success is never inferred.
+                            self.state = 'idle'
+                            self._notify('delivered' if outcome == 'unknown' else 'saved')
         except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
             with self.lock:
                 if not cancelled.is_set() and not self.closed:
@@ -519,6 +558,8 @@ class HyprlandDelivery:
                             'gnome-terminal-server', 'gnome-terminal', 'xterm', 'st', 'tilix', 'contour', 'rio',
                             'xfce4-terminal', 'urxvt', 'terminator', 'ptyxis', 'wayst', 'blackbox', 'tabby')
 
+    COMM_LENGTH = 15
+
     def process_name(self, pid):
         try:
             if type(pid) is not int or pid <= 0:
@@ -540,7 +581,9 @@ class HyprlandDelivery:
         if target.get('class') in classes:
             return True
         executables = self.config.get('terminal_executables', list(self.TERMINAL_EXECUTABLES))
-        return self.process_name(target.get('pid')) in executables
+        name = self.process_name(target.get('pid'))
+        # The kernel truncates comm to 15 characters, so 'gnome-terminal-server' reads back as 'gnome-terminal-'.
+        return name is not None and name[:self.COMM_LENGTH] in {item[:self.COMM_LENGTH] for item in executables}
 
     def submit(self, text, target):
         if not self.allowed(target):
@@ -575,10 +618,20 @@ class HyprlandDelivery:
             return 'target_changed'
         previous = None
         if self.config.get('restore_clipboard', True):
-            try:
-                previous = self.clipboard()
-            except (OSError, ValueError, PhraseContextUnavailable, subprocess.SubprocessError):
-                previous = None
+            types = self.clipboard_types()
+            if types and any(item in self.SENSITIVE_TYPES for item in types):
+                # A password manager marked it. Overwriting is fine; putting it back would republish the secret.
+                types = None
+            elif types and not self.restorable(types):
+                # An image or file list can't be put back as text, so overwriting it would destroy it.
+                return 'recover_only'
+            if types is not None:
+                try:
+                    previous = self.clipboard()
+                except ClipboardTooLarge:
+                    return 'recover_only'
+                except (OSError, ValueError, PhraseContextUnavailable, subprocess.SubprocessError):
+                    previous = None
         try:
             self.run(['wl-copy', '--type', 'text/plain;charset=utf-8'], input=text.encode('utf-8'),
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
@@ -598,7 +651,30 @@ class HyprlandDelivery:
         return 'unknown'
 
     settle_seconds = 1.5
+    restore_delay_seconds = 1.5
     restore_thread = None
+    SENSITIVE_TYPES = ('x-kde-passwordManagerHint',)
+    TEXT_TYPES = ('UTF8_STRING', 'STRING', 'TEXT', 'COMPOUND_TEXT')
+    # Offers that mean the content is more than text, even when a plain-text flavour rides along.
+    BINARY_PREFIXES = ('image/', 'audio/', 'video/', 'x-special/')
+
+    @classmethod
+    def restorable(cls, types):
+        """True when putting back the plain-text flavour reproduces what the clipboard held."""
+        if not any(item.startswith('text/plain') or item in cls.TEXT_TYPES for item in types):
+            return False
+        return not any(item.startswith(cls.BINARY_PREFIXES) or item == 'text/uri-list' for item in types)
+
+    def clipboard_types(self):
+        """MIME types the clipboard offers: [] when it is empty, None when that can't be learned."""
+        try:
+            result = self.run(['wl-paste', '--list-types'], capture_output=True, text=True, check=False, timeout=1)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if getattr(result, 'returncode', 1) != 0:
+            return []
+        output = getattr(result, 'stdout', '')
+        return [line.strip() for line in output.splitlines() if line.strip()] if isinstance(output, str) else None
 
     def wait_for_clipboard(self, text):
         end = time.monotonic() + self.settle_seconds
@@ -643,8 +719,11 @@ class HyprlandDelivery:
     def clipboard(self):
         return read_phrase_clipboard()
 
-    def schedule_restore(self, previous, ours, *, delay=.6):
+    def schedule_restore(self, previous, ours, *, delay=None):
         """Put the earlier text clipboard back once the target has had time to read ours, unless something newer owns it."""
+        if delay is None:
+            delay = self.config.get('restore_delay_seconds', self.restore_delay_seconds)
+
         def restore():
             time.sleep(delay)
             try:
@@ -677,6 +756,10 @@ def stop_process(process, first=signal.SIGTERM):
     process.wait(timeout=.5)
 
 
+class ClipboardTooLarge(PhraseContextUnavailable):
+    pass
+
+
 def read_phrase_clipboard(command=None, *, seconds=1, maximum=1024 * 1024, env=None):
     process = subprocess.Popen(command or ['wl-paste', '--no-newline', '--type', 'text'],
                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
@@ -696,7 +779,7 @@ def read_phrase_clipboard(command=None, *, seconds=1, maximum=1024 * 1024, env=N
                     break
                 output.extend(data)
                 if len(output) > maximum:
-                    raise PhraseContextUnavailable('Clipboard phrase context exceeds its limit')
+                    raise ClipboardTooLarge('Clipboard phrase context exceeds its limit')
         if process.wait(timeout=max(0, end - time.monotonic())) != 0:
             raise PhraseContextUnavailable('Clipboard phrase context is unavailable')
         return output.decode('utf-8')
@@ -775,7 +858,7 @@ class SpeechEngine:
             try:
                 if self.worker is None:
                     verify_artifacts(self.settings)
-                    self.worker = Worker([self.python, str(self.script), 'speech'])
+                    self.worker = Worker(guarded_command([self.python, str(self.script), 'speech']))
                     remaining = self.worker.send({'configuration': self.settings}, self.startup_seconds, cancelled)
                     ready = self.worker.receive(remaining, cancelled)
                     if ready.get('event') != 'ready':
@@ -832,6 +915,8 @@ class CleanupEngine:
 
     def _recover(self):
         """Called from clean() while not ready. Starts a background load when one is due; never waits."""
+        if self.shutdown.is_set():
+            return
         if self.state == 'idle':
             self.warm()
         elif self.state == 'failed' and self.clock() >= self.retry_at:
@@ -852,7 +937,7 @@ class CleanupEngine:
         self.state = 'loading'
         started = time.monotonic()
         verify_artifacts(self.settings)
-        self.worker = Worker([self.python, str(self.script), 'cleanup'])
+        self.worker = Worker(guarded_command([self.python, str(self.script), 'cleanup']))
         remaining = self.worker.send({'configuration': {**self.settings, 'startup_seconds': self.startup_seconds}},
                                      self.startup_seconds, cancelled)
         ready = self.worker.receive(remaining, cancelled)
@@ -927,9 +1012,11 @@ class CleanupEngine:
                 return result['text']
             except (OSError, ValueError, KeyError, TypeError, Stopped) as error:
                 self._fail(error)
-                if self.state == 'failed' and Path(self.settings['artifacts']['model']['path']).is_file():
-                    # A cancelled or crashed request reloads on the next take.
-                    self.state = 'idle'
+                if isinstance(error, Stopped) and str(error) == 'cancelled':
+                    # A cancelled request isn't an engine fault: reload on the next take, with no backoff owed.
+                    self.failures, self.retry_at = max(0, self.failures - 1), 0.0
+                    if Path(self.settings['artifacts']['model']['path']).is_file():
+                        self.state = 'idle'
                 raise RuntimeError('Cleanup engine unavailable') from None
         finally:
             self.lock.release()
@@ -995,6 +1082,10 @@ def validate_config(value):
         engine = result.get('cleanup_engine')
         if not isinstance(engine, str) or not engine or '\0' in engine:
             raise ValueError('Model cleanup requires a cleanup_engine configuration path')
+    if 'restore_delay_seconds' in delivery:
+        delay = delivery['restore_delay_seconds']
+        if type(delay) not in (int, float) or not math.isfinite(delay) or not .1 <= delay <= 30:
+            raise ValueError('delivery.restore_delay_seconds must be between 0.1 and 30')
     if type(result.get('phrase_clipboard', False)) is not bool:
         raise ValueError('phrase_clipboard must be true or false')
     return result
@@ -1105,8 +1196,11 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                             keep = False
                         if keep:
                             connection.setblocking(False)
+                            # Existing watchers keep comparing against what they were last sent. Adopting this
+                            # snapshot would hide an idle transition that landed after it was taken.
+                            if not watchers:
+                                last_snapshot = result
                             watchers.append(connection)
-                            last_snapshot = result
                     finally:
                         if not keep:
                             connection.close()
@@ -1221,7 +1315,68 @@ def recovery_result(root, identity, *, raw=False):
     return (recovery_path(root, identity) / ('raw-recognition.txt' if raw else 'transcript.txt')).read_bytes().decode('utf-8')
 
 
-def main():
+@dataclass(frozen=True)
+class CliContext:
+    """What a cli_<name>.py module gets in run(args, context).
+
+    config, recovery, imports and runtime are the paths this invocation resolved from the global options. socket is
+    the service socket inside runtime. request(action, identity=None, **fields) sends one command to the running
+    service and returns its JSON reply; it raises OSError when the service is absent."""
+    config: Path
+    recovery: Path
+    imports: Path
+    runtime: Path
+    socket: Path
+    request: Callable
+
+
+def load_cli_modules(directory=None):
+    """Import every cli_*.py beside this file (or in `directory`) that has register() and run(). Broken ones are skipped."""
+    directory = Path(directory) if directory is not None else Path(__file__).resolve().parent
+    modules = []
+    for source in sorted(directory.glob('cli_*.py')):
+        if not source.is_file() or source.is_symlink():
+            continue
+        name = source.stem
+        try:
+            spec = importlib.util.spec_from_file_location(name, source)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+            if not callable(getattr(module, 'register', None)) or not callable(getattr(module, 'run', None)):
+                raise ValueError('cli module needs register(subparsers) and run(args, context)')
+        except Exception as error:
+            sys.modules.pop(name, None)
+            print(json.dumps({'error': 'cli_module_unavailable', 'module': name, 'error_class': type(error).__name__}),
+                  file=sys.stderr)
+            continue
+        modules.append(module)
+    return modules
+
+
+def register_cli_modules(commands, modules):
+    """Let each module add subcommands. Returns {command name: module} for what it added; core commands are never replaced."""
+    owners = {}
+    for module in modules:
+        before = dict(commands.choices)
+        try:
+            module.register(commands)
+        except Exception as error:
+            added = set(commands.choices) - set(before)
+            for name in added:
+                del commands.choices[name]
+            print(json.dumps({'error': 'cli_module_unavailable', 'module': module.__name__,
+                              'error_class': type(error).__name__}), file=sys.stderr)
+            continue
+        for name, parser in list(commands.choices.items()):
+            if name in before and parser is not before[name]:
+                commands.choices[name] = before[name]
+            elif name not in before:
+                owners[name] = module
+    return owners
+
+
+def main(argv=None, *, cli_directory=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=Path.home() / '.config/mouthtype/linux.json')
     runtime_base = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid())))
@@ -1250,9 +1405,15 @@ def main():
     saver = commands.add_parser('import-save', help='Write the latest file transcript as UTF-8 text')
     saver.add_argument('path')
     saver.add_argument('--overwrite', action='store_true', help='Replace an existing text file; never the audio source')
-    args = parser.parse_args()
+    owners = register_cli_modules(commands, load_cli_modules(cli_directory))
+    args = parser.parse_args(argv)
     path = args.runtime / 'session.sock'
     try:
+        if args.action in owners:
+            context = CliContext(config=args.config, recovery=args.recovery, imports=args.imports, runtime=args.runtime,
+                                 socket=path, request=lambda action, identity=None, **fields: request(path, action, identity, **fields))
+            result = owners[args.action].run(args, context)
+            return result if type(result) is int else 0
         if args.action == 'capabilities':
             print(json.dumps(CAPABILITIES))
             return 0

@@ -4,7 +4,8 @@
   "maximum_recording_seconds": 60,
   "request_seconds": 30,
   "delivery": {
-    "mode": "recover"
+    "mode": "recover",
+    "restore_delay_seconds": 1.5
   },
   "notifications": true,
   "cleanup": "off"
