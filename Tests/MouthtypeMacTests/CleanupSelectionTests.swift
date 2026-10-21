@@ -26,16 +26,16 @@ import MouthtypeCore
         let fast = FakeSmartModel(downloaded: true, id: "fast")
         let selection = CleanupSelection(
             fast: fast, thorough: FakeSmartModel(downloaded: true, id: "thorough"), level: { choice.level },
-            idleUnloadDelay: .milliseconds(500))
+            idleUnloadDelay: .seconds(4))
         selection.start()
         for _ in 0..<200 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
-        try? await Task.sleep(for: .milliseconds(300))
+        try? await Task.sleep(for: .milliseconds(2500))
         selection.recordingStarted(level: .light, take: "take-1")
-        try? await Task.sleep(for: .milliseconds(400))
-        // 700 ms since ready, past the 500 ms delay, but the key-down was only 400 ms ago.
+        try? await Task.sleep(for: .milliseconds(2500))
+        // 5 s since ready, past the 4 s delay, but the key-down was only 2.5 s ago: a second of slack either way.
         #expect(fast.isLoaded && fast.unloads == 0)
         selection.releasePrewarm(for: "take-1")
-        for _ in 0..<200 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        for _ in 0..<1500 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(fast.unloads == 1)
     }
 
