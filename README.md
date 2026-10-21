@@ -2,7 +2,7 @@
 
 <img src="website/public/assets/mouthtype-icon.png" alt="Mouthtype app icon" width="112">
 
-<h1>Mouthtype</h1>
+<h1 id="mouthtype">Mouthtype</h1>
 
 **Local dictation for your Mac. Hold Fn, speak, release to paste.**
 
