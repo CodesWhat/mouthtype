@@ -581,6 +581,9 @@ class ControlModuleTests(unittest.TestCase):
         (self.root / "control_Upper.py").write_text("COMMANDS = {'upper': lambda: {}}\n", encoding="utf-8")
         (self.root / "control_later.py").write_text("COMMANDS = {'echo': lambda: {'later': True}, 'late-only': lambda: {'ok': 1}}\n",
                                                     encoding="utf-8")
+        (self.root / "control_data.py").write_text(
+            "from __future__ import annotations\nfrom dataclasses import dataclass\n@dataclass\nclass R:\n    m: str\n"
+            "def data():\n    return {'m': R('ok').m}\nCOMMANDS = {'data': data}\n", encoding="utf-8")
         (self.root / "notcontrol.py").write_text("COMMANDS = {'sneaky': lambda: {}}\n", encoding="utf-8")
         patches = [
             mock.patch.object(control, "PLUGIN_DIR", self.root),
@@ -599,13 +602,17 @@ class ControlModuleTests(unittest.TestCase):
 
     def test_modules_are_loaded_by_name_and_bad_ones_are_skipped(self):
         commands = control.module_commands()
-        self.assertEqual(sorted(commands), ["boom", "echo", "late-only"])
+        self.assertEqual(sorted(commands), ["boom", "data", "echo", "late-only"])
         log = control.LOG.read_text(encoding="utf-8")
         self.assertIn("control_broken.py was not loaded", log)
         self.assertIn("control_nocommands.py was not loaded", log)
         self.assertIn("ignored command 'state'", log)
         self.assertIn("ignored invalid command 'Bad Name'", log)
         self.assertIn("ignored command 'echo'", log)
+
+    def test_module_using_dataclasses_with_postponed_annotations_loads(self):
+        self.assertEqual(control.module_commands()["data"](), {"m": "ok"})
+        self.assertNotIn("mouthtype_control_broken", sys.modules)
 
     def test_first_module_alphabetically_owns_a_clashing_verb(self):
         self.assertEqual(control.module_commands()["echo"]("x"), {"words": ["x"]})

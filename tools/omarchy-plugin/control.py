@@ -1114,12 +1114,19 @@ def module_commands():
         if not MODULE_PATTERN.fullmatch(path.name) or path.is_symlink() or not path.is_file():
             continue
         try:
-            spec = importlib.util.spec_from_file_location("mouthtype_" + path.stem, path)
+            name = "mouthtype_" + path.stem
+            spec = importlib.util.spec_from_file_location(name, path)
             module = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(module)
-            table = module.COMMANDS
-            if not isinstance(table, dict):
-                raise TypeError("COMMANDS must be a dict")
+            # dataclasses and typing look the module up by name while it executes.
+            sys.modules[name] = module
+            try:
+                spec.loader.exec_module(module)
+                table = module.COMMANDS
+                if not isinstance(table, dict):
+                    raise TypeError("COMMANDS must be a dict")
+            except BaseException:
+                sys.modules.pop(name, None)
+                raise
         except Exception as error:
             log_note(f"{path.name} was not loaded: {type(error).__name__}: {error}")
             continue
