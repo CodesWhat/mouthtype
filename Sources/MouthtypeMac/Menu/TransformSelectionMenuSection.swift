@@ -12,6 +12,7 @@ import MouthtypeCore
     private let capture: () -> MenuCapture
     private let parent = NSMenuItem(title: TransformSelectionMenuSection.title, action: nil, keyEquivalent: "")
     private let submenu = NSMenu(title: TransformSelectionMenuSection.title)
+    private var state = MenuCapture.ready
     var items: [NSMenuItem] { [parent] }
 
     /// `open` gets nil for Clean up and the AI transform otherwise.
@@ -28,9 +29,16 @@ import MouthtypeCore
         rebuild(.ready)
     }
 
-    /// The selection is read only when this submenu opens, never when the top-level menu refreshes, so a slow app
-    /// can't hold up Settings, Stop Dictation or Quit.
-    func menuNeedsUpdate(_ menu: NSMenu) { rebuild(capture()) }
+    /// The selection is read as the status menu is about to open and only then, not on every refresh, and the read is
+    /// time-boxed so a slow app can't hold up Settings, Stop Dictation or Quit. It can't wait for the submenu to open:
+    /// by then the menu is tracking and the system focus is the menu, not the text field, so the read finds nothing and
+    /// every item comes up disabled.
+    func prepareForMenuOpen() {
+        state = capture()
+        rebuild(state)
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) { rebuild(state) }
 
     private func rebuild(_ state: MenuCapture) {
         let enabled = state == .ready
