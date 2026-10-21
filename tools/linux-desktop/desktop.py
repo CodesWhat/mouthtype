@@ -1,10 +1,8 @@
 """Mouthtype Linux session service and compositor command client."""
 
 import argparse
-from dataclasses import dataclass
+from collections import namedtuple
 import fcntl
-import importlib.util
-import inspect
 import json
 import math
 import os
@@ -18,41 +16,71 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Callable
 import uuid
 import wave
 
 PROOF = Path(__file__).resolve().parents[1] / 'linux-engine-proof'
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(PROOF))
-from proof import Stopped, Worker, verify_artifacts
-from spellings import load_spellings
-from phrases import load_phrases, PhraseContextUnavailable
-from cleanup import BasicCleanup
-import imports
-from imports import FileError, FileTranscription
+from session_client import read_message, request
+
+# Importing these costs tens of milliseconds, and a hotkey or panel client never needs them. They are bound into this
+# module on first use (the service, doctor and tests reach them through the constructors below or by attribute).
+RUNTIME_NAMES = {
+    'Stopped': 'proof', 'Worker': 'proof', 'verify_artifacts': 'proof',
+    'load_spellings': 'spellings', 'load_phrases': 'phrases', 'PhraseContextUnavailable': 'phrases',
+    'BasicCleanup': 'cleanup', 'smart': None, 'style_contexts': None, 'tone_stage': None, 'imports': None,
+    'FileError': 'imports', 'FileTranscription': 'imports',
+}
+RUNTIME_MODULES = {'smart': 'smart', 'style_contexts': 'styles', 'tone_stage': 'tone', 'imports': 'imports'}
+
+
+def load_runtime():
+    """Bind the service-side modules into this module's globals. Names already present (a test patch) are kept."""
+    import importlib
+    scope = globals()
+    for name, module in RUNTIME_NAMES.items():
+        if name in scope:
+            continue
+        if module is None:
+            scope[name] = importlib.import_module(RUNTIME_MODULES[name])
+        else:
+            scope[name] = getattr(importlib.import_module(module), name)
+    if 'ClipboardTooLarge' not in scope:
+        scope['ClipboardTooLarge'] = type('ClipboardTooLarge', (scope['PhraseContextUnavailable'],), {'__module__': __name__})
+
+
+def __getattr__(name):
+    if name in RUNTIME_NAMES or name == 'ClipboardTooLarge':
+        load_runtime()
+        return globals()[name]
+    if name == 'CAPABILITIES':
+        return capabilities_report()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
 from hyprland_ipc import HyprlandIPC, IPCError, IPCTimeout
-import smart
-import styles as style_contexts
-import tone as tone_stage
+
 
 INTERFACE = 1
-CAPABILITIES = {
-    'interface': INTERFACE,
-    'client': 'linux-development',
-    'features': {
-        'dictation': True, 'recovery': True, 'doctor': True,
-        'cleanup_levels': ['off', 'basic', 'fast', 'thorough'],
-        'delivery_modes': ['recover', 'type', 'paste'],
-        'file_transcription': {'formats': list(imports.FORMATS), 'extensions': list(imports.EXTENSIONS),
-                               'maximum_seconds': imports.MAXIMUM_SECONDS,
-                               'maximum_bytes': imports.MAXIMUM_SOURCE_BYTES},
-        'state_stream': True, 'level_meter': True,
-        'ai_cleanup': {'levels': ['fast', 'thorough'], 'runtime': 'llama.cpp CPU server', 'setup': 'setup_cleanup.py'},
-        'pill': 'frontend', 'typography': 'frontend', 'live_words': False,
-        'secure_field_detection': False, 'delivery_verification': False,
-    },
-}
+
+
+def capabilities_report():
+    import imports
+    return {
+        'interface': INTERFACE,
+        'client': 'linux-development',
+        'features': {
+            'dictation': True, 'recovery': True, 'doctor': True,
+            'cleanup_levels': ['off', 'basic', 'fast', 'thorough'],
+            'delivery_modes': ['recover', 'type', 'paste'],
+            'file_transcription': {'formats': list(imports.FORMATS), 'extensions': list(imports.EXTENSIONS),
+                                   'maximum_seconds': imports.MAXIMUM_SECONDS,
+                                   'maximum_bytes': imports.MAXIMUM_SOURCE_BYTES},
+            'state_stream': True, 'level_meter': True,
+            'ai_cleanup': {'levels': ['fast', 'thorough'], 'runtime': 'llama.cpp CPU server', 'setup': 'setup_cleanup.py'},
+            'pill': 'frontend', 'typography': 'frontend', 'live_words': False,
+            'secure_field_detection': False, 'delivery_verification': False,
+        },
+    }
 
 
 def private_write(path, data):
@@ -111,10 +139,14 @@ def guarded_command(command):
 
 
 class Session:
+    HOUSEKEEPING_TAKES = 10
+    HOUSEKEEPING_SECONDS = 1800
+
     def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
                  dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None, cleanup='off',
                  cleanup_engine=None, maximum_takes=200, audio_days=90, audio_megabytes=2048, history_keep=None,
                  styles=None, styles_path=None, engine_loader=None):
+        load_runtime()
         self.capture, self.engine, self.delivery = capture, engine, delivery
         self.maximum_takes, self.audio_days, self.audio_megabytes = maximum_takes, audio_days, audio_megabytes
         self.history_keep = history_keep
@@ -139,6 +171,10 @@ class Session:
             raise ValueError('Recovery directory must be private and owned by you')
         self.maximum_seconds, self.clock = maximum_seconds, clock or time.monotonic
         self.lock = threading.RLock()
+        self.take_times = {}
+        self.pruned = threading.Event()
+        self.takes_since_retire = self.HOUSEKEEPING_TAKES
+        self.retired_at = time.monotonic()
         self.state, self.error, self.outcome = 'idle', None, 'not_attempted'
         self.thread = None
         self.cancelled = threading.Event()
@@ -148,6 +184,7 @@ class Session:
         # True while a delivery runs outside the lock; close() waits longer for it than for inference.
         self.delivering = False
         try:
+            import inspect
             parameters = inspect.signature(delivery.submit).parameters
             self._cancellable_delivery = 'cancelled' in parameters
             self._verifiable_delivery = 'verified' in parameters
@@ -214,7 +251,8 @@ class Session:
         return {'level': level, 'tone': resolved['tone'], 'engine': self.cleanup_engines.get(level)}
 
     def take_count(self):
-        return sum(1 for path in self.recovery.iterdir() if path.is_dir() and not path.is_symlink())
+        with os.scandir(self.recovery) as entries:
+            return sum(1 for entry in entries if entry.is_dir(follow_symlinks=False))
 
     @staticmethod
     def take_time(path):
@@ -235,23 +273,37 @@ class Session:
                 pass
         return min(stamps) if stamps else path.stat().st_mtime
 
+    def known_take_time(self, path):
+        """take_time, remembered by take name: a take's creation time never moves, so repeat scans skip the reads."""
+        known = self.take_times.get(path.name)
+        if known is None:
+            known = self.take_times[path.name] = self.take_time(path)
+        return known
+
     def prune_history(self):
         """Keep only the newest `history_keep` takes, forgetting the rest entirely. The active take is never touched."""
         if not self.history_keep:
             return 0
         removed = 0
-        # Choosing and deleting share the session lock, so recover_audio cannot accept a take in between.
-        with self.lock:
-            takes = []
-            for path in self.recovery.iterdir():
-                if not path.is_dir() or path.is_symlink() or not re.fullmatch('[0-9a-f]{32}', path.name):
+        # The walk runs without the session lock, so a hotkey is never queued behind a large history. Only the delete
+        # step holds it, and it re-checks the active take: recover_audio may have picked a listed take meanwhile.
+        takes = []
+        with os.scandir(self.recovery) as entries:
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False) or not re.fullmatch('[0-9a-f]{32}', entry.name):
                     continue
+                path = Path(entry.path)
                 try:
-                    takes.append((self.take_time(path), path.name, path))
+                    takes.append((self.known_take_time(path), path.name, path))
                 except OSError:
                     continue
-            takes.sort(reverse=True)
-            for _, _, path in takes[self.history_keep:]:
+        self.take_times = {name: self.take_times[name] for _, name, _ in takes if name in self.take_times}
+        if len(takes) <= self.history_keep:
+            return 0
+        takes.sort(reverse=True)
+        doomed = [path for _, _, path in takes[self.history_keep:]]
+        with self.lock:
+            for path in doomed:
                 if path == self.take:
                     continue
                 for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json', 'take.json'):
@@ -269,32 +321,60 @@ class Session:
         completed = []
         with self.lock:
             active = self.take
-        for path in self.recovery.iterdir():
-            if not path.is_dir() or path.is_symlink() or path == active:
-                continue
-            audio, transcript = path / 'recording.wav', path / 'transcript.txt'
-            if audio.is_file() and transcript.is_file():
-                try:
-                    info = audio.stat()
-                except OSError:
+        with os.scandir(self.recovery) as entries:
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False):
                     continue
-                completed.append((info.st_mtime, info.st_size, audio))
-        removed = 0
+                path = Path(entry.path)
+                if path == active:
+                    continue
+                audio, transcript = path / 'recording.wav', path / 'transcript.txt'
+                if audio.is_file() and transcript.is_file():
+                    try:
+                        info = audio.stat()
+                    except OSError:
+                        continue
+                    completed.append((info.st_mtime, info.st_size, audio))
         completed.sort()
         kept_bytes = sum(size for _, size, _ in completed)
         limit = self.audio_megabytes * 1024 * 1024 if self.audio_megabytes else None
+        doomed = []
         for mtime, size, audio in completed:
             expired = self.audio_days is not None and now - mtime > self.audio_days * 86400
             oversize = limit is not None and kept_bytes > limit
             if not expired and not oversize:
                 continue
-            try:
-                audio.unlink()
-                removed += 1
-                kept_bytes -= size
-            except OSError:
-                pass
+            doomed.append((size, audio))
+            kept_bytes -= size
+        removed = 0
+        with self.lock:
+            for size, audio in doomed:
+                if audio.parent == self.take:
+                    continue
+                try:
+                    audio.unlink()
+                    removed += 1
+                except OSError:
+                    pass
         return removed
+
+    def housekeep(self, *, force=False):
+        """Retention after a take. The audio walk is throttled to every HOUSEKEEPING_TAKES takes or
+        HOUSEKEEPING_SECONDS; the first take after startup always runs it. History pruning is cheap and exact, so it
+        runs every time."""
+        with self.lock:
+            self.takes_since_retire += 1
+            due = force or self.takes_since_retire >= self.HOUSEKEEPING_TAKES or \
+                time.monotonic() - self.retired_at >= self.HOUSEKEEPING_SECONDS
+            if due:
+                self.takes_since_retire, self.retired_at = 0, time.monotonic()
+        # Pruning frees recovery slots, so it goes first and signals; the slow audio walk follows.
+        try:
+            self.prune_history()
+        finally:
+            self.pruned.set()
+        if due:
+            self.retire_completed_audio()
 
     def status(self):
         return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
@@ -509,8 +589,7 @@ class Session:
                 if cancelled.is_set() and self.cancelled is cancelled and self.state == 'cancelling':
                     self.state = 'idle'
             try:
-                self.retire_completed_audio()
-                self.prune_history()
+                self.housekeep()
             except OSError:
                 pass
 
@@ -639,6 +718,7 @@ class HyprlandDelivery:
     IPC_TIMEOUT = .5
 
     def __init__(self, config, run=None, ipc=None):
+        load_runtime()
         self.config, self.run = config, run or subprocess.run
         # Only the real subprocess path talks to the socket; an injected runner stands in for hyprctl itself.
         self.ipc = ipc if ipc is not None else HyprlandIPC() if run is None else None
@@ -924,11 +1004,8 @@ def stop_process(process, first=signal.SIGTERM):
     process.wait(timeout=.5)
 
 
-class ClipboardTooLarge(PhraseContextUnavailable):
-    pass
-
-
 def read_phrase_clipboard(command=None, *, seconds=1, maximum=1024 * 1024, env=None):
+    load_runtime()
     process = subprocess.Popen(command or ['wl-paste', '--no-newline', '--type', 'text'],
                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.DEVNULL, start_new_session=True, env=env)
@@ -1007,6 +1084,7 @@ class PipeWireCapture:
 
 class SpeechEngine:
     def __init__(self, settings, *, python=sys.executable, worker=None, request_seconds=30, startup_seconds=120):
+        load_runtime()
         if not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict):
             raise ValueError('Invalid speech artifact configuration')
         for item in settings['artifacts'].values():
@@ -1054,6 +1132,7 @@ class CleanupEngine:
     ABSENT_RECHECK_SECONDS = 30
 
     def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic):
+        load_runtime()
         if (not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict) or
                 not isinstance(settings.get('server'), str) or settings.get('prompt', 's1') not in ('s1', 'shared')):
             raise ValueError('Invalid cleanup engine configuration')
@@ -1200,6 +1279,7 @@ class CleanupEngine:
 
 
 def validate_config(value):
+    load_runtime()
     if not isinstance(value, dict) or not isinstance(value.get('engine_config'), str):
         raise ValueError('engine_config is required')
     result = {'maximum_recording_seconds': 60, 'request_seconds': 30, 'maximum_recovery_takes': 200,
@@ -1261,30 +1341,12 @@ def validate_config(value):
     return result
 
 
-def read_message(connection, maximum=4096):
-    raw = b''
-    while b'\n' not in raw:
-        chunk = connection.recv(min(1024, maximum + 1 - len(raw)))
-        if not chunk:
-            raise ValueError('Incomplete command')
-        raw += chunk
-        if len(raw) > maximum:
-            raise ValueError('Command exceeds limit')
-    line, rest = raw.split(b'\n', 1)
-    if rest:
-        raise ValueError('One command per connection')
-    return json.loads(line)
-
-
 def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup=None):
     path = Path(path)
     # The lock owns this one runtime socket, including cleanup after an interrupted session.
     with open(str(path) + '.lock', 'a') as ownership:
         os.chmod(ownership.name, 0o600)
         fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if startup is not None:
-            # Maintenance prunes takes, so only the daemon that owns the runtime lock may run it.
-            startup()
         if path.exists():
             info = path.lstat()
             if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
@@ -1295,6 +1357,17 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
             os.chmod(path, 0o600)
             server.listen(4)
             server.settimeout(.1)
+            maintenance = None
+            if startup is not None:
+                # Maintenance prunes takes, so only the daemon that owns the runtime lock may run it. It runs after the
+                # bind so a large history never delays the first hotkey, and the lock-holding steps it takes are short.
+                def run_maintenance():
+                    try:
+                        startup()
+                    except OSError:
+                        pass
+                maintenance = threading.Thread(target=run_maintenance, daemon=True)
+                maintenance.start()
             end = time.monotonic() + lifetime_seconds
             watchers = []
             last_snapshot = None
@@ -1348,6 +1421,15 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                                 if action in ('start', 'toggle') and (
                                         type(admission) not in (int, float) or not math.isfinite(admission)):
                                     raise ValueError('Recording admission deadline is required')
+                                starting = action == 'start' or (action == 'toggle' and session.state == 'idle')
+                                if (starting and maintenance is not None and maintenance.is_alive()
+                                        and session.take_count() >= session.maximum_takes):
+                                    # Startup pruning may be about to free a slot; wait for it, within the deadline,
+                                    # rather than answer recovery_full to the first key press. Stop, cancel and a toggle that
+                                    # ends a recording never wait.
+                                    until = min(time.monotonic() + 1.0, admission - .25)
+                                    while maintenance.is_alive() and not session.pruned.is_set() and time.monotonic() < until:
+                                        time.sleep(.01)
                                 if action in ('start', 'toggle') and files is not None and files.active() and session.state == 'idle':
                                     # A file job owns the speech engine; a microphone take would wait on it.
                                     result = {**session.status(), 'error': 'file_import_active'}
@@ -1375,6 +1457,8 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                         if not keep:
                             connection.close()
             finally:
+                if maintenance is not None:
+                    maintenance.join(2)
                 for watcher in watchers:
                     try:
                         watcher.sendall(json.dumps({'event': 'stopping'}).encode() + b'\n')
@@ -1453,15 +1537,6 @@ def watch(path, output, *, retry=False, stopped=None, interval=1.0):
     return 0
 
 
-def request(path, action, identity=None, **fields):
-    with socket.socket(socket.AF_UNIX) as connection:
-        connection.settimeout(2.5)
-        connection.connect(str(path))
-        connection.sendall(json.dumps({'action': action, 'id': identity,
-                                       'admit_before': time.monotonic() + 1.5, **fields}).encode() + b'\n')
-        return read_message(connection, maximum=16384)
-
-
 def recovery_path(root, identity):
     if not isinstance(identity, str) or not re.fullmatch('[0-9a-f]{32}', identity):
         raise ValueError('Invalid recovery ID')
@@ -1485,23 +1560,18 @@ def recovery_result(root, identity, *, raw=False):
     return (recovery_path(root, identity) / ('raw-recognition.txt' if raw else 'transcript.txt')).read_bytes().decode('utf-8')
 
 
-@dataclass(frozen=True)
-class CliContext:
+class CliContext(namedtuple('CliContext', 'config recovery imports runtime socket request')):
     """What a cli_<name>.py module gets in run(args, context).
 
     config, recovery, imports and runtime are the paths this invocation resolved from the global options. socket is
     the service socket inside runtime. request(action, identity=None, **fields) sends one command to the running
     service and returns its JSON reply; it raises OSError when the service is absent."""
-    config: Path
-    recovery: Path
-    imports: Path
-    runtime: Path
-    socket: Path
-    request: Callable
+    __slots__ = ()
 
 
 def load_cli_modules(directory=None):
     """Import every cli_*.py beside this file (or in `directory`) that has register() and run(). Broken ones are skipped."""
+    import importlib.util
     directory = Path(directory) if directory is not None else Path(__file__).resolve().parent
     modules = []
     for source in sorted(directory.glob('cli_*.py')):
@@ -1546,7 +1616,61 @@ def register_cli_modules(commands, modules):
     return owners
 
 
+def requested_action(tokens, parser, commands):
+    """The first command word in argv, skipping global options and their values; None when there isn't one."""
+    valued = [option for action in parser._actions if action is not commands for option in action.option_strings
+              if action.nargs != 0]
+    skip = False
+    for token in tokens:
+        if skip:
+            skip = False
+        elif token.startswith('--') and '=' not in token and any(option.startswith(token) for option in valued):
+            skip = True
+        elif not token.startswith('-'):
+            return token
+    return None
+
+
+CLIENT_VERBS = ('start', 'stop', 'toggle', 'cancel', 'status', 'capabilities')
+
+
+def client_verb(tokens):
+    """(verb, runtime directory) when argv is just global path options and one plain socket verb or capabilities, else None.
+
+    Python 3.14's argparse imports dataclasses and inspect when a parser is built, which a hotkey-path client should
+    not pay for. Anything this does not recognise goes to the full parser, so behaviour is unchanged."""
+    runtime = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid()))) / 'mouthtype'
+    verb = None
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token in ('--config', '--recovery', '--imports') and index + 1 < len(tokens):
+            index += 2
+        elif token == '--runtime' and index + 1 < len(tokens):
+            runtime, index = Path(tokens[index + 1]), index + 2
+        elif token.startswith('--runtime='):
+            runtime, index = Path(token.split('=', 1)[1]), index + 1
+        elif token.startswith(('--config=', '--recovery=', '--imports=')):
+            index += 1
+        elif token in CLIENT_VERBS and verb is None:
+            verb, index = token, index + 1
+        else:
+            return None
+    return (verb, runtime) if verb else None
+
+
 def main(argv=None, *, cli_directory=None):
+    plain = client_verb(sys.argv[1:] if argv is None else list(argv))
+    if plain is not None and plain[0] == 'capabilities':
+        print(json.dumps(capabilities_report()))
+        return 0
+    if plain is not None:
+        try:
+            print(json.dumps(request(plain[1] / 'session.sock', plain[0], None)))
+            return 0
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
+            print(json.dumps({'error': 'unavailable', 'error_class': type(error).__name__}), file=sys.stderr)
+            return 2
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=Path.home() / '.config/mouthtype/linux.json')
     runtime_base = Path(os.environ.get('XDG_RUNTIME_DIR', '/run/user/' + str(os.getuid())))
@@ -1575,7 +1699,9 @@ def main(argv=None, *, cli_directory=None):
     saver = commands.add_parser('import-save', help='Write the latest file transcript as UTF-8 text')
     saver.add_argument('path')
     saver.add_argument('--overwrite', action='store_true', help='Replace an existing text file; never the audio source')
-    owners = register_cli_modules(commands, load_cli_modules(cli_directory))
+    # Plug-in modules cost an import each, so a core command skips them. A plug-in cannot replace a core command.
+    owners = {} if requested_action(sys.argv[1:] if argv is None else list(argv), parser, commands) in commands.choices else \
+        register_cli_modules(commands, load_cli_modules(cli_directory))
     args = parser.parse_args(argv)
     path = args.runtime / 'session.sock'
     try:
@@ -1585,7 +1711,7 @@ def main(argv=None, *, cli_directory=None):
             result = owners[args.action].run(args, context)
             return result if type(result) is int else 0
         if args.action == 'capabilities':
-            print(json.dumps(CAPABILITIES))
+            print(json.dumps(capabilities_report()))
             return 0
         if args.action == 'watch':
             halt = threading.Event()
@@ -1593,9 +1719,11 @@ def main(argv=None, *, cli_directory=None):
                 signal.signal(event, lambda *_: halt.set())
             return watch(path, sys.stdout, retry=args.retry, stopped=halt)
         if args.action == 'import-result':
+            import imports
             sys.stdout.write(imports.result_text(args.imports))
             return 0
         if args.action == 'import-save':
+            import imports
             imports.save_text(args.imports, args.path, overwrite=args.overwrite)
             return 0
         if args.action == 'import':
@@ -1603,6 +1731,7 @@ def main(argv=None, *, cli_directory=None):
             print(json.dumps(request(path, 'import', source=source)))
             return 0
         if args.action == 'doctor':
+            load_runtime()
             from doctor import diagnose, render
             report = diagnose(args.config, args.runtime)
             print(json.dumps(report) if args.json else render(report))
@@ -1645,6 +1774,7 @@ def main(argv=None, *, cli_directory=None):
         info = args.runtime.stat()
         if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise ValueError('Runtime directory must be owned by you with mode 0700')
+        load_runtime()
         engine = SpeechEngine(settings, python=config.get('python', sys.executable),
                               request_seconds=config['request_seconds'])
         cleanup_engine = None
@@ -1679,7 +1809,7 @@ def main(argv=None, *, cli_directory=None):
             signal.signal(event, lambda *_: stopped.set())
         try:
             serve(path, session, stopped, lifetime_seconds=args.lifetime_seconds, files=files,
-                  startup=lambda: (session.retire_completed_audio(), session.prune_history()))
+                  startup=lambda: session.housekeep(force=True))
         finally:
             try:
                 files.close()
@@ -1690,14 +1820,16 @@ def main(argv=None, *, cli_directory=None):
                     for loaded in {id(e): e for e in (cleanup_engine, *session.cleanup_engines.values()) if e is not None}.values():
                         loaded.close()
         return 0
-    except FileError as error:
-        print(json.dumps({'error': error.code}), file=sys.stderr)
-        return 2
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
+    except Exception as error:
+        loaded = sys.modules.get('imports')
+        if loaded is not None and isinstance(error, loaded.FileError):
+            print(json.dumps({'error': error.code}), file=sys.stderr)
+            return 2
+        if not isinstance(error, (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError)):
+            raise
         # Config paths, model errors and transcripts never go into routine diagnostics.
         print(json.dumps({'error': 'unavailable', 'error_class': type(error).__name__}), file=sys.stderr)
         return 2
-
 
 
 class Notifications:

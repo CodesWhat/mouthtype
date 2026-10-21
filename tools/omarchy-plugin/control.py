@@ -3,7 +3,6 @@
 
 import fcntl
 import importlib.util
-import inspect
 import json
 import os
 import re
@@ -75,6 +74,43 @@ def cli(*args, timeout=35):
         [str(LAUNCHER), "--config", str(CONFIG), *args],
         text=True, capture_output=True, timeout=timeout, check=False,
     )
+
+
+SOCKET_ACTIONS = ("start", "stop", "toggle", "cancel", "status")
+_session_client = False
+
+
+def session_client():
+    """The service-socket client module, or None when this install doesn't ship it (then the CLI is used)."""
+    global _session_client
+    if _session_client is False:
+        _session_client = None
+        for directory in (DESKTOP, PLUGIN_DIR.parent / "linux-desktop"):
+            if (directory / "session_client.py").is_file():
+                sys.path.insert(0, str(directory))
+                try:
+                    import session_client as module
+                    _session_client = module
+                except ImportError:
+                    pass
+                break
+    return _session_client
+
+
+def session_call(action, identity=None, timeout=35):
+    """Run a daemon command. The hotkey path sends it to the service socket directly, the same JSON line the CLI
+    sends, so no second interpreter starts. A missing socket (service down) falls back to the CLI, which reports
+    that failure the way every caller already expects. Returns a CompletedProcess, like cli()."""
+    client = session_client() if action in SOCKET_ACTIONS and identity is None else None
+    if client is not None:
+        path = client.default_socket()
+        if path.exists():
+            try:
+                reply = client.request(path, action)
+                return subprocess.CompletedProcess([action], 0, json.dumps(reply), "")
+            except (OSError, ValueError):
+                return subprocess.CompletedProcess([action], 2, "", json.dumps({"error": "unavailable"}))
+    return cli(action, *([identity] if identity else []), timeout=timeout)
 
 
 def cli_error(result):
@@ -370,11 +406,110 @@ def shortcut_mode():
     return shortcut_info()["mode"]
 
 
+def created_cache_path():
+    return capabilities_cache_path().with_name("take-created.json")
+
+
+def read_created(name):
+    """(created, identity) from take.json, or None when it is missing or unusable. The identity is the file's inode,
+    mtime and size, which tells a reused take name from the take the cache entry was made for."""
+    try:
+        path = RECOVERY / name / "take.json"
+        info = path.stat()
+        created = json.loads(path.read_text(encoding="utf-8"))["created"]
+        if type(created) in (int, float) and created == created and abs(created) != float("inf"):
+            return float(created), [info.st_ino, info.st_mtime_ns, info.st_size]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def take_identity(name):
+    try:
+        info = (RECOVERY / name / "take.json").stat()
+        return [info.st_ino, info.st_mtime_ns, info.st_size]
+    except OSError:
+        return None
+
+
+def take_rows():
+    """(id, mtime) of every take directory, newest first by creation time, from one scandir pass.
+
+    A take's creation time never changes, so take.json is read once per take and remembered in a small cache file
+    (each poll is a fresh process). An entry also carries take.json's inode, mtime and size, and is re-read when
+    they differ, so a reused take name never inherits a stale time. The directory mtime is only the fallback for a
+    take without take.json, because retiring a WAV rewrites it."""
+    rows = []
+    try:
+        with os.scandir(RECOVERY) as entries:
+            for entry in entries:
+                name = entry.name
+                if len(name) != 32 or not all(c in "0123456789abcdef" for c in name):
+                    continue
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        rows.append((name, entry.stat(follow_symlinks=False).st_mtime))
+                except OSError:
+                    continue
+    except OSError:
+        return []
+    path = created_cache_path()
+    try:
+        cache = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(cache, dict):
+            cache = {}
+    except (OSError, ValueError):
+        cache = {}
+    changed = False
+    keyed = []
+    live = set()
+    for name, mtime in rows:
+        live.add(name)
+        entry = cache.get(name)
+        identity = take_identity(name)
+        created = None
+        if identity is not None:
+            if (isinstance(entry, list) and len(entry) == 2 and type(entry[0]) in (int, float)
+                    and entry[1] == identity):
+                created = entry[0]
+            else:
+                found = read_created(name)
+                if found is not None:
+                    created = found[0]
+                    cache[name] = [found[0], found[1]]
+                    changed = True
+        if created is None and name in cache:
+            del cache[name]
+            changed = True
+        keyed.append((created if created is not None else mtime, name, mtime))
+    for name in [name for name in cache if name not in live]:
+        del cache[name]
+        changed = True
+    if changed:
+        try:
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            atomic_json(path, cache)
+        except OSError:
+            pass
+    keyed.sort(reverse=True)
+    return [(name, mtime) for _, name, mtime in keyed]
+
+
+def take_entry(name, mtime, preview=True):
+    transcript = RECOVERY / name / "transcript.txt"
+    has_transcript = transcript.is_file()
+    text = ""
+    if preview and has_transcript:
+        text = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
+    return {"id": name, "transcript": has_transcript, "audio": (RECOVERY / name / "recording.wav").is_file(),
+            "preview": text, "mtime": mtime}
+
+
 def words_today(entries=None):
     today = time.localtime().tm_yday
     year = time.localtime().tm_year
     total = 0
-    for entry in entries if entries is not None else recent_dictations(limit=None):
+    for entry in entries if entries is not None else recent_dictations(limit=None, previews=False):
         if not entry["transcript"]:
             continue
         stamp = time.localtime(entry["mtime"])
@@ -384,22 +519,9 @@ def words_today(entries=None):
     return total
 
 
-def recent_dictations(limit=5):
-    if not RECOVERY.is_dir():
-        return []
-    takes = [p for p in RECOVERY.iterdir()
-             if p.is_dir() and not p.is_symlink() and len(p.name) == 32
-             and all(c in "0123456789abcdef" for c in p.name)]
-    recent = []
-    for path in sorted(takes, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
-        transcript = path / "transcript.txt"
-        preview = ""
-        if transcript.is_file():
-            preview = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
-        recent.append({"id": path.name, "transcript": transcript.is_file(),
-                       "audio": (path / "recording.wav").is_file(),
-                       "preview": preview, "mtime": path.stat().st_mtime})
-    return recent
+def recent_dictations(limit=5, previews=True):
+    """Newest takes first. Only the rows returned are opened: file flags for each, transcript text for the preview."""
+    return [take_entry(name, mtime, previews) for name, mtime in (take_rows() if limit is None else take_rows()[:limit])]
 
 
 def versions():
@@ -421,14 +543,16 @@ def versions():
 def state():
     if not LAUNCHER.is_file() or not CONFIG.is_file():
         return {"running": False, "state": "unavailable", "error": "Mouthtype installation is missing"}
-    result = cli("status", timeout=5)
+    result = session_call("status", timeout=5)
     try:
         status = json.loads(result.stdout)
     except json.JSONDecodeError:
         status = {}
     running = result.returncode == 0 and status.get("error") != "unavailable"
-    entries = recent_dictations(limit=None)
+    entries = recent_dictations(limit=None, previews=False)
     transcripts = [entry for entry in entries if entry["transcript"]]
+    for entry in transcripts[:5]:
+        entry["preview"] = " ".join((RECOVERY / entry["id"] / "transcript.txt").read_text(encoding="utf-8").split())[:36]
     report = capabilities()
     file_import = status.get("file_import") if running else None
     if not isinstance(file_import, dict):
@@ -676,7 +800,7 @@ def hold_stop(t):
 
 
 def deliver(command, identity=None, timeout=35):
-    result = cli(command, *([identity] if identity else []), timeout=timeout)
+    result = session_call(command, identity, timeout=timeout)
     if result.returncode:
         raise RuntimeError("Mouthtype command failed")
     try:
@@ -951,8 +1075,7 @@ def forget(identity):
 
 def prune(rule, value):
     """Forget saved dictations by rule: keep-N newest, older-N days, or all. The active take is never touched."""
-    entries = recent_dictations(limit=None)
-    entries.sort(key=lambda e: e["mtime"])
+    entries = [{"id": name, "mtime": mtime} for name, mtime in reversed(take_rows())]
     try:
         number = int(value)
     except (TypeError, ValueError):
@@ -987,8 +1110,8 @@ def recover(identity):
 
 def latest_transcript(identity=None):
     if identity is None:
-        identity = next((entry["id"] for entry in recent_dictations(limit=None)
-                         if entry["transcript"]), None)
+        # Newest by creation time, so retiring an old take's WAV cannot promote it.
+        identity = next((name for name, _ in take_rows() if (RECOVERY / name / "transcript.txt").is_file()), None)
     if identity is None:
         raise RuntimeError("No saved dictation is available")
     return recover(identity)["text"]
@@ -1197,6 +1320,7 @@ def available_actions():
 
 def run_module_command(verb, args):
     function = module_commands()[verb]
+    import inspect
     try:
         inspect.signature(function).bind(*args)
     except TypeError:
