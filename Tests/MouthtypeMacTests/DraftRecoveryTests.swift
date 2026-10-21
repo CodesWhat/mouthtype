@@ -7,64 +7,50 @@ import Testing
         DraftRecovery(directory: FileManager.default.temporaryDirectory.appendingPathComponent("drafts-\(UUID().uuidString)", isDirectory: true))
     }
 
-    @Test func aSavedDraftComesBackOnceAndTheFileIsRemoved() throws {
+    @Test func aSavedDraftIsWrittenAsJSONAndNeverRemoved() throws {
         let recovery = makeRecovery()
         defer { try? FileManager.default.removeItem(at: recovery.directory) }
         let draft = DraftRecovery.Draft(kind: .phrase, trigger: "sig", expansion: "Best,\nScott")
-        let url = try recovery.save(draft)
-        #expect(url.lastPathComponent.hasPrefix("phrase-") && url.pathExtension == "json")
-        #expect(recovery.take(.spelling) == nil)
-        #expect(recovery.take(.phrase) == draft)
-        #expect(recovery.take(.phrase) == nil)
-        #expect(!FileManager.default.fileExists(atPath: url.path))
+        let url = try recovery.save(draft, at: Date(timeIntervalSince1970: 1_000))
+        #expect(url.lastPathComponent == "phrase-1000000.json")
+        #expect(try JSONDecoder().decode(DraftRecovery.Draft.self, from: Data(contentsOf: url)) == draft)
     }
 
-    @Test func theNewestDraftWins() throws {
+    @Test func anOlderDraftIsNotOverwritten() throws {
         let recovery = makeRecovery()
         defer { try? FileManager.default.removeItem(at: recovery.directory) }
         try recovery.save(.init(kind: .phrase, trigger: "old", expansion: "x"), at: Date(timeIntervalSince1970: 1_000))
         try recovery.save(.init(kind: .phrase, trigger: "new", expansion: "y"), at: Date(timeIntervalSince1970: 2_000))
-        #expect(recovery.take(.phrase)?.trigger == "new")
-        #expect(recovery.take(.phrase) == nil)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: recovery.directory.path).count == 2)
     }
 }
 
 @MainActor @Suite struct DraftRecoveryEditorTests {
-    @Test func aDirtyPhraseEditorRoundTripsThroughARecoveryFile() throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("drafts-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let recovery = DraftRecovery(directory: directory.appendingPathComponent("drafts"))
-        let file = FilePhrases(url: directory.appendingPathComponent("phrases.json"))
-        let before = PhraseEditor(store: file)
-        before.trigger = "addr"
-        before.expansion = "1 Main St"
-        #expect(recovery.saveDrafts(spellings: nil, phrases: before).count == 1)
-
-        let after = PhraseEditor(store: file)
-        recovery.restoreDrafts(spellings: nil, phrases: after)
-        #expect(after.isDirty && after.trigger == "addr" && after.expansion == "1 Main St")
-        #expect(recovery.take(.phrase) == nil)
+    private func directory() -> URL {
+        FileManager.default.temporaryDirectory.appendingPathComponent("drafts-\(UUID().uuidString)", isDirectory: true)
     }
 
-    @Test func aDirtySpellingEditorRoundTripsThroughARecoveryFile() {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("drafts-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let recovery = DraftRecovery(directory: directory.appendingPathComponent("drafts"))
-        let vocabulary = FileVocabulary(url: directory.appendingPathComponent("dictionary.json"))
-        let before = SpellingEditor(store: vocabulary)
-        before.restore(.init(kind: .spelling, heardForms: ["kuber nettys"], heardInput: "kube", written: "Kubernetes", starred: true))
-        #expect(recovery.saveDrafts(spellings: before, phrases: nil).count == 1)
-
-        let after = SpellingEditor(store: vocabulary)
-        recovery.restoreDrafts(spellings: after, phrases: nil)
-        #expect(after.isDirty && after.isEditing)
-        #expect(after.written == "Kubernetes" && after.starred && after.heardForms == ["kuber nettys"] && after.heardInput == "kube")
+    @Test func dirtyPhraseAndSpellingEditorsEachWriteTheirDraft() throws {
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recovery = DraftRecovery(directory: root.appendingPathComponent("drafts"))
+        let phrases = PhraseEditor(store: FilePhrases(url: root.appendingPathComponent("phrases.json")))
+        phrases.trigger = "addr"
+        phrases.expansion = "1 Main St"
+        let spellings = SpellingEditor(store: FileVocabulary(url: root.appendingPathComponent("dictionary.json")))
+        spellings.written = "Kubernetes"
+        spellings.heardInput = "kube"
+        let urls = recovery.saveDrafts(spellings: spellings, phrases: phrases)
+        #expect(urls.count == 2)
+        let drafts = try urls.map { try JSONDecoder().decode(DraftRecovery.Draft.self, from: Data(contentsOf: $0)) }
+        #expect(drafts.contains { $0.kind == .phrase && $0.trigger == "addr" && $0.expansion == "1 Main St" })
+        #expect(drafts.contains { $0.kind == .spelling && $0.written == "Kubernetes" && $0.heardInput == "kube" })
     }
 
     @Test func aCleanEditorWritesNothing() {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("drafts-\(UUID().uuidString)", isDirectory: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let editor = PhraseEditor(store: FilePhrases(url: directory.appendingPathComponent("phrases.json")))
-        #expect(DraftRecovery(directory: directory.appendingPathComponent("drafts")).saveDrafts(spellings: nil, phrases: editor).isEmpty)
+        let root = directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let editor = PhraseEditor(store: FilePhrases(url: root.appendingPathComponent("phrases.json")))
+        #expect(DraftRecovery(directory: root.appendingPathComponent("drafts")).saveDrafts(spellings: nil, phrases: editor).isEmpty)
     }
 }

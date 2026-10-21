@@ -163,9 +163,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
-        if FileManager.default.fileExists(atPath: DraftRecovery.standard.directory.path) {
-            DraftRecovery.standard.restoreDrafts(spellings: spellingEditor, phrases: settingsWindow.model.phrases)
-        }
         let store = openStore()
         let archive = AudioArchive(supportDirectory: TranscriptStore.defaultURL().deletingLastPathComponent())
         purgeAudio(archive: archive, store: store)
@@ -376,7 +373,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
-    /// A signal can't ask whether to keep a draft, so both editors' drafts go to disk and come back at the next launch.
+    /// A signal can't ask whether to keep a draft, so both editors' drafts go to disk and stay in Application Support/Mouthtype/drafts.
     private func saveDraftsForSignal() -> Bool {
         let saved = DraftRecovery.standard.saveDrafts(spellings: spellingEditor, phrases: settingsWindow.model.phrases)
         if !saved.isEmpty { Log.app.info("saved \(saved.count, privacy: .public) unsaved draft(s) before quitting on a signal") }

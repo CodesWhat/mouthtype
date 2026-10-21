@@ -75,12 +75,6 @@ import Observation
         isDirty ? DraftRecovery.Draft(kind: .phrase, trigger: trigger, expansion: expansion) : nil
     }
 
-    func restore(_ draft: DraftRecovery.Draft) {
-        setDraft(nil)
-        trigger = draft.trigger
-        expansion = draft.expansion
-    }
-
     private func setDraft(_ phrase: Snippet?) {
         original = phrase
         trigger = phrase?.trigger ?? ""

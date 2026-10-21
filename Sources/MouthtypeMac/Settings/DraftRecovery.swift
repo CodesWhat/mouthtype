@@ -1,7 +1,7 @@
 import Foundation
 
 /// An unsaved spelling or phrase draft, written to disk when a signal quits the app (a prompt can't be answered there)
-/// and put back into its editor at the next launch.
+/// and left there for the user to recover by hand.
 struct DraftRecovery {
     struct Draft: Codable, Equatable {
         enum Kind: String, Codable { case spelling, phrase }
@@ -30,15 +30,6 @@ struct DraftRecovery {
         try JSONEncoder().encode(draft).write(to: url, options: .atomic)
         return url
     }
-
-    /// The newest draft of `kind`. Every file of that kind is removed afterwards, so one is offered back once.
-    func take(_ kind: Draft.Kind) -> Draft? {
-        let files = ((try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [])
-            .filter { $0.lastPathComponent.hasPrefix("\(kind.rawValue)-") && $0.pathExtension == "json" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        defer { files.forEach { try? FileManager.default.removeItem(at: $0) } }
-        return files.reversed().lazy.compactMap { try? JSONDecoder().decode(Draft.self, from: Data(contentsOf: $0)) }.first
-    }
 }
 
 @MainActor
@@ -48,10 +39,5 @@ extension DraftRecovery {
     func saveDrafts(spellings: SpellingEditor?, phrases: PhraseEditor?) -> [URL] {
         let drafts = [spellings?.draftSnapshot(), phrases?.draftSnapshot()].compactMap { $0 }
         return drafts.compactMap { try? save($0) }
-    }
-
-    func restoreDrafts(spellings: SpellingEditor?, phrases: PhraseEditor?) {
-        if let spellings, !spellings.isDirty, let draft = take(.spelling) { spellings.restore(draft) }
-        if let phrases, !phrases.isDirty, let draft = take(.phrase) { phrases.restore(draft) }
     }
 }
