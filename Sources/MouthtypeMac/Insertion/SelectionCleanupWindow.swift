@@ -167,8 +167,7 @@ struct SelectionCleanupView: View {
     }
 
     private func copyOriginal() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(model.original, forType: .string)
+        SystemClipboard().write(model.original)
     }
 
     private func copyResult() {

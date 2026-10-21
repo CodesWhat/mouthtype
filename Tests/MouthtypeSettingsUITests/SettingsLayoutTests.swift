@@ -287,12 +287,6 @@ import MouthtypeCore
 
     // MARK: Every old control is still reachable
 
-    @Test func everySettingFromTheOldWindowHasAHomeOnItsPage() throws {
-        let (model, cleanup) = try makeModel()
-        defer { cleanup() }
-        // The Settings modal pages draw their own popups and switches, so their controls are checked by identifier in ModalPagesTests.
-    }
-
     @Test func everyOldControlIdentifierStillExistsInTheSettingsSources() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let directory = root.appendingPathComponent("Sources/MouthtypeMac/Settings")

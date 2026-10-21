@@ -337,6 +337,7 @@ final class DictationController {
                 enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
                 readers: .system, readGate: .shared
             )
+            pipeline.warmEditorBias(current.editorHints)
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
         // The page URL was read off the main actor while the row opened. It belongs to this recording only, and a read that missed
@@ -776,13 +777,17 @@ final class DictationController {
         undo = nil
         captureFinalizations += 1
         enqueue { [self] previous in
-            await previous?.value
+            // Like process(): the audio is reopened and archived before waiting on the earlier take, so Quit behind a
+            // long one finds it already saved.
             await pipeline.reopen(pending.session)
             showProcessing()
+            let keyUpMs = clock.milliseconds(from: pending.session.keyDownAt, to: pending.cancelledAt)
+            let features = await captureForProcessing(pending.audio, session: pending.session, keyUpMs: keyUpMs)
+            captureFinalizations -= 1
+            let waits = pendingJobs > 1
+            await previous?.value
+            if waits { showProcessing() }
             do {
-                let keyUpMs = clock.milliseconds(from: pending.session.keyDownAt, to: pending.cancelledAt)
-                let features = await captureForProcessing(pending.audio, session: pending.session, keyUpMs: keyUpMs)
-                captureFinalizations -= 1
                 try await transcribeAndDeliver(pending.audio, features: features, session: pending.session)
             } catch {
                 await failJob(pending.session, error)

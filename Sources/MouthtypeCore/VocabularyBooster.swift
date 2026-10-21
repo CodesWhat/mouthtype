@@ -128,6 +128,11 @@ actor VocabularyBooster {
     func setBias(_ new: VocabularyBias?, settleWithin: Duration? = nil) async {
         let new = new?.isEmpty == false ? new : nil
         if new == bias {
+            // Already building (started early, e.g. at key-down): the budget still applies, but only to what is left of the build.
+            if new != nil, let settleWithin, let building {
+                _ = await Self.withTimeout(settleWithin) { await building.value }
+                return
+            }
             guard new != nil, session == nil, building == nil, let failedAt,
                   ContinuousClock.now - failedAt >= retryAfter else { return }
         }

@@ -49,6 +49,52 @@ struct CleanedDictation: Sendable {
     var deterministicText: String?
 }
 
+/// How many takes are between "audio in hand" and "engine done". The engine holds one bias for all takes, so a key-down
+/// warm-up for a new take must not replace it while an earlier take is still being recognised or boosted. A warm-up claims
+/// the engine only while nothing is transcribing, and a take that arrives during the write waits for it to land, so the
+/// take then sets its own bias after it rather than being overwritten in flight.
+final class TranscribeActivity: @unchecked Sendable {
+    private let lock = NSLock()
+    private var active = 0
+    private var warming = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func enter() async {
+        await withCheckedContinuation { continuation in
+            let admitted = lock.withLock { () -> Bool in
+                if warming { waiters.append(continuation); return false }
+                active += 1
+                return true
+            }
+            if admitted { continuation.resume() }
+        }
+        // A waiter was counted when released by `endWarm`.
+    }
+
+    func leave() { lock.withLock { active -= 1 } }
+
+    /// True when nothing is transcribing and the caller now holds the warm-up claim; it must call `endWarm`.
+    func beginWarm() -> Bool {
+        lock.withLock {
+            guard active == 0, !warming else { return false }
+            warming = true
+            return true
+        }
+    }
+
+    func endWarm() {
+        let released = lock.withLock { () -> [CheckedContinuation<Void, Never>] in
+            warming = false
+            active += waiters.count
+            defer { waiters = [] }
+            return waiters
+        }
+        for waiter in released { waiter.resume() }
+    }
+
+    var isIdle: Bool { lock.withLock { active == 0 } }
+}
+
 /// Everything after the audio is in hand, off the main actor: features, the WAV, the trim, the engine call, the
 /// timing shift and the store writes. The controller adds the paste; `--pipeline-selftest` runs it without one.
 /// A store or archive failure is logged and never stops the dictation.
@@ -57,6 +103,7 @@ struct DictationPipeline: Sendable {
     let archive: (any DictationArchiving)?
     let engine: any DictationEngine
     let clock: any DictationClock
+    let transcribing = TranscribeActivity()
 
     var audioRetention: @Sendable () -> AudioRetentionPolicy = { AudioRetentionPreference.load() }
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
@@ -146,6 +193,24 @@ struct DictationPipeline: Sendable {
         return capture.durable
     }
 
+    /// Starts the editor-name bias building once the hints are in, so the key-up `transcribe` finds the model built
+    /// (or already part way) instead of starting it. Never waits for the build; `transcribe` still applies its own
+    /// settle cap, which then covers only what is left. Does nothing without editor names, or while an earlier take is still being transcribed.
+    @discardableResult
+    func warmEditorBias(_ hints: Task<[VocabularyBias.Term], Never>?) -> Task<Void, Never>? {
+        guard let hints else { return nil }
+        return Task {
+            let editorTerms = await hints.value
+            guard !editorTerms.isEmpty, !Task.isCancelled else { return }
+            let bias = VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary(), editorTerms: editorTerms)
+            // An earlier take still in recognition or boosting would be rescored with these names (or lose its own
+            // while this build starts), so this take falls back to the release-time path.
+            guard transcribing.beginWarm() else { return }
+            defer { transcribing.endWarm() }
+            await engine.setVocabularyBias(bias, settleWithin: nil)
+        }
+    }
+
     func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
         let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))
         var audioPath: String?
@@ -176,6 +241,8 @@ struct DictationPipeline: Sendable {
     func transcribe(
         _ audio: CapturedAudio, session: DictationSession, voicedMs: Double? = nil
     ) async throws -> TranscribedDictation? {
+        await transcribing.enter()
+        defer { transcribing.leave() }
         guard SilenceTrimmer.voicedRange(audio.samples) != nil else {
             await finish(session, .empty)
             return nil
@@ -313,24 +380,28 @@ struct DictationPipeline: Sendable {
         guard level.needsModel, !result.text.isEmpty, let smart else {
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
+        // Joined saved spellings were held back for the model. Whenever its text isn't used, redo the
+        // deterministic pass with the full dictionary so they still apply.
+        func fullDictionaryFallback(modelMs: Int = 0) -> CleanedDictation? {
+            guard dictionary.count != inputs.dictionary.count else { return nil }
+            let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
+            let totalMs = ms + fallback.ms
+            record.ms = Int(totalMs.rounded()) + modelMs
+            if totalMs > cleanupBudget {
+                Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
+                record.outcome = "timeout"
+                let heard = asHeard(transcribed.text)
+                return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
+            }
+            return CleanedDictation(text: fallback.expanded.text,
+                edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)
+        }
         guard let delivery = await smart.runReady(SmartCleanupRequest(
             text: result.text, level: level, style: settings.style, destination: destination,
             dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
             protectedPhrases: protectedPhrases
         ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
-            if dictionary.count != inputs.dictionary.count {
-                let fallback = deterministic(inputs.dictionary, startedAt: clock.now)
-                let totalMs = ms + fallback.ms
-                record.ms = Int(totalMs.rounded())
-                if totalMs > cleanupBudget {
-                    Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
-                    record.outcome = "timeout"
-                    let heard = asHeard(transcribed.text)
-                    return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
-                }
-                return CleanedDictation(text: fallback.expanded.text,
-                    edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)
-            }
+            if let fallback = fullDictionaryFallback() { return fallback }
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         let model = delivery.model
@@ -342,9 +413,13 @@ struct DictationPipeline: Sendable {
         record.outcome = modelResult.outcome.rawValue
         record.promptSha = modelResult.promptSHA
         smartDiagnostic("smart cleanup \(modelResult.outcome.rawValue) ms=\(modelResult.milliseconds)")
+        if modelResult.outcome != .ok, let fallback = fullDictionaryFallback(modelMs: modelResult.milliseconds) {
+            return fallback
+        }
         let final = phrases.apply(modelResult.text)
         guard phrases.matchingTriggers(in: modelResult.text) == expected else {
             record.outcome = "guard-rejected"
+            if let fallback = fullDictionaryFallback(modelMs: modelResult.milliseconds) { return fallback }
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         let modelEdits = (modelResult.edit(from: result.text).map { [$0] } ?? []) + modelResult.postEdits
