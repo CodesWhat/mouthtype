@@ -196,7 +196,7 @@ public struct InsertionRecord: Sendable {
 public struct EditOp: Sendable, Equatable {
     public enum Kind: String, Sendable { case delete, replace, insert }
 
-    public var stage: String   // filler, self-correction, spoken command, number format, dictionary, snippet, blend, llm
+    public var stage: String   // filler, self-correction, spoken command, number format, dictionary, snippet, profanity, blend, llm
     public var kind: Kind
     public var fromText: String?
     public var toText: String?
