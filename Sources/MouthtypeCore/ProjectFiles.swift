@@ -50,11 +50,16 @@ public enum ProjectFiles {
         ].first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
+    /// A repo's own `.git/config` can name an fsmonitor command that git runs on `ls-files`, so it is switched off here.
+    static func lsFilesArguments(root: URL) -> [String] {
+        ["-c", "core.fsmonitor=false", "-C", root.path, "ls-files", "-z"]
+    }
+
     private static func run(root: URL) async -> [String]? {
         guard let git = gitExecutable() else { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: git)
-        process.arguments = ["-C", root.path, "ls-files", "-z"]
+        process.arguments = lsFilesArguments(root: root)
         process.environment = ["GIT_OPTIONAL_LOCKS": "0", "PATH": "/usr/bin:/bin"]
         let pipe = Pipe()
         process.standardOutput = pipe

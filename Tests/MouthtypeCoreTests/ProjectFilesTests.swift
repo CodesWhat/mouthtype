@@ -53,6 +53,25 @@ import Testing
         #expect(names == ["TopLevelZephyr", "NestedQuillKit"])
     }
 
+    @Test func lsFilesTurnsOffTheRepoFsmonitorHook() {
+        let root = URL(fileURLWithPath: "/tmp/some repo")
+        #expect(ProjectFiles.lsFilesArguments(root: root) == ["-c", "core.fsmonitor=false", "-C", "/tmp/some repo", "ls-files", "-z"])
+    }
+
+    @Test(.enabled(if: ProjectFiles.gitExecutable() != nil)) func aRepoFsmonitorCommandIsNeverRun() async throws {
+        ProjectFiles.resetCache()
+        let root = try makeRepo()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let marker = root.deletingLastPathComponent().appendingPathComponent("fsmonitor-ran-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: marker) }
+        try git(root, ["init", "-q"])
+        try git(root, ["add", "-A"])
+        try git(root, ["config", "core.fsmonitor", "touch '\(marker.path)'; false"])
+        let files = await ProjectFiles.trackedFiles(in: root)
+        #expect(files.contains("TopLevelZephyr.swift"))
+        #expect(!FileManager.default.fileExists(atPath: marker.path))
+    }
+
     @Test(.enabled(if: ProjectFiles.gitExecutable() != nil)) func cachesByRootUntilTheIndexChanges() async throws {
         ProjectFiles.resetCache()
         let root = try makeRepo()
