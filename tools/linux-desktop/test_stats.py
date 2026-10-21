@@ -209,6 +209,13 @@ class StatsTests(unittest.TestCase):
         self.assertIsNone(take.duration_ms)
         self.assertEqual(take.words, 9)
 
+    def test_truncated_riff_header_has_no_duration(self):
+        path = make_take(self.root, hexid(14), stamp(20, 12), 9)
+        (path / 'recording.wav').write_bytes(b'RIFF\x04\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00')
+        os.utime(path / 'recording.wav', (NOW - 3600, NOW - 3600))
+        take = next(t for t in stats.read_takes(self.root, now=NOW) if t.id == hexid(14))
+        self.assertIsNone(take.duration_ms)
+
     def test_latest_transcript_is_the_newest_take_with_text(self):
         self.assertEqual(stats.latest_transcript(self.root), (hexid(2), 'word word word'))
         self.assertIsNone(stats.latest_transcript(self.root / 'absent'))

@@ -23,6 +23,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 import json
 import re
+import struct
 import time
 import wave
 from pathlib import Path
@@ -72,7 +73,7 @@ def wav_duration_ms(path):
     try:
         with wave.open(str(path), 'rb') as audio:
             rate, frames = audio.getframerate(), audio.getnframes()
-    except (OSError, EOFError, wave.Error):
+    except (OSError, EOFError, wave.Error, struct.error, ValueError, OverflowError):
         return None
     if rate <= 0 or frames <= 0:
         return None
