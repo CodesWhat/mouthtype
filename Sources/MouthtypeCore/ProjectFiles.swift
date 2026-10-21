@@ -53,16 +53,49 @@ public enum ProjectFiles {
     /// `GIT_NO_LAZY_FETCH` keeps a promisor remote from fetching missing objects, which could run the repo's `core.sshCommand`.
     static let gitEnvironment = ["GIT_OPTIONAL_LOCKS": "0", "GIT_NO_LAZY_FETCH": "1", "PATH": "/usr/bin:/bin"]
 
-    /// A repo's own `.git/config` can name an fsmonitor command that git runs on `ls-files`, so it is switched off here.
-    static func lsFilesArguments(root: URL) -> [String] {
-        ["-c", "core.fsmonitor=false", "-C", root.path, "ls-files", "-z"]
+    /// `--no-lazy-fetch` and `GIT_NO_LAZY_FETCH` arrived together in git 2.45.0. An older git ignores both, so the guard would fail open.
+    static let minimumGitVersion = (major: 2, minor: 45)
+
+    /// The major and minor of `git version 2.45.1 (Apple Git-155)`, nil when it doesn't parse.
+    static func parseGitVersion(_ output: String) -> (major: Int, minor: Int)? {
+        let parts = output.split(separator: " ")
+        guard parts.count >= 3, parts[0] == "git", parts[1] == "version" else { return nil }
+        let numbers = parts[2].split(separator: ".").prefix(2).compactMap { Int($0) }
+        guard numbers.count == 2 else { return nil }
+        return (numbers[0], numbers[1])
     }
 
-    private static func run(root: URL) async -> [String]? {
+    /// `git --version` of the installed git, read once.
+    private static let installedGitVersionOutput: String? = {
         guard let git = gitExecutable() else { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: git)
-        process.arguments = lsFilesArguments(root: root)
+        process.arguments = ["--version"]
+        process.environment = ["PATH": "/usr/bin:/bin"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
+        guard (try? process.run()) != nil else { return nil }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    }()
+
+    /// What git runs for a listing, or nil when this git is too old to guard against lazy fetching and the listing is skipped.
+    /// A repo's own `.git/config` can name an fsmonitor command, which `core.fsmonitor=false` switches off.
+    static func lsFilesArguments(root: URL, versionOutput: String?) -> [String]? {
+        guard let versionOutput, let version = parseGitVersion(versionOutput),
+              (version.major, version.minor) >= (minimumGitVersion.major, minimumGitVersion.minor) else { return nil }
+        return ["--no-lazy-fetch", "-c", "core.fsmonitor=false", "-C", root.path, "ls-files", "-z"]
+    }
+
+    private static func run(root: URL) async -> [String]? {
+        guard let git = gitExecutable(),
+              let arguments = lsFilesArguments(root: root, versionOutput: installedGitVersionOutput) else { return nil }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: git)
+        process.arguments = arguments
         process.environment = gitEnvironment
         let pipe = Pipe()
         process.standardOutput = pipe

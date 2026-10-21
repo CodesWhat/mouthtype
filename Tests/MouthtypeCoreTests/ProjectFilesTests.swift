@@ -53,9 +53,32 @@ import Testing
         #expect(names == ["TopLevelZephyr", "NestedQuillKit"])
     }
 
-    @Test func lsFilesTurnsOffTheRepoFsmonitorHook() {
+    @Test func lsFilesTurnsOffTheRepoFsmonitorHookAndLazyFetch() {
         let root = URL(fileURLWithPath: "/tmp/some repo")
-        #expect(ProjectFiles.lsFilesArguments(root: root) == ["-c", "core.fsmonitor=false", "-C", "/tmp/some repo", "ls-files", "-z"])
+        #expect(ProjectFiles.lsFilesArguments(root: root, versionOutput: "git version 2.45.0")
+            == ["--no-lazy-fetch", "-c", "core.fsmonitor=false", "-C", "/tmp/some repo", "ls-files", "-z"])
+    }
+
+    @Test(arguments: [
+        ("git version 2.54.0 (Apple Git-157)", 2, 54), ("git version 2.45.1", 2, 45), ("git version 10.0.3", 10, 0),
+    ])
+    func parsesTheGitVersion(output: String, major: Int, minor: Int) {
+        let version = ProjectFiles.parseGitVersion(output)
+        #expect(version?.major == major && version?.minor == minor)
+    }
+
+    @Test(arguments: ["", "git", "git version", "git version abc", "git version 2", "usage: git"])
+    func anUnparseableVersionIsNil(output: String) {
+        #expect(ProjectFiles.parseGitVersion(output) == nil)
+    }
+
+    @Test(arguments: ["git version 2.44.0", "git version 2.39.5 (Apple Git-154)", "git version 1.9.0", "garbage"] as [String?] + [nil])
+    func anOldOrUnknownGitSkipsTheListing(output: String?) {
+        #expect(ProjectFiles.lsFilesArguments(root: URL(fileURLWithPath: "/tmp/r"), versionOutput: output) == nil)
+    }
+
+    @Test func aNewerMajorVersionIsAllowed() {
+        #expect(ProjectFiles.lsFilesArguments(root: URL(fileURLWithPath: "/tmp/r"), versionOutput: "git version 3.0.0") != nil)
     }
 
     @Test func gitRunsWithLazyFetchDisabled() {
