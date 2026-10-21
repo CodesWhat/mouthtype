@@ -14,10 +14,10 @@ import SwiftUI
 //   DesignSegmented       segmented control on c0 with a surface selected pill, optional colour dots
 //   DesignKbd             key cap in JetBrains Mono on the key colour
 //   DesignButtonStyle     primary (accent) and secondary (surface + hair border): `.buttonStyle(.designPrimary)`
-//   DesignNavRow          36 pt sidebar / 34 pt modal-nav row, radius 8, selected on the sel tint
+//   DesignNavRow          34 pt sidebar / modal-nav row, radius 8, selected on the sel tint
 //   DesignCloseButton     the 28 pt round close control for modals
 //
-// Colours come from DesignPalette, type from DesignFont, pixel icons from DesignIcon. Text wraps or grows the container, never
+// Colours come from DesignPalette, type from DesignFont, navigation icons as SF Symbols. Text wraps or grows the container, never
 // truncates. Every control takes an explicit accessibility title.
 
 // MARK: Layout
@@ -316,32 +316,19 @@ extension ButtonStyle where Self == DesignButtonStyle {
 
 // MARK: Navigation
 
-enum DesignNavIcon {
-    case pixel(DesignIcon)
-    case symbol(String)
-}
-
-/// A navigation row: icon, title, selected on the sel tint. Sidebar rows are 40 pt around a 24 pt pixel icon (8 pt above and below); the Settings modal nav uses 34 with a 16 pt symbol.
+/// A navigation row: SF Symbol, title, selected on the sel tint. Sidebar and modal-nav rows share the native sidebar sizing, a 16 pt regular monochrome symbol in a 34 pt row.
 struct DesignNavRow: View {
     let title: String
-    let icon: DesignNavIcon
+    let symbol: String
     var selected = false
-    var height: CGFloat = 40
+    var height: CGFloat = 34
     let action: () -> Void
-
-    /// The 24 pt pixel icon gets 12 pt before its label; the 16 pt symbol keeps 10.
-    private var iconSpacing: CGFloat {
-        if case .pixel = icon { 12 } else { 10 }
-    }
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: iconSpacing) {
-                switch icon {
-                case .pixel(let pixel): DesignIconView(icon: pixel)
-                case .symbol(let name):
-                    Image(systemName: name).font(.system(size: 13)).foregroundStyle(DesignPalette.ink2).frame(width: 16).accessibilityHidden(true)
-                }
+            HStack(spacing: 10) {
+                Image(systemName: symbol).symbolRenderingMode(.monochrome).font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(selected ? DesignPalette.ink : DesignPalette.ink2).frame(width: 20).accessibilityHidden(true)
                 Text(title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
