@@ -83,6 +83,9 @@ enum CleanerState: Equatable, Sendable {
 @MainActor
 @Observable
 final class CleanerHost: CleanupModelManaging {
+    /// How long the model stays in memory with no cleanup use before its GPU memory is handed back.
+    static let defaultIdleUnloadDelay: Duration = .seconds(10 * 60)
+
     private(set) var state: CleanerState
 
     nonisolated let smart: SmartCleanup
@@ -93,11 +96,16 @@ final class CleanerHost: CleanupModelManaging {
     @ObservationIgnored private var downloadTask: Task<Void, Never>?
     @ObservationIgnored private var pressure: (any DispatchSourceMemoryPressure)?
     @ObservationIgnored private var defaultsObserver: NSKeyValueObservation?
+    @ObservationIgnored private var idleTask: Task<Void, Never>?
+    @ObservationIgnored private var activeUses = 0
+    @ObservationIgnored private let idleUnloadDelay: Duration
 
     init(
         model: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-        budget: (@Sendable (Int) -> Duration)? = nil
+        budget: (@Sendable (Int) -> Duration)? = nil,
+        idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay
     ) {
+        self.idleUnloadDelay = idleUnloadDelay
         self.model = model
         self.level = level
         smart = SmartCleanup(cleaner: model, budget: budget)
@@ -177,6 +185,7 @@ final class CleanerHost: CleanupModelManaging {
     private func finishLoad(_ result: CleanerState) {
         loadTask = nil
         state = result
+        if case .ready = result { scheduleIdleUnload() }
         // The level may have dropped to basic or off while it loaded.
         if case .ready = result, !level().needsModel { unload(reason: "level \(level().rawValue)") }
     }
@@ -189,12 +198,46 @@ final class CleanerHost: CleanupModelManaging {
     private func unload(reason: String) {
         guard case .ready = state else { return }
         state = .unloaded
+        idleTask?.cancel()
+        idleTask = nil
         unloadTask = Task { [model, smart] in
             await smart.pauseForModelUnload()
             await model.unload()
             unloadTask = nil
         }
         Log.cleaner.info("model unloaded: \(reason, privacy: .public)")
+    }
+
+    // MARK: Idle unload
+
+    /// Restarts the idle countdown. Called when the model becomes ready and on every use of it.
+    private func scheduleIdleUnload() {
+        idleTask?.cancel()
+        guard case .ready = state else { idleTask = nil; return }
+        idleTask = Task { [weak self, idleUnloadDelay] in
+            try? await Task.sleep(for: idleUnloadDelay)
+            guard !Task.isCancelled else { return }
+            self?.idleExpired()
+        }
+    }
+
+    private func idleExpired() {
+        idleTask = nil
+        guard case .ready = state else { return }
+        // A generation in flight is use. Its end restarts the countdown.
+        guard activeUses == 0 else { return }
+        unload(reason: "idle \(idleUnloadDelay)")
+    }
+
+    private func beginUse() {
+        activeUses += 1
+        idleTask?.cancel()
+        idleTask = nil
+    }
+
+    private func endUse() {
+        activeUses = max(0, activeUses - 1)
+        if activeUses == 0 { scheduleIdleUnload() }
     }
 
     // MARK: Download
@@ -253,7 +296,10 @@ final class CleanerHost: CleanupModelManaging {
     }
 
     nonisolated func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
-        await smart.run(request)
+        await beginUse()
+        let result = await smart.run(request)
+        await endUse()
+        return result
     }
 
     /// Runs one explicit selected-text transform once the model is ready.
@@ -264,12 +310,17 @@ final class CleanerHost: CleanupModelManaging {
             throw CleanerError.unavailable(reason: "\(modelName) isn't loaded yet. Try again in a moment.")
         }
         // Through SmartCleanup so unload, dictation cleanup and a re-requested transform all wait for this generation.
+        beginUse()
+        defer { endUse() }
         return try await smart.transform(kind, text: text)
     }
 
     nonisolated func recordingStarted() {
         Task { @MainActor in
-            if self.level().needsModel { self.ensureLoaded() }
+            guard self.level().needsModel else { return }
+            self.ensureLoaded()
+            // A key-down is use: don't unload under a take that is about to need the model.
+            if case .ready = self.state { self.scheduleIdleUnload() }
         }
     }
 }
