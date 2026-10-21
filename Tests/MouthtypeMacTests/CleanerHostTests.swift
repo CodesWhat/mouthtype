@@ -354,6 +354,27 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         #expect(await host.readiness(waitingUpTo: .seconds(60)) != nil)
     }
 
+    @Test func aWaitingCallerIsReleasedWhenItsTaskIsCancelled() async {
+        let gate = DownloadGate()
+        let (host, _, _) = host(downloaded: true) { $0.loadGate = gate }
+        host.start()
+        let waiter = Task { await host.readiness(waitingUpTo: .seconds(60)) }
+        try? await Task.sleep(for: .milliseconds(30))
+        waiter.cancel()
+        #expect(await waiter.value == nil)
+        await gate.release()
+    }
+
+    @Test func everyWaiterIsReleasedByOneLoad() async {
+        let gate = DownloadGate()
+        let (host, _, _) = host(downloaded: true) { $0.loadGate = gate }
+        host.start()
+        let waiters = (0..<3).map { _ in Task { await host.readiness(waitingUpTo: .seconds(60)) } }
+        try? await Task.sleep(for: .milliseconds(30))
+        await gate.release()
+        for waiter in waiters { #expect(await waiter.value != nil) }
+    }
+
     @Test func aFailedLoadIsPublishedAndRetriedOnTheNextLevelChange() async {
         struct Broken: Error, LocalizedError { var errorDescription: String? { "no metallib" } }
         let (host, model, _) = host(downloaded: true) { $0.loadError = Broken() }
