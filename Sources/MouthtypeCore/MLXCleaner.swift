@@ -76,6 +76,14 @@ public actor MLXCleaner: MeasuredCleaner {
         let configuration = pinnedConfiguration
         container = try await LLMModelFactory.shared.loadContainer(
             from: downloader, using: TransformersTokenizerLoader(), configuration: configuration)
+        await warmUp()
+    }
+
+    /// One generation of the real prompt shape right after load. The first take otherwise pays for kernel compilation
+    /// and for building the shared-prefix cache (about 0.5 s extra on Gemma). A failure here is harmless: the take
+    /// that follows just does the same work itself.
+    private func warmUp() async {
+        _ = try? await cleanMeasured("warm up the model before the first take", context: CleanupContext())
     }
 
     /// Drops the weights and returns MLX's buffer cache, so the memory goes back to the system.
@@ -103,6 +111,7 @@ public actor MLXCleaner: MeasuredCleaner {
                 from: downloader, using: TransformersTokenizerLoader(), configuration: configuration)
         }
         container = loaded
+        await warmUp()
         return PrepareTimings(
             downloadSeconds: alreadyPresent ? 0 : downloadTime.seconds,
             loadSeconds: loadTime.seconds,

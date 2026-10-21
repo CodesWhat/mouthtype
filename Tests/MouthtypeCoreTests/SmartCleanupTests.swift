@@ -578,6 +578,20 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(edge.outcome != .skipped)
     }
 
+    @Test func aModelThatLowercasesAMeridiemIsStillAccepted() async {
+        let cleaner = FakeCleaner(returning: "Meet at 3:15pm tomorrow.")
+        let result = await smart(cleaner).run(request("Meet at 3:15 PM tomorrow"))
+        #expect(result.outcome == .ok)
+        #expect(result.text == "Meet at 3:15 PM tomorrow.")
+    }
+
+    @Test func aModelThatChangesTheMeridiemIsStillRejected() async {
+        let cleaner = FakeCleaner(returning: "Meet at 3:15am tomorrow.")
+        let result = await smart(cleaner).run(request("Meet at 3:15 PM tomorrow"))
+        #expect(result.outcome == .guardRejected)
+        #expect(result.text == "Meet at 3:15 PM tomorrow")
+    }
+
     @Test(arguments: [CleanupLevel.off, .basic])
     func levelsWithoutTheModelSkipIt(level: CleanupLevel) async {
         let cleaner = FakeCleaner(returning: "x")
@@ -587,16 +601,28 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
 
     // MARK: Time
 
-    @Test func theBudgetIs400PlusTwelvePerWordCappedAt2500() {
-        #expect(SmartCleanup.defaultBudget(words: 4) == .milliseconds(448))
-        #expect(SmartCleanup.defaultBudget(words: 50) == .milliseconds(1000))
-        #expect(SmartCleanup.defaultBudget(words: 175) == .milliseconds(2500))
-        #expect(SmartCleanup.defaultBudget(words: 400) == .milliseconds(2500))
+    @Test func theBudgetIs400PlusSixteenPerWordCappedAtFiveSeconds() {
+        #expect(SmartCleanup.defaultBudget(words: 4) == .milliseconds(464))
+        #expect(SmartCleanup.defaultBudget(words: 50) == .milliseconds(1200))
+        #expect(SmartCleanup.defaultBudget(words: 250) == .milliseconds(4400))
+        #expect(SmartCleanup.defaultBudget(words: 288) == .milliseconds(5000))
+        #expect(SmartCleanup.defaultBudget(words: 400) == .milliseconds(5000))
     }
 
     @Test func qualityDeadlineScalesToLongDictations() {
+        #expect(SmartCleanup.qualityBudget(words: 40) == .milliseconds(3000))
         #expect(SmartCleanup.qualityBudget(words: 157) >= .milliseconds(5500))
-        #expect(SmartCleanup.qualityBudget(words: 400) <= .seconds(12))
+        #expect(SmartCleanup.qualityBudget(words: 157) == .milliseconds(8265))
+        #expect(SmartCleanup.qualityBudget(words: 400) == .seconds(19) + .milliseconds(200))
+        #expect(SmartCleanup.qualityBudget(words: 1000) == .seconds(20))
+    }
+
+    @Test func theQualityBudgetCoversAQuietGenerationWithRoomForALoadedMachine() {
+        // Gemma decodes about 20 ms a word when quiet. The budget has to be at least double that at every length.
+        for words in [10, 50, 150, 300, 400] {
+            let quiet = Duration.milliseconds(20) * words
+            #expect(SmartCleanup.qualityBudget(words: words) >= quiet * 2)
+        }
     }
 
     @Test func aLongGeneralModelPassCanFinishBeyondFourSeconds() async {
@@ -865,6 +891,68 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(reason("give me a second to think about it", "Give me a second to think about it.") == nil)
         #expect(reason("we need three more people on the team", "We need 3 more people on the team.") == nil)
         #expect(reason("we need three more people on the team", "We need four more people on the team.") != nil)
+    }
+
+    @Test func compoundSpokenNumbersMayBecomeOneValueButOnlyTheRightOne() {
+        let offer = "we offer twenty four seven phone support"
+        #expect(reason(offer, "We offer 24/7 phone support.") == nil)
+        #expect(reason(offer, "We offer 25/7 phone support.") != nil)
+        #expect(reason(offer, "We offer 24/8 phone support.") != nil)
+        let due = "it's due on March third twenty twenty six"
+        #expect(reason(due, "It's due on March 3rd, 2026.") == nil)
+        #expect(reason(due, "It's due on March 3rd, 2025.") != nil)
+        let move = "launch is moving from the fifteenth to the twenty second because legal is open"
+        #expect(reason(move, "Launch is moving from the 15th to the 22nd because legal is open.") == nil)
+        #expect(reason(move, "Launch is moving from the 15th to the 21st because legal is open.") != nil)
+        let miles = "it's about fifteen hundred miles away"
+        #expect(reason(miles, "It's about 1,500 miles away.") == nil)
+        #expect(reason(miles, "It's about 1,600 miles away.") != nil)
+        #expect(reason(miles, "It's about 15 miles away.") != nil)
+    }
+
+    @Test func spokenDigitStringsMayBecomeWrittenOnesWithoutChangingADigit() {
+        let phone = "my number is five five five, oh one two three and I'm home"
+        #expect(reason(phone, "My number is 555-0123 and I'm home.") == nil)
+        #expect(reason(phone, "My number is 5550123 and I'm home.") == nil)
+        #expect(reason(phone, "My number is 555-0124 and I'm home.") != nil)
+        #expect(reason(phone, "My number is 555-123 and I'm home.") != nil)
+    }
+
+    @Test func aSpokenTimeWithOhMayBecomeAClockTimeAndACodeStaysACode() {
+        let deploy = "a deploy went out at nine oh five and broke the pool"
+        #expect(reason(deploy, "A deploy went out at 9:05 and broke the pool.") == nil)
+        #expect(reason(deploy, "A deploy went out at 9:06 and broke the pool.") != nil)
+        #expect(reason("the API returns a four oh four error", "The API returns a 404 error.") == nil)
+        #expect(reason("the API returns a four oh four error", "The API returns a 405 error.") != nil)
+    }
+
+    @Test func spokenLettersMayBecomeASlashPairButNotOtherLetters() {
+        let test = "we decided to run an AB test for two weeks"
+        #expect(reason(test, "We decided to run an A/B test for two weeks.") == nil)
+        #expect(reason(test, "We decided to run an A/C test for two weeks.") != nil)
+    }
+
+    @Test func theGuardStillRejectsLowercaseMeridiemOnItsOwn() {
+        #expect(reason("meet at 3:15 PM tomorrow", "Meet at 3:15pm tomorrow.") != nil)
+        #expect(reason("meet at 3:15 PM tomorrow", "Meet at 3:15 AM tomorrow.") != nil)
+    }
+
+    @Test func aLowercasedMeridiemIsWrittenBackButAChangedOneStaysChanged() {
+        func restored(_ input: String, _ output: String) -> String {
+            SmartCleanupGuard.restoringMeridiem(input: input, output: output)
+        }
+        #expect(restored("meet at 3:15 PM tomorrow", "Meet at 3:15pm tomorrow.") == "Meet at 3:15 PM tomorrow.")
+        #expect(restored("the meeting is at 9:30 AM and lunch at 12 PM", "The meeting is at 9:30am and lunch at 12pm.")
+            == "The meeting is at 9:30 AM and lunch at 12 PM.")
+        #expect(restored("meet at 3 PM", "Meet at 3 PM.") == "Meet at 3 PM.")
+        // The input never spelled a time that way, so the output is left alone.
+        #expect(restored("meet at 3:15 tomorrow", "Meet at 3:15pm tomorrow.") == "Meet at 3:15pm tomorrow.")
+        // The model's own change of AM to PM is kept, so the time-of-day check still rejects it.
+        let changed = restored("meet at 3:15 AM tomorrow", "Meet at 3:15pm tomorrow.")
+        #expect(changed == "Meet at 3:15 PM tomorrow.")
+        #expect(reason("meet at 3:15 AM tomorrow", changed) != nil)
+        // Words that merely end in "am" or "pm" are not times.
+        #expect(restored("meet at 3 PM", "Meet at 3 PM, then the team") == "Meet at 3 PM, then the team")
     }
 
     // MARK: Names and dictionary words

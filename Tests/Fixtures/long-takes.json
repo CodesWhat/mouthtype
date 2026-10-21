@@ -1,0 +1,122 @@
+[
+  {
+    "id": "long-40",
+    "input": "Um so I wanted to check in on the release build, like, the signing step failed again last night and I think it's the keychain profile, so can you look at it before standup tomorrow",
+    "target": "",
+    "mustContain": [
+      "keychain profile",
+      "before standup"
+    ],
+    "mustNotContain": [
+      "um "
+    ]
+  },
+  {
+    "id": "long-55",
+    "input": "Okay so the plan for the week is, uh, first finish the settings page, then fix the paste bug in Sublime, and after that we should write the changelog, you know, for the release, and I think Priya wants a demo on Friday so let's leave some time for that",
+    "target": "",
+    "mustContain": [
+      "settings page",
+      "paste bug",
+      "changelog",
+      "demo on Friday"
+    ],
+    "mustNotContain": [
+      "uh,"
+    ]
+  },
+  {
+    "id": "long-80",
+    "input": "So I was thinking about the cleanup levels, right, the fast one is really quick but sometimes it just drops a sentence when the take is long, and the thorough one is slower but it keeps everything, so maybe we should let the thorough one have more time on long takes, because nobody is going to notice an extra second if the text comes out right, and nobody wants to lose half of what they said",
+    "target": "",
+    "mustContain": [
+      "cleanup levels",
+      "drops a sentence",
+      "extra second",
+      "half of what they said"
+    ],
+    "mustNotContain": [
+      " um "
+    ]
+  },
+  {
+    "id": "long-110",
+    "input": "Hey Dana, quick update on the move. The truck is booked for Saturday morning, no wait, Sunday morning, because the building only lets us use the elevator on Sunday. We still need boxes, probably about thirty, and tape, and I'll grab the markers so we can label everything by room. Can you handle the kitchen and the bathroom? I'll do the bedroom and the living room. Oh and don't forget the cable box has to go back to the store by Monday or they charge us another month",
+    "target": "",
+    "mustContain": [
+      "Sunday morning",
+      "30",
+      "kitchen",
+      "bathroom",
+      "cable box",
+      "by Monday"
+    ],
+    "mustNotContain": [
+      "Saturday"
+    ]
+  },
+  {
+    "id": "long-150",
+    "input": "So the thing I keep running into is that when I dictate a long paragraph the app waits a really long time and then pastes the raw text without any cleanup, which is kind of the worst outcome because I can see it was thinking and then it did nothing. What I would expect is that it either finishes the cleanup or it tells me it gave up. Also the first take after I open the app is always slower, I assume that's the model loading, but it would be nice if it warmed up in the background so the first take is as fast as the rest. And one more thing, when I say a list, like first the keys, second the wallet, third the phone, it should format it as a numbered list and not just run all of it together in one sentence",
+    "target": "",
+    "mustContain": [
+      "waits a really long time",
+      "raw text",
+      "warmed up",
+      "first take",
+      "keys",
+      "wallet",
+      "phone"
+    ],
+    "mustNotContain": []
+  },
+  {
+    "id": "long-220",
+    "input": "Okay this is a longer note for the team about the benchmark results. We ran the cleanup models one at a time on the same machine and the numbers are mostly what we expected. The fast model comes back in under a hundred milliseconds for short takes and a few hundred for long ones, and the thorough model is about seven times slower but it fixes more of the awkward phrasing. The problem is the deadline. When a take is long the thorough model runs out of time and we throw away its answer, so the user gets the raw text instead, and that happens more than it should. There are two things I want to try. One, give long takes a bigger budget that scales with the number of words. Two, make sure the model is warm before the first take so we don't pay for loading on top of the generation. I also want to look at why the guard rejects some outputs, because a few of those look fine to me when I read them side by side. We should be careful there though, the guard exists so we never lose a sentence or change what someone meant, so anything we loosen needs a test",
+    "target": "",
+    "mustContain": [
+      "deadline",
+      "scales with the number of words",
+      "warm",
+      "guard",
+      "never lose a sentence",
+      "needs a test"
+    ],
+    "mustNotContain": []
+  },
+  {
+    "id": "long-300",
+    "input": "Alright so this is going to be a long one because I want to get everything down before I forget it. Yesterday I went through the whole onboarding flow with fresh eyes and there are a few things that bothered me. The first screen asks for microphone access before it explains why, and that feels pushy, so I would put the explanation first and the button second. The second screen has the shortcut recorder and it does not say which key is the default, and I had to read the docs to find out it is the function key. The third screen lets you download the model but the progress bar jumps from zero to ninety percent and then sits there, which made me think it was stuck, so we should either show real progress or just show a spinner and the size. After that there is a screen about the dictionary which honestly nobody will use on day one, so I would move it into settings and let people get to their first dictation faster. Finally, the last screen says you are all set but it does not actually let you try it, and I think the best ending is a text box where you hold the key, say a sentence, and see it appear. If that works the first time, people will trust the app. If it does not, at least they find out right there and not in the middle of an email to their boss",
+    "target": "",
+    "mustContain": [
+      "microphone access",
+      "function key",
+      "progress bar",
+      "dictionary",
+      "text box",
+      "email to their boss"
+    ],
+    "mustNotContain": []
+  },
+  {
+    "id": "long-395",
+    "input": "Alright so this is going to be a long one because I want to get everything down before I forget it. Yesterday I went through the whole onboarding flow with fresh eyes and there are a few things that bothered me. The first screen asks for microphone access before it explains why, and that feels pushy, so I would put the explanation first and the button second. The second screen has the shortcut recorder and it does not say which key is the default, and I had to read the docs to find out it is the function key. The third screen lets you download the model but the progress bar jumps from zero to ninety percent and then sits there, which made me think it was stuck, so we should either show real progress or just show a spinner and the size. After that there is a screen about the dictionary which honestly nobody will use on day one, so I would move it into settings and let people get to their first dictation faster. Finally, the last screen says you are all set but it does not actually let you try it, and I think the best ending is a text box where you hold the key, say a sentence, and see it appear. If that works the first time, people will trust the app. If it does not, at least they find out right there and not in the middle of an email to their boss. so the thing I keep running into is that when I dictate a long paragraph the app waits a really long time and then pastes the raw text without any cleanup, which is kind of the worst outcome because I can see it was thinking and then it did nothing. What I would expect is that it either finishes the cleanup or it tells me it gave up. Also the first take after I open the app is always slower, I assume that's the model loading, but it would be nice if it warmed up in the background so the first take is as fast as the rest. And one more thing, when I say a list, like first the keys, second the wallet, third the phone, it should format it as a numbered list and not just run all of it together in one sentence",
+    "target": "",
+    "mustContain": [
+      "microphone access",
+      "function key",
+      "progress bar",
+      "dictionary",
+      "text box",
+      "email to their boss",
+      "waits a really long time",
+      "raw text",
+      "warmed up",
+      "first take",
+      "keys",
+      "wallet",
+      "phone"
+    ],
+    "mustNotContain": []
+  }
+]

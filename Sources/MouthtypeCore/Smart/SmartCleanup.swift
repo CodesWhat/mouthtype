@@ -83,16 +83,22 @@ public actor SmartCleanup {
     public static let minWords = 2
     public static let maxWords = 400
     public static let budgetBase = Duration.milliseconds(400)
-    public static let budgetPerWord = Duration.milliseconds(12)
-    public static let budgetCap = Duration.milliseconds(2500)
+    public static let budgetPerWord = Duration.milliseconds(16)
+    public static let budgetCap = Duration.seconds(5)
+    public static let qualityBase = Duration.milliseconds(1200)
+    public static let qualityPerWord = Duration.milliseconds(45)
+    public static let qualityCap = Duration.seconds(20)
 
-    /// 400 ms plus 12 ms a word, at most 2.5 s.
+    /// 400 ms plus 16 ms a word, at most 5 s. The native model decodes about 8 ms a word on a quiet machine, so this
+    /// leaves room for a loaded one. A take that finishes early returns early; the budget only bounds a stall.
     public static func defaultBudget(words: Int) -> Duration {
         min(budgetBase + budgetPerWord * words, budgetCap)
     }
 
+    /// 1.2 s plus 45 ms a word, at most 20 s. Gemma decodes about 14 ms a token (roughly 20 ms a word) with the shared
+    /// prompt prefix cached, so N words need about 20 ms times N when quiet and two to three times that when busy.
     public static func qualityBudget(words: Int) -> Duration {
-        min(.milliseconds(1200) + .milliseconds(30) * words, .seconds(12))
+        min(qualityBase + qualityPerWord * words, qualityCap)
     }
 
     /// Native cleanup preserves the spoken register; casing and punctuation are applied afterward.
@@ -203,7 +209,7 @@ public actor SmartCleanup {
             of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
             options: [.regularExpression, .caseInsensitive]) != nil
         let allowance = customBudget || cleaner.usesNativeControls ? budget(words)
-            : min(budget(words) * (settleCorrections ? 2 : 1), .seconds(12))
+            : min(budget(words) * (settleCorrections ? 2 : 1), Self.qualityCap)
         let deadline = start + allowance
         // A generation that outlived its own timeout still holds the model; wait for it, within this budget.
         while true {
@@ -266,7 +272,8 @@ public actor SmartCleanup {
         case let .failure(error):
             return finish(.failed, rejection: String(describing: error), sha: sha)
         case let .success(draft):
-            let model = SmartCleanupGuard.restoringTerminal(input: request.text, output: CleanupPrompt.sanitize(draft.text, input: request.text))
+            let model = SmartCleanupGuard.restoringMeridiem(input: request.text, output: SmartCleanupGuard.restoringTerminal(
+                input: request.text, output: CleanupPrompt.sanitize(draft.text, input: request.text)))
             if SmartCleanupGuard.copiesSurroundingText(input: request.text, output: model,
                 references: [context.before, context.after].compactMap { $0 }) {
                 return finish(.guardRejected, rejection: "surrounding text copied into output", sha: sha)

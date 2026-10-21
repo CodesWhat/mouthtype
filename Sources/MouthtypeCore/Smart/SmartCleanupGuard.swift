@@ -28,6 +28,21 @@ public enum SmartCleanupGuard {
         return String(body.dropLast()) + String(wanted)
     }
 
+    /// The model's text with "3:15pm" written back as "3:15 PM" when the input spelled its times that way. The native
+    /// model lowercases and closes the gap; the deterministic pass already wrote the conventional form, and the guard
+    /// would otherwise throw out a correct output over the casing of its AM or PM.
+    public static func restoringMeridiem(input: String, output: String) -> String {
+        guard input.range(of: #"(?<![\p{L}])[AP]M(?![\p{L}])"#, options: .regularExpression) != nil,
+              let expression = try? NSRegularExpression(pattern: #"(?<=\d)[ \t]?([apAP])[mM](?![\p{L}\p{N}])"#) else { return output }
+        let source = output as NSString
+        var result = output
+        for match in expression.matches(in: output, range: NSRange(location: 0, length: source.length)).reversed() {
+            guard let range = Range(match.range, in: result) else { continue }
+            result.replaceSubrange(range, with: " " + source.substring(with: match.range(at: 1)).uppercased() + "M")
+        }
+        return result
+    }
+
     private static func terminalMark(_ text: String) -> Character? {
         guard let last = text.last(where: { !$0.isWhitespace }), ".?!".contains(last) else { return nil }
         return last
@@ -305,10 +320,26 @@ public enum SmartCleanupGuard {
         result = replace(result, pattern: #"\bUSB[ \t]+([ABC])\b"#) { match, source in
             "USB" + source.substring(with: match.range(at: 1))
         }
-        result = replace(result, pattern: "(?i)\\b\(digitPattern)(?:\\s+\(digitPattern))+\\b") { match, source in
-            let words = source.substring(with: match.range).lowercased().split(whereSeparator: \.isWhitespace).map(String.init)
+        // "nine oh five" may be written 9:05. Both sides compare as 905, so "four oh four" and 404 still agree.
+        result = replace(result, pattern: #"(?<![\p{N}:.])(\d{1,2}):(0\d)(?![\p{N}:])"#) { match, source in
+            source.substring(with: match.range(at: 1)) + source.substring(with: match.range(at: 2))
+        }
+        // "A/B" is the written form of the spoken letters "A B".
+        result = replace(result, pattern: #"(?<![\p{L}\p{N}])([A-Z])/([A-Z])(?![\p{L}\p{N}])"#) { match, source in
+            source.substring(with: match.range(at: 1)) + source.substring(with: match.range(at: 2))
+        }
+        // Spoken digit strings such as a phone number, with the speaker's pauses (commas) between groups.
+        result = replace(result, pattern: "(?i)\\b\(digitPattern)(?:,?\\s+\(digitPattern))+\\b") { match, source in
+            let words = source.substring(with: match.range).lowercased().split(whereSeparator: { $0.isWhitespace || $0 == "," }).map(String.init)
             guard words.contains("oh") || words.contains("zero") else { return source.substring(with: match.range) }
             return words.compactMap { digits[$0] }.joined()
+        }
+        // Written phone numbers: the hyphens are formatting.
+        result = replace(result, pattern: #"(?<![\p{L}\p{N}-])(\d{3})-(\d{3})-(\d{4})(?![\p{L}\p{N}-])"#) { match, source in
+            (1...3).map { source.substring(with: match.range(at: $0)) }.joined()
+        }
+        result = replace(result, pattern: #"(?<![\p{L}\p{N}-])(\d{3})-(\d{4})(?![\p{L}\p{N}-])"#) { match, source in
+            source.substring(with: match.range(at: 1)) + source.substring(with: match.range(at: 2))
         }
         for _ in 0..<4 {
             result = replace(result, pattern: "(?i)\\b(\\d+(?:\\.\\d+)*)\\s+point\\s+(\(digitPattern)|\\d+)\\b") { match, source in
@@ -362,9 +393,73 @@ public enum SmartCleanupGuard {
         "ninth": 9, "tenth": 10,
     ]
 
+    static let magnitudeWords: [String: Int] = ["hundred": 100, "thousand": 1000]
+
+    /// Spoken numbers that read as one value: "twenty four" is 24, "twenty second" is 22, "fifteen hundred" is 1500 and
+    /// "twenty twenty six" is 2026. Each word of the phrase accepts itself or the phrase's digits, so "24/7" can stand for
+    /// "twenty four seven". Only the exact value is accepted: "25/7", "2025" and "15" for "fifteen hundred" all fail.
+    private static func addPhraseValues(to found: inout [Quantity], tokens: [Substring]) {
+        let words = tokens.map { stripped($0).lowercased() }
+        func breaks(_ index: Int) -> Bool { tokens[index].last.map { !$0.isLetter && !$0.isNumber } ?? true }
+        func ones(_ word: String) -> Int? {
+            guard let value = numberWords[word] ?? ordinalWords[word], (1...9).contains(value) else { return nil }
+            return value
+        }
+        func isTens(_ word: String) -> Bool { (numberWords[word] ?? 0) >= 20 }
+        func record(_ value: Int, positions: Range<Int>) {
+            for index in found.indices where positions.contains(found[index].position) {
+                found[index].accepted = [found[index].label, String(value)]
+            }
+        }
+        var index = 0
+        while index < words.count {
+            guard let first = numberWords[words[index]] else { index += 1; continue }
+            // A spoken year: "twenty twenty six", "nineteen eighty four", "twenty oh five".
+            if first == 19 || first == 20, !breaks(index), index + 1 < words.count {
+                var year: Int?
+                var length = 0
+                let next = words[index + 1]
+                if next == "oh", index + 2 < words.count, let digit = ones(words[index + 2]) {
+                    year = first * 100 + digit
+                    length = 3
+                } else if let second = numberWords[next], (10...99).contains(second) {
+                    year = first * 100 + second
+                    length = 2
+                    if isTens(next), !breaks(index + 1), index + 2 < words.count, let digit = ones(words[index + 2]) {
+                        year = first * 100 + second + digit
+                        length = 3
+                    }
+                }
+                if let year {
+                    record(year, positions: index..<(index + length))
+                    index += length
+                    continue
+                }
+            }
+            var value = first
+            var length = 1
+            if isTens(words[index]), !breaks(index), index + 1 < words.count, let digit = ones(words[index + 1]) {
+                value += digit
+                length = 2
+            }
+            if !breaks(index + length - 1), index + length < words.count, let scale = magnitudeWords[words[index + length]] {
+                value *= scale
+                length += 1
+            }
+            if length > 1 { record(value, positions: index..<(index + length)) }
+            index += length
+        }
+    }
+
     /// Digit groups ("1,000" is 1000, "3:30" is 3 and 30) and small spoken numbers, each with its word position.
     /// A spoken number is kept if the output spells it the same way or as digits.
     static func quantities(in text: String) -> [Quantity] {
+        var found = wordsAndDigits(in: text)
+        addPhraseValues(to: &found, tokens: text.split(whereSeparator: \.isWhitespace))
+        return found
+    }
+
+    private static func wordsAndDigits(in text: String) -> [Quantity] {
         var found: [Quantity] = []
         for (position, token) in text.split(whereSeparator: \.isWhitespace).enumerated() {
             let word = stripped(token).lowercased()
