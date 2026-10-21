@@ -204,6 +204,8 @@ public enum SmartCleanupGuard {
 
         if let missing = missingNumber(input: comparableInput, output: comparableOutput) { return "number \(missing) missing or changed" }
         if let scale = droppedScale(input: comparableInput, output: comparableOutput) { return "scale word \(scale) missing or changed" }
+        if reordered(numberSequence(comparableInput), numberSequence(comparableOutput)) { return "number order changed" }
+        if reordered(timeSequence(comparableInput), timeSequence(comparableOutput)) { return "time order changed" }
         for source in [input, resolvedInput].compactMap({ $0 }) {
             if let added = DictionaryReplacer.introducedAlias(input: source, output: trimmed, rules: dictionary) {
                 return "dictionary spelling \"\(added)\" added without an exact match"
@@ -659,6 +661,46 @@ public enum SmartCleanupGuard {
             if !laterCue(tokens: tokens, position: quantity.position) { return quantity.label }
         }
         return nil
+    }
+
+    /// The numeric values a text states, in reading order, with every spelling a quantity accepts as a digit string.
+    /// "twenty four" lists 20, 24, 4 and 24, so a phrase reads the same as its digits.
+    static func numberSequence(_ text: String) -> [String] {
+        quantities(in: text).enumerated().sorted { ($0.element.position, $0.offset) < ($1.element.position, $1.offset) }
+            .flatMap { $0.element.accepted.filter { $0.first?.isNumber == true }.sorted() }
+    }
+
+    /// Each clock time that carries its own AM or PM, in reading order, as "9:00a".
+    static func timeSequence(_ text: String) -> [String] {
+        guard let expression = try? NSRegularExpression(
+            pattern: #"(?i)(?<![\p{L}\p{N}:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b"#) else { return [] }
+        let source = text as NSString
+        return expression.matches(in: text, range: NSRange(location: 0, length: source.length)).map { match in
+            let minutes = match.range(at: 2).location == NSNotFound ? "00" : source.substring(with: match.range(at: 2))
+            return "\(Int(source.substring(with: match.range(at: 1))) ?? 0):\(minutes)\(source.substring(with: match.range(at: 3)).lowercased())"
+        }
+    }
+
+    /// Whether two values both texts state swapped places: every occurrence of one came before every occurrence of the
+    /// other in the input, and after it in the output. Values only one text has are left to the missing-number checks,
+    /// and a value repeated around another doesn't count as moved.
+    static func reordered(_ input: [String], _ output: [String]) -> Bool {
+        func spans(_ values: [String]) -> [String: ClosedRange<Int>] {
+            var found: [String: ClosedRange<Int>] = [:]
+            for (index, value) in values.enumerated() { found[value] = (found[value]?.lowerBound ?? index)...index }
+            return found
+        }
+        let before = spans(input)
+        let after = spans(output)
+        let shared = Set(before.keys).intersection(after.keys).sorted()
+        for (offset, left) in shared.enumerated() {
+            for right in shared[(offset + 1)...] {
+                guard let a = before[left], let b = before[right], let c = after[left], let d = after[right] else { continue }
+                if (a.upperBound < b.lowerBound && d.upperBound < c.lowerBound)
+                    || (b.upperBound < a.lowerBound && c.upperBound < d.lowerBound) { return true }
+            }
+        }
+        return false
     }
 
     // MARK: Names and spellings

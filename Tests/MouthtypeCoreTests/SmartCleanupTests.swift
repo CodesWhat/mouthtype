@@ -849,6 +849,32 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(reason("run /code-review on the branch", "Run code review on the branch.") != nil)
     }
 
+    @Test(arguments: [
+        ("the shop is open 9 AM to 5 PM", "The shop is open 5 PM to 9 AM."),
+        ("call at 3:30 PM then at 9:15 AM", "Call at 9:15 AM, then at 3:30 PM."),
+        ("meet at 9 AM then at 9 PM", "Meet at 9 PM, then at 9 AM."),
+        ("we need two chairs and five tables", "We need five tables and two chairs."),
+        ("the shop is open nine to five", "The shop is open 5 to 9."),
+    ])
+    func swappedTimesAndNumbersAreRejected(input: String, output: String) {
+        #expect(reason(input, output) != nil, "\(output)")
+    }
+
+    @Test(arguments: [
+        ("the shop is open 9 AM to 5 PM", "The shop is open 9 AM to 5 PM."),
+        ("we need three to five chairs", "We need 3–5 chairs."),
+        ("the shop is open nine to five", "The shop is open 9 to 5."),
+        ("call at 3:30 PM then at 9:15 AM", "Call at 3:30 PM, then at 9:15 AM."),
+        ("we need two chairs and five tables", "We need 2 chairs and 5 tables."),
+        ("pick one two three", "Pick 1, 2, 3."),
+        ("it costs twenty four dollars for seven days", "It costs $24 for 7 days."),
+        ("i have 5 cats then 9 dogs and 5 birds", "I have 5 cats, 9 dogs, and 5 birds."),
+        ("meet at five no wait nine", "Meet at nine."),
+    ])
+    func normalReformattingKeepsTimesAndNumbersInOrder(input: String, output: String) {
+        #expect(reason(input, output) == nil, "\(output)")
+    }
+
     @Test func theCleanupPromptKeepsSlashCommands() {
         #expect(CleanupPrompt.systemPrompt.contains("/research"))
     }
