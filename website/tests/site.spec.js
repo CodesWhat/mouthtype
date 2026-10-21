@@ -110,8 +110,8 @@ test("hero cycles examples at labelled paces without moving its layout", async (
   await page.goto("/");
   await page.locator(".product-preview").scrollIntoViewIfNeeded();
   await expect(page.locator("#voice-copy")).toBeVisible();
-  await expect(page.locator(".voice-lane .pace-label")).toContainText("180 WPM");
-  await expect(page.locator(".typing-lane .pace-label")).toContainText("45 WPM");
+  await expect(page.locator(".voice-lane .pace-label")).toContainText("150 WPM");
+  await expect(page.locator(".typing-lane .pace-label")).toContainText("40 WPM");
   const regions = [".preview-paper", ".voice-lane", ".typing-lane", ".pill-slot", ".shortcut-hint", ".skin-controls"];
   const bounds = await Promise.all(regions.map((selector) => page.locator(selector).boundingBox()));
   await page.clock.runFor(3000);
@@ -284,4 +284,50 @@ test("hero menu bar mouth does not shift the hero layout", async ({ page }) => {
   expect(await bar.boundingBox()).toEqual(before);
   expect(before.x + before.width).toBeLessThanOrEqual(360);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(360);
+});
+
+test("example card auto-alternates until the user touches it", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/");
+  const text = page.locator("#example-text");
+  await page.locator(".example").scrollIntoViewIfNeeded();
+  await expect(text).toContainText("Send the mockups");
+  await page.clock.runFor(6000 + 400);
+  await expect(text).toContainText("um send");
+  await page.clock.runFor(6000 + 400);
+  await expect(text).toContainText("Send the mockups");
+  await expect(text.locator("mark")).toHaveText("Sean");
+  await expect(page.locator("#example-live")).toHaveText("");
+  await page.locator(".compare-switch button[data-copy=heard]").hover();
+  await page.clock.runFor(20000);
+  await expect(text).toContainText("Send the mockups");
+  await page.getByRole("button", { name: "As spoken", exact: true }).click();
+  await page.clock.runFor(500);
+  await expect(page.locator("#example-live")).toContainText("As spoken");
+  await expect(text).toContainText("um send");
+});
+
+test("example card does not auto-cycle with reduced motion", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.clock.install();
+  await page.goto("/");
+  await page.locator(".example").scrollIntoViewIfNeeded();
+  await page.clock.runFor(20000);
+  await expect(page.locator("#example-text")).toContainText("Send the mockups");
+});
+
+test("example card does not cycle while offscreen", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/");
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.clock.runFor(20000);
+  await page.locator(".example").scrollIntoViewIfNeeded();
+  await expect(page.locator("#example-text")).toContainText("Send the mockups");
+});
+
+test("primary buttons use the highlight lime with dark ink", async ({ page }) => {
+  await page.goto("/");
+  const button = page.locator("a.primary").first();
+  await expect(button).toHaveCSS("background-color", "rgb(211, 229, 139)");
+  await expect(button).toHaveCSS("color", "rgb(17, 24, 39)");
 });
