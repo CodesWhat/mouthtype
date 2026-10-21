@@ -320,6 +320,56 @@ import Testing
         #expect(SettingsPage.arrowTarget(focused: nil, selected: .appearance, offset: 1) == .appearance)
     }
 
+    /// Warm open: the window already exists with the ring on one row, and a URL or menu route reopens it on another page. No row may keep the ring.
+    @Test func warmPresentLeavesNoSidebarRowFocused() throws {
+        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let rows = SettingsView.sidebarRowProxies(in: window)
+        let home = try #require(SettingsPage.allCases.firstIndex(of: .home)), stats = try #require(SettingsPage.allCases.firstIndex(of: .stats))
+        #expect(window.makeFirstResponder(rows[home]))
+        controller.present(page: .stats)
+        for _ in 0..<3 {
+            while let event = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+        }
+        #expect(controller.model.page == .stats)
+        #expect(!rows.contains { $0 === window.firstResponder })
+        #expect(!(window.firstResponder is NSText))
+        _ = stats
+    }
+
+    private func pump() {
+        for _ in 0..<3 { while let e = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(e) } }
+    }
+
+    /// The ring is never on a row other than the selected one: a selection that changes from outside the sidebar (a click or a link
+    /// lands here as a plain select) drops a ring left on the old row.
+    @Test func selectionChangeNeverLeavesTheRingOnAnotherRow() throws {
+        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let rows = SettingsView.sidebarRowProxies(in: window)
+        let home = try #require(SettingsPage.allCases.firstIndex(of: .home))
+        #expect(window.makeFirstResponder(rows[home]))
+        pump()
+        #expect(controller.model.select(.dictionary))
+        pump()
+        let dictionary = try #require(SettingsPage.allCases.firstIndex(of: .dictionary))
+        for (index, row) in rows.enumerated() where index != dictionary { #expect(window.firstResponder !== row, "ring left on row \(index)") }
+    }
+
+    /// Arrow keys with a row focused move the selection and the ring together.
+    @Test func arrowKeysMoveRingWithSelectionUnderFullKeyboardAccess() throws {
+        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let rows = SettingsView.sidebarRowProxies(in: window)
+        let home = try #require(SettingsPage.allCases.firstIndex(of: .home))
+        #expect(window.makeFirstResponder(rows[home]))
+        pump()
+        try press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
+        #expect(controller.model.page == .stats)
+        let stats = try #require(SettingsPage.allCases.firstIndex(of: .stats))
+        #expect(window.firstResponder === rows[stats], "responder \(String(describing: window.firstResponder)) rows \(rows.map { ObjectIdentifier($0) == ObjectIdentifier(window.firstResponder ?? window) })")
+    }
+
     /// The ring is AppKit's first responder, not the @FocusState, so a page change has to move the responder itself.
     @Test func ringMovesToTheNewPageRowOnlyWhenASidebarRowHasIt() throws {
         let (controller, window) = try keyWindow(page: .stats, fullKeyboardAccess: true)

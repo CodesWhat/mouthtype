@@ -15,6 +15,7 @@ struct SettingsView: View {
     @State var previewWidth: CGFloat = 0
     @FocusState private var sidebarFocus: SettingsPage?
     @State private var seededSidebarFocus = false
+    @State private var arrowMovedPage = false
 
     var body: some View {
         HStack(spacing: 0) {
@@ -36,10 +37,18 @@ struct SettingsView: View {
             // The stats are watched only on their own page.
             if page == .stats { model.stats.activate() } else { model.stats.deactivate() }
             model.syncWords()
-            // A page change from outside the sidebar (URL route, menu) would leave the ring on the old row. AppKit draws that ring, and the
-            // @FocusState can be nil while it is on a row, so the window's first responder decides, not sidebarFocus.
-            let ringMoved = NSApp.keyWindow.map { SettingsView.moveSidebarRing(in: $0, to: page) } ?? false
-            if ringMoved || sidebarFocus != nil, sidebarFocus != page { sidebarFocus = page }
+            // A page change from outside the sidebar (URL route, menu) shows no ring: SettingsWindow.present clears sidebar focus.
+            // Arrows and clicks move sidebarFocus themselves, so nothing here may pull focus onto a row.
+            // A ring is never left on a row other than the selected one: arrows already moved focus with the selection, anything else drops it.
+            if arrowMovedPage {
+                arrowMovedPage = false
+                // The ring is AppKit's first responder and sidebarFocus can be nil while it is on a row, so move both.
+                let ringMoved = SettingsView.settingsWindow.map { SettingsView.moveSidebarRing(in: $0, to: page) } ?? false
+                if ringMoved || sidebarFocus != nil, sidebarFocus != page { sidebarFocus = page }
+            } else {
+                if sidebarFocus != page { sidebarFocus = nil }
+                if let window = SettingsView.settingsWindow { SettingsView.clearStaleSidebarRing(in: window, selected: page) }
+            }
         }
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
             keyboardNavigation = fullKeyboardAccess()
@@ -86,14 +95,25 @@ struct SettingsView: View {
     }
 
     private func sidebarPageRow(_ page: SettingsPage) -> some View {
-        DesignNavRow(title: page.title, symbol: page.symbol, selected: model.page == page) { model.select(page) }
+        DesignNavRow(title: page.title, symbol: page.symbol, selected: model.page == page) {
+            model.select(page)
+            // A mouse click selects without a keyboard ring; Space or Return on a focused row keeps it.
+            if SettingsView.isMouseEvent(NSApp.currentEvent) {
+                sidebarFocus = nil
+                if let window = SettingsView.settingsWindow { SettingsView.clearSidebarRing(in: window) }
+            }
+        }
             .accessibilityIdentifier("settings-page-" + page.rawValue)
             .focused($sidebarFocus, equals: page)
     }
 
     private func moveSidebar(by offset: Int) -> KeyPress.Result {
         let target = SettingsPage.arrowTarget(focused: sidebarFocus, selected: model.page, offset: offset)
-        if model.select(target), sidebarFocus != nil { sidebarFocus = target }
+        // The page-change handler moves the ring with this selection instead of dropping it as a change from outside.
+        arrowMovedPage = true
+        if model.select(target) {
+            if sidebarFocus != nil { sidebarFocus = target }
+        } else { arrowMovedPage = false }
         return .handled
     }
 
@@ -109,6 +129,32 @@ struct SettingsView: View {
         let rows = proxies.filter { $0.bounds.height < rowHeight * 2 }
             .sorted { $0.convert($0.bounds, to: nil).minY > $1.convert($1.bounds, to: nil).minY }
         return Array(rows.prefix(SettingsPage.allCases.count))
+    }
+
+    /// The Settings window: the key window when it is one, else the open Settings window (the window is not always key during a link open).
+    @MainActor static var settingsWindow: NSWindow? {
+        if let key = NSApp.keyWindow as? SettingsNSWindow { return key }
+        let open = NSApp.windows.filter { $0 is SettingsNSWindow && $0.isVisible }
+        return open.first { w in sidebarRowProxies(in: w).contains { $0 === w.firstResponder } } ?? open.first
+    }
+
+    static func isMouseEvent(_ event: NSEvent?) -> Bool {
+        guard let type = event?.type else { return false }
+        return type == .leftMouseDown || type == .leftMouseUp
+    }
+
+    /// Drops first responder when a sidebar row holds it. Anything else holding focus is left alone.
+    @discardableResult @MainActor static func clearSidebarRing(in window: NSWindow) -> Bool {
+        guard let responder = window.firstResponder as? NSView, sidebarRowProxies(in: window).contains(where: { $0 === responder }) else { return false }
+        return window.makeFirstResponder(nil)
+    }
+
+    /// Drops the ring when a sidebar row other than `selected`'s holds it.
+    @discardableResult @MainActor static func clearStaleSidebarRing(in window: NSWindow, selected: SettingsPage) -> Bool {
+        let rows = sidebarRowProxies(in: window)
+        guard let responder = window.firstResponder as? NSView, let held = rows.firstIndex(where: { $0 === responder }),
+              SettingsPage.allCases.firstIndex(of: selected) != held else { return false }
+        return window.makeFirstResponder(nil)
     }
 
     /// Moves the focus ring to `page`'s row when a sidebar row currently has it. Anything else holding focus (a text field's editor, a page
