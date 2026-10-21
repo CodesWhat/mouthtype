@@ -142,7 +142,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap, guardian: FnGuardLauncher(), requestTermination: { [unowned self] in
         // A signal can't wait on a person: no unsaved-draft prompt and no failure alert on this path.
         signalShutdown = true
-        NSApp.terminate(nil)
+        FnRemap.requestQuit { NSApp.terminate(nil) }
     })
     private let shortcuts = GlobalShortcuts()
     private var menuBar: MenuBarController?

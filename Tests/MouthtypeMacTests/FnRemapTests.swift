@@ -167,6 +167,27 @@ private final class FakeStore: KeyMappingStore {
         #expect(exits.first == 0 && !remap.isApplied)
     }
 
+    @Test func anIdleSignalQuitFinishesWithoutTheFallbackTimer() async {
+        let remap = FnRemap(store: FakeStore(nil), defaults: makeDefaults())
+        var exits: [Int32] = []
+        remap.exitProcess = { exits.append($0) }
+        remap.hardExit = { _ in }
+        var answered = false
+        // Stands in for NSApp.terminate returning terminateLater: it waits in a nested loop for a MainActor task
+        // (the quit work) to reply. Called straight from the signal's main-queue block it would never get the reply.
+        let terminate: @MainActor () -> Void = {
+            Task { @MainActor in answered = true }
+            let end = Date().addingTimeInterval(1.2)
+            while !answered, Date() < end { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
+        }
+        let start = ContinuousClock.now
+        remap.handleSignal(requestTermination: { FnRemap.requestQuit(terminate) }, fallbackDelay: 1.5)
+        for _ in 0..<200 where !answered { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(answered)
+        #expect(start.duration(to: .now) < .seconds(1))
+        #expect(exits.isEmpty)
+    }
+
     @Test func aRealSignalReachesTheQuitRequestOnTheMainQueue() async {
         let remap = FnRemap(store: FakeStore(nil), defaults: makeDefaults())
         var requests = 0
