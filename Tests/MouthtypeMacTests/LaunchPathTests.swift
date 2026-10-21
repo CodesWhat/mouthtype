@@ -78,6 +78,54 @@ import Testing
         #expect(window.model.stats.store === store)
     }
 
+    private func queuedDelegate(quits: @escaping () -> Void) -> AppDelegate {
+        let delegate = AppDelegate()
+        delegate.quitAgain = { _ in quits() }
+        return delegate
+    }
+
+    @Test func aQuitAfterAQueuedURLWaitsForTheReplayThenQuits() {
+        var quits = 0
+        let delegate = queuedDelegate { quits += 1 }
+        delegate.application(NSApp, open: [URL(string: "mouthtype://record/start")!])
+        #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
+        #expect(quits == 0)
+        delegate.finishLaunch()
+        #expect(delegate.pendingOpenCount == 0)
+        #expect(quits == 1)
+    }
+
+    @Test func aQuitWithAnEmptyQueueIsImmediate() {
+        var quits = 0
+        let delegate = queuedDelegate { quits += 1 }
+        #expect(!delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
+        #expect(quits == 0)
+    }
+
+    @Test func aQuitThatOutlastsTheDeadlineDropsTheQueueAndGoesAhead() async {
+        var quits = 0
+        let delegate = queuedDelegate { quits += 1 }
+        delegate.quitDeadline = .milliseconds(50)
+        delegate.application(NSApplication.shared, open: [URL(string: "mouthtype://record/start")!])
+        #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(delegate.pendingOpenCount == 0)
+        #expect(quits == 1)
+        // A late finishLaunch has nothing to replay and doesn't quit twice.
+        delegate.finishLaunch()
+        #expect(quits == 1)
+    }
+
+    @Test func anAbandonedLaunchDropsTheQueueAndReleasesTheQuit() {
+        var quits = 0
+        let delegate = queuedDelegate { quits += 1 }
+        delegate.application(NSApplication.shared, open: [URL(string: "mouthtype://record/start")!])
+        #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
+        delegate.abandonLaunch(reason: "test")
+        #expect(delegate.pendingOpenCount == 0)
+        #expect(quits == 1)
+    }
+
     @Test func burstsOfRefreshRequestsRunOnce() async {
         let (defaults, cleanup) = defaults()
         defer { cleanup() }

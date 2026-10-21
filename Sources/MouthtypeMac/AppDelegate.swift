@@ -115,13 +115,50 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private(set) var launchComplete = false
     var pendingOpenCount: Int { pendingOpenURLs.count }
 
-    /// Re-wires a settings window built early, then replays what arrived during launch.
+    /// Re-wires a settings window built early, then replays what arrived during launch. A quit that arrived meanwhile runs after the replay.
     func finishLaunch() {
         if settingsWindowBuilt { wireSettingsModels(settingsWindow.model) }
         launchComplete = true
         let pending = pendingOpenURLs
         pendingOpenURLs = []
         for urls in pending { application(NSApp, open: urls) }
+        resumeDeferredQuit()
+    }
+
+    /// Launch can't finish (a fatal setup error). The queue is dropped, never replayed, and a waiting quit goes ahead.
+    func abandonLaunch(reason: String) {
+        if !pendingOpenURLs.isEmpty { Log.app.error("dropped \(self.pendingOpenURLs.count, privacy: .public) queued URL event(s): \(reason, privacy: .public)") }
+        pendingOpenURLs = []
+        resumeDeferredQuit()
+    }
+
+    /// How long a quit waits for the launch gap to close before the queue is dropped and the quit goes ahead.
+    var quitDeadline: Duration = .seconds(3)
+    private var deferredQuit: (sender: NSApplication, deadline: Task<Void, Never>)?
+    /// Cancels the held termination and asks again, so the normal quit path runs once the queue is empty.
+    var quitAgain: @MainActor (NSApplication) -> Void = { sender in
+        sender.reply(toApplicationShouldTerminate: false)
+        sender.terminate(nil)
+    }
+
+    /// A quit while URLs are still queued waits for them to replay first. Returns true when the quit is being held.
+    func deferQuitForQueuedURLs(sender: NSApplication) -> Bool {
+        guard !launchComplete, !pendingOpenURLs.isEmpty else { return false }
+        if deferredQuit != nil { return true }
+        let deadline = Task { [weak self] in
+            try? await Task.sleep(for: self?.quitDeadline ?? .seconds(3))
+            guard !Task.isCancelled else { return }
+            self?.abandonLaunch(reason: "launch didn't finish before quit")
+        }
+        deferredQuit = (sender, deadline)
+        return true
+    }
+
+    private func resumeDeferredQuit() {
+        guard let held = deferredQuit else { return }
+        deferredQuit = nil
+        held.deadline.cancel()
+        quitAgain(held.sender)
     }
 
     /// Hands the engine the current bias now, so turning the setting on starts the model download without waiting for a take.
@@ -427,6 +464,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
+        if deferQuitForQueuedURLs(sender: sender) { return .terminateLater }
         guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : (builtSettingsWindow?.resolveDraftForQuit() ?? true) }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
