@@ -50,7 +50,7 @@ struct SpellingSuggestionsSection: View {
         let count = model.maybe.count
         return Button { showMaybe.toggle() } label: {
             HStack(spacing: 6) {
-                Image(systemName: showMaybe ? "chevron.down" : "chevron.right").font(.system(size: 9, weight: .semibold)).frame(width: 10)
+                Image(systemName: showMaybe ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).frame(width: 10)
                     .accessibilityHidden(true)
                 Text("Maybe · \(count) weaker guess\(count == 1 ? "" : "es")").fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)

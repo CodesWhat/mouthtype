@@ -249,7 +249,7 @@ struct StyleToneCard: View {
 
 struct StyleCheck: View {
     var body: some View {
-        Image(systemName: "checkmark").font(.system(size: 9, weight: .bold)).foregroundStyle(DesignPalette.surface)
+        Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(DesignPalette.surface)
             .frame(width: 18, height: 18).background(Circle().fill(DesignPalette.ink)).accessibilityHidden(true)
     }
 }
@@ -286,7 +286,7 @@ struct StyleMembersCard: View {
             Text(member.name).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8)
-            Text(row.isBuiltIn ? "BUILT IN" : "ADDED BY YOU").font(DesignFont.mono(9)).tracking(0.9).foregroundStyle(DesignPalette.ink3)
+            Text(row.isBuiltIn ? "BUILT IN" : "ADDED BY YOU").font(DesignFont.mono(10)).tracking(0.9).foregroundStyle(DesignPalette.ink3)
                 .fixedSize()
             DesignPopup(title: "Tone for \(member.name)", selection: Binding(
                 get: { row.ruleStyle.map { $0.preset?.rawValue ?? "custom" } ?? "same" },

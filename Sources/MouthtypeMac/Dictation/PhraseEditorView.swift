@@ -63,7 +63,7 @@ struct PhraseEditorView: View {
                         .lineLimit(1).fixedSize()
                 }
                 .clipped().fadeEdge()
-                Text(kind.title).font(DesignFont.mono(9)).tracking(0.9).foregroundStyle(DesignPalette.ink3).fixedSize()
+                Text(kind.title).font(DesignFont.mono(10)).tracking(0.9).foregroundStyle(DesignPalette.ink3).fixedSize()
                 Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
                     .frame(width: 12).accessibilityHidden(true)
             }
@@ -159,16 +159,16 @@ struct PhraseEditorView: View {
 
     @ViewBuilder private func status(_ transform: MenuTransform) -> some View {
         if !transform.usesModel {
-            Text("NO MODEL \u{00B7} INSTANT").font(DesignFont.mono(9.5)).tracking(0.95).foregroundStyle(DesignPalette.ink3).fixedSize()
+            Text("NO MODEL \u{00B7} INSTANT").font(DesignFont.mono(10)).tracking(0.95).foregroundStyle(DesignPalette.ink3).fixedSize()
         } else if let status = transformModel?.transformModelStatus {
             let ready = status.isReady
             HStack(spacing: 5) {
                 Circle().fill(ready ? DesignPalette.accent : DesignPalette.orange).frame(width: 6, height: 6).accessibilityHidden(true)
-                Text("THOROUGH \u{00B7} \(status.stateWord)").font(DesignFont.mono(9.5)).tracking(0.95)
+                Text("THOROUGH \u{00B7} \(status.stateWord)").font(DesignFont.mono(10)).tracking(0.95)
                     .foregroundStyle(DesignPalette.ink3).fixedSize()
             }
         } else {
-            Text("NEEDS THOROUGH").font(DesignFont.mono(9.5)).tracking(0.95).foregroundStyle(DesignPalette.ink3).fixedSize()
+            Text("NEEDS THOROUGH").font(DesignFont.mono(10)).tracking(0.95).foregroundStyle(DesignPalette.ink3).fixedSize()
         }
     }
 }

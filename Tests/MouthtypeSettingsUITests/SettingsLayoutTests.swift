@@ -103,21 +103,62 @@ import MouthtypeCore
         }
     }
 
-    @Test func settingsSourcesDeclareNoPointSizeBelowTen() throws {
+    /// Nothing below 10 pt, except the 9 pt chart axis labels (README: "Nothing below 9 px, and 9 only on axis labels").
+    /// Scans every UI source directory for `size:` literals, `DesignFont.<face>(<number>)` calls and the `DesignFont` scale
+    /// constants, whether declared or referenced by name.
+    @Test func sourcesDeclareNoPointSizeBelowTen() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let directory = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
-        let files = ["SettingsView", "SettingsTheme", "SettingsGeneralPage", "SettingsWritingPage", "SettingsAppearancePage",
-                     "MicrophoneSettingsSection", "AudioRetentionSection", "FontOverridesSection", "LivePreviewSettingsRow",
-                     "SettingsDiagnosticsView", "SettingsWindow", "SettingsAdvancedPage", "SettingsMacPage", "SettingsModalRows",
-                     "SettingsModalView", "SetupWindow"]
-        let pattern = try NSRegularExpression(pattern: #"size:\s*([0-9]+(?:\.[0-9]+)?)"#)
+        let sources = root.appendingPathComponent("Sources/MouthtypeMac")
+        let directories = ["Settings", "Design", "Stats", "Dictation", "FileTranscription", "Insertion", "Card"]
+        // The only sub-10 sizes allowed: the `axis` scale constant (9 pt), used for chart axis labels in the stats page.
+        let axisFiles: Set<String> = ["Stats/StatsPage.swift"]
+        let number = #"([0-9]+(?:\.[0-9]+)?)"#
+        let literal = try NSRegularExpression(pattern: #"size:\s*"# + number)
+        let call = try NSRegularExpression(pattern: #"DesignFont\.[a-z]+\(\s*"# + number)
+        let declaration = try NSRegularExpression(pattern: #"static let ([a-zA-Z]+): CGFloat = "# + number)
+        let reference = try NSRegularExpression(pattern: #"DesignFont\.([a-zA-Z]+)\b(?!\()"#)
+
+        func matches(_ regex: NSRegularExpression, in text: String) -> [NSTextCheckingResult] {
+            regex.matches(in: text, range: NSRange(text.startIndex..., in: text))
+        }
+        func capture(_ match: NSTextCheckingResult, _ index: Int, in text: String) -> String {
+            String(text[Range(match.range(at: index), in: text)!])
+        }
+
+        let typography = try String(contentsOf: sources.appendingPathComponent("Design/DesignTypography.swift"), encoding: .utf8)
+        var scale: [String: Double] = [:]
+        for match in matches(declaration, in: typography) {
+            // Tracking is letter spacing, not a point size.
+            if !capture(match, 1, in: typography).hasSuffix("Tracking") { scale[capture(match, 1, in: typography)] = Double(capture(match, 2, in: typography))! }
+        }
+        #expect(scale["axis"] == 9 && scale["eyebrow"] == 10)
+
         var found = 0
-        for file in files {
-            let text = try String(contentsOf: directory.appendingPathComponent(file + ".swift"), encoding: .utf8)
-            for match in pattern.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                let value = Double(text[Range(match.range(at: 1), in: text)!])!
-                found += 1
-                #expect(value >= 10, "\(file) declares a \(value) pt font")
+        let manager = FileManager.default
+        for directory in directories {
+            let enumerator = try #require(manager.enumerator(at: sources.appendingPathComponent(directory), includingPropertiesForKeys: nil))
+            for case let url as URL in enumerator where url.pathExtension == "swift" {
+                let relative = directory + url.path.components(separatedBy: "/Sources/MouthtypeMac/" + directory).last!
+                let text = try String(contentsOf: url, encoding: .utf8)
+                var values: [(String, Double)] = []
+                for match in matches(literal, in: text) + matches(call, in: text) {
+                    values.append((capture(match, 0, in: text), Double(capture(match, 1, in: text))!))
+                }
+                for match in matches(reference, in: text) {
+                    let name = capture(match, 1, in: text)
+                    if let value = scale[name] { values.append(("DesignFont." + name, value)) }
+                }
+                if relative == "Design/DesignTypography.swift" {
+                    for match in matches(declaration, in: text) where capture(match, 1, in: text) != "axis" && scale[capture(match, 1, in: text)] != nil {
+                        values.append((capture(match, 0, in: text), Double(capture(match, 2, in: text))!))
+                    }
+                    values.removeAll { $0.0 == "DesignFont.axis" }
+                }
+                for (snippet, value) in values {
+                    found += 1
+                    let isAxis = value == 9 && snippet.hasSuffix("axis") && axisFiles.contains(relative)
+                    #expect(value >= 10 || isAxis, "\(relative) declares a \(value) pt font: \(snippet)")
+                }
             }
         }
         #expect(found > 0)

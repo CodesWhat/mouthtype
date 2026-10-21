@@ -233,7 +233,7 @@ struct SpellingWordSheet: View {
                         HStack(spacing: 4) {
                             Text(form).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
                             Button { editor.removeHeardForm(form) } label: {
-                                Image(systemName: "xmark").font(.system(size: 9, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
+                                Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
                                     .frame(width: 18, height: 18).contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityLabel("Remove \(form)")
                         }
