@@ -1,0 +1,29 @@
+# Omarchy-like Hyprland desktop for Mouthtype Linux tests. Start it with testbed.sh, which stages the
+# checkout, picks the render mode and runs this under its own project name.
+name: mouthtype-omarchy-testbed
+
+services:
+  desktop:
+    image: mouthtype/omarchy-testbed:local
+    build:
+      context: .
+    init: true
+    restart: unless-stopped
+    shm_size: 1gb
+    ports:
+      # RFB behind the password gate. 20000-20031 is the NAS testbed's published range.
+      - "${TESTBED_PORT:-20010}:5900"
+    environment:
+      TESTBED_RENDER: ${TESTBED_RENDER:-auto}
+      # Optional. Left unset, a random 8-character password is generated at start. RFB allows 8 at most.
+      TESTBED_VNC_PASSWORD: ${TESTBED_VNC_PASSWORD:-}
+    volumes:
+      # The checkout under test, staged by `nas-docker.sh --sync`. Read-only.
+      - ${NAS_WORKSPACE:?run through testbed.sh so the checkout is staged}:/src:ro
+      # Speech model and its Python environment (about 0.5 GiB), kept across container rebuilds.
+      - testbed-data:/var/lib/testbed
+    labels:
+      dev.scttbnsn.testbed.owner: mouthtype-omarchy-testbed
+
+volumes:
+  testbed-data:
