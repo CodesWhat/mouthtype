@@ -47,8 +47,8 @@ def spellings_import_preview(path):
     return _library().preview_import(CONFIG, path)
 
 
-def spellings_import(path, expect_digest=""):
-    return _library().import_spellings(CONFIG, path, _option(expect_digest))
+def spellings_import(path, expect_digest="", expect_csv_digest=""):
+    return _library().import_spellings(CONFIG, path, _option(expect_digest), _option(expect_csv_digest))
 
 
 def phrases_list():

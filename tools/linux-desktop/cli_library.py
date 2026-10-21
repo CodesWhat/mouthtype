@@ -29,6 +29,7 @@ def register(subparsers):
     command.add_argument('file')
     command.add_argument('--dry-run', action='store_true', help='Print the per-row preview and write nothing')
     command.add_argument('--expect-digest', help='Refuse if the library is not the one a preview saw')
+    command.add_argument('--expect-csv-digest', help='Refuse if the CSV is not the one a preview saw')
 
     phrases = subparsers.add_parser('phrases', help='Saved phrases (the Mac Transforms page)')
     commands = phrases.add_subparsers(dest='library_action', required=True)
@@ -62,7 +63,7 @@ def run(args, context):
             elif args.dry_run:
                 result = library.preview_import(config, args.file)
             else:
-                result = library.import_spellings(config, args.file, args.expect_digest)
+                result = library.import_spellings(config, args.file, args.expect_digest, args.expect_csv_digest)
         else:
             if action == 'list':
                 result = library.list_library(config, 'phrases')

@@ -627,13 +627,18 @@ def _row(line, heard, written, result, message=None):
 def preview_import(config, csv_path):
     """What importing this CSV would do, without writing. `digest` is the library's state to hand back to import_spellings."""
     path, configured, raw, entries = _for_write(config, 'spellings')
-    result, _additions = _preview(entries, _read_csv(csv_path))
-    return dict(result, file=Path(csv_path).name, digest=_digest(raw), kind='spellings', configured=configured)
-
-
-def import_spellings(config, csv_path, expect_digest=None):
-    """Append the CSV's new rows in one write. With expect_digest, refuses if the library moved since the preview."""
     data = _read_csv(csv_path)
+    result, _additions = _preview(entries, data)
+    return dict(result, file=Path(csv_path).name, digest=_digest(raw), csv_digest=_digest(data), kind='spellings',
+                configured=configured)
+
+
+def import_spellings(config, csv_path, expect_digest=None, expect_csv_digest=None):
+    """Append the CSV's new rows in one write. With expect_digest or expect_csv_digest from a preview, refuses if the
+    library or the CSV moved since, so the rows written are the rows shown."""
+    data = _read_csv(csv_path)
+    if expect_csv_digest is not None and expect_csv_digest != _digest(data):
+        raise ValueError('The CSV changed after this preview. Cancel and choose the CSV again.')
     path, configured = library_path(config, 'spellings')
     with _locked(path):
         path, configured, raw, entries = _for_write(config, 'spellings')

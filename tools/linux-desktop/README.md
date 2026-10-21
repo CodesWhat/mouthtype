@@ -84,11 +84,11 @@ Each recording or explicit recovery snapshots the library and its variables befo
 
 ## Editing the libraries
 
-`mouthtype-linux spellings` and `mouthtype-linux phrases` edit the two files above without the service running; they are what the panel's Dictionary and Transforms pages call. Each writes under a lock on the library's directory and ends in an atomic rename that keeps the file's mode and follows a symlink, so the service never reads a half-written file. Validation and wording mirror the Mac editors. A library the service could not read is reported as `problem` and is never overwritten. Extra keys on spelling and phrase entries survive an edit. The first write to an unconfigured library creates `dictionary.json` or `phrases.json` beside `linux.json` and adds the matching key to `linux.json` (after a `.bak.<time>` copy), reported as `adopted_config`.
+`mouthtype-linux spellings` and `mouthtype-linux phrases` edit the two files above without the service running; they are what the panel's Dictionary and Transforms pages call. Each writes under a lock on the library's directory and ends in an atomic rename that keeps the file's mode and follows a symlink, so the service never reads a half-written file. Validation and wording mirror the Mac editors. A library the service could not read is reported as `problem` and is never overwritten. Extra keys on spelling and phrase entries survive an edit. The first write to an unconfigured library creates `dictionary.json` or `phrases.json` beside `linux.json` and adds the matching key to `linux.json` (after a `.bak.<time>` copy), reported as `adopted_config`. A running service read its paths at start, so after `adopted_config` is true the service must be restarted before it applies the new library.
 
 ```
 spellings list | add HEARD WRITTEN | edit HEARD NEW_HEARD NEW_WRITTEN [--expect-written W] | remove HEARD [--expect-written W]
-spellings import FILE.csv [--dry-run] [--expect-digest D]
+spellings import FILE.csv [--dry-run] [--expect-digest D] [--expect-csv-digest C]
 phrases   list | add TRIGGER EXPANSION | edit TRIGGER NEW_TRIGGER NEW_EXPANSION [--expect-expansion X] | remove TRIGGER [--expect-expansion X]
 ```
 
@@ -107,12 +107,12 @@ Phrase entries are `{"trigger", "expansion"}`. `warning` is the Mac's everyday-w
 `spellings import` reads a CSV of up to 1 MiB and 5,000 rows with a `name` column or `heard,written` columns (either order) and a header row, using the Mac's quoting rules. `--dry-run` writes nothing and returns the sheet's preview:
 
 ```
-{"file": "names.csv", "problem": null, "can_import": true, "digest": "...",
+{"file": "names.csv", "problem": null, "can_import": true, "digest": "...", "csv_digest": "...",
  "counts": {"add": 1, "existing": 1, "duplicate": 0, "invalid": 0},
  "rows": [{"row": 2, "heard": "shawn", "written": "Sean", "result": "add", "label": "Add", "warning": null}]}
 ```
 
-`result` is `add`, `existing`, `duplicate` or `invalid`; `label` is the sheet text ("Already saved", "Duplicate row", or the invalid reason); `row` is the CSV line. `problem` is set instead of rows for an unreadable CSV or wrong headers. `can_import` needs no problem, no invalid row and at least one `add`; one invalid row blocks the whole import. Importing appends only the `add` rows in one write and returns the library state with `imported` and `skipped`. `--expect-digest` refuses with the Mac's "changed after this preview" message if the library moved since the preview. Suggestions from corrections are not part of the Linux client.
+`result` is `add`, `existing`, `duplicate` or `invalid`; `label` is the sheet text ("Already saved", "Duplicate row", or the invalid reason); `row` is the CSV line. `problem` is set instead of rows for an unreadable CSV or wrong headers. `can_import` needs no problem, no invalid row and at least one `add`; one invalid row blocks the whole import. Importing appends only the `add` rows in one write and returns the library state with `imported` and `skipped`. `--expect-digest` and `--expect-csv-digest` take the preview's `digest` and `csv_digest` and refuse (the Mac's "changed after this preview" message) if the library or the CSV moved since, so the rows written are the rows shown. Suggestions from corrections are not part of the Linux client.
 
 `{clipboard}` additionally requires `"phrase_clipboard": true` and the optional distro `wl-clipboard` package. It defaults off. If any configured expansion uses that variable, a start/recovery reads the default Wayland clipboard once through `wl-paste --no-newline --type text`; no clipboard watcher, write or key event is started. The read has a one-second deadline and 1 MiB limit. Missing permission, helper, text or failed reads refuse that operation with `phrase_context_unavailable`, rather than silently deleting the trigger. A successfully read empty text offer expands to empty, like Core. Use the initial Hyprland/data-control target; other compositors and clipboard behavior still require acceptance. These are explicit clipboard reads even in recovery-only delivery mode.
 

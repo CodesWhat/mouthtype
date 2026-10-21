@@ -61,7 +61,7 @@ class LibraryVerbTests(unittest.TestCase):
         csv.write_text("name\nSean\nPostHog\n", encoding="utf-8")
         code, preview = self.main("spellings-import-preview", str(csv))
         self.assertEqual((code, preview["can_import"], preview["counts"]["add"]), (0, True, 2))
-        code, imported = self.main("spellings-import", str(csv), preview["digest"])
+        code, imported = self.main("spellings-import", str(csv), preview["digest"], preview["csv_digest"])
         self.assertEqual((code, imported["imported"], imported["count"]), (0, 2, 3))
         code, removed = self.main("spellings-remove", "sean", "")
         self.assertEqual((code, removed["count"]), (0, 2))

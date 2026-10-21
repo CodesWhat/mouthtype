@@ -278,6 +278,16 @@ class CsvTests(Base):
         self.assertEqual(self.dictionary.read_bytes(), before)
         self.assertEqual(self.import_csv('name\nSean')['imported'], 1)
 
+    def test_confirm_refuses_a_csv_that_changed_after_the_preview(self):
+        preview = self.preview('heard,written\nshawn,Sean')
+        csv = self.root / 'in.csv'
+        csv.write_text('heard,written\ntheir,Thair')
+        with self.assertRaisesRegex(ValueError, 'CSV changed after this preview'):
+            library.import_spellings(self.config, csv, preview['digest'], preview['csv_digest'])
+        self.assertFalse(self.dictionary.exists())
+        csv.write_text('heard,written\nshawn,Sean')
+        self.assertEqual(library.import_spellings(self.config, csv, preview['digest'], preview['csv_digest'])['imported'], 1)
+
     def test_missing_library_digest_and_unreadable_library(self):
         self.assertEqual(self.preview('name\nSean')['digest'], 'missing')
         self.import_csv('name\nSean', 'missing')
