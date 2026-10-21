@@ -79,6 +79,8 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
             return PrepareTimings(downloadSeconds: 0, loadSeconds: 0, downloaded: false)
         }
         let clock = ContinuousClock()
+        await ModelCacheAdoption.adoptCache(of: version == .v2 ? .parakeetV2 : .parakeetV3, pin: version == .v2 ? ModelPins.parakeetV2 : ModelPins.parakeetV3)
+        await ModelCacheAdoption.adoptCache(of: .vad, pin: ModelPins.sileroVAD)
         let alreadyPresent = AsrModels.modelsExist(at: modelDirectory, version: version)
         if !alreadyPresent { await report?(.downloading(fraction: 0)) }
 
