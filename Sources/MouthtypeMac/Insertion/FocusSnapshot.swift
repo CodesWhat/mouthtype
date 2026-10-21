@@ -77,7 +77,11 @@ struct FocusProbe: Sendable {
 protocol FocusReading: AnyObject {
     func snapshotApplication() -> FocusSnapshot
     func snapshot() -> FocusSnapshot
-    func websiteHost(for snapshot: FocusSnapshot) -> String?
+    /// Like `snapshot()`, for reading the user's selection while a status menu is tracking. Defaults to `snapshot()`.
+    func selectionSnapshot() -> FocusSnapshot
+    /// A read of the browser's page URL that is safe to run off the main actor, or nil when the focus rules out reading it.
+    /// The cheap checks happen here, on the main actor; the Accessibility calls happen inside the returned closure.
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)?
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor
     /// A bounded window of text around the cursor, for the cleanup pass. Nil when the app doesn't say.
     func insertionContext(of element: FocusedElement) -> InsertionContext?
@@ -88,7 +92,8 @@ protocol FocusReading: AnyObject {
 
 extension FocusReading {
     func snapshotApplication() -> FocusSnapshot { snapshot() }
-    func websiteHost(for snapshot: FocusSnapshot) -> String? { nil }
+    func selectionSnapshot() -> FocusSnapshot { snapshot() }
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? { nil }
     func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
     func readField(of element: FocusedElement) -> FieldReading { FieldReading() }
 }
@@ -96,7 +101,14 @@ extension FocusReading {
 @MainActor
 final class AccessibilityFocusReader: FocusReading {
     /// Upper bound on each Accessibility call, so a hung app cannot stall the main thread (and with it the hotkey tap).
-    static let messagingTimeout: Float = 0.25
+    nonisolated static let messagingTimeout: Float = 0.25
+    /// Set while a time-boxed read runs (the menu capture). Each call's timeout shrinks to what's left, so the reads together stay near the budget.
+    static var deadline: Date?
+    static var deadlinePassed: Bool { deadline.map { $0.timeIntervalSinceNow <= 0 } ?? false }
+    static func callTimeout() -> Float {
+        guard let deadline else { return messagingTimeout }
+        return max(0.005, min(messagingTimeout, Float(deadline.timeIntervalSinceNow)))
+    }
 
     var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
 
@@ -116,24 +128,53 @@ final class AccessibilityFocusReader: FocusReading {
             }
             return snapshot
         }
-        bounded(element)
+        return fill(snapshot, with: element)
+    }
+
+    /// The same read as `snapshot()`, except that when the system-wide focused element is empty it asks the frontmost app
+    /// directly. The system-wide element is empty while a status menu tracks, but the app still knows its own focus.
+    func selectionSnapshot() -> FocusSnapshot {
+        var snapshot = snapshotApplication()
+        let systemWide = bounded(AXUIElementCreateSystemWide())
+        var focused = elementValue(systemWide, kAXFocusedUIElementAttribute)
+        if focused == nil, !Self.deadlinePassed, let pid = snapshot.pid {
+            focused = elementValue(bounded(AXUIElementCreateApplication(pid)), kAXFocusedUIElementAttribute)
+        }
+        guard let element = focused else {
+            if !Self.deadlinePassed, let pid = snapshot.pid {
+                let appElement = bounded(AXUIElementCreateApplication(pid))
+                snapshot.windowTitle = elementValue(appElement, kAXFocusedWindowAttribute).flatMap(title(of:))
+            }
+            return snapshot
+        }
+        return fill(snapshot, with: element)
+    }
+
+    private func fill(_ base: FocusSnapshot, with element: AXUIElement) -> FocusSnapshot {
+        var snapshot = base
         snapshot.element = FocusedElement(element)
         snapshot.focusedOwnerPID = ownerPID(of: FocusedElement(element))
-        snapshot.role = stringValue(element, kAXRoleAttribute)
-        snapshot.subrole = stringValue(element, kAXSubroleAttribute)
-        snapshot.isSecure = isSecure(element, subrole: snapshot.subrole)
-        if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(element) }
-        snapshot.windowTitle = elementValue(element, kAXWindowAttribute).flatMap(title(of:))
+        // Each read below re-derives its timeout from what's left of the deadline, and none is issued once it has passed.
+        // The caller sees the expired deadline and treats the whole capture as timed out.
+        if Self.deadlinePassed { return snapshot }
+        snapshot.role = stringValue(bounded(element), kAXRoleAttribute)
+        if Self.deadlinePassed { return snapshot }
+        snapshot.subrole = stringValue(bounded(element), kAXSubroleAttribute)
+        if Self.deadlinePassed { return snapshot }
+        snapshot.isSecure = isSecure(bounded(element), subrole: snapshot.subrole)
+        if Self.deadlinePassed { return snapshot }
+        if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(bounded(element)) }
+        if Self.deadlinePassed { return snapshot }
+        snapshot.windowTitle = elementValue(bounded(element), kAXWindowAttribute).flatMap { title(of: bounded($0)) }
         return snapshot
     }
 
-    func websiteHost(for snapshot: FocusSnapshot) -> String? {
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
         guard !snapshot.isSecure, !isSecureInputEnabled, WebsiteContext.supports(bundleID: snapshot.bundleID),
               let element = snapshot.element, let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
-              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid,
-              let window = elementValue(bounded(element.ref), kAXWindowAttribute) else { return nil }
-        // Apple's AXDocument attribute is a URL string. Missing browser support is a fallback, never a guess.
-        return WebsiteContext.host(document: stringValue(bounded(window), kAXDocumentAttribute), bundleID: snapshot.bundleID)
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return nil }
+        let bundleID = snapshot.bundleID
+        return { BrowserURLRead.host(of: element, bundleID: bundleID, timeout: BrowserURLRead.callTimeout) }
     }
 
     /// Diagnostic ownership only. Event delivery still uses the frontmost application.
@@ -246,7 +287,7 @@ final class AccessibilityFocusReader: FocusReading {
 
     @discardableResult
     private func bounded(_ element: AXUIElement) -> AXUIElement {
-        AXUIElementSetMessagingTimeout(element, Self.messagingTimeout)
+        AXUIElementSetMessagingTimeout(element, Self.callTimeout())
         return element
     }
 
@@ -304,5 +345,26 @@ final class AccessibilityFocusReader: FocusReading {
             return value.utf16.count
         }
         return nil
+    }
+}
+
+
+/// The page URL read from a browser window's document attribute. Blocking, so callers run it off the main actor under their own
+/// budget; every Accessibility call carries its own messaging timeout so a hung browser cannot hold the thread for long.
+enum BrowserURLRead {
+    /// Per-call Accessibility timeout, in seconds.
+    static let callTimeout: Float = 0.15
+
+    static func host(of element: FocusedElement, bundleID: String?, timeout: Float) -> String? {
+        AXUIElementSetMessagingTimeout(element.ref, timeout)
+        var window: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element.ref, kAXWindowAttribute as CFString, &window) == .success,
+              let window, CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+        let windowRef = window as! AXUIElement
+        AXUIElementSetMessagingTimeout(windowRef, timeout)
+        var document: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(windowRef, kAXDocumentAttribute as CFString, &document) == .success else { return nil }
+        // Apple's AXDocument attribute is a URL string. Missing browser support is a fallback, never a guess.
+        return WebsiteContext.host(document: document as? String, bundleID: bundleID)
     }
 }

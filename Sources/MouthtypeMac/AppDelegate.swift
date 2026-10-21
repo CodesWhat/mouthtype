@@ -23,7 +23,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.accessibility.start()
             NSWorkspace.shared.open(AccessibilityAccess.settingsURL)
         }, retrySpeech: { [weak self] in self?.engineHost.start() },
-        inputSettings: { [weak self] in self?.settingsWindow.present(page: .diagnostics) }))
+        inputSettings: { [weak self] in self?.settingsWindow.present(destination: .settings(.health)) }))
     private let fontChooser = TextFontMenuSection()
     private lazy var appUpdater: AppUpdater = AppUpdater(
         driver: UpdateLaunchPolicy.allows(arguments: CommandLine.arguments, bundleURL: Bundle.main.bundleURL,
@@ -33,14 +33,23 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var selectionCleanupModel = SelectionCleanupModel(editor: AccessibilitySelectionEditor(), transformer: cleanerHost, busy: { [weak self] in
         guard let self else { return true }
         return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
-    }, changed: { [weak self] in self?.appUpdater.refreshActivity() })
+    }, changed: { [weak self] in self?.appUpdater.refreshActivity() }, styleFor: { selection in
+        // The tone that applies to the focused app: its rule, else the global default.
+        let styles = (try? AppCleanupStyles.load()) ?? AppCleanupStyles()
+        return styles.resolve(bundleID: NSRunningApplication(processIdentifier: selection.pid)?.bundleIdentifier,
+                              fallback: CleanupSettings.load().style)
+    })
     private lazy var selectionCleanupWindow = SelectionCleanupWindow(model: selectionCleanupModel)
     private lazy var fileTranscriptionModel: FileTranscriptionModel = FileTranscriptionModel(
         makeJob: { [weak self] in
             guard let self, case .ready = self.engineHost.state, let engine = self.engineHost.engine else {
                 throw CocoaError(.featureUnsupported)
             }
-            return AudioFileTranscription(decoder: MacAudioFileDecoder(), engine: engine)
+            // A dictation in an editor leaves its code names on the shared engine. An import gets the saved words only.
+            let bias = VocabularyBoostSetting.bias(enabled: VocabularyBoostSetting.isEnabled(), rules: self.dictionary.dictionary())
+            return AudioFileTranscription(decoder: MacAudioFileDecoder(), engine: engine, beforeTranscribing: {
+                await (engine as? any VocabularyBiasing)?.setVocabularyBias(bias)
+            })
         }, canBegin: { [weak self] in
             guard let self, !self.isTerminating else { return false }
             return self.dictation?.phase == .idle && self.recovery?.isRecovering != true && !self.appUpdater.blocksNewWork
@@ -50,18 +59,19 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.settingsWindow.model.home.refreshRecoverability()
         }, copy: { SystemClipboard().write($0) })
     private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
-    private lazy var spellingWindow = SpellingEditorWindow(store: dictionary)
-    private lazy var phraseWindow = PhraseEditorWindow(store: phrases)
+    private lazy var spellingEditor = SpellingEditor(store: dictionary)
+    private lazy var spellingSuggestions = SpellingSuggestionsModel(vocabulary: dictionary)
     private lazy var settingsWindow = SettingsWindow(
         model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
             onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
             onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
             onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
             onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
-            onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() }),
+            onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
+            spellings: spellingEditor, spellingSuggestions: spellingSuggestions, phrases: PhraseEditor(store: phrases),
+            openTranscribeWindow: { [weak self] in self?.fileTranscriptionWindow.present() }),
         actions: SettingsActions(openSetup: { [weak self] in self?.showSetup() }, changeShortcut: { [weak self] in self?.showShortcutEditor() },
-            openSpellings: { [weak self] in self?.spellingWindow.present() },
-            openPhrases: { [weak self] in self?.phraseWindow.present() }, cleaner: cleanerHost,
+            cleaner: cleanerHost,
             diagnostics: diagnostics, retrySpeech: { [weak self] in self?.engineHost.start() },
             refreshDiagnostics: { [weak self] in self?.refreshDiagnostics() },
             toggleRemap: { [weak self] in self?.toggleRemap() },
@@ -89,7 +99,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuBar: MenuBarController?
     private var historySection: HistoryMenuSection?
     private var hotkeyService: HotkeyService?
-    private var shortcutWindow: ShortcutRecorderWindow?
+    private var shortcutSheet: ShortcutRecorderSheet?
     private var hotkeyLogTask: Task<Void, Never>?
     private var pill: PillController?
     private var cardController: DeliveryCardController?
@@ -203,25 +213,32 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
         settingsWindow.model.home.store = store
         settingsWindow.model.stats.store = store
-        spellingWindow.suggestions.store = store
+        settingsWindow.model.spellingSuggestions?.store = store
         let settingsSection = SettingsMenuSection(
-            open: { [weak self] in self?.settingsWindow.present(page: .general) },
+            open: { [weak self] in self?.settingsWindow.present(destination: .settings(.general)) },
             openHome: { [weak self] in self?.settingsWindow.present(page: .home) })
         menuBar.add(section: AttentionMenuSection(diagnostics: diagnostics, open: { [weak self] in
             guard let self else { return }
             if self.diagnostics.microphoneStatus != .authorized || !self.diagnostics.accessibilityGranted { self.showSetup() }
-            else { self.settingsWindow.present(page: .diagnostics) }
+            else { self.settingsWindow.present(destination: .settings(.health)) }
         }))
-        menuBar.add(section: settingsSection, startsGroup: false)
+        menuBar.add(section: EngineRetryMenuSection(host: engineHost), startsGroup: false)
+        menuBar.add(section: UpdateAvailableMenuSection(updater: appUpdater), startsGroup: false)
+        menuBar.add(section: settingsSection)
         NSApp.mainMenu = settingsSection.applicationMenu()
         menuBar.add(section: ActionsMenuSection(
             onPasteLast: { [weak self] in self?.pasteLast() }, onCopyLast: { [weak self] in self?.copyLast() }
         ))
-        menuBar.add(section: SelectionCleanupMenuSection(
-            open: { [weak self] in self?.selectionCleanupWindow.present() },
-            openTransform: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
-            unavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason }), startsGroup: false)
-        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.fileTranscriptionWindow.present() }, startsGroup: false)
+        menuBar.add(section: history, startsGroup: false)
+        menuBar.add(section: TransformSelectionMenuSection(
+            open: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
+            editTransforms: { [weak self] in self?.settingsWindow.present(page: .transforms) },
+            aiUnavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason },
+            capture: { [weak self] in
+                guard let self, AXIsProcessTrusted() else { return .unavailable }
+                return self.selectionCleanupModel.captureForMenu()
+            }))
+        menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(destination: .transcribeFile) }, startsGroup: false)
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost, weak recovery] in
                 guard dictation?.phase == .idle, recovery?.isRecovering != true, let engineHost else { return false }
@@ -242,7 +259,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         dictation.canStartRecording = { [weak self] in self?.isTerminating != true && self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true }
-        menuBar.add(section: history, startsGroup: false)
         menuBar.add(section: UpdateMenuSection(updater: appUpdater), isFooter: true)
         menuBar.add(section: HelpMenuSection(), isFooter: true)
         self.menuBar = menuBar
@@ -255,6 +271,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictation.onAttemptFinished = { [weak menuBar, weak home = settingsWindow.model.home] in menuBar?.refresh(); home?.refreshRecoverability() }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
         dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
+        dictation.onAutomationLock = { [weak self] in self?.hotkeyService?.adoptLockedRecording() }
         menuBar.onStopDictation = { [weak dictation] in dictation?.stopHandsFree() }
         menuBar.onCancelDictation = { [weak dictation] in
             guard let dictation else { return }
@@ -290,6 +307,35 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         appUpdater.start()
     }
 
+    public func application(_ application: NSApplication, open urls: [URL]) {
+        guard !isTerminating else { return }
+        let router = automationRouter()
+        for url in urls {
+            if case .disabled = router.handle(url) {
+                showNotice(PillMessage("Automation is off", detail: "See the automation docs"), duration: 3)
+            }
+        }
+    }
+
+    /// A line on the pill that never takes a live recording's place.
+    private func showNotice(_ message: PillMessage, duration: TimeInterval = 2.5) {
+        if let dictation { dictation.showNotice(message, duration: duration) } else { pill?.showMessage(message, duration: duration) }
+    }
+
+    private func automationRouter() -> AutomationRouter {
+        AutomationRouter(actions: AutomationActions(
+            // Queued, so a stop or cancel that follows a start waits for the recording the start is still bringing up.
+            startDictation: { [weak self] in self?.dictation?.enqueueAutomation(.start) },
+            stopDictation: { [weak self] in self?.dictation?.enqueueAutomation(.stop) },
+            toggleDictation: { [weak self] in self?.dictation?.enqueueAutomation(.toggle) },
+            cancelDictation: { [weak self] in self?.dictation?.enqueueAutomation(.cancel) },
+            copyLast: { [weak self] in self?.copyLast() },
+            pasteLast: { [weak self] in self?.pasteLast() },
+            // present(page:) moves through SettingsModel.select, so an unsaved spelling or phrase draft still asks first.
+            open: { [weak self] page in self?.settingsWindow.present(destination: page.destination) }
+        ))
+    }
+
     public func applicationDidBecomeActive(_ notification: Notification) {
         guard menuBar != nil else { return }
         refreshDiagnostics()
@@ -302,7 +348,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
-        guard appUpdater.allowsTermination else { return .terminateCancel }
+        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
             await dictation?.prepareForTermination() ?? true
@@ -320,6 +366,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         })
         return .terminateLater
+    }
+
+    static func mayQuit(allowsTermination: Bool, resolveDraft: () -> Bool) -> Bool {
+        allowsTermination && resolveDraft()
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
@@ -356,10 +406,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func pasteLast() {
         guard !isTerminating else { return }
-        guard let inserter, let pill, let cardPresenter else { return }
+        guard let inserter, let cardPresenter else { return }
         Task {
             guard let result = await inserter.pasteLast() else {
-                pill.showMessage("Nothing to paste yet")
+                showNotice(PillMessage("Nothing to paste yet"))
                 return
             }
             if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") { cardPresenter.present(card) }
@@ -367,8 +417,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func copyLast() {
-        guard let inserter, let pill else { return }
-        pill.showMessage(inserter.copyLast() ? "Copied" : "Nothing to copy yet")
+        guard let inserter else { return }
+        showNotice(PillMessage(inserter.copyLast() ? "Copied" : "Nothing to copy yet"))
     }
 
     /// Fn-key presence comes from an IOHIDManager enumeration, so the 2 s setup poll reuses the last full check's answer.
@@ -502,7 +552,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startInput() {
-        guard !inputStarted, shortcutWindow == nil else { return }
+        guard !inputStarted, shortcutSheet == nil else { return }
         inputStarted = true
         if let mode = InputProbe.mode(in: CommandLine.arguments) {
             Task { await InputProbe.run(mode, remap: fnRemap) }
@@ -582,7 +632,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func activateRecordingMode(_ mode: RecordingMode) -> String? {
-        guard shortcutWindow == nil else { return "Finish changing the shortcut before changing recording behavior." }
+        guard shortcutSheet == nil else { return "Finish changing the shortcut before changing recording behavior." }
         guard let service = hotkeyService else { return nil }
         let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
         do {
@@ -602,7 +652,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func showShortcutEditor() {
-        if let shortcutWindow { shortcutWindow.present(); return }
+        if shortcutSheet != nil { settingsWindow.present(); return }
         guard dictation?.phase == .idle else {
             pill?.showMessage("Finish or cancel this dictation before changing its shortcut")
             return
@@ -613,12 +663,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeyService?.stop()
         shortcuts.unregisterAll()
-        let window = ShortcutRecorderWindow(saved: ShortcutSettings.load(), apply: { [weak self] shortcut in
+        let sheet = ShortcutRecorderSheet(saved: ShortcutSettings.load(), apply: { [weak self] shortcut in
             guard let self else { return "Mouthtype is closing." }
             return ShortcutSettings.apply(shortcut, activate: self.activateShortcut)
         }, onClose: { [weak self] in
             guard let self else { return }
-            self.shortcutWindow = nil
+            self.shortcutSheet = nil
             guard !self.isTerminating else { return }
             if let error = self.activateShortcut(ShortcutSettings.load()) {
                 self.pill?.showMessage(error)
@@ -631,8 +681,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self.registerGlobalShortcuts()
             self.refreshGlobeCheck()
         })
-        shortcutWindow = window
-        window.present()
+        shortcutSheet = sheet
+        settingsWindow.present()
+        if let parent = settingsWindow.topmostWindow { sheet.present(over: parent) } else { sheet.close() }
     }
 
     private func showSetup() {

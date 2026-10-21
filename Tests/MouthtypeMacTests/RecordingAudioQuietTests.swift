@@ -131,14 +131,14 @@ private enum OutputFailure: Error { case unavailable }
         #expect(!output.muted)
     }
 
-    @Test func preferenceIsOffByDefaultAndPersists() {
+    @Test func preferenceIsOnByDefaultAndExplicitOffPersists() {
         let name = "QuietAudioTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
-        #expect(!QuietAudioPreference.isEnabled(defaults))
-        QuietAudioPreference.set(true, in: defaults)
         #expect(QuietAudioPreference.isEnabled(defaults))
         QuietAudioPreference.set(false, in: defaults)
         #expect(!QuietAudioPreference.isEnabled(defaults))
+        QuietAudioPreference.set(true, in: defaults)
+        #expect(QuietAudioPreference.isEnabled(defaults))
     }
 }

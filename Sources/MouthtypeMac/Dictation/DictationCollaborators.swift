@@ -39,12 +39,17 @@ protocol DictationEngine: AnyObject, Sendable {
     func transcribe(samples: [Float]) async throws -> Transcription
     func preview(samples: [Float]) async throws -> String?
     func setVocabularyBias(_ bias: VocabularyBias?) async
+    /// `settleWithin` is how long a changed vocabulary may hold the call for the engine's model. Nil never waits.
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async
 }
 
 extension DictationEngine {
     func preview(samples: [Float]) async throws -> String? { nil }
     /// Engines without a recognition-time hook ignore the bias.
     func setVocabularyBias(_ bias: VocabularyBias?) async {}
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        await setVocabularyBias(bias)
+    }
 }
 
 /// Every write is async so a real store keeps its blocking database calls off the main actor.
@@ -83,7 +88,8 @@ extension DictationArchiving {
 protocol DictationInserting: AnyObject {
     func snapshotApplication() -> FocusSnapshot
     func snapshotFocus() -> FocusSnapshot
-    func websiteHost(for snapshot: FocusSnapshot) -> String?
+    /// See `FocusReading.websiteHostReader`. The returned closure blocks, so it is run off the main actor.
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)?
     func deliver(_ text: String, startFocus: FocusSnapshot?) async -> DeliveryResult
     /// A little text either side of the cursor for the cleanup pass, or nil when it can't be read.
     func insertionContext() -> InsertionContext?
@@ -97,7 +103,7 @@ protocol DictationInserting: AnyObject {
 
 extension DictationInserting {
     func snapshotApplication() -> FocusSnapshot { snapshotFocus() }
-    func websiteHost(for snapshot: FocusSnapshot) -> String? { nil }
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? { nil }
     func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void) {}
     func cancelVerification() {}
     func insertionContext() -> InsertionContext? { nil }
@@ -206,6 +212,11 @@ final class HostEngine: DictationEngine {
     func setVocabularyBias(_ bias: VocabularyBias?) async {
         guard let biasing = host.engine as? any VocabularyBiasing else { return }
         await biasing.setVocabularyBias(bias)
+    }
+
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        guard let biasing = host.engine as? any VocabularyBiasing else { return }
+        await biasing.setVocabularyBias(bias, settleWithin: settleWithin)
     }
 
     func preview(samples: [Float]) async throws -> String? {

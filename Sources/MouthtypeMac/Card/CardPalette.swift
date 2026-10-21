@@ -77,6 +77,22 @@ struct CardPalette {
     static let classicBody = NSColor(hex: 0xF1F0E6)
     static let onInk = NSColor(hex: 0x1D1D1F)
     static let classicWarn = NSColor(hex: 0xFF453A)
+    /// The app's v1-pass lime (`DesignPalette.NS.accent` and `onAccent`) for a card's one primary action. The card resolves its own
+    /// appearance, so these are fixed per appearance rather than the adaptive colours.
+    /// Minimal's lime takes dark ink, so hover and press lighten it (more contrast) where the other skins darken on press.
+    var primaryLightens = false
+
+    /// The primary button's fill for a state, as the button draws it.
+    func primaryFill(hovered: Bool, pressed: Bool) -> NSColor {
+        if primaryLightens {
+            return primaryFill.blended(withFraction: pressed ? 0.40 : hovered ? 0.25 : 0, of: .white) ?? primaryFill
+        }
+        return pressed ? primaryFill.blended(withFraction: 0.18, of: .black) ?? primaryFill
+            : hovered ? primaryFill.blended(withFraction: 0.5, of: .white) ?? primaryFill : primaryFill
+    }
+
+    static func lime(dark: Bool) -> NSColor { NSColor(hex: dark ? 0xA6CD52 : 0x76A11A) }
+    static func onLime(dark: Bool) -> NSColor { NSColor(hex: dark ? 0x1F1F21 : 0x1D1D1F) }
 
     func accent(for kind: DeliveryCard.Kind) -> NSColor {
         kind.isQuestion ? question : kind.isQuiet ? quiet : warn
@@ -128,17 +144,18 @@ struct CardPalette {
             let s = SquirclePalette.resolve(flavor, dark: dark)
             let tint = dark ? CardTint(color: .white, rest: 0.10, hover: 0.16, press: 0.24)
                 : CardTint(color: .black, rest: 0.07, hover: 0.12, press: 0.18)
-            let good = flavor == .minimal && !dark ? NSColor(hex: 0x315B54) : s.ink
             return CardPalette(
                 ink: s.text, body: dark ? classicBody : NSColor(hex: 0x2C2C2E), emphasis: s.text,
-                warn: s.error, quiet: good, question: s.ink,
-                primaryFill: flavor == .matrix ? amber : s.finishFill, primaryText: flavor == .matrix ? onInk : s.finishGlyph,
+                warn: s.error, quiet: s.ink, question: s.ink,
+                // Matrix keeps its amber. Minimal's one primary action is the app lime; everything else on it is ink or neutral.
+                primaryFill: flavor == .matrix ? amber : lime(dark: dark), primaryText: flavor == .matrix ? onInk : onLime(dark: dark),
                 secondary: tint, secondaryText: dark ? classicBody : onInk,
                 dismiss: tint, dismissGlyph: dark ? .white : onInk,
                 squircleControls: true, chips: false, showsDot: false,
                 bodyFill: nil, border: nil, shadowFill: .clear,
                 rowShade: dark ? NSColor.black.withAlphaComponent(0.25) : NSColor.black.withAlphaComponent(0.04),
-                rowRule: dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.08)
+                rowRule: dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.08),
+                primaryLightens: flavor == .minimal
             )
         }
     }

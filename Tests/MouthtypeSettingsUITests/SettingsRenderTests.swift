@@ -24,6 +24,14 @@ import MouthtypeCore
                 #expect(bitmap.pixelsWide >= 900 && bitmap.pixelsHigh >= 620)
                 try SettingsRender.save(bitmap, name: "settings-\(page.rawValue)-\(appearance)")
             }
+            model.setAdvancedOptions(true)
+            for page in SettingsModalPage.allCases {
+                model.modalPage = page
+                let bitmap = try SettingsRender.renderModal(model: model, actions: actions, dark: appearance == "dark")
+                #expect(bitmap.pixelsWide >= 760 && bitmap.pixelsHigh >= 540)
+                try SettingsRender.save(bitmap, name: "settings-modal-\(page.rawValue)-\(appearance)")
+            }
+            model.setAdvancedOptions(false)
         }
         #expect(controller.window?.isVisible == false)
     }
@@ -48,7 +56,7 @@ import MouthtypeCore
         let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state, updater: AppUpdater(driver: PreviewUpdateDriver(), activity: { .idle }))
         let controller = SettingsWindow(model: model, actions: actions, reduceTransparency: { true })
         model.setRecordingMode(.toggle)
-        for page in [SettingsPage.general, .writing, .appearance, .diagnostics] {
+        for page in [SettingsPage.home, .style, .appearance] {
             model.page = page
             let bitmap = try SettingsRender.render(model: model, actions: actions, dark: false,
                                                    size: SettingsTheme.minimumSize)

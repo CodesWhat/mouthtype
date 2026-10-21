@@ -1,22 +1,18 @@
 import AppKit
 import SwiftUI
 
-/// Brand colours and type for the Settings window. Brand green replaces the system blue for tint, toggles and selection.
+/// Colours and type for the Settings window. The lime accent replaces the system blue for tint, switches and selection.
 enum SettingsTheme {
-    static let lightControl = NSColor(srgbRed: 0x31 / 255, green: 0x5B / 255, blue: 0x54 / 255, alpha: 1)
-    static let darkControl = NSColor(srgbRed: 0x4F / 255, green: 0x8F / 255, blue: 0x82 / 255, alpha: 1)
-    static let darkSymbol = NSColor(srgbRed: 0x8F / 255, green: 0xC1 / 255, blue: 0xB5 / 255, alpha: 1)
+    static let lightControl = NSColor(srgbRed: 0x76 / 255, green: 0xA1 / 255, blue: 0x1A / 255, alpha: 1)
+    static let darkControl = NSColor(srgbRed: 0xA6 / 255, green: 0xCD / 255, blue: 0x52 / 255, alpha: 1)
 
-    /// Tint for toggles, buttons, pickers and selection: #315B54 in light, #4F8F82 in dark.
+    /// Tint for switches, buttons, pickers and selection: #76A11A in light, #A6CD52 in dark.
     static let controlNS = NSColor(name: nil) { $0.isDark ? darkControl : lightControl }
-    /// Tint for icons and glyphs: #315B54 in light, #8FC1B5 in dark.
-    static let symbolNS = NSColor(name: nil) { $0.isDark ? darkSymbol : lightControl }
     static let control = Color(nsColor: controlNS)
-    static let symbol = Color(nsColor: symbolNS)
 
     static let windowSize = NSSize(width: 900, height: 620)
     static let minimumSize = NSSize(width: 860, height: 600)
-    static let sidebarWidth: CGFloat = 210
+    static let sidebarWidth: CGFloat = 212
     static let headerHeight: CGFloat = 46
     static let rowMinHeight: CGFloat = 36
     static let rowLabelWidth: CGFloat = 220
@@ -124,14 +120,24 @@ struct SettingsGroup<Content: View>: View {
     }
 }
 
-/// The scrolling page body: groups stacked 12 pt apart under the header bar.
+/// Set false by `DesignPage`, which owns the scrolling, so a hosted `SettingsForm` page lays out in place instead of nesting a scroll view.
+extension EnvironmentValues {
+    @Entry var settingsFormScrolls = true
+}
+
+/// The scrolling page body: groups stacked 14 pt apart. Inside a `DesignPage` it only stacks, with no margins of its own.
 struct SettingsForm<Content: View>: View {
+    @Environment(\.settingsFormScrolls) private var scrolls
     @ViewBuilder var content: () -> Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) { content() }
-                .padding(.horizontal, 24).padding(.top, 6).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
+        if scrolls {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) { content() }
+                    .padding(.horizontal, 24).padding(.top, 6).padding(.bottom, 16).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        } else {
+            VStack(alignment: .leading, spacing: 14) { content() }.frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }

@@ -102,7 +102,7 @@ import MouthtypeCore
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = FileVocabulary(url: dir.appendingPathComponent("dictionary.json"))
         let editor = SpellingEditor(store: store)
-        editor.heard = "unsaved"
+        editor.heardInput = "unsaved"
         editor.written = "Draft"
         editor.previewImport(data: Data("name\nSean".utf8), fileName: "names.csv")
         #expect(editor.importPreview == nil && editor.isDirty && !editor.showingImport)
@@ -113,7 +113,7 @@ import MouthtypeCore
         editor.cancelImport()
         #expect(!editor.showingImport && editor.importPreview == nil && !editor.canImport)
         editor.previewImport(data: Data("name\nSean".utf8), fileName: "names.csv")
-        editor.heard = "new draft"
+        editor.heardInput = "new draft"
         editor.confirmImport()
         #expect(editor.isDirty && !editor.canImport)
         #expect(try store.allRules().isEmpty)

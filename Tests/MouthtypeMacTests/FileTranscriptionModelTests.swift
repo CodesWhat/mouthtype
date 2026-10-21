@@ -101,4 +101,32 @@ private struct ImportEngine: Transcriber {
         #expect(try Data(contentsOf: source) == Data("unchanged".utf8))
     }
 
+    @Test func failedImportKeepsThePreviousResultAndNamesTheFileThatFailed() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let good = root.appendingPathComponent("good.wav"), bad = root.appendingPathComponent("bad.wav")
+        try Data(count: 2048).write(to: good)
+        try Data(count: 10).write(to: bad)
+        let model = FileTranscriptionModel(makeJob: { AudioFileTranscription(decoder: FlakyDecoder(), engine: ImportEngine(gate: nil)) }, copy: { _ in })
+        model.start(good)
+        await settled(model)
+        #expect(model.state == .finished && model.fileSize == 2048 && model.duration == 1)
+        let kept = model.text
+        model.start(bad)
+        await settled(model)
+        #expect(model.state == .failed && model.text == kept && model.filename == "good.wav")
+        #expect(model.failedFilename == "bad.wav" && model.fileSize == 2048 && model.errorMessage == AudioFileError.invalidAudio.errorDescription)
+        #expect(model.wordCount == TextMetrics.wordCount(kept))
+        model.start(good)
+        await settled(model)
+        #expect(model.state == .finished && model.failedFilename == nil)
+    }
+}
+
+private struct FlakyDecoder: AudioFileDecoding {
+    func decode(_ url: URL, limits: AudioFileLimits) async throws -> DecodedAudioFile {
+        if url.lastPathComponent == "bad.wav" { throw AudioFileError.invalidAudio }
+        return DecodedAudioFile(samples: [0.1, 0.2], durationSeconds: 1)
+    }
 }

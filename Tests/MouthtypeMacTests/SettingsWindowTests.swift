@@ -29,17 +29,26 @@ import MouthtypeCore
         var changes: [Bool] = []
         let model = SettingsModel(defaults: defaults, onQuietOtherAudioChanged: { changes.append($0) })
         let sounds = model.sounds
-        #expect(!model.quietOtherAudio)
-        model.setQuietOtherAudio(true)
         #expect(model.quietOtherAudio)
-        #expect(QuietAudioPreference.isEnabled(defaults))
         model.setQuietOtherAudio(false)
+        #expect(!model.quietOtherAudio)
         #expect(!QuietAudioPreference.isEnabled(defaults))
-        QuietAudioPreference.set(true, in: defaults)
+        model.setQuietOtherAudio(true)
+        #expect(QuietAudioPreference.isEnabled(defaults))
+        QuietAudioPreference.set(false, in: defaults)
         model.refresh()
-        #expect(model.quietOtherAudio)
+        #expect(!model.quietOtherAudio)
         #expect(model.sounds == sounds)
-        #expect(changes == [true, false])
+        #expect(changes == [false, true])
+    }
+
+    @Test func explicitOffIsKeptAndUnsetIsOn() {
+        let name = "SettingsQuietUnsetTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        #expect(SettingsModel(defaults: defaults).quietOtherAudio)
+        defaults.set(false, forKey: QuietAudioPreference.key)
+        #expect(!SettingsModel(defaults: defaults).quietOtherAudio)
     }
 
     @Test func cleanupEditsPersistWithoutChangingOtherPreferences() {
@@ -148,7 +157,8 @@ import MouthtypeCore
         #expect(try AppCleanupStyles.load(defaults).entries.count == 2)
         model.removeAppStyle(bundleID: "com.apple.MobileSMS")
         #expect(model.appStyles.entries.map(\.appName) == ["Slack"])
-        #expect(model.appStyles.resolve(bundleID: "com.apple.MobileSMS", fallback: .formal) == .formal)
+        #expect(model.appStyles.resolve(bundleID: "com.apple.MobileSMS", fallback: .formal) == StylePreset.casual.options)
+        #expect(model.appStyles.resolve(bundleID: "org.example.Unlisted", fallback: .formal) == .formal)
     }
 
     @Test func malformedAppStylesCannotBeOverwrittenFromSettings() {

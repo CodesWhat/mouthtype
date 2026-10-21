@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import Testing
 import MouthtypeCore
@@ -30,6 +31,7 @@ private final class FakeCapture: DictationCapturing {
     var keyDownAtNanos: UInt64?
     var onInterrupted: (@MainActor () -> Void)?
     var duringStart: (@MainActor () async -> Void)?
+    var duringStop: (@MainActor () async -> Void)?
     /// How many samples of the recording in progress `partialSamples` can hand over.
     var available = 0
 
@@ -59,6 +61,7 @@ private final class FakeCapture: DictationCapturing {
 
     func stop() async throws -> CapturedAudio {
         log.add("capture.stop")
+        await duringStop?()
         if let stopError { throw stopError }
         return audios.isEmpty ? audio : audios.removeFirst()
     }
@@ -147,6 +150,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     private let lock = NSLock()
     var failing: Set<String> = []
     var duringBegin: (@MainActor @Sendable () async -> Void)?
+    var duringLock: (@MainActor @Sendable () async -> Void)?
     private(set) var start: DictationStart?
     private(set) var capture: CaptureRecord?
     private(set) var transcription: TranscriptionRecord?
@@ -181,6 +185,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     }
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
         try run("recordLock") { handsFreeLock = (mode, trigger) }
+        await duringLock?()
     }
     func reopen(_ id: String) async throws { try run("reopen") { reopens += 1 } }
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try run("appendEdits") { self.edits += edits } }
@@ -228,7 +233,12 @@ private final class FakeInserter: DictationInserting {
     var startFocusSeen: FocusSnapshot?
     var focus = FocusSnapshot(pid: 7, bundleID: "com.apple.Notes", appName: "Notes", role: "AXTextArea")
     var website: String?
-    func websiteHost(for snapshot: FocusSnapshot) -> String? { log.add("inserter.website"); return website }
+    /// When set, the fake page-URL read blocks on it, to stand in for a hung browser. The test signals it to let the read finish.
+    var websiteGate: DispatchSemaphore?
+    func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
+        let value = website, gate = websiteGate, log = log
+        return { log.add("inserter.website"); _ = gate?.wait(timeout: .now() + 30); return value }
+    }
     var context: InsertionContext?
     var clipboard: String?
     private(set) var contextReads = 0
@@ -637,6 +647,53 @@ private struct Rig {
         let plain = Rig()
         await plain.dictate()
         #expect(!plain.log.contains("inserter.website"))
+    }
+
+    @Test func aSlowPageURLReadFallsBackToTheAppRuleAndNeverLeaksIntoTheNextTake() async throws {
+        var styles = AppCleanupStyles()
+        try styles.setWebsite(domain: "slack.com", style: StylePreset.casual.options)
+        try styles.set(bundleID: "com.google.Chrome", appName: "Chrome", style: StylePreset.veryCasual.options)
+        let configured = styles
+        let rig = Rig(appStyles: { configured })
+        rig.controller.websiteBudget = 0.05
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "work.slack.com"
+        let gate = DispatchSemaphore(value: 0)
+        rig.inserter.websiteGate = gate
+        rig.engine.result.text = "See Maya Friday."
+        await rig.dictate()
+        // The hung read is abandoned at its budget and the app rule answers.
+        #expect(rig.store.insertion?.cleanup?.style == "veryCasual")
+        gate.signal()
+
+        // A later take with a fast read gets its own site, not the abandoned read's.
+        rig.inserter.websiteGate = nil
+        rig.controller.websiteBudget = 5
+        rig.inserter.website = "work.slack.com"
+        await rig.dictate()
+        #expect(rig.store.insertion?.cleanup?.style == "casual")
+    }
+
+    @Test func contextWebsitesApplyWithoutAnyLegacyWebsiteRule() async throws {
+        let builtIn = AppCleanupStyles()
+        let rig = Rig(appStyles: { builtIn })
+        rig.inserter.focus.bundleID = "com.google.Chrome"
+        rig.inserter.website = "www.linkedin.com"
+        rig.engine.result.text = "See Maya Friday."
+        await rig.dictate()
+        #expect(rig.log.contains("inserter.website"))
+        #expect(rig.store.insertion?.cleanup?.style == "casual")
+
+        var added = AppCleanupStyles()
+        added.contexts.addSite(.personal, domain: "example.org")
+        added.contexts.setTone(.personal, .veryCasual)
+        let configured = added
+        let custom = Rig(appStyles: { configured })
+        custom.inserter.focus.bundleID = "com.google.Chrome"
+        custom.inserter.website = "example.org"
+        custom.engine.result.text = "See Maya Friday."
+        await custom.dictate()
+        #expect(custom.store.insertion?.cleanup?.style == "veryCasual")
     }
 
     @Test func unknownAppUsesGlobalToneAndOffStillBypassesTone() async throws {
@@ -1794,6 +1851,343 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.lockEnded.count == 1)
     }
 
+    // MARK: Automation
+
+    @Test func automationStartLocksHandsFree() async {
+        let rig = Rig()
+        await rig.controller.startHandsFree()
+        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree)
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
+    }
+
+    @Test func twoAutomationStartsBeginOneSession() async {
+        let rig = Rig()
+        // A recording just stopped, so the next press waits on the capture's stop. That wait is the window two URLs race in.
+        await rig.lockIn()
+        rig.capture.duringStop = { await rig.settle() }
+        rig.controller.stopHandsFree()
+        let before = rig.log.all.filter { $0 == "capture.start" }.count
+        async let first: Void = rig.controller.startHandsFree()
+        async let second: Void = rig.controller.startHandsFree()
+        _ = await (first, second)
+        await rig.settle()
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == before + 1)
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+    }
+
+    @Test func aNoticeNeverTakesALiveRecordingsPill() async {
+        let hands = Rig()
+        await hands.lockIn()
+        hands.controller.showNotice(PillMessage("Copied"))
+        #expect(hands.pill.messages.isEmpty && hands.pill.notices == ["Copied"])
+        #expect(!hands.log.contains("pill.hide") && hands.controller.phase == .recording)
+
+        let held = Rig()
+        await held.controller.handle(.pressed(at: keyDown))
+        held.controller.showNotice(PillMessage("Automation is off"))
+        #expect(held.pill.messages.isEmpty && held.pill.notices.isEmpty)
+
+        let idle = Rig()
+        idle.controller.showNotice(PillMessage("Copied"))
+        #expect(idle.pill.messages.map(\.headline) == ["Copied"])
+    }
+
+    @Test(arguments: [true, false])
+    func aNoticeAfterTheCaptureIsLiveKeepsTheRecordingPillWhileHistoryStarts(handsFree: Bool) async {
+        let rig = Rig()
+        let gate = StartGate()
+        let reached = StartGate()
+        rig.store.duringBegin = {
+            reached.open()
+            await gate.wait()
+        }
+        let start = Task { @MainActor in
+            if handsFree { await rig.controller.startHandsFree() } else { await rig.controller.handle(.pressed(at: keyDown)) }
+        }
+        await reached.wait()
+        // Capture is running and the recording pill is up; only the history row is still pending.
+        #expect(rig.log.contains("pill.recording"))
+        rig.controller.showNotice(PillMessage("Automation is off"))
+        #expect(rig.pill.messages.isEmpty && rig.pill.notices.isEmpty)
+        #expect(!rig.log.contains("pill.hide"))
+        gate.open()
+        await start.value
+        await rig.settle()
+        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree == handsFree)
+        #expect(rig.pill.messages.isEmpty)
+    }
+
+    @Test func aStopQueuedBehindAStartingRecordingStopsIt() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        rig.controller.enqueueAutomation(.start)
+        rig.controller.enqueueAutomation(.stop)
+        await rig.settle()
+        // The capture is still coming up, so the stop has not run and has not been dropped.
+        #expect(rig.controller.phase == .recording && !rig.controller.isHandsFree)
+        gate.open()
+        await rig.controller.automationTail?.value
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.log.contains("capture.stop"))
+    }
+
+    @Test func aCancelQueuedBehindAStartingRecordingCancelsIt() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        rig.controller.enqueueAutomation(.start)
+        rig.controller.enqueueAutomation(.cancel)
+        await rig.settle()
+        gate.open()
+        await rig.controller.automationTail?.value
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.inserter.delivered.isEmpty)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func aStartDroppedForAnInFlightStartShowsANotice() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        rig.controller.enqueueAutomation(.start)
+        await rig.settle()
+        #expect(rig.controller.isStartReserved)
+        await rig.controller.startHandsFree()
+        #expect(rig.pill.messages.map(\.headline) == ["Already starting"])
+        #expect(rig.log.all.filter { $0 == "capture.start" }.count == 1)
+        gate.open()
+        await rig.controller.automationTail?.value
+
+        // A start that finds a finished recording is still silent.
+        await rig.controller.startHandsFree()
+        #expect(rig.pill.messages.map(\.headline) == ["Already starting"])
+    }
+
+    @Test(.timeLimit(.minutes(1)), arguments: [DictationAutomationStep.stop, .cancel])
+    func aStopQueuedBehindAHungStartEndsTheCaptureOnceTheStartComesUp(step: DictationAutomationStep) async {
+        let rig = Rig()
+        let hung = StartGate()
+        let limit = StartGate()
+        rig.capture.duringStart = { await hung.wait() }
+        rig.controller.automationWaitLimit = { await limit.wait() }
+        rig.controller.enqueueAutomation(.start)
+        let startTask = rig.controller.automationTail
+        rig.controller.enqueueAutomation(step)
+        let endTask = rig.controller.automationTail
+        await rig.settle()
+        // Still waiting: the limit has not fired and the start has not returned.
+        var endRan = false
+        let watcher = Task { @MainActor in await endTask?.value; endRan = true }
+        await rig.settle()
+        #expect(!endRan)
+        limit.open()
+        await watcher.value
+        #expect(endRan)
+        // The start is still hung; letting it go must end the capture rather than lock it on.
+        #expect(rig.controller.isStartReserved)
+        hung.open()
+        await startTask?.value
+        await rig.controller.waitForProcessing()
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
+        if step == .stop {
+            #expect(rig.inserter.delivered == ["Hello world."])
+            #expect(rig.log.contains("capture.stop"))
+        } else {
+            #expect(rig.store.finishes.map(\.0) == [.cancelled])
+            #expect(rig.inserter.delivered.isEmpty)
+        }
+    }
+
+    @Test(.timeLimit(.minutes(1)), arguments: [true, false])
+    func aCancelOnAHungStartWinsWhicheverOrderTheEndsArrive(cancelFirst: Bool) async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        let start = Task { @MainActor in await rig.controller.startHandsFree() }
+        await rig.settle()
+        if cancelFirst {
+            await rig.controller.cancelHandsFree()
+            rig.controller.stopHandsFree()
+        } else {
+            rig.controller.stopHandsFree()
+            await rig.controller.cancelHandsFree()
+        }
+        #expect(rig.controller.pendingAutomationEnd == .cancel)
+        gate.open()
+        await start.value
+        await rig.controller.waitForProcessing()
+        #expect(rig.store.finishes.map(\.0) == [.cancelled])
+        #expect(rig.inserter.delivered.isEmpty)
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
+    }
+
+    @Test(.timeLimit(.minutes(1)))
+    func aSlowEarlierStartCannotClearALaterStartsPendingStop() async {
+        let rig = Rig()
+        let lockGate = StartGate()
+        let limit = StartGate()
+        let startB = StartGate()
+        var locks = 0
+        rig.store.duringLock = { locks += 1; if locks == 1 { await lockGate.wait() } }
+        rig.controller.automationWaitLimit = { await limit.wait() }
+        // A comes up hands-free, then suspends writing its lock.
+        rig.controller.enqueueAutomation(.start)
+        while locks == 0 { await Task.yield() }
+        #expect(rig.controller.isHandsFree && !rig.controller.automationStartPending)
+        // Stop A and start B go through once the wait limit fires, and B hangs coming up.
+        rig.capture.duringStart = { await startB.wait() }
+        rig.controller.enqueueAutomation(.stop)
+        rig.controller.enqueueAutomation(.start)
+        limit.open()
+        await rig.settle()
+        #expect(rig.controller.automationStartPending)
+        // A's lock write finishes while B is pending, which used to wipe B's flags.
+        lockGate.open()
+        await rig.settle()
+        #expect(rig.controller.automationStartPending)
+        rig.controller.enqueueAutomation(.stop)
+        let stopB = rig.controller.automationTail
+        await rig.settle()
+        #expect(rig.controller.pendingAutomationEnd == .stop)
+        startB.open()
+        await stopB?.value
+        await rig.controller.waitForProcessing()
+        while rig.controller.phase != .idle { await Task.yield() }
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+        #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
+        #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 2)
+    }
+
+    @Test func aFailedAutomationStartDropsAStopThatReachedIt() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.capture.duringStart = { await gate.wait() }
+        rig.capture.startError = CaptureError.noInputDevice
+        let start = Task { @MainActor in await rig.controller.startHandsFree() }
+        await rig.settle()
+        rig.controller.stopHandsFree()
+        #expect(rig.controller.pendingAutomationEnd == .stop)
+        gate.open()
+        await start.value
+        #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
+    }
+
+    @Test func aURLStartAndAKeyPressDuringACaptureStopBeginOneSession() async {
+        for urlFirst in [true, false] {
+            let rig = Rig()
+            let gate = StartGate()
+            await rig.lockIn()
+            rig.capture.duringStop = { await gate.wait() }
+            rig.controller.stopHandsFree()
+            let before = rig.log.all.filter { $0 == "capture.start" }.count
+            var tasks: [Task<Void, Never>] = []
+            let url: @MainActor () -> Void = { tasks.append(Task { @MainActor in await rig.controller.startHandsFree() }) }
+            let key: @MainActor () -> Void = { tasks.append(Task { @MainActor in await rig.controller.handle(.pressed(at: keyDown + 1)) }) }
+            if urlFirst { url(); key() } else { key(); url() }
+            await rig.settle()
+            gate.open()
+            for task in tasks { await task.value }
+            await rig.settle()
+            #expect(rig.log.all.filter { $0 == "capture.start" }.count == before + 1)
+        }
+    }
+
+    @Test func aQuickFnTapDuringAURLStartCannotDiscardTheRecordingAndTheNextTapStopsIt() async {
+        let rig = Rig()
+        let gate = StartGate()
+        let service = HotkeyService(options: .init(source: .fnFlag, configuration: .init(recordingMode: .hold)), otherKeysHeld: { _ in false })
+        defer { service.stop() }
+        rig.controller.onAutomationLock = { service.adoptLockedRecording() }
+        let consumer = Task { @MainActor in await rig.controller.consume(service.events) }
+        defer { consumer.cancel() }
+        let fn = CGEventFlags.maskSecondaryFn.rawValue
+        rig.capture.duringStart = { await gate.wait() }
+
+        let url = Task { @MainActor in await rig.controller.startHandsFree() }
+        await rig.settle()
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: fn, timestamp: 1_000_000))
+        await rig.settle()
+        gate.open()
+        await url.value
+        await rig.settle()
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+
+        // The release lands inside the minimum hold, which used to read as a discard.
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: 0, timestamp: 20_000_000))
+        await rig.settle()
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+        #expect(rig.store.finishes.isEmpty)
+
+        service.process(.init(kind: .flagsChanged, keyCode: 63, flags: fn, timestamp: 900_000_000))
+        await rig.until { rig.controller.phase != .recording }
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+    }
+
+    @Test func aDiscardNeverEndsAHandsFreeRecording() async {
+        let rig = Rig()
+        await rig.lockIn()
+        await rig.controller.handle(.discarded(reason: .tooShort))
+        #expect(rig.controller.phase == .recording && rig.controller.isHandsFree)
+        #expect(rig.store.finishes.isEmpty)
+    }
+
+    @Test func anAutomationStartTellsTheHotkeySideButAKeyLockDoesNot() async {
+        let rig = Rig()
+        let told = Rig.Counter()
+        rig.controller.onAutomationLock = { told.count += 1 }
+        await rig.lockIn()
+        #expect(told.count == 0)
+        await rig.controller.cancelHandsFree()
+
+        await rig.controller.startHandsFree()
+        #expect(told.count == 1 && rig.controller.isHandsFree)
+    }
+
+    @Test func automationStartIsRefusedWhenBusyLoadingOrFailed() async {
+        let busy = Rig()
+        busy.controller.canStartRecording = { false }
+        await busy.controller.startHandsFree()
+        #expect(busy.controller.phase == .idle && !busy.log.contains("capture.start"))
+        #expect(busy.pill.messages.map(\.headline) == ["Mouthtype is busy"])
+
+        let loading = Rig()
+        loading.engine.readiness = .loading
+        await loading.controller.startHandsFree()
+        #expect(loading.controller.phase == .idle && !loading.log.contains("capture.start"))
+
+        let failed = Rig()
+        failed.engine.readiness = .failed
+        await failed.controller.startHandsFree()
+        #expect(failed.controller.phase == .idle && !failed.log.contains("capture.start"))
+    }
+
+    @Test func automationToggleStopsAHandsFreeRecordingAndStartsWhenIdle() async {
+        let rig = Rig()
+        await rig.controller.toggleHandsFree()
+        #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
+        await rig.controller.toggleHandsFree()
+        await rig.controller.waitForProcessing()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
+    }
+
+    @Test func automationStartAndToggleLeaveAHeldKeyRecordingAlone() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        let before = rig.log.all
+        await rig.controller.startHandsFree()
+        await rig.controller.toggleHandsFree()
+        #expect(rig.log.all == before)
+        #expect(rig.controller.phase == .recording && !rig.controller.isHandsFree)
+    }
+
     @Test func menuStopAndCancelActLikeTheKeyAndEscape() async {
         let stopped = Rig()
         await stopped.lockIn()
@@ -1896,6 +2290,24 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(controller.phase == .recording && controller.isHandsFree)
         #expect(store.finishes.map(\.0) == [.tooShort])
         #expect(store.handsFreeLock?.1 == .doubleTap)
+    }
+}
+
+/// Holds a fake capture's start or stop until the test lets it go, so the ordering under test is fixed, not timed.
+@MainActor
+private final class StartGate {
+    private var continuation: CheckedContinuation<Void, Never>?
+    private var isOpen = false
+
+    func wait() async {
+        if isOpen { return }
+        await withCheckedContinuation { continuation = $0 }
+    }
+
+    func open() {
+        isOpen = true
+        continuation?.resume()
+        continuation = nil
     }
 }
 

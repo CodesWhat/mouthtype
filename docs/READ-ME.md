@@ -1,4 +1,4 @@
-# Mouthtype 0.3.0
+# Mouthtype 0.4.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac. Fresh installation, Bluetooth and USB microphones and VoiceOver weren't verified on a device for this release; see the known limits.
 
@@ -13,11 +13,21 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository remains private.
 
+## What changed in 0.4.0
+
+Mouthtype is now one redesigned window with a new palette and SF Symbols in the sidebar: Home, Stats, Dictionary, Transforms, Style, Appearance and a Settings modal. Saved spellings and Phrases are now pages in the Mouthtype window instead of separate windows, and the shortcut recorder is a sheet on it. Set Up Mouthtype and Transcribe Audio File keep their own windows, since the menu bar opens them when no Mouthtype window is up. Leaving a page or closing the window with an unsaved draft still asks first.
+
+Transform Selection in the menu bar cleans up a selection or runs Fix grammar, Make shorter, More formal or More casual on the Thorough model. A preview panel shows the original and an editable result; choose Accept, Copy result, Retry or Cancel. Accept replaces the text only if the app, field and selection are the same. The Transforms page lists your phrases and these transforms, and Transcribe Audio File opens in its own window.
+
+mouthtype:// URLs and a mouthtype command-line script can start, stop, toggle, cancel, copy-last and paste-last, and open a page. Those dictation commands are off until you turn on the automation switch. With Boost my saved words on, an optional setting adds code names from VS Code, Cursor, Xcode and Terminal for one take. Quiet other audio is on by default, and stays off if you turned it off before.
+
+Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release.
+
 ## What changed in 0.3.0
 
 Open Mouthtype from the menu to a new Home page with your last 50 takes, newest first. Each take has Copy and Recover. Recover works for any take whose audio is still saved, and it offers the text again without changing the history entry. Home updates as you dictate.
 
-Home also shows your stats: words today, this week and all time, a 14-day chart, average and best speed, current and longest streak, biggest day, longest take, and time saved compared with typing at 40 WPM. Records show your fastest speed, biggest day, longest streak and longest take, each with its date. Everything is worked out on your Mac from your own history, and takes from secure fields are never counted.
+Home also shows your stats: words today, this week and all time, a 30-day view, average and best speed, current and longest streak, biggest day, longest take, and time saved compared with typing at 40 WPM. High scores on the same page show your fastest speed, biggest day, longest streak and longest take, each with its date. Everything is worked out on your Mac from your own history, and takes from secure fields are never counted.
 
 Saved spellings now suggest spellings from your recent takes: names it keeps mishearing, brand names that come out lowercase, and words that get split apart, each with examples. Add, Remove or Dismiss a suggestion, and Undo right after. It also flags saved heard forms that rewrite everyday words.
 
@@ -27,7 +37,7 @@ Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verifie
 
 ## What changed in 0.2.0
 
-Transform Selected Text rewrites a selection with Fix grammar, Make shorter, Make more formal or Make more casual on the Thorough model. You get an editable preview with Accept, Retry and Cancel. Accept replaces the text only if the original app, field and selection still match, and Cmd-Z or Copy original gets the old text back.
+The Fix grammar, Make shorter, More formal and More casual chips in the Transform Selection panel rewrite a selection on the Thorough model. You get an editable result with Accept, Retry and Cancel. Accept replaces the text only if the original app, field and selection still match, and Cmd-Z or Copy original gets the old text back.
 
 Boost my saved words while recognising is off by default. It favours your saved spellings during recognition. First use downloads an English speech model of about 100 MB, and dictation never waits for it.
 
@@ -67,25 +77,25 @@ Synthetic recognition checks cover clean/noisy speech and a repeated 19-minute c
 
 Open **Settings… → General** to change the dictation shortcut, recording behavior, cleanup model, sounds and launch at login. **Hold to talk** remains the default. Choose **Press to toggle** to press your shortcut once to start recording, release it while speaking, then press it again to stop and insert. Changing behavior cancels an active recording.
 
-Choose System Default, a named microphone or an opt-in Priority list in General. The priority list chooses the first connected listed input at the start of a take; System Default fallback is a separate choice. Fixed microphone choices keep their unavailable-input behavior. Mouthtype remembers the chosen device and reports when it is missing. It does not change the Mac’s system input. A change applies to the next take. Quiet other audio is an optional, default-off control for supported output devices. It restores only output changes Mouthtype owns; hardware behavior still needs tester feedback.
+Choose System Default, a named microphone or an opt-in Priority list in General. The priority list chooses the first connected listed input at the start of a take; System Default fallback is a separate choice. Fixed microphone choices keep their unavailable-input behavior. Mouthtype remembers the chosen device and reports when it is missing. It does not change the Mac’s system input. A change applies to the next take. Quiet other audio is a control, on by default from 0.4.0 and still off for anyone who turned it off, for supported output devices. It restores only output changes Mouthtype owns; hardware behavior still needs tester feedback.
 
 **Live words** in General is optional and off by default. It shows provisional words above the pill. The finished take still goes through full transcription and inserts once. Preview work is bounded to an eight-second audio window; that is not a wall-clock deadline. Final transcription waits for any already-running preview model work to finish.
 
-The shortcut recorder accepts a key or modifier combination. Click Change, press the shortcut, release all keys, then Save. Cancel keeps the previous shortcut; Use Fn / Globe restores the default. Your shortcut is reserved for Mouthtype while it runs, including a bare letter. A shortcut matching Paste Last or Copy Last takes precedence over that action.
+The shortcut recorder accepts a key or modifier combination. Click Change, which opens a sheet on the Mouthtype window, press the shortcut, release all keys, then Save. Cancel or Escape keeps the previous shortcut; Use Fn / Globe restores the default. Your shortcut is reserved for Mouthtype while it runs, including a bare letter. A shortcut matching Paste Last Take or Copy Last Take takes precedence over that action.
 
-In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. Fn+Space also locks the default Fn shortcut. Escape cancels and offers Undo for five seconds. If Escape itself is your dictation shortcut, use the menu’s Cancel action. Caps Lock uses press-to-start/press-to-stop even in Hold mode; its system Caps Lock state may also change. Some system-reserved/media keys may be handled by macOS first. Control+Command+V pastes the last delivered take, and Control+Command+C copies it.
+In Hold mode, double-tap the shortcut for hands-free recording; tap it to stop. Fn+Space also locks the default Fn shortcut. Escape cancels and offers Undo for five seconds. If Escape itself is your dictation shortcut, use the menu’s Cancel action. Caps Lock uses press-to-start/press-to-stop even in Hold mode; its system Caps Lock state may also change. Some system-reserved/media keys may be handled by macOS first. Paste Last Take (Control+Command+V) pastes the last delivered take, and Copy Last Take (Control+Command+C) copies it.
 
-**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app and website rules that set tone, cleanup level or both. Website domains include subdomains; the most specific domain wins before the app rule and the default when the browser exposes its document URL. Missing URL support falls back, and URLs are not retained. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Formal removes swear words used as exclamations or emphasis at Basic, Fast and Thorough (Off bypasses cleanup), and Thorough also swaps a swear noun for a plain word, while Basic and Fast only remove exclamations and emphasis; tone does not otherwise authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Diagnostics** holds model, permission, input and advanced controls. Recent takes are collapsed in the menu rather than filling the daily dropdown.
+**Writing** includes cleanup level, global tone, saved spellings, phrases and optional per-app and website rules that set tone, cleanup level or both. Website domains include subdomains; the most specific domain wins before the app rule and the default when the browser exposes its document URL. Missing URL support falls back, and URLs are not retained. Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. Rules start empty and fall back to the global tone. Formal removes swear words used as exclamations or emphasis at Basic, Fast and Thorough (Off bypasses cleanup), and Thorough also swaps a swear noun for a plain word, while Basic and Fast only remove exclamations and emphasis; tone does not otherwise authorize paraphrasing. **Appearance** includes Classic/Hi-Fi, Hi-Fi sizing and fonts. Default stays simple; Override individual fonts reveals independent Heading, Body and Readout choices. **Settings > Health** holds model, permission and input status, and **Settings > Advanced** holds the set-once options. Recent Takes is collapsed in the menu rather than filling the daily dropdown. The menu is plain text, with no pill style, font, cleanup or login-item controls; those live in the Mouthtype window.
 
 ## Clean selected text
 
-Select text in an accessible editable field, then choose **Clean Selected Text…**. Review or edit the deterministic Basic preview, then explicitly choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. Unsupported or changed selections keep **Copy result** available. Password fields are excluded. There is no AI rewrite, automatic paste or retry. Check the original field after Accept. See [writing tools](https://mouthtype.app/docs/#cleanup) for browser, device and selection limits.
+Select text in an accessible editable field, then choose **Transform Selection**, then **Clean up** (it uses the tone that applies to the app you're in) or one of the AI transforms. The panel names the app the text came from, strikes through removed words in the original and highlights what changed in the result, which you can edit. Choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. If they don't, the panel says so, disables Accept and makes **Copy result** the main button. Password fields are excluded. The chips switch transforms inside the panel. There is no automatic paste. **Edit Transforms…** opens the Transforms page. Saved phrases are no longer in this menu; they're inserted by voice. Check the original field after Accept. See [writing tools](https://mouthtype.app/docs/#cleanup) for browser, device and selection limits.
 
 ## Transcribe an audio file
 
-Choose **Transcribe Audio File…** in the menu, then select one WAV, AIFF or M4A file up to 10 minutes and 512 MB. Mouthtype uses the speech model already loaded on your Mac. Your original file stays unchanged.
+Choose **Transcribe Audio File…** in the menu (it opens the Transcribe Audio File window, and Home has a button for it too), then select one WAV, AIFF or M4A file up to 10 minutes and 512 MB. Mouthtype uses the speech model already loaded on your Mac. Your original file stays unchanged.
 
-Preparing and Transcribing show actual work stages. Cancel, or close the window, to cancel the import. Cancellation may wait for the current recognition operation to return. The full raw result is selectable: explicitly use **Copy** or **Save Text…** to export UTF-8 text. Saving over the original audio is refused.
+Preparing and Transcribing show actual work stages. Cancel, or close the Mouthtype window, to cancel the import. Switching to another page keeps it running. Cancellation may wait for the current recognition operation to return. The full raw result is selectable: explicitly use **Copy** or **Save Text…** to export UTF-8 text. Saving over the original audio is refused.
 
 Imports do not apply cleanup, saved spellings or phrases, paste automatically, or change dictation history/statistics. Finish any dictation or recovery before importing; new recording, recovery and update installation wait while the import or its cancellation settles.
 
@@ -93,13 +103,13 @@ Imports do not apply cleanup, saved spellings or phrases, paste automatically, o
 
 Alpha.1 through alpha.3 do not contain an updater. Download the current Mac release once from the website and replace the old app to get it.
 
-Use **Check for Updates…** in Mouthtype’s menu to check manually. Automatic update checks are on by default without a prompt; you can turn them off in General. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
+Use **Check for Updates…** in Mouthtype’s menu to check manually. Automatic update checks are on by default without a prompt; you can turn them off in Settings > Mac. Update checks and update downloads use HTTPS. They do not include your transcripts or recordings, and anonymous system profiling is disabled.
 
 Available updates show a notification and release notes. Choose installation in the app. Updates use signed archives, a signed feed and Developer ID signatures. Installation waits while dictation, recovery or file transcription is active. Automatic silent installation is disabled. Do not remove your data folder when upgrading.
 
 ## Current release-candidate evidence
 
-The built-in output passed ten actual quiet/restore cycles after reproducing the delayed mute-notification failure. Separate native checks preserved an observed unmute/remute and a volume adjustment. The tests restored their owned output baseline. Optional quieting remains off by default; this does not certify other output devices.
+The built-in output passed ten actual quiet/restore cycles after reproducing the delayed mute-notification failure. Separate native checks preserved an observed unmute/remute and a volume adjustment. The tests restored their owned output baseline. Quieting is on by default; this does not certify other output devices.
 
 Private native pasteboard checks preserve rich/multiple items through a promise read and restoration, and retain a newer copy during shutdown. They emit no keyboard events and never use the general clipboard. A disposable copy of existing saved data opens through the production store with unchanged schema and value digests; a WAL fixture verifies committed rows are included. These checks do not establish fresh-install permissions or normal updater installation/relaunch.
 
@@ -134,7 +144,7 @@ Synthetic audio, process/IPC, real headless Wayland components and remote speech
 
 ## Local data and removal
 
-History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely. In **Settings → General → Saved audio**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch to completed Mouthtype recordings only; unfinished recordings and recovery audio are exempt. Text and timings stay. No age limit still has a size limit. Removed audio cannot be restored. See [saved audio](https://mouthtype.app/docs/#local-data). The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it. Quit Mouthtype before removing the app. Delete the data folder only if you intend to erase it.
+History, dictionary, settings and recordings stay on your Mac. Text history is retained indefinitely. In **Settings > Advanced > Storage**, choose 14, 30 or 90 days, or No age limit, plus a 2 GB or 10 GB limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch to completed Mouthtype recordings only; unfinished recordings and recovery audio are exempt. Text and timings stay. No age limit still has a size limit. Removed audio cannot be restored. See [saved audio](https://mouthtype.app/docs/#local-data). The data directory is `~/Library/Application Support/Mouthtype`. Uninstalling the app does not remove it. Quit Mouthtype before removing the app. Delete the data folder only if you intend to erase it.
 
 ## Report a problem
 

@@ -1,55 +1,68 @@
 import MouthtypeCore
 import SwiftUI
 
-/// Suggestions at the top of Saved spellings. One short line when there is nothing to offer.
+/// Suggestions at the top of the Dictionary page: one card of rows, then a collapsed Maybe row for the weaker guesses.
+/// One short note when there is nothing to offer.
 struct SpellingSuggestionsSection: View {
     var model: SpellingSuggestionsModel
     var editor: SpellingEditor
     /// Opens the first row's examples. Previews use it; the app starts with every row collapsed.
     var expandFirst = false
+    @State private var showMaybe = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if model.suggestions.isEmpty {
-                Text("No suggestions yet. Mouthtype looks at your recent takes for names it keeps mishearing.")
-                    .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier("spelling-suggestions-empty")
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
-                        heading("SUGGESTIONS", count: model.confident.count)
-                        ForEach(model.confident) { row($0, expanded: expandFirst && $0.id == model.confident.first?.id) }
-                        if !model.maybe.isEmpty {
-                            heading("MAYBE", count: model.maybe.count).padding(.top, 4)
-                            ForEach(model.maybe) { row($0, expanded: false) }
-                        }
+        VStack(alignment: .leading, spacing: 8) {
+            DesignEyebrow(model.suggestions.isEmpty ? "Suggestions" : "Suggestions · heard a lot lately")
+            DesignCard {
+                if model.suggestions.isEmpty {
+                    Text("No suggestions yet. Mouthtype looks at your recent takes for names it keeps mishearing.")
+                        .font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 16).padding(.vertical, 12)
+                        .accessibilityIdentifier("spelling-suggestions-empty")
+                } else {
+                    ForEach(model.confident) { row($0, expanded: expandFirst && $0.id == model.confident.first?.id) }
+                    if !model.maybe.isEmpty {
+                        maybeToggle
+                        if showMaybe { ForEach(model.maybe) { row($0, expanded: false) } }
                     }
-                }.frame(maxHeight: 260)
+                }
             }
             if let undo = model.undo {
                 HStack(spacing: 8) {
-                    Label(undo.message, systemImage: "checkmark.circle").font(.callout).foregroundStyle(.secondary)
-                    Button("Undo") { model.undoLast() }.buttonStyle(.link).disabled(editor.isDirty || editor.loadFailed)
+                    Label(undo.message, systemImage: "checkmark.circle").font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Undo") { model.undoLast() }.buttonStyle(.designSecondary).disabled(editor.isDirty || editor.loadFailed)
                         .accessibilityLabel("Undo: \(undo.message)").accessibilityIdentifier("spelling-suggestion-undo")
-                }
+                }.padding(.horizontal, 4)
             }
             if let error = model.error {
-                Label(error, systemImage: "exclamationmark.circle").font(.callout).foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
+                Label(error, systemImage: "exclamationmark.circle").font(DesignFont.sans(DesignFont.detail)).foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 24).padding(.vertical, 14)
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Suggestions")
     }
 
-    private func heading(_ title: String, count: Int) -> some View {
-        HStack {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            Spacer()
-            Text("\(count)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
+    private var maybeToggle: some View {
+        let count = model.maybe.count
+        return Button { showMaybe.toggle() } label: {
+            HStack(spacing: 6) {
+                Image(systemName: showMaybe ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).frame(width: 10)
+                    .accessibilityHidden(true)
+                Text("Maybe · \(count) weaker guess\(count == 1 ? "" : "es")").fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+            }
+            .font(DesignFont.sans(DesignFont.detail, .medium)).foregroundStyle(DesignPalette.ink2)
+            .padding(.horizontal, 16).frame(maxWidth: .infinity, minHeight: 34, alignment: .leading).contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Maybe, \(count) weaker guess\(count == 1 ? "" : "es")")
+        .accessibilityValue(showMaybe ? "Shown" : "Hidden")
+        .accessibilityHint("Shows or hides the weaker guesses")
+        .accessibilityIdentifier("spelling-suggestions-maybe")
     }
 
     private func row(_ suggestion: SpellingSuggestion, expanded: Bool) -> some View {
@@ -72,39 +85,81 @@ struct SpellingSuggestionRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(Self.title(suggestion)).fontWeight(.medium).fixedSize(horizontal: false, vertical: true)
-                    Text(Self.reason(suggestion)).font(.callout).foregroundStyle(.secondary)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 12) {
+                    summary.frame(maxWidth: .infinity, alignment: .leading)
+                    actions
                 }
-                Spacer(minLength: 12)
-                if !suggestion.evidence.isEmpty {
-                    Button(expanded ? "Hide examples" : "Examples") { expanded.toggle() }
-                        .buttonStyle(.link).font(.callout)
-                        .accessibilityLabel(expanded ? "Hide examples for \(Self.title(suggestion))" : "Show examples for \(Self.title(suggestion))")
+                VStack(alignment: .leading, spacing: 6) {
+                    summary.frame(maxWidth: .infinity, alignment: .leading)
+                    actions
                 }
-                if suggestion.kind == .removeHazard {
-                    Button("Remove") { model.remove(suggestion) }.disabled(busy)
-                        .accessibilityLabel("Remove: \(Self.title(suggestion))")
-                } else {
-                    Button("Add") { model.add(suggestion) }.disabled(busy).buttonStyle(.borderedProminent)
-                        .accessibilityLabel("Add: \(Self.title(suggestion))")
-                }
-                Button("Dismiss") { model.dismiss(suggestion) }
-                    .accessibilityLabel("Dismiss: \(Self.title(suggestion))")
             }
             if expanded {
                 VStack(alignment: .leading, spacing: 4) {
                     ForEach(Array(suggestion.evidence.prefix(5).enumerated()), id: \.offset) { _, item in
                         Text(Self.highlighted(item.fragment, terms: suggestion.heardForms + [suggestion.written]))
-                            .font(.callout).fixedSize(horizontal: false, vertical: true)
+                            .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                }.padding(.leading, 12)
+                }.padding(.leading, 4).padding(.bottom, 4)
             }
         }
-        .padding(12)
-        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 8))
+        .padding(.leading, 16).padding(.trailing, 10).padding(.vertical, 6).frame(minHeight: 42)
         .accessibilityElement(children: .contain)
+    }
+
+    private var summary: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            if suggestion.kind == .removeHazard {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(Self.title(suggestion)).font(DesignFont.sans(DesignFont.body, .semibold)).foregroundStyle(DesignPalette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(Self.reason(suggestion)).font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            } else {
+                HeardFlow(spacing: 6) {
+                    Text(suggestion.written).font(DesignFont.sans(DesignFont.body, .semibold)).foregroundStyle(DesignPalette.ink)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text("for").font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                    ForEach(suggestion.heardForms, id: \.self) { form in
+                        Text(form).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 6).padding(.vertical, 1)
+                            .background(RoundedRectangle(cornerRadius: 4).fill(DesignPalette.sel))
+                    }
+                    Text("· " + Self.reason(suggestion).replacingOccurrences(of: "Heard ", with: "")).font(DesignFont.sans(DesignFont.detail))
+                        .foregroundStyle(DesignPalette.ink2)
+                }
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.title(suggestion) + ". " + Self.reason(suggestion))
+    }
+
+    private var actions: some View {
+        HStack(spacing: 4) {
+            if !suggestion.evidence.isEmpty {
+                Button { expanded.toggle() } label: {
+                    Text(expanded ? "Hide examples" : "Examples").font(DesignFont.sans(DesignFont.detail, .medium))
+                        .foregroundStyle(DesignPalette.ink2).padding(.horizontal, 10).frame(minHeight: 28).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(expanded ? "Hide examples for \(Self.title(suggestion))" : "Show examples for \(Self.title(suggestion))")
+            }
+            if suggestion.kind == .removeHazard {
+                Button("Remove") { model.remove(suggestion) }.buttonStyle(.designSecondary).disabled(busy)
+                    .accessibilityLabel("Remove: \(Self.title(suggestion))")
+            } else {
+                Button("Add") { model.add(suggestion) }.buttonStyle(.designPrimary).disabled(busy)
+                    .accessibilityLabel("Add: \(Self.title(suggestion))")
+            }
+            Button { model.dismiss(suggestion) } label: {
+                Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
+                    .frame(width: 28, height: 28).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain).accessibilityLabel("Dismiss: \(Self.title(suggestion))")
+        }
     }
 
     static func title(_ suggestion: SpellingSuggestion) -> String {
@@ -134,8 +189,8 @@ struct SpellingSuggestionRow: View {
         for term in terms where !term.isEmpty {
             var from = text.startIndex
             while from < text.endIndex, let range = text[from...].range(of: term, options: .caseInsensitive) {
-                text[range].font = .callout.bold()
-                text[range].backgroundColor = Color.accentColor.opacity(0.25)
+                text[range].font = DesignFont.sans(DesignFont.detail, .semibold)
+                text[range].backgroundColor = DesignPalette.sel
                 from = range.upperBound
             }
         }

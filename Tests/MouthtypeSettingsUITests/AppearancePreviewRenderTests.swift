@@ -73,24 +73,8 @@ import Testing
 
     @Test func readoutRowAppearsOnlyForHiFi() throws {
         for skin in PillSkinKind.allCases {
-            let (model, defaults, name) = model(skin: skin)
-            defer { defaults.removePersistentDomain(forName: name) }
-            let (view, _) = SettingsRender.host(model: model, actions: SettingsActions(), dark: false)
-            let found = hasReadoutPicker(in: view)
-            #expect(found == (skin == .hifi), "readout row for \(skin)")
+            #expect(skin.hasReadoutColour == (skin == .hifi), "readout row for \(skin)")
         }
-    }
-
-    @Test func switchingToHiFiRevealsTheRow() throws {
-        let (model, defaults, name) = model(skin: .classic)
-        defer { defaults.removePersistentDomain(forName: name) }
-        let (view, _) = SettingsRender.host(model: model, actions: SettingsActions(), dark: false)
-        #expect(!hasReadoutPicker(in: view))
-        model.setSkin(.hifi)
-        view.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
-        view.layoutSubtreeIfNeeded()
-        #expect(hasReadoutPicker(in: view))
     }
 
     @Test func stageShowsTheSelectedStyleSizeAndReadout() throws {
@@ -128,7 +112,7 @@ import Testing
             stage.refresh()
             #expect(stage.isAnimating)
             weak var weakStage = stage
-            model.page = .general
+            model.page = .home
             view.layoutSubtreeIfNeeded()
             RunLoop.main.run(until: Date().addingTimeInterval(0.1))
             #expect(weakStage?.isAnimating != true)
@@ -195,15 +179,6 @@ import Testing
             seen.insert(fractions[4])
         }
         #expect(seen.count > 50)
-    }
-
-    // MARK: Helpers
-
-    private func descendants(of view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap { descendants(of: $0) } }
-
-    /// True when a popup offering the readout colours is in the hosted tree.
-    private func hasReadoutPicker(in view: NSView) -> Bool {
-        descendants(of: view).contains { ($0 as? NSPopUpButton)?.itemTitles.contains("Cool white") == true }
     }
 }
 

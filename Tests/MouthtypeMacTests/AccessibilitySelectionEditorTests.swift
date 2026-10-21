@@ -11,6 +11,15 @@ import Testing
     func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor { .unknown }
 }
 
+@MainActor private final class MenuTrackingFocus: FocusReading {
+    var isSecureInputEnabled = false
+    func snapshot() -> FocusSnapshot { FocusSnapshot(pid: 100) }
+    func selectionSnapshot() -> FocusSnapshot {
+        FocusSnapshot(pid: 100, role: "AXTextArea", element: FocusedElement(AXUIElementCreateApplication(100)), focusedOwnerPID: 100)
+    }
+    func textBeforeCursor(of element: FocusedElement) -> TextBeforeCursor { .unknown }
+}
+
 @MainActor private final class SelectionBoundary {
     let focus = SelectionFocus()
     var range: NSRange? = NSRange(location: 4, length: 9)
@@ -19,6 +28,7 @@ import Testing
     var textReads = 0
     var writes: [(FocusedElement, String)] = []
     var acceptsWrite = true
+    var events: [String] = []
 
     func editor() -> AccessibilitySelectionEditor {
         AccessibilitySelectionEditor(focus: focus, readRange: { element in
@@ -28,13 +38,24 @@ import Testing
             self.textReads += 1
             return self.text
         }, writeText: { element, text in
+            self.events.append("write")
             self.writes.append((element, text))
             return self.acceptsWrite
+        }, setTimeout: { _, seconds in
+            self.events.append("timeout=\(seconds)")
         })
     }
 }
 
 @MainActor @Suite struct AccessibilitySelectionEditorTests {
+    @Test func captureReadsTheAppFocusWhenTheSystemWideElementIsEmpty() throws {
+        let editor = AccessibilitySelectionEditor(focus: MenuTrackingFocus(), readRange: { _ in NSRange(location: 0, length: 5) },
+            readText: { _ in "hello" }, writeText: { _, _ in true }, setTimeout: { _, _ in })
+        let selected = try editor.capture()
+        #expect(selected.text == "hello")
+        #expect(selected.pid == 100)
+    }
+
     @Test func unchangedUnicodeSelectionWritesExactlyOnceThroughTheRealAdapter() throws {
         let fixture = SelectionBoundary()
         fixture.range?.length = fixture.text!.utf16.count
@@ -111,5 +132,28 @@ import Testing
         fixture.acceptsWrite = false
         #expect(!editor.replace(original, with: "result"))
         #expect(fixture.writes.count == 1)
+    }
+
+    @Test func writeResetsTheShortenedTimeoutBeforeWritingThroughTheOriginalReference() throws {
+        let fixture = SelectionBoundary()
+        fixture.range?.length = fixture.text!.utf16.count
+        let editor = fixture.editor()
+        let original = try editor.capture()
+        fixture.events = []
+        #expect(editor.replace(original, with: "result"))
+        #expect(fixture.events == ["timeout=0.0", "write"])
+    }
+
+    @Test func aBudgetedCaptureLeavesNoDeadlineBehind() throws {
+        let fixture = SelectionBoundary()
+        fixture.range?.length = fixture.text!.utf16.count
+        let editor = fixture.editor()
+        _ = try editor.capture(budget: 5)
+        #expect(AccessibilityFocusReader.deadline == nil)
+        fixture.range = nil
+        #expect(throws: SelectionCleanupError.self) { try editor.capture(budget: 5) }
+        #expect(AccessibilityFocusReader.deadline == nil)
+        #expect(throws: SelectionCleanupError.timedOut) { try editor.capture(budget: -1) }
+        #expect(AccessibilityFocusReader.deadline == nil)
     }
 }

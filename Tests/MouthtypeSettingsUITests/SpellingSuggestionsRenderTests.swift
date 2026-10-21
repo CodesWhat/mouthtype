@@ -37,26 +37,18 @@ import MouthtypeCore
         #expect(suggestions.suggestions.count >= 3)
         FontRegistry.registerBundledFonts()
         let editor = SpellingEditor(store: vocabulary)
-        try render(editor, suggestions, name: "mouthtype-suggestions-light", appearance: .aqua)
-        try render(editor, suggestions, name: "mouthtype-suggestions-dark", appearance: .darkAqua)
+        try renderPage(editor, suggestions, name: "dictionary-suggestions-light", dark: false)
+        try renderPage(editor, suggestions, name: "dictionary-suggestions-dark", dark: true)
 
         let empty = SpellingSuggestionsModel(vocabulary: vocabulary, store: nil, dismissedURL: dir.appendingPathComponent("none.json"))
-        try render(editor, empty, name: "mouthtype-suggestions-empty", appearance: .aqua)
+        try renderPage(editor, empty, name: "dictionary-suggestions-empty", dark: false)
     }
 
-    private func render(_ editor: SpellingEditor, _ suggestions: SpellingSuggestionsModel, name: String, appearance: NSAppearance.Name) throws {
-        let size = NSSize(width: 900, height: 700)
-        let view = NSHostingView(rootView: SpellingEditorView(editor: editor, suggestions: suggestions, expandFirstSuggestion: true))
-        view.appearance = NSAppearance(named: appearance)
-        view.setFrameSize(size)
-        view.layoutSubtreeIfNeeded()
-        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-        view.cacheDisplay(in: view.bounds, to: bitmap)
-        #expect(bitmap.pixelsWide >= Int(size.width))
-        if let directory = ProcessInfo.processInfo.environment["MOUTHTYPE_SETTINGS_PREVIEWS"] {
-            let output = URL(fileURLWithPath: directory, isDirectory: true)
-            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-            try #require(bitmap.representation(using: .png, properties: [:])).write(to: output.appendingPathComponent(name + ".png"))
-        }
+    private func renderPage(_ editor: SpellingEditor, _ suggestions: SpellingSuggestionsModel, name: String, dark: Bool) throws {
+        let model = SettingsModel(defaults: UserDefaults(suiteName: "SuggestRender-\(UUID().uuidString)")!, spellings: editor, spellingSuggestions: suggestions)
+        model.page = .dictionary
+        let bitmap = try SettingsRender.render(model: model, actions: SettingsActions(), dark: dark)
+        #expect(bitmap.pixelsWide >= 900)
+        try SettingsRender.save(bitmap, name: name)
     }
 }

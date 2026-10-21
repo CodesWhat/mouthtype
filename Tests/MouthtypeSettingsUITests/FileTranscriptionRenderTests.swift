@@ -5,52 +5,97 @@ import Testing
 @testable import MouthtypeMac
 
 @MainActor @Suite(.serialized) struct FileTranscriptionRenderTests {
-    @Test func fileFlowRendersIdleAndFullResultWithoutOpeningOrCopying() async throws {
-        var copies = 0
-        let model = FileTranscriptionModel(makeJob: {
-            AudioFileTranscription(decoder: RenderFileDecoder(), engine: RenderFileEngine())
-        }, copy: { _ in copies += 1 })
-        let controller = FileTranscriptionWindow(model: model)
-        #expect(controller.window?.title == "Transcribe Audio File")
-        try render(controller, size: NSSize(width: 760, height: 600), name: "file-idle")
-        model.start(URL(fileURLWithPath: "/not-opened/recording.wav"))
-        for _ in 0..<500 where model.isBusy { await Task.yield() }
-        #expect(model.state == .finished)
-        #expect(model.text == RenderFileEngine.text)
-        try render(controller, size: NSSize(width: 560, height: 440), name: "file-result-minimum")
-        #expect(copies == 0)
-        #expect(controller.window?.isVisible == false)
+    private func model(gate: RenderGate? = nil, failing: Bool = false) -> FileTranscriptionModel {
+        FileTranscriptionModel(makeJob: {
+            AudioFileTranscription(decoder: RenderFileDecoder(failing: failing), engine: RenderFileEngine(gate: gate))
+        }, copy: { _ in })
     }
 
-    private func render(_ controller: FileTranscriptionWindow, size: NSSize, name: String) throws {
-        controller.window?.appearance = NSAppearance(named: .aqua)
-        controller.window?.setContentSize(size)
-        let view = try #require(controller.window?.contentView)
-        view.setFrameSize(size)
-        view.layoutSubtreeIfNeeded()
-        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-        view.cacheDisplay(in: view.bounds, to: bitmap)
-        #expect(!controller.window!.isVisible)
-        #expect(bitmap.pixelsWide >= Int(size.width) && bitmap.pixelsHigh >= Int(size.height))
-        if let directory = ProcessInfo.processInfo.environment["MOUTHTYPE_SETTINGS_PREVIEWS"] {
-            let output = URL(fileURLWithPath: directory, isDirectory: true)
-            try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
-            let data = try #require(bitmap.representation(using: .png, properties: [:]))
-            try data.write(to: output.appendingPathComponent(name + ".png"))
+    @Test func emptyBusyDoneAndFailedRenderInLightAndDark() async throws {
+        let gate = RenderGate()
+        let transcription = model(gate: gate)
+
+        try renderBoth(transcription, name: "transcribe-empty")
+        #expect(transcription.state == .idle)
+
+        transcription.start(URL(fileURLWithPath: "/not-opened/standup.m4a"))
+        for _ in 0..<500 where await !gate.entered { await Task.yield() }
+        #expect(transcription.state == .transcribing)
+        try renderBoth(transcription, name: "transcribe-busy")
+
+        await gate.release()
+        for _ in 0..<500 where transcription.isBusy { await Task.yield() }
+        #expect(transcription.state == .finished && transcription.text == RenderFileEngine.text)
+        try renderBoth(transcription, name: "transcribe-done")
+
+        // A failed second import keeps the transcript on screen.
+        let failing = model(failing: true)
+        failing.start(URL(fileURLWithPath: "/not-opened/broken.wav"))
+        for _ in 0..<500 where failing.isBusy { await Task.yield() }
+        #expect(failing.state == .failed && !failing.hasResult)
+        try renderBoth(failing, name: "transcribe-failed")
+    }
+
+    @Test func aFailedImportOverAResultRendersWithTheKeptTranscript() async throws {
+        var fail = false
+        let transcription = FileTranscriptionModel(makeJob: {
+            AudioFileTranscription(decoder: RenderFileDecoder(failing: fail), engine: RenderFileEngine(gate: nil))
+        }, copy: { _ in })
+        transcription.start(URL(fileURLWithPath: "/not-opened/standup.m4a"))
+        for _ in 0..<500 where transcription.isBusy { await Task.yield() }
+        fail = true
+        transcription.start(URL(fileURLWithPath: "/not-opened/broken.wav"))
+        for _ in 0..<500 where transcription.isBusy { await Task.yield() }
+        #expect(transcription.state == .failed && transcription.hasResult)
+        try renderBoth(transcription, name: "transcribe-failed-kept")
+    }
+
+    @Test func renderingNeverCopiesOrOpensAFile() async throws {
+        var copies = 0
+        let transcription = FileTranscriptionModel(makeJob: {
+            AudioFileTranscription(decoder: RenderFileDecoder(failing: false), engine: RenderFileEngine(gate: nil))
+        }, copy: { _ in copies += 1 })
+        transcription.start(URL(fileURLWithPath: "/not-opened/recording.wav"))
+        for _ in 0..<500 where transcription.isBusy { await Task.yield() }
+        try renderBoth(transcription, name: "transcribe-no-side-effects")
+        #expect(copies == 0)
+    }
+
+    @Test func durationReadsAsMinutesAndSeconds() {
+        #expect(FileTranscriptionView.durationText(252) == "4 min 12 s")
+        #expect(FileTranscriptionView.durationText(42.4) == "42 s")
+    }
+
+    private func renderBoth(_ model: FileTranscriptionModel, name: String) throws {
+        for dark in [false, true] {
+            let size = FileTranscriptionView.size
+            let bitmap = try SettingsRender.render(FileTranscriptionView(model: model, choose: {}, save: {}), dark: dark, size: size)
+            #expect(bitmap.pixelsWide >= Int(size.width) && bitmap.pixelsHigh >= Int(size.height))
+            try SettingsRender.save(bitmap, name: "\(name)-\(dark ? "dark" : "light")")
         }
     }
 }
 
+private actor RenderGate {
+    private var waiter: CheckedContinuation<Void, Never>?
+    private(set) var entered = false
+    func wait() async { entered = true; await withCheckedContinuation { waiter = $0 } }
+    func release() { waiter?.resume(); waiter = nil }
+}
 private struct RenderFileDecoder: AudioFileDecoding {
+    var failing = false
     func decode(_ url: URL, limits: AudioFileLimits) async throws -> DecodedAudioFile {
-        DecodedAudioFile(samples: [0.1], durationSeconds: 1)
+        if failing { throw AudioFileError.invalidAudio }
+        return DecodedAudioFile(samples: [0.1], durationSeconds: 252)
     }
 }
 private struct RenderFileEngine: Transcriber {
     let id = "render", displayName = "Render only"
+    var gate: RenderGate?
     static let text = Array(repeating: "Émilie shared the draft. 世界 👋", count: 70).joined(separator: "\n")
     func prepare() async throws { Issue.record("No model preparation in render tests") }
     func transcribe(samples: [Float]) async throws -> Transcription {
-        Transcription(text: Self.text, processingSeconds: 0, engineID: id)
+        await gate?.wait()
+        return Transcription(text: Self.text, processingSeconds: 0, engineID: id)
     }
 }

@@ -55,6 +55,27 @@ final class DictationController {
     @ObservationIgnored weak var corrections: (any CorrectionObserving)?
     @ObservationIgnored private var session: DictationSession?
     @ObservationIgnored private var captureStarting = false
+    /// True once the capture is running and the recording pill is up, while the startup still waits on history. A notice
+    /// in that window meets a live recording, not a startup with nothing on screen.
+    @ObservationIgnored private var recordingLive = false
+    /// True from the moment a press passes its checks until its startup ends. Set before the first suspension, so a
+    /// second press (a URL and the hotkey, say) can't also pass the phase check and start a second session.
+    @ObservationIgnored private var startReserved = false
+    /// The generation of the automation start that is bringing its recording up, nil once it can lock. A start only
+    /// clears the pending flags while it still owns them, so a slow earlier start can't wipe a later one's.
+    @ObservationIgnored var automationStartOwner: Int?
+    @ObservationIgnored var automationStartGeneration = 0
+    /// True while an automation start is bringing its recording up, before it can lock.
+    var automationStartPending: Bool { automationStartOwner != nil }
+    /// A stop or cancel that reached the pending automation start, applied when the start comes up. A cancel always
+    /// wins: it is never downgraded to a stop, and a stop already waiting is upgraded by a cancel.
+    @ObservationIgnored var pendingAutomationEnd: AutomationEnd?
+    /// The last queued URL command. Each one waits for the one before, so a stop or cancel lands after the start it follows.
+    @ObservationIgnored var automationTail: Task<Void, Never>?
+    /// How long a queued URL command waits for the one before it. A start that never returns must not hold up a later stop.
+    @ObservationIgnored var automationWaitLimit: @MainActor () async throws -> Void = { try await Task.sleep(for: .seconds(10)) }
+    /// Fired when an automation start has become a hands-free recording, so the hotkey side can adopt the lock.
+    @ObservationIgnored var onAutomationLock: (@MainActor () -> Void)?
     @ObservationIgnored private var shuttingDown = false
     @ObservationIgnored private var termination: Task<Bool, Never>?
     @ObservationIgnored private var captureFinalizations = 0
@@ -223,7 +244,10 @@ final class DictationController {
 
     // MARK: Press
 
+    var isStartReserved: Bool { startReserved }
+
     private func pressed(at nanos: UInt64) async {
+        guard !startReserved else { return }
         guard terminationCapture == nil else {
             pill.showMessage(PillMessage("Recording not saved", detail: "Retry Quit to save the kept audio", isError: true), duration: 3)
             return
@@ -250,6 +274,9 @@ final class DictationController {
             return
         }
 
+        startReserved = true
+        defer { startReserved = false }
+
         // A new dictation ends the last one's card and the Undo it offered, and the last paste's read-back. With
         // earlier dictations still queued their deliveries haven't happened yet, so there is no read-back to end. A
         // card holding a saved recording stays up: its Insert is the only way back to that audio this session.
@@ -275,10 +302,12 @@ final class DictationController {
         )
         phase = .recording
         captureStarting = true
+        recordingLive = false
         interruptedDuringStart = false
 
         // The capture goes first: nothing else waits ahead of it.
         var startError: Error?
+        var websiteRead: Task<String?, Never>?
         do {
             try await capture.start(keyDownAtNanos: nanos)
         } catch {
@@ -293,20 +322,37 @@ final class DictationController {
             sounds.playStart()
             beginQuietAfterStartCue()
             pill.showRecording()
+            recordingLive = true
             let globalLevel = pipeline.settings().level
             pipeline.smart?.recordingStarted(level: cleanupLevel ?? globalLevel, take: current.id)
-            if !appStyles.websites.isEmpty {
-                let websiteHost = inserter.websiteHost(for: startFocus)
-                current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID,
-                    websiteHost: websiteHost, fallback: cleanupStyle)
+            if appStyles.hasWebsiteRules, WebsiteContext.supports(bundleID: startFocus.bundleID) {
+                websiteRead = inserter.websiteHostReader(for: startFocus).map { read in
+                    let budget = websiteBudget
+                    return Task { await Self.boundedRead(read, budget: budget) }
+                }
+            }
+        }
+        if startError == nil {
+            current.editorHints = EditorHintsGatherer.start(
+                enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
+                readers: .system, readGate: .shared
+            )
+        }
+        current.rowOpen = await pipeline.begin(current, target: startFocus.target)
+        // The page URL was read off the main actor while the row opened. It belongs to this recording only, and a read that missed
+        // its budget leaves the app and context resolution above as it was.
+        if let websiteRead, startError == nil {
+            let websiteHost = await websiteRead.value
+            if websiteHost != nil {
+                current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, websiteHost: websiteHost, fallback: cleanupStyle)
                 current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
                 if current.cleanupLevel != cleanupLevel, let level = current.cleanupLevel {
                     pipeline.smart?.recordingStarted(level: level, take: current.id)
                 }
             }
         }
-        current.rowOpen = await pipeline.begin(current, target: startFocus.target)
         captureStarting = false
+        recordingLive = false
         if let startError {
             interruptedDuringStart = false
             await fail(current, startError)
@@ -319,6 +365,29 @@ final class DictationController {
             await captureInterrupted()
         } else {
             startTimers(for: current)
+        }
+    }
+
+    /// How long a recording waits for the browser's page URL before it goes with the app and context rules.
+    @ObservationIgnored var websiteBudget: TimeInterval = 0.15
+
+    /// Runs a blocking read on a background queue and gives up on it after `budget`. A read that outlives the budget is abandoned,
+    /// not cancelled; each Accessibility call inside it has its own timeout, so it ends shortly after.
+    nonisolated static func boundedRead(_ read: @escaping @Sendable () -> String?, budget: TimeInterval) async -> String? {
+        await withCheckedContinuation { continuation in
+            let once = OnceResume(continuation)
+            DispatchQueue.global(qos: .userInitiated).async { once.resume(read()) }
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + budget) { once.resume(nil) }
+        }
+    }
+
+    private final class OnceResume: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<String?, Never>?
+        init(_ continuation: CheckedContinuation<String?, Never>) { self.continuation = continuation }
+        func resume(_ value: String?) {
+            let taken = lock.withLock { () -> CheckedContinuation<String?, Never>? in defer { continuation = nil }; return continuation }
+            taken?.resume(returning: value)
         }
     }
 
@@ -364,13 +433,32 @@ final class DictationController {
 
     /// The menu's Stop Dictation: the same as tapping the key to end a locked recording.
     func stopHandsFree() {
-        guard !shuttingDown, isHandsFree else { return }
+        guard !shuttingDown else { return }
+        guard isHandsFree else {
+            if automationStartPending, pendingAutomationEnd != .cancel { pendingAutomationEnd = .stop }
+            return
+        }
         released(at: clock.nowNanos())
+    }
+
+    /// Shows a line for a URL command or a copy, without taking a live recording's pill. A hands-free recording shows it
+    /// over the pill and comes back; a held-key recording keeps its pill and the line is dropped. While the capture is
+    /// still coming up there is no recording on screen yet, so the line shows normally. Once the pill is up it counts as live.
+    func showNotice(_ message: PillMessage, duration: TimeInterval = 2.5) {
+        guard phase == .recording, !captureStarting || recordingLive else {
+            pill.showMessage(message, duration: duration)
+            return
+        }
+        if isHandsFree { pill.showHandsFreeNotice(message.headline, duration: duration) }
     }
 
     /// The menu's Cancel Dictation: the same as Esc.
     func cancelHandsFree() async {
-        guard !shuttingDown, isHandsFree else { return }
+        guard !shuttingDown else { return }
+        guard isHandsFree else {
+            if automationStartPending { pendingAutomationEnd = .cancel }
+            return
+        }
         await cancelled()
     }
 
@@ -606,7 +694,8 @@ final class DictationController {
     // MARK: Discard and cancel
 
     private func discarded() async {
-        guard phase == .recording, let current = session else { return }
+        // A hands-free recording was started on purpose, and a key gesture that didn't start it can't throw it away.
+        guard phase == .recording, !isHandsFree, let current = session else { return }
         captureFinalizations += 1
         defer { captureFinalizations -= 1 }
         session = nil

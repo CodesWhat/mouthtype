@@ -61,7 +61,6 @@ import Testing
         let model = SelectionCleanupModel(editor: PreviewSelectionEditor(text: String(repeating: "hello world ", count: 1_000)))
         model.prepare()
         model.accept()
-        model.acceptanceErrorPresented = false
         let controller = SelectionCleanupWindow(model: model, maximumContentHeight: heightLimit)
         let view = try #require(controller.window?.contentView)
         view.layoutSubtreeIfNeeded()
@@ -71,7 +70,7 @@ import Testing
         view.cacheDisplay(in: view.bounds, to: bitmap)
         let editor = try #require(descendants(of: view).compactMap { $0 as? NSTextView }.first)
         #expect(editor.enclosingScrollView?.contentView.bounds.height ?? 0 >= 44)
-        #expect(model.message.contains("selection changed"))
+        #expect(model.refused)
         #expect(controller.window?.isVisible == false)
     }
 

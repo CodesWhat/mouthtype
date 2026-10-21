@@ -2,8 +2,9 @@ import AppKit
 import SwiftUI
 import MouthtypeCore
 
-/// The Settings window content: a 210 pt sidebar and a grouped-form page under a 46 pt header bar. `solid` swaps the
-/// glass sidebar for an opaque fill (Reduce Transparency, and offscreen renders where glass cannot draw).
+/// The Mouthtype window content: a frosted 212 pt sidebar (Home, Stats, Dictionary, Transforms, Style, Appearance, and a Settings row
+/// that opens the modal) beside the page. `solid` swaps the glass sidebar for an opaque fill (Reduce Transparency, and offscreen
+/// renders where glass cannot draw). Pages live in `SettingsPageHosts.swift`; the modal in `SettingsModalView.swift`.
 struct SettingsView: View {
     @Bindable var model: SettingsModel
     var actions = SettingsActions()
@@ -13,50 +14,42 @@ struct SettingsView: View {
     @State private var keyboardNavigation: Bool?
     @State var previewWidth: CGFloat = 0
     @FocusState private var sidebarFocus: SettingsPage?
+    @State private var seededSidebarFocus = false
 
     var body: some View {
         HStack(spacing: 0) {
+            // The window can open already on the selected page (URL route), so no onChange fires; start focus on that row, not the first.
             sidebar.frame(width: SettingsTheme.sidebarWidth)
-            VStack(spacing: 0) {
-                header
-                SettingsForm {
-                    switch model.page {
-                    case .home: HomePage(model: model.home)
-                    case .stats: StatsHostPage(model: model.stats)
-                    case .records: RecordsHostPage(model: model.stats)
-                    case .general: general
-                    case .writing: writing
-                    case .appearance: appearance
-                    case .diagnostics:
-                        if let diagnostics = actions.diagnostics { SettingsDiagnosticsView(state: diagnostics, model: model, actions: actions) }
-                        else { SettingsGroup(eyebrow: "DIAGNOSTICS") { SettingsNote(text: "Diagnostic status is unavailable.") } }
-                    }
-                }
-            }.frame(maxWidth: .infinity, maxHeight: .infinity).background(Color(nsColor: .windowBackgroundColor))
+                .defaultFocus($sidebarFocus, model.page)
+            pageContent.frame(maxWidth: .infinity, maxHeight: .infinity).background(DesignPalette.bg)
                 .focusSection()
         }
-        .font(SettingsFont.sans(SettingsFont.body))
-        .foregroundStyle(.primary)
+        .font(DesignFont.sans(DesignFont.body))
+        .foregroundStyle(DesignPalette.ink)
         .tint(SettingsTheme.control)
         .ignoresSafeArea()
         .frame(minWidth: SettingsTheme.minimumSize.width, minHeight: SettingsTheme.minimumSize.height)
-        .onChange(of: model.page) { _, page in
-            // The stats are watched only on their own pages. Moving between Stats and Records keeps one observation.
-            if page == .stats || page == .records { model.stats.activate() } else { model.stats.deactivate() }
+        .sheet(isPresented: $model.settingsOpen) {
+            SettingsModalView(model: model, actions: actions, fullKeyboardAccess: fullKeyboardAccess)
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
+        .onChange(of: model.page) { _, page in
+            // The stats are watched only on their own page.
+            if page == .stats { model.stats.activate() } else { model.stats.deactivate() }
+            model.syncWords()
+            // A page change from outside the sidebar (URL route, menu) would leave the ring on the old row. AppKit draws that ring, and the
+            // @FocusState can be nil while it is on a row, so the window's first responder decides, not sidebarFocus.
+            let ringMoved = NSApp.keyWindow.map { SettingsView.moveSidebarRing(in: $0, to: page) } ?? false
+            if ringMoved || sidebarFocus != nil, sidebarFocus != page { sidebarFocus = page }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            keyboardNavigation = fullKeyboardAccess()
+            // AppKit hands the first row focus when the window first becomes key, after any default focus; move it to the selected page.
+            // Only the first time, so a row the user Tabbed to isn't pulled back on every return to the window.
+            guard !seededSidebarFocus else { return }
+            seededSidebarFocus = true
+            DispatchQueue.main.async { if let follow = SettingsPage.focusFollowing(focused: sidebarFocus, selected: model.page) { sidebarFocus = follow } }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }
-    }
-
-    private var header: some View {
-        let title = Text(model.page.headline).font(SettingsFont.serif(SettingsFont.title))
-            .accessibilityAddTraits(.isHeader)
-        let summary = Text(model.page.summary).font(SettingsFont.sans(SettingsFont.headerDescription)).foregroundStyle(.secondary)
-        return ViewThatFits(in: .horizontal) {
-            HStack(alignment: .firstTextBaseline, spacing: 14) { title.fixedSize(); summary.fixedSize() }
-            VStack(alignment: .leading, spacing: 2) { title; summary.fixedSize(horizontal: false, vertical: true) }.padding(.vertical, 6)
-        }.padding(.horizontal, 24).padding(.top, 8)
-            .frame(maxWidth: .infinity, minHeight: SettingsTheme.headerHeight, alignment: .leading)
     }
 
     // MARK: Sidebar
@@ -68,81 +61,75 @@ struct SettingsView: View {
                     Image(nsImage: mark).resizable().interpolation(.high).frame(width: SidebarMark.size, height: SidebarMark.size)
                         .accessibilityHidden(true)
                 }
-                Text("mouthtype").font(SettingsFont.serif(SettingsFont.wordmark))
-            }.padding(.horizontal, 10).padding(.top, 52).padding(.bottom, 22)
+                Text("mouthtype").font(DesignFont.serif(24)).foregroundStyle(DesignPalette.ink)
+            }.padding(.horizontal, 8).padding(.top, 52).padding(.bottom, 20)
             // Arrows bubble up from the focused row (Full Keyboard Access on) and move both selection and focus. With it off,
             // plain buttons never take focus, so the list itself is the focus target and arrows step from the selection.
             // With it on the list stays out of the loop, so Tab walks on into the page instead of cycling in the sidebar.
             // The flag is re-read each time the window becomes key, so toggling Keyboard navigation applies on the next focus.
-            VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 2) {
-                    sidebarPageRow(.home)
-                    sidebarPageRow(.stats)
-                    sidebarPageRow(.records)
-                }
-                Text("YOUR WORDS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8)
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(SettingsSidebarLink.words) { link in linkRow(link) }
-                }
-                Text("SETTINGS").font(SettingsFont.mono(SettingsFont.eyebrow)).tracking(1).foregroundStyle(.secondary)
-                    .padding(.horizontal, 10).padding(.top, 22).padding(.bottom, 8).accessibilityAddTraits(.isHeader)
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(SettingsPage.settingsPages) { page in sidebarPageRow(page) }
-                }
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(SettingsPage.allCases) { page in sidebarPageRow(page) }
             }
             .modifier(SidebarListFocus(focusable: SettingsView.sidebarListFocusable(fullKeyboardAccess: keyboardNavigation ?? fullKeyboardAccess())))
             .onKeyPress(.upArrow) { moveSidebar(by: -1) }
             .onKeyPress(.downArrow) { moveSidebar(by: 1) }
             Spacer(minLength: 12)
-            linkRow(.setUp)
-            Text("ON YOUR MAC · \(AppInfo.version)").font(SettingsFont.mono(SettingsFont.footer)).tracking(1).lineSpacing(4)
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 10).padding(.top, 14).padding(.bottom, 18)
-        }.padding(.horizontal, 10).frame(maxHeight: .infinity, alignment: .topLeading)
+            DesignNavRow(title: "Settings", symbol: "gearshape", selected: model.settingsOpen) { model.openSettings() }
+                .accessibilityIdentifier("settings-open")
+            Text(AppInfo.version.first?.isNumber == true ? "v\(AppInfo.version)" : AppInfo.version).font(DesignFont.mono(DesignFont.eyebrow)).tracking(1).foregroundStyle(DesignPalette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 10).padding(.top, 14)
+        }.padding(.horizontal, 12).padding(.bottom, 16).frame(maxHeight: .infinity, alignment: .topLeading)
             .focusSection()
-            .background { if solid { Color(nsColor: .windowBackgroundColor).overlay(Color.primary.opacity(0.04)) } }
-            .overlay(alignment: .trailing) { if solid { Rectangle().fill(Color.primary.opacity(0.12)).frame(width: 1) } }
+            .background { DesignSidebarBackground(solid: solid) }
+            .overlay(alignment: .trailing) { Rectangle().fill(DesignPalette.hair2).frame(width: 1) }
     }
 
     private func sidebarPageRow(_ page: SettingsPage) -> some View {
-        sidebarRow(page.title, icon: page.icon, selected: model.page == page, id: "settings-page-" + page.rawValue) { model.page = page }
+        DesignNavRow(title: page.title, symbol: page.symbol, selected: model.page == page) { model.select(page) }
+            .accessibilityIdentifier("settings-page-" + page.rawValue)
             .focused($sidebarFocus, equals: page)
     }
 
     private func moveSidebar(by offset: Int) -> KeyPress.Result {
         let target = SettingsPage.arrowTarget(focused: sidebarFocus, selected: model.page, offset: offset)
-        model.page = target
-        if sidebarFocus != nil { sidebarFocus = target }
+        if model.select(target), sidebarFocus != nil { sidebarFocus = target }
         return .handled
+    }
+
+    /// The page rows' key view proxies, top to bottom. Empty when the rows are not Tab stops (Keyboard navigation off).
+    static func sidebarRowProxies(in window: NSWindow) -> [NSView] {
+        var proxies: [NSView] = []
+        func collect(_ view: NSView) {
+            if String(describing: type(of: view)) == "KeyViewProxy", view.convert(view.bounds, to: nil).minX < SettingsTheme.sidebarWidth { proxies.append(view) }
+            view.subviews.forEach(collect)
+        }
+        if let content = window.contentView { collect(content) }
+        guard let rowHeight = proxies.map({ $0.bounds.height }).min() else { return [] }
+        let rows = proxies.filter { $0.bounds.height < rowHeight * 2 }
+            .sorted { $0.convert($0.bounds, to: nil).minY > $1.convert($1.bounds, to: nil).minY }
+        return Array(rows.prefix(SettingsPage.allCases.count))
+    }
+
+    /// Moves the focus ring to `page`'s row when a sidebar row currently has it. Anything else holding focus (a text field's editor, a page
+    /// control) is left alone. Returns whether the ring moved.
+    @discardableResult @MainActor static func moveSidebarRing(in window: NSWindow, to page: SettingsPage) -> Bool {
+        guard let responder = window.firstResponder as? NSView, !(responder is NSText) else { return false }
+        let rows = sidebarRowProxies(in: window)
+        guard rows.contains(where: { $0 === responder }), let index = SettingsPage.allCases.firstIndex(of: page), index < rows.count else { return false }
+        return rows[index] === responder || window.makeFirstResponder(rows[index])
     }
 
     /// With Full Keyboard Access the rows are Tab stops themselves, so the list must not also be one or Tab cycles in the sidebar.
     static func sidebarListFocusable(fullKeyboardAccess: Bool) -> Bool { !fullKeyboardAccess }
 
     @MainActor static func systemFullKeyboardAccess() -> Bool { NSApp?.isFullKeyboardAccessEnabled ?? false }
-
-    private func linkRow(_ link: SettingsSidebarLink) -> some View {
-        sidebarRow(link.title, icon: link.icon, selected: false, id: link.accessibilityID) { actions.perform(link) }
-    }
-
-    private func sidebarRow(_ title: String, icon: String, selected: Bool, id: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                Image(systemName: icon).foregroundStyle(SettingsTheme.symbol).frame(width: 18)
-                Text(title).font(SettingsFont.sans(SettingsFont.body)).fixedSize(horizontal: false, vertical: true)
-                Spacer(minLength: 0)
-            }.padding(.horizontal, 10).padding(.vertical, 7).contentShape(Rectangle())
-                .background { if selected { RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.1)) } }
-        }.buttonStyle(.plain).accessibilityIdentifier(id)
-            .accessibilityAddTraits(selected ? .isSelected : [])
-    }
 }
 
 /// Makes the sidebar list a focus target only when `focusable`, with its focus ring suppressed (arrows drive selection there). When not
 /// focusable the rows are the focus targets and keep their system focus effect, the only cue for where focus is. Passing `false` to `.focusable(_:)` is not the same as leaving it
 /// off: it disables focus for every descendant, so under Full Keyboard Access the rows lost their own Tab stops.
-private struct SidebarListFocus: ViewModifier {
+struct SidebarListFocus: ViewModifier {
     let focusable: Bool
     @ViewBuilder func body(content: Content) -> some View {
         if focusable { content.focusable().focusEffectDisabled() } else { content }

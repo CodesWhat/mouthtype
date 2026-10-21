@@ -77,3 +77,40 @@ import Observation
         expansion = phrase?.expansion ?? ""
     }
 }
+
+/// The kind tag on a Transforms page row, worked out from the saved text. A clipboard placeholder wins, then a date placeholder,
+/// then a multi-line body, and everything else is plain text. The data format has no kind field.
+enum TransformKind: Equatable {
+    case text, lines(Int), clipboard, date
+
+    var title: String {
+        switch self {
+        case .text: "TEXT"
+        case let .lines(count): "\(count) LINES"
+        case .clipboard: "CLIPBOARD"
+        case .date: "DATE"
+        }
+    }
+
+    static func of(_ phrase: Snippet) -> TransformKind {
+        let text = phrase.expansion
+        if text.localizedCaseInsensitiveContains("{clipboard}") { return .clipboard }
+        if text.localizedCaseInsensitiveContains("{date}") { return .date }
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
+        return lines > 1 ? .lines(lines) : .text
+    }
+}
+
+extension PhraseEditor {
+    /// The saved phrases that match a search, by trigger, text or kind. An empty search matches everything.
+    func matching(_ query: String) -> [Snippet] {
+        let terms = query.split(whereSeparator: \.isWhitespace).map(String.init)
+        guard !terms.isEmpty else { return items }
+        return items.filter { phrase in
+            terms.allSatisfy { term in
+                phrase.trigger.localizedCaseInsensitiveContains(term) || phrase.expansion.localizedCaseInsensitiveContains(term)
+                    || TransformKind.of(phrase).title.localizedCaseInsensitiveContains(term)
+            }
+        }
+    }
+}
