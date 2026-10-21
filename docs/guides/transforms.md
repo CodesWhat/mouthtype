@@ -41,7 +41,7 @@ Select text in an editable field that supports Accessibility, then choose **Tran
 
 **Edit Transforms…** opens the Transforms page.
 
-A small panel appears over your app without taking focus. It shows your original with removed words struck through, and a result with added or changed characters highlighted. You can edit the result. The panel names the app the text came from.
+A small panel appears over your app without taking focus. It shows your original with removed words struck through, and a result with added or changed characters highlighted. You can edit the result.
 
 | Button | What it does |
 | --- | --- |

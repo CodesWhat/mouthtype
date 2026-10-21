@@ -4,9 +4,6 @@ Mouthtype has a small local automation surface: a `mouthtype://` URL scheme and 
 
 The scheme comes from `CFBundleURLTypes` in the built app.
 
-> [!NOTE]
-> An app bundle built before this change has to be rebuilt and launched once so LaunchServices registers `mouthtype://`.
-
 ## Turn it on
 
 > [!WARNING]

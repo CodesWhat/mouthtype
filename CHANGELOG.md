@@ -14,7 +14,7 @@ Work on `dev/v0.5.0`, merged since 0.4.0.
 ### Added
 
 - Spoken slash commands in coding apps. Saying "slash research" types `/research`, and "dash", "hyphen" and "underscore" join more words ("slash code dash review" is `/code-review`). It only runs in terminals, editors, JetBrains, and the Claude, ChatGPT, Codex and Orca apps (plus claude.ai and chatgpt.com in a supported browser). There's an Advanced toggle, on by default.
-- Show in Dock in Settings > General: Never, While a window is open (the default) or Always. The menu bar icon stays in every mode.
+- Show in Dock in Settings > Mac: Never, While a window is open (the default) or Always. The menu bar icon stays in every mode.
 - A docs site at docs.mouthtype.app.
 - Real app icons in the Style lists. Built-in apps that aren't installed are hidden from the Counts as lists.
 

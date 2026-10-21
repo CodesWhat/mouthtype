@@ -7,7 +7,7 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 1. Download the ZIP from https://mouthtype.app/download and expand it in Finder.
 2. Drag Mouthtype.app into Applications. Quit an older running Mouthtype before replacing it.
 3. Open Mouthtype from Applications.
-4. Follow Set Up Mouthtype, one card at a time. Allow Microphone access, then grant Accessibility in System Settings and return to the app. Each card advances when its prerequisite is ready. Reopen setup from Settings → General if you defer it.
+4. Follow Set Up Mouthtype, one card at a time. Allow Microphone access, then grant Accessibility in System Settings and return to the app. Each card advances when its prerequisite is ready. Reopen setup from Settings → Health → Set Up Mouthtype if you defer it.
 5. Wait for the speech model to download and prepare. Downloads need internet access; transcription and cleanup run on your Mac. Basic cleanup works without a cleanup-model download. Optional Fast is roughly 1.4 GB; Thorough is roughly 5.2 GB.
 6. Click a blank TextEdit document. Hold Fn, say a sentence, then release. Wait for text to appear. Dictate another sentence without clicking or typing between takes. Confirm one insertion per take and a space between them.
 
@@ -37,8 +37,8 @@ Mouthtype is now one redesigned window, with automation and Transform Selection 
 Home gets your recent takes and stats, and saved spellings get suggestions.
 
 - Added: Open Mouthtype from the menu to a new Home page with your last 50 takes, newest first. Each take has Copy and Recover. Recover works for any take whose audio is still saved, and it offers the text again without changing the history entry. Home updates as you dictate.
-- Added: Home also shows your stats: words today, this week and all time, a 30-day view, average and best speed, current and longest streak, biggest day, longest take, and time saved compared with typing at 40 WPM.
-- Added: High scores on the same page show your fastest speed, biggest day, longest streak and longest take, each with its date. Everything is worked out on your Mac from your own history, and takes from secure fields are never counted.
+- Added: The Stats page shows your stats: words today, this week and all time, a 30-day view, average and best speed, current and longest streak, biggest day, longest take, and time saved compared with typing at 40 WPM.
+- Added: High scores on the Stats page show your fastest speed, biggest day, longest streak and longest take, each with its date. Everything is worked out on your Mac from your own history, and takes from secure fields are never counted.
 - Added: Saved spellings now suggest spellings from your recent takes: names it keeps mishearing, brand names that come out lowercase, and words that get split apart, each with examples. Add, Remove or Dismiss a suggestion, and Undo right after. It also flags saved heard forms that rewrite everyday words.
 - Changed: In Settings, with Keyboard navigation on, the page scrolls to follow <kbd>Tab</kbd> and <kbd>Shift</kbd>+<kbd>Tab</kbd>.
 
@@ -117,7 +117,7 @@ Synthetic recognition checks cover clean/noisy speech and a repeated 19-minute c
 
 ## Shortcuts and Settings
 
-Open **Settings… → General** to change the dictation shortcut, recording behavior, cleanup model, sounds and launch at login.
+Open **Settings…** to change the dictation shortcut, recording behavior, microphone and sounds on General, launch at login on Mac, and the cleanup level and models on Style.
 
 | Setting | Where | What |
 | --- | --- | --- |
@@ -162,7 +162,7 @@ Live words finishes through full transcription and inserts once. Preview work is
 ### Writing and rules
 
 - Website domains include subdomains; the most specific domain wins before the app rule and the default when the browser exposes its document URL. Missing URL support falls back, and URLs are not retained.
-- Rules start empty and fall back to the global tone.
+- Your own rules start empty. Built-in app and website lists carry their own tones, and everything else uses the default tone.
 - Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import.
 - Formal removes swear words used as exclamations or emphasis at Basic, Fast and Thorough (Off bypasses cleanup). Thorough also swaps a swear noun for a plain word, while Basic and Fast only remove exclamations and emphasis; tone does not otherwise authorize paraphrasing.
 - Default appearance stays simple; Override individual fonts reveals independent Heading, Body and Readout choices.
@@ -171,7 +171,7 @@ Live words finishes through full transcription and inserts once. Preview work is
 
 Select text in an accessible editable field, then choose **Transform Selection**, then **Clean up** (it uses the tone that applies to the app you're in) or one of the AI transforms.
 
-- The panel names the app the text came from, strikes through removed words in the original and highlights what changed in the result, which you can edit.
+- The panel strikes through removed words in the original and highlights what changed in the result, which you can edit.
 - Choose **Accept** to request replacement of the original selection. The app, field, range and text must still match. If they don't, the panel says so, disables Accept and makes **Copy result** the main button.
 - Password fields are excluded. The chips switch transforms inside the panel.
 - There is no automatic paste.
@@ -184,7 +184,7 @@ Check the original field after Accept. See [writing tools](https://docs.mouthtyp
 Choose **Transcribe Audio File…** in the menu (it opens the Transcribe Audio File window, and Home has a button for it too), then select one WAV, AIFF or M4A file up to 10 minutes and 512 MB. Mouthtype uses the speech model already loaded on your Mac. Your original file stays unchanged.
 
 - Preparing and Transcribing show actual work stages.
-- Cancel, or close the Mouthtype window, to cancel the import. Switching to another page keeps it running. Cancellation may wait for the current recognition operation to return.
+- Cancel, or close the Transcribe Audio File window, to cancel the import. Closing or switching the Mouthtype window doesn't. Cancellation may wait for the current recognition operation to return.
 - The full raw result is selectable: explicitly use **Copy** or **Save Text…** to export UTF-8 text. Saving over the original audio is refused.
 - Imports do not apply cleanup, saved spellings or phrases, paste automatically, or change dictation history/statistics.
 

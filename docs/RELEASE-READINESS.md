@@ -11,8 +11,7 @@ Not verified on a device for stable 0.4.0:
 
 - Fresh install on a Mac that has never run Mouthtype.
 - VoiceOver.
-- Bluetooth and USB microphones, and switching microphones.
-- File transcription.
+- Bluetooth and USB microphones.
 
 Phase3 froze the beta.1 feature set. The rc.1/build11 candidate was followed by rc.2/build12, which adds the visual refresh and default-on update checks, rc.3/build13, which fixes the rc.2 review findings, and rc.4/build14, which fixes the rc.3 review findings, before stable0.1.0. The new interface has automated and offscreen rendering coverage only; it adds no physical acceptance. The earlier candidates were not a declaration that every stable gate had passed, and this stable release doesn't claim the unverified items above. The repository remains private; published app/source/feed assets are verified independently.
 

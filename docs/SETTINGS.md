@@ -16,7 +16,7 @@ The Mouthtype window has six pages in the sidebar: **Home**, **Stats**, **Dictio
 | Recording behavior | Hold to talk | Settings > General |
 | Live words | Off | Settings > General |
 | Quiet other audio | On (from 0.4.0; stays off if you turned it off before) | Settings > General |
-| Show in Dock | While a window is open | Settings > General |
+| Show in Dock | While a window is open | Settings > Mac |
 | Automatic update checks | On, with no prompt | Settings > Mac |
 | Boost saved words | Off | Settings > Advanced |
 | Code names from your editor | Off | Settings > Advanced |
@@ -36,7 +36,7 @@ The daily menu is plain text, top to bottom. Pill style, text font, cleanup leve
 | Transcribe Audio File… | Opens the Transcribe Audio File window |
 | Saved Recordings | Interrupted or failed recordings |
 | Check for Updates… | Checks for a new version |
-| How to Use Mouthtype… | Menu item |
+| How to Use Mouthtype… | Opens the how-to window with the quick start for your current shortcut |
 | About Mouthtype, Quit | Standard app items |
 
 A few items only appear when they apply:
@@ -80,7 +80,7 @@ Stats is built from the dictation log on this Mac (nothing extra is stored). It 
 
 ## General
 
-**General** (Settings modal) contains the dictation shortcut, Recording behavior and Microphone, then Recording sounds, Live words and Quiet other audio. **Mac** holds Launch at login and the update settings. The cleanup level lives on the Style page (Cleanup tab).
+**General** (Settings modal) contains the dictation shortcut, Recording behavior and Microphone, then Recording sounds, Live words and Quiet other audio. **Mac** holds Launch at login, Show in Dock and the update settings. The cleanup level lives on the Style page (Cleanup tab).
 
 ### Shortcut and recording behavior
 
@@ -149,7 +149,7 @@ A device that was already muted is left alone. Mouthtype never changes volume. A
 
 ### Show in Dock
 
-**Settings > General > Show in Dock** chooses when Mouthtype has a Dock icon. The menu bar icon stays in every mode.
+**Settings > Mac > Show in Dock** chooses when Mouthtype has a Dock icon. The menu bar icon stays in every mode.
 
 | Mode | `dockIconMode` value | Behavior |
 | --- | --- | --- |
@@ -170,7 +170,7 @@ Updates are in **Mac**, and **Check for Updates…** is also in the menu.
 - If you agree to install while a take is running, installation waits for it and queued processing to finish, then pauses new recording and replay work until the update completes or is cancelled.
 - Unconfigured source builds and diagnostic runs never start the updater.
 
-**Mac** also holds Launch at login, which reports when macOS approval is still needed.
+**Mac** also holds Launch at login, which reports when macOS approval is still needed, and Show in Dock.
 
 ## Style
 
@@ -191,9 +191,9 @@ A context is a tone plus an optional cleanup level, applied to a list of apps an
 | Email | Mail, Outlook, mail.google.com and outlook.office.com (Formal) |
 | Other | No list. It is everything not listed elsewhere, its tone is the default tone, and it can hold a cleanup level |
 
-Built-in entries are tagged BUILT IN and yours ADDED BY YOU. Choose **Add an app or website** to add one, which moves it out of any other context.
+Built-in entries are tagged BUILT IN and yours ADDED BY YOU. Apps show their real icons, and built-in apps that aren't installed are hidden from the Counts as lists. Choose **Add an app or website** to add one, which moves it out of any other context.
 
-**Cleanup here** overrides the cleanup level for the context (Same as everywhere, Off, Basic, Fast or Thorough). The Cleanup tab sets the global level and lists the contexts that override it. There, Fast and Thorough show their actual download/loading state. A rule can turn cleanup on for one context even when the global level is Off.
+**Cleanup here** overrides the cleanup level for the context (Same as everywhere, Off, Basic, Fast or Thorough). The Cleanup tab sets the global level and lists the contexts that override it. There, Fast and Thorough show their actual download/loading state. A rule can turn cleanup on for one context even when the global level is Off. A loaded cleanup model unloads after 10 minutes without use and reloads on the next take.
 
 > [!NOTE]
 > A level that needs a model that isn't installed runs as Basic, and the take records the level that actually ran. Dictations use Basic while the selected cleanup model is unavailable.
@@ -395,7 +395,7 @@ Ready to dictate requires:
 > [!NOTE]
 > Secure Input keeps setup unready. The hint follows the saved shortcut and Hold/Toggle behavior. It does not record or paste a test take. Fast/Thorough cleanup can still be preparing; Basic is used until its model is available.
 
-Refresh status or return from System Settings to recheck permissions. A denied permission links to its System Settings pane. An authorized microphone that could not prepare can be retried. Input settings opens Settings > Health for the existing shortcut, Fn remapping and keyboard controls. Diagnostic command-line probes retain their previous permission behavior and do not show or consume first-run setup.
+Refresh status or return from System Settings to recheck permissions. A denied permission links to its System Settings pane. An authorized microphone that could not prepare can be retried. Change shortcut opens Settings > Health for the existing shortcut, Fn remapping and keyboard controls. Diagnostic command-line probes retain their previous permission behavior and do not show or consume first-run setup.
 
 Saved Recordings loads on demand in pages; older saved audio remains reachable.
 
