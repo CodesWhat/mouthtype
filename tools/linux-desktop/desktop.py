@@ -122,6 +122,7 @@ class Session:
         self.cleanup_engines = {cleanup: cleanup_engine} if cleanup_engine is not None and cleanup in ('fast', 'thorough') else {}
         self.engine_loader = engine_loader
         self.styles, self.styles_path, self.styles_stamp = self._usable_styles(styles), styles_path, None
+        self._rejected_stamp = None
         self._refresh_styles()
         self.cleanup_outcome, self.cleanup_ms = None, None
         self.feedback = feedback
@@ -169,9 +170,24 @@ class Session:
             if stamp == self.styles_stamp:
                 return
             block = self._usable_styles(style_contexts.read_block(self.styles_path))
-        except (OSError, ValueError):
+        except OSError:
+            return
+        except Exception as error:
+            # Any malformed edit keeps the styles already loaded. Say so once per file state, not on every take.
+            if stamp != self._rejected_stamp:
+                self._rejected_stamp = stamp
+                print(json.dumps({'error': 'styles_invalid', 'error_class': type(error).__name__}), file=sys.stderr)
             return
         self.styles, self.styles_stamp = block, stamp
+
+    def _style_window(self):
+        """The take-start window for style resolution only, whatever the delivery mode. Other when unknown."""
+        lookup = getattr(self.delivery, 'window_class', None)
+        try:
+            window_class = lookup() if lookup is not None else None
+        except Exception:
+            return None
+        return {'class': window_class} if isinstance(window_class, str) and window_class else None
 
     def _plan(self, target):
         """What one take runs: the model level, its engine and the tone to re-apply after the model.
@@ -330,7 +346,8 @@ class Session:
                     self._notify('error')
                     return self.status()
                 target = self.delivery.snapshot()
-                plan = self._plan(target)
+                style_target = target if target is not None else self._style_window()
+                plan = self._plan(style_target)
                 if admit_before is not None and time.monotonic() >= admit_before:
                     self.error = 'command_expired'
                     return self.status()
@@ -353,7 +370,7 @@ class Session:
                     self._notify('error')
                     return self.status()
                 self.discard_on_cancel = True
-                self.target = target
+                self.target, self.style_target = target, style_target
                 self.spellings = spellings
                 self.phrase_rules = phrases
                 self.cleanup_rules = cleanup
@@ -392,7 +409,7 @@ class Session:
                 self._notify('transcribing')
                 self.thread = threading.Thread(target=self._finish,
                                                args=(self.take, self.cancelled, self.target, self.spellings, self.phrase_rules, self.cleanup_rules),
-                                               kwargs={'plan': self.cleanup_plan})
+                                               kwargs={'plan': self.cleanup_plan, 'style_target': self.style_target})
                 self.thread.start()
             elif action == 'cancel':
                 if self.state != 'idle':
@@ -419,7 +436,7 @@ class Session:
             except OSError:
                 pass
 
-    def _finish(self, take, cancelled, target, spellings, phrases, cleanup, allow_delivery=True, plan=None):
+    def _finish(self, take, cancelled, target, spellings, phrases, cleanup, allow_delivery=True, plan=None, style_target=None):
         try:
             raw_path = take / 'raw-recognition.txt'
             raw = raw_path.read_bytes().decode('utf-8') if raw_path.exists() else self.engine.transcribe(take / 'recording.wav', cancelled)
@@ -432,7 +449,7 @@ class Session:
                     private_write(raw_path, raw)
             if plan is None:
                 plan = {'level': self.cleanup, 'tone': None, 'engine': self.cleanup_engine}
-            basic = cleanup.apply(raw, target)
+            basic = cleanup.apply(raw, target if target is not None else style_target)
             outcome, milliseconds = self._model_cleanup(basic, cancelled, plan['level'], plan['engine'])
             text = basic if outcome is None or not isinstance(outcome[1], str) else outcome[1]
             if outcome is not None and isinstance(outcome[1], str) and plan['tone']:
@@ -630,6 +647,19 @@ class HyprlandDelivery:
             return {key: active[key] for key in ('address', 'class', 'pid')}
         except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
             return None
+
+    def window_class(self):
+        """The active window's class for style resolution. Unlike snapshot() it also answers in recover mode, and
+        it never authorises delivery. None when the query fails or times out."""
+        if self.config.get('mode') in ('type', 'paste'):
+            return None
+        try:
+            result = self.run(['hyprctl', '-j', 'activewindow'], capture_output=True,
+                              text=True, check=True, timeout=.5)
+            window_class = json.loads(result.stdout).get('class')
+        except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
+            return None
+        return window_class if isinstance(window_class, str) and window_class else None
 
     # Terminals paste with Ctrl+Shift+V, and a pasted line break runs a command there.
     TERMINAL_CLASSES = ('Alacritty', 'kitty', 'foot', 'footclient', 'com.mitchellh.ghostty', 'org.wezfurlong.wezterm',

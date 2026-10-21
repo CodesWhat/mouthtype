@@ -251,5 +251,94 @@ class ReloadTests(WiringCase):
             self.assertEqual(loader.asked, ['fast'])
 
 
+class RecoverModeTests(WiringCase):
+    def run_take(self, window, mode='recover', fail=None):
+        from desktop import HyprlandDelivery
+        calls = []
+
+        def run(argv, **kwargs):
+            calls.append(argv)
+            if fail is not None:
+                raise fail
+            if argv[-1] == 'locked':
+                return type('Result', (), {'stdout': json.dumps({'locked': False})})()
+            if argv[-1] == 'activewindow':
+                return type('Result', (), {'stdout': json.dumps({'address': '0x1', 'class': window, 'pid': 7})})()
+            return type('Result', (), {'returncode': 0, 'stdout': ''})()
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        delivery = HyprlandDelivery({'mode': mode}, run=run)
+        session = Session(Capture(), Engine(SHORT), delivery, Path(temp.name), cleanup='basic',
+                          styles=config(set_tone('work', 'casual')))
+        self.addCleanup(session.close)
+        session.command('start')
+        session.command('stop')
+        session.wait()
+        return session, calls, (session.take / 'transcript.txt').read_text()
+
+    def test_recover_mode_resolves_the_apps_context(self):
+        _, _, slack = self.run_take('Slack')
+        _, _, editor = self.run_take('editor')
+        self.assertEqual((slack, editor), ('See you Friday', 'See you Friday.'))
+
+    def test_recover_mode_never_delivers(self):
+        session, calls, _ = self.run_take('Slack')
+        self.assertEqual(session.status()['delivery'], 'recover_only')
+        self.assertEqual([call[0] for call in calls], ['hyprctl'])
+        self.assertTrue(all(call[-1] == 'activewindow' for call in calls))
+
+    def test_a_failed_or_timed_out_query_falls_back_to_other(self):
+        import subprocess
+        for error in (subprocess.TimeoutExpired('hyprctl', .5), OSError('no hyprctl')):
+            _, _, text = self.run_take('Slack', fail=error)
+            self.assertEqual(text, 'See you Friday.')
+
+
+class MalformedStylesTests(ReloadTests):
+    SHAPES = (
+        {'contexts': {'work': {'removed': [{}]}}},
+        {'contexts': {'work': {'removed': [['slack']]}}},
+        {'contexts': {'work': {'added': [{'app': {}, 'name': 'x'}]}}},
+        {'contexts': {'work': {'added': [{'app': 'x', 'name': []}]}}},
+        {'contexts': {'work': 5}},
+        {'contexts': []},
+        {'rules': [{'app': ['x'], 'tone': 'casual'}]},
+        {'rules': [5]},
+        {'tone': {}},
+    )
+
+    def test_every_malformed_shape_raises_value_error(self):
+        for shape in self.SHAPES:
+            with self.subTest(shape=shape), self.assertRaises(ValueError):
+                styles.validate(shape)
+
+    def test_a_malformed_edit_keeps_the_styles_and_the_next_take_records(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'linux.json'
+            path.write_text(json.dumps({'engine_config': 'x.json', 'styles': config(set_tone('work', 'casual'))}))
+            session = self.session(path)
+            self.assertEqual(self.dictate(session), 'See you Friday')
+            for shape in self.SHAPES:
+                path.write_text(json.dumps({'engine_config': 'x.json', 'styles': shape}))
+                self.assertEqual(self.dictate(session), 'See you Friday')
+                self.assertNotEqual(session.status().get('error'), 'invalid_command')
+
+    def test_a_rejected_edit_is_logged_once(self):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'linux.json'
+            path.write_text(json.dumps({'engine_config': 'x.json'}))
+            session = self.session(path)
+            self.dictate(session)
+            path.write_text(json.dumps({'engine_config': 'x.json',
+                                        'styles': {'contexts': {'work': {'removed': [{}]}}}}))
+            errors = io.StringIO()
+            with contextlib.redirect_stderr(errors):
+                self.dictate(session)
+                self.dictate(session)
+            self.assertEqual(errors.getvalue().count('styles_invalid'), 1)
+
+
 if __name__ == '__main__':
     unittest.main()
