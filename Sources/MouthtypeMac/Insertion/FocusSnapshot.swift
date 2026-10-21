@@ -15,6 +15,10 @@ public struct FocusSnapshot: Sendable {
     public var role: String?
     public var subrole: String?
     var focusedOwnerPID: pid_t?
+    /// The pid of the application that owns the focused element's window, read through Accessibility ancestry. Only read
+    /// when `focusedOwnerPID` differs from `pid`. Browsers host web content in renderer processes, so the owner pid
+    /// alone says nothing about which app the field is in.
+    var focusedApplicationPID: pid_t?
     public var isSecure: Bool
     /// For static text only: whether its value or selection can be set. Nil for every other role, or when unread.
     var isTextSettable: Bool?
@@ -24,7 +28,7 @@ public struct FocusSnapshot: Sendable {
     init(
         pid: pid_t? = nil, bundleID: String? = nil, appName: String? = nil, windowTitle: String? = nil,
         role: String? = nil, subrole: String? = nil, isSecure: Bool = false, isTextSettable: Bool? = nil,
-        element: FocusedElement? = nil, focusedOwnerPID: pid_t? = nil
+        element: FocusedElement? = nil, focusedOwnerPID: pid_t? = nil, focusedApplicationPID: pid_t? = nil
     ) {
         self.pid = pid
         self.bundleID = bundleID
@@ -36,6 +40,7 @@ public struct FocusSnapshot: Sendable {
         self.isTextSettable = isTextSettable
         self.element = element
         self.focusedOwnerPID = focusedOwnerPID
+        self.focusedApplicationPID = focusedApplicationPID
     }
 
     public var target: DictationTarget {
@@ -51,11 +56,12 @@ public struct FocusSnapshot: Sendable {
         return false
     }
 
-    /// The focused element belongs to a different process than the frontmost app, as with a non-activating panel.
-    /// Unknown ownership is not a mismatch: Chromium and Electron may expose no focused element yet.
+    /// The focused element sits in a different application than the frontmost one, as with a non-activating panel.
+    /// A differing owner pid is not enough, because a browser's renderer process owns its page elements. Unknown
+    /// ownership or unreadable ancestry is not a mismatch: Chromium and Electron may expose no focused element yet.
     var focusOwnerDiffersFromFrontmost: Bool {
-        guard let pid, let focusedOwnerPID else { return false }
-        return pid != focusedOwnerPID
+        guard let pid, let focusedOwnerPID, focusedOwnerPID != pid, let focusedApplicationPID else { return false }
+        return focusedApplicationPID != pid
     }
 }
 
@@ -161,6 +167,9 @@ final class AccessibilityFocusReader: FocusReading {
         var snapshot = base
         snapshot.element = FocusedElement(element)
         snapshot.focusedOwnerPID = ownerPID(of: FocusedElement(element))
+        if let owner = snapshot.focusedOwnerPID, owner != snapshot.pid {
+            snapshot.focusedApplicationPID = applicationPID(ofElement: element)
+        }
         // Each read below re-derives its timeout from what's left of the deadline, and none is issued once it has passed.
         // The caller sees the expired deadline and treats the whole capture as timed out.
         if Self.deadlinePassed { return snapshot }
@@ -182,6 +191,19 @@ final class AccessibilityFocusReader: FocusReading {
               NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return nil }
         let bundleID = snapshot.bundleID
         return { BrowserURLRead.host(of: element, bundleID: bundleID, timeout: BrowserURLRead.callTimeout) }
+    }
+
+    /// The pid of the application whose window holds `element`: its top-level window's parent when that is the
+    /// application element, else the window itself. Nil when the ancestry can't be read.
+    func applicationPID(ofElement element: AXUIElement) -> pid_t? {
+        guard let window = elementValue(bounded(element), kAXTopLevelUIElementAttribute)
+                ?? elementValue(bounded(element), kAXWindowAttribute) else { return nil }
+        let owner = elementValue(bounded(window), kAXParentAttribute).flatMap {
+            stringValue(bounded($0), kAXRoleAttribute) == kAXApplicationRole ? $0 : nil
+        } ?? window
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(bounded(owner), &pid) == .success, pid > 0 else { return nil }
+        return pid
     }
 
     /// Diagnostic ownership only. Event delivery still uses the frontmost application.
