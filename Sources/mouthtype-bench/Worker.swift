@@ -22,7 +22,7 @@ struct EngineWorker: AsyncParsableCommand {
             output.displayName = transcriber.displayName
             if let measured = transcriber as? any MeasuredTranscriber {
                 output.prepare = try await measured.prepareMeasured()
-                output.modelPath = measured.modelDirectory.path
+                output.modelPath = (measured.modelDirectory.path as NSString).abbreviatingWithTildeInPath
                 output.modelBytes = Self.directorySize(measured.modelDirectory)
             } else {
                 try await transcriber.prepare()
