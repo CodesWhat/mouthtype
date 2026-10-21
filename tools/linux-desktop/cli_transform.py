@@ -17,6 +17,7 @@ import sys
 import threading
 
 import transform
+import transform_host
 from transform import MAX_UNITS, TransformService, failure, units
 
 
@@ -85,7 +86,9 @@ def execute(args, service, stdin):
 def run(args, context, *, stdin=None, output=None, service=None):
     cancelled = threading.Event()
     service = service or TransformService(context.config, context.runtime, cancelled=cancelled,
-                                          busy=lambda: service_busy(context))
+                                          busy=lambda: service_busy(context),
+                                          idle_seconds=transform_host.idle_seconds(),
+                                          hash_cache=lambda: transform._desktop().hash_cache())
     previous = {}
     if threading.current_thread() is threading.main_thread():
         for event in (signal.SIGINT, signal.SIGTERM):

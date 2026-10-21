@@ -6,6 +6,7 @@ arrives in the request's `controls` field; anything else (the warm-up request, f
 """
 
 from pathlib import Path
+import socket
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'linux-engine-proof'))
@@ -59,6 +60,21 @@ worker.cleanup_payload = transform_payload
 # The proof worker strips <transcript> tags and <think> blocks from cleanup output. In an edit those can be the text
 # being edited, so the output goes back untouched and transform.sanitize_output frames it with the source in hand.
 worker.sanitize = lambda text: text
+
+def complete(port, alias, text, kind, seconds):
+    """One transform against a llama-server another process already runs. None when it didn't answer in time."""
+    payload = transform_payload(text, 'shared', kind)
+    payload['model'] = alias
+    try:
+        result = worker.http_json(port, '/v1/chat/completions', payload, timeout=float(seconds))
+    except (socket.timeout, TimeoutError):
+        return None
+    choice = result['choices'][0]
+    output = choice['message'].get('content')
+    if choice.get('finish_reason') != 'stop' or not isinstance(output, str) or choice['message'].get('reasoning_content'):
+        raise ValueError('Incomplete transform result')
+    return output
+
 
 if __name__ == '__main__':
     sys.exit(worker.main())

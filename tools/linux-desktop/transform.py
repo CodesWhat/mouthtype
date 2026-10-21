@@ -298,7 +298,8 @@ class TransformService:
     """The five verbs behind `transform`. Each returns the JSON-serialisable dict the panel renders."""
 
     def __init__(self, config, runtime, *, busy=None, cancelled=None, clock=time.time, run=None, worker=None,
-                 focus_wait=FOCUS_WAIT_SECONDS, load_seconds=LOAD_SECONDS, deadline_seconds=None):
+                 focus_wait=FOCUS_WAIT_SECONDS, load_seconds=LOAD_SECONDS, deadline_seconds=None,
+                 idle_seconds=0, hash_cache=None):
         self.config, self.runtime = Path(config), Path(runtime)
         self.busy = busy or (lambda: False)
         self.cancelled = cancelled if cancelled is not None else threading.Event()
@@ -306,6 +307,8 @@ class TransformService:
         self.run = run or subprocess.run
         self.worker = worker
         self.focus_wait, self.load_seconds, self.deadline_seconds = focus_wait, load_seconds, deadline_seconds
+        # idle_seconds > 0 keeps the model resident in transform_host that long after a transform; 0 loads per run.
+        self.idle_seconds, self.hash_cache = idle_seconds, hash_cache
         self.store = CaptureStore(self.runtime, clock)
 
     # -- model status
@@ -422,11 +425,25 @@ class TransformService:
 
     # -- transform
 
+    def _hash_cache(self):
+        """The hash cache, built on first use when given as a factory, so only the model path pays for it."""
+        if callable(self.hash_cache):
+            self.hash_cache = self.hash_cache()
+        return self.hash_cache
+
     def _model(self, kind, text, settings):
         """Model text, or None when interrupted. Raises RuntimeError, ValueError or OSError on a model fault."""
         desktop = _desktop()
         words = len(text.split())
         seconds = min(180.0, 5.0 + 0.4 * words)
+        # The same model is never loaded twice: when the daemon already runs it, use that server.
+        shared = self._daemon_server(settings)
+        if shared is not None:
+            return self._model_shared(shared, kind, text, seconds)
+        if self.cancelled.is_set():
+            return None
+        if self.idle_seconds > 0:
+            return self._model_resident(kind, text, settings, seconds)
 
         class Engine(desktop.CleanupEngine):
             def _prime(self):
@@ -437,7 +454,7 @@ class TransformService:
                     self._ensure_loaded(cancelled)
 
         engine = Engine(settings, worker=self.worker or Path(__file__).with_name('transform_worker.py'),
-                        startup_seconds=self.load_seconds)
+                        startup_seconds=self.load_seconds, hash_cache=self._hash_cache())
         box = {}
 
         def work():
@@ -462,6 +479,70 @@ class TransformService:
                 return None
             raise box['error']
         return box['text']
+
+    def _daemon_server(self, settings):
+        """The daemon's running server (port, alias) for this model file, or None when it has none to share.
+
+        A matching engine that is still loading is waited for; one that failed or is absent is not, since then no
+        copy of the model is in memory and loading it here duplicates nothing."""
+        desktop = _desktop()
+        socket_path = self.runtime / 'session.sock'
+        wanted = (settings['artifacts']['model']['sha256'], os.path.realpath(settings['server']))
+        end = time.monotonic() + self.load_seconds
+        while not self.cancelled.is_set():
+            try:
+                reply = desktop.request(socket_path, 'engine')
+                engines = reply['engines']
+                match = next((item for item in engines if (item.get('sha256'), item.get('server')) == wanted), None)
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                return None
+            if match is None:
+                return None
+            if match.get('state') == 'ready' and type(match.get('port')) is int and isinstance(match.get('alias'), str):
+                return match
+            if match.get('state') not in ('idle', 'loading') or time.monotonic() >= end:
+                return None
+            self.cancelled.wait(.25)
+        return None
+
+    def _model_shared(self, server, kind, text, seconds):
+        """Same contract as _model, sent straight to the daemon's llama-server. It serves one request at a time, so a
+        dictation in flight just makes this wait its turn."""
+        import transform_worker
+        box = {}
+
+        def work():
+            try:
+                box['text'] = transform_worker.complete(server['port'], server['alias'], text, kind, seconds)
+            except BaseException as error:
+                box['error'] = error
+
+        thread = threading.Thread(target=work, daemon=True)
+        thread.start()
+        while thread.is_alive() and not self.cancelled.is_set():
+            thread.join(.05)
+        if thread.is_alive():
+            # Leaving the request makes the server stop generating once this process exits and drops the connection.
+            return None
+        if 'error' in box:
+            if self.cancelled.is_set():
+                return None
+            raise RuntimeError('Transform model unavailable')
+        return box['text']
+
+    def _model_resident(self, kind, text, settings, seconds):
+        """Same contract as _model, served by the resident host so the hash, the load and the warm server are shared."""
+        import transform_host
+        command = transform_host.host_command(
+            self.runtime, worker=self.worker or Path(__file__).with_name('transform_worker.py'),
+            idle=self.idle_seconds, load_seconds=self.load_seconds, hash_cache=self._hash_cache())
+        reply = transform_host.ask(self.runtime, {'settings': settings, 'kind': kind, 'text': text, 'seconds': seconds},
+                                   self.cancelled, command=command, seconds=self.load_seconds + seconds + 10)
+        if reply is None or reply.get('timeout'):
+            return None
+        if isinstance(reply.get('text'), str):
+            return reply['text']
+        raise RuntimeError('Transform model unavailable')
 
     def transform(self, identity, kind):
         record, problem = self._record(identity)

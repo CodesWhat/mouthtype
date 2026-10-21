@@ -27,7 +27,7 @@ from session_client import read_message, request
 # Importing these costs tens of milliseconds, and a hotkey or panel client never needs them. They are bound into this
 # module on first use (the service, doctor and tests reach them through the constructors below or by attribute).
 RUNTIME_NAMES = {
-    'Stopped': 'proof', 'Worker': 'proof', 'verify_artifacts': 'proof',
+    'Stopped': 'proof', 'VerifiedHashes': 'proof', 'Worker': 'proof', 'verify_artifacts': 'proof',
     'load_spellings': 'spellings', 'load_phrases': 'phrases', 'PhraseContextUnavailable': 'phrases',
     'BasicCleanup': 'cleanup', 'smart': None, 'style_contexts': None, 'tone_stage': None, 'imports': None,
     'FileError': 'imports', 'FileTranscription': 'imports',
@@ -81,6 +81,14 @@ def capabilities_report():
             'secure_field_detection': False, 'delivery_verification': False,
         },
     }
+
+
+def hash_cache(*, environ=None):
+    """The verified-model-hash cache in the state directory. MOUTHTYPE_VERIFY_FULL=1 forces a full SHA-256 every load."""
+    environ = os.environ if environ is None else environ
+    base = Path(environ.get('XDG_STATE_HOME') or Path.home() / '.local/state')
+    return VerifiedHashes(base / 'mouthtype/verified-models.json',
+                          force=environ.get('MOUTHTYPE_VERIFY_FULL', '') not in ('', '0'))
 
 
 def private_write(path, data):
@@ -1083,7 +1091,8 @@ class PipeWireCapture:
         stop_process(process)
 
 class SpeechEngine:
-    def __init__(self, settings, *, python=sys.executable, worker=None, request_seconds=30, startup_seconds=120):
+    def __init__(self, settings, *, python=sys.executable, worker=None, request_seconds=30, startup_seconds=120,
+                 hash_cache=None):
         load_runtime()
         if not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict):
             raise ValueError('Invalid speech artifact configuration')
@@ -1096,19 +1105,49 @@ class SpeechEngine:
         self.script = worker or PROOF / 'worker.py'
         self.request_seconds, self.startup_seconds = request_seconds, startup_seconds
         self.worker = None
+        self.hash_cache = hash_cache
         self.lock = threading.Lock()
+        self.shutdown = threading.Event()
+        self.warming = None
+        self.warm_guard = threading.Lock()
+
+    def _ensure_loaded(self, cancelled):
+        if self.worker is None:
+            verify_artifacts(self.settings, self.hash_cache)
+            self.worker = Worker(guarded_command([self.python, str(self.script), 'speech']))
+            remaining = self.worker.send({'configuration': self.settings}, self.startup_seconds, cancelled)
+            ready = self.worker.receive(remaining, cancelled)
+            if ready.get('event') != 'ready':
+                raise ValueError('Speech engine is unavailable')
+
+    def warm(self):
+        """Load in the background so the first take does not pay the hash and model load. A failure just leaves the
+        engine cold; the first take retries and reports its own error."""
+        def run():
+            with self.lock:
+                if self.shutdown.is_set():
+                    return
+                try:
+                    self._ensure_loaded(self.shutdown)
+                except (OSError, ValueError, KeyError, TypeError, Stopped):
+                    self.close()
+        with self.warm_guard:
+            if self.warming is not None and self.warming.is_alive():
+                return self.warming
+            self.warming = threading.Thread(target=run, daemon=True)
+            self.warming.start()
+            return self.warming
+
+    def stop(self):
+        self.shutdown.set()
+        with self.lock:
+            self.close()
 
     def transcribe(self, path, cancelled, *, seconds=None):
         seconds = self.request_seconds if seconds is None else seconds
         with self.lock:
             try:
-                if self.worker is None:
-                    verify_artifacts(self.settings)
-                    self.worker = Worker(guarded_command([self.python, str(self.script), 'speech']))
-                    remaining = self.worker.send({'configuration': self.settings}, self.startup_seconds, cancelled)
-                    ready = self.worker.receive(remaining, cancelled)
-                    if ready.get('event') != 'ready':
-                        raise ValueError('Speech engine is unavailable')
+                self._ensure_loaded(cancelled)
                 identity = uuid.uuid4().hex
                 remaining = self.worker.send({'id': identity, 'wav': str(path)}, seconds, cancelled)
                 result = self.worker.receive(remaining, cancelled)
@@ -1131,7 +1170,8 @@ class CleanupEngine:
     RETRY_SECONDS = (30, 120, 480, 1800)
     ABSENT_RECHECK_SECONDS = 30
 
-    def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic):
+    def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic,
+                 hash_cache=None):
         load_runtime()
         if (not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict) or
                 not isinstance(settings.get('server'), str) or settings.get('prompt', 's1') not in ('s1', 'shared')):
@@ -1143,6 +1183,7 @@ class CleanupEngine:
         self.settings, self.python = settings, python
         self.script = worker or PROOF / 'worker.py'
         self.startup_seconds = startup_seconds
+        self.hash_cache = hash_cache
         self.worker = None
         self.lock = threading.Lock()
         # close() sets this so a load in progress stops promptly instead of holding the lock for minutes.
@@ -1153,6 +1194,7 @@ class CleanupEngine:
         # A failed load retries from clean() on a growing delay; a reload of the config builds a fresh engine.
         self.failures, self.retry_at = 0, 0.0
         self.artifacts_checked = clock()
+        self.endpoint = None
         self.state = 'idle' if self._artifacts_present() else 'absent'
         self.error = None
         self.load_ms = None
@@ -1183,14 +1225,18 @@ class CleanupEngine:
             return
         self.state = 'loading'
         started = time.monotonic()
-        verify_artifacts(self.settings)
+        verify_artifacts(self.settings, self.hash_cache)
+        configuration = {**self.settings, 'startup_seconds': self.startup_seconds}
+        if self.hash_cache is not None and not self.hash_cache.force:
+            configuration['version_cache'] = str(self.hash_cache.path.with_name('llama-version.json'))
         self.worker = Worker(guarded_command([self.python, str(self.script), 'cleanup']))
-        remaining = self.worker.send({'configuration': {**self.settings, 'startup_seconds': self.startup_seconds}},
-                                     self.startup_seconds, cancelled)
+        remaining = self.worker.send({'configuration': configuration}, self.startup_seconds, cancelled)
         ready = self.worker.receive(remaining, cancelled)
         if ready.get('event') != 'ready':
             raise ValueError('Cleanup engine is unavailable')
         self.load_ms = int((time.monotonic() - started) * 1000)
+        port, alias = ready.get('port'), ready.get('alias')
+        self.endpoint = {'port': port, 'alias': alias} if type(port) is int and isinstance(alias, str) else None
         self.state = 'ready'
         self.error = None
         self.failures, self.retry_at = 0, 0.0
@@ -1225,6 +1271,7 @@ class CleanupEngine:
         self.state, self.error = 'failed', type(error).__name__
         self.retry_at = self.clock() + self.RETRY_SECONDS[min(self.failures, len(self.RETRY_SECONDS) - 1)]
         self.failures += 1
+        self.endpoint = None
         worker, self.worker = self.worker, None
         if worker:
             worker.close()
@@ -1268,9 +1315,17 @@ class CleanupEngine:
         finally:
             self.lock.release()
 
+    def info(self):
+        """What another local process needs to share this engine's running server instead of loading the model again."""
+        model = self.settings['artifacts']['model']
+        return {'state': self.state, 'sha256': model['sha256'], 'server': os.path.realpath(self.settings['server']),
+                'port': self.endpoint['port'] if self.endpoint and self.state == 'ready' else None,
+                'alias': self.endpoint['alias'] if self.endpoint and self.state == 'ready' else None}
+
     def close(self):
         self.shutdown.set()
         with self.lock:
+            self.endpoint = None
             worker, self.worker = self.worker, None
             if worker:
                 worker.close()
@@ -1341,7 +1396,7 @@ def validate_config(value):
     return result
 
 
-def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup=None):
+def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup=None, bound=None):
     path = Path(path)
     # The lock owns this one runtime socket, including cleanup after an interrupted session.
     with open(str(path) + '.lock', 'a') as ownership:
@@ -1357,6 +1412,8 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
             os.chmod(path, 0o600)
             server.listen(4)
             server.settimeout(.1)
+            if bound is not None:
+                bound()
             maintenance = None
             if startup is not None:
                 # Maintenance prunes takes, so only the daemon that owns the runtime lock may run it. It runs after the
@@ -1402,6 +1459,8 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                                     raise ValueError('Too many watchers')
                                 result = state_snapshot(session, files)
                                 keep = True
+                            elif action == 'engine':
+                                result = engine_info(session)
                             elif action == 'import':
                                 if files is None:
                                     raise ValueError('File transcription is unavailable')
@@ -1466,6 +1525,16 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                         pass
                     watcher.close()
                 path.unlink(missing_ok=True)
+
+
+def engine_info(session):
+    """The cleanup engines this service runs. A configured engine that is not loaded yet starts loading, so a caller
+    that wants its model waits for it instead of loading a second copy."""
+    engines = {id(e): e for e in list(session.cleanup_engines.values()) if e is not None}
+    for engine in engines.values():
+        if engine.state == 'idle':
+            engine.warm()
+    return {'engines': [engine.info() for engine in engines.values()]}
 
 
 def state_snapshot(session, files=None):
@@ -1775,22 +1844,23 @@ def main(argv=None, *, cli_directory=None):
         if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise ValueError('Runtime directory must be owned by you with mode 0700')
         load_runtime()
+        verified = hash_cache()
         engine = SpeechEngine(settings, python=config.get('python', sys.executable),
-                              request_seconds=config['request_seconds'])
+                              request_seconds=config['request_seconds'], hash_cache=verified)
         cleanup_engine = None
         if config['cleanup'] in ('fast', 'thorough'):
             cleanup_path = Path(config['cleanup_engine']).expanduser()
             if not cleanup_path.is_absolute():
                 cleanup_path = args.config.resolve().parent / cleanup_path
             cleanup_settings = json.loads(cleanup_path.read_text())['engines'][config['cleanup']]
-            cleanup_engine = CleanupEngine(cleanup_settings)
+            cleanup_engine = CleanupEngine(cleanup_settings, hash_cache=verified)
         def load_engine(level):
             if not isinstance(config.get('cleanup_engine'), str) or not config['cleanup_engine']:
                 return None
             path = Path(config['cleanup_engine']).expanduser()
             if not path.is_absolute():
                 path = args.config.resolve().parent / path
-            return CleanupEngine(json.loads(path.read_text())['engines'][level])
+            return CleanupEngine(json.loads(path.read_text())['engines'][level], hash_cache=verified)
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
                           HyprlandDelivery(config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
@@ -1809,7 +1879,8 @@ def main(argv=None, *, cli_directory=None):
             signal.signal(event, lambda *_: stopped.set())
         try:
             serve(path, session, stopped, lifetime_seconds=args.lifetime_seconds, files=files,
-                  startup=lambda: session.housekeep(force=True))
+                  startup=lambda: session.housekeep(force=True),
+                  bound=engine.warm)
         finally:
             try:
                 files.close()
@@ -1817,8 +1888,15 @@ def main(argv=None, *, cli_directory=None):
                 try:
                     session.close()
                 finally:
-                    for loaded in {id(e): e for e in (cleanup_engine, *session.cleanup_engines.values()) if e is not None}.values():
-                        loaded.close()
+                    try:
+                        engine.stop()
+                    finally:
+                        try:
+                            import transform_host
+                            transform_host.stop(args.runtime)
+                        finally:
+                            for loaded in {id(e): e for e in (cleanup_engine, *list(session.cleanup_engines.values())) if e is not None}.values():
+                                loaded.close()
         return 0
     except Exception as error:
         loaded = sys.modules.get('imports')
