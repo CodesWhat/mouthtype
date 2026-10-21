@@ -58,6 +58,26 @@ import Testing
         #expect(window.model.spellingSuggestions?.store === store)
     }
 
+    @Test func aURLDuringLaunchIsQueuedThenReplayedAndALateWindowIsRewired() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("launch-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("history.sqlite"))
+        let delegate = AppDelegate()
+        // Something builds the window before launch has a store.
+        let window = delegate.settingsWindow
+        #expect(window.model.home.store == nil)
+        delegate.application(NSApp, open: [URL(string: "mouthtype://record/start")!])
+        delegate.application(NSApp, open: [URL(string: "mouthtype://record/stop")!])
+        #expect(delegate.pendingOpenCount == 2)
+        delegate.settingsStore = store
+        delegate.finishLaunch()
+        #expect(delegate.launchComplete)
+        #expect(delegate.pendingOpenCount == 0)
+        #expect(window.model.home.store === store)
+        #expect(window.model.stats.store === store)
+    }
+
     @Test func burstsOfRefreshRequestsRunOnce() async {
         let (defaults, cleanup) = defaults()
         defer { cleanup() }

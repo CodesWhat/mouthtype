@@ -90,7 +90,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Hands the store and the recovery hooks to the models the first time the window exists.
     private func wiredSettingsWindow(_ window: SettingsWindow) -> SettingsWindow {
-        let model = window.model
+        wireSettingsModels(window.model)
+        settingsWindowBuilt = true
+        return window
+    }
+
+    /// Safe to repeat: completeLaunch runs it again for a window something built before the store and recovery existed.
+    private func wireSettingsModels(_ model: SettingsModel) {
         model.home.store = settingsStore
         model.stats.store = settingsStore
         model.spellingSuggestions?.store = settingsStore
@@ -101,9 +107,22 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             home.canRecover = recovery.canRecover
             home.recoverTake = { [weak recovery] item in recovery?.offerSaved(item) }
         }
-        settingsWindowBuilt = true
-        return window
     }
+
+    /// Open-URL events that arrived before launch finished. They replay in order once the store, pill and menu exist.
+    private var pendingOpenURLs: [[URL]] = []
+    private(set) var launchComplete = false
+    var pendingOpenCount: Int { pendingOpenURLs.count }
+
+    /// Re-wires a settings window built early, then replays what arrived during launch.
+    func finishLaunch() {
+        if settingsWindowBuilt { wireSettingsModels(settingsWindow.model) }
+        launchComplete = true
+        let pending = pendingOpenURLs
+        pendingOpenURLs = []
+        for urls in pending { application(NSApp, open: urls) }
+    }
+
     /// Hands the engine the current bias now, so turning the setting on starts the model download without waiting for a take.
     private func refreshVocabularyBias() {
         let bias = VocabularyBoostSetting.bias(enabled: VocabularyBoostSetting.isEnabled(), rules: dictionary.dictionary())
@@ -336,10 +355,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibility.start(prompt: diagnosticLaunch)
         if showFirstSetup { showSetup() }
         appUpdater.start()
+        finishLaunch()
     }
 
     public func application(_ application: NSApplication, open urls: [URL]) {
         guard !isTerminating else { return }
+        guard launchComplete else { pendingOpenURLs.append(urls); return }
         let router = automationRouter()
         for url in urls {
             if case .disabled = router.handle(url) {
