@@ -95,12 +95,14 @@ private final class FakeFocus: FocusReading {
     var reads = 0
     var snapshots = 0
     var rechecks = 0
+    /// What the cheap recheck reports when it should disagree with the full snapshot.
+    var recheckResult: FocusSnapshot?
     var contexts = 0
     var context: InsertionContext? = InsertionContext(before: "Hello", after: "")
 
     func snapshot() -> FocusSnapshot { snapshots += 1; return current }
 
-    func recheck() -> FocusSnapshot { rechecks += 1; return current }
+    func recheck() -> FocusSnapshot { rechecks += 1; return recheckResult ?? current }
 
     func insertionContext(of element: FocusedElement) -> InsertionContext? { contexts += 1; return context }
 
@@ -205,7 +207,7 @@ private struct Rig {
 
 @MainActor
 @Suite struct TextInserterTests {
-    /// A delivery after the cleanup's context read: one full snapshot, two cheap rechecks, no second text-before-cursor read.
+    /// A delivery after the cleanup's context read: one full snapshot, two cheap rechecks, a fresh text-before-cursor read.
     private func primed(_ rig: Rig, bundleID: String = "com.example.app") {
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: bundleID, element: element(100))
         rig.focus.before = .character("o")
@@ -222,7 +224,7 @@ private struct Rig {
         #expect(result.method == .paste)
         #expect(result.finalText == " world")
         #expect(rig.focus.snapshots == 1 && rig.focus.rechecks == 2)
-        #expect(rig.focus.beforeReads == 0 && rig.focus.reads == 1 && rig.focus.contexts == 1)
+        #expect(rig.focus.beforeReads == 1 && rig.focus.reads == 1 && rig.focus.contexts == 1)
     }
 
     @Test func withoutACleanupReadDeliverReadsTheTextBeforeTheCursorItself() async {
@@ -234,11 +236,11 @@ private struct Rig {
         #expect(rig.focus.snapshots == 1 && rig.focus.rechecks == 1 && rig.focus.beforeReads == 1)
     }
 
-    @Test func typingAfterTheCleanupReadMakesDeliverReadAgain() async {
+    @Test func aFieldEditedAfterTheCleanupReadIsReadFreshBeforeInsertion() async {
         let rig = Rig()
         primed(rig)
         _ = rig.inserter.insertionContext()
-        rig.input.value = 5
+        // Changed with no key or click, so the input count is the same as at the cleanup read.
         rig.focus.before = .character(" ")
         let result = await rig.inserter.deliver("world", startFocus: nil)
         rig.inserter.cancelVerification()
@@ -246,26 +248,19 @@ private struct Rig {
         #expect(result.finalText == "world")
     }
 
-    @Test func aDifferentFieldAfterTheCleanupReadMakesDeliverReadAgain() async {
+    @Test(arguments: [false, true]) func aLightRecheckThatSawSecureOrAnotherOwnerStandsOverTheFullSnapshot(owner: Bool) async {
         let rig = Rig()
         primed(rig)
-        _ = rig.inserter.insertionContext()
-        rig.focus.current.element = element(101)
-        rig.focus.before = .start
-        let result = await rig.inserter.deliver("world", startFocus: nil)
-        rig.inserter.cancelVerification()
-        #expect(rig.focus.beforeReads == 1)
-        #expect(result.finalText == "world")
-    }
-
-    @Test func unknownInputCountNeverReusesTheCleanupRead() async {
-        let rig = Rig()
-        primed(rig)
-        rig.input.value = nil
-        _ = rig.inserter.insertionContext()
-        _ = await rig.inserter.deliver("world", startFocus: nil)
-        rig.inserter.cancelVerification()
-        #expect(rig.focus.beforeReads == 1)
+        rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original clipboard")]])
+        var light = rig.focus.current
+        if owner { light.focusedOwnerPID = 101; light.focusedApplicationPID = 101 } else { light.isSecure = true }
+        rig.focus.recheckResult = light
+        // The full snapshot's secure and ancestry reads failed, so it looks fine.
+        let result = await rig.inserter.deliver("keep this", startFocus: nil)
+        #expect(rig.poster.posts == 0 && !rig.inserter.isRestorePending)
+        #expect(result.method == (owner ? .clipboardOnly : .none))
+        if !owner { #expect(result.outcome == .secureDiscard) }
+        #expect(rig.focus.snapshots == 2)
     }
 
     @Test func noReadBackListenerMeansNoBaselineRead() async {
@@ -280,15 +275,15 @@ private struct Rig {
     @Test func noAccessibilityReadBetweenTheGuardsSkipsTheRecheck() async {
         let rig = Rig()
         primed(rig, bundleID: "com.apple.Terminal")
-        _ = rig.inserter.insertionContext()
+        rig.focus.current.element = nil
         let result = await rig.inserter.deliver("world", startFocus: nil)
         rig.inserter.cancelVerification()
         #expect(result.method == .paste)
         #expect(rig.focus.reads == 0 && rig.focus.beforeReads == 0)
-        #expect(rig.focus.snapshots == 1 && rig.focus.rechecks == 1)
+        #expect(rig.focus.snapshots == 1 && rig.focus.rechecks == 0)
     }
 
-    @Test(arguments: [0, 1, 2]) func focusGuardsStillHoldAfterAPrefetchedRead(change: Int) async {
+    @Test(arguments: [0, 1, 2]) func focusGuardsStillHoldAfterTheBoundaryRead(change: Int) async {
         let rig = Rig()
         primed(rig)
         rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original clipboard")]])
