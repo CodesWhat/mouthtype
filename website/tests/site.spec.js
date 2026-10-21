@@ -62,12 +62,6 @@ for (const width of [1440, 768, 390, 320]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    const hero = await page.locator(".hero").boundingBox();
-    const status = await page.locator(".platform-status").boundingBox();
-    expect(
-      Math.abs(status.x + status.width - hero.x - hero.width),
-    ).toBeLessThan(2);
-    expect(status.y - hero.y).toBeLessThan(25);
     expect(
       await page.locator(".edition, .feature-steps, #preview-note").count(),
     ).toBe(0);

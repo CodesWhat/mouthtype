@@ -157,17 +157,6 @@ p {
 .hero > * {
   min-width: 0;
 }
-.platform-status {
-  position: absolute;
-  right: 0;
-  top: 18px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font: 9px var(--mono);
-  letter-spacing: 1px;
-  color: var(--muted);
-}
 .status-dot {
   display: inline-block;
   width: 6px;
@@ -693,11 +682,6 @@ footer {
   }
   .nav-alpha span {
     margin-left: 8px;
-  }
-  .platform-status {
-    top: 12px;
-    font-size: 6px;
-    gap: 7px;
   }
   .hero {
     padding-top: 45px;
