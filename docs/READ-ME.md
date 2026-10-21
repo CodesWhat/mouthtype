@@ -15,7 +15,7 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 ## What changed in 0.4.0
 
-Mouthtype is now one redesigned window with a new palette and pixel icons: Home, Stats, Dictionary, Transforms, Style, Appearance and a Settings modal. Saved spellings and Phrases are now pages in the Mouthtype window instead of separate windows, and the shortcut recorder is a sheet on it. Set Up Mouthtype and Transcribe Audio File keep their own windows, since the menu bar opens them when no Mouthtype window is up. Leaving a page or closing the window with an unsaved draft still asks first.
+Mouthtype is now one redesigned window with a new palette and SF Symbols in the sidebar: Home, Stats, Dictionary, Transforms, Style, Appearance and a Settings modal. Saved spellings and Phrases are now pages in the Mouthtype window instead of separate windows, and the shortcut recorder is a sheet on it. Set Up Mouthtype and Transcribe Audio File keep their own windows, since the menu bar opens them when no Mouthtype window is up. Leaving a page or closing the window with an unsaved draft still asks first.
 
 Transform Selection in the menu bar cleans up a selection or runs Fix grammar, Make shorter, More formal or More casual on the Thorough model. A preview panel shows the original and an editable result; choose Accept, Copy result, Retry or Cancel. Accept replaces the text only if the app, field and selection are the same. The Transforms page lists your phrases and these transforms, and Transcribe Audio File opens in its own window.
 
