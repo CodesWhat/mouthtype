@@ -62,6 +62,9 @@ final class FnRemapCoordinator {
             return true
         case .repaired:
             Log.hotkey.notice("fn remap was removed by something else and has been reapplied")
+            // What the remap displaces may have changed, and the guard only knows what it was started with.
+            guardian?.stop()
+            guardian?.start(restoring: remap.displacedEntry)
             return true
         case .failed, .restored, .clean:
             Log.hotkey.error("fn remap was lost and could not be repaired, using the plain Fn key")
@@ -91,7 +94,7 @@ final class FnRemapCoordinator {
         switch remap.apply() {
         case .applied, .alreadyApplied, .repaired:
             remap.installSignalHandlers()
-            guardian?.start()
+            guardian?.start(restoring: remap.displacedEntry)
             isActive = true
             return true
         case let .failed(reason):

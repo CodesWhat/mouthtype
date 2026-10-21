@@ -150,7 +150,8 @@ private final class FakeKeyStore: KeyMappingStore {
 private final class FakeGuardian: FnGuarding {
     private(set) var starts = 0
     private(set) var stops = 0
-    func start() { starts += 1 }
+    private(set) var restorings: [FnRemapMapping.Entry?] = []
+    func start(restoring: FnRemapMapping.Entry?) { starts += 1; restorings.append(restoring) }
     func stop() { stops += 1 }
 }
 
@@ -171,6 +172,32 @@ private final class FakeGuardian: FnGuarding {
         #expect(guardian.stops == 1)
         _ = coordinator.setEnabled(true)
         #expect(guardian.starts == 2)
+    }
+
+    @Test func guardIsToldWhichUserMappingTheRemapDisplaced() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0029]
+        let guardian = FakeGuardian()
+        let coordinator = make(FakeKeyStore([theirFn]), guardian: guardian)
+        _ = coordinator.initialSource()
+        #expect(guardian.restorings == [theirFn])
+    }
+
+    @Test func guardGetsNothingToRestoreWhenFnWasUnmapped() {
+        let guardian = FakeGuardian()
+        let coordinator = make(FakeKeyStore(), guardian: guardian)
+        _ = coordinator.initialSource()
+        #expect(guardian.restorings == [nil])
+    }
+
+    @Test func guardRestartsWithTheNewDisplacedMappingAfterARepair() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0029]
+        let store = FakeKeyStore()
+        let guardian = FakeGuardian()
+        let coordinator = make(store, guardian: guardian)
+        _ = coordinator.initialSource()
+        store.mapping = [theirFn]
+        #expect(coordinator.verify())
+        #expect(guardian.stops == 1 && guardian.restorings == [nil, theirFn])
     }
 
     @Test func noGuardWhenTheRemapIsRefused() {
@@ -206,8 +233,8 @@ private final class FakeGuardian: FnGuarding {
 
     @Test func aMissingBinaryIsSurvived() {
         let launcher = FnGuardLauncher(executable: URL(fileURLWithPath: "/nonexistent/mouthtype-fn-guard"))
-        launcher.start()
-        launcher.start()
+        launcher.start(restoring: nil)
+        launcher.start(restoring: nil)
         #expect(launcher.pid == nil && !launcher.isRunning)
         launcher.stop()
     }
@@ -216,15 +243,15 @@ private final class FakeGuardian: FnGuarding {
         let url = try script("exec /bin/sleep 30")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let launcher = FnGuardLauncher(executable: url)
-        launcher.start()
+        launcher.start(restoring: nil)
         let first = try #require(launcher.pid)
-        launcher.start()
+        launcher.start(restoring: nil)
         #expect(launcher.pid == first && launcher.isRunning)
         #expect(getsid(first) == first, "not a session leader")
         #expect(getsid(first) != getsid(getpid()))
         launcher.stop()
         #expect(launcher.pid == nil)
-        launcher.start()
+        launcher.start(restoring: nil)
         #expect(launcher.pid != nil && launcher.pid != first)
         launcher.stop()
     }
@@ -235,7 +262,7 @@ private final class FakeGuardian: FnGuarding {
         let previous = signal(SIGTERM, SIG_IGN)
         defer { signal(SIGTERM, previous) }
         let launcher = FnGuardLauncher(executable: url)
-        launcher.start()
+        launcher.start(restoring: nil)
         let pid = try #require(launcher.pid)
         launcher.stop()
         var gone = false
@@ -250,10 +277,10 @@ private final class FakeGuardian: FnGuarding {
         let url = try script("exit 0")
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
         let launcher = FnGuardLauncher(executable: url)
-        launcher.start()
+        launcher.start(restoring: nil)
         let first = try #require(launcher.pid)
         while launcher.isRunning { usleep(10_000) }
-        launcher.start()
+        launcher.start(restoring: nil)
         #expect(launcher.pid != nil && launcher.pid != first)
         while launcher.isRunning { usleep(10_000) }
     }

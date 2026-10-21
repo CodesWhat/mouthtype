@@ -36,6 +36,12 @@ public final class FnRemap {
         self.defaults = defaults
     }
 
+    /// The user's own mapping of Fn that ours displaced, if any. The crash guardian puts it back.
+    var displacedEntry: FnRemapMapping.Entry? {
+        guard isApplied else { return nil }
+        return savedOriginal()?.first { $0[FnRemapMapping.srcKey] == ours[FnRemapMapping.srcKey] && $0 != ours }
+    }
+
     public var isApplied: Bool { defaults.bool(forKey: Self.markerKey) }
 
     /// What the mapping holds right now, for logging. Unset reads as "unset".

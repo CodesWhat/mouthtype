@@ -33,6 +33,8 @@ public enum FnRemapMapping {
     /// `current` with our entry removed, and any original entry we displaced put back.
     /// Entries other apps or the user added since are kept.
     public static func restoring(current: [Entry], ours: Entry, original: [Entry]) -> [Entry] {
-        current.filter { !isOurs($0, ours: ours) } + original.filter { $0[srcKey] == ours[srcKey] }
+        let kept = current.filter { !isOurs($0, ours: ours) }
+        // Skip what is already there: the guard may have put it back before a later restore runs.
+        return kept + original.filter { $0[srcKey] == ours[srcKey] && !kept.contains($0) }
     }
 }

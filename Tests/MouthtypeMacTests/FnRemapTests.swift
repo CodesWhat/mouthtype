@@ -147,4 +147,22 @@ private final class FakeStore: KeyMappingStore {
         store.unreadable = true
         guard case .failed = remap.apply() else { Issue.record("expected failure"); return }
     }
+
+    @Test func crashCleanupPutsBackTheDisplacedFnMappingAndRelaunchStaysIdempotent() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0029]
+        let defaults = makeDefaults()
+        let store = FakeStore([capsToEscape, theirFn])
+        let dead = FnRemap(store: store, defaults: defaults)
+        #expect(dead.apply() == .applied)
+        #expect(dead.displacedEntry == theirFn)
+        // The app is killed. The guard runs with what the app told it.
+        let arguments = FnGuardArguments(parent: 4242, entry: FnRemapMapping.entry(), displaced: dead.displacedEntry)
+        #expect(FnGuard.run(arguments, store: store, wait: { _ in }) == .removed)
+        #expect(Set(store.mapping ?? []) == [capsToEscape, theirFn])
+        // Next launch finds the stale marker and must not duplicate or lose anything.
+        let next = FnRemap(store: store, defaults: defaults)
+        #expect(next.restoreIfStale() == .restored)
+        #expect(store.mapping?.count == 2 && Set(store.mapping ?? []) == [capsToEscape, theirFn])
+        #expect(next.restoreIfStale() == .clean)
+    }
 }
