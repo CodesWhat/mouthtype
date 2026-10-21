@@ -438,7 +438,7 @@ struct StatsTapeCard: View {
         let wide: CGFloat = slot.isAllHollow ? 4 : 2.5
         let pad: CGFloat = hovered ? 3 : 0
         // Lime only on the peak or hovered needle; every other needle is grey. Ring and callout are hover only.
-        let mark = peak || hovered ? DesignPalette.accent : DesignPalette.neutralMark
+        let mark = peak || hovered ? DesignPalette.accentMark : DesignPalette.neutralMark
         return ZStack {
             if slot.isAllHollow {
                 UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).fill(DesignPalette.surface)
@@ -455,7 +455,7 @@ struct StatsTapeCard: View {
             }
         }
         .padding(pad)
-        .overlay(hovered ? RoundedRectangle(cornerRadius: 3).strokeBorder(DesignPalette.accent, lineWidth: 1) : nil)
+        .overlay(hovered ? RoundedRectangle(cornerRadius: 3).strokeBorder(DesignPalette.accentMark, lineWidth: 1) : nil)
         .overlay(alignment: callOutAlignment(x: slot.x, width: width)) {
             if hovered { callOut(slot).fixedSize().offset(y: -28) }
         }
@@ -519,6 +519,7 @@ struct StatsSpeedCard: View {
                         HStack(spacing: 2) {
                             ForEach(0..<Self.segments, id: \.self) { index in
                                 RoundedRectangle(cornerRadius: 2).fill(fill(index, average: average, peak: peak))
+                                    .overlay(index == average && index != peak ? RoundedRectangle(cornerRadius: 2).strokeBorder(DesignPalette.accentMark, lineWidth: 1) : nil)
                                     .overlay(index == typist ? RoundedRectangle(cornerRadius: 2).strokeBorder(DesignPalette.ink, lineWidth: 1.5) : nil)
                             }
                         }
@@ -532,7 +533,7 @@ struct StatsSpeedCard: View {
                     .accessibilityLabel(meterLabel)
                 }
                 HStack(spacing: 14) {
-                    key(DesignPalette.accent, "average", report.averageWPM.map { String(Int($0.rounded())) } ?? "none")
+                    key(DesignPalette.accent, "average", report.averageWPM.map { String(Int($0.rounded())) } ?? "none", edged: true)
                     key(DesignPalette.ink, "peak", report.bestWPM.map { String(Int($0.rounded())) } ?? "none")
                     key(DesignPalette.track, "a typist", String(Int(report.typingWPM)), outlined: true)
                 }
@@ -554,10 +555,11 @@ struct StatsSpeedCard: View {
         return DesignPalette.track
     }
 
-    private func key(_ color: Color, _ label: String, _ value: String, outlined: Bool = false) -> some View {
+    private func key(_ color: Color, _ label: String, _ value: String, edged: Bool = false, outlined: Bool = false) -> some View {
         HStack(spacing: 5) {
             RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 8, height: 10)
                 .overlay(outlined ? RoundedRectangle(cornerRadius: 2).strokeBorder(DesignPalette.ink, lineWidth: 1.5) : nil)
+                .overlay(edged ? RoundedRectangle(cornerRadius: 2).strokeBorder(DesignPalette.accentMark, lineWidth: 1) : nil)
             (Text(label).foregroundStyle(DesignPalette.ink2) + Text(" \(value)").foregroundStyle(DesignPalette.ink))
                 .font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8).textCase(.uppercase)
                 .fixedSize(horizontal: false, vertical: true)
@@ -600,7 +602,7 @@ struct StatsStreakCard: View {
                                 .aspectRatio(1, contentMode: .fit)
                                 .frame(minWidth: 0)
                                 .overlay(index == daily.count - 1 && daily[index].words == 0
-                                         ? Circle().strokeBorder(DesignPalette.accent, lineWidth: 1.5).background(Circle().fill(DesignPalette.surface)) : nil)
+                                         ? Circle().strokeBorder(DesignPalette.accentMark, lineWidth: 1.5).background(Circle().fill(DesignPalette.surface)) : nil)
                         }
                     }
                     .padding(.horizontal, 2)
@@ -688,7 +690,7 @@ struct StatsDayCard: View {
                                 Rectangle().fill(DesignPalette.track).frame(height: 2)
                             } else {
                                 UnevenRoundedRectangle(topLeadingRadius: 2, topTrailingRadius: 2)
-                                    .fill(hour == peak ? DesignPalette.accent : DesignPalette.neutralMark)
+                                    .fill(hour == peak ? DesignPalette.accentMark : DesignPalette.neutralMark)
                                     .frame(height: max(3, proxy.size.height * CGFloat(words) / CGFloat(maxWords)))
                             }
                         }

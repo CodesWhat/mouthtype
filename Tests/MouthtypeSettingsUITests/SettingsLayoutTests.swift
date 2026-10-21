@@ -174,8 +174,8 @@ import MouthtypeCore
             }
             return hex
         }
-        #expect(resolve(SettingsTheme.controlNS, .aqua) == "76A11A")
-        #expect(resolve(SettingsTheme.controlNS, .darkAqua) == "A6CD52")
+        #expect(resolve(SettingsTheme.controlNS, .aqua) == "4A6A12")
+        #expect(resolve(SettingsTheme.controlNS, .darkAqua) == "D3E58B")
     }
 
     // MARK: Layout

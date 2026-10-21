@@ -109,9 +109,10 @@ import Testing
         #expect(hex(DesignPalette.NS.bg, .aqua) == "F3F3F5" && hex(DesignPalette.NS.bg, .darkAqua) == "1F1F21")
         #expect(hex(DesignPalette.NS.surface, .aqua) == "FFFFFF" && hex(DesignPalette.NS.surface, .darkAqua) == "2A2A2C")
         // v1-pass lime.
-        #expect(hex(DesignPalette.NS.accent, .aqua) == "76A11A" && hex(DesignPalette.NS.accent, .darkAqua) == "A6CD52")
+        #expect(hex(DesignPalette.NS.accent, .aqua) == "D3E58B" && hex(DesignPalette.NS.accent, .darkAqua) == "D3E58B")
         #expect(hex(DesignPalette.NS.onAccent, .aqua) == "1D1D1F" && hex(DesignPalette.NS.onAccent, .darkAqua) == "1F1F21")
         #expect(hex(DesignPalette.NS.accentText, .aqua) == "4A6A12" && hex(DesignPalette.NS.focus, .aqua) == "4A6A12")
+        #expect(hex(DesignPalette.NS.accentMark, .aqua) == "4A6A12" && hex(DesignPalette.NS.accentMark, .darkAqua) == "D3E58B")
         #expect(hex(DesignPalette.NS.orange, .aqua) == "E37512" && hex(DesignPalette.NS.orange, .darkAqua) == "F19A4B")
         #expect(hex(DesignPalette.NS.success, .aqua) == "537F5D" && hex(DesignPalette.NS.danger, .darkAqua) == "FF564C")
         #expect(hex(DesignPalette.NS.gold, .aqua) == "BB8C1A" && hex(DesignPalette.NS.silver, .aqua) == "8F939D")
@@ -121,7 +122,7 @@ import Testing
         #expect(hex(DesignPalette.NS.track, .aqua) == "D9D9DE" && hex(DesignPalette.NS.key, .darkAqua) == "38383B")
     }
 
-    @Test func lightAccentFillClearsThreeToOneOnWhiteAndCarriesDarkInk() {
+    @Test func limeFillCarriesDarkInkAndAccentMarkClearsThreeToOne() {
         func luminance(_ value: Int) -> Double {
             let channels = [16, 8, 0].map { Double((value >> $0) & 0xFF) / 255 }.map { $0 <= 0.03928 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
             return 0.2126 * channels[0] + 0.7152 * channels[1] + 0.0722 * channels[2]
@@ -130,9 +131,11 @@ import Testing
             let (x, y) = (luminance(a), luminance(b))
             return (max(x, y) + 0.05) / (min(x, y) + 0.05)
         }
-        #expect(ratio(0x76A11A, 0xFFFFFF) >= 3)
-        #expect(ratio(0x1D1D1F, 0x76A11A) >= 4.5)
-        #expect(ratio(0x1F1F21, 0xA6CD52) >= 4.5)
+        #expect(ratio(0x1D1D1F, 0xD3E58B) >= 4.5)
+        #expect(ratio(0x1F1F21, 0xD3E58B) >= 4.5)
+        // Lime is a fill only on white; the shapes drawn on a light surface take accentMark.
+        #expect(ratio(0x4A6A12, 0xFFFFFF) >= 3)
+        #expect(ratio(0xD3E58B, 0x2A2A2C) >= 3)
     }
 
     @Test func everyNavigationSymbolExistsInTheSystemSet() {

@@ -187,7 +187,7 @@ private struct TransformChip: View {
             .foregroundStyle(active ? DesignPalette.accentText : DesignPalette.ink2)
             .padding(.horizontal, 12).frame(height: 28)
             .background(RoundedRectangle(cornerRadius: 14).fill(active ? DesignPalette.accentSoft : DesignPalette.surface))
-            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(active ? DesignPalette.accent : DesignPalette.hair, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(active ? DesignPalette.accentMark : DesignPalette.hair, lineWidth: 1))
             .contentShape(RoundedRectangle(cornerRadius: 14))
             .onTapGesture { if enabled { action() } }
             .opacity(enabled || active ? 1 : 0.45)

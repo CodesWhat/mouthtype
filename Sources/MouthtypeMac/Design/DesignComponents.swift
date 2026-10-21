@@ -178,7 +178,12 @@ struct DesignSwitchStyle: ToggleStyle {
         let width: CGFloat = compact ? 36 : 42, height: CGFloat = compact ? 20 : 24, knob = height - 4
         Button { configuration.isOn.toggle() } label: {
             ZStack(alignment: configuration.isOn ? .trailing : .leading) {
-                Capsule().fill(configuration.isOn ? DesignPalette.accent : DesignPalette.track)
+                if configuration.isOn {
+                    Capsule().fill(DesignPalette.accentMark)
+                    Capsule().fill(DesignPalette.accent).padding(1)
+                } else {
+                    Capsule().fill(DesignPalette.track)
+                }
                 Circle().fill(Color.white).frame(width: knob, height: knob).shadow(color: .black.opacity(0.25), radius: 0.5, y: 1).padding(2)
             }
             .frame(width: width, height: height)
@@ -302,7 +307,7 @@ struct DesignButtonStyle: ButtonStyle {
             .foregroundStyle(kind == .primary ? DesignPalette.onAccent : DesignPalette.ink)
             .padding(.horizontal, 10).frame(minHeight: 28)
             .background(shape.fill(kind == .primary ? DesignPalette.accent : DesignPalette.surface))
-            .overlay { if kind == .secondary { shape.strokeBorder(DesignPalette.hair, lineWidth: 1) } }
+            .overlay { shape.strokeBorder(kind == .secondary ? DesignPalette.hair : DesignPalette.accentMark, lineWidth: 1) }
             .overlay { if configuration.isPressed { shape.fill(Color.black.opacity(0.1)) } }
             .contentShape(shape)
             .opacity(isEnabled ? 1 : 0.45)

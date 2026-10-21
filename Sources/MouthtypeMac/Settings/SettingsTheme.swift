@@ -3,11 +3,8 @@ import SwiftUI
 
 /// Colours and type for the Settings window. The lime accent replaces the system blue for tint, switches and selection.
 enum SettingsTheme {
-    static let lightControl = NSColor(srgbRed: 0x76 / 255, green: 0xA1 / 255, blue: 0x1A / 255, alpha: 1)
-    static let darkControl = NSColor(srgbRed: 0xA6 / 255, green: 0xCD / 255, blue: 0x52 / 255, alpha: 1)
-
-    /// Tint for switches, buttons, pickers and selection: #76A11A in light, #A6CD52 in dark.
-    static let controlNS = NSColor(name: nil) { $0.isDark ? darkControl : lightControl }
+    /// Tint for switches, buttons, pickers and selection: the accent-mark green in light (#4A6A12, 3:1 or better on white), lime in dark.
+    static let controlNS = DesignPalette.NS.accentMark
     static let control = Color(nsColor: controlNS)
 
     static let windowSize = NSSize(width: 900, height: 620)
@@ -16,10 +13,6 @@ enum SettingsTheme {
     static let headerHeight: CGFloat = 46
     static let rowMinHeight: CGFloat = 36
     static let rowLabelWidth: CGFloat = 220
-}
-
-private extension NSAppearance {
-    var isDark: Bool { bestMatch(from: [.aqua, .darkAqua]) == .darkAqua }
 }
 
 /// Every point size the Settings window uses. Nothing may go below `minimum`.
