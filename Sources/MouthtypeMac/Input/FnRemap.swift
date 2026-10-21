@@ -24,6 +24,11 @@ public final class FnRemap {
     private let defaults: UserDefaults
     private let ours = FnRemapMapping.entry()
     private var signalSources: [DispatchSourceSignal] = []
+    private var terminationRequested = false
+    /// Replaced in tests; the real thing ends the process.
+    var exitProcess: (Int32) -> Void = { exit($0) }
+    /// The last resort when the main queue is wedged, so it can't touch the actor. Replaced in tests.
+    var hardExit: @Sendable (Int32) -> Void = { exit($0) }
 
     public convenience init(defaults: UserDefaults = .standard) {
         self.init(store: HIDKeyMappingStore(), defaults: defaults)
@@ -99,21 +104,49 @@ public final class FnRemap {
         return restore()
     }
 
-    /// Restore on SIGTERM and SIGINT, then quit. Call once the remap is applied.
-    public func installSignalHandlers() {
+    /// Handles SIGTERM and SIGINT on the main queue. Call once the remap is applied.
+    ///
+    /// With `requestTermination` (the app) the signal goes into the normal quit path, so take preservation, the
+    /// clipboard lease and the audio unmute all run, and Fn is restored by that teardown. If the quit stalls or is
+    /// cancelled, after `fallbackDelay` the mapping is restored and the process exits anyway; if the main queue is
+    /// wedged too, a background timer exits and the fn guard restores the mapping. A second signal does the same
+    /// immediately. Without it (the diagnostic probes) the handler restores and exits at once.
+    public func installSignalHandlers(
+        signals: [Int32] = [SIGTERM, SIGINT],
+        requestTermination: (@MainActor () -> Void)? = nil,
+        fallbackDelay: TimeInterval = 10
+    ) {
         guard signalSources.isEmpty else { return }
-        for number in [SIGTERM, SIGINT] {
+        for number in signals {
             signal(number, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
             source.setEventHandler { [weak self] in
                 MainActor.assumeIsolated {
-                    _ = self?.restore()
-                    exit(0)
+                    self?.handleSignal(requestTermination: requestTermination, fallbackDelay: fallbackDelay)
                 }
             }
             source.resume()
             signalSources.append(source)
         }
+    }
+
+    func handleSignal(requestTermination: (@MainActor () -> Void)?, fallbackDelay: TimeInterval) {
+        guard let requestTermination, !terminationRequested else {
+            _ = restore()
+            exitProcess(0)
+            return
+        }
+        terminationRequested = true
+        requestTermination()
+        let hardExit = self.hardExit
+        DispatchQueue.main.asyncAfter(deadline: .now() + fallbackDelay) { [weak self] in
+            MainActor.assumeIsolated {
+                Log.hotkey.error("quit after signal stalled, restoring the fn mapping and exiting")
+                _ = self?.restore()
+                self?.exitProcess(0)
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + fallbackDelay + 5) { hardExit(0) }
     }
 
     // MARK: - Marker

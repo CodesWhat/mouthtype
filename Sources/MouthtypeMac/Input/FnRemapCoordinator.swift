@@ -14,10 +14,12 @@ final class FnRemapCoordinator {
     private let remap: FnRemap
     private let preferences: UserDefaults
     private let guardian: (any FnGuarding)?
+    private let requestTermination: (@MainActor () -> Void)?
     private var started = false
     private(set) var isActive = false
 
-    init(remap: FnRemap, preferences: UserDefaults = .standard, guardian: (any FnGuarding)? = nil) {
+    init(remap: FnRemap, preferences: UserDefaults = .standard, guardian: (any FnGuarding)? = nil, requestTermination: (@MainActor () -> Void)? = nil) {
+        self.requestTermination = requestTermination
         self.remap = remap
         self.preferences = preferences
         self.guardian = guardian
@@ -71,7 +73,7 @@ final class FnRemapCoordinator {
     private func activate() -> Bool {
         switch remap.apply() {
         case .applied, .alreadyApplied:
-            remap.installSignalHandlers()
+            remap.installSignalHandlers(requestTermination: requestTermination)
             guardian?.start()
             isActive = true
             return true
