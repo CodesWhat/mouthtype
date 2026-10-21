@@ -262,7 +262,9 @@ struct StyleMembersCard: View {
     @State private var addingSite = false
     @State private var domain = ""
 
-    private var rows: [StyleRows.Row] { StyleRows.rows(for: context, in: model.appStyles) }
+    @State private var installRevision = 0
+
+    private var rows: [StyleRows.Row] { _ = installRevision; return StyleRows.rows(for: context, in: model.appStyles) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -273,6 +275,10 @@ struct StyleMembersCard: View {
                 addRow
                 if let error = model.appStylesError { errorRow(error) }
             }
+        }
+        .onAppear { AppIconResolver.invalidateMisses(); installRevision += 1 }
+        .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didLaunchApplicationNotification)) { _ in
+            AppIconResolver.invalidateMisses(); installRevision += 1
         }
     }
 
@@ -383,6 +389,8 @@ enum AppIconResolver {
         for id in bundleIDs { if let icon = cache.object(forKey: id as NSString) { return icon } }
         return nil
     }
+
+    static func invalidateMisses() { misses.removeAllObjects() }
 
     static func icon(bundleIDs: [String]) -> NSImage? {
         for id in bundleIDs {
