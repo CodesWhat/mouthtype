@@ -223,6 +223,9 @@ public final class TextInserter {
             Log.app.info("nothing frontmost; transcript left on the clipboard")
             return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: now, finalText: text)
         case .paste:
+            if now.focusOwnerDiffersFromFrontmost {
+                return leaveOnClipboard(text, because: "focus belongs to another process than the frontmost app", moved: moved, target: now)
+            }
             if PasteTargetPolicy.refuses(role: now.role, textSettable: now.isTextSettable) {
                 lastText = text
                 clipboard.copy(text)
@@ -250,6 +253,10 @@ public final class TextInserter {
                 checked.isSecure = checked.isSecure || checkedSecureInput
                 return DeliveryResult(method: .none, outcome: .secureDiscard,
                                       focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
+            }
+            if checked.focusOwnerDiffersFromFrontmost {
+                return leaveOnClipboard(text, because: "focus moved to another process during paste preparation",
+                                        moved: moved || now.hasChanged(to: checked), target: checked)
             }
             lastText = text
             guard checked.pid == now.pid, checked.bundleID == now.bundleID, checked.element == now.element else {
@@ -304,6 +311,13 @@ public final class TextInserter {
         }
     }
 
+    private func leaveOnClipboard(_ text: String, because reason: String, moved: Bool, target: FocusSnapshot) -> DeliveryResult {
+        lastText = text
+        clipboard.copy(text)
+        Log.app.info("\(reason, privacy: .public); transcript left on the clipboard")
+        return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: target, finalText: text)
+    }
+
     private func waitForPreviousPaste(_ lease: Int, deadline suppliedDeadline: ContinuousClock.Instant? = nil) async -> Bool {
         let generation = batchGeneration
         let clock = ContinuousClock()
@@ -353,6 +367,7 @@ public final class TextInserter {
             let current = focus.snapshot()
             return !Task.isCancelled && generation == batchGeneration && clock.now < deadline
                 && input != nil && inputGeneration() == input && !focus.isSecureInputEnabled && !current.isSecure
+                && !current.focusOwnerDiffersFromFrontmost
                 && current.pid == target.pid && current.bundleID == target.bundleID
                 && current.windowTitle == target.windowTitle && current.element == target.element
         }
