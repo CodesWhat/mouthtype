@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 import FnRemapKit
 import Testing
 @testable import MouthtypeMac
@@ -175,5 +176,15 @@ private final class FakeStore: KeyMappingStore {
         kill(getpid(), SIGUSR2)
         for _ in 0..<200 where requests == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(requests == 1)
+    }
+
+    @Test func theHardExitFiresWhileAModalBlocksTheMainThread() {
+        let remap = FnRemap(store: FakeStore(nil), defaults: makeDefaults())
+        let hard = Mutex(false)
+        remap.exitProcess = { _ in }
+        remap.hardExit = { _ in hard.withLock { $0 = true } }
+        // Stands in for NSApp.terminate sitting in an NSAlert.runModal that never returns in time.
+        remap.handleSignal(requestTermination: { Thread.sleep(forTimeInterval: 0.6) }, fallbackDelay: 0.05, hardGrace: 0.05)
+        #expect(hard.withLock { $0 })
     }
 }

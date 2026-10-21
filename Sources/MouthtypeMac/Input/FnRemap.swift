@@ -109,7 +109,7 @@ public final class FnRemap {
     /// With `requestTermination` (the app) the signal goes into the normal quit path, so take preservation, the
     /// clipboard lease and the audio unmute all run, and Fn is restored by that teardown. If the quit stalls or is
     /// cancelled, after `fallbackDelay` the mapping is restored and the process exits anyway; if the main queue is
-    /// wedged too, a background timer exits and the fn guard restores the mapping. A second signal does the same
+    /// blocked (a modal alert) or wedged too, a background timer exits and the fn guard restores the mapping. A second signal does the same
     /// immediately. Without it (the diagnostic probes) the handler restores and exits at once.
     public func installSignalHandlers(
         signals: [Int32] = [SIGTERM, SIGINT],
@@ -130,14 +130,15 @@ public final class FnRemap {
         }
     }
 
-    func handleSignal(requestTermination: (@MainActor () -> Void)?, fallbackDelay: TimeInterval) {
+    func handleSignal(requestTermination: (@MainActor () -> Void)?, fallbackDelay: TimeInterval, hardGrace: TimeInterval = 5) {
         guard let requestTermination, !terminationRequested else {
             _ = restore()
             exitProcess(0)
             return
         }
         terminationRequested = true
-        requestTermination()
+        // Both deadlines are armed before the request: NSApp.terminate can block this thread in a modal alert or
+        // wait on a stalled save, and nothing after it would run. The background one doesn't need the main queue.
         let hardExit = self.hardExit
         DispatchQueue.main.asyncAfter(deadline: .now() + fallbackDelay) { [weak self] in
             MainActor.assumeIsolated {
@@ -146,7 +147,8 @@ public final class FnRemap {
                 self?.exitProcess(0)
             }
         }
-        DispatchQueue.global().asyncAfter(deadline: .now() + fallbackDelay + 5) { hardExit(0) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + fallbackDelay + hardGrace) { hardExit(0) }
+        requestTermination()
     }
 
     // MARK: - Marker

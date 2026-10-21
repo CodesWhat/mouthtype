@@ -94,7 +94,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let systemSection = SystemAccessMenuSection()
     private let accessibility = AccessibilityAccess()
     private let fnRemap = FnRemap()
-    private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap, guardian: FnGuardLauncher(), requestTermination: { NSApp.terminate(nil) })
+    private var signalShutdown = false
+    private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap, guardian: FnGuardLauncher(), requestTermination: { [unowned self] in
+        // A signal can't wait on a person: no unsaved-draft prompt and no failure alert on this path.
+        signalShutdown = true
+        NSApp.terminate(nil)
+    })
     private let shortcuts = GlobalShortcuts()
     private var menuBar: MenuBarController?
     private var historySection: HistoryMenuSection?
@@ -348,7 +353,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
-        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
+        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown || settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
             await dictation?.prepareForTermination() ?? true
@@ -357,7 +362,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }, reply: { [self] ready in
             if !ready { isTerminating = false }
             sender.reply(toApplicationShouldTerminate: ready)
-            if !ready {
+            if !ready, !signalShutdown {
                 let alert = NSAlert()
                 alert.messageText = "Couldn't finish saving the recording"
                 alert.informativeText = "Mouthtype stayed open because the recording hasn't been fully saved. Resolve the storage or microphone problem, then try Quit again."
