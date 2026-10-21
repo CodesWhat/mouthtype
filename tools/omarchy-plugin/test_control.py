@@ -755,5 +755,106 @@ class CapabilitiesCacheTests(unittest.TestCase):
         self.assertEqual(self.calls, [])
 
 
+class SessionSocketTests(unittest.TestCase):
+    """Hotkey verbs talk to the service socket directly and fall back to the CLI only when it is missing."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.runtime = Path(self.directory.name)
+        patcher = mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(self.runtime)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.cli_calls = []
+        patcher = mock.patch.object(control, "cli", self.fake_cli)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.requests = []
+        self.server = None
+
+    def fake_cli(self, *args, timeout=35):
+        self.cli_calls.append(args)
+        return subprocess.CompletedProcess(args, 0, json.dumps({"state": "idle", "via": "cli"}), "")
+
+    def serve(self, reply):
+        import socket as socket_module
+        path = self.runtime / "mouthtype" / "session.sock"
+        path.parent.mkdir()
+        server = socket_module.socket(socket_module.AF_UNIX)
+        server.bind(str(path))
+        server.listen(4)
+        server.settimeout(5)
+        self.addCleanup(server.close)
+
+        def loop():
+            while True:
+                try:
+                    connection, _ = server.accept()
+                except OSError:
+                    return
+                with connection:
+                    raw = b""
+                    while not raw.endswith(b"\n"):
+                        raw += connection.recv(1024)
+                    self.requests.append(json.loads(raw))
+                    connection.sendall(json.dumps(reply).encode() + b"\n")
+        thread = threading.Thread(target=loop, daemon=True)
+        thread.start()
+        return path
+
+    def test_start_stop_toggle_cancel_status_use_the_socket_and_never_spawn_the_cli(self):
+        self.serve({"state": "recording"})
+        for verb in ("start", "stop", "toggle", "cancel", "status"):
+            self.assertEqual(control.deliver(verb)["state"], "recording")
+        self.assertEqual([r["action"] for r in self.requests], ["start", "stop", "toggle", "cancel", "status"])
+        self.assertEqual(self.cli_calls, [])
+        # Same line the CLI sends: a start carries the admission deadline.
+        self.assertIsInstance(self.requests[0]["admit_before"], float)
+
+    def test_missing_socket_falls_back_to_the_cli(self):
+        self.assertEqual(control.deliver("start")["via"], "cli")
+        self.assertEqual(self.cli_calls, [("start",)])
+
+    def test_verbs_that_need_the_cli_still_use_it(self):
+        self.serve({"state": "idle"})
+        control.deliver("transcribe", "a" * 32)
+        control.deliver("shutdown")
+        self.assertEqual(self.requests, [])
+        self.assertEqual(len(self.cli_calls), 2)
+
+    def test_stale_socket_fails_like_the_cli_without_a_second_interpreter(self):
+        import socket as socket_module
+        path = self.runtime / "mouthtype" / "session.sock"
+        path.parent.mkdir()
+        stale = socket_module.socket(socket_module.AF_UNIX)
+        stale.bind(str(path))
+        stale.close()
+        with self.assertRaises(RuntimeError):
+            control.deliver("start")
+        self.assertEqual(self.cli_calls, [])
+
+    def test_state_reads_status_from_the_socket(self):
+        self.serve({"state": "idle", "maximum_takes": 7, "file_import": None})
+        root = self.runtime / "files"
+        root.mkdir()
+        launcher, config = root / "launcher", root / "linux.json"
+        launcher.write_text("")
+        config.write_text("{}")
+        with mock.patch.object(control, "LAUNCHER", launcher), mock.patch.object(control, "CONFIG", config), \
+                mock.patch.object(control, "RECOVERY", root / "recovery"), \
+                mock.patch.object(control, "capabilities", lambda: {}):
+            report = control.state()
+        self.assertTrue(report["running"])
+        self.assertEqual(report["state"], "idle")
+        self.assertEqual(report["history"]["maximum"], 7)
+        self.assertEqual(self.cli_calls, [])
+
+    def test_loading_control_does_not_import_inspect(self):
+        script = "import sys, runpy; runpy.run_path(%r, run_name='control_probe'); print('inspect' in sys.modules)" \
+                 % str(HERE / "control.py")
+        out = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout.strip(), "False")
+
+
 if __name__ == "__main__":
     unittest.main()

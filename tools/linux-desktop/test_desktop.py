@@ -350,6 +350,47 @@ for line in sys.stdin:
             self.assertEqual(ran, [1])
             session.close()
 
+class LightClientTests(unittest.TestCase):
+    """The status, hotkey and capabilities paths must not pay for the service's imports."""
+    HEAVY = ('proof', 'spellings', 'phrases', 'cleanup', 'smart', 'styles', 'tone', 'imports', 'dataclasses', 'inspect')
+
+    def loaded_after(self, argv):
+        script = ('import sys; sys.path.insert(0, %r); import desktop, io, contextlib\n'
+                  'with contextlib.redirect_stdout(io.StringIO()): desktop.main(%r)\n'
+                  'print(sorted(m for m in %r if m in sys.modules))' % (str(Path(__file__).parent), argv, self.HEAVY))
+        out = subprocess.run([sys.executable, '-I', '-c', script], capture_output=True, text=True, check=True, timeout=20)
+        return out.stdout.strip().splitlines()[-1]
+
+    def test_status_loads_none_of_the_service_modules(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertEqual(self.loaded_after(['--runtime', temp, 'status']), '[]')
+        # capabilities reads the file-import limits, which pulls in the imports module and its proof dependency.
+        self.assertEqual(self.loaded_after(['capabilities']), "['imports', 'proof']")
+
+    def test_public_names_still_resolve_lazily(self):
+        import desktop
+        self.assertTrue(issubclass(desktop.ClipboardTooLarge, desktop.PhraseContextUnavailable))
+        for name in ('Stopped', 'Worker', 'verify_artifacts', 'load_spellings', 'load_phrases', 'BasicCleanup',
+                     'FileError', 'FileTranscription', 'smart', 'style_contexts', 'tone_stage', 'imports'):
+            self.assertTrue(hasattr(desktop, name), name)
+        self.assertEqual(desktop.CAPABILITIES['interface'], desktop.INTERFACE)
+        with self.assertRaises(AttributeError):
+            desktop.not_a_name
+
+    def test_cli_context_is_immutable_and_keeps_its_fields(self):
+        from desktop import CliContext
+        context = CliContext(config=1, recovery=2, imports=3, runtime=4, socket=5, request=6)
+        self.assertEqual((context.config, context.recovery, context.imports, context.runtime, context.socket, context.request),
+                         (1, 2, 3, 4, 5, 6))
+        with self.assertRaises(AttributeError):
+            context.config = 9
+
+    def test_session_client_is_the_one_protocol_implementation(self):
+        import desktop, session_client
+        self.assertIs(desktop.request, session_client.request)
+        self.assertIs(desktop.read_message, session_client.read_message)
+
+
 class RecoveryTests(unittest.TestCase):
     def test_recovery_is_explicit_read_only_and_never_delivers(self):
         from desktop import recovery_result, recovery_list

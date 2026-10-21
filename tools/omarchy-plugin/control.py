@@ -3,7 +3,6 @@
 
 import fcntl
 import importlib.util
-import inspect
 import json
 import os
 import re
@@ -75,6 +74,43 @@ def cli(*args, timeout=35):
         [str(LAUNCHER), "--config", str(CONFIG), *args],
         text=True, capture_output=True, timeout=timeout, check=False,
     )
+
+
+SOCKET_ACTIONS = ("start", "stop", "toggle", "cancel", "status")
+_session_client = False
+
+
+def session_client():
+    """The service-socket client module, or None when this install doesn't ship it (then the CLI is used)."""
+    global _session_client
+    if _session_client is False:
+        _session_client = None
+        for directory in (DESKTOP, PLUGIN_DIR.parent / "linux-desktop"):
+            if (directory / "session_client.py").is_file():
+                sys.path.insert(0, str(directory))
+                try:
+                    import session_client as module
+                    _session_client = module
+                except ImportError:
+                    pass
+                break
+    return _session_client
+
+
+def session_call(action, identity=None, timeout=35):
+    """Run a daemon command. The hotkey path sends it to the service socket directly, the same JSON line the CLI
+    sends, so no second interpreter starts. A missing socket (service down) falls back to the CLI, which reports
+    that failure the way every caller already expects. Returns a CompletedProcess, like cli()."""
+    client = session_client() if action in SOCKET_ACTIONS and identity is None else None
+    if client is not None:
+        path = client.default_socket()
+        if path.exists():
+            try:
+                reply = client.request(path, action)
+                return subprocess.CompletedProcess([action], 0, json.dumps(reply), "")
+            except (OSError, ValueError):
+                return subprocess.CompletedProcess([action], 2, "", json.dumps({"error": "unavailable"}))
+    return cli(action, *([identity] if identity else []), timeout=timeout)
 
 
 def cli_error(result):
@@ -421,7 +457,7 @@ def versions():
 def state():
     if not LAUNCHER.is_file() or not CONFIG.is_file():
         return {"running": False, "state": "unavailable", "error": "Mouthtype installation is missing"}
-    result = cli("status", timeout=5)
+    result = session_call("status", timeout=5)
     try:
         status = json.loads(result.stdout)
     except json.JSONDecodeError:
@@ -676,7 +712,7 @@ def hold_stop(t):
 
 
 def deliver(command, identity=None, timeout=35):
-    result = cli(command, *([identity] if identity else []), timeout=timeout)
+    result = session_call(command, identity, timeout=timeout)
     if result.returncode:
         raise RuntimeError("Mouthtype command failed")
     try:
@@ -1197,6 +1233,7 @@ def available_actions():
 
 def run_module_command(verb, args):
     function = module_commands()[verb]
+    import inspect
     try:
         inspect.signature(function).bind(*args)
     except TypeError:

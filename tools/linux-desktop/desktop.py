@@ -1,10 +1,8 @@
 """Mouthtype Linux session service and compositor command client."""
 
 import argparse
-from dataclasses import dataclass
+from collections import namedtuple
 import fcntl
-import importlib.util
-import inspect
 import json
 import math
 import os
@@ -18,40 +16,70 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Callable
 import uuid
 import wave
 
 PROOF = Path(__file__).resolve().parents[1] / 'linux-engine-proof'
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(PROOF))
-from proof import Stopped, Worker, verify_artifacts
-from spellings import load_spellings
-from phrases import load_phrases, PhraseContextUnavailable
-from cleanup import BasicCleanup
-import imports
-from imports import FileError, FileTranscription
-import smart
-import styles as style_contexts
-import tone as tone_stage
+from session_client import read_message, request
+
+# Importing these costs tens of milliseconds, and a hotkey or panel client never needs them. They are bound into this
+# module on first use (the service, doctor and tests reach them through the constructors below or by attribute).
+RUNTIME_NAMES = {
+    'Stopped': 'proof', 'Worker': 'proof', 'verify_artifacts': 'proof',
+    'load_spellings': 'spellings', 'load_phrases': 'phrases', 'PhraseContextUnavailable': 'phrases',
+    'BasicCleanup': 'cleanup', 'smart': None, 'style_contexts': None, 'tone_stage': None, 'imports': None,
+    'FileError': 'imports', 'FileTranscription': 'imports',
+}
+RUNTIME_MODULES = {'smart': 'smart', 'style_contexts': 'styles', 'tone_stage': 'tone', 'imports': 'imports'}
+
+
+def load_runtime():
+    """Bind the service-side modules into this module's globals. Names already present (a test patch) are kept."""
+    import importlib
+    scope = globals()
+    for name, module in RUNTIME_NAMES.items():
+        if name in scope:
+            continue
+        if module is None:
+            scope[name] = importlib.import_module(RUNTIME_MODULES[name])
+        else:
+            scope[name] = getattr(importlib.import_module(module), name)
+    if 'ClipboardTooLarge' not in scope:
+        scope['ClipboardTooLarge'] = type('ClipboardTooLarge', (scope['PhraseContextUnavailable'],), {'__module__': __name__})
+
+
+def __getattr__(name):
+    if name in RUNTIME_NAMES or name == 'ClipboardTooLarge':
+        load_runtime()
+        return globals()[name]
+    if name == 'CAPABILITIES':
+        return capabilities_report()
+    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+
 
 INTERFACE = 1
-CAPABILITIES = {
-    'interface': INTERFACE,
-    'client': 'linux-development',
-    'features': {
-        'dictation': True, 'recovery': True, 'doctor': True,
-        'cleanup_levels': ['off', 'basic', 'fast', 'thorough'],
-        'delivery_modes': ['recover', 'type', 'paste'],
-        'file_transcription': {'formats': list(imports.FORMATS), 'extensions': list(imports.EXTENSIONS),
-                               'maximum_seconds': imports.MAXIMUM_SECONDS,
-                               'maximum_bytes': imports.MAXIMUM_SOURCE_BYTES},
-        'state_stream': True, 'level_meter': True,
-        'ai_cleanup': {'levels': ['fast', 'thorough'], 'runtime': 'llama.cpp CPU server', 'setup': 'setup_cleanup.py'},
-        'pill': 'frontend', 'typography': 'frontend', 'live_words': False,
-        'secure_field_detection': False, 'delivery_verification': False,
-    },
-}
+
+
+def capabilities_report():
+    import imports
+    return {
+        'interface': INTERFACE,
+        'client': 'linux-development',
+        'features': {
+            'dictation': True, 'recovery': True, 'doctor': True,
+            'cleanup_levels': ['off', 'basic', 'fast', 'thorough'],
+            'delivery_modes': ['recover', 'type', 'paste'],
+            'file_transcription': {'formats': list(imports.FORMATS), 'extensions': list(imports.EXTENSIONS),
+                                   'maximum_seconds': imports.MAXIMUM_SECONDS,
+                                   'maximum_bytes': imports.MAXIMUM_SOURCE_BYTES},
+            'state_stream': True, 'level_meter': True,
+            'ai_cleanup': {'levels': ['fast', 'thorough'], 'runtime': 'llama.cpp CPU server', 'setup': 'setup_cleanup.py'},
+            'pill': 'frontend', 'typography': 'frontend', 'live_words': False,
+            'secure_field_detection': False, 'delivery_verification': False,
+        },
+    }
 
 
 def private_write(path, data):
@@ -114,6 +142,7 @@ class Session:
                  dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None, cleanup='off',
                  cleanup_engine=None, maximum_takes=200, audio_days=90, audio_megabytes=2048, history_keep=None,
                  styles=None, styles_path=None, engine_loader=None):
+        load_runtime()
         self.capture, self.engine, self.delivery = capture, engine, delivery
         self.maximum_takes, self.audio_days, self.audio_megabytes = maximum_takes, audio_days, audio_megabytes
         self.history_keep = history_keep
@@ -147,6 +176,7 @@ class Session:
         # True while a delivery runs outside the lock; close() waits longer for it than for inference.
         self.delivering = False
         try:
+            import inspect
             self._cancellable_delivery = 'cancelled' in inspect.signature(delivery.submit).parameters
         except (TypeError, ValueError):
             self._cancellable_delivery = False
@@ -631,6 +661,7 @@ class Session:
 
 class HyprlandDelivery:
     def __init__(self, config, run=None):
+        load_runtime()
         self.config, self.run = config, run or subprocess.run
 
     def snapshot(self):
@@ -887,11 +918,8 @@ def stop_process(process, first=signal.SIGTERM):
     process.wait(timeout=.5)
 
 
-class ClipboardTooLarge(PhraseContextUnavailable):
-    pass
-
-
 def read_phrase_clipboard(command=None, *, seconds=1, maximum=1024 * 1024, env=None):
+    load_runtime()
     process = subprocess.Popen(command or ['wl-paste', '--no-newline', '--type', 'text'],
                                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=subprocess.DEVNULL, start_new_session=True, env=env)
@@ -970,6 +998,7 @@ class PipeWireCapture:
 
 class SpeechEngine:
     def __init__(self, settings, *, python=sys.executable, worker=None, request_seconds=30, startup_seconds=120):
+        load_runtime()
         if not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict):
             raise ValueError('Invalid speech artifact configuration')
         for item in settings['artifacts'].values():
@@ -1017,6 +1046,7 @@ class CleanupEngine:
     ABSENT_RECHECK_SECONDS = 30
 
     def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic):
+        load_runtime()
         if (not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict) or
                 not isinstance(settings.get('server'), str) or settings.get('prompt', 's1') not in ('s1', 'shared')):
             raise ValueError('Invalid cleanup engine configuration')
@@ -1163,6 +1193,7 @@ class CleanupEngine:
 
 
 def validate_config(value):
+    load_runtime()
     if not isinstance(value, dict) or not isinstance(value.get('engine_config'), str):
         raise ValueError('engine_config is required')
     result = {'maximum_recording_seconds': 60, 'request_seconds': 30, 'maximum_recovery_takes': 200,
@@ -1222,21 +1253,6 @@ def validate_config(value):
     if type(result.get('phrase_clipboard', False)) is not bool:
         raise ValueError('phrase_clipboard must be true or false')
     return result
-
-
-def read_message(connection, maximum=4096):
-    raw = b''
-    while b'\n' not in raw:
-        chunk = connection.recv(min(1024, maximum + 1 - len(raw)))
-        if not chunk:
-            raise ValueError('Incomplete command')
-        raw += chunk
-        if len(raw) > maximum:
-            raise ValueError('Command exceeds limit')
-    line, rest = raw.split(b'\n', 1)
-    if rest:
-        raise ValueError('One command per connection')
-    return json.loads(line)
 
 
 def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup=None):
@@ -1416,15 +1432,6 @@ def watch(path, output, *, retry=False, stopped=None, interval=1.0):
     return 0
 
 
-def request(path, action, identity=None, **fields):
-    with socket.socket(socket.AF_UNIX) as connection:
-        connection.settimeout(2.5)
-        connection.connect(str(path))
-        connection.sendall(json.dumps({'action': action, 'id': identity,
-                                       'admit_before': time.monotonic() + 1.5, **fields}).encode() + b'\n')
-        return read_message(connection, maximum=16384)
-
-
 def recovery_path(root, identity):
     if not isinstance(identity, str) or not re.fullmatch('[0-9a-f]{32}', identity):
         raise ValueError('Invalid recovery ID')
@@ -1448,23 +1455,18 @@ def recovery_result(root, identity, *, raw=False):
     return (recovery_path(root, identity) / ('raw-recognition.txt' if raw else 'transcript.txt')).read_bytes().decode('utf-8')
 
 
-@dataclass(frozen=True)
-class CliContext:
+class CliContext(namedtuple('CliContext', 'config recovery imports runtime socket request')):
     """What a cli_<name>.py module gets in run(args, context).
 
     config, recovery, imports and runtime are the paths this invocation resolved from the global options. socket is
     the service socket inside runtime. request(action, identity=None, **fields) sends one command to the running
     service and returns its JSON reply; it raises OSError when the service is absent."""
-    config: Path
-    recovery: Path
-    imports: Path
-    runtime: Path
-    socket: Path
-    request: Callable
+    __slots__ = ()
 
 
 def load_cli_modules(directory=None):
     """Import every cli_*.py beside this file (or in `directory`) that has register() and run(). Broken ones are skipped."""
+    import importlib.util
     directory = Path(directory) if directory is not None else Path(__file__).resolve().parent
     modules = []
     for source in sorted(directory.glob('cli_*.py')):
@@ -1509,6 +1511,21 @@ def register_cli_modules(commands, modules):
     return owners
 
 
+def requested_action(tokens, parser, commands):
+    """The first command word in argv, skipping global options and their values; None when there isn't one."""
+    valued = [option for action in parser._actions if action is not commands for option in action.option_strings
+              if action.nargs != 0]
+    skip = False
+    for token in tokens:
+        if skip:
+            skip = False
+        elif token.startswith('--') and '=' not in token and any(option.startswith(token) for option in valued):
+            skip = True
+        elif not token.startswith('-'):
+            return token
+    return None
+
+
 def main(argv=None, *, cli_directory=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=Path.home() / '.config/mouthtype/linux.json')
@@ -1538,7 +1555,9 @@ def main(argv=None, *, cli_directory=None):
     saver = commands.add_parser('import-save', help='Write the latest file transcript as UTF-8 text')
     saver.add_argument('path')
     saver.add_argument('--overwrite', action='store_true', help='Replace an existing text file; never the audio source')
-    owners = register_cli_modules(commands, load_cli_modules(cli_directory))
+    # Plug-in modules cost an import each, so a core command skips them. A plug-in cannot replace a core command.
+    owners = {} if requested_action(sys.argv[1:] if argv is None else list(argv), parser, commands) in commands.choices else \
+        register_cli_modules(commands, load_cli_modules(cli_directory))
     args = parser.parse_args(argv)
     path = args.runtime / 'session.sock'
     try:
@@ -1548,7 +1567,7 @@ def main(argv=None, *, cli_directory=None):
             result = owners[args.action].run(args, context)
             return result if type(result) is int else 0
         if args.action == 'capabilities':
-            print(json.dumps(CAPABILITIES))
+            print(json.dumps(capabilities_report()))
             return 0
         if args.action == 'watch':
             halt = threading.Event()
@@ -1556,9 +1575,11 @@ def main(argv=None, *, cli_directory=None):
                 signal.signal(event, lambda *_: halt.set())
             return watch(path, sys.stdout, retry=args.retry, stopped=halt)
         if args.action == 'import-result':
+            import imports
             sys.stdout.write(imports.result_text(args.imports))
             return 0
         if args.action == 'import-save':
+            import imports
             imports.save_text(args.imports, args.path, overwrite=args.overwrite)
             return 0
         if args.action == 'import':
@@ -1566,6 +1587,7 @@ def main(argv=None, *, cli_directory=None):
             print(json.dumps(request(path, 'import', source=source)))
             return 0
         if args.action == 'doctor':
+            load_runtime()
             from doctor import diagnose, render
             report = diagnose(args.config, args.runtime)
             print(json.dumps(report) if args.json else render(report))
@@ -1608,6 +1630,7 @@ def main(argv=None, *, cli_directory=None):
         info = args.runtime.stat()
         if info.st_uid != os.getuid() or stat.S_IMODE(info.st_mode) != 0o700:
             raise ValueError('Runtime directory must be owned by you with mode 0700')
+        load_runtime()
         engine = SpeechEngine(settings, python=config.get('python', sys.executable),
                               request_seconds=config['request_seconds'])
         cleanup_engine = None
@@ -1653,14 +1676,16 @@ def main(argv=None, *, cli_directory=None):
                     for loaded in {id(e): e for e in (cleanup_engine, *session.cleanup_engines.values()) if e is not None}.values():
                         loaded.close()
         return 0
-    except FileError as error:
-        print(json.dumps({'error': error.code}), file=sys.stderr)
-        return 2
-    except (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError) as error:
+    except Exception as error:
+        loaded = sys.modules.get('imports')
+        if loaded is not None and isinstance(error, loaded.FileError):
+            print(json.dumps({'error': error.code}), file=sys.stderr)
+            return 2
+        if not isinstance(error, (OSError, ValueError, KeyError, TypeError, RuntimeError, subprocess.SubprocessError)):
+            raise
         # Config paths, model errors and transcripts never go into routine diagnostics.
         print(json.dumps({'error': 'unavailable', 'error_class': type(error).__name__}), file=sys.stderr)
         return 2
-
 
 
 class Notifications:
