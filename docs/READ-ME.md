@@ -1,10 +1,10 @@
-# Mouthtype 0.4.0
+# Mouthtype 0.5.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
 ## Install
 
-1. Download the ZIP from https://mouthtype.app/download and expand it in Finder.
+1. Download the DMG from https://mouthtype.app/download and open it.
 2. Drag Mouthtype.app into Applications. Quit an older running Mouthtype before replacing it.
 3. Open Mouthtype from Applications.
 4. Follow Set Up Mouthtype, one card at a time. Allow Microphone access, then grant Accessibility in System Settings and return to the app. Each card advances when its prerequisite is ready. Reopen setup from Settings → Health → Set Up Mouthtype if you defer it.
@@ -15,6 +15,20 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.5.0
+
+Faster launch, dictation and Thorough cleanup, plus spoken slash commands for coding apps.
+
+- Added: Spoken slash commands in terminals, editors, JetBrains, and the Claude, ChatGPT, Codex and Orca apps (plus claude.ai and chatgpt.com in a supported browser). "Slash research" types /research, and "dash", "hyphen" and "underscore" join more words. There's an Advanced toggle, on by default.
+- Added: Show in Dock in Settings > Mac: Never, While a window is open (the default) or Always. The menu bar icon stays in every mode.
+- Added: A docs site at docs.mouthtype.app, and real app icons in the Style lists.
+- Added: The first-install download is a notarized DMG. Updates still use the ZIP.
+- Changed: Launch and dictation are faster, and Thorough cleanup caches the unchanging part of its prompt between takes. The cleanup model unloads after 10 minutes without use and reloads on your next take.
+- Fixed: Fn remap repairs, signal quits, paste into another process's field, cleanup of dictated quotes, and the sidebar ring on arrow-key selection. See the changelog for the full list.
+
+> [!NOTE]
+> Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release. See the known limits.
 
 ## What changed in 0.4.0
 
