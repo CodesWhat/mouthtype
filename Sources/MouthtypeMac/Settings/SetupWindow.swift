@@ -146,16 +146,19 @@ struct SetupView: View {
             ScrollView {
                 VStack(spacing: 12) {
                     SetupLips().padding(.bottom, 6)
-                    Text(title).font(.custom("InstrumentSerif-Regular", size: 30))
+                    Text(title).font(DesignFont.serif(DesignFont.headline)).foregroundStyle(DesignPalette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
-                    Text(detail).foregroundStyle(.secondary)
+                    Text(detail).font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.sideInk)
                         .fixedSize(horizontal: false, vertical: true)
-                    controls.padding(.top, 4)
+                    controls.padding(.top, 6)
                     if step == .ready {
                         Text("Change your shortcut or recording behavior in Settings. Fast and Thorough use Basic until their cleanup model is ready.")
-                            .font(.callout).foregroundStyle(.secondary)
+                            .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.sideInk)
                             .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text(stepCaption).designEyebrow().foregroundStyle(DesignPalette.sideInk).tracking(1).padding(.top, 4)
+                            .fixedSize(horizontal: false, vertical: true).accessibilityHidden(true)
                     }
                 }
                 .multilineTextAlignment(.center)
@@ -167,32 +170,39 @@ struct SetupView: View {
             }.defaultScrollAnchor(.top)
             HStack {
                 if step == .ready {
-                    Button("Done", action: actions.done)
+                    Button("Done", action: actions.done).buttonStyle(.designPrimary)
                         .keyboardShortcut(.defaultAction).accessibilityIdentifier("setup-done")
                 } else {
-                    Button("Set up later", action: actions.done).buttonStyle(.link)
-                        .foregroundStyle(.secondary).accessibilityIdentifier("setup-done")
+                    Button("Set up later", action: actions.done).buttonStyle(.plain)
+                        .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.sideInk).accessibilityIdentifier("setup-done")
                 }
                 Spacer()
                 footerSteps.accessibilityIdentifier("setup-progress")
             }
-            .font(.callout).padding(.horizontal, 20).padding(.bottom, 16)
+            .padding(.horizontal, 20).padding(.bottom, 16)
         }
         .frame(width: SetupWindow.contentSize.width, height: SetupWindow.contentSize.height)
         .ignoresSafeArea()
-        .font(.custom("InstrumentSans-Regular", size: 14))
-        .tint(SettingsTheme.control)
-        .background { if solid { Color(nsColor: .windowBackgroundColor) } }
+        .font(DesignFont.sans(DesignFont.body))
+        .tint(DesignPalette.accent)
+        .background { DesignSidebarBackground(solid: solid) }
+    }
+
+    /// The eyebrow under the card's control. Only Accessibility says it is being re-checked, because that is the step the
+    /// user leaves the window for.
+    private var stepCaption: String {
+        let base = "Step \(step.rawValue) of 4"
+        return step == .accessibility ? base + " · Checking every few seconds" : base
     }
 
     /// One Text so the names wrap onto a second line at narrow widths instead of truncating.
     private var footerSteps: some View {
         let line = SetupStep.footerNames.enumerated().reduce(Text("")) { text, entry in
-            let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? .primary : .secondary)
-            return entry.offset == 0 ? name : text + Text(" · ").foregroundColor(.secondary) + name
+            let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? DesignPalette.ink : DesignPalette.sideInk)
+            return entry.offset == 0 ? name : text + Text(" · ").foregroundColor(DesignPalette.hair) + name
         }
         return line
-        .font(.custom("JetBrainsMono-Medium", size: 10)).tracking(1)
+        .font(DesignFont.mono(DesignFont.eyebrow)).tracking(1)
         .multilineTextAlignment(.trailing)
         .fixedSize(horizontal: false, vertical: true)
         .accessibilityElement(children: .ignore)
@@ -263,7 +273,7 @@ struct SetupView: View {
     }
 
     private func action(_ title: String, identifier: String, perform: @escaping () -> Void) -> some View {
-        Button(title, action: perform).buttonStyle(.designPrimary).controlSize(.large)
+        Button(title, action: perform).buttonStyle(SetupActionButtonStyle())
             .keyboardShortcut(.defaultAction).accessibilityIdentifier(identifier)
     }
 }
@@ -282,9 +292,9 @@ struct SetupStepDots: View {
 
     private func fill(_ dot: SetupDot) -> Color {
         switch dot {
-        case .active: Color(red: 0.19, green: 0.36, blue: 0.34)
-        case .done: Color(red: 0.19, green: 0.36, blue: 0.34).opacity(0.5)
-        case .pending: Color.primary.opacity(0.18)
+        case .active: DesignPalette.accent
+        case .done: DesignPalette.c3
+        case .pending: DesignPalette.track
         }
     }
 }
@@ -300,5 +310,21 @@ struct SetupLips: View {
                 .frame(width: Self.size.width * Self.scale, height: Self.size.height * Self.scale)
                 .accessibilityHidden(true)
         }
+    }
+}
+
+/// The card's main action: the accent button at the 36 pt height the setup mock draws.
+private struct SetupActionButtonStyle: ButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = RoundedRectangle(cornerRadius: 8)
+        configuration.label
+            .font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.onAccent)
+            .padding(.horizontal, 18).frame(minHeight: 36)
+            .background(shape.fill(DesignPalette.accent))
+            .overlay { if configuration.isPressed { shape.fill(Color.black.opacity(0.1)) } }
+            .contentShape(shape)
+            .opacity(isEnabled ? 1 : 0.45)
     }
 }

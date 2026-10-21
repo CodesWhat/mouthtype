@@ -23,7 +23,7 @@ struct SpellingEditorView: View {
             SpellingWordSheet(editor: editor)
         }
         .sheet(isPresented: $editor.showingImport, onDismiss: editor.cancelImport) {
-            SpellingImportView(editor: editor).frame(minWidth: 620, idealWidth: 720, minHeight: 480, idealHeight: 560)
+            SpellingImportView(editor: editor)
         }
         .onDisappear { if !editor.isDirty { editor.cancel() } }
     }
