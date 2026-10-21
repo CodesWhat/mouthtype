@@ -220,7 +220,7 @@ struct DesignPopup<Value: Hashable>: View {
         } label: {
             HStack(spacing: 8) {
                 Text(current).font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink)
-                Image(systemName: "chevron.up.chevron.down").font(.system(size: 9, weight: .semibold)).foregroundStyle(DesignPalette.ink2)
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink2)
             }
             .padding(.leading, 10).padding(.trailing, 8).frame(minHeight: 28)
             .background(RoundedRectangle(cornerRadius: 7).fill(DesignPalette.surface))
