@@ -102,26 +102,40 @@ import Testing
         #expect(model.dockIconMode == .never)
     }
 
+    private func survivor(_ id: Int, key: Bool = true) -> DockSurvivor<Int> { DockSurvivor(id: id, canTakeKey: key) }
+
     @Test func activeAppRestoresSurvivorsAndRekeys() {
-        let plan = DockRestorePlan.make(visible: [1, 2], wasActive: true, key: 2)
+        let plan = DockRestorePlan.make(visible: [survivor(1), survivor(2)], wasActive: true, key: 2)
         #expect(plan == DockRestorePlan(restore: [1, 2], activate: true, key: 2))
     }
 
     @Test func inactiveAppRestoresPanelsWithoutActivating() {
-        let plan = DockRestorePlan.make(visible: [7, 8], wasActive: false, key: 7)
+        let plan = DockRestorePlan.make(visible: [survivor(7), survivor(8)], wasActive: false, key: 7)
         #expect(plan.restore == [7, 8])
         #expect(!plan.activate)
         #expect(plan.key == nil)
     }
 
     @Test func nothingVisibleRestoresNothingAndNeverActivates() {
-        let plan = DockRestorePlan.make(visible: [Int](), wasActive: true, key: 3)
+        let plan = DockRestorePlan.make(visible: [], wasActive: true, key: 3)
         #expect(plan.restore.isEmpty)
         #expect(!plan.activate)
         #expect(plan.key == nil)
     }
 
     @Test func aKeyWindowThatWasntVisibleIsNotRekeyed() {
-        #expect(DockRestorePlan.make(visible: [1], wasActive: true, key: 9).key == nil)
+        #expect(DockRestorePlan.make(visible: [survivor(1)], wasActive: true, key: 9).key == nil)
+    }
+
+    @Test func onlyAPillOrCardSurvivingDoesNotActivate() {
+        let plan = DockRestorePlan.make(visible: [survivor(5, key: false), survivor(6, key: false)], wasActive: true, key: 5)
+        #expect(plan.restore == [5, 6])
+        #expect(!plan.activate)
+        #expect(plan.key == nil)
+    }
+
+    @Test func aFocusableSurvivorAmongPanelsActivatesAndKeysIt() {
+        let plan = DockRestorePlan.make(visible: [survivor(5, key: false), survivor(1)], wasActive: true, key: 1)
+        #expect(plan == DockRestorePlan(restore: [5, 1], activate: true, key: 1))
     }
 }

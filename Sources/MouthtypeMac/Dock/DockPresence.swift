@@ -61,30 +61,41 @@ import AppKit
             key.makeKeyAndOrderFront(nil)
             return
         }
-        let plan = DockRestorePlan.make(visible: survivors.map(ObjectIdentifier.init), wasActive: wasActive, key: key.map(ObjectIdentifier.init))
-        guard !plan.restore.isEmpty else { return }
-        // AppKit can finish hiding on the next turn, so restore after it.
-        DispatchQueue.main.async {
-            MainActor.assumeIsolated {
-                for window in survivors where plan.restore.contains(ObjectIdentifier(window)) { window.orderFrontRegardless() }
-                guard plan.activate else { return }
-                NSApp.activate(ignoringOtherApps: true)
-                survivors.first { plan.key == ObjectIdentifier($0) }?.makeKeyAndOrderFront(nil)
-            }
-        }
+        let plan = DockRestorePlan.make(
+            visible: survivors.map { DockSurvivor(id: ObjectIdentifier($0), canTakeKey: Self.canTakeKey($0)) },
+            wasActive: wasActive, key: key.map(ObjectIdentifier.init))
+        // Right away, not on a later turn: a window dismissed in between must stay dismissed.
+        for window in survivors where plan.restore.contains(ObjectIdentifier(window)) { window.orderFrontRegardless() }
+        guard plan.activate else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        survivors.first { plan.key == ObjectIdentifier($0) }?.makeKeyAndOrderFront(nil)
+    }
+
+    /// A regular window, or a panel that isn't nonactivating, can take focus. A pill or card can't.
+    private static func canTakeKey(_ window: NSWindow) -> Bool {
+        guard window.canBecomeKey else { return false }
+        guard let panel = window as? NSPanel else { return true }
+        return !panel.styleMask.contains(.nonactivatingPanel)
     }
 }
 
+/// One window that survives the switch, and whether it could be given focus.
+struct DockSurvivor<ID: Hashable>: Equatable {
+    var id: ID
+    var canTakeKey: Bool
+}
+
 /// What to put back after the policy drops to accessory. Windows that were hidden or closing aren't in `visible`, so
-/// they stay that way. An app that wasn't active is never activated, so a floating panel doesn't take focus from the
-/// user's target app.
+/// they stay that way. The app is activated only if it was active and a survivor can take focus, so a floating panel,
+/// pill or card never takes focus from the user's target app.
 struct DockRestorePlan<ID: Hashable>: Equatable {
     var restore: [ID]
     var activate: Bool
     var key: ID?
 
-    static func make(visible: [ID], wasActive: Bool, key: ID?) -> DockRestorePlan {
-        DockRestorePlan(restore: visible, activate: wasActive && !visible.isEmpty,
-                        key: wasActive ? key.flatMap { visible.contains($0) ? $0 : nil } : nil)
+    static func make(visible: [DockSurvivor<ID>], wasActive: Bool, key: ID?) -> DockRestorePlan {
+        let focusable = visible.filter(\.canTakeKey).map(\.id)
+        return DockRestorePlan(restore: visible.map(\.id), activate: wasActive && !focusable.isEmpty,
+                               key: wasActive ? key.flatMap { focusable.contains($0) ? $0 : nil } : nil)
     }
 }
