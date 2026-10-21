@@ -19,11 +19,6 @@ Natural speech in, clean text out.
 
 <hr>
 
-> [!NOTE]
-> **Upgrading from alpha.1 to alpha.3?** Those builds have no built-in updater, so you need one manual download to get it. Builds after alpha.3 offer **Check for Updates…** and optional automatic checking. Read the [install and upgrade notes](docs/READ-ME.md) before replacing an existing app.
-
-<!-- separate alerts: a blank-line-only gap between blockquotes trips markdownlint MD028 -->
-
 > [!IMPORTANT]
 > **Not verified on a device for 0.4.0:** fresh installation, VoiceOver, and Bluetooth and USB microphones. See [known limits](docs/KNOWN-LIMITS.md).
 
@@ -36,7 +31,6 @@ Natural speech in, clean text out.
 - [Features](#features)
 - [Privacy and Permissions](#privacy-and-permissions)
 - [Feature Comparison](#feature-comparison)
-- [Upgrading](#upgrading)
 - [Roadmap](#roadmap)
 - [Build and Contribute](#build-and-contribute)
 - [Experimental Linux Source](#experimental-linux-source)
@@ -89,7 +83,7 @@ The Mac app is at 0.4.0, a stable release. It supports **Apple Silicon and macOS
 
 Hold Fn, double-tap Fn, or use Fn+Space. **Control+Command+V** pastes the last delivered take and **Control+Command+C** copies it. A single recording stops after 20 minutes, with a warning at 19.
 
-See the [install and upgrade notes](docs/READ-ME.md) and the [getting-started guide](https://mouthtype.app/start/) for the full walkthrough. What changed in each release is in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
+See the [install notes](docs/READ-ME.md) and the [getting-started guide](https://mouthtype.app/start/) for the full walkthrough. What changed in each release is in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
 <hr>
 
@@ -170,7 +164,7 @@ Model downloads and optional update checks use the network. Dictation and cleanu
 <details>
 <summary><strong>How does Mouthtype compare to Apple Dictation and Wispr Flow?</strong></summary>
 
-> These are tradeoffs, not a scoreboard. We haven't run a controlled accuracy or speed benchmark against either product, and nothing here claims Mouthtype is more accurate or faster. &nbsp; ✅ = supported &nbsp; ❌ = not supported &nbsp; ? = not covered by the comparison pages
+> These are tradeoffs, not a scoreboard. We haven't run a controlled accuracy or speed benchmark against either product, and nothing here claims Mouthtype is more accurate or faster. &nbsp; ✅ = supported &nbsp; ❌ = not supported
 
 <h4 align="center">Dictation tools</h4>
 
@@ -185,36 +179,17 @@ Model downloads and optional update checks use the network. Dictation and cleanu
 </thead>
 <tbody>
 <tr><td>Where it runs</td><td align="center">Apple Silicon Macs, macOS 26+. Experimental Linux source only.</td><td align="center">Part of macOS</td><td align="center">Mac, Windows, iOS and Android</td></tr>
-<tr><td>Separate app to install</td><td align="center">✅</td><td align="center">❌</td><td align="center">?</td></tr>
+<tr><td>Separate app to install</td><td align="center">✅</td><td align="center">❌</td><td align="center">✅<sup>1</sup></td></tr>
 <tr><td>Recognition</td><td align="center">Local, after model downloads</td><td align="center">On-device for general text on supported setups. Check your Mac's notice.</td><td align="center">Cloud, needs internet access</td></tr>
 <tr><td>Cleanup</td><td align="center">Basic rules, or optional local Fast and Thorough models</td><td align="center">Automatic punctuation in supported languages, plus spoken punctuation and formatting commands</td><td align="center">Dictation and text cleanup together</td></tr>
-<tr><td>Rhythm</td><td align="center">Hold, speak, release. The take is processed, then inserted.</td><td align="center">Start Dictation and speak into the field. Supported Apple Silicon Macs let you type while dictating.</td><td align="center">?</td></tr>
-<tr><td>Per-app tone rules</td><td align="center">✅</td><td align="center">?</td><td align="center">?</td></tr>
-<tr><td>Recovery after failed insertion</td><td align="center">✅ Recovery and Paste Last</td><td align="center">?</td><td align="center">Recovery guidance when insertion fails</td></tr>
-<tr><td>History and recordings</td><td align="center">Local on your Mac</td><td align="center">?</td><td align="center">Separate controls for model improvement, cloud storage and local history</td></tr>
-<tr><td>Mobile support</td><td align="center">❌</td><td align="center">?</td><td align="center">✅</td></tr>
-<tr><td>Recording pill styles</td><td align="center">✅</td><td align="center">?</td><td align="center">?</td></tr>
 </tbody>
 </table>
 
 > Stay with Apple Dictation if you want built-in dictation without another app and its output already suits you. Consider Wispr Flow if you want dictation across desktop and mobile and cloud processing works for your setup. Try Mouthtype if you want local recognition and cleanup on a supported Mac, explicit cleanup choices and a small app with optional skins.
 >
 > Product details checked October 16, 2026. See the [Apple Dictation](https://mouthtype.app/compare/apple-dictation/) and [Wispr Flow](https://mouthtype.app/compare/wispr-flow/) comparisons for sources. Contributions welcome if any information is inaccurate.
-
-</details>
-
-<hr>
-
-<h2 align="center" id="upgrading">Upgrading</h2>
-
-<details>
-<summary><strong>Updating an existing install</strong></summary>
-
-Existing alpha.1 to alpha.3 installations need one manual download to get the built-in updater. Builds after alpha.3 offer **Check for Updates…** and optional automatic checking.
-
-0.4.0 turns **Quiet other audio** on by default. If you turned it off before, it stays off. The 0.4.0 menu-bar menu is plain text, and Saved phrases and Very Casual are no longer in the Transform Selection menu.
-
-See the [install and upgrade notes](docs/READ-ME.md) before replacing an existing app, and the [release notes](packaging/ReleaseNotes.txt) for what changed.
+>
+> <sup>1</sup> Wispr's help center tells you to download Flow and open it from the menu bar or system tray ([data sharing and local history](https://docs.wisprflow.ai/articles/9609615338-Private-Cloud-Sync-and-Data-Sharing-preferences-in-Wispr-Flow), URL checked 2026-10-21).
 
 </details>
 
@@ -261,18 +236,17 @@ Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includ
 
 <h2 align="center" id="built-with">Built With</h2>
 
-[![Swift 6.2](https://img.shields.io/badge/Swift_6.2-F05138?logo=swift&logoColor=fff)](https://www.swift.org/)
-[![FluidAudio](https://img.shields.io/badge/FluidAudio-Parakeet_TDT-555555)](https://github.com/FluidInference/FluidAudio)
-[![WhisperKit](https://img.shields.io/badge/WhisperKit-Whisper-555555)](https://github.com/argmaxinc/WhisperKit)
-[![MLX](https://img.shields.io/badge/MLX-mlx--swift--lm-555555)](https://github.com/ml-explore/mlx-swift-lm)
-[![Gemma 4](https://img.shields.io/badge/Gemma_4-Thorough_cleanup-555555)](https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit)
-[![S1-mini](https://img.shields.io/badge/S1--mini-Fast_cleanup-555555)](https://huggingface.co/superwhisper/s1-mini)
-[![Silero VAD](https://img.shields.io/badge/Silero-VAD-555555)](https://huggingface.co/FluidInference/silero-vad-coreml)
-[![GRDB](https://img.shields.io/badge/GRDB.swift-SQLite-555555)](https://github.com/groue/GRDB.swift)
-[![Sparkle](https://img.shields.io/badge/Sparkle-updates-555555)](https://github.com/sparkle-project/Sparkle)
-
-[![SemVer](https://img.shields.io/badge/semver-2.0.0-blue)](https://semver.org/)
-[![Conventional Commits](https://img.shields.io/badge/commits-conventional-fe5196?logo=conventionalcommits&logoColor=fff)](https://www.conventionalcommits.org/)
+| Component | What it does | License |
+| --- | --- | --- |
+| [FluidAudio](https://github.com/FluidInference/FluidAudio) | Runs the Parakeet speech models on Core ML | Apache-2.0 |
+| [WhisperKit](https://github.com/argmaxinc/WhisperKit) | Alternative Whisper speech recognition | MIT |
+| [mlx-swift-lm](https://github.com/ml-explore/mlx-swift-lm) | Runs the local cleanup models on MLX | MIT |
+| [Sparkle](https://github.com/sparkle-project/Sparkle) | Signed update checks | MIT |
+| [GRDB.swift](https://github.com/groue/GRDB.swift) | SQLite storage for local history | MIT |
+| [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3) | Speech recognition | CC BY 4.0 |
+| [Silero VAD](https://huggingface.co/FluidInference/silero-vad-coreml) | Speech detection | MIT |
+| [S1-mini](https://huggingface.co/superwhisper/s1-mini) | Fast cleanup | Apache-2.0 plus a naming clause |
+| [Gemma 4 E4B](https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit) | Thorough cleanup | Apache-2.0 |
 
 Speech recognition uses NVIDIA's Parakeet models, converted to Core ML by FluidInference. No model is bundled; each downloads on request. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every dependency and model with its license.
 
