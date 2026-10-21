@@ -66,6 +66,10 @@ def main(argv=None, *, run=subprocess.run, speech=None):
         print('The Omarchy plugin source was not found. Use --plugin-dir, or --skip-plugin to prepare speech only.',
               file=sys.stderr)
         return 2
+    if plugin is not None and not (Path.home() / '.config/omarchy/shell.json').is_file():
+        print('Omarchy shell configuration (~/.config/omarchy/shell.json) not found, so the bar plugin cannot be installed. '
+              'Run this on Omarchy, or add --skip-plugin to prepare speech only. Nothing was downloaded.', file=sys.stderr)
+        return 2
     config = args.destination.expanduser() / 'linux.json'
     if config.is_file():
         print('Speech is already prepared: ' + str(config))

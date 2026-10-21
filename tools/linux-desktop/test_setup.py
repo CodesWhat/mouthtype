@@ -31,6 +31,7 @@ class SetupTests(unittest.TestCase):
             (plugin / 'install.py').write_text('')
             home = root / 'home'
             (home / '.config/omarchy/plugins/dstahl.mouthtype').mkdir(parents=True)
+            (home / '.config/omarchy/shell.json').write_text('{}')
             commands = []
 
             def run(command, **kwargs):
@@ -47,6 +48,19 @@ class SetupTests(unittest.TestCase):
             speech.assert_not_called()
             self.assertIn('--update', commands[-1])
             self.assertIn('--no-restart-shell', commands[-1])
+
+    def test_missing_omarchy_shell_stops_before_any_download(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plugin = Path(temp) / 'plugin'
+            plugin.mkdir()
+            (plugin / 'install.py').write_text('')
+            speech = mock.Mock(return_value=0)
+            with mock.patch.object(setup, 'find_launcher', lambda: '/x/mouthtype-linux'), \
+                    mock.patch.object(setup, 'missing_packages', lambda table, which=None: []), \
+                    mock.patch.object(setup.Path, 'home', classmethod(lambda cls: Path(temp))), \
+                    mock.patch.object(setup.sys, 'platform', 'linux'), mock.patch('sys.stderr'):
+                self.assertEqual(setup.main(['--destination', temp + '/s', '--plugin-dir', str(plugin)], speech=speech), 2)
+            speech.assert_not_called()
 
     def test_failed_doctor_stops_before_the_plugin(self):
         with tempfile.TemporaryDirectory() as temp:
