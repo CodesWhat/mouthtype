@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -21,14 +22,32 @@ def runtime_available(python):
         return False
 
 
+def probe_llama_server(server, run=subprocess.run):
+    """Ask a llama-server for its version and accelerator devices. Loads no model. Returns (version, devices, problem)."""
+    try:
+        version = run([str(server), '--version'], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10, check=False)
+        devices = run([str(server), '--list-devices'], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError) as error:
+        return '', [], 'it did not run (' + type(error).__name__ + ')'
+    text = version.stdout + version.stderr
+    listing = devices.stdout + devices.stderr
+    if version.returncode or not text.strip():
+        return '', [], 'it exited with status ' + str(version.returncode) + ' on --version (missing shared libraries?)'
+    if devices.returncode or 'no backends are loaded' in listing.lower():
+        return text.strip().splitlines()[0], [], 'no compute backend loaded (the build has no CPU backend or cannot find its backend libraries)'
+    names = [line.strip() for line in listing.splitlines() if ':' in line and not line.lower().startswith('available')]
+    return text.strip().splitlines()[0], names, ''
+
+
 def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
-             runtime_check=None, service_check=None):
+             runtime_check=None, service_check=None, llama_probe=None):
     from desktop import validate_config, request
     from proof import verify_artifacts
     from spellings import load_spellings
     from phrases import load_phrases
     which = which or shutil.which
     runtime_check = runtime_check or runtime_available
+    llama_probe = llama_probe or probe_llama_server
     service_check = service_check or (lambda path: request(path, 'status'))
     checks = []
 
@@ -106,6 +125,35 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
             except (OSError, ValueError, TypeError, KeyError):
                 add('cleanup_model', 'error', 'The ' + config['cleanup'] + ' cleanup model is not prepared or its files changed.',
                     'Run tools/linux-desktop/setup_cleanup.py --destination PATH --level ' + config['cleanup'] + ', or choose off or basic cleanup.')
+        configured = None
+        if config['cleanup'] in ('fast', 'thorough'):
+            try:
+                configured = json.loads(relative(config['cleanup_engine']).read_text())['engines'][config['cleanup']]['server']
+            except (OSError, ValueError, TypeError, KeyError):
+                configured = None
+        server = configured or which('llama-server') or next(
+            (str(path) for path in (Path(config_path).resolve().parent.parent / 'cleanup-candidate/build/llama.cpp/build-cpu/bin/llama-server',)
+             if path.is_file()), None)
+        if server is None:
+            add('llama_server', 'warning', 'llama-server is not installed, so AI cleanup (Fast and Thorough) is off. Basic cleanup works without it.',
+                'Optional: python3 tools/linux-desktop/setup_cleanup.py --destination "$HOME/.local/share/mouthtype/cleanup-candidate" '
+                '(clones and builds the pinned llama.cpp for the CPU; about 1 GB of disk and 10 to 30 minutes). '
+                'Arch and Debian packages exist but are not the pinned revision, which the client requires.')
+        else:
+            version, devices, problem = llama_probe(server)
+            from setup_cleanup import PINS as cleanup_pins
+            pinned = cleanup_pins['llama']['revision']
+            found = re.findall(r'\b[0-9a-f]{7,40}\b', version)
+            if problem:
+                add('llama_server', 'error' if configured else 'warning', 'llama-server at ' + str(server) + ' is not usable: ' + problem + '.',
+                    'Rebuild it with tools/linux-desktop/setup_cleanup.py, or remove the cleanup setting from linux.json.')
+            elif not any(pinned.startswith(item) for item in found):
+                add('llama_server', 'warning', 'llama-server at ' + str(server) + ' runs (' + version + ') but is not the pinned revision ' +
+                    pinned[:9] + ', which the client requires; backend: ' + (', '.join(devices) or 'CPU') + '.',
+                    'Build the pinned revision with tools/linux-desktop/setup_cleanup.py; a distro llama.cpp is rejected at load time.')
+            else:
+                add('llama_server', 'ok', 'llama-server at ' + str(server) + ' runs (' + version + '), pinned revision; backend: ' +
+                    (', '.join(devices) or 'CPU') + '. No model was loaded.')
         decoder = all(which(name) is not None for name in ('ffprobe', 'ffmpeg'))
         add('file_transcription', 'ok' if decoder else 'warning',
             'Audio file decoder helpers checked; no file was decoded.',

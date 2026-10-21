@@ -45,6 +45,13 @@ package() {
 
     install -Dm755 packaging/arch/aur/mouthtype-linux-setup "$pkgdir/usr/bin/mouthtype-linux-setup"
     install -Dm644 packaging/arch/aur/mouthtype-linux.service "$pkgdir/usr/lib/systemd/user/mouthtype-linux.service"
+    # First-run unit: enabled for every user (the same as `systemctl --global enable`), so the first login after
+    # install runs the per-user setup. The logic lives in the client (`mouthtype-linux firstrun`), not here.
+    install -Dm644 tools/linux-desktop/systemd/mouthtype-linux-firstrun.service \
+        "$pkgdir/usr/lib/systemd/user/mouthtype-linux-firstrun.service"
+    install -d "$pkgdir/usr/lib/systemd/user/graphical-session.target.wants"
+    ln -s ../mouthtype-linux-firstrun.service \
+        "$pkgdir/usr/lib/systemd/user/graphical-session.target.wants/mouthtype-linux-firstrun.service"
 
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"

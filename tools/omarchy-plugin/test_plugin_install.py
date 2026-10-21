@@ -84,6 +84,71 @@ class InstallFlowTests(unittest.TestCase):
         self.assertEqual(json.loads(self.shell.read_text()), LAYOUT)
         self.assertTrue(data.is_dir(), "models and recordings are kept without --purge")
 
+    def test_install_binds_transform_by_default_and_opt_out_skips_it(self):
+        self.shell.write_text(json.dumps(LAYOUT))
+        commands = []
+
+        def run(command, **kwargs):
+            commands.append(command)
+            return mock.Mock(returncode=0, stdout="{}", stderr="")
+        with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(install.shutil, "which", lambda name: None), \
+                mock.patch.object(install.subprocess, "run", run):
+            install.main(["--no-autostart", "--no-restart-shell"])
+        self.assertTrue(any(c[-2:] == ["set-transform-shortcut", "on"] for c in commands))
+        shutil_target = self.target
+        install.shutil.rmtree(shutil_target)
+        self.shell.write_text(json.dumps(LAYOUT))
+        commands.clear()
+        with contextlib.redirect_stdout(io.StringIO()), mock.patch.object(install.shutil, "which", lambda name: None), \
+                mock.patch.object(install.subprocess, "run", run):
+            install.main(["--no-autostart", "--no-restart-shell", "--no-transform-shortcut"])
+        self.assertFalse(any("set-transform-shortcut" in c for c in commands))
+
+    def test_uninstall_removes_the_transform_block_too(self):
+        self.shell.write_text(json.dumps(LAYOUT))
+        bindings = self.names["BINDINGS"]
+        bindings.parent.mkdir(parents=True)
+        bindings.write_text("keep()\n\n" + install.BIND_BEGIN + "\na()\n" + install.BIND_END + "\n\n" +
+                            install.TRANSFORM_BEGIN + "\nb()\n" + install.TRANSFORM_END + "\n")
+        self.run_main("--uninstall")
+        self.assertEqual(bindings.read_text(), "keep()\n")
+
+    def test_omarchy_plugin_add_is_used_when_available_and_the_copy_is_the_fallback(self):
+        self.shell.write_text(json.dumps(LAYOUT))
+        calls = []
+
+        def run(command, **kwargs):
+            calls.append(command)
+            if command[0] == "/bin/omarchy-plugin-add":
+                self.target.mkdir(parents=True)
+                (self.target / "manifest.json").write_text("{}")
+                (self.target / "control.py").write_text("from omarchy")
+                (self.target / "save_dialog.py").write_text("")
+                return mock.Mock(returncode=0, stdout="", stderr="")
+            if command[0] == "/bin/git" and "commit" in command:
+                self.assertTrue((Path(command[2]) / "manifest.json").is_file())
+            return mock.Mock(returncode=0, stdout="{}", stderr="")
+        found = {"omarchy-plugin-add": "/bin/omarchy-plugin-add", "git": "/bin/git"}
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), mock.patch.object(install.shutil, "which", found.get), \
+                mock.patch.object(install.subprocess, "run", run):
+            install.main(["--no-autostart", "--no-restart-shell", "--no-transform-shortcut"])
+        add = next(c for c in calls if c[0] == "/bin/omarchy-plugin-add")
+        self.assertEqual(add[2:], ["--yes", "--enable"])
+        self.assertIn("omarchy plugin add", out.getvalue())
+        self.assertEqual((self.target / "control.py").read_text(), "from omarchy", "the copy is skipped when Omarchy installed it")
+        self.assertIn({"id": "dstahl.mouthtype"}, json.loads(self.shell.read_text())["bar"]["layout"]["right"])
+
+        install.shutil.rmtree(self.target)
+        self.shell.write_text(json.dumps(LAYOUT))
+
+        def failing(command, **kwargs):
+            return mock.Mock(returncode=1 if command[0] == "/bin/omarchy-plugin-add" else 0, stdout="{}", stderr="shell not running")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()), \
+                mock.patch.object(install.shutil, "which", found.get), mock.patch.object(install.subprocess, "run", failing):
+            install.main(["--no-autostart", "--no-restart-shell", "--no-transform-shortcut"])
+        self.assertTrue((self.target / "control.py").is_file(), "falls back to copying the files")
+
     def test_uninstall_leaves_an_unmanaged_unit_alone(self):
         unit = self.names["UNIT"]
         unit.parent.mkdir(parents=True)

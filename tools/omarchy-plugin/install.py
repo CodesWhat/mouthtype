@@ -21,6 +21,9 @@ BINDINGS = Path.home() / ".config/hypr/bindings.lua"
 PREFS = Path.home() / ".config/mouthtype/omarchy-plugin.json"
 BIND_BEGIN = "-- Mouthtype Omarchy plugin shortcut: begin"
 BIND_END = "-- Mouthtype Omarchy plugin shortcut: end"
+TRANSFORM_BEGIN = "-- Mouthtype Omarchy plugin transform shortcut: begin"
+TRANSFORM_END = "-- Mouthtype Omarchy plugin transform shortcut: end"
+PLUGIN_ID = "dstahl.mouthtype"
 UNIT_MARKER = "# Managed by the Mouthtype Omarchy plugin"
 
 
@@ -62,6 +65,10 @@ def parse(argv):
                         help="Remove the plugin, its bar entry, login service, shortcut block and settings file")
     parser.add_argument("--purge", action="store_true",
                         help="With --uninstall, also delete models, recordings and configuration under ~/.local/share|state|.config/mouthtype")
+    parser.add_argument("--no-transform-shortcut", action="store_true",
+                        help="Do not bind Super+Shift+T to open Transform Selection (refused anyway if Hyprland already uses it)")
+    parser.add_argument("--copy", action="store_true",
+                        help="Copy the plugin into ~/.config/omarchy/plugins instead of using Omarchy's `omarchy plugin add`")
     parser.add_argument("--no-autostart", action="store_true", help="Do not enable the login service that starts dictation at boot")
     parser.add_argument("--no-restart-shell", action="store_true", help="Do not restart the Omarchy shell afterwards")
     parser.add_argument("--shortcut", choices=("toggle", "hold"),
@@ -126,19 +133,21 @@ def uninstall(args):
             print(f"Removed {UNIT}")
         else:
             print(f"Left {UNIT} alone: the Mouthtype plugin did not create it", file=sys.stderr)
-    if BINDINGS.is_file() and BIND_BEGIN in BINDINGS.read_text(encoding="utf-8"):
+    for begin, end, label in ((BIND_BEGIN, BIND_END, "shortcut"), (TRANSFORM_BEGIN, TRANSFORM_END, "transform shortcut")):
+        if not (BINDINGS.is_file() and begin in BINDINGS.read_text(encoding="utf-8")):
+            continue
         original = BINDINGS.read_text(encoding="utf-8")
-        before, _, rest = original.partition(BIND_BEGIN)
-        if BIND_END in rest:
-            updated = before.rstrip() + rest.split(BIND_END, 1)[1]
+        before, _, rest = original.partition(begin)
+        if end in rest:
+            updated = before.rstrip() + rest.split(end, 1)[1]
             backup = BINDINGS.with_name(f"bindings.lua.bak.mouthtype.{int(time.time())}")
             shutil.copy2(BINDINGS, backup)
             BINDINGS.write_text(updated.rstrip() + "\n", encoding="utf-8")
             if shutil.which("hyprctl"):
                 subprocess.run(["hyprctl", "reload"], check=False, timeout=10, capture_output=True)
-            print(f"Removed the Mouthtype shortcut block from {BINDINGS} (backup: {backup})")
+            print(f"Removed the Mouthtype {label} block from {BINDINGS} (backup: {backup})")
         else:
-            print(f"The Mouthtype block in {BINDINGS} is incomplete; remove it by hand.", file=sys.stderr)
+            print(f"The Mouthtype {label} block in {BINDINGS} is incomplete; remove it by hand.", file=sys.stderr)
     if SHELL.is_file():
         data = load_shell()
         changed = False
@@ -167,19 +176,54 @@ def uninstall(args):
         print("Omarchy shell restarted.")
 
 
+def add_with_omarchy():
+    """Install through Omarchy's own `omarchy plugin add` (validates the manifest, rescans and enables it in the running shell).
+
+    That command only takes a git URL or path to a repository whose root is the plugin, and our plugin is a subfolder of the
+    Mouthtype repository (or a packaged copy with no git history). So a one-commit repository of the plugin files is made in a
+    temporary directory and handed to it. Returns True when the plugin is in place; False means use the file copy."""
+    command = shutil.which("omarchy-plugin-add")
+    git = shutil.which("git")
+    if not command or not git:
+        return False
+    with tempfile.TemporaryDirectory(prefix="mouthtype-plugin-") as scratch:
+        stage = Path(scratch) / "plugin"
+        shutil.copytree(SOURCE, stage, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".git"))
+        try:
+            for step in (["init", "-q"], ["add", "-A"],
+                         ["-c", "user.name=Mouthtype", "-c", "user.email=mouthtype@localhost", "commit", "-q", "-m", "Mouthtype plugin"]):
+                subprocess.run([git, "-C", str(stage)] + step, check=True, timeout=60, capture_output=True)
+            result = subprocess.run([command, str(stage), "--yes", "--enable"], timeout=180, capture_output=True, text=True)
+        except (OSError, subprocess.SubprocessError):
+            return False
+    if result.returncode or not (TARGET / "manifest.json").is_file():
+        print("omarchy plugin add did not complete (" + (result.stderr.strip().splitlines() or ["no output"])[-1] +
+              "); copying the files instead.", file=sys.stderr)
+        if TARGET.is_dir() and not TARGET.is_symlink():
+            shutil.rmtree(TARGET, ignore_errors=True)
+        return False
+    print("Added through `omarchy plugin add`; update it with this installer's --update, not `omarchy plugin update`.")
+    return True
+
+
 def main(argv=None):
     args = parse(argv)
     if args.uninstall:
         return uninstall(args)
     if (TARGET.exists() or TARGET.is_symlink()) and not args.update:
         raise FileExistsError(f"Plugin already exists: {TARGET} (use --update to replace its files)")
+    load_shell()
+    # Omarchy's own command first: it validates, registers and enables the plugin in the running shell. The copy below is the fallback.
+    added = not args.update and not args.copy and add_with_omarchy()
     data = load_shell()
     right = data.get("bar", {}).get("layout", {}).get("right")
     if not isinstance(right, list):
         raise ValueError(f"{SHELL} has no bar layout to add the widget to (expected bar.layout.right)")
-    if not any(entry.get("id") == "dstahl.mouthtype" for entry in right):
+    entry_added = False
+    if not any(entry.get("id") == PLUGIN_ID for entry in right):
         index = next((i for i, entry in enumerate(right) if entry.get("id") == "dstahl.agents"), len(right))
-        right.insert(index, {"id": "dstahl.mouthtype"})
+        right.insert(index, {"id": PLUGIN_ID})
+        entry_added = True
     launcher = shutil.which("mouthtype-linux") or next(
         (str(path) for path in (Path.home() / ".local/bin/mouthtype-linux", Path("/usr/bin/mouthtype-linux")) if path.is_file()), None)
     if launcher is None:
@@ -189,23 +233,24 @@ def main(argv=None):
         print("Warning: no speech setup yet, so the widget will show Unavailable until you run "
               "tools/linux-desktop/setup.py (or setup_speech.py).", file=sys.stderr)
 
-    TARGET.parent.mkdir(parents=True, exist_ok=True)
-    if args.update and TARGET.exists():
-        staging = TARGET.with_name(TARGET.name + ".updating")
-        if staging.exists():
-            shutil.rmtree(staging)
-        shutil.copytree(SOURCE, staging, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
-        shutil.rmtree(TARGET)
-        os.rename(staging, TARGET)
-    else:
-        shutil.copytree(SOURCE, TARGET, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    if not added:
+        TARGET.parent.mkdir(parents=True, exist_ok=True)
+        if args.update and TARGET.exists():
+            staging = TARGET.with_name(TARGET.name + ".updating")
+            if staging.exists():
+                shutil.rmtree(staging)
+            shutil.copytree(SOURCE, staging, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+            shutil.rmtree(TARGET)
+            os.rename(staging, TARGET)
+        else:
+            shutil.copytree(SOURCE, TARGET, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     write_versions(TARGET, read_versions())
     (TARGET / "control.py").chmod(0o755)
     (TARGET / "save_dialog.py").chmod(0o755)
 
-    backup = write_shell(data)
     print(TARGET)
-    print(f"Config backup: {backup}")
+    if not added or entry_added:
+        print(f"Config backup: {write_shell(data)}")
     if not args.no_autostart:
         # Default: the dictation service starts with the graphical session and is supervised by systemd.
         result = subprocess.run([sys.executable, str(TARGET / "control.py"), "set-autostart", "on"],
@@ -234,6 +279,18 @@ def main(argv=None):
                   ". Choose a key from the Mouthtype menu instead.", file=sys.stderr)
         else:
             print(f"Dictation shortcut bound ({args.shortcut}); change it from the menu.")
+    if not args.no_transform_shortcut:
+        result = subprocess.run([sys.executable, str(TARGET / "control.py"), "set-transform-shortcut", "on"],
+                                capture_output=True, text=True, timeout=60)
+        try:
+            outcome = json.loads(result.stdout or "{}")
+        except json.JSONDecodeError:
+            outcome = {}
+        if result.returncode or outcome.get("error"):
+            print("Transform shortcut was not bound: " + str(outcome.get("error") or result.stderr.strip() or "unknown error") +
+                  ". Bind control.py transform-open to a free key yourself, or ignore this.", file=sys.stderr)
+        else:
+            print("Transform Selection shortcut bound (Super+Shift+T); skip it with --no-transform-shortcut.")
     if restart_shell(args):
         print("Omarchy shell restarted; the Mouthtype glyph is on the right side of the bar.")
 

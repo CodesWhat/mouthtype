@@ -1,9 +1,9 @@
 post_install() {
     cat <<'MSG'
-==> Mouthtype is installed. Finish setup as your normal user (not root):
-==>     mouthtype-linux-setup
-==> That downloads the speech model (about 465 MiB), adds the Mouthtype widget to the Omarchy bar and
-==> enables the mouthtype-linux systemd user service. Add --shortcut toggle to bind Super+Alt+M too.
+==> Mouthtype is installed. Log in again (or run: systemctl --user start mouthtype-linux-firstrun) and it sets
+==> itself up: speech model (about 465 MiB), Omarchy bar widget, the dictation (Super+Alt+M) and Transform
+==> (Super+Shift+T) keys, and the login service. Progress and any failure show as notifications.
+==> To repeat or repair that by hand as your normal user (not root): mouthtype-linux-setup
 MSG
 }
 
@@ -16,7 +16,7 @@ MSG
 
 pre_remove() {
     cat <<'MSG'
-==> Removing Mouthtype. Per-user pieces (bar widget, login service link, shortcut block) live in your home
+==> Removing Mouthtype. Per-user pieces (bar widget, login service link, shortcut blocks) live in your home
 ==> directory, so pacman leaves them. Run this as your normal user while the package is still installed:
 ==>     mouthtype-linux-setup --uninstall          (add --purge to also delete models and recordings)
 MSG
