@@ -31,8 +31,8 @@ import MouthtypeCore
 
     /// The selection is read as the status menu is about to open and only then, not on every refresh, and the read is
     /// time-boxed so a slow app can't hold up Settings, Stop Dictation or Quit. It can't wait for the submenu to open:
-    /// by then the menu is tracking and the system focus is the menu, not the text field, so the read finds nothing and
-    /// every item comes up disabled.
+    /// by then the menu is tracking and the system-wide focused element is empty, so a system-wide read finds nothing and
+    /// every item comes up disabled. The read goes to the frontmost app instead, which still reports its own focus.
     func prepareForMenuOpen() {
         state = capture()
         rebuild(state)

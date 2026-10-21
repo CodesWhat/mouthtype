@@ -77,6 +77,8 @@ struct FocusProbe: Sendable {
 protocol FocusReading: AnyObject {
     func snapshotApplication() -> FocusSnapshot
     func snapshot() -> FocusSnapshot
+    /// Like `snapshot()`, for reading the user's selection while a status menu is tracking. Defaults to `snapshot()`.
+    func selectionSnapshot() -> FocusSnapshot
     /// A read of the browser's page URL that is safe to run off the main actor, or nil when the focus rules out reading it.
     /// The cheap checks happen here, on the main actor; the Accessibility calls happen inside the returned closure.
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)?
@@ -90,6 +92,7 @@ protocol FocusReading: AnyObject {
 
 extension FocusReading {
     func snapshotApplication() -> FocusSnapshot { snapshot() }
+    func selectionSnapshot() -> FocusSnapshot { snapshot() }
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? { nil }
     func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
     func readField(of element: FocusedElement) -> FieldReading { FieldReading() }
@@ -125,6 +128,30 @@ final class AccessibilityFocusReader: FocusReading {
             }
             return snapshot
         }
+        return fill(snapshot, with: element)
+    }
+
+    /// The same read as `snapshot()`, except that when the system-wide focused element is empty it asks the frontmost app
+    /// directly. The system-wide element is empty while a status menu tracks, but the app still knows its own focus.
+    func selectionSnapshot() -> FocusSnapshot {
+        var snapshot = snapshotApplication()
+        let systemWide = bounded(AXUIElementCreateSystemWide())
+        var focused = elementValue(systemWide, kAXFocusedUIElementAttribute)
+        if focused == nil, !Self.deadlinePassed, let pid = snapshot.pid {
+            focused = elementValue(bounded(AXUIElementCreateApplication(pid)), kAXFocusedUIElementAttribute)
+        }
+        guard let element = focused else {
+            if !Self.deadlinePassed, let pid = snapshot.pid {
+                let appElement = bounded(AXUIElementCreateApplication(pid))
+                snapshot.windowTitle = elementValue(appElement, kAXFocusedWindowAttribute).flatMap(title(of:))
+            }
+            return snapshot
+        }
+        return fill(snapshot, with: element)
+    }
+
+    private func fill(_ base: FocusSnapshot, with element: AXUIElement) -> FocusSnapshot {
+        var snapshot = base
         snapshot.element = FocusedElement(element)
         snapshot.focusedOwnerPID = ownerPID(of: FocusedElement(element))
         // Each read below re-derives its timeout from what's left of the deadline, and none is issued once it has passed.
