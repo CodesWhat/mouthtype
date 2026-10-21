@@ -105,6 +105,16 @@ private func isWellFormed(_ runs: [VocabularyBooster.Run], _ old: [String], _ ne
         }
     }
 
+    @Test func repeatedSharedWordsMatchReferenceExactly() {
+        var rng = SeededRNG(state: 99)
+        for _ in 0..<3000 {
+            let alphabet = Int.random(in: 1...3, using: &rng)
+            let old = (0..<Int.random(in: 0...12, using: &rng)).map { _ in "w\(Int.random(in: 0..<alphabet, using: &rng))" }
+            let new = (0..<Int.random(in: 0...12, using: &rng)).map { _ in "w\(Int.random(in: 0..<alphabet, using: &rng))" }
+            #expect(VocabularyBooster.align(old, new) == referenceAlign(old, new), "old \(old) new \(new)")
+        }
+    }
+
     /// More than the Myers edit cap, so this goes through the table fallback.
     @Test func heavilyEditedMiddleStillMatchesReference() {
         let old = (0..<900).map { "a\($0)" }

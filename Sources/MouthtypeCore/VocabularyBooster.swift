@@ -258,11 +258,16 @@ extension VocabularyBooster {
     }
 
     /// Longest-common-subsequence alignment of two word lists, as shared words and the changed stretches between them.
-    /// The common prefix and suffix are matched directly, then the middle goes through a Myers diff, which is near
-    /// linear when the rescorer changed a few words. A middle with too many edits falls back to the full table.
+    /// The common prefix is matched directly. When no word repeats across the rest, the common suffix is matched too
+    /// and the middle goes through a Myers diff, which is near linear when the rescorer changed a few words. Repeated
+    /// shared words make the tie-break between equal-length alignments matter, so those go through the full table
+    /// with its original forward traversal. A middle with too many edits also falls back to the full table.
     static func align(_ old: [String], _ new: [String]) -> [Run] {
         var head = 0
         while head < old.count, head < new.count, old[head] == new[head] { head += 1 }
+        if hasRepeatedSharedWord(old[head...], new[head...]) {
+            return (0..<head).map { .same(old: $0, new: $0) } + alignTable(old, head..<old.count, new, head..<new.count)
+        }
         var tail = 0
         while tail < old.count - head, tail < new.count - head,
               old[old.count - 1 - tail] == new[new.count - 1 - tail] { tail += 1 }
@@ -271,6 +276,17 @@ extension VocabularyBooster {
         runs += alignMiddle(old, head..<oldEnd, new, head..<newEnd)
         runs += (0..<tail).map { .same(old: oldEnd + $0, new: newEnd + $0) }
         return runs
+    }
+
+    private static func hasRepeatedSharedWord(_ old: ArraySlice<String>, _ new: ArraySlice<String>) -> Bool {
+        var oldCounts: [String: Int] = [:]
+        for word in old { oldCounts[word, default: 0] += 1 }
+        var newCounts: [String: Int] = [:]
+        for word in new { newCounts[word, default: 0] += 1 }
+        return oldCounts.contains { word, count in
+            guard let other = newCounts[word] else { return false }
+            return count > 1 || other > 1
+        }
     }
 
     /// Edit-distance cap for the Myers pass. Past it the trace storage grows quadratically, so the table takes over.
@@ -328,6 +344,12 @@ extension VocabularyBooster {
             }
             return runs
         }
+        return alignTable(old, oldRange, new, newRange)
+    }
+
+    private static func alignTable(_ old: [String], _ oldRange: Range<Int>, _ new: [String], _ newRange: Range<Int>) -> [Run] {
+        let rows = oldRange.count, cols = newRange.count
+        guard rows > 0 || cols > 0 else { return [] }
         let (o, n) = (oldRange.lowerBound, newRange.lowerBound)
         var table = [[Int]](repeating: [Int](repeating: 0, count: cols + 1), count: rows + 1)
         for r in stride(from: rows - 1, through: 0, by: -1) {
