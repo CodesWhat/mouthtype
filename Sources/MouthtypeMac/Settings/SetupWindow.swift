@@ -149,12 +149,12 @@ struct SetupView: View {
                     Text(title).font(DesignFont.serif(DesignFont.headline)).foregroundStyle(DesignPalette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
-                    Text(detail).font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
+                    Text(detail).font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.sideInk)
                         .fixedSize(horizontal: false, vertical: true)
                     controls.padding(.top, 6)
                     if step == .ready {
                         Text("Change your shortcut or recording behavior in Settings. Fast and Thorough use Basic until their cleanup model is ready.")
-                            .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                            .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.sideInk)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
                         Text(stepCaption).designEyebrow().foregroundStyle(DesignPalette.sideInk).tracking(1).padding(.top, 4)
@@ -174,7 +174,7 @@ struct SetupView: View {
                         .keyboardShortcut(.defaultAction).accessibilityIdentifier("setup-done")
                 } else {
                     Button("Set up later", action: actions.done).buttonStyle(.plain)
-                        .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.ink2).accessibilityIdentifier("setup-done")
+                        .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.sideInk).accessibilityIdentifier("setup-done")
                 }
                 Spacer()
                 footerSteps.accessibilityIdentifier("setup-progress")
