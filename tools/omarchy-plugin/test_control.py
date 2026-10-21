@@ -973,6 +973,20 @@ class TakeScanTests(unittest.TestCase):
             self.assertEqual(control.latest_transcript(), newest["id"])
         self.assertLessEqual(len(checked), 3)
 
+    def test_latest_transcript_uses_creation_time_not_directory_mtime(self):
+        small = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(shutil.rmtree, small)
+        now = time.time()
+        for name, created, text in (("a" * 32, now - 100 * 86400, "old words"), ("b" * 32, now - 60, "new words")):
+            (small / name).mkdir()
+            (small / name / "take.json").write_text(json.dumps({"created": created}))
+            (small / name / "transcript.txt").write_text(text)
+        # Retiring the old take's expired WAV rewrites its directory, so its mtime is the newest.
+        os.utime(small / ("a" * 32), (now + 5, now + 5))
+        with mock.patch.object(control, "RECOVERY", small), \
+                mock.patch.object(control, "recover", lambda identity: {"text": identity}):
+            self.assertEqual(control.latest_transcript(), "b" * 32)
+
     def test_prune_selects_targets_from_the_scan(self):
         small = Path(tempfile.mkdtemp(dir=self.root.parent))
         self.addCleanup(shutil.rmtree, small)

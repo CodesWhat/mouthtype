@@ -217,10 +217,6 @@ class StatsTests(unittest.TestCase):
         self.assertIsNone(take.duration_ms)
 
     def test_latest_transcript_is_the_newest_take_with_text(self):
-        # Newest is by directory mtime; a real take's directory was last written when it was made.
-        for path in self.root.iterdir():
-            created = json.loads((path / 'take.json').read_text())['created'] if (path / 'take.json').exists() else NOW
-            os.utime(path, (created, created))
         self.assertEqual(stats.latest_transcript(self.root), (hexid(2), 'word word word'))
         self.assertIsNone(stats.latest_transcript(self.root / 'absent'))
 
@@ -274,6 +270,16 @@ def reference_read_takes(root, *, now):
 
 
 class ScanTests(unittest.TestCase):
+    def test_retiring_an_old_takes_audio_does_not_make_it_the_latest(self):
+        root = Path(tempfile.mkdtemp())
+        self.addCleanup(__import__('shutil').rmtree, root)
+        old = make_take(root, hexid(1), NOW - 100 * 86400, 3, 1)
+        make_take(root, hexid(2), NOW - 60, 5)
+        # Retention removes the expired WAV, which bumps the old take's directory mtime to now.
+        (old / 'recording.wav').unlink()
+        os.utime(old, (NOW + 5, NOW + 5))
+        self.assertEqual(stats.latest_transcript(root)[0], hexid(2))
+
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
         self.addCleanup(self.directory.cleanup)
@@ -305,8 +311,9 @@ class ScanTests(unittest.TestCase):
 
     def test_latest_transcript_stops_at_the_newest_take_with_words(self):
         for index in range(300):
-            path = make_take(self.root, hexid(index), stamp(1 + index % 19), (index + 1) % 4)
-            os.utime(path, (NOW - (300 - index) * 60, NOW - (300 - index) * 60))
+            path = make_take(self.root, hexid(index), NOW - (300 - index) * 60, (index + 1) % 4)
+            # Scramble the directory mtimes: they must not decide which take is newest.
+            os.utime(path, (NOW - index * 7 % 301, NOW - index * 7 % 301))
         # The newest take is empty, the one before it has text.
         newest = [hexid(i) for i in range(300) if (i + 1) % 4][-1]
         opened = []

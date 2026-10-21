@@ -427,6 +427,17 @@ def take_rows():
     return rows
 
 
+def take_created(name, mtime):
+    """When the take was made: take.json's created time, else the directory mtime."""
+    try:
+        created = json.loads((RECOVERY / name / "take.json").read_text(encoding="utf-8"))["created"]
+        if type(created) in (int, float) and created == created and abs(created) != float("inf"):
+            return float(created)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return mtime
+
+
 def take_entry(name, mtime, preview=True):
     transcript = RECOVERY / name / "transcript.txt"
     has_transcript = transcript.is_file()
@@ -1042,8 +1053,9 @@ def recover(identity):
 
 def latest_transcript(identity=None):
     if identity is None:
-        # Newest by directory mtime; only takes newer than the answer are opened, never the whole history.
-        identity = next((name for name, _ in take_rows() if (RECOVERY / name / "transcript.txt").is_file()), None)
+        # Newest by creation time (take.json). Directory mtime moves when an expired WAV is retired.
+        identity = next((name for _, name in sorted(((take_created(name, mtime), name) for name, mtime in take_rows()), reverse=True)
+                         if (RECOVERY / name / "transcript.txt").is_file()), None)
     if identity is None:
         raise RuntimeError("No saved dictation is available")
     return recover(identity)["text"]

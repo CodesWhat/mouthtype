@@ -312,15 +312,16 @@ def compute(root, *, now=None, tz=None):
 def latest_transcript(root):
     """(id, text) of the newest take with a non-empty transcript, or None.
 
-    Newest means the take directory's mtime, which moves when its transcript is written. Takes are visited newest
-    first and the walk stops at the first one with words, so the rest of the history is never opened."""
+    Newest means the take's creation time (take.json, as everywhere else), never the directory mtime: retiring an
+    expired recording.wav rewrites that. Takes are visited newest first and the walk stops at the first one with
+    words, so only take.json is read for the rest of the history."""
     candidates = []
     try:
         with os.scandir(root) as scan:
             for entry in scan:
                 try:
                     if TAKE_ID.fullmatch(entry.name) and not entry.is_symlink() and entry.is_dir():
-                        candidates.append((entry.stat().st_mtime, entry.name))
+                        candidates.append((take_started(entry.path), entry.name))
                 except OSError:
                     continue
     except OSError:
