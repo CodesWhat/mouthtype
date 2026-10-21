@@ -35,12 +35,21 @@ public enum OrdinaryWords {
 
     /// Only letters and apostrophes. Digits or symbols (S3, C++, win32, node.js) mark an identifier, never plain speech.
     private static func isPlainWord(_ raw: Substring) -> Bool {
-        raw.unicodeScalars.allSatisfy { CharacterSet.letters.contains($0) || $0 == "'" || $0 == "\u{2019}" }
+        raw.unicodeScalars.allSatisfy(isWordScalar)
+    }
+
+    /// Letters and apostrophes. ASCII is decided by range; CharacterSet is only consulted for other scripts.
+    private static func isWordScalar(_ scalar: Unicode.Scalar) -> Bool {
+        switch scalar.value {
+        case 0x41...0x5A, 0x61...0x7A, 0x27, 0x2019: return true
+        case 0..<0x80: return false
+        default: return CharacterSet.letters.contains(scalar)
+        }
     }
 
     private static func normalise(_ raw: Substring) -> String {
         raw.lowercased().unicodeScalars
-            .filter { CharacterSet.letters.contains($0) || $0 == "'" || $0 == "\u{2019}" }
+            .filter(isWordScalar)
             .map { $0 == "\u{2019}" ? "'" : Character($0) }
             .reduce(into: "") { $0.append($1) }
     }

@@ -53,13 +53,6 @@ struct SelectionCleanupView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: compact ? 6 : 12) {
-            if !compact {
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    Text(model.sourceApp.map { "Transform selection · from \($0)" } ?? "Transform selection").designEyebrow()
-                    Spacer(minLength: 0)
-                    Text("AI transforms run on this Mac").designEyebrow()
-                }.fixedSize(horizontal: false, vertical: true)
-            }
             chips
             if let reason = model.transformUnavailableReason {
                 Text(reason).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)

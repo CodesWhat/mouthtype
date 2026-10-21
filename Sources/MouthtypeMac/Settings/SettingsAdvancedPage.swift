@@ -20,6 +20,8 @@ extension SettingsView {
             ModalToggleRow(title: "Remove fillers", isOn: Binding(get: { model.cleanup.fillers }, set: model.setFillers), identifier: "settings-fillers")
             ModalToggleRow(title: "Spoken commands and lists", detail: "Say \u{201C}new paragraph\u{201D}, \u{201C}number one\u{201D}, \u{201C}scratch that\u{201D}.",
                 isOn: Binding(get: { model.cleanup.spokenCommands }, set: model.setSpokenCommands), identifier: "settings-spoken-commands")
+            ModalToggleRow(title: "Slash commands in coding apps", detail: "In terminals, editors and agent apps, \u{201C}slash research\u{201D} types /research.",
+                isOn: Binding(get: { model.cleanup.slashCommands }, set: model.setSlashCommands), identifier: "settings-slash-commands")
             ModalToggleRow(title: "Format numbers", isOn: Binding(get: { model.cleanup.numbers }, set: model.setNumbers), identifier: "settings-numbers")
             ModalToggleRow(title: "Lowercase sentence starts", detail: "Shows as a Custom tone on the Style page.",
                 isOn: Binding(get: { model.cleanup.style.capitalisation == .lowercase }, set: model.setLowercaseStarts), identifier: "settings-lowercase-starts")

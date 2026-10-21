@@ -1,0 +1,89 @@
+name: Bug Report
+description: Report a bug in Mouthtype
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Fill out the sections below so we can reproduce it.
+
+        Don't paste personal transcripts or audio. Redact anything you don't want public. Report security problems through the private advisory link, not here.
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - macOS app
+        - Linux (experimental source)
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Mouthtype version
+      description: Shown in About Mouthtype or the menu bar menu
+      placeholder: "e.g. 0.4.0 (build 18)"
+    validations:
+      required: true
+
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      description: For Linux, enter your distro and version instead
+      placeholder: "e.g. macOS 26.0"
+    validations:
+      required: true
+
+  - type: input
+    id: mac-model
+    attributes:
+      label: Mac model
+      placeholder: "e.g. MacBook Pro M4 Pro"
+    validations:
+      required: false
+
+  - type: input
+    id: destination
+    attributes:
+      label: Destination app
+      description: The app and field you were dictating into
+      placeholder: "e.g. Safari, Slack, Terminal"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Say whether text appeared once, twice or not at all
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Hold Fn in ...
+        2. Say ...
+        3. Release
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Redact personal text first. Don't attach recordings or transcripts you want to keep private.
+    validations:
+      required: false

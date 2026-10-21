@@ -26,11 +26,12 @@ final class CleanupSelection: CleanupModelManaging {
     private var holds: [String: CleanupLevel] = [:]
 
     init(fast: any SmartModel, thorough: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-         budget: (@Sendable (Int) -> Duration)? = nil) {
+         budget: (@Sendable (Int) -> Duration)? = nil,
+         idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay) {
         let demand = CleanupDemand(level: level)
         self.demand = demand
-        self.fast = CleanerHost(model: fast, level: { demand.wanted(.light) }, budget: budget)
-        self.thorough = CleanerHost(model: thorough, level: { demand.wanted(.medium) }, budget: budget)
+        self.fast = CleanerHost(model: fast, level: { demand.wanted(.light) }, budget: budget, idleUnloadDelay: idleUnloadDelay)
+        self.thorough = CleanerHost(model: thorough, level: { demand.wanted(.medium) }, budget: budget, idleUnloadDelay: idleUnloadDelay)
     }
 
     private func host(for level: CleanupLevel) -> CleanerHost { level == .medium ? thorough : fast }

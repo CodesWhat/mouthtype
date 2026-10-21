@@ -7,7 +7,6 @@ for (const route of [
   "/start/",
   "/download/",
   "/linux/",
-  "/docs/",
   "/why-mouthtype/",
   "/compare/",
   "/compare/apple-dictation/",

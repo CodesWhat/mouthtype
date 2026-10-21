@@ -25,13 +25,30 @@ import MouthtypeCore
     }
 
     @Test func noneInstalledEditsEveryID() {
-        let rows = telegramRows(AppCleanupStyles(), installed: [])
-        #expect(rows.count == 1 && rows[0].targets == [classic, modern])
         let m = model()
-        m.setAppStyle(bundleIDs: rows[0].targets, appName: "Telegram", tone: .veryCasual)
+        m.setAppStyle(bundleIDs: [classic, modern], appName: "Telegram", tone: .veryCasual)
         #expect(Set(m.appStyles.entries.map(\.bundleID)) == [classic, modern])
         // Both stored rules are identical, so the page still shows a single row.
         #expect(telegramRows(m.appStyles, installed: []).count == 1)
+    }
+
+    @Test func uninstalledBuiltInsAreHiddenUntilInstalledOrGivenARule() throws {
+        #expect(telegramRows(AppCleanupStyles(), installed: []).isEmpty)
+        #expect(StyleRows.rows(for: .personal, in: AppCleanupStyles(), installed: { _ in false }).allSatisfy { $0.member.kind == .site })
+        // Display only: the built-in rule still matches, and the row returns once the app resolves.
+        #expect(AppCleanupStyles().contexts.context(bundleID: modern) == .personal)
+        #expect(telegramRows(AppCleanupStyles(), installed: [modern]).count == 1)
+        var styles = AppCleanupStyles()
+        try styles.set(bundleID: modern, appName: "Telegram", style: StylePreset.formal.options)
+        #expect(!telegramRows(styles, installed: []).isEmpty)
+    }
+
+    @Test func addedAppsAndWebsitesShowEvenWhenNotInstalled() {
+        var styles = AppCleanupStyles()
+        styles.contexts.addApp(.personal, bundleID: "org.example.Gone", appName: "Gone")
+        _ = styles.contexts.addSite(.personal, domain: "example.net")
+        let names = StyleRows.rows(for: .personal, in: styles, installed: { _ in false }).map(\.member.name)
+        #expect(names.contains("Gone") && names.contains("example.net") && !names.contains("Telegram"))
     }
 
     @Test func bothInstalledGetOneRowEachBoundToItsExactID() {

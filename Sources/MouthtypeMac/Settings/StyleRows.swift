@@ -68,8 +68,9 @@ enum StyleRows {
     }
 
     /// The rows for one built-in or added member. A website has one. An app has one row per identifier that is installed or carries
-    /// a stored rule, each bound to exactly that identifier. With none installed it has one row that edits every identifier it
-    /// ships under (plus a row for any stored rule that differs), so an edit never lands on an identifier dictation won't see.
+    /// a stored rule, each bound to exactly that identifier. With none installed and a stored rule it has one row that edits every
+    /// identifier it ships under (plus a row for any stored rule that differs), so an edit never lands on an identifier dictation
+    /// won't see. With none installed and no stored rule it has no row.
     private static func memberRows(_ member: StyleMember, in styles: AppCleanupStyles, installed: (String) -> Bool) -> [Row] {
         guard member.kind == .app else {
             return [Row(member: member, ownRule: false, ruleStyle: ruleStyle(member, in: styles), ruleLevel: ruleLevel(member, in: styles))]
@@ -80,6 +81,8 @@ enum StyleRows {
         }
         let present = member.keys.filter(installed)
         if present.isEmpty {
+            // A built-in that isn't installed and has no stored rule stays out of the list. Display only: the context still matches it.
+            guard !member.isBuiltIn || member.keys.contains(where: { key in styles.entries.contains { $0.bundleID == key } }) else { return [] }
             let primary = row(member.keys, split: member.keys.count > 1 ? member.keys[0] : nil)
             var rows = [primary]
             for key in member.keys.dropFirst() {

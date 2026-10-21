@@ -32,6 +32,11 @@ public final class FnRemap {
     private var repairTimes: [Date] = []
     var now: () -> Date = Date.init
     private var signalSources: [DispatchSourceSignal] = []
+    private var terminationRequested = false
+    /// Replaced in tests; the real thing ends the process.
+    var exitProcess: (Int32) -> Void = { exit($0) }
+    /// The last resort when the main queue is wedged, so it can't touch the actor. Replaced in tests.
+    var hardExit: @Sendable (Int32) -> Void = { exit($0) }
 
     public convenience init(defaults: UserDefaults = .standard) {
         self.init(store: HIDKeyMappingStore(), defaults: defaults)
@@ -143,20 +148,68 @@ public final class FnRemap {
         return restore()
     }
 
-    /// Restore on SIGTERM and SIGINT, then quit. Call once the remap is applied.
-    public func installSignalHandlers() {
+    /// Handles SIGTERM and SIGINT on the main queue. Call once the remap is applied.
+    ///
+    /// With `requestTermination` (the app) the signal goes into the normal quit path, so take preservation, the
+    /// clipboard lease and the audio unmute all run, and Fn is restored by that teardown. If the quit stalls or is
+    /// cancelled, after `fallbackDelay` the mapping is restored and the process exits anyway; if the main queue is
+    /// blocked (a modal alert) or wedged too, a background timer exits and the fn guard restores the mapping. A second signal does the same
+    /// immediately. Without it (the diagnostic probes) the handler restores and exits at once.
+    public func installSignalHandlers(
+        signals: [Int32] = [SIGTERM, SIGINT],
+        requestTermination: (@MainActor () -> Void)? = nil,
+        fallbackDelay: TimeInterval = 10
+    ) {
         guard signalSources.isEmpty else { return }
-        for number in [SIGTERM, SIGINT] {
+        for number in signals {
             signal(number, SIG_IGN)
             let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
             source.setEventHandler { [weak self] in
                 MainActor.assumeIsolated {
-                    _ = self?.restore()
-                    exit(0)
+                    self?.handleSignal(requestTermination: requestTermination, fallbackDelay: fallbackDelay)
                 }
             }
             source.resume()
             signalSources.append(source)
+        }
+    }
+
+    func handleSignal(requestTermination: (@MainActor () -> Void)?, fallbackDelay: TimeInterval, hardGrace: TimeInterval = 5) {
+        guard let requestTermination, !terminationRequested else {
+            _ = restore()
+            exitProcess(0)
+            return
+        }
+        terminationRequested = true
+        // Both deadlines are armed before the request: NSApp.terminate can block this thread in a modal alert or
+        // wait on a stalled save, and nothing after it would run. The background one doesn't need the main queue.
+        let hardExit = self.hardExit
+        let hardRestore = backgroundRestore()
+        DispatchQueue.main.asyncAfter(deadline: .now() + fallbackDelay) { [weak self] in
+            MainActor.assumeIsolated {
+                Log.hotkey.error("quit after signal stalled, restoring the fn mapping and exiting")
+                _ = self?.restore()
+                self?.exitProcess(0)
+            }
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + fallbackDelay + hardGrace) {
+            hardRestore()
+            hardExit(0)
+        }
+        requestTermination()
+    }
+
+    /// A restore that needs no actor, for the hard exit when the main thread is blocked. It carries a snapshot of the
+    /// saved original and uses the same read, merge and write the main-actor restore does, so it works whether or not
+    /// the fn guard is running (it may be missing or have failed to spawn).
+    private func backgroundRestore() -> @Sendable () -> Void {
+        guard isApplied else { return {} }
+        nonisolated(unsafe) let store = self.store
+        let original = savedOriginal() ?? []
+        let ours = self.ours
+        return {
+            guard let current = try? store.read() ?? [] else { return }
+            _ = store.write(FnRemapMapping.restoring(current: current, ours: ours, original: original))
         }
     }
 
