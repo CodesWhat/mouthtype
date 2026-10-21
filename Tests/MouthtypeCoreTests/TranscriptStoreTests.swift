@@ -146,9 +146,14 @@ import Testing
     }
 
     @Test func reopeningRunsNoMigrationTwice() throws {
-        let (_, dir) = try makeStore()
+        let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
-        _ = try TranscriptStore(url: dir.appendingPathComponent("nested/mouthtype.sqlite"))
+        let id = try dictate(store, at: Self.noon, words: 3, audioMs: 1000)
+        let before = try #require(try store.dictation(id: id))
+        let reopened = try TranscriptStore(url: dir.appendingPathComponent("nested/mouthtype.sqlite"))
+        #expect(try reopened.dictation(id: id) == before)
+        let migrations = try reopened.pool.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations") }
+        #expect(migrations == ["v1", "v2", "v3"])
     }
 
     @Test func stagedLifecycleRoundTrips() throws {
