@@ -35,9 +35,9 @@ import NaturalLanguage
 ///   spelling heard forms, snippet triggers) are never removed.
 /// - Not touched: URL, path, email or hyphenated tokens that happen to contain a listed word.
 ///
-/// English only. Edits are logged under the `filler` stage name, the store's vocabulary has no separate one.
+/// English only. Edits are logged under the `profanity` stage name.
 public struct ProfanityRemover: Sendable {
-    public static let stageName = FillerRemover.stageName
+    public static let stageName = "profanity"
 
     public static let words: Set<String> = [
         "fuck", "fucks", "fucked", "fucking", "fucker", "fuckers", "motherfucker", "motherfuckers", "motherfucking",
@@ -83,23 +83,23 @@ public struct ProfanityRemover: Sendable {
 
     private let protectedWords: Set<String>
     private let writtenForms: Set<String>
-    private let protectedPhrases: [String]
+    private let phraseMatcher: PhraseMatcher
 
     public init(protectedWords: Set<String> = [], protectedPhrases: [String] = []) {
         self.protectedWords = Set(protectedWords.map { $0.lowercased() })
         self.writtenForms = protectedWords
-        self.protectedPhrases = protectedPhrases
+        self.phraseMatcher = PhraseMatcher(patterns: protectedPhrases)
     }
 
     public func apply(_ text: String) -> StageResult {
         let chars = Array(text)
         guard !chars.isEmpty else { return StageResult(text: text) }
-        var scan = Scan(chars: chars, protectedWords: protectedWords, writtenForms: writtenForms, protectedPhrases: protectedPhrases)
+        var scan = Scan(chars: chars, protectedWords: protectedWords, writtenForms: writtenForms, phraseMatcher: phraseMatcher)
         scan.run()
         let removed = SpanRewriter.apply(scan.spans, to: chars, stage: Self.stageName)
         // What is left of the swearing is a noun, adjective or verb the sentence needs: swap it for a mild word.
         let tidied = Array(removed.text)
-        let swaps = Scan(chars: tidied, protectedWords: protectedWords, writtenForms: writtenForms, protectedPhrases: protectedPhrases)
+        let swaps = Scan(chars: tidied, protectedWords: protectedWords, writtenForms: writtenForms, phraseMatcher: phraseMatcher)
             .findSwaps()
         let swapped = swaps.isEmpty ? removed : SpanRewriter.apply(swaps, to: tidied, stage: Self.stageName)
         guard !removed.edits.isEmpty || !swaps.isEmpty else { return removed }
@@ -118,7 +118,7 @@ public struct ProfanityRemover: Sendable {
         var edits = removed.edits + (swaps.isEmpty ? [] : inOriginal(swapped.edits, through: origin))
         // A swap or a removal can leave the wrong "a" or "an" before the next word.
         let final = Array(swapped.text)
-        let finalScan = Scan(chars: final, protectedWords: protectedWords, writtenForms: writtenForms, protectedPhrases: protectedPhrases)
+        let finalScan = Scan(chars: final, protectedWords: protectedWords, writtenForms: writtenForms, phraseMatcher: phraseMatcher)
         let known = Set(scan.articlePairs().map { "\($0.offset):\($0.key)" })
         let articles = finalScan.articleRepairs(skipping: known, origin: swapMap)
         guard !articles.isEmpty else { return StageResult(text: swapped.text, edits: edits) }
@@ -236,7 +236,7 @@ public struct ProfanityRemover: Sendable {
         var spans: [TextSpan] = []
         var lastCutEnd = 0
 
-        init(chars: [Character], protectedWords: Set<String>, writtenForms: Set<String>, protectedPhrases: [String]) {
+        init(chars: [Character], protectedWords: Set<String>, writtenForms: Set<String>, phraseMatcher: PhraseMatcher) {
             self.chars = chars
             self.n = chars.count
             let lower = TextScan.lowered(chars)
@@ -246,11 +246,9 @@ public struct ProfanityRemover: Sendable {
             self.tags = LexicalClasses(chars)
             self.removed = [Bool](repeating: false, count: chars.count)
             var covered = [Bool](repeating: false, count: chars.count)
-            // Each phrase on its own, so overlapping phrases ("oh my", "my damn project") all keep their cover.
-            for phrase in Set(protectedPhrases) {
-                for hit in PhraseMatcher(patterns: [phrase]).matches(chars, lower: lower) {
-                    for i in hit.range { covered[i] = true }
-                }
+            // All hits of every phrase, so overlapping phrases ("oh my", "my damn project") all keep their cover.
+            for hit in phraseMatcher.allMatches(chars, lower: lower) {
+                for i in hit.range { covered[i] = true }
             }
             self.inProtectedPhrase = covered
         }
