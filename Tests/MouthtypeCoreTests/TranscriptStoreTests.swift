@@ -343,6 +343,43 @@ import Testing
         #expect(stats.longestStreakDays == 4)
     }
 
+    @Test func secureTakesDoNotCountTowardStreaks() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, at: Self.noon, words: 3, audioMs: 1_000)
+        // Yesterday only has a secure take, so it breaks the streak the way it does on the Stats page.
+        let secure = try start(store, at: Self.noon.addingTimeInterval(-86_400))
+        try store.recordInsertion(secure, InsertionRecord(finalText: "a b c", target: DictationTarget(isSecure: true)))
+        try dictate(store, at: Self.noon.addingTimeInterval(-2 * 86_400), words: 3, audioMs: 1_000)
+        let stats = try store.stats(now: Self.noon, timeZone: Self.utc)
+        #expect(stats.currentStreakDays == 1)
+        #expect(stats.longestStreakDays == 1)
+    }
+
+    @Test func streakQueryUsesTheCoveringStatsIndex() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pool = try DatabasePool(path: dir.appendingPathComponent("nested/mouthtype.sqlite").path)
+        let plan = try pool.read { db in
+            try Row.fetchAll(db, sql: """
+                EXPLAIN QUERY PLAN SELECT DISTINCT local_day FROM dictation
+                WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0 ORDER BY local_day
+                """).map { $0["detail"] as String }.joined(separator: " ")
+        }
+        #expect(plan.contains("dictation_stats"))
+        _ = store
+    }
+
+    @Test func recentTakesReturnsTheSlimColumnsAndTheFullRowStaysAvailable() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try store.begin(DictationStart(startedAt: Self.noon, target: DictationTarget(appName: "Notes")))
+        try store.recordInsertion(id, InsertionRecord(finalText: "hello there"))
+        let take = try #require(try store.recentTakes(limit: 1).first)
+        #expect(take.id == id && take.finalText == "hello there" && take.appName == "Notes" && take.startedAt == Self.noon.timeIntervalSince1970)
+        #expect(try store.dictation(id: id)?.finalText == "hello there")
+    }
+
     @Test func transcriptionRecordsSpeechOnsetAndInsertionRecordsTheDeliveryTarget() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
