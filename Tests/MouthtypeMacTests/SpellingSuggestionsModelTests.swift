@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 @testable import MouthtypeCore
 @testable import MouthtypeMac
@@ -232,19 +233,29 @@ import Testing
         defer { try? FileManager.default.removeItem(at: f.dir) }
         try seed(f.store)
         let model = model(f)
+        let started = OSAllocatedUnfairLock(initialState: false)
+        let release = DispatchSemaphore(value: 0)
+        let finished = OSAllocatedUnfairLock(initialState: false)
         model.fetchRecent = { store, limit in
             let rows = try store.recentTakes(limit: limit)
-            Thread.sleep(forTimeInterval: 0.4)
+            started.withLock { $0 = true }
+            // Held until after deactivate; the cap only bounds a hang.
+            _ = release.wait(timeout: .now() + 60)
+            finished.withLock { $0 = true }
             return rows
         }
         model.activate()
-        try await Task.sleep(for: .milliseconds(100))
+        // Deactivate only once the fetch is really in flight.
+        for _ in 0..<1000 where !started.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(10)) }
         model.deactivate()
-        try await Task.sleep(for: .milliseconds(700))
+        release.signal()
+        for _ in 0..<1000 where !finished.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(10)) }
+        // Let the finished fetch's result reach the model, which must drop it.
+        try await Task.sleep(for: .milliseconds(300))
         #expect(model.suggestions.isEmpty)
         model.fetchRecent = { store, limit in try store.recentTakes(limit: limit) }
         model.activate()
-        try await Task.sleep(for: .milliseconds(700))
+        for _ in 0..<1000 where model.suggestions.isEmpty { try await Task.sleep(for: .milliseconds(10)) }
         #expect(!model.suggestions.isEmpty)
     }
 

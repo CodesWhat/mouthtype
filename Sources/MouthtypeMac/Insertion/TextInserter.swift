@@ -135,10 +135,9 @@ public final class TextInserter {
         batchGeneration += 1
         cancelVerification()
         let work = Task {
-            let clock = ContinuousClock()
-            let deadline = clock.now.advanced(by: .seconds(PasteboardSession.receiptCap))
+            let deadline = now().addingTimeInterval(PasteboardSession.receiptCap)
             for _ in 0..<400 {
-                guard deliveryActive, clock.now < deadline else { break }
+                guard deliveryActive, now() < deadline else { break }
                 do { try await sleep(0.02) } catch { break }
             }
             if !deliveryActive, clipboard.holdsPaste(clipboard.pasteGeneration) {
@@ -337,12 +336,11 @@ public final class TextInserter {
         return DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: moved, target: target, finalText: text)
     }
 
-    private func waitForPreviousPaste(_ lease: Int, deadline suppliedDeadline: ContinuousClock.Instant? = nil) async -> Bool {
+    private func waitForPreviousPaste(_ lease: Int, deadline suppliedDeadline: Date? = nil) async -> Bool {
         let generation = batchGeneration
-        let clock = ContinuousClock()
-        let deadline = suppliedDeadline ?? clock.now.advanced(by: .seconds(PasteboardSession.receiptCap))
+        let deadline = suppliedDeadline ?? now().addingTimeInterval(PasteboardSession.receiptCap)
         func mayContinue() -> Bool {
-            !Task.isCancelled && batchGeneration == generation && clock.now < deadline
+            !Task.isCancelled && batchGeneration == generation && now() < deadline
                 && (clipboard.holdsPaste(lease) || clipboard.wasRestored(lease))
         }
         do {
@@ -380,11 +378,11 @@ public final class TextInserter {
         }
         let input = inputGeneration()
         let generation = batchGeneration
-        let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(8))
+        // The injected clock, so a stalled main thread in a test can't spend the budget.
+        let deadline = now().addingTimeInterval(8)
         func mayContinue() -> Bool {
             let current = focus.snapshot()
-            return !Task.isCancelled && generation == batchGeneration && clock.now < deadline
+            return !Task.isCancelled && generation == batchGeneration && now() < deadline
                 && input != nil && inputGeneration() == input && !focus.isSecureInputEnabled && !current.isSecure
                 && !current.focusOwnerDiffersFromFrontmost
                 && current.pid == target.pid && current.bundleID == target.bundleID

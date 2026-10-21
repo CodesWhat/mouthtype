@@ -371,14 +371,15 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     }
 
     @Test func useRestartsTheIdleCountdown() async {
-        let (host, model) = idleHost(.milliseconds(400))
+        // The delay dwarfs the gaps between uses, so a stalled scheduler can't let the countdown expire between them.
+        let (host, model) = idleHost(.seconds(2))
         host.start()
         await settle(host) { if case .ready = $0 { true } else { false } }
         for _ in 0..<4 {
-            try? await Task.sleep(for: .milliseconds(200))
+            try? await Task.sleep(for: .milliseconds(300))
             _ = await host.run(SmartCleanupRequest(text: "keep going", level: .light))
         }
-        // 800 ms have passed, twice the delay, but the last use was moments ago.
+        // The delay is not over since the first use, but the last use was moments ago.
         if case .ready = host.state {} else { Issue.record("unloaded despite use: \(host.state)") }
         #expect(model.unloads == 0)
         await settle(host) { $0 == .unloaded }
@@ -404,7 +405,10 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         model.cleanGate = gate
         let request = SmartCleanupRequest(text: "long take", level: .light)
         let running = Task { await host.run(request) }
-        try? await Task.sleep(for: .milliseconds(400))
+        // Wait until the generation has actually started, then well past the 100 ms idle delay.
+        for _ in 0..<500 where model.cleanCalls == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(model.cleanCalls == 1)
+        try? await Task.sleep(for: .milliseconds(500))
         if case .ready = host.state {} else { Issue.record("unloaded mid-generation: \(host.state)") }
         #expect(model.unloads == 0)
         await gate.release()
