@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Synchronization
 import FnRemapKit
@@ -165,6 +166,39 @@ private final class FakeStore: KeyMappingStore {
         remap.handleSignal(requestTermination: {}, fallbackDelay: 0.05)
         for _ in 0..<200 where exits.isEmpty { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(exits.first == 0 && !remap.isApplied)
+    }
+
+    @Test func anIdleSignalQuitFinishesWithoutTheFallbackTimer() async {
+        let remap = FnRemap(store: FakeStore(nil), defaults: makeDefaults())
+        var exits: [Int32] = []
+        remap.exitProcess = { exits.append($0) }
+        remap.hardExit = { _ in }
+        var answered = false
+        // Stands in for NSApp.terminate returning terminateLater: it waits in a nested loop for a MainActor task
+        // (the quit work) to reply. Called straight from the signal's main-queue block it would never get the reply.
+        let terminate: @MainActor () -> Void = {
+            Task { @MainActor in answered = true }
+            let end = Date().addingTimeInterval(1.2)
+            while !answered, Date() < end { RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.01)) }
+        }
+        let start = ContinuousClock.now
+        remap.handleSignal(requestTermination: { FnRemap.requestQuit(terminate) }, fallbackDelay: 1.5)
+        for _ in 0..<200 where !answered { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(answered)
+        #expect(start.duration(to: .now) < .seconds(1))
+        #expect(exits.isEmpty)
+    }
+
+    @Test func aSignalQuitStillRunsWhileAModalOrMenuTrackingLoopIsSpinning() {
+        _ = NSApplication.shared
+        for mode in [RunLoop.Mode("NSModalPanelRunLoopMode"), .eventTracking] {
+            var ran = false
+            // The loop a modal alert or a tracked menu runs: default-mode-only perform blocks never fire in it.
+            FnRemap.requestQuit { ran = true }
+            let end = Date().addingTimeInterval(1)
+            while !ran, Date() < end { RunLoop.main.run(mode: mode, before: Date().addingTimeInterval(0.01)) }
+            #expect(ran, "terminate should run in \(mode.rawValue)")
+        }
     }
 
     @Test func aRealSignalReachesTheQuitRequestOnTheMainQueue() async {
