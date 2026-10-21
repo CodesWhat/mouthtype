@@ -1145,6 +1145,41 @@ class RetentionTests(unittest.TestCase):
             finally:
                 session.close()
 
+    def test_first_start_waits_for_startup_pruning_instead_of_answering_recovery_full(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'recovery'
+            root.mkdir(mode=0o700)
+            for index in range(4):
+                take = root / ('%032x' % index)
+                take.mkdir(mode=0o700)
+                (take / 'take.json').write_text(json.dumps({'created': 1000 + index}))
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=4, history_keep=2)
+            real = session.prune_history
+            def slow_prune():
+                time.sleep(.4)
+                return real()
+            session.prune_history = slow_prune
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={
+                'lifetime_seconds': 5, 'startup': lambda: session.housekeep(force=True)})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'start')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                self.assertNotEqual(reply.get('error'), 'recovery_full', reply)
+                self.assertEqual(reply['state'], 'recording')
+            finally:
+                stopped.set()
+                thread.join(4)
+                session.close()
+
     def test_serve_binds_the_socket_before_startup_maintenance_runs(self):
         from desktop import serve, request
         with tempfile.TemporaryDirectory() as temp:

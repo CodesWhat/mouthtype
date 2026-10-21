@@ -171,6 +171,7 @@ class Session:
         self.maximum_seconds, self.clock = maximum_seconds, clock or time.monotonic
         self.lock = threading.RLock()
         self.take_times = {}
+        self.pruned = threading.Event()
         self.takes_since_retire = self.HOUSEKEEPING_TAKES
         self.retired_at = time.monotonic()
         self.state, self.error, self.outcome = 'idle', None, 'not_attempted'
@@ -364,9 +365,13 @@ class Session:
                 time.monotonic() - self.retired_at >= self.HOUSEKEEPING_SECONDS
             if due:
                 self.takes_since_retire, self.retired_at = 0, time.monotonic()
+        # Pruning frees recovery slots, so it goes first and signals; the slow audio walk follows.
+        try:
+            self.prune_history()
+        finally:
+            self.pruned.set()
         if due:
             self.retire_completed_audio()
-        self.prune_history()
 
     def status(self):
         return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
@@ -1379,6 +1384,13 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                                 if action in ('start', 'toggle') and (
                                         type(admission) not in (int, float) or not math.isfinite(admission)):
                                     raise ValueError('Recording admission deadline is required')
+                                if (action in ('start', 'toggle') and maintenance is not None and maintenance.is_alive()
+                                        and session.take_count() >= session.maximum_takes):
+                                    # Startup pruning may be about to free a slot; wait for it, within the deadline,
+                                    # rather than answer recovery_full to the first key press.
+                                    until = min(time.monotonic() + 1.0, admission - .25)
+                                    while maintenance.is_alive() and not session.pruned.is_set() and time.monotonic() < until:
+                                        time.sleep(.01)
                                 if action in ('start', 'toggle') and files is not None and files.active() and session.state == 'idle':
                                     # A file job owns the speech engine; a microphone take would wait on it.
                                     result = {**session.status(), 'error': 'file_import_active'}
