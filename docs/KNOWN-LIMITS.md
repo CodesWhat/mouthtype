@@ -1,13 +1,13 @@
-# Known limits for 0.4.0
+# Known limits for 0.5.0
 
 > [!NOTE]
-> This page covers what 0.4.0 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
+> This page covers what 0.5.0 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Not verified
 
 | Area | What isn't verified | Safe assumption |
 | --- | --- | --- |
-| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.4.0. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
+| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.5.0. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
 | Bluetooth and USB microphones | Not physically verified. Microphone removal, reconnection and sleep are only lightly covered. | Built-in microphones are the tested path. Setup's microphone status can lag a recovered input until you return to the app and refresh it. |
 | VoiceOver | Acceptance testing is deferred. | Controls have accessibility identifiers and render correctly offscreen, but that doesn't show they work with VoiceOver. |
 | Update installation | Other macOS versions and fresh installs aren't verified. | Signed update checks are tested. An update from one release to the next was observed installing and relaunching on one Mac. |

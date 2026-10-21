@@ -1,4 +1,20 @@
-Mouthtype 0.4.0
+Mouthtype 0.5.0
+
+Faster. Launch is quicker: the menu bar icon appears before anything draws with a bundled font, fonts register off the launch path, and the Settings window is built when you first open it. Dictation is quicker too, because voice activity detection and transcription run together. Thorough cleanup caches the unchanging part of its prompt between takes, so each take only processes what follows. In one benchmark the median per-case time went from 823 ms to 435 ms. The cleanup model unloads after 10 minutes without use and reloads when you start your next take.
+
+Spoken slash commands. In terminals, editors, JetBrains, and the Claude, ChatGPT, Codex and Orca apps (plus claude.ai and chatgpt.com in a supported browser), saying "slash research" types /research, and "dash", "hyphen" and "underscore" join more words, so "slash code dash review" is /code-review. There's an Advanced toggle, on by default.
+
+Show in Dock. Settings > Mac offers Never, While a window is open (the default) or Always. The menu bar icon stays in every mode.
+
+Real app icons now show in the Style lists, and built-in apps that aren't installed are hidden from the Counts as lists. The Transform Selection panel no longer shows an eyebrow header. There is a docs site at docs.mouthtype.app.
+
+Fixes: the Fn remap repairs are bounded and re-checked against the live mapping, and the crash guard restores your own Fn mapping. Quitting by signal goes through the normal quit path and keeps drafts. Paste is refused when the focused element belongs to another process. An undone take is archived before waiting on the earlier job. Cleanup keeps dictated quotes and a dictated preamble, strips model framing from its output, applies joined saved spellings when the model result isn't used, and no longer reads "no one" as a self-correction. Copies made from the card, Recent Takes and cleanup are marked concealed on the clipboard. The sidebar ring follows the row an arrow key selects.
+
+The first-install download is now a notarized DMG. Updates still use the ZIP.
+
+Not verified on a device for this release: fresh installation, VoiceOver, and Bluetooth and USB microphones.
+
+Earlier in 0.4.0:
 
 One window. Mouthtype now lives in a single redesigned window with a new palette and SF Symbols in the sidebar: Home, Stats, Dictionary, Transforms, Style, Appearance and a Settings modal. Saved spellings and Phrases are pages in that window instead of separate windows, and the shortcut recorder is a sheet on it. Leaving a page or closing the window with an unsaved draft still asks first. Set Up Mouthtype and Transcribe Audio File keep their own windows, since the menu bar opens them when no Mouthtype window is up. The Import CSV sheet for the dictionary and Set Up Mouthtype use the new look too.
 

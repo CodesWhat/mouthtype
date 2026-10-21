@@ -6,7 +6,7 @@ Click a text field, hold <kbd>Fn</kbd> and speak, then release to paste. Double-
 
 ## Mac release
 
-The latest published release, 0.4.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized ZIP from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
+The latest published release, 0.5.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
 
 > [!NOTE]
 > Existing alpha.1–3 users need this download once to get the built-in updater.
