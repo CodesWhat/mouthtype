@@ -66,13 +66,19 @@ Any `cli_<name>.py` file next to `desktop.py` that defines `register(subparsers)
 
 **Important limitation:** Hyprland window identity does not establish editable-field identity or whether a field is a password field. AT-SPI context, secure-field detection and insertion read-back are unsupported. Automatic typing therefore requires the explicit unknown-field opt-in and a known suitable field. A helper returning success means **delivery is unknown**, not verified. Focus can change during key submission. Newline, tab, Escape and other C0/C1 control characters are refused for automatic typing because wtype turns some into Return/Tab actions. The full transcript remains available in recovery. Never enable automatic typing for a terminal or other command-executing field without understanding those limits.
 
+## Statistics and last-take verbs
+
+`mouthtype-linux stats` prints one JSON object rebuilt from the recovery directory on every call (the Omarchy panel reads the same data through `control.py stats`). It holds words today, this week and all time, take count, speaking speed (average and peak, from takes of at least 5 words and 3 seconds; rates above 400 wpm are ignored), the current and longest streak, words by hour of day over 30 days, today's tape (each take with its time, words, duration and an `audio_only` flag), High scores (fastest, biggest day, longest streak, longest take, each with its date) and time saved against typing at 40 wpm. Nothing new is written to disk. Because recovery is bounded (`maximum_recovery_takes`, `history_keep`, Forget), every number covers only what is still saved, and the result carries `history_limited: true`. Speaking time is the length of `recording.wav` rather than voiced time, and a take whose WAV was retired by the audio policy keeps its words but has no duration, so it leaves speed and time saved alone.
+
+`mouthtype-linux copy-last` puts the newest saved transcript on the clipboard. `mouthtype-linux paste-last` delivers it to the active window through the same delivery the service uses after a take: the allowed-window check, the terminal rules, the target recheck, the clipboard guard and cancellation (SIGINT or SIGTERM stops it before any key is sent). It needs `delivery.mode` set to `paste` or `type`, refuses while the service is recording or transcribing, and exits 2 with a JSON error on stderr when it can't deliver. A successful exit means the paste was requested, not that the field received it.
+
 ## Explicit saved spellings
 
 Optionally add `"dictionary": "dictionary.json"` to `linux.json`. Relative paths resolve beside that client configuration; absolute paths and `~` are accepted. The existing Mac library can be copied as a regular UTF-8 JSON file containing an array such as `[{"heard":"post hog","written":"PostHog","starred":true}]`. `heard` and `written` must be strings; `starred` is optional, boolean or null and does not affect matching. Unknown fields are ignored. No library is created, edited or learned automatically.
 
 The service validates and snapshots the configured file before each recording or explicit audio recovery. A missing/malformed/nonregular file or one over 4 MiB refuses that operation with `dictionary_unavailable`; it never silently drops a configured library. Fixing the file takes effect on the next start without restarting. Edits during a take apply to the next take. Omitting `dictionary` or using an empty array leaves text unchanged.
 
-Matching uses whole-word Unicode boundaries, canonical equivalence and per-character lowercase, with the longest normalized source first and the first duplicate winning. Source whitespace matches any whitespace run. Replacement text is inserted literally, once, without chaining into another rule. Empty sources and empty replacements are ignored, matching the Core matcher rather than imposing the Mac editor's validation limits. Final recovery and optional delivery use the replaced text; original recognition stays separate. There is no phonetic matching, speech-model boosting, cleanup-model integration or saved-spelling editor here.
+Matching uses whole-word Unicode boundaries, canonical equivalence and per-character lowercase, with the longest normalized source first and the first duplicate winning. Source whitespace matches any whitespace run. Replacement text is inserted literally, once, without chaining into another rule. Empty sources and empty replacements are ignored, matching the Core matcher rather than imposing the Mac editor's validation limits. Final recovery and optional delivery use the replaced text; original recognition stays separate. There is no phonetic matching, speech-model boosting or cleanup-model integration here. Editing the library is `mouthtype-linux spellings` (see Editing the libraries).
 
 The portable matcher vendors the MIT `grapheme` v0.7.2 iterator at immutable commit `56f7f2d16d54576290634b7484eeece52c538bcb`, with Unicode 16.0 data and licenses in `vendor/grapheme`. Alphabetic/numeric boundary ranges are also pinned to Unicode 16.0 in `spelling-unicode.json`; whitespace uses Unicode White_Space. Lowercase mappings come from the running Python's Unicode database, so recently introduced characters can differ across Python/Swift versions. The committed shared spelling fixtures pass against the actual Core matcher, covering combining accents, Greek/Cyrillic, Hangul, Indic clusters, emoji, boundaries, precedence and nonchaining. This is not a promise that all Unicode versions agree. The local Swift 6.4 Character implementation differs on one of 1,093 official Unicode 16 grapheme cases (`✁‍✁`); the vendored iterator passes all 1,093. No runtime dependency download is needed.
 
@@ -81,6 +87,38 @@ The portable matcher vendors the MIT `grapheme` v0.7.2 iterator at immutable com
 Optionally add `"phrases": "phrases.json"` to `linux.json`. Paths resolve beside that configuration, like `dictionary`. The Mac library format is an array of `{"trigger":"my address","expansion":"First Street"}` entries. No library is created or edited automatically. A configured missing, malformed, nonregular or oversized library refuses recording/recovery with `phrases_unavailable`. The limit is 1 MiB, with unique nonblank triggers up to 128 graphemes and nonblank expansions up to 16,000 graphemes.
 
 Each recording or explicit recovery snapshots the library and its variables before capture/inference. Saved spellings run first, then phrases use the same whole-word, case-insensitive, longest-trigger and single-pass matcher. Expansion text is literal, preserves its whitespace and is never rewritten by spelling rules or another phrase. `{date}` uses an English long date such as October 17, 2026; Linux does not yet mirror the Mac's locale-dependent date formatting. Unknown variables stay literal. The final result is limited to 2 MiB; a failed expansion keeps the original recognized text and audio for explicit recovery.
+
+## Editing the libraries
+
+`mouthtype-linux spellings` and `mouthtype-linux phrases` edit the two files above without the service running; they are what the panel's Dictionary and Transforms pages call. Each writes under a lock on the library's directory and ends in an atomic rename that keeps the file's mode and follows a symlink, so the service never reads a half-written file. Validation and wording mirror the Mac editors. A library the service could not read is reported as `problem` and is never overwritten. Extra keys on spelling and phrase entries survive an edit. The first write to an unconfigured library creates `dictionary.json` or `phrases.json` beside `linux.json` and adds the matching key to `linux.json` (after a `.bak.<time>` copy), reported as `adopted_config`. A running service read its paths at start, so after `adopted_config` is true the service must be restarted before it applies the new library.
+
+```
+spellings list | add HEARD WRITTEN | edit HEARD NEW_HEARD NEW_WRITTEN [--expect-written W] | remove HEARD [--expect-written W]
+spellings import FILE.csv [--dry-run] [--expect-digest D] [--expect-csv-digest C]
+phrases   list | add TRIGGER EXPANSION | edit TRIGGER NEW_TRIGGER NEW_EXPANSION [--expect-expansion X] | remove TRIGGER [--expect-expansion X]
+```
+
+Every command prints one JSON object and exits 0, or prints `{"error": message}` on stderr and exits 1. `--expect-*` refuses the change (the Mac's "changed outside the editor" message) when the saved text is no longer what the page showed. Heard phrases and triggers match ignoring case and whitespace runs; heard phrases and triggers are stored with whitespace collapsed and spellings with the ends trimmed. Limits are the service's: 4 MiB for spellings, 1 MiB for phrases, 128 characters for a heard phrase, spelling or trigger, and 16,000 for an expansion.
+
+Library state, returned by `list` and by every change (with `result` and `entry` added; `result` is `added`, `updated`, `unchanged`, `removed` or `imported`):
+
+```
+{"kind": "spellings", "path": "...", "configured": true, "exists": true, "digest": "<sha256 or missing>", "count": 2,
+ "entries": [{"heard": "post hog", "written": "PostHog", "starred": false, "warning": null}],
+ "problem": null, "writable": true}
+```
+
+Phrase entries are `{"trigger", "expansion"}`. `warning` is the Mac's everyday-word notice (it does not block saving). `digest` identifies the file contents for the import check below.
+
+`spellings import` reads a CSV of up to 1 MiB and 5,000 rows with a `name` column or `heard,written` columns (either order) and a header row, using the Mac's quoting rules. `--dry-run` writes nothing and returns the sheet's preview:
+
+```
+{"file": "names.csv", "problem": null, "can_import": true, "digest": "...", "csv_digest": "...",
+ "counts": {"add": 1, "existing": 1, "duplicate": 0, "invalid": 0},
+ "rows": [{"row": 2, "heard": "shawn", "written": "Sean", "result": "add", "label": "Add", "warning": null}]}
+```
+
+`result` is `add`, `existing`, `duplicate` or `invalid`; `label` is the sheet text ("Already saved", "Duplicate row", or the invalid reason); `row` is the CSV line. `problem` is set instead of rows for an unreadable CSV or wrong headers. `can_import` needs no problem, no invalid row and at least one `add`; one invalid row blocks the whole import. Importing appends only the `add` rows in one write and returns the library state with `imported` and `skipped`. `--expect-digest` and `--expect-csv-digest` take the preview's `digest` and `csv_digest` and refuse (the Mac's "changed after this preview" message) if the library or the CSV moved since, so the rows written are the rows shown. Suggestions from corrections are not part of the Linux client.
 
 `{clipboard}` additionally requires `"phrase_clipboard": true` and the optional distro `wl-clipboard` package. It defaults off. If any configured expansion uses that variable, a start/recovery reads the default Wayland clipboard once through `wl-paste --no-newline --type text`; no clipboard watcher, write or key event is started. The read has a one-second deadline and 1 MiB limit. Missing permission, helper, text or failed reads refuse that operation with `phrase_context_unavailable`, rather than silently deleting the trigger. A successfully read empty text offer expands to empty, like Core. Use the initial Hyprland/data-control target; other compositors and clipboard behavior still require acceptance. These are explicit clipboard reads even in recovery-only delivery mode.
 

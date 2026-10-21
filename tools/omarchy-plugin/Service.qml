@@ -5,6 +5,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Wayland
 import qs.Commons
+import "design"
 import "PillModel.js" as Model
 import "Fonts.js" as Fonts
 
@@ -27,6 +28,7 @@ Item {
   readonly property bool enabled: pillPrefs.enabled !== false
   readonly property string skin: pillPrefs.skin === "hifi" ? "hifi" : "classic"
   readonly property int hifiScale: pillPrefs.size === 2 ? 2 : 1
+  readonly property string cardStyle: pillPrefs.card === "minimal" ? "minimal" : "classic"
   property string deliveryMode: "recover"
 
   // Controller state: hidden, recording, processing, message.
@@ -186,6 +188,19 @@ Item {
     stdout: StdioCollector { waitForEnd: true }
   }
 
+  // Floating windows owned by later slices load only once their file exists, so a build without them stays quiet.
+  FileView {
+    path: root.plugin + "/TransformWindow.qml"
+    printErrors: false
+    onLoaded: transformWindow.active = true
+  }
+  Loader {
+    id: transformWindow
+    active: false
+    source: "file://" + root.plugin + "/TransformWindow.qml"
+    onLoaded: if (item && item.shell !== undefined) item.shell = root.shell
+  }
+
   PanelWindow {
     id: panel
     visible: root.showing && root.activeScreen !== null
@@ -236,127 +251,28 @@ Item {
     Item { id: hifiControls }
   }
 
-  // MARK: Classic skin — a dark capsule with ten bars, two discs when controls show, text for a message.
+  // MARK: Classic skin — a dark capsule with ten bars, two discs when controls show, a delivery card for a message.
   Component {
     id: classicSkin
-    Item {
+    ClassicPill {
       id: classic
-      readonly property real scale: panel.screen ? panel.screen.devicePixelRatio : 1
-      function snapEven(v) { return 2 * Math.round(v * scale / 2) / scale }
-      readonly property real barWidth: Math.max(2 / scale, snapEven(2.25))
-      readonly property real barPitch: Math.max(2 / scale, snapEven(4.25))
-      readonly property real maxBar: Math.max(barWidth, snapEven(14.25))
-      readonly property real barsSpan: 9 * barPitch + barWidth
-      readonly property real holdWidth: 2 * Math.ceil((barsSpan + 18) * scale / 2) / scale
-      readonly property real lockedWidth: 2 * Math.ceil((2 * (5 + 18 + 10) + barsSpan) * scale / 2) / scale
-      readonly property bool isMessage: root.mode === "message"
-      readonly property string pillFont: Fonts.family(root.prefs, "pill", Style.font.family)
+      mode: root.mode
+      message: root.message
+      fractions: root.fractions
+      processingTime: root.processingTime
+      showControls: root.showControls
+      devicePixelRatio: panel.screen ? panel.screen.devicePixelRatio : 1
+      pillFont: Fonts.family(root.prefs, "pill", "")
+      cardStyle: root.cardStyle
+      dark: Theme.dark
+      onCancelRequested: root.control("cancel")
+      onStopRequested: root.control("stop")
 
-      implicitWidth: Math.max(capsule.width, 1)
-      implicitHeight: Math.max(capsule.height, 28)
-
-      TextMetrics { id: headMetrics; font.family: classic.pillFont; font.pixelSize: 13; font.weight: Font.Medium; text: root.message ? root.message.headline : "" }
-      TextMetrics { id: detailMetrics; font.family: classic.pillFont; font.pixelSize: 11; text: root.message && root.message.detail ? root.message.detail : "" }
-
-      Rectangle {
-        id: capsule
-        anchors.horizontalCenter: parent.horizontalCenter
-        anchors.bottom: parent.bottom
-        width: classic.isMessage
-          ? Math.min(320, Math.max(64, Math.ceil(Math.max(headMetrics.advanceWidth, detailMetrics.advanceWidth)) + 32))
-          : root.mode === "recording" ? classic.lockedWidth : classic.holdWidth
-        height: classic.isMessage && root.message && root.message.detail ? 44 : 28
-        radius: 14
-        color: Qt.rgba(0x1A / 255, 0x1A / 255, 0x1A / 255, 0.96)
-        border.color: "#4D4A42"
-        border.width: 1
-        Behavior on width { NumberAnimation { duration: 165; easing.type: Easing.OutCubic } }
-        Behavior on height { NumberAnimation { duration: 165; easing.type: Easing.OutCubic } }
-
-        // Bars
-        Item {
-          anchors.centerIn: parent
-          width: classic.barsSpan
-          height: classic.maxBar
-          opacity: classic.isMessage ? 0 : 1
-          Behavior on opacity { NumberAnimation { duration: 120 } }
-          Repeater {
-            model: Model.BAR_COUNT
-            Rectangle {
-              required property int index
-              readonly property real fractionValue: root.mode === "processing"
-                ? Model.processingFractions(root.processingTime)[index]
-                : (root.fractions.length > index ? root.fractions[index] : 0)
-              width: classic.barWidth
-              height: classic.snapEven(classic.barWidth + (classic.maxBar - classic.barWidth) * Math.min(1, Math.max(0, fractionValue)))
-              radius: width / 2
-              color: "#FFFFEB"
-              x: index * classic.barPitch
-              anchors.verticalCenter: parent.verticalCenter
-            }
-          }
-        }
-
-        // Controls, cancel on the left and stop on the right.
-        Item {
-          id: discs
-          anchors.fill: parent
-          opacity: root.showControls ? 1 : 0
-          Behavior on opacity { NumberAnimation { duration: 120 } }
-          Rectangle {
-            id: cancelDisc
-            x: 5; anchors.verticalCenter: parent.verticalCenter
-            width: 18; height: 18; radius: 9
-            color: cancelArea.pressed ? "#5C5C5A" : cancelArea.containsMouse ? "#858582" : "#71716E"
-            scale: cancelArea.pressed ? 0.92 : 1
-            Canvas {
-              anchors.fill: parent
-              onPaint: {
-                var ctx = getContext("2d"); ctx.reset(); ctx.strokeStyle = "#FCFCFB"; ctx.lineWidth = 1.5; ctx.lineCap = "round"
-                var c = width / 2, h = 3.1
-                ctx.beginPath(); ctx.moveTo(c - h, c - h); ctx.lineTo(c + h, c + h); ctx.moveTo(c - h, c + h); ctx.lineTo(c + h, c - h); ctx.stroke()
-              }
-            }
-            MouseArea { id: cancelArea; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; enabled: root.showControls; cursorShape: Qt.PointingHandCursor; onClicked: root.control("cancel") }
-          }
-          Rectangle {
-            id: stopDisc
-            anchors.right: parent.right; anchors.rightMargin: 5; anchors.verticalCenter: parent.verticalCenter
-            width: 18; height: 18; radius: 9
-            color: stopArea.pressed ? "#D2D2CF" : stopArea.containsMouse ? "#EDEDEB" : "#FCFCFB"
-            scale: stopArea.pressed ? 0.92 : 1
-            Rectangle { anchors.centerIn: parent; width: 7; height: 7; radius: 1.5; color: "#1A1A1A" }
-            MouseArea { id: stopArea; anchors.fill: parent; anchors.margins: -3; hoverEnabled: true; enabled: root.showControls; cursorShape: Qt.PointingHandCursor; onClicked: root.control("stop") }
-          }
-        }
-
-        // Message
-        Column {
-          anchors.centerIn: parent
-          spacing: 1
-          opacity: classic.isMessage ? 1 : 0
-          Behavior on opacity { NumberAnimation { duration: 120 } }
-          Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: root.message ? root.message.headline : ""
-            color: root.message && root.message.isError ? "#FF6B5E" : "#FFFFEB"
-            font.family: classic.pillFont; font.pixelSize: 13; font.weight: Font.Medium
-          }
-          Text {
-            anchors.horizontalCenter: parent.horizontalCenter
-            visible: !!(root.message && root.message.detail)
-            text: root.message && root.message.detail ? root.message.detail : ""
-            color: Qt.rgba(1, 1, 0.92, 0.62)
-            font.family: classic.pillFont; font.pixelSize: 11
-          }
-        }
-
-        // Input region follows the drawn discs.
-        Binding { target: classicControls; property: "x"; value: capsule.mapToItem(panel.contentItem, 0, 0).x }
-        Binding { target: classicControls; property: "y"; value: capsule.mapToItem(panel.contentItem, 0, 0).y }
-        Binding { target: classicControls; property: "width"; value: capsule.width }
-        Binding { target: classicControls; property: "height"; value: capsule.height }
-      }
+      // Input region follows the drawn discs.
+      Binding { target: classicControls; property: "x"; value: classic.capsule.mapToItem(panel.contentItem, 0, 0).x }
+      Binding { target: classicControls; property: "y"; value: classic.capsule.mapToItem(panel.contentItem, 0, 0).y }
+      Binding { target: classicControls; property: "width"; value: classic.capsule.width }
+      Binding { target: classicControls; property: "height"; value: classic.capsule.height }
     }
   }
 
