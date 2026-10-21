@@ -406,9 +406,27 @@ def shortcut_mode():
     return shortcut_info()["mode"]
 
 
+def created_cache_path():
+    return capabilities_cache_path().with_name("take-created.json")
+
+
+def read_created(name):
+    """take.json's created time for one take, or None when it is missing or unusable."""
+    try:
+        created = json.loads((RECOVERY / name / "take.json").read_text(encoding="utf-8"))["created"]
+        if type(created) in (int, float) and created == created and abs(created) != float("inf"):
+            return float(created)
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
 def take_rows():
-    """(id, mtime) of every take directory, newest first, from one scandir pass. DirEntry supplies the type and the
-    directory mtime, so no take costs more than one stat."""
+    """(id, mtime) of every take directory, newest first by creation time, from one scandir pass.
+
+    A take's creation time never changes, so take.json is read once per take and remembered in a small cache file
+    (each poll is a fresh process). The directory mtime is only the fallback for a take without take.json, because
+    retiring a WAV rewrites it."""
     rows = []
     try:
         with os.scandir(RECOVERY) as entries:
@@ -423,19 +441,36 @@ def take_rows():
                     continue
     except OSError:
         return []
-    rows.sort(key=lambda row: row[1], reverse=True)
-    return rows
-
-
-def take_created(name, mtime):
-    """When the take was made: take.json's created time, else the directory mtime."""
+    path = created_cache_path()
     try:
-        created = json.loads((RECOVERY / name / "take.json").read_text(encoding="utf-8"))["created"]
-        if type(created) in (int, float) and created == created and abs(created) != float("inf"):
-            return float(created)
-    except (OSError, ValueError, KeyError, TypeError):
-        pass
-    return mtime
+        cache = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(cache, dict):
+            cache = {}
+    except (OSError, ValueError):
+        cache = {}
+    changed = False
+    keyed = []
+    live = set()
+    for name, mtime in rows:
+        live.add(name)
+        created = cache.get(name)
+        if type(created) not in (int, float):
+            created = read_created(name)
+            if created is not None:
+                cache[name] = created
+                changed = True
+        keyed.append((created if created is not None else mtime, name, mtime))
+    for name in [name for name in cache if name not in live]:
+        del cache[name]
+        changed = True
+    if changed:
+        try:
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            atomic_json(path, cache)
+        except OSError:
+            pass
+    keyed.sort(reverse=True)
+    return [(name, mtime) for _, name, mtime in keyed]
 
 
 def take_entry(name, mtime, preview=True):
@@ -1053,9 +1088,8 @@ def recover(identity):
 
 def latest_transcript(identity=None):
     if identity is None:
-        # Newest by creation time (take.json). Directory mtime moves when an expired WAV is retired.
-        identity = next((name for _, name in sorted(((take_created(name, mtime), name) for name, mtime in take_rows()), reverse=True)
-                         if (RECOVERY / name / "transcript.txt").is_file()), None)
+        # Newest by creation time, so retiring an old take's WAV cannot promote it.
+        identity = next((name for name, _ in take_rows() if (RECOVERY / name / "transcript.txt").is_file()), None)
     if identity is None:
         raise RuntimeError("No saved dictation is available")
     return recover(identity)["text"]

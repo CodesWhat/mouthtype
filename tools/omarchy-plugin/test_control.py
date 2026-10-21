@@ -890,9 +890,12 @@ class TakeScanTests(unittest.TestCase):
         cls.directory.cleanup()
 
     def setUp(self):
-        patcher = mock.patch.object(control, "RECOVERY", self.root)
-        patcher.start()
-        self.addCleanup(patcher.stop)
+        cache = tempfile.TemporaryDirectory()
+        self.addCleanup(cache.cleanup)
+        for patcher in (mock.patch.object(control, "RECOVERY", self.root),
+                        mock.patch.object(control, "created_cache_path", lambda: Path(cache.name) / "take-created.json")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     @staticmethod
     def build(root, count):
@@ -906,6 +909,7 @@ class TakeScanTests(unittest.TestCase):
             if kind != 0:
                 (path / "recording.wav").write_bytes(b"\0" * 44)
             stamp = now - (count - index) * 700
+            (path / "take.json").write_text(json.dumps({"created": stamp}))
             os.utime(path, (stamp, stamp))
         (root / "not-a-take").mkdir()
         (root / ("f" * 32)).write_text("a file named like a take")
@@ -929,12 +933,14 @@ class TakeScanTests(unittest.TestCase):
     def test_only_the_rows_shown_have_their_transcript_read(self):
         reads = []
         real = Path.read_text
+        control.take_rows()  # the first poll fills the creation-time cache
         with mock.patch.object(Path, "read_text", lambda path, *a, **k: reads.append(path) or real(path, *a, **k)):
             control.recent_dictations(limit=5)
-            self.assertLessEqual(len(reads), 5)
+            self.assertLessEqual(len([p for p in reads if p.name == "transcript.txt"]), 5)
+            self.assertFalse([path for path in reads if path.name == "take.json"], "a warm poll must not read take.json")
             reads.clear()
             control.recent_dictations(limit=None, previews=False)
-            self.assertEqual(reads, [])
+            self.assertEqual([p.name for p in reads], ["take-created.json"])
 
     def test_state_reads_five_previews_not_the_whole_history(self):
         reads = []
@@ -960,7 +966,7 @@ class TakeScanTests(unittest.TestCase):
         self.assertEqual(report["recent"], [e for e in old if e["transcript"]][:5])
         self.assertEqual(report["saved"], [{**e, "preview": ""} for e in old if e["audio"] and not e["transcript"]])
         self.assertEqual(report["words_today"], control.words_today(old))
-        previews = [p for p in reads if p.parent.parent == self.root]
+        previews = [p for p in reads if p.parent.parent == self.root and p.name == "transcript.txt"]
         # Five previews, plus the transcripts of takes made today for the word count.
         self.assertLessEqual(len(previews), 5 + sum(1 for e in old if e["transcript"] and time.localtime(e["mtime"]).tm_yday == time.localtime().tm_yday))
 
@@ -972,6 +978,29 @@ class TakeScanTests(unittest.TestCase):
                 mock.patch.object(control, "recover", lambda identity: {"text": identity}):
             self.assertEqual(control.latest_transcript(), newest["id"])
         self.assertLessEqual(len(checked), 3)
+
+    def test_recent_dictations_order_by_creation_time_after_a_wav_is_retired(self):
+        small = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(shutil.rmtree, small)
+        now = time.time()
+        for name, created in (("a" * 32, now - 100 * 86400), ("b" * 32, now - 60), ("c" * 32, now - 120)):
+            (small / name).mkdir()
+            (small / name / "take.json").write_text(json.dumps({"created": created}))
+            (small / name / "transcript.txt").write_text(name[0] + " words")
+        (small / ("d" * 32)).mkdir()  # no take.json: falls back to its directory mtime
+        (small / ("d" * 32) / "transcript.txt").write_text("d words")
+        os.utime(small / ("d" * 32), (now - 600, now - 600))
+        # Retiring the old take's expired WAV rewrites its directory, so its mtime is the newest.
+        os.utime(small / ("a" * 32), (now + 5, now + 5))
+        with mock.patch.object(control, "RECOVERY", small):
+            order = [entry["id"][0] for entry in control.recent_dictations(limit=None)]
+            self.assertEqual(order, ["b", "c", "d", "a"])
+            self.assertEqual([e["id"][0] for e in control.recent_dictations(limit=2)], ["b", "c"])
+            # A deleted take leaves the cache; a repeat poll gives the same answer from the cache.
+            shutil.rmtree(small / ("c" * 32))
+            self.assertEqual([e["id"][0] for e in control.recent_dictations(limit=None)], ["b", "d", "a"])
+            cached = json.loads(control.created_cache_path().read_text())
+            self.assertEqual(sorted(name[0] for name in cached), ["a", "b"])
 
     def test_latest_transcript_uses_creation_time_not_directory_mtime(self):
         small = Path(tempfile.mkdtemp(dir=self.root.parent))
