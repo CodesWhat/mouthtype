@@ -62,7 +62,7 @@ class ResolutionTests(unittest.TestCase):
     def test_adding_moves_an_app_between_contexts_and_restores_defaults(self):
         block = styles.add_app(None, 'email', 'Slack')
         self.assertEqual(styles.context_of(block, 'Slack'), 'email')
-        self.assertFalse(any(m['id'] == 'slack' for m in styles.members(block, 'work')))
+        self.assertFalse(any('Slack' in m['apps'] for m in styles.members(block, 'work')))
         block = styles.add_app(block, 'work', 'Slack')
         self.assertEqual(styles.context_of(block, 'Slack'), 'work')
         self.assertTrue(styles.is_default(block))
