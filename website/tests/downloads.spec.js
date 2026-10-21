@@ -72,7 +72,7 @@ test("installation and update help cover 0.4.0 and the manual first upgrade", as
   );
   await expect(page.locator("#install")).toContainText("0.4.0");
   await expect(page.locator("#your-build")).toContainText(
-    "General, Writing, Appearance and Diagnostics",
+    "General, Mac, Health and an optional Advanced page",
   );
   await expect(
     page.locator('a[href="https://docs.mouthtype.app/getting-started/install-notes/#updates"]'),
