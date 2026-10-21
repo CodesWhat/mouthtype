@@ -2,6 +2,7 @@ import contextlib
 import importlib.util
 import io
 import json
+import os
 import re
 import subprocess
 import sys
@@ -655,6 +656,103 @@ class PanelActionTests(unittest.TestCase):
         self.assertEqual(sorted(actions - control.available_actions()), [])
         self.assertNotIn("cleanup-cleanupPage", panel)
         self.assertNotIn("cleanup cleanupPage", panel)
+
+
+class CapabilitiesCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.launcher = Path(self.directory.name) / "launcher"
+        self.launcher.write_text("", encoding="utf-8")
+        self.calls = []
+        self.output = json.dumps({"interface": "x", "features": {"a": True}})
+        self.returncode = 0
+        self.runtime = Path(self.directory.name) / "runtime"
+        env = mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(self.runtime)})
+        env.start()
+        self.addCleanup(env.stop)
+
+        def fake_cli(*args, **kwargs):
+            self.calls.append(args)
+            return mock.Mock(returncode=self.returncode, stdout=self.output)
+        for patch in (mock.patch.object(control, "LAUNCHER", self.launcher),
+                      mock.patch.object(control, "cli", fake_cli)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_repeated_polls_spawn_the_launcher_once(self):
+        first = control.capabilities()
+        self.assertEqual(control.capabilities(), first)
+        self.assertEqual(first["features"], {"a": True})
+        self.assertEqual(len(self.calls), 1)
+
+    def test_replaced_launcher_is_asked_again(self):
+        control.capabilities()
+        stat = self.launcher.stat()
+        os.utime(self.launcher, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+        control.capabilities()
+        self.assertEqual(len(self.calls), 2)
+
+    def test_failed_answer_is_not_cached(self):
+        self.returncode = 1
+        self.assertEqual(control.capabilities(), {})
+        self.assertEqual(control.capabilities(), {})
+        self.assertEqual(len(self.calls), 2)
+        self.returncode = 0
+        self.assertTrue(control.capabilities())
+        control.capabilities()
+        self.assertEqual(len(self.calls), 3)
+
+    def test_cache_expires_after_the_ttl(self):
+        control.capabilities()
+        later = time.time() + control.CAPABILITIES_TTL + 1
+        with mock.patch.object(control.time, "time", lambda: later):
+            control.capabilities()
+        self.assertEqual(len(self.calls), 2)
+
+    def test_cache_file_is_private_and_unreadable_cache_falls_back(self):
+        control.capabilities()
+        path = control.capabilities_cache_path()
+        self.assertEqual(path.parent.stat().st_mode & 0o777, 0o700)
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        path.write_text("not json", encoding="utf-8")
+        self.assertEqual(control.capabilities()["features"], {"a": True})
+        self.assertEqual(len(self.calls), 2)
+
+    def test_cache_falls_back_to_the_user_cache_dir_without_a_runtime_dir(self):
+        with mock.patch.dict(os.environ, {"XDG_CACHE_HOME": str(self.runtime / "c")}):
+            os.environ.pop("XDG_RUNTIME_DIR")
+            self.assertEqual(control.capabilities_cache_path(), self.runtime / "c/mouthtype/capabilities.json")
+
+    def test_separate_processes_share_the_cache(self):
+        marker = Path(self.directory.name) / "spawns"
+        launcher = Path(self.directory.name) / "fake-launcher"
+        launcher.write_text("#!/bin/sh\necho x >> '%s'\necho '{\"features\": {\"a\": true}}'\n" % marker, encoding="utf-8")
+        launcher.chmod(0o755)
+        script = ("import importlib.util,sys\n"
+                  "from pathlib import Path\n"
+                  "s=importlib.util.spec_from_file_location('c', sys.argv[1]);c=importlib.util.module_from_spec(s);s.loader.exec_module(c)\n"
+                  "c.LAUNCHER=Path(sys.argv[2]);c.CONFIG=Path(sys.argv[3])\n"
+                  "if len(sys.argv)>4: c.time.time=lambda v=float(sys.argv[4]): v\n"
+                  "print(c.capabilities()['features']['a'])\n")
+        env = {**os.environ, "XDG_RUNTIME_DIR": str(self.runtime)}
+
+        def run(*extra):
+            out = subprocess.run([sys.executable, "-I", "-c", script, str(HERE / "control.py"), str(launcher),
+                                  str(launcher), *extra], capture_output=True, text=True, env=env, check=True)
+            self.assertEqual(out.stdout.strip(), "True")
+            return len(marker.read_text().split())
+        self.assertEqual(run(), 1)
+        self.assertEqual(run(), 1)
+        stat = launcher.stat()
+        os.utime(launcher, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+        self.assertEqual(run(), 2)
+        self.assertEqual(run(str(time.time() + control.CAPABILITIES_TTL + 5)), 3)
+
+    def test_missing_launcher_returns_empty_without_spawning(self):
+        self.launcher.unlink()
+        self.assertEqual(control.capabilities(), {})
+        self.assertEqual(self.calls, [])
 
 
 if __name__ == "__main__":
