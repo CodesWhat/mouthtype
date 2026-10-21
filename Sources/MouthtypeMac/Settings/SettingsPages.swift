@@ -30,7 +30,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .home: "Your recent takes."
         case .stats: "Your numbers."
         case .dictionary: "Names, spelled your way."
-        case .transforms: "Say less. Insert more."
+        case .transforms: "Say this, get that."
         case .style: "Your words. Your way."
         case .appearance: "Clean by default. Personal by choice."
         }
@@ -40,7 +40,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
         case .home: "Everything you dictated lately, newest first. Copy it or recover it."
         case .stats: "Words, speed, streaks and time saved, worked out on this Mac from your log."
         case .dictionary: "Keep names and terms spelled the way you want."
-        case .transforms: "Say a short phrase. Insert exactly the text you saved."
+        case .transforms: "A short phrase you say, and the exact text Mouthtype types instead. Plus what it can do to text you\u{2019}ve selected."
         case .style: "A finish that feels right, without changing what you mean."
         case .appearance: "The same Mouthtype underneath. A different little machine when you want one."
         }

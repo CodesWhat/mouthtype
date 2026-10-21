@@ -24,4 +24,22 @@ enum TransformAvailability {
     }
 }
 
+/// The Thorough model's state and name, which is what Transform Selection runs on regardless of the selected cleanup level.
+struct TransformModelStatus: Equatable {
+    var state: CleanerState
+    var modelName: String
+
+    var unavailableReason: String? { TransformAvailability.reason(for: state, modelName: modelName) }
+    var isReady: Bool { unavailableReason == nil }
+
+    var stateWord: String {
+        switch state {
+        case .absent: "NOT DOWNLOADED"
+        case let .downloading(fraction): "DOWNLOADING \(Int(min(max(fraction, 0), 1) * 100))%"
+        case .failed: "UNAVAILABLE"
+        case .loading, .unloaded, .ready: "READY"
+        }
+    }
+}
+
 enum TransformError: Error, Equatable { case emptyResult }

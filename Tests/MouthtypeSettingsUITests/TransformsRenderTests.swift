@@ -20,9 +20,12 @@ import MouthtypeCore
     }
 
     private static let sample = [
-        Snippet(trigger: "my email", expansion: "scott@example.com"),
-        Snippet(trigger: "paste as quote", expansion: "> {clipboard}"),
-        Snippet(trigger: "sign off", expansion: "Thanks,\nScott\n{date}"),
+        Snippet(trigger: "my work email", expansion: "scott@example.com"),
+        Snippet(trigger: "sign off", expansion: "Thanks,\nScott"),
+        Snippet(trigger: "meeting link", expansion: "https://meet.google.com/kqp-vwxa-hhz"),
+        Snippet(trigger: "paste link", expansion: "{clipboard}"),
+        Snippet(trigger: "today's date", expansion: "{date}"),
+        Snippet(trigger: "a very long spoken phrase that runs past its column", expansion: String(repeating: "A long line of typed text that keeps going. ", count: 8)),
     ]
 
     @Test(arguments: [false, true])
@@ -36,7 +39,7 @@ import MouthtypeCore
     }
 
     @Test(arguments: [false, true])
-    func emptyLibraryStillShowsCleanSelection(dark: Bool) throws {
+    func emptyLibraryStillShowsSelectedTextTransforms(dark: Bool) throws {
         FontRegistry.registerBundledFonts()
         let (model, _, dir) = try model(phrases: [])
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -50,8 +53,8 @@ import MouthtypeCore
         let (_, editor, dir) = try model(phrases: Self.sample)
         defer { try? FileManager.default.removeItem(at: dir) }
         editor.select(Self.sample[1])
-        editor.expansion += " {date}"
-        let size = NSSize(width: 500, height: 520)
+        editor.expansion += "\n{date}"
+        let size = NSSize(width: 520, height: 470)
         let bitmap = try SettingsRender.render(PhraseFormSheet(editor: editor) {}, dark: dark, size: size)
         #expect(bitmap.pixelsWide >= Int(size.width))
         try SettingsRender.save(bitmap, name: "transforms-sheet-\(dark ? "dark" : "light")")

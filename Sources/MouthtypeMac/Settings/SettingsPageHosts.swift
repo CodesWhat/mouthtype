@@ -20,7 +20,7 @@ extension SettingsView {
         case .dictionary:
             SavedSpellingsPage(model: model)
         case .transforms:
-            DesignPage(title: page.headline, summary: page.summary) { PhrasesPage(model: model) }
+            DesignPage(title: page.headline, summary: page.summary) { PhrasesPage(model: model, cleaner: actions.cleaner) }
         case .style:
             DesignPage(title: page.headline, summary: "A tone for each kind of writing, and the apps that count as each kind.") {
                 styleContent
