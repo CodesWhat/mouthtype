@@ -10,31 +10,50 @@ An Apple Silicon Mac running macOS 26 or later. That's the only supported setup 
 
 1. Download the ZIP from [mouthtype.app/download](https://mouthtype.app/download) and expand it in Finder.
 2. Drag Mouthtype.app into Applications. If an older Mouthtype is running, quit it first.
-3. Open Mouthtype from Applications. The app is Developer ID signed and notarized. If macOS rejects it anyway, note the exact message. Don't turn off Gatekeeper.
+3. Open Mouthtype from Applications.
 
-If you're on one of the alpha builds (1 through 3), you need this download once. Those builds have no updater. From here on, **Check for Updates…** in the menu does it.
+> [!NOTE]
+> The app is Developer ID signed and notarized. If macOS rejects it anyway, note the exact message. Don't turn off Gatekeeper.
+
+> [!NOTE]
+> If you're on one of the alpha builds (1 through 3), you need this download once. Those builds have no updater. From here on, **Check for Updates…** in the menu does it.
 
 ## Allow Microphone and Accessibility
 
 Mouthtype needs both.
 
-- **Microphone** is how it hears you.
-- **Accessibility** is how the shortcut works and how text gets into the app you're using.
+| Permission | What it's for |
+| --- | --- |
+| Microphone | How it hears you. |
+| Accessibility | How the shortcut works and how text gets into the app you're using. |
 
-On the first launch with either one missing, **Set Up Mouthtype** opens and walks you through it one card at a time. Allow Microphone when macOS asks. Then turn Mouthtype on under System Settings → Privacy & Security → Accessibility and come back to the app. Each card moves on once its step is done, and Mouthtype checks Accessibility about once a second, so you don't need to relaunch.
+On the first launch with either one missing, **Set Up Mouthtype** opens and walks you through it one card at a time.
 
-If you close setup, it doesn't nag again on the next launch. Reopen it any time from **Settings → Health → Set Up Mouthtype**.
+1. Allow Microphone when macOS asks.
+2. Turn Mouthtype on under System Settings → Privacy & Security → Accessibility.
+3. Come back to the app.
+
+Each card moves on once its step is done, and Mouthtype checks Accessibility about once a second, so you don't need to relaunch.
+
+> [!TIP]
+> If you close setup, it doesn't nag again on the next launch. Reopen it any time from **Settings → Health → Set Up Mouthtype**.
 
 ## Wait for the speech model
 
 The speech model and a small speech detector download on first launch. Setup shows the progress. Downloads need internet access. After that, recognition runs on your Mac.
 
-Basic cleanup works with no extra download. The optional Fast (about 1.4 GB) and Thorough (about 5.2 GB) cleanup models download only when you ask for them. Until the one you picked is ready, Mouthtype uses Basic. See [Cleanup and Style](cleanup-and-style.md).
+Basic cleanup works with no extra download. The optional Fast and Thorough cleanup models download only when you ask for them. Until the one you picked is ready, Mouthtype uses Basic. See [Cleanup and Style](cleanup-and-style.md).
+
+| Model | Download |
+| --- | --- |
+| Basic | None |
+| Fast | About 1.4 GB |
+| Thorough | About 5.2 GB |
 
 ## Your first dictation
 
 1. Click into a text field. A blank TextEdit document is a good first target.
-2. Hold **Fn** and say a sentence.
+2. Hold <kbd>Fn</kbd> and say a sentence.
 3. Let go. Clean text appears where your cursor is.
 
 Dictate a second sentence without clicking or typing in between. You should get one insertion per take, with a space between them.

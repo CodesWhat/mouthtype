@@ -15,9 +15,17 @@ Both live on the **Style** page in the Mouthtype window.
 
 Neither model rewrites what you said into a different voice. If a model's output is invalid or misses its deadline, Mouthtype delivers the Basic result instead.
 
-The default level is Fast. Models download only when you ask: open the Cleanup tab on the Style page (or Settings → Health), choose **Download…**, and confirm. You can watch the percentage and **Cancel download**. Until the level you picked has its model, takes run as Basic. That's expected, not an error.
+The default level is Fast. Models download only when you ask:
 
-Cleanup can read up to 300 characters before your cursor and 40 after it, when the app exposes them, so it can get boundary spacing and capitalization right. It never reads secure fields and doesn't read earlier chat messages.
+1. Open the Cleanup tab on the Style page (or Settings → Health).
+2. Choose **Download…** and confirm.
+3. Watch the percentage. **Cancel download** stops it.
+
+> [!NOTE]
+> Until the level you picked has its model, takes run as Basic. That's expected, not an error.
+
+> [!NOTE]
+> Cleanup can read up to 300 characters before your cursor and 40 after it, when the app exposes them, so it can get boundary spacing and capitalization right. It never reads secure fields and doesn't read earlier chat messages.
 
 ## Tone
 
@@ -29,10 +37,12 @@ Formal also removes or softens swearing at Basic, Fast and Thorough. Exclamation
 
 The Style page has four context tabs plus Cleanup.
 
-- **Personal messages** starts with Messages, WhatsApp, Telegram, Discord and Signal, set to Casual.
-- **Work messages** starts with Slack, Teams, linkedin.com and teams.microsoft.com.
-- **Email** starts with Mail, Outlook, mail.google.com and outlook.office.com, set to Formal.
-- **Other** is everything not listed elsewhere. Its tone is your default.
+| Context | Starts with |
+| --- | --- |
+| Personal messages | Messages, WhatsApp, Telegram, Discord and Signal, set to Casual |
+| Work messages | Slack, Teams, linkedin.com and teams.microsoft.com |
+| Email | Mail, Outlook, mail.google.com and outlook.office.com, set to Formal |
+| Other | Everything not listed elsewhere. Its tone is your default |
 
 Entries that ship with the app are tagged BUILT IN. Yours are tagged ADDED BY YOU.
 
@@ -53,7 +63,8 @@ The app where recording starts decides the rule for that take. Tone and cleanup 
 3. Other, for the cleanup level only.
 4. The global default.
 
-Website rules work in Safari, Chrome, Edge and Brave when the focused window exposes its page URL through macOS Accessibility. If it doesn't, Mouthtype falls back to the app rule. Only HTTP and HTTPS pages count, password fields are excluded, and the URL isn't stored or logged. Mouthtype doesn't scrape the address bar or ask for extra browser permissions.
+> [!NOTE]
+> Website rules work in Safari, Chrome, Edge and Brave when the focused window exposes its page URL through macOS Accessibility. If it doesn't, Mouthtype falls back to the app rule. Only HTTP and HTTPS pages count, password fields are excluded, and the URL isn't stored or logged. Mouthtype doesn't scrape the address bar or ask for extra browser permissions.
 
 More detail and the limits are in the [writing tools reference](../WRITING-TOOLS.md).
 

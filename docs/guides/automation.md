@@ -4,7 +4,8 @@ Mouthtype has a small local automation surface: a `mouthtype://` URL scheme and 
 
 ## Turn on the automation switch
 
-Commands that record, copy or insert are off until you opt in, because any web page can open a `mouthtype://` link. Opening a page of the window works without the switch.
+> [!WARNING]
+> Commands that record, copy or insert are off until you opt in, because any web page can open a `mouthtype://` link. Opening a page of the window works without the switch.
 
 ```sh
 defaults write com.codeswhat.mouthtype automationEnabled -bool true
@@ -41,9 +42,15 @@ mouthtype open appearance
 
 ## Shortcuts and Raycast
 
-In Shortcuts, add an "Open URLs" action set to `mouthtype://toggle`. Make one shortcut per command and give each a keyboard shortcut or put it in the menu bar.
+### Shortcuts
 
-For Raycast, save a script command like this, or use an "Open URL" quicklink with `mouthtype://paste-last`.
+1. Add an "Open URLs" action set to `mouthtype://toggle`.
+2. Make one shortcut per command.
+3. Give each a keyboard shortcut or put it in the menu bar.
+
+### Raycast
+
+Save a script command like this, or use an "Open URL" quicklink with `mouthtype://paste-last`.
 
 ```sh
 #!/bin/bash

@@ -2,7 +2,18 @@
 
 A functional command-line session service for **Arch/Omarchy with Hyprland and PipeWire**. This is a development candidate, not a supported Linux release. It records only after an explicit start, supports hold and toggle commands, reuses a pinned resident Parakeet worker, and keeps recoverable audio/transcripts locally. The Omarchy bar plugin in `../omarchy-plugin` is the desktop frontend and Fast/Thorough cleanup models are optional (see below). Mac pipeline parity and X11, GNOME or KDE adapters are not provided.
 
-The automated tests use synthetic WAVs, fake capture/engine processes, and Unix sockets. They establish application behavior, including real child-process cleanup. They do not establish microphone, model, Hyprland, native Wayland delivery, or Omarchy compatibility. Those require a recorded Linux session test. The earlier Ubuntu model checkpoint belongs to `../linux-engine-proof/README.md`; its 5/6 exact result is not desktop acceptance.
+> [!NOTE]
+> The automated tests use synthetic WAVs, fake capture/engine processes, and Unix sockets. They establish application behavior, including real child-process cleanup. They do not establish microphone, model, Hyprland, native Wayland delivery, or Omarchy compatibility. Those require a recorded Linux session test. The earlier Ubuntu model checkpoint belongs to `../linux-engine-proof/README.md`; its 5/6 exact result is not desktop acceptance.
+
+## Quick start
+
+1. Check an existing setup: `mouthtype-linux --config /absolute/path/linux.json doctor`. It's a read-only report.
+2. Install the client: `python3 tools/linux-desktop/install.py --prefix "$HOME/.local"`.
+3. Prepare the speech model: `python3 tools/linux-desktop/setup_speech.py --destination "$HOME/.local/share/mouthtype/speech-candidate"`.
+4. Start a foreground session: `mouthtype-linux --config "$HOME/.local/share/mouthtype/speech-candidate/linux.json" serve`.
+5. Bind keys for `start`, `stop`, `toggle` and `cancel` in your compositor, using unused keys. See [Hold, toggle and cancellation](#hold-toggle-and-cancellation).
+
+The sections below explain each step. The Omarchy bar plugin in `../omarchy-plugin` is the desktop frontend.
 
 ## Check an existing setup
 
@@ -18,7 +29,17 @@ From a source checkout or the development source archive, run `python3 tools/lin
 
 For a local Arch test package, a clean committed full repository checkout can run `python3 scripts/prepare-linux-arch.py --destination /absolute/new/arch-bundle`. This creates a standalone local-source PKGBUILD bundle with explicit source integrity/provenance and its own `0.1.0test.r<commit-time>.<revision>` version, without changing signed app metadata. The attached test suffix sorts below the matching stable version. Follow the bundle's README to build as an ordinary user and install with normal pacman policy. No AUR entry, public source endpoint, signing key, model download, service or binding is added. The existing 60-file payload is reused. The installer supports `--prefix /usr --destdir /absolute/staging-root` so a package-stage path never appears in the runtime launcher. Staged system-package payload directories and newly created prefix parents use mode 0755, and payload files use mode 0644 regardless of the build umask. Existing staging ancestors are preserved. The manual user install retains its private mode 0700 payload root. Package removal leaves separately prepared user models, configuration and recovery outside `/usr` alone.
 
-Arch/Omarchy prerequisites are `python`, `python-pip`, `curl`, and `pipewire-audio` from normal signed package management. Optional `libnotify` provides recording feedback; `wtype` and `wl-clipboard` are needed only for deliberate paste or typing delivery; `ffmpeg` only for audio file transcription; `git`, `cmake` and `base-devel` only to build the pinned cleanup server. The ordered end-to-end checklist for people and coding agents, covering this client, speech setup, the Omarchy plugin in `../omarchy-plugin` and its login service, is `website/public/linux/agent-install.md`, published at https://mouthtype.app/linux/agent-install.md. Preparation reports missing required helpers and never invokes a package manager. Native Arch Python3.14 installed the pinned sherpa wheels in the remote runtime experiment; actual desktop acceptance remains separate. Missing binary wheels fail preparation without replacing or downgrading system Python.
+Prerequisites come from normal signed package management on Arch/Omarchy.
+
+| Package | Needed for |
+| --- | --- |
+| `python`, `python-pip`, `curl`, `pipewire-audio` | Required. |
+| `libnotify` | Optional recording feedback. |
+| `wtype`, `wl-clipboard` | Only deliberate paste or typing delivery. |
+| `ffmpeg` | Only audio file transcription. |
+| `git`, `cmake`, `base-devel` | Only building the pinned cleanup server. |
+
+The ordered end-to-end checklist for people and coding agents, covering this client, speech setup, the Omarchy plugin in `../omarchy-plugin` and its login service, is `website/public/linux/agent-install.md`, published at https://mouthtype.app/linux/agent-install.md. Preparation reports missing required helpers and never invokes a package manager. Native Arch Python3.14 installed the pinned sherpa wheels in the remote runtime experiment; actual desktop acceptance remains separate. Missing binary wheels fail preparation without replacing or downgrading system Python.
 
 Explicitly prepare the speech model with `python3 tools/linux-desktop/setup_speech.py --destination "$HOME/.local/share/mouthtype/speech-candidate"`. This downloads the exact published Parakeet INT8 archive, verifies its pinned SHA-256 before extracting only the four regular speech files, and uses the existing verifier to check each extracted digest. It creates a dedicated virtual environment, installs the pinned requirements as binary packages from PyPI, checks the runtime import/version, and writes private `engines.json`, `linux.json`, and a provenance receipt. It does not load models, record audio, start a service, register shortcuts or change the clipboard. No cleanup-model download or C++ build is required for this speech client.
 
@@ -32,15 +53,42 @@ Start a bounded foreground session with `mouthtype-linux serve`. It exits after 
 
 ## Hold, toggle and cancellation
 
-Choose **unused** compositor keys. Omarchy can already bind F9 to Voxtype, so inspect/remove that conflict or choose other keys before using these examples. Nothing edits or reloads your compositor configuration automatically.
+Choose **unused** compositor keys. Nothing edits or reloads your compositor configuration automatically.
 
-- `mouthtype-linux start` starts one recording. Repeated start is ignored.
-- `mouthtype-linux stop` finalizes one recording and transcribes it. Repeated stop never duplicates insertion.
-- `mouthtype-linux toggle` starts when idle and stops when recording. It does nothing during transcription/cancellation.
-- `mouthtype-linux cancel` discards an active take and prevents a late inference result from being delivered.
-- `mouthtype-linux status` reports state, a coarse error category and recovery ID, without transcript, window title or audio.
+> [!NOTE]
+> Omarchy can already bind F9 to Voxtype, so inspect/remove that conflict or choose other keys before using these examples.
 
-For Hyprland **0.55 and newer**, adapt the current Lua examples in `hyprland.lua` using `hl.bind` and nonblocking `hl.dsp.exec_cmd`. Its F9 press/release implements hold; F10 toggles; F11 cancels. `hyprland-legacy.conf` is separately labeled for **0.54 and older**. Custom modifier combinations need release-order acceptance on the chosen compositor version. The 60-second default recording cap cancels an overlong take instead of inserting a partial result. The maximum configurable cap is 120 seconds. Lost capture is preserved as interrupted audio rather than transcribed automatically.
+### Commands
+
+Every verb below is a `mouthtype-linux` subcommand.
+
+| Command | Does |
+| --- | --- |
+| `start` | Starts one recording. Repeated start is ignored. |
+| `stop` | Finalizes one recording and transcribes it. Repeated stop never duplicates insertion. |
+| `toggle` | Starts when idle and stops when recording. Does nothing during transcription or cancellation. |
+| `cancel` | Discards an active take and prevents a late inference result from being delivered. |
+| `status` | Reports state, a coarse error category and recovery ID, without transcript, window title or audio. |
+| `watch` | Prints one JSON line per state change until the service exits. `--retry` keeps reconnecting. |
+| `list` | Lists take IDs and whether audio and text exist. |
+| `recover ID` | Prints the selected transcript exactly, with no automatic delivery. `--raw` prints the original recognition. |
+| `transcribe ID` | Asks the running service to transcribe a take that has audio only, always into recovery. |
+| `forget ID` | Deletes that take's generated files, refusing a take currently in use. |
+| `capabilities` | Prints the client's interface version and feature list without contacting the service. |
+| `import FILE` | Transcribes one WAV, AIFF or M4A file through the running service. |
+| `import-status` | Reports the file job state, a coarse error code and the decoded duration. |
+| `import-cancel` | Stops decoding or inference and discards any partial result. |
+| `import-result` | Prints the latest file result exactly. |
+| `import-save PATH` | Writes the latest file result as UTF-8. |
+| `import-forget` | Removes the latest file result. |
+| `doctor` | Read-only setup check. See above. |
+| `serve` | Runs a bounded foreground session. |
+| `shutdown` | Ends the service explicitly. |
+
+> [!NOTE]
+> For Hyprland **0.55 and newer**, adapt the current Lua examples in `hyprland.lua` using `hl.bind` and nonblocking `hl.dsp.exec_cmd`. Its F9 press/release implements hold; F10 toggles; F11 cancels. `hyprland-legacy.conf` is separately labeled for **0.54 and older**.
+
+Custom modifier combinations need release-order acceptance on the chosen compositor version. The 60-second default recording cap cancels an overlong take instead of inserting a partial result. The maximum configurable cap is 120 seconds. Lost capture is preserved as interrupted audio rather than transcribed automatically.
 
 ## Live state for frontends
 
@@ -50,19 +98,54 @@ The Omarchy bar widget and floating pill that use these interfaces live in `../o
 
 ## Recovery and deliberate delivery
 
-Recovery lives in `$XDG_STATE_HOME/mouthtype/recovery`, default `~/.local/state/mouthtype/recovery`. Directories use mode 0700; recording/transcript files use 0600. Recordings and transcripts remain until explicitly forgotten. At `maximum_recovery_takes` saved take directories (default 200, 1 to 5000), another recording is refused as `recovery_full` instead of silently deleting user data; `status` reports `takes` and `maximum_takes`. Completed audio follows the Mac saved-audio policy: when the service starts and after each take, a completed take's WAV older than `audio_retention_days` (default 90, `null` for no age limit) or beyond `audio_retention_megabytes` (default 2048, oldest first) is removed while its transcript and raw recognition stay. Audio without a transcript, waiting for explicit recovery, is never removed by that audio policy. Separately, `history_keep` (default `null`) forgets everything but that many newest takes, audio and text alike, after each dictation and at service start; the Omarchy menu offers Keep all, 5, 20 or 50. No text is included in routine status/errors, process arguments or compositor logs.
+Recovery lives in `$XDG_STATE_HOME/mouthtype/recovery`, default `~/.local/state/mouthtype/recovery`. Directories use mode 0700; recording/transcript files use 0600. Recordings and transcripts remain until explicitly forgotten.
 
-`mouthtype-linux list` lists IDs and whether audio/text exists. `mouthtype-linux recover ID` prints the selected transcript exactly, with no automatic delivery. If a crash or model error left audio only, `mouthtype-linux transcribe ID` asks the running service to transcribe that take, always into recovery. Read the result with `recover`. Existing transcripts are never overwritten. `mouthtype-linux forget ID` explicitly deletes that take's generated files, refusing a take currently in use. Recovery is never replayed on startup.
+- At `maximum_recovery_takes` saved take directories (default 200, 1 to 5000), another recording is refused as `recovery_full` instead of silently deleting user data. `status` reports `takes` and `maximum_takes`.
+- Completed audio follows the Mac saved-audio policy. When the service starts and after each take, a completed take's WAV older than `audio_retention_days` (default 90, `null` for no age limit) or beyond `audio_retention_megabytes` (default 2048, oldest first) is removed while its transcript and raw recognition stay.
+- Audio without a transcript, waiting for explicit recovery, is never removed by that audio policy.
+- Separately, `history_keep` (default `null`) forgets everything but that many newest takes, audio and text alike, after each dictation and at service start. The Omarchy menu offers Keep all, 5, 20 or 50.
+- No text is included in routine status/errors, process arguments or compositor logs.
+
+Recovered takes never replay on startup. `mouthtype-linux transcribe ID` is for a crash or model error that left audio only: read the result with `recover`. Existing transcripts are never overwritten. See the [command table](#commands).
 
 New takes save original engine text in `raw-recognition.txt` and final text in `transcript.txt`, both mode 0600. `mouthtype-linux recover ID --raw` prints the original exactly, including its line endings. An older take without a raw file reports unavailable rather than substituting its final result. If final saving failed after raw recognition was saved, explicit `transcribe ID` finishes from that saved raw text using the current dictionary; it does not run recognition again or deliver automatically. Forget removes both text files and the audio. Cancelling a recovered take preserves its existing audio/raw text.
 
-Automatic delivery is opt-in. Set `delivery.mode` to `paste` or `type`, then either provide a nonempty `allowed_classes` array of **exact** Hyprland window classes or set `any_window` to `true`, and set `allow_unknown_secure_field` to `true` only after considering the limitation below.
+> [!WARNING]
+> Automatic delivery is opt-in. Set `delivery.mode` to `paste` or `type`, then either provide a nonempty `allowed_classes` array of **exact** Hyprland window classes or set `any_window` to `true`, and set `allow_unknown_secure_field` to `true` only after considering the limitation below.
 
 `paste` is the Mac-like path: the transcript is placed on the Wayland clipboard with `wl-copy` and one Ctrl+V chord is sent to the window captured at recording start, through Hyprland's `send_shortcut` dispatcher first (falling back to the legacy `sendshortcut` form, then to `wtype`), after checking that it is still the unlocked active window. Line breaks and tabs travel as text, so multiline Basic cleanup results can be pasted. Windows whose class is in `terminal_classes` (a built-in list of common terminals plus Omarchy's `org.omarchy.agent`, overridable) or whose owning process name is in `terminal_executables` (ghostty, alacritty, kitty, foot and other terminals, so a terminal launched with a custom class is still recognised) receive Ctrl+Shift+V instead, and a transcript containing a line break is refused for a terminal as `unsupported_text` unless `allow_terminal_multiline` is `true`, because a pasted line break runs a command. With `restore_clipboard` (default `true`) the previous **text** clipboard is read once before the paste and put back about half a second later, only if the clipboard still holds the pasted transcript; a clipboard holding an image or other non-text content is not restored. Successful helper exits mean the paste was requested, not that the field received it; the `delivered` cue says so.
 
 `type` submits the characters directly and keeps the stricter rules below. The service captures address/class/PID at recording start, checks the current unlocked target before delivery, and declines delivery if target identity changed or is unavailable. It submits one UTF-8 text stream to `wtype -` via stdin. It never borrows or overwrites the clipboard, focuses another window, synthesizes a paste chord, or retries after uncertainty. The helper has a 15-second deadline; a timeout may have typed a prefix, so read recovery and check the target before doing anything else.
 
-**Important limitation:** Hyprland window identity does not establish editable-field identity or whether a field is a password field. AT-SPI context, secure-field detection and insertion read-back are unsupported. Automatic typing therefore requires the explicit unknown-field opt-in and a known suitable field. A helper returning success means **delivery is unknown**, not verified. Focus can change during key submission. Newline, tab, Escape and other C0/C1 control characters are refused for automatic typing because wtype turns some into Return/Tab actions. The full transcript remains available in recovery. Never enable automatic typing for a terminal or other command-executing field without understanding those limits.
+> [!WARNING]
+> Hyprland window identity does not establish editable-field identity or whether a field is a password field. Automatic typing therefore requires the explicit unknown-field opt-in and a known suitable field.
+
+AT-SPI context, secure-field detection and insertion read-back are unsupported. A helper returning success means **delivery is unknown**, not verified. Focus can change during key submission. Newline, tab, Escape and other C0/C1 control characters are refused for automatic typing because wtype turns some into Return/Tab actions. The full transcript remains available in recovery. Never enable automatic typing for a terminal or other command-executing field without understanding those limits.
+
+## Config keys
+
+These keys live in `linux.json`. Relative paths resolve beside that file.
+
+| Key | Values | Default |
+| --- | --- | --- |
+| `delivery.mode` | `recover`, `paste`, `type` | `recover` |
+| `allowed_classes` | Nonempty array of exact Hyprland window classes | Not set |
+| `any_window` | `true` or `false` | Not set |
+| `allow_unknown_secure_field` | `true` only after considering the typing limitation | Off |
+| `restore_clipboard` | `true` or `false` | `true` |
+| `terminal_classes`, `terminal_executables` | Lists that select Ctrl+Shift+V | Built-in lists |
+| `allow_terminal_multiline` | `true` lets a multiline transcript paste into a terminal | Off |
+| `capture_target` | A PipeWire node name or serial | Not set |
+| `maximum_recovery_takes` | 1 to 5000 | 200 |
+| `audio_retention_days` | A number of days, or `null` for no age limit | 90 |
+| `audio_retention_megabytes` | A size in megabytes | 2048 |
+| `history_keep` | A number of newest takes to keep, or `null` | `null` |
+| `dictionary` | Path to the saved-spellings JSON | Not set |
+| `phrases` | Path to the saved-phrases JSON | Not set |
+| `phrase_clipboard` | `true` enables the `{clipboard}` variable | `false` |
+| `notifications` | `true` or `false` | `true` |
+| `cleanup` | `off`, `basic`, `fast`, `thorough` | `off` |
+| `cleanup_engine` | Path to `cleanup.json` | Not set |
 
 ## Explicit saved spellings
 
@@ -72,7 +155,11 @@ The service validates and snapshots the configured file before each recording or
 
 Matching uses whole-word Unicode boundaries, canonical equivalence and per-character lowercase, with the longest normalized source first and the first duplicate winning. Source whitespace matches any whitespace run. Replacement text is inserted literally, once, without chaining into another rule. Empty sources and empty replacements are ignored, matching the Core matcher rather than imposing the Mac editor's validation limits. Final recovery and optional delivery use the replaced text; original recognition stays separate. There is no phonetic matching, speech-model boosting, cleanup-model integration or saved-spelling editor here.
 
+<details><summary>Unicode and vendored matcher details</summary>
+
 The portable matcher vendors the MIT `grapheme` v0.7.2 iterator at immutable commit `56f7f2d16d54576290634b7484eeece52c538bcb`, with Unicode 16.0 data and licenses in `vendor/grapheme`. Alphabetic/numeric boundary ranges are also pinned to Unicode 16.0 in `spelling-unicode.json`; whitespace uses Unicode White_Space. Lowercase mappings come from the running Python's Unicode database, so recently introduced characters can differ across Python/Swift versions. The committed shared spelling fixtures pass against the actual Core matcher, covering combining accents, Greek/Cyrillic, Hangul, Indic clusters, emoji, boundaries, precedence and nonchaining. This is not a promise that all Unicode versions agree. The local Swift 6.4 Character implementation differs on one of 1,093 official Unicode 16 grapheme cases (`✁‍✁`); the vendored iterator passes all 1,093. No runtime dependency download is needed.
+
+</details>
 
 ## Saved phrases
 
@@ -104,15 +191,35 @@ Input/output formatting is limited to 2 MiB. Raw recognition is saved first. A f
 
 ## Fast and Thorough cleanup with local models
 
+| Level | Model | Notes |
+| --- | --- | --- |
+| Basic | None | Deterministic. No extra model or network request. |
+| Fast | S1-mini by Superwhisper, GGUF Q4_K_M | Budget of 1 s plus 35 ms a word, at most 10 s. |
+| Thorough | Qwen3-4B-Instruct-2507, GGUF Q4_K_M | Budget of 2 s plus 200 ms a word, at most 30 s. Slow on CPU. |
+
 `"cleanup": "fast"` or `"thorough"` adds a local model pass after Basic cleanup, matching the Mac levels: Fast is **S1-mini by Superwhisper** (GGUF Q4_K_M, Apache-2.0 with its naming clause) with its native control line; Thorough is **Qwen3-4B-Instruct-2507** (GGUF Q4_K_M, Apache-2.0) with the Mac app's shared cleanup prompt, because the Mac Thorough model's terms are gated and it has no pinned llama.cpp build here. Both run through the pinned `llama.cpp` CPU server from `../linux-engine-proof/pins.json`, listening on loopback only, started once by the service and stopped with it. Neither level is implied by the other, and neither is on by default.
 
 Prepare explicitly with `python3 tools/linux-desktop/setup_cleanup.py --destination "$HOME/.local/share/mouthtype/cleanup-candidate" --level fast` (add `--level thorough` for both). It clones and builds the pinned `llama-server` revision for the CPU unless `--server` names an existing pinned build, downloads each GGUF with a bounded `curl`, verifies the pinned SHA-256 before placing it, hashes the server, and writes private `cleanup.json`, a receipt and a `cleanup-setup.json` progress file. It never edits `linux.json`; add `"cleanup_engine": "/path/cleanup.json"` and the chosen level yourself, then restart the service. `doctor` verifies the configured model and server hashes without loading them.
 
 At each take the raw recognition is saved first, Basic cleanup runs, then the model receives that text within a budget derived from the on-machine benchmark (Fast: 1 s plus 35 ms a word, at most 10 s; Thorough: 2 s plus 200 ms a word, at most 30 s). Takes under two or over 400 words skip the model. A timeout closes only the HTTP request, so the server stays warm; cancellation stops the worker and the next take reloads it. The model text replaces the Basic text only when the ported Mac guard accepts it: non-empty, within the length cap, same negations, certainty words, question form and time of day, every number, acronym, capitalised name, quoted or code-like literal kept, at least half the content words retained and at most half new. Any other outcome, including a crashed or missing model, keeps the Basic text and the audio. Each take records `cleanup.json` with the level, outcome (`ok`, `guard-rejected`, `timeout`, `failed`, `skipped`), milliseconds and reason, never text; `status` reports the level, last outcome and the model state (`absent`, `idle`, `loading`, `ready`, `failed`). Saved spellings and phrases still run after the model.
 
+<details><summary>Benchmark numbers on the development machine</summary>
+
 On this machine (Ryzen 5 3600, 6 threads, CPU only) the pinned S1-mini loaded in about 0.9 s and answered the 75 Mac cleanup fixtures with a median of 0.4 s, under 1 s up to about 30 words and about 7 s at 220 words, with 2.2 GiB resident; 39 of 75 matched the Mac reference exactly, the differences being S1's habit of keeping spoken register. The Thorough candidate on the same CPU loaded in about 2.3 s and answered the same fixtures with a median of 2.7 s, about 3 s at 10 to 19 words, 11 s at 50 words and 38 s at 220 words, with 5.3 GiB resident; 42 of 75 matched exactly and, on the 19 smart-correction fixtures, 8 against S1-mini's 11. Thorough is therefore selectable but slow here: its budget of 2 s plus 200 ms a word, capped at 30 s, means takes over roughly 140 words keep the Basic text. It is a different model with a different prompt, evaluated separately, not Fast under another name. GPU offload is possible through `gpu_layers` in `cleanup.json` with a Vulkan build of the same revision, which this setup script does not produce.
 
-## Checks and development archive
+</details>
+
+## Recording feedback
+
+Coarse desktop notifications are enabled by default through the existing `notify-send` helper. They identify ready, recording, transcribing, saved, cancelled and error states without transcript text, window titles or audio. Subsequent cues replace the previous notification when the desktop returns a notification ID. Active cues expire if a later replacement cannot be submitted; shutdown replaces an active recording cue with cancellation. Desktop notification presentation is best effort and never counts as delivery verification.
+
+Set `notifications` to `false` to disable this helper. If it is missing, hung or rejected by the desktop, dictation and recovery continue; `status` reports feedback as unavailable. `submitted_unknown` means the helper accepted a cue, not that the desktop displayed it. Each helper has a short deadline and its owned process group is stopped/reaped. This client does not install the helper, notification service, bindings or login integration. Arch's `libnotify` and Ubuntu's `libnotify-bin` provide `notify-send` through their normal signed package management.
+
+## For maintainers
+
+The rest of this page is for people working on the client itself.
+
+### Checks and development archive
 
 Run `python3 -W error::ResourceWarning -m unittest discover -s tools/linux-desktop -p 'test_*.py'`. No test opens a microphone, launches a compositor or loads/downloads a model.
 
@@ -120,7 +227,7 @@ In a full repository checkout with the Swift compiler, `python3 tools/linux-desk
 
 Create a new source-only archive with `python3 tools/linux-desktop/install.py --archive /absolute/new/mouthtype-linux-development.tar.gz`. Its explicit file list includes the service, installer, bindings, engine adapter/pins/requirements, GPL license and third-party notices. It includes no model weights, user configuration, recordings or private planning. It is not a signed release package and does not promise a tested desktop baseline.
 
-## Runtime references
+### Runtime references
 
 - [Hyprland current binds and Lua migration](https://wiki.hypr.land/Configuring/Basics/Binds/)
 - [Hyprland flags and release behavior](https://wiki.hypr.land/configuring/core/binds/flags/)
@@ -130,7 +237,9 @@ Create a new source-only archive with `python3 tools/linux-desktop/install.py --
 
 These sources were inspected on 2026-10-16. No Voxtype/Omarchy implementation was copied. Existing runtime/model licenses and provenance remain in the engine pins and third-party notices.
 
-## Explicit remote component acceptance
+### Explicit remote component acceptance
+
+<details><summary>Component runner, workflow and evidence notes</summary>
 
 `acceptance.py` is a separate opt-in Linux runner. Its `capabilities` command records available helpers and `/dev/dri` nodes without starting a compositor or microphone. `pipewire` starts an isolated PipeWire graph with the upstream synthetic 440 Hz test source and WirePlumber's policy-only profile, captures it through the real production adapter, checks PCM format/signal/frequency, and stops its processes. It does not load speech weights or open physical sources. Run it in an isolated D-Bus session using `dbus-run-session -- python3 tools/linux-desktop/acceptance.py pipewire`.
 
@@ -146,10 +255,6 @@ The first actual component runs exposed two integration mistakes and an environm
 
 Arch's signed packaged Sway 1.12 carries `cap_sys_nice`, and its executable was denied by the default hosted container boundary before startup. That failure is preserved as evidence. The Arch component job therefore builds **a separately labeled unprivileged upstream Sway 1.12 component** from immutable release commit `88869399f421d9180dd8b6ed0b5a1f4a3585d252`, verifies the source archive SHA-256 in `sway-build.json`, and builds with two jobs against the recorded signed Arch libraries. It neither changes the installed package/file capabilities nor grants container privileges. The test result identifies this source build, while capabilities evidence continues to probe the original packaged executable. This establishes no packaged-Sway, Hyprland or Omarchy support claim. Source download, build commands and owned child groups have finite deadlines; source/binary digests and build logs accompany the component evidence.
 
-## Recording feedback
-
-Coarse desktop notifications are enabled by default through the existing `notify-send` helper. They identify ready, recording, transcribing, saved, cancelled and error states without transcript text, window titles or audio. Subsequent cues replace the previous notification when the desktop returns a notification ID. Active cues expire if a later replacement cannot be submitted; shutdown replaces an active recording cue with cancellation. Desktop notification presentation is best effort and never counts as delivery verification.
-
-Set `notifications` to `false` to disable this helper. If it is missing, hung or rejected by the desktop, dictation and recovery continue; `status` reports feedback as unavailable. `submitted_unknown` means the helper accepted a cue, not that the desktop displayed it. Each helper has a short deadline and its owned process group is stopped/reaped. This client does not install the helper, notification service, bindings or login integration. Arch's `libnotify` and Ubuntu's `libnotify-bin` provide `notify-send` through their normal signed package management.
-
 The source-built component includes the exact upstream circular-scroll compatibility fix `1652c54b73f67df17b7b4ab0b0f7048204aa8104`, verified by its pinned patch digest and applied with exact context. Released Sway 1.12 predates Arch's libinput 1.32 enum; the backport handles that enum rather than disabling upstream `-Werror`. Source and patch identities remain separate in the receipt. Failed component artifacts may include the generated synthetic WAV and final owned compositor/target state for diagnosis. These fixtures contain no user recordings or desktop state.
+
+</details>
