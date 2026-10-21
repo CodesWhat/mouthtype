@@ -11,7 +11,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dictionary = FileVocabulary()
     private let phrases = FilePhrases()
     private let diagnostics = SettingsDiagnostics()
-    private lazy var setupModel = SetupModel(diagnostics: diagnostics, engine: engineHost, microphone: micCapture.preparation)
+    private lazy var setupModel = SetupModel(diagnostics: diagnostics, engine: engineHost, microphone: micCapture.preparation, cleanup: cleanerHost)
     private lazy var setupWindow = SetupWindow(model: setupModel, actions: SetupActions(
         refresh: { [weak self] in
             self?.refreshDiagnostics()

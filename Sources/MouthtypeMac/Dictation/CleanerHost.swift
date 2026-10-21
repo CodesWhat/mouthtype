@@ -8,12 +8,21 @@ protocol SmartModel: TextCleaner {
     var revision: String? { get }
     var downloadSizeMB: Int { get }
     func download(progress: @escaping @Sendable (Double) -> Void) async throws
+    func downloadReporting(report: @escaping @Sendable (ModelDownloadProgress) -> Void) async throws
     func load() async throws
     func unload() async
 }
 
 extension MLXCleaner: SmartModel {
     nonisolated var downloadSizeMB: Int { spec.downloadSizeMB }
+}
+
+extension SmartModel {
+    /// A model that reports only a fraction still gets a bar, sized from the catalog.
+    func downloadReporting(report: @escaping @Sendable (ModelDownloadProgress) -> Void) async throws {
+        let known = Int64(downloadSizeMB) * 1_000_000
+        try await download(progress: { report(ModelDownloadProgress(fraction: $0, knownTotalBytes: known)) })
+    }
 }
 
 /// What the dictation pipeline asks of the model pass, so tests can stand in for the host.
@@ -87,6 +96,8 @@ final class CleanerHost: CleanupModelManaging {
     static let defaultIdleUnloadDelay: Duration = .seconds(10 * 60)
 
     private(set) var state: CleanerState
+    /// Bytes fetched so far while `state` is downloading, with a smoothed time remaining.
+    private(set) var downloadProgress: ModelDownloadProgress?
 
     nonisolated let smart: SmartCleanup
     @ObservationIgnored private let model: any SmartModel
@@ -100,6 +111,8 @@ final class CleanerHost: CleanupModelManaging {
     @ObservationIgnored private var activeUses = 0
     @ObservationIgnored private let idleUnloadDelay: Duration
     @ObservationIgnored private var loadWaiters: [UUID: LoadWaiter] = [:]
+    @ObservationIgnored private var rateMeter = DownloadRateMeter()
+    @ObservationIgnored private let uptime: () -> TimeInterval
 
     private struct LoadWaiter {
         let continuation: CheckedContinuation<Void, Never>
@@ -109,8 +122,10 @@ final class CleanerHost: CleanupModelManaging {
     init(
         model: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
         budget: (@Sendable (Int) -> Duration)? = nil,
-        idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay
+        idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay,
+        uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
+        self.uptime = uptime
         self.idleUnloadDelay = idleUnloadDelay
         self.model = model
         self.level = level
@@ -126,6 +141,17 @@ final class CleanerHost: CleanupModelManaging {
         }
     }
     var downloadSizeMB: Int { model.downloadSizeMB }
+
+    /// What a download row shows. Nothing is fetched until the user asks, so a model not on disk is available, not pending.
+    var downloadStatus: ModelDownloadStatus {
+        switch state {
+        case .absent: .available
+        case let .downloading(fraction):
+            .downloading(downloadProgress ?? ModelDownloadProgress(fraction: fraction, knownTotalBytes: Int64(model.downloadSizeMB) * 1_000_000))
+        case .loading, .unloaded, .ready: .done
+        case let .failed(message): .failed(message: message)
+        }
+    }
 
     /// Watches for memory pressure and loads the model if the level wants it and it is on disk.
     func start() {
@@ -265,20 +291,25 @@ final class CleanerHost: CleanupModelManaging {
     func startDownload() {
         guard state == .absent || { if case .failed = state { return true } else { return false } }(), downloadTask == nil else { return }
         state = .downloading(fraction: 0)
+        rateMeter.reset()
+        downloadProgress = ModelDownloadProgress(fraction: 0, knownTotalBytes: Int64(model.downloadSizeMB) * 1_000_000)
         downloadTask = Task { [model] in
             do {
-                try await model.download { fraction in
-                    Task { @MainActor [weak self] in self?.downloadProgress(fraction) }
-                }
+                try await model.downloadReporting(report: { progress in
+                    Task { @MainActor [weak self] in self?.receive(progress) }
+                })
                 downloadTask = nil
+                downloadProgress = nil
                 state = .unloaded
                 Log.cleaner.info("model \(model.id, privacy: .public) downloaded")
                 levelChanged()
             } catch is CancellationError {
                 downloadTask = nil
+                downloadProgress = nil
                 state = model.isDownloaded ? .unloaded : .absent
             } catch {
                 downloadTask = nil
+                downloadProgress = nil
                 Log.cleaner.error("model download failed: \(error.localizedDescription, privacy: .public)")
                 state = .failed(message: error.localizedDescription)
             }
@@ -289,9 +320,14 @@ final class CleanerHost: CleanupModelManaging {
         downloadTask?.cancel()
     }
 
-    private func downloadProgress(_ fraction: Double) {
-        guard case .downloading = state else { return }
-        state = .downloading(fraction: min(max(fraction, 0), 1))
+    /// Reports hop to the main actor as separate tasks, so one that lands behind a later one is dropped rather than moving the bar back.
+    private func receive(_ progress: ModelDownloadProgress) {
+        guard case let .downloading(current) = state, progress.fraction >= current else { return }
+        rateMeter.record(fraction: progress.fraction, at: uptime())
+        var update = progress
+        update.secondsRemaining = rateMeter.secondsRemaining
+        downloadProgress = update
+        state = .downloading(fraction: min(max(progress.fraction, 0), 1))
     }
 
     // MARK: SmartCleaning

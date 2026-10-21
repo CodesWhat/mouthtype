@@ -28,7 +28,11 @@ public final class EngineHost {
     public private(set) var state: EngineState = .loading
     public private(set) var engine: (any Transcriber)?
     public private(set) var preparation: EnginePreparation = .loadingModel
+    /// Bytes fetched so far, with a smoothed time remaining. Nil until a download reports.
+    public private(set) var downloadProgress: ModelDownloadProgress?
     private var warmingUp = false
+    /// The model is on disk (cached, or its download finished), so only compiling and loading are left.
+    private var downloadSettled = false
 
     public var statusText: String {
         guard state == .loading else { return state.statusText }
@@ -36,19 +40,36 @@ public final class EngineHost {
         switch preparation {
         case let .downloading(fraction):
             return "Downloading speech model: \(Int((min(max(fraction, 0), 1) * 100).rounded()))%"
+        case let .progress(progress):
+            return "Downloading speech model: \(Int((progress.fraction * 100).rounded()))%"
+        case .cached: return state.statusText
         case .compiling: return "Preparing downloaded speech model…"
         case .loadingModel: return state.statusText
         }
     }
 
+    /// What the setup bar shows for the speech model.
+    public var downloadStatus: ModelDownloadStatus {
+        switch state {
+        case .ready: .done
+        case let .failed(message): .failed(message: message)
+        case .loading:
+            if downloadSettled { .done } else if let downloadProgress { .downloading(downloadProgress) } else { .preparing }
+        }
+    }
+
+    @ObservationIgnored private var rateMeter = DownloadRateMeter()
+    @ObservationIgnored private let uptime: () -> TimeInterval
     @ObservationIgnored private let engineID: String
     @ObservationIgnored private let makeEngine: @Sendable (String) throws -> any Transcriber
     @ObservationIgnored private var task: Task<Void, Never>?
 
     public init(
         engineID: String = EngineHost.defaultEngineID,
-        makeEngine: @escaping @Sendable (String) throws -> any Transcriber = { try EngineCatalog.make(id: $0, englishHint: true) }
+        makeEngine: @escaping @Sendable (String) throws -> any Transcriber = { try EngineCatalog.make(id: $0, englishHint: true) },
+        uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
+        self.uptime = uptime
         self.engineID = engineID
         self.makeEngine = makeEngine
     }
@@ -66,6 +87,9 @@ public final class EngineHost {
     func load() async {
         state = .loading
         preparation = .loadingModel
+        downloadProgress = nil
+        downloadSettled = false
+        rateMeter.reset()
         warmingUp = false
         Log.engine.info("engine \(self.engineID, privacy: .public) loading")
         let clock = ContinuousClock()
@@ -97,7 +121,25 @@ public final class EngineHost {
 
     private func report(_ stage: EnginePreparation) {
         guard state == .loading, !warmingUp else { return }
-        preparation = stage
+        switch stage {
+        case let .progress(progress):
+            record(progress)
+        case let .downloading(fraction):
+            record(ModelDownloadProgress(fraction: fraction))
+        case .cached, .compiling, .loadingModel:
+            downloadSettled = true
+            preparation = stage
+        }
+    }
+
+    /// Reports are delivered from unordered tasks, so one that arrives behind a later one is dropped rather than moving the bar back.
+    private func record(_ progress: ModelDownloadProgress) {
+        guard !downloadSettled, progress.fraction >= (downloadProgress?.fraction ?? 0) else { return }
+        rateMeter.record(fraction: progress.fraction, at: uptime())
+        var update = progress
+        update.secondsRemaining = rateMeter.secondsRemaining
+        downloadProgress = update
+        preparation = .progress(update)
     }
 }
 

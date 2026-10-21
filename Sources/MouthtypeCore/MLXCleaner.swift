@@ -63,10 +63,20 @@ public actor MLXCleaner: MeasuredCleaner {
 
     /// Fetches the snapshot from Hugging Face. A partial download resumes where it stopped.
     public func download(progress: @escaping @Sendable (Double) -> Void) async throws {
+        try await downloadReporting(report: { progress($0.fraction) })
+    }
+
+    /// The same download with byte progress. The Hub client's aggregate `Progress` is weighted by file size, so its units
+    /// are bytes when the repo tree declared sizes and file counts when it didn't.
+    public func downloadReporting(report: @escaping @Sendable (ModelDownloadProgress) -> Void) async throws {
         let configuration = pinnedConfiguration
+        let known = Int64(spec.downloadSizeMB) * 1_000_000
         _ = try await resolve(
             configuration: configuration, from: downloadSource, useLatest: true,
-            progressHandler: { progress($0.fractionCompleted) })
+            progressHandler: {
+                report(ModelDownloadProgress(
+                    hubCompletedUnits: $0.completedUnitCount, hubTotalUnits: $0.totalUnitCount, knownTotalBytes: known))
+            })
     }
 
     /// Loads a downloaded snapshot into memory without touching the network.

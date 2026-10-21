@@ -18,7 +18,7 @@ private final class CleanupDemand {
 }
 
 @MainActor
-final class CleanupSelection: CleanupModelManaging {
+final class CleanupSelection: CleanupModelManaging, CleanupModelListing {
     private let fast: CleanerHost
     private let thorough: CleanerHost
     private let demand: CleanupDemand
@@ -44,6 +44,16 @@ final class CleanupSelection: CleanupModelManaging {
     var modelName: String { selected.modelName }
     var downloadSizeMB: Int { selected.downloadSizeMB }
     var downloadTarget: any CleanupModelManaging { selected }
+
+    func cleanupModels() -> [CleanupModelStatus] {
+        [CleanupLevel.light, .medium].map { level in
+            let host = host(for: level)
+            return CleanupModelStatus(level: level, name: host.modelName, sizeMB: host.downloadSizeMB,
+                status: host.downloadStatus, selected: demand.level() == level)
+        }
+    }
+
+    func downloadCleanupModel(_ level: CleanupLevel) { host(for: level).startDownload() }
 
     func unloadThoroughForMemoryPressure() { thorough.unloadForMemoryPressure() }
     func start() { fast.start(); thorough.start() }
