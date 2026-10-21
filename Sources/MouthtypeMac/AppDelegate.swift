@@ -463,8 +463,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictionary.reloadIfChanged()
         if case .error(let message) = dictionary.status { diagnostics.dictionaryError = message }
         else { diagnostics.dictionaryError = nil }
-        do { _ = try phrases.all(); diagnostics.phrasesError = nil }
-        catch { diagnostics.phrasesError = error.localizedDescription }
+        diagnostics.phrasesError = phrases.healthError()
     }
 
     /// The setup poll refreshes only what `SetupReadiness` reads. Engine state and microphone preparation are observed
