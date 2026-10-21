@@ -318,6 +318,8 @@ import Testing
         #expect(SettingsPage.focusFollowing(focused: .home, selected: .stats) == .stats)
         #expect(SettingsPage.focusFollowing(focused: .stats, selected: .stats) == .stats)
         #expect(SettingsPage.focusFollowing(focused: nil, selected: .stats) == nil)
+        // First key on a window opened straight onto Stats: AppKit focuses Home, the ring has to land on the selected row.
+        #expect(SettingsPage.focusFollowing(focused: .home, selected: .stats) != .home)
     }
 
     @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {

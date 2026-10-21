@@ -14,10 +14,13 @@ struct SettingsView: View {
     @State private var keyboardNavigation: Bool?
     @State var previewWidth: CGFloat = 0
     @FocusState private var sidebarFocus: SettingsPage?
+    @State private var seededSidebarFocus = false
 
     var body: some View {
         HStack(spacing: 0) {
+            // The window can open already on the selected page (URL route), so no onChange fires; start focus on that row, not the first.
             sidebar.frame(width: SettingsTheme.sidebarWidth)
+                .defaultFocus($sidebarFocus, model.page)
             pageContent.frame(maxWidth: .infinity, maxHeight: .infinity).background(DesignPalette.bg)
                 .focusSection()
         }
@@ -36,7 +39,14 @@ struct SettingsView: View {
             // A page change from outside the sidebar (URL route, menu) would leave the ring on the old row.
             if let follow = SettingsPage.focusFollowing(focused: sidebarFocus, selected: page), sidebarFocus != follow { sidebarFocus = follow }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in keyboardNavigation = fullKeyboardAccess() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            keyboardNavigation = fullKeyboardAccess()
+            // AppKit hands the first row focus when the window first becomes key, after any default focus; move it to the selected page.
+            // Only the first time, so a row the user Tabbed to isn't pulled back on every return to the window.
+            guard !seededSidebarFocus else { return }
+            seededSidebarFocus = true
+            DispatchQueue.main.async { if let follow = SettingsPage.focusFollowing(focused: sidebarFocus, selected: model.page) { sidebarFocus = follow } }
+        }
         .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }
     }
 
