@@ -175,6 +175,17 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
                                      startedAt: ContinuousClock.Instant) async throws -> Transcription {
         let clock = ContinuousClock()
         let start = startedAt
+        // VAD and ASR run together. VAD stays the filter for noise the recogniser would turn into words: with no speech
+        // the ASR result is dropped, and an ASR failure only matters when there was speech.
+        let language = version == .v3 ? language : nil
+        async let asr: Result<ASRResult, Error> = {
+            do {
+                var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
+                return .success(try await manager.transcribe(samples, decoderState: &state, language: language))
+            } catch {
+                return .failure(error)
+            }
+        }()
         let speech = try await detector.process(samples)
         guard speech.contains(where: { $0.isVoiceActive }) else {
             return Transcription(
@@ -184,8 +195,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
                 modelRevision: version == .v2 ? Repo.parakeetV2.rawValue : Repo.parakeetV3.rawValue
             )
         }
-        var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
-        let result = try await manager.transcribe(samples, decoderState: &state, language: version == .v3 ? language : nil)
+        let result = try await asr.get()
         let units = (result.tokenTimings ?? []).map {
             SubwordUnit(text: $0.token, start: $0.startTime, end: $0.endTime, confidence: $0.confidence)
         }
