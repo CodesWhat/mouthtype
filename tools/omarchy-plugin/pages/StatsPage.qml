@@ -12,7 +12,9 @@ Item {
   property bool active: false
   signal request(string command, var args)
 
-  // Seconds since local midnight, refreshed once a minute while shown so the NOW marker keeps up.
+  // How often the shown page re-reads stats and moves the NOW marker.
+  property int refreshInterval: 60000
+  // Seconds since local midnight, refreshed with the stats while shown so the NOW marker keeps up.
   property int nowSeconds: secondsNow()
 
   readonly property var stats: backend && backend.results && backend.results.stats && backend.results.stats.version !== undefined ? backend.results.stats : null
@@ -33,10 +35,13 @@ Item {
   Component.onCompleted: if (active) refresh()
 
   Timer {
-    interval: 60000
+    interval: root.refreshInterval
     running: root.active
     repeat: true
-    onTriggered: root.nowSeconds = root.secondsNow()
+    onTriggered: {
+      root.nowSeconds = root.secondsNow()
+      if (!(root.backend && root.backend.busy)) root.refresh()
+    }
   }
 
   Column {

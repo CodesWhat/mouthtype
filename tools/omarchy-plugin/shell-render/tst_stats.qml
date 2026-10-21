@@ -168,6 +168,23 @@ TestCase {
     compare(requests.count, 1)
   }
 
+  function test_shown_page_keeps_refreshing() {
+    tc.dark = false
+    page.active = false
+    page.refreshInterval = 50
+    requests.clear()
+    page.backend = { state: {}, results: {}, busy: false, error: "", dark: false }
+    page.active = true
+    compare(requests.count, 1)
+    tryVerify(function() { return requests.count >= 2 }, 1000, "no refresh while the page stayed open")
+    var seen = requests.count
+    page.backend = { state: {}, results: {}, busy: true, error: "", dark: false }
+    wait(200)
+    compare(requests.count, seen, "no new request while one is running")
+    page.active = false
+    page.refreshInterval = 60000
+  }
+
   function test_history_limited_note() {
     tc.dark = false
     show("dense")
