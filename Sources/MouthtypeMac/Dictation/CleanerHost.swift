@@ -99,6 +99,12 @@ final class CleanerHost: CleanupModelManaging {
     @ObservationIgnored private var idleTask: Task<Void, Never>?
     @ObservationIgnored private var activeUses = 0
     @ObservationIgnored private let idleUnloadDelay: Duration
+    @ObservationIgnored private var loadWaiters: [UUID: LoadWaiter] = [:]
+
+    private struct LoadWaiter {
+        let continuation: CheckedContinuation<Void, Never>
+        let timeout: Task<Void, Never>
+    }
 
     init(
         model: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
@@ -173,7 +179,7 @@ final class CleanerHost: CleanupModelManaging {
                 try await model.load()
                 let loadSeconds = (clock.now - start).seconds
                 let warmStart = clock.now
-                _ = try? await model.clean("warm up the cleanup model", context: CleanupContext())
+                _ = try? await model.clean(Self.warmUpTranscript, context: CleanupContext())
                 Log.cleaner.info("model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
                 await smart.resumeAfterModelLoad()
                 finishLoad(.ready(loadSeconds: loadSeconds))
@@ -184,10 +190,14 @@ final class CleanerHost: CleanupModelManaging {
         }
     }
 
+    /// Shaped like a real take, so the warm-up builds the shared prompt prefix and compiles the same kernels.
+    private static let warmUpTranscript = "um so I was thinking we could move the meeting to three thirty, no wait, four, and send the notes to Sam after"
+
     private func finishLoad(_ result: CleanerState) {
         loadTask = nil
         state = result
         if case .ready = result { scheduleIdleUnload() }
+        resumeLoadWaiters()
         // The level may have dropped to basic or off while it loaded.
         if case .ready = result, !level().needsModel { unload(reason: "level \(level().rawValue)") }
     }
@@ -280,21 +290,47 @@ final class CleanerHost: CleanupModelManaging {
     // MARK: SmartCleaning
 
     func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? {
-        let clock = ContinuousClock()
-        let deadline = clock.now + limit
+        let deadline = ContinuousClock.now + limit
         if state == .unloaded { ensureLoaded() }
         while !Task.isCancelled {
             switch state {
             case .ready:
                 return SmartCleanerInfo(id: model.id, revision: model.revision)
             case .loading:
-                guard clock.now < deadline else { return nil }
-                do { try await Task.sleep(for: .milliseconds(20)) } catch { return nil }
+                guard ContinuousClock.now < deadline else { return nil }
+                await waitForLoad(until: deadline)
             default:
                 return nil
             }
         }
         return nil
+    }
+
+    /// Suspends until the load in progress finishes, the deadline passes or the caller is cancelled.
+    private func waitForLoad(until deadline: ContinuousClock.Instant) async {
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                guard !Task.isCancelled else { return continuation.resume() }
+                let timeout = Task { [weak self] in
+                    try? await Task.sleep(until: deadline, clock: .continuous)
+                    self?.resumeLoadWaiter(id)
+                }
+                loadWaiters[id] = LoadWaiter(continuation: continuation, timeout: timeout)
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.resumeLoadWaiter(id) }
+        }
+    }
+
+    private func resumeLoadWaiter(_ id: UUID) {
+        guard let waiter = loadWaiters.removeValue(forKey: id) else { return }
+        waiter.timeout.cancel()
+        waiter.continuation.resume()
+    }
+
+    private func resumeLoadWaiters() {
+        for id in Array(loadWaiters.keys) { resumeLoadWaiter(id) }
     }
 
     nonisolated func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
