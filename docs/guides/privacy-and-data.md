@@ -10,11 +10,18 @@ Recognition, cleanup, your history, your dictionary, your settings and your reco
 
 The data directory is `~/Library/Application Support/Mouthtype`.
 
-- `mouthtype.sqlite` holds your history.
-- `audio/` next to it holds recordings.
-- `dictionary.json`, `phrases.json` and `dismissed-suggestions.json` hold your spellings, transforms and dismissed suggestions.
+| File | Holds |
+| --- | --- |
+| `mouthtype.sqlite` | Your history. |
+| `audio/` | Recordings, next to the database. |
+| `dictionary.json` | Your spellings. |
+| `phrases.json` | Your transforms. |
+| `dismissed-suggestions.json` | Dismissed suggestions. |
 
-Mouthtype doesn't encrypt its database, recordings or backups. Uninstalling the app doesn't remove the folder. Quit Mouthtype before you remove it, and delete the data folder only if you mean to erase it. Don't delete it when upgrading.
+> [!WARNING]
+> Don't delete the data folder when upgrading. Mouthtype doesn't encrypt its database, recordings or backups.
+
+Uninstalling the app doesn't remove the folder. Quit Mouthtype before you remove it, and delete the data folder only if you mean to erase it.
 
 ## Retention
 
@@ -23,8 +30,11 @@ Text history is kept indefinitely. Completed recordings are pruned by the rules 
 - Age: 14, 30 or 90 days, or No age limit.
 - Size: 2 GB or 10 GB.
 - Defaults are 90 days and 2 GB.
+- Changes apply at the next launch, to completed recordings only. The text and word timings stay.
+- Unfinished recordings, crash-recovery audio and failed takes available for recovery are exempt, so they can use extra space.
+- Removed audio can't be restored.
 
-Changes apply at the next launch, and only to completed Mouthtype recordings. The text and word timings stay. Unfinished recordings, crash-recovery audio and failed takes available for recovery are exempt, so they can use extra space. Removed audio can't be restored. Details are in [saved audio](../AUDIO-RETENTION.md).
+Details are in [saved audio](../AUDIO-RETENTION.md).
 
 Takes from secure fields are never shown and never counted in stats. Audio you import with Transcribe Audio File stays where it is and isn't part of the archive.
 
