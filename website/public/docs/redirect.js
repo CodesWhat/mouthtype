@@ -22,7 +22,12 @@
     "known-limits": "/reference/known-limits/",
     linux: "/linux/",
   };
-  var id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  var id = "";
+  try {
+    id = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  } catch (error) {
+    // A malformed escape in the hash falls back to the docs root.
+  }
   var target = Object.prototype.hasOwnProperty.call(map, id) ? map[id] : "/";
   window.location.replace(base + target);
 })();

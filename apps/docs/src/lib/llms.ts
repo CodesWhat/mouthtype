@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { type InferPageType, llms } from "fumadocs-core/source";
-import { absoluteUrl, BASE_URL } from "@/lib/site-config";
+import { absoluteUrl } from "@/lib/site-config";
 import { source } from "@/lib/source";
 
 function stripFrontmatter(text: string) {
@@ -19,5 +19,8 @@ export const llmsOutput = llms(source, { renderPage });
 
 /** llms.txt with absolute links, so it still makes sense when read outside the site. */
 export function llmsIndex() {
-  return llmsOutput.index().replaceAll("](/", `](${BASE_URL}/`);
+  // Same trailing-slash form as the sitemap and canonical URLs.
+  return llmsOutput
+    .index()
+    .replace(/\]\((\/[^)]*)\)/g, (_, path: string) => `](${absoluteUrl(path)})`);
 }

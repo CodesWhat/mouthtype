@@ -48,7 +48,7 @@ Natural speech in, clean text out.
 | Website | [mouthtype.app](https://mouthtype.app/) |
 | Download | [mouthtype.app/download](https://mouthtype.app/download) |
 | Getting started | [mouthtype.app/start](https://mouthtype.app/start/) |
-| Docs | [mouthtype.app/docs](https://mouthtype.app/docs/) |
+| Docs | [docs.mouthtype.app](https://docs.mouthtype.app/) |
 | Install, update and remove | [`docs/READ-ME.md`](docs/READ-ME.md) |
 | Usage and cleanup reference | [`docs/USAGE.md`](docs/USAGE.md) |
 | Settings, tone rules and input selection | [`docs/SETTINGS.md`](docs/SETTINGS.md) |

@@ -118,6 +118,7 @@ for (const [anchor, target] of [
   ["#known-limits", "/reference/known-limits/"],
   ["#linux", "/linux/"],
   ["#not-an-old-anchor", "/"],
+  ["#%E0%A4%A", "/"],
 ]) {
   test(`/docs/${anchor} redirects to docs.mouthtype.app${target}`, async ({ page }) => {
     await page.route("https://docs.mouthtype.app/**", (route) =>
