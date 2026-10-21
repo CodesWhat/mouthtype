@@ -26,9 +26,9 @@ The installed plugin is at `~/.config/omarchy/plugins/dstahl.mouthtype`. Its sou
 
 ## Panel layout and pages
 
-The panel is one window: a sidebar (Home, Stats, Dictionary, Transforms, Style, Appearance, Settings) and a page. Settings opens a modal with General, Linux, Health and, while its footer switch is on, Advanced. `Panel.qml` owns the state and the `control.py` processes; `MouthtypeShell.qml` lays out the window; each page is a file in `pages/`. `shell-render/render_shell.sh <dir>` renders every page and the modal, light and dark, offscreen on the NAS testbed and runs `shell-render/tst_shell.qml`.
+The panel is one window: a sidebar (Home, Stats, Dictionary, Transforms, Style, Appearance, Settings) and a page. Settings opens a modal with General, Linux, Health and, while its footer switch is on, Advanced. `Panel.qml` owns the state and the `control.py` processes; `MouthtypeShell.qml` lays out the window; each page is a file in `pages/`. `shell-render/render_shell.sh <dir>` renders every page and the modal, light and dark, offscreen on the NAS testbed and runs `shell-render/tst_shell.qml` and `shell-render/tst_library.qml`.
 
-Stats, Dictionary and Transforms are placeholders until their backends land (Style is built, see below). A slice that builds one replaces `pages/<Name>Page.qml` and keeps this contract, which is also written at the top of `MouthtypeShell.qml`:
+Stats is built: `pages/StatsPage.qml` with its parts in `pages/stats/`, fed by the `stats` verb. Style is built too, see the Style page section below. Dictionary and Transforms are built: the helpers, sheets and fixtures are in `pages/library/`, the fixtures are real `control_library.py` output, and the Import CSV sheet takes a file path because the plugin's file chooser only opens audio files. A slice that builds a page replaces `pages/<Name>Page.qml` and keeps this contract, which is also written at the top of `MouthtypeShell.qml`:
 
 - The root is an `Item` with an `implicitHeight`. The shell sets its width and scrolls it.
 - `property var backend` is set by the shell to `{ state, results, busy, error, dark }`. `state` is the last `control.py state` reply, `results[verb]` is the last parsed reply of each verb the page requested, `busy` is true while a request runs, and `error` is the last request's message or `""`. The shell assigns a new object on every change.
@@ -37,10 +37,24 @@ Stats, Dictionary and Transforms are placeholders until their backends land (Sty
 
 `control_library.py` adds the Dictionary and Transforms verbs. They print the same JSON as the `mouthtype-linux spellings` and `phrases` commands documented in `tools/linux-desktop/README.md`: `spellings-list`, `spellings-add HEARD WRITTEN`, `spellings-edit HEARD NEW_HEARD NEW_WRITTEN [EXPECT_WRITTEN]`, `spellings-remove HEARD [EXPECT_WRITTEN]`, `spellings-import-preview FILE`, `spellings-import FILE [DIGEST] [CSV_DIGEST]`, `phrases-list`, `phrases-add TRIGGER EXPANSION`, `phrases-edit TRIGGER NEW_TRIGGER NEW_EXPANSION [EXPECT_EXPANSION]` and `phrases-remove TRIGGER [EXPECT_EXPANSION]`. An optional argument may be passed as an empty string to leave it unset.
 
+## Transform Selection panel
+
+`TransformWindow.qml` is the floating Transform Selection card, loaded by `Service.qml` once the file exists. The card, its chips and its text views live in `transform/`; `transform/TransformModel.js` holds every decision as plain functions so the card is a view. `transform-render/render_transform.sh <dir>` renders eight scenes in light and dark (normal, AI ready, AI busy, refused, model missing, over the 2,000 character highlight cap, accepted, capture error) on the NAS testbed and runs `transform-render/tst_transform.qml`. `transform-render/make_fixtures.py` rewrites `transform/fixtures/*.json` from the real backend.
+
+Open it with a key bound to `control.py transform-open`. That verb captures the selection (primary selection, clipboard as fallback) in its own process, before focus moves, and writes the reply to `$XDG_RUNTIME_DIR/mouthtype/panel-transform.json`. The window polls that file every 400 ms and shows the card for a reply less than 30 seconds old. Add a binding (choose an unused key; this one is only an example):
+
+```
+hl.bind("SUPER + SHIFT + T", hl.dsp.exec_cmd("~/.config/omarchy/plugins/dstahl.mouthtype/control.py transform-open"))
+```
+
+or, on Hyprland 0.54 and older, `bind = SUPER SHIFT, T, exec, ~/.config/omarchy/plugins/dstahl.mouthtype/control.py transform-open`.
+
+The layer surface asks for keyboard focus on demand only, so it does not take focus when it appears and gets it when you click into the result box. Before Accept, the window runs `control.py transform-focus ADDRESS`, which is `hyprctl dispatch focuswindow address:ADDRESS` on the window the selection came from, because `transform accept` refuses unless that window is focused. Cancel while an AI transform runs sends SIGTERM to the running verb, which `control_transform.py` passes to the CLI so the model worker stops.
+
 ## Style page
 
 `pages/StylePage.qml` has five tabs: Personal messages, Work messages, Email, Other and Cleanup. Each context tab shows three tone cards (the sample lines and the highlighted characters come from the `samples` in `style-state`, not from the page), the apps that count as that context tagged BUILT IN or ADDED BY YOU with a tone popup and a cleanup popup each, a row that adds an app by window class (find it with `hyprctl clients`), and a "Cleanup here" popup. A context with no tone yet shows `suggested_tone` as a quiet hint. Other holds the default tone, a cleanup level and the per-app rules that no list claims. Linux has no website rows: Wayland does not tell Mouthtype which site is open.
 
-The Cleanup tab is where the global cleanup level (Off, Basic, Fast, Thorough) is chosen, through `set-config cleanup`. Settings, Health keeps the model status and the Prepare buttons and points here for the level. Edits are written to `linux.json` and the dictation service reads them when it starts, so a reply with `restart_required` makes the page show a restart note.
+The Cleanup tab is where the global cleanup level (Off, Basic, Fast, Thorough) is chosen, through `set-config cleanup`. Settings, Health keeps the model status and the Prepare buttons and points here for the level. Edits are written to `linux.json` and the dictation service reloads them on the next take.
 
 Every edit verb replies with the full Style state, so the page treats the newest reply as current and does not re-read after an edit. Per-app tone and cleanup popups write a per-app rule with `style-rule` for each window class the app ships under. `pages/style/fixtures/gen_fixtures.py` regenerates the fixtures the render scenes use from the real `styles.describe`; `test_style_page.py` fails when they are stale.

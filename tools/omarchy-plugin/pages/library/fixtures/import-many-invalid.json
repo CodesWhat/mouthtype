@@ -1,0 +1,185 @@
+{
+  "problem": null,
+  "rows": [
+    {
+      "row": 2,
+      "heard": "word 1 spoken",
+      "written": "Word1",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 3,
+      "heard": "word 2 spoken",
+      "written": "Word2",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 4,
+      "heard": "word 3 spoken",
+      "written": "Word3",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 5,
+      "heard": "word 4 spoken",
+      "written": "Word4",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 6,
+      "heard": "word 5 spoken",
+      "written": "Word5",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 7,
+      "heard": "word 6 spoken",
+      "written": "Word6",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 8,
+      "heard": "word 7 spoken",
+      "written": "Word7",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 9,
+      "heard": "word 8 spoken",
+      "written": "Word8",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 10,
+      "heard": "word 9 spoken",
+      "written": "Word9",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 11,
+      "heard": "word 10 spoken",
+      "written": "Word10",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 12,
+      "heard": "word 11 spoken",
+      "written": "Word11",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 13,
+      "heard": "word 12 spoken",
+      "written": "Word12",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 14,
+      "heard": "word 13 spoken",
+      "written": "Word13",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 15,
+      "heard": "word 14 spoken",
+      "written": "Word14",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 16,
+      "heard": "",
+      "written": "Blank",
+      "result": "invalid",
+      "label": "Enter the word or phrase Mouthtype gets wrong.",
+      "warning": null
+    },
+    {
+      "row": 17,
+      "heard": "later 1",
+      "written": "Later1",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 18,
+      "heard": "later 2",
+      "written": "Later2",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 19,
+      "heard": "later 3",
+      "written": "Later3",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 20,
+      "heard": "later 4",
+      "written": "Later4",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 21,
+      "heard": "later 5",
+      "written": "Later5",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 22,
+      "heard": "",
+      "written": "AlsoBlank",
+      "result": "invalid",
+      "label": "Enter the word or phrase Mouthtype gets wrong.",
+      "warning": null
+    }
+  ],
+  "counts": {
+    "add": 19,
+    "existing": 0,
+    "duplicate": 0,
+    "invalid": 2
+  },
+  "can_import": false,
+  "file": "manybad.csv",
+  "digest": "d354f25fd9710e744bbecbdb7160228c38961811eea9c523912c770a18866a2b",
+  "csv_digest": "6517475111918f9517f845dd980139e502bfd6fe55cee59a5f4fba68268ae224",
+  "kind": "spellings",
+  "configured": true
+}

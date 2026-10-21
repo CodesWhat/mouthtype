@@ -206,7 +206,7 @@ class CliTests(unittest.TestCase):
             self.assertEqual(json.loads(out)['default_tone'], None)
             code, out, _ = self.run_cli(path, 'set-tone', 'email', 'formal')
             self.assertEqual(json.loads(out)['contexts'][2]['tone'], 'formal')
-            self.assertTrue(json.loads(out)['restart_required'])
+            self.assertNotIn('restart_required', json.loads(out))
             code, out, _ = self.run_cli(path, 'add-app', 'work', 'foot', '--name', 'Terminal')
             self.assertEqual(code, 0)
             code, out, _ = self.run_cli(path, 'resolve', 'foot')

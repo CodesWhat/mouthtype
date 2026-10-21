@@ -7,7 +7,7 @@ import "style/StyleLogic.js" as Logic
 // messages, Work messages, Email, Other and Cleanup. Page contract: see MouthtypeShell.qml.
 //
 // Every number and sample on the page comes from `style-state` (control_style.py). An edit verb replies with the same shape
-// plus restart_required, so the newest reply of any style verb is the current state and the page does not re-read after an
+// so the newest reply of any style verb is the current state and the page does not re-read after an
 // edit. The global cleanup level is state.config.cleanup, set through set-config as Settings, Health used to do.
 Item {
   id: root
@@ -19,7 +19,6 @@ Item {
   // "personal", "work", "email", "other" or "cleanup".
   property string tab: "personal"
   property var styles: null
-  property bool restartNeeded: false
   property string editError: ""
   property var seen: ({})
 
@@ -73,7 +72,6 @@ Item {
       if (reply.error) { editError = String(reply.error); continue }
       editError = ""
       if (reply.contexts !== undefined) styles = reply
-      if (reply.restart_required === true) restartNeeded = true
     }
     seen = next
   }
@@ -98,16 +96,6 @@ Item {
       width: parent.width
       title: "Style"
       summary: "A tone for each kind of writing, and the apps that count as each kind."
-    }
-
-    DesignCard {
-      width: parent.width
-      visible: root.restartNeeded
-      DesignRow {
-        title: "Restart Mouthtype to use this"
-        detail: "The dictation service reads its Style settings when it starts. Restart it (systemctl --user restart mouthtype-linux) and the change applies to the next take."
-        Icon { name: "clock"; size: 24; color: Theme.ink3 }
-      }
     }
 
     DesignCard {

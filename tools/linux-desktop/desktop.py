@@ -32,6 +32,8 @@ from cleanup import BasicCleanup
 import imports
 from imports import FileError, FileTranscription
 import smart
+import styles as style_contexts
+import tone as tone_stage
 
 INTERFACE = 1
 CAPABILITIES = {
@@ -110,11 +112,18 @@ def guarded_command(command):
 class Session:
     def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
                  dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None, cleanup='off',
-                 cleanup_engine=None, maximum_takes=200, audio_days=90, audio_megabytes=2048, history_keep=None):
+                 cleanup_engine=None, maximum_takes=200, audio_days=90, audio_megabytes=2048, history_keep=None,
+                 styles=None, styles_path=None, engine_loader=None):
         self.capture, self.engine, self.delivery = capture, engine, delivery
         self.maximum_takes, self.audio_days, self.audio_megabytes = maximum_takes, audio_days, audio_megabytes
         self.history_keep = history_keep
         self.cleanup_engine = cleanup_engine
+        # One resident model per level a take can run at: the global level's, plus any a Style context overrides to.
+        self.cleanup_engines = {cleanup: cleanup_engine} if cleanup_engine is not None and cleanup in ('fast', 'thorough') else {}
+        self.engine_loader = engine_loader
+        self.styles, self.styles_path, self.styles_stamp = self._usable_styles(styles), styles_path, None
+        self._rejected_stamp = None
+        self._refresh_styles()
         self.cleanup_outcome, self.cleanup_ms = None, None
         self.feedback = feedback
         self.dictionary = dictionary
@@ -141,6 +150,65 @@ class Session:
             self._cancellable_delivery = 'cancelled' in inspect.signature(delivery.submit).parameters
         except (TypeError, ValueError):
             self._cancellable_delivery = False
+
+    @staticmethod
+    def _usable_styles(value):
+        """The validated styles block, or None when it is absent or all defaults (nothing then changes)."""
+        if value is None:
+            return None
+        block = style_contexts.validate(value)
+        return block if style_contexts.to_config(block) is not None else None
+
+    def _refresh_styles(self):
+        """Pick up `style-*` edits made while the service runs. Reads the file only when its mtime or size changed,
+        and keeps the styles already loaded when the file can't be read or no longer validates."""
+        if self.styles_path is None:
+            return
+        try:
+            info = os.stat(self.styles_path)
+            stamp = (info.st_mtime_ns, info.st_size)
+            if stamp == self.styles_stamp:
+                return
+            block = self._usable_styles(style_contexts.read_block(self.styles_path))
+        except OSError:
+            return
+        except Exception as error:
+            # Any malformed edit keeps the styles already loaded. Say so once per file state, not on every take.
+            if stamp != self._rejected_stamp:
+                self._rejected_stamp = stamp
+                print(json.dumps({'error': 'styles_invalid', 'error_class': type(error).__name__}), file=sys.stderr)
+            return
+        self.styles, self.styles_stamp = block, stamp
+
+    def _style_window(self):
+        """The take-start window for style resolution only, whatever the delivery mode. Other when unknown."""
+        lookup = getattr(self.delivery, 'window_class', None)
+        try:
+            window_class = lookup() if lookup is not None else None
+        except Exception:
+            return None
+        return {'class': window_class} if isinstance(window_class, str) and window_class else None
+
+    def _plan(self, target):
+        """What one take runs: the model level, its engine and the tone to re-apply after the model.
+
+        Without a styles block this is the global level and no tone, exactly as before styles existed."""
+        plan = {'level': self.cleanup, 'tone': None, 'engine': self.cleanup_engine}
+        if self.styles is None:
+            return plan
+        resolved = style_contexts.resolve(self.styles, target.get('class') if isinstance(target, dict) else None)
+        wanted = resolved['cleanup'] or self.cleanup
+        if wanted in ('fast', 'thorough') and wanted not in self.cleanup_engines and self.engine_loader is not None:
+            try:
+                engine = self.engine_loader(wanted)
+            except (OSError, ValueError, KeyError, TypeError):
+                engine = None
+            if engine is not None:
+                self.cleanup_engines[wanted] = engine
+                if engine.state == 'idle':
+                    engine.warm()
+        level = style_contexts.effective_cleanup(resolved, self.cleanup, tuple(self.cleanup_engines))
+        return {'level': level, 'tone': resolved['tone'], 'engine': self.cleanup_engines.get(level)}
 
     def take_count(self):
         return sum(1 for path in self.recovery.iterdir() if path.is_dir() and not path.is_symlink())
@@ -270,13 +338,16 @@ class Session:
                     self.error = 'phrases_unavailable'
                     self._notify('error')
                     return self.status()
+                self._refresh_styles()
                 try:
-                    cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup)
+                    cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles)
                 except ValueError:
                     self.error = 'cleanup_unavailable'
                     self._notify('error')
                     return self.status()
                 target = self.delivery.snapshot()
+                style_target = target if target is not None else self._style_window()
+                plan = self._plan(style_target)
                 if admit_before is not None and time.monotonic() >= admit_before:
                     self.error = 'command_expired'
                     return self.status()
@@ -299,10 +370,11 @@ class Session:
                     self._notify('error')
                     return self.status()
                 self.discard_on_cancel = True
-                self.target = target
+                self.target, self.style_target = target, style_target
                 self.spellings = spellings
                 self.phrase_rules = phrases
                 self.cleanup_rules = cleanup
+                self.cleanup_plan = plan
                 self.cancelled = threading.Event()
                 self.error, self.outcome = None, 'not_attempted'
                 try:
@@ -336,7 +408,8 @@ class Session:
                 self.state = 'transcribing'
                 self._notify('transcribing')
                 self.thread = threading.Thread(target=self._finish,
-                                               args=(self.take, self.cancelled, self.target, self.spellings, self.phrase_rules, self.cleanup_rules))
+                                               args=(self.take, self.cancelled, self.target, self.spellings, self.phrase_rules, self.cleanup_rules),
+                                               kwargs={'plan': self.cleanup_plan, 'style_target': self.style_target})
                 self.thread.start()
             elif action == 'cancel':
                 if self.state != 'idle':
@@ -363,7 +436,7 @@ class Session:
             except OSError:
                 pass
 
-    def _finish(self, take, cancelled, target, spellings, phrases, cleanup, allow_delivery=True):
+    def _finish(self, take, cancelled, target, spellings, phrases, cleanup, allow_delivery=True, plan=None, style_target=None):
         try:
             raw_path = take / 'raw-recognition.txt'
             raw = raw_path.read_bytes().decode('utf-8') if raw_path.exists() else self.engine.transcribe(take / 'recording.wav', cancelled)
@@ -374,9 +447,14 @@ class Session:
                     return
                 if not raw_path.exists():
                     private_write(raw_path, raw)
-            basic = cleanup.apply(raw)
-            outcome, milliseconds = self._model_cleanup(basic, cancelled)
+            if plan is None:
+                plan = {'level': self.cleanup, 'tone': None, 'engine': self.cleanup_engine}
+            basic = cleanup.apply(raw, target if target is not None else style_target)
+            outcome, milliseconds = self._model_cleanup(basic, cancelled, plan['level'], plan['engine'])
             text = basic if outcome is None or not isinstance(outcome[1], str) else outcome[1]
+            if outcome is not None and isinstance(outcome[1], str) and plan['tone']:
+                # Match Core: a model can't undo the tone, and Formal still softens any swearing it put back.
+                text = tone_stage.apply(text, plan['tone'])
             text = phrases.apply(spellings.apply(text))
             with self.lock:
                 if cancelled.is_set() or self.closed:
@@ -384,7 +462,7 @@ class Session:
                 private_write(take / 'transcript.txt', text)
                 if outcome is not None:
                     self.cleanup_outcome, self.cleanup_ms = outcome[0], milliseconds
-                    private_write(take / 'cleanup.json', json.dumps({'level': self.cleanup, 'outcome': outcome[0],
+                    private_write(take / 'cleanup.json', json.dumps({'level': plan['level'], 'outcome': outcome[0],
                                                                       'milliseconds': milliseconds, 'reason': outcome[2]}))
                 self.outcome = 'empty' if not text else 'recover_only' if not allow_delivery else 'target_changed'
                 deliver = bool(allow_delivery and text and target == self.delivery.snapshot())
@@ -425,16 +503,18 @@ class Session:
             except OSError:
                 pass
 
-    def _model_cleanup(self, basic, cancelled):
+    def _model_cleanup(self, basic, cancelled, level=None, engine=None):
         """Run the resident model on the deterministic text within its budget. Any trouble keeps the basic text."""
-        if self.cleanup not in ('fast', 'thorough') or self.cleanup_engine is None:
+        if level is None:
+            level, engine = self.cleanup, self.cleanup_engine
+        if level not in ('fast', 'thorough') or engine is None:
             return None, None
         if not smart.eligible(basic):
             return ('skipped', None, None), 0
         started = time.monotonic()
-        seconds = smart.budget_seconds(self.cleanup, smart.word_count(basic))
+        seconds = smart.budget_seconds(level, smart.word_count(basic))
         try:
-            model = self.cleanup_engine.clean(basic, cancelled, seconds=seconds)
+            model = engine.clean(basic, cancelled, seconds=seconds)
         except (OSError, ValueError, RuntimeError, Stopped, subprocess.SubprocessError) as error:
             return ('failed', None, type(error).__name__), int((time.monotonic() - started) * 1000)
         elapsed = int((time.monotonic() - started) * 1000)
@@ -470,18 +550,21 @@ class Session:
                 self.error = 'phrases_unavailable'
                 self._notify('error')
                 return self.status()
+            self._refresh_styles()
             try:
-                cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup)
+                cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles)
             except ValueError:
                 self.error = 'cleanup_unavailable'
                 self._notify('error')
                 return self.status()
+            plan = self._plan(None)
             self.take = take
             self.discard_on_cancel = False
             self.cancelled = threading.Event()
             self.error, self.outcome, self.state = None, 'not_attempted', 'transcribing'
             self._notify('transcribing')
-            self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, spellings, phrases, cleanup, False))
+            self.thread = threading.Thread(target=self._finish, args=(take, self.cancelled, None, spellings, phrases, cleanup, False),
+                                           kwargs={'plan': plan})
             self.thread.start()
             return self.status()
 
@@ -564,6 +647,19 @@ class HyprlandDelivery:
             return {key: active[key] for key in ('address', 'class', 'pid')}
         except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
             return None
+
+    def window_class(self):
+        """The active window's class for style resolution. Unlike snapshot() it also answers in recover mode, and
+        it never authorises delivery. None when the query fails or times out."""
+        if self.config.get('mode') in ('type', 'paste'):
+            return None
+        try:
+            result = self.run(['hyprctl', '-j', 'activewindow'], capture_output=True,
+                              text=True, check=True, timeout=.5)
+            window_class = json.loads(result.stdout).get('class')
+        except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
+            return None
+        return window_class if isinstance(window_class, str) and window_class else None
 
     # Terminals paste with Ctrl+Shift+V, and a pasted line break runs a command there.
     TERMINAL_CLASSES = ('Alacritty', 'kitty', 'foot', 'footclient', 'com.mitchellh.ghostty', 'org.wezfurlong.wezterm',
@@ -1116,6 +1212,8 @@ def validate_config(value):
         delay = delivery['restore_delay_seconds']
         if type(delay) not in (int, float) or not math.isfinite(delay) or not .1 <= delay <= 30:
             raise ValueError('delivery.restore_delay_seconds must be between 0.1 and 30')
+    if 'styles' in result:
+        style_contexts.validate(result['styles'])
     if type(result.get('phrase_clipboard', False)) is not bool:
         raise ValueError('phrase_clipboard must be true or false')
     return result
@@ -1514,6 +1612,13 @@ def main(argv=None, *, cli_directory=None):
                 cleanup_path = args.config.resolve().parent / cleanup_path
             cleanup_settings = json.loads(cleanup_path.read_text())['engines'][config['cleanup']]
             cleanup_engine = CleanupEngine(cleanup_settings)
+        def load_engine(level):
+            if not isinstance(config.get('cleanup_engine'), str) or not config['cleanup_engine']:
+                return None
+            path = Path(config['cleanup_engine']).expanduser()
+            if not path.is_absolute():
+                path = args.config.resolve().parent / path
+            return CleanupEngine(json.loads(path.read_text())['engines'][level])
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
                           HyprlandDelivery(config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
@@ -1521,7 +1626,8 @@ def main(argv=None, *, cli_directory=None):
                           phrase_clipboard=config.get('phrase_clipboard', False), cleanup=config['cleanup'],
                           cleanup_engine=cleanup_engine, maximum_takes=int(config['maximum_recovery_takes']),
                           audio_days=config['audio_retention_days'], audio_megabytes=config['audio_retention_megabytes'],
-                          history_keep=config['history_keep'])
+                          history_keep=config['history_keep'], styles=config.get('styles'), styles_path=args.config,
+                          engine_loader=load_engine)
         files = FileTranscription(engine, args.imports, request_seconds=config['request_seconds'])
         if cleanup_engine is not None and cleanup_engine.state == 'idle':
             cleanup_engine.warm()
@@ -1539,8 +1645,8 @@ def main(argv=None, *, cli_directory=None):
                 try:
                     session.close()
                 finally:
-                    if cleanup_engine is not None:
-                        cleanup_engine.close()
+                    for loaded in {id(e): e for e in (cleanup_engine, *session.cleanup_engines.values()) if e is not None}.values():
+                        loaded.close()
         return 0
     except FileError as error:
         print(json.dumps({'error': error.code}), file=sys.stderr)

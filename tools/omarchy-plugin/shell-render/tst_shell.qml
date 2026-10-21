@@ -81,11 +81,8 @@ TestCase {
       case "style-cleanup": openStyle("cleanup", Fixtures.populated); break
       case "style-fresh": openStyle("personal", Fixtures.fresh); break
       case "style-fresh-cleanup": host.empty(); openStyle("cleanup", Fixtures.fresh); break
-      case "style-restart":
+      case "style-error":
         openStyle("work", Fixtures.populated)
-        var again = JSON.parse(JSON.stringify(Fixtures.populated))
-        again.restart_required = true
-        shell.pageResult("style-set-tone", again)
         shell.pageResult("style-add-app", { error: "App must be one exact window class of up to 128 characters, without wildcards" })
         break
       case "appearance": shell.navigate("appearance"); break
@@ -116,7 +113,7 @@ TestCase {
   function stylePage() {
     var page = null
     function find(item) {
-      if (item.restartNeeded !== undefined && item.request !== undefined) { page = item; return }
+      if (item.editError !== undefined && item.request !== undefined) { page = item; return }
       for (var i = 0; i < item.children.length && !page; i++) find(item.children[i])
     }
     find(shell)
@@ -136,7 +133,7 @@ TestCase {
 
   property var saved: ({})
   readonly property var scenes: ["home", "home-empty", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
-    "style-email", "style-other", "style-cleanup", "style-fresh", "style-fresh-cleanup", "style-restart", "appearance", "appearance-hifi",
+    "style-email", "style-other", "style-cleanup", "style-fresh", "style-fresh-cleanup", "style-error", "appearance", "appearance-hifi",
     "transcript", "import-active", "import-done", "import-failed", "settings-general", "settings-general-off", "settings-linux",
     "settings-health", "settings-health-empty", "settings-advanced", "shortcut", "error"]
 
@@ -176,11 +173,11 @@ TestCase {
     compare(shell.page, "home")
     shell.navigate("dictionary")
     compare(shell.page, "dictionary")
-    tryVerify(function() { return pageTitle() === "Dictionary" }, 2000)
+    tryVerify(function() { return pageTitle() === "Your names, spelled right." }, 2000)
     shell.navigate("stats")
     tryVerify(function() { return pageTitle() === "Stats" }, 2000)
     shell.navigate("transforms")
-    tryVerify(function() { return pageTitle() === "Transforms" }, 2000)
+    tryVerify(function() { return pageTitle() === "Say this, get that." }, 2000)
     shell.navigate("style")
     tryVerify(function() { return pageTitle() === "Style" }, 2000)
   }
@@ -206,7 +203,7 @@ TestCase {
 
   function test_data_page_contract() {
     setScene("dictionary")
-    tryVerify(function() { return pageTitle() === "Dictionary" }, 2000)
+    tryVerify(function() { return pageTitle() === "Your names, spelled right." }, 2000)
     var requests = []
     shell.pageRequested.connect(function(command, args) { requests.push([command, args]) })
     var page = null
@@ -473,14 +470,10 @@ TestCase {
     tc.dark = false
     setScene("style-personal")
     var page = stylePage()
-    compare(page.restartNeeded, false)
     var edited = JSON.parse(JSON.stringify(Fixtures.populated))
     edited.contexts[0].tone = "formal"
-    edited.restart_required = true
     shell.pageResult("style-set-tone", edited)
-    compare(page.restartNeeded, true)
     compare(page.styles.contexts[0].tone, "formal")
-    verify(allTexts().join("\n").indexOf("Restart Mouthtype to use this") >= 0, "restart note")
     shell.pageResult("style-add-app", { error: "That app is not in this context" })
     compare(page.editError, "That app is not in this context")
     compare(page.styles.contexts[0].tone, "formal", "an error keeps the last good state")
