@@ -5,7 +5,7 @@ public protocol MenuSection {
     var items: [NSMenuItem] { get }
     func refresh()
     /// Called as the menu is about to open, before it starts tracking. Anything that reads another app's state through
-    /// Accessibility has to do it here: once the menu is tracking, the system focus belongs to the menu.
+    /// Accessibility has to do it here: once the menu is tracking, the system-wide focused element is empty.
     func prepareForMenuOpen()
 }
 

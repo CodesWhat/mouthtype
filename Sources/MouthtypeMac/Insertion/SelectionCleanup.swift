@@ -55,7 +55,7 @@ enum MenuCapture: Equatable { case ready, unavailable, timedOut }
     }
 
     func capture() throws -> SelectedText {
-        let snapshot = focus.snapshot()
+        let snapshot = focus.selectionSnapshot()
         if AccessibilityFocusReader.deadlinePassed { throw SelectionCleanupError.timedOut }
         guard !snapshot.isSecure, !focus.isSecureInputEnabled,
               let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
