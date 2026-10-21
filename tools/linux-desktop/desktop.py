@@ -138,6 +138,9 @@ def guarded_command(command):
 
 
 class Session:
+    HOUSEKEEPING_TAKES = 10
+    HOUSEKEEPING_SECONDS = 1800
+
     def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
                  dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None, cleanup='off',
                  cleanup_engine=None, maximum_takes=200, audio_days=90, audio_megabytes=2048, history_keep=None,
@@ -167,6 +170,9 @@ class Session:
             raise ValueError('Recovery directory must be private and owned by you')
         self.maximum_seconds, self.clock = maximum_seconds, clock or time.monotonic
         self.lock = threading.RLock()
+        self.take_times = {}
+        self.takes_since_retire = self.HOUSEKEEPING_TAKES
+        self.retired_at = time.monotonic()
         self.state, self.error, self.outcome = 'idle', None, 'not_attempted'
         self.thread = None
         self.cancelled = threading.Event()
@@ -241,7 +247,8 @@ class Session:
         return {'level': level, 'tone': resolved['tone'], 'engine': self.cleanup_engines.get(level)}
 
     def take_count(self):
-        return sum(1 for path in self.recovery.iterdir() if path.is_dir() and not path.is_symlink())
+        with os.scandir(self.recovery) as entries:
+            return sum(1 for entry in entries if entry.is_dir(follow_symlinks=False))
 
     @staticmethod
     def take_time(path):
@@ -262,23 +269,37 @@ class Session:
                 pass
         return min(stamps) if stamps else path.stat().st_mtime
 
+    def known_take_time(self, path):
+        """take_time, remembered by take name: a take's creation time never moves, so repeat scans skip the reads."""
+        known = self.take_times.get(path.name)
+        if known is None:
+            known = self.take_times[path.name] = self.take_time(path)
+        return known
+
     def prune_history(self):
         """Keep only the newest `history_keep` takes, forgetting the rest entirely. The active take is never touched."""
         if not self.history_keep:
             return 0
         removed = 0
-        # Choosing and deleting share the session lock, so recover_audio cannot accept a take in between.
-        with self.lock:
-            takes = []
-            for path in self.recovery.iterdir():
-                if not path.is_dir() or path.is_symlink() or not re.fullmatch('[0-9a-f]{32}', path.name):
+        # The walk runs without the session lock, so a hotkey is never queued behind a large history. Only the delete
+        # step holds it, and it re-checks the active take: recover_audio may have picked a listed take meanwhile.
+        takes = []
+        with os.scandir(self.recovery) as entries:
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False) or not re.fullmatch('[0-9a-f]{32}', entry.name):
                     continue
+                path = Path(entry.path)
                 try:
-                    takes.append((self.take_time(path), path.name, path))
+                    takes.append((self.known_take_time(path), path.name, path))
                 except OSError:
                     continue
-            takes.sort(reverse=True)
-            for _, _, path in takes[self.history_keep:]:
+        self.take_times = {name: self.take_times[name] for _, name, _ in takes if name in self.take_times}
+        if len(takes) <= self.history_keep:
+            return 0
+        takes.sort(reverse=True)
+        doomed = [path for _, _, path in takes[self.history_keep:]]
+        with self.lock:
+            for path in doomed:
                 if path == self.take:
                     continue
                 for name in ('recording.wav', 'transcript.txt', 'raw-recognition.txt', 'cleanup.json', 'take.json'):
@@ -296,32 +317,56 @@ class Session:
         completed = []
         with self.lock:
             active = self.take
-        for path in self.recovery.iterdir():
-            if not path.is_dir() or path.is_symlink() or path == active:
-                continue
-            audio, transcript = path / 'recording.wav', path / 'transcript.txt'
-            if audio.is_file() and transcript.is_file():
-                try:
-                    info = audio.stat()
-                except OSError:
+        with os.scandir(self.recovery) as entries:
+            for entry in entries:
+                if not entry.is_dir(follow_symlinks=False):
                     continue
-                completed.append((info.st_mtime, info.st_size, audio))
-        removed = 0
+                path = Path(entry.path)
+                if path == active:
+                    continue
+                audio, transcript = path / 'recording.wav', path / 'transcript.txt'
+                if audio.is_file() and transcript.is_file():
+                    try:
+                        info = audio.stat()
+                    except OSError:
+                        continue
+                    completed.append((info.st_mtime, info.st_size, audio))
         completed.sort()
         kept_bytes = sum(size for _, size, _ in completed)
         limit = self.audio_megabytes * 1024 * 1024 if self.audio_megabytes else None
+        doomed = []
         for mtime, size, audio in completed:
             expired = self.audio_days is not None and now - mtime > self.audio_days * 86400
             oversize = limit is not None and kept_bytes > limit
             if not expired and not oversize:
                 continue
-            try:
-                audio.unlink()
-                removed += 1
-                kept_bytes -= size
-            except OSError:
-                pass
+            doomed.append((size, audio))
+            kept_bytes -= size
+        removed = 0
+        with self.lock:
+            for size, audio in doomed:
+                if audio.parent == self.take:
+                    continue
+                try:
+                    audio.unlink()
+                    removed += 1
+                except OSError:
+                    pass
         return removed
+
+    def housekeep(self, *, force=False):
+        """Retention after a take. The audio walk is throttled to every HOUSEKEEPING_TAKES takes or
+        HOUSEKEEPING_SECONDS; the first take after startup always runs it. History pruning is cheap and exact, so it
+        runs every time."""
+        with self.lock:
+            self.takes_since_retire += 1
+            due = force or self.takes_since_retire >= self.HOUSEKEEPING_TAKES or \
+                time.monotonic() - self.retired_at >= self.HOUSEKEEPING_SECONDS
+            if due:
+                self.takes_since_retire, self.retired_at = 0, time.monotonic()
+        if due:
+            self.retire_completed_audio()
+        self.prune_history()
 
     def status(self):
         return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
@@ -533,8 +578,7 @@ class Session:
                 if cancelled.is_set() and self.cancelled is cancelled and self.state == 'cancelling':
                     self.state = 'idle'
             try:
-                self.retire_completed_audio()
-                self.prune_history()
+                self.housekeep()
             except OSError:
                 pass
 
@@ -1261,9 +1305,6 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
     with open(str(path) + '.lock', 'a') as ownership:
         os.chmod(ownership.name, 0o600)
         fcntl.flock(ownership, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        if startup is not None:
-            # Maintenance prunes takes, so only the daemon that owns the runtime lock may run it.
-            startup()
         if path.exists():
             info = path.lstat()
             if not stat.S_ISSOCK(info.st_mode) or info.st_uid != os.getuid():
@@ -1274,6 +1315,17 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
             os.chmod(path, 0o600)
             server.listen(4)
             server.settimeout(.1)
+            maintenance = None
+            if startup is not None:
+                # Maintenance prunes takes, so only the daemon that owns the runtime lock may run it. It runs after the
+                # bind so a large history never delays the first hotkey, and the lock-holding steps it takes are short.
+                def run_maintenance():
+                    try:
+                        startup()
+                    except OSError:
+                        pass
+                maintenance = threading.Thread(target=run_maintenance, daemon=True)
+                maintenance.start()
             end = time.monotonic() + lifetime_seconds
             watchers = []
             last_snapshot = None
@@ -1354,6 +1406,8 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                         if not keep:
                             connection.close()
             finally:
+                if maintenance is not None:
+                    maintenance.join(2)
                 for watcher in watchers:
                     try:
                         watcher.sendall(json.dumps({'event': 'stopping'}).encode() + b'\n')
@@ -1665,7 +1719,7 @@ def main(argv=None, *, cli_directory=None):
             signal.signal(event, lambda *_: stopped.set())
         try:
             serve(path, session, stopped, lifetime_seconds=args.lifetime_seconds, files=files,
-                  startup=lambda: (session.retire_completed_audio(), session.prune_history()))
+                  startup=lambda: session.housekeep(force=True))
         finally:
             try:
                 files.close()

@@ -1036,6 +1036,144 @@ class RetentionTests(unittest.TestCase):
         os.utime(path / 'recording.wav', (stamp, stamp))
         return path
 
+    def owned_elsewhere(self, session):
+        """True when another thread cannot take the session lock right now."""
+        free = []
+        def attempt():
+            got = session.lock.acquire(blocking=False)
+            free.append(got)
+            if got:
+                session.lock.release()
+        probe = threading.Thread(target=attempt)
+        probe.start()
+        probe.join()
+        return not free[0]
+
+    def test_take_count_matches_the_directory_walk_on_two_thousand_takes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index in range(2000):
+                (root / ('%032x' % index)).mkdir(mode=0o700)
+            (root / 'stray.txt').write_text('x')
+            (root / 'link').symlink_to(root / ('%032x' % 1), target_is_directory=True)
+            session = Session(Capture(), Engine(), Delivery(), root)
+            try:
+                old = sum(1 for path in root.iterdir() if path.is_dir() and not path.is_symlink())
+                self.assertEqual(old, 2000)
+                self.assertEqual(session.take_count(), old)
+            finally:
+                session.close()
+
+    def test_prune_walks_outside_the_lock_and_deletes_inside_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, name in enumerate('abcd'):
+                self.take(root, name, age_days=10 - index)
+            session = Session(Capture(), Engine(), Delivery(), root, history_keep=2)
+            walking, deleting = [], []
+            real_time, real_rmdir = Session.known_take_time, Path.rmdir
+            def known_take_time(owner, path):
+                walking.append(self.owned_elsewhere(session))
+                return real_time(owner, path)
+            def rmdir(path):
+                deleting.append(session.lock._is_owned())
+                return real_rmdir(path)
+            try:
+                with unittest.mock.patch.object(Session, 'known_take_time', known_take_time), \
+                        unittest.mock.patch.object(Path, 'rmdir', rmdir):
+                    self.assertEqual(session.prune_history(), 2)
+            finally:
+                session.close()
+            self.assertEqual(walking, [False] * 4)
+            self.assertEqual(deleting, [True, True])
+            self.assertEqual(sorted(path.name[0] for path in root.iterdir()), ['c', 'd'])
+
+    def test_prune_remembers_take_times_between_runs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, name in enumerate('abc'):
+                self.take(root, name, age_days=10 - index)
+            session = Session(Capture(), Engine(), Delivery(), root, history_keep=5)
+            reads = []
+            real = Session.take_time
+            try:
+                with unittest.mock.patch.object(Session, 'take_time', staticmethod(lambda path: reads.append(path) or real(path))):
+                    session.prune_history()
+                    session.prune_history()
+            finally:
+                session.close()
+            self.assertEqual(len(reads), 3)
+
+    def test_retire_walks_outside_the_lock_and_deletes_inside_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old = self.take(root, 'a', age_days=100)
+            self.take(root, 'b', age_days=1)
+            session = Session(Capture(), Engine(), Delivery(), root, audio_days=90)
+            walking, deleting = [], []
+            real_is_file, real_unlink = Path.is_file, Path.unlink
+            def is_file(path):
+                walking.append(self.owned_elsewhere(session))
+                return real_is_file(path)
+            def unlink(path, *args, **kwargs):
+                deleting.append(session.lock._is_owned())
+                return real_unlink(path, *args, **kwargs)
+            try:
+                with unittest.mock.patch.object(Path, 'is_file', is_file), unittest.mock.patch.object(Path, 'unlink', unlink):
+                    self.assertEqual(session.retire_completed_audio(), 1)
+            finally:
+                session.close()
+            self.assertTrue(walking and not any(walking))
+            self.assertEqual(deleting, [True])
+            self.assertFalse((old / 'recording.wav').exists())
+
+    def test_audio_walk_is_throttled_to_every_n_takes_but_pruning_is_not(self):
+        with tempfile.TemporaryDirectory() as temp:
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), history_keep=3)
+            retired, pruned = [], []
+            session.retire_completed_audio = lambda now=None: retired.append(1) or 0
+            session.prune_history = lambda: pruned.append(1) or 0
+            try:
+                for _ in range(session.HOUSEKEEPING_TAKES):
+                    session.housekeep()
+                # The first take after startup walks the audio; the next walk waits for a full interval of takes.
+                self.assertEqual((len(retired), len(pruned)), (1, session.HOUSEKEEPING_TAKES))
+                session.housekeep()
+                self.assertEqual((len(retired), len(pruned)), (2, session.HOUSEKEEPING_TAKES + 1))
+                session.housekeep(force=True)
+                self.assertEqual(len(retired), 3)
+            finally:
+                session.close()
+
+    def test_serve_binds_the_socket_before_startup_maintenance_runs(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
+            seen, release = [], threading.Event()
+            def startup():
+                seen.append(path.exists())
+                release.wait(3)
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 3, 'startup': startup})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'status')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                # Maintenance is still blocked, yet the daemon already answers.
+                self.assertEqual(reply['state'], 'idle')
+                self.assertEqual(seen, [True])
+            finally:
+                release.set()
+                stopped.set()
+                thread.join(4)
+                session.close()
+
     def test_cap_is_configurable_and_reported(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1184,16 +1322,15 @@ class RetentionTests(unittest.TestCase):
                 except ValueError:
                     results.append('rejected')
             thread = threading.Thread(target=retry)
-            real = Path.iterdir
-            def iterdir(path):
-                found = list(real(path))
-                if path == root and not thread.ident:
-                    # The retry arrives after the take list is built but before anything is deleted.
+            real = Session.known_take_time
+            def known_take_time(owner, path):
+                if not thread.ident:
+                    # The retry arrives after the walk started but before anything is deleted.
                     thread.start()
                     thread.join(.2)
-                return iter(found)
+                return real(owner, path)
             try:
-                with unittest.mock.patch.object(Path, 'iterdir', iterdir):
+                with unittest.mock.patch.object(Session, 'known_take_time', known_take_time):
                     session.prune_history()
                 thread.join(2)
                 if results == ['accepted']:
