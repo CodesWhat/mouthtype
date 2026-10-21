@@ -1,0 +1,53 @@
+# Maintainer: CodesWhat <https://github.com/CodesWhat>
+#
+# Development build of the Mouthtype Linux client and Omarchy bar plugin, built from git. Experimental:
+# nothing here has been accepted on a wide range of hardware yet (see https://mouthtype.app/linux/).
+_branch=feat/linux-parity
+pkgname=mouthtype-linux-git
+pkgver=0.0.0
+pkgrel=1
+pkgdesc='Local voice dictation for Omarchy and Hyprland (development client)'
+arch=('x86_64')
+url='https://mouthtype.app/linux/'
+license=('GPL-3.0-only' 'MIT' 'Unicode-3.0')
+depends=('python' 'curl' 'pipewire-audio' 'wl-clipboard' 'wtype' 'libnotify' 'ffmpeg')
+makedepends=('git')
+optdepends=('hyprland: identify the active window for paste and type delivery (Omarchy ships it)'
+            'git: build the optional AI cleanup server'
+            'cmake: build the optional AI cleanup server'
+            'base-devel: build the optional AI cleanup server')
+provides=("${pkgname%-git}")
+conflicts=("${pkgname%-git}")
+install=mouthtype-linux.install
+source=("${pkgname%-git}::git+https://github.com/CodesWhat/mouthtype.git#branch=${_branch}")
+sha256sums=('SKIP')
+
+pkgver() {
+    cd "$srcdir/${pkgname%-git}"
+    local base
+    base=$(python -c "import plistlib; print(plistlib.load(open('packaging/Version.plist', 'rb'))['CFBundleShortVersionString'])")
+    printf '%s.r%s.%s' "$base" "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
+}
+
+package() {
+    cd "$srcdir/${pkgname%-git}"
+    python tools/linux-desktop/install.py --prefix /usr --destdir "$pkgdir"
+
+    # Omarchy bar plugin: the runtime files only. mouthtype-linux-setup copies it into ~/.config/omarchy/plugins.
+    local plugin="$pkgdir/usr/share/mouthtype-linux/omarchy-plugin" file
+    while IFS= read -r -d '' file; do
+        install -Dm644 "tools/omarchy-plugin/$file" "$plugin/$file"
+    done < <(cd tools/omarchy-plugin && find . -type f \
+        ! -name 'test_*' ! -name 'tst_*' ! -name 'gen_*' ! -name '*.pyc' \
+        ! -path './*-render/*' ! -path './design/gallery/*' ! -path './design/render/*' \
+        ! -path '*/fixtures/*' -print0)
+    chmod 755 "$plugin/control.py" "$plugin/save_dialog.py" "$plugin/install.py"
+
+    install -Dm755 packaging/arch/aur/mouthtype-linux-setup "$pkgdir/usr/bin/mouthtype-linux-setup"
+    install -Dm644 packaging/arch/aur/mouthtype-linux.service "$pkgdir/usr/lib/systemd/user/mouthtype-linux.service"
+
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm644 THIRD_PARTY_NOTICES.md "$pkgdir/usr/share/licenses/$pkgname/THIRD_PARTY_NOTICES.md"
+    install -Dm644 tools/linux-desktop/vendor/grapheme/LICENSE "$pkgdir/usr/share/licenses/$pkgname/grapheme-MIT"
+    install -Dm644 tools/linux-desktop/vendor/grapheme/UNICODE-LICENSE "$pkgdir/usr/share/licenses/$pkgname/Unicode-LICENSE"
+}

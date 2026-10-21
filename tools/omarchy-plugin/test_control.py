@@ -34,6 +34,7 @@ class AutostartTests(unittest.TestCase):
         self.calls = []
         patches = [
             mock.patch.object(control, "UNIT", self.unit),
+            mock.patch.object(control, "VENDOR_UNIT", self.root / "vendor" / "mouthtype-linux.service"),
             mock.patch.object(control, "LAUNCHER", self.root / "my bin" / "mouthtype-linux"),
             mock.patch.object(control, "CONFIG", self.root / "linux.json"),
             mock.patch.object(control, "state", lambda: {}),
@@ -77,6 +78,20 @@ class AutostartTests(unittest.TestCase):
         control.set_autostart("on")
         verbs = [call[0] for call in self.calls]
         self.assertEqual(verbs, ["disable", "daemon-reload", "enable"])
+
+    def test_packaged_unit_is_enabled_without_writing_a_user_copy(self):
+        vendor = self.root / "vendor" / "mouthtype-linux.service"
+        vendor.parent.mkdir()
+        vendor.write_text("[Service]\n")
+        control.set_autostart("on")
+        self.assertFalse(self.unit.exists())
+        self.assertEqual([call[0] for call in self.calls], ["enable"])
+        wants = self.unit.parent / "graphical-session.target.wants"
+        wants.mkdir(parents=True)
+        (wants / self.unit.name).symlink_to(vendor)
+        self.calls.clear()
+        control.set_autostart("off")
+        self.assertEqual([call[0] for call in self.calls], ["disable"])
 
     def test_failed_enable_explains_why_and_leaves_no_unit_behind(self):
         def failing(command, **kwargs):

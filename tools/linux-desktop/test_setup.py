@@ -62,6 +62,19 @@ class SetupTests(unittest.TestCase):
                 self.assertEqual(setup.main(['--destination', temp + '/s', '--plugin-dir', str(plugin)], speech=speech), 2)
             speech.assert_not_called()
 
+    def test_uninstall_runs_the_plugin_uninstaller_with_purge(self):
+        with tempfile.TemporaryDirectory() as temp:
+            plugin = Path(temp)
+            (plugin / 'install.py').write_text('')
+            commands = []
+
+            def run(command, **kwargs):
+                commands.append(command)
+                return mock.Mock(returncode=0)
+            with mock.patch.object(setup.sys, 'platform', 'linux'):
+                self.assertEqual(setup.main(['--uninstall', '--purge', '--plugin-dir', temp], run=run), 0)
+            self.assertEqual(commands[0][-2:], ['--uninstall', '--purge'])
+
     def test_failed_doctor_stops_before_the_plugin(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
