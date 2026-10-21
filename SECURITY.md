@@ -15,9 +15,9 @@ Fixes land on the active development branch and ship in a 0.4.x patch release or
 
 ## Report a vulnerability
 
-Email **[hi@scottbenson.dev](mailto:hi@scottbenson.dev)** with “Mouthtype security” in the subject. Don't put vulnerabilities, personal audio, transcripts, credentials or permission databases in public issues, discussions or pull requests. Repository collaborators can also contact the maintainer through an existing private channel.
+Email **[security@codeswhat.com](mailto:security@codeswhat.com)** with “Mouthtype security” in the subject, or use [GitHub's private vulnerability reporting](https://github.com/CodesWhat/mouthtype/security/advisories/new). Don't put vulnerabilities, personal audio, transcripts, credentials or permission databases in public issues, discussions or pull requests.
 
-Include the affected version or source revision, macOS version, reproduction steps, impact and a minimal synthetic example. Send sensitive evidence only after agreeing on a suitable transfer method. The maintainer will acknowledge and triage reports as availability allows; no response or fix deadline is guaranteed.
+Include the affected version or source revision, macOS version, reproduction steps, impact and a minimal synthetic example. Send sensitive evidence only after agreeing on a suitable transfer method. You can expect an acknowledgement within 7 days and a status update after triage. Fix timing depends on severity and maintainer availability, and no fix deadline is guaranteed. Reporters are credited in the release notes unless they prefer to stay anonymous.
 
 ## Scope
 

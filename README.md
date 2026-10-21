@@ -14,6 +14,8 @@ Natural speech in, clean text out.
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.4.0-2ea44f" alt="Version 0.4.0"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-555555?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
+  <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
+  <a href="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml"><img src="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml/badge.svg" alt="Security CI"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
 </p>
 
@@ -60,7 +62,9 @@ Natural speech in, clean text out.
 | Known limits for 0.4.0 | [`docs/KNOWN-LIMITS.md`](docs/KNOWN-LIMITS.md) |
 | Release notes | [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) |
 | Roadmap | See [Roadmap](#roadmap) below |
+| Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
+| Code of conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
 | Security policy | [`SECURITY.md`](SECURITY.md) |
 | Security controls and limits | [`docs/SECURITY.md`](docs/SECURITY.md) |
 | Third-party notices | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) |
@@ -74,7 +78,7 @@ Natural speech in, clean text out.
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.4.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The repository is private; the signed app and corresponding release source are available without repository access.
+The Mac app is at 0.4.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
 
 1. Download the signed, notarized ZIP from [mouthtype.app/download](https://mouthtype.app/download).
 2. Extract Mouthtype, move it to Applications and open it.
@@ -200,7 +204,7 @@ Model downloads and optional update checks use the network. Dictation and cleanu
 <details>
 <summary><strong>Shipped and planned</strong></summary>
 
-High-level themes only, with no dates. [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) has per-release detail.
+High-level themes only, with no dates. [`CHANGELOG.md`](CHANGELOG.md) has per-release detail.
 
 | Version | Theme | Highlights |
 | --- | --- | --- |
@@ -208,6 +212,7 @@ High-level themes only, with no dates. [`packaging/ReleaseNotes.txt`](packaging/
 | **0.2.x** ✅ | Transform and boost | Transform selected text, optional Boost my saved words, cleanup level in app and website rules |
 | **0.3.x** ✅ | Home and Stats | Home page with recent takes and Recover, Stats page, suggested spellings |
 | **0.4.0** ✅ | One window | Single redesigned window, Transform Selection preview, Transforms page, separate Transcribe Audio File window, automation, editor hints |
+| **0.5.0** 🚧 | In progress | Launch and dictation speed, Fn remap and quit-path hardening, cleanup fixes, real app icons in Style lists |
 | **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style, custom tones |
 
 **Still open:** fresh-install, VoiceOver, and Bluetooth and USB microphone verification, and wider app-compatibility testing. See [known limits](docs/KNOWN-LIMITS.md).
@@ -228,7 +233,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks, dependency maintenance and t
 
 <h2 align="center" id="experimental-linux-source">Experimental Linux Source</h2>
 
-Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI, setup diagnostics, an Omarchy bar plugin with a floating pill, single-file audio transcription, optional paste or typing delivery and optional local Fast and Thorough cleanup models. Delivery is recovery-only and cleanup is off by default. **There is no supported Linux desktop release.** Physical acceptance remains open, and the Linux cleanup models differ from the Mac ones (Thorough is Qwen3 4B, not Gemma). Follow the [Linux setup and testing guide](tools/linux-desktop/README.md) or the [Omarchy plugin guide](tools/omarchy-plugin/README.md). Coding agents can follow the ordered checklist at [mouthtype.app/linux/agent-install.md](website/public/linux/agent-install.md).
+Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI, setup diagnostics, an Omarchy bar plugin with a floating pill, single-file audio transcription, optional paste or typing delivery and optional local Fast and Thorough cleanup models. Delivery is recovery-only and cleanup is off by default. **There is no supported Linux desktop release.** Physical acceptance remains open, and the Linux cleanup models differ from the Mac ones (Thorough is Qwen3 4B, not Gemma). Follow the [Linux setup and testing guide](tools/linux-desktop/README.md) or the [Omarchy plugin guide](tools/omarchy-plugin/README.md).
 
 <hr>
 
@@ -252,7 +257,7 @@ Speech recognition uses NVIDIA's Parakeet models, converted to Core ML by FluidI
 
 <h2 align="center" id="community-and-support">Community and Support</h2>
 
-Bug reports from repository collaborators belong in private issues. Include the app version, macOS version, destination app and reproduction steps; omit personal transcripts and recordings. Report vulnerabilities through [SECURITY.md](SECURITY.md), not in an issue. The [troubleshooting guide](docs/TROUBLESHOOTING.md) covers the problems you can hit today.
+Open an [issue](https://github.com/CodesWhat/mouthtype/issues) for bugs, or ask in [Discussions](https://github.com/CodesWhat/mouthtype/discussions). Include the app version, macOS version, destination app and reproduction steps; omit personal transcripts and recordings. Report vulnerabilities through [SECURITY.md](SECURITY.md), not in an issue. The [troubleshooting guide](docs/TROUBLESHOOTING.md) covers the problems you can hit today.
 
 <h2 align="center" id="codeswhat-ecosystem">CodesWhat Ecosystem</h2>
 

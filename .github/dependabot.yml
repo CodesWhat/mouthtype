@@ -2,7 +2,7 @@ version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
-    target-branch: dev/v0.1.0
+    target-branch: dev/v0.5.0
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
@@ -11,13 +11,13 @@ updates:
         patterns: ["*"]
   - package-ecosystem: swift
     directory: /
-    target-branch: dev/v0.1.0
+    target-branch: dev/v0.5.0
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
   - package-ecosystem: npm
     directory: /website
-    target-branch: dev/v0.1.0
+    target-branch: dev/v0.5.0
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
