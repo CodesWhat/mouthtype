@@ -56,6 +56,9 @@ def transform_payload(text, prompt='s1', controls=worker.CONTROLS):
 
 
 worker.cleanup_payload = transform_payload
+# The proof worker strips <transcript> tags and <think> blocks from cleanup output. In an edit those can be the text
+# being edited, so the output goes back untouched and transform.sanitize_output frames it with the source in hand.
+worker.sanitize = lambda text: text
 
 if __name__ == '__main__':
     sys.exit(worker.main())

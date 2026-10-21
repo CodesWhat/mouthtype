@@ -34,6 +34,7 @@ FAKES = {
                 exit 0
             fi
         done
+        [ -e "$d/switch" ] && cp "$d/switch" "$d/active.json"
         cat "$d/$name"
     ''',
     'wl-copy': '''
@@ -279,6 +280,10 @@ class WorkerPayloadTests(unittest.TestCase):
         payload = transform_worker.transform_payload('Warm up, please.', 'shared', transform_worker.worker.CONTROLS)
         self.assertIn('dictation cleanup engine', payload['messages'][0]['content'])
 
+    def test_literal_markup_in_the_text_survives(self):
+        self.assertEqual(transform_worker.worker.sanitize('<transcript>a</transcript> <think>b</think>'),
+                         '<transcript>a</transcript> <think>b</think>')
+
     def test_token_allowance(self):
         self.assertEqual(transform_worker.max_tokens('one two'), 71)
         self.assertEqual(transform_worker.max_tokens('x' * 100000), 16384)
@@ -382,6 +387,13 @@ class CaptureTests(Harness):
         self.put('primary', 'hello')
         result = self.service(busy=lambda: True).capture()
         self.assertEqual(result['error'], 'busy')
+
+    def test_focus_moving_during_the_read_discards_the_capture(self):
+        (self.fake / 'switch').write_text(json.dumps(OTHER))
+        self.put('primary', 'hello')
+        result = self.service().capture()
+        self.assertEqual((result['state'], result['error']), ('error', 'focus_changed'))
+        self.assertEqual(list(self.runtime.glob('transform-*.json')), [])
 
     def test_missing_compositor_still_captures_without_a_window(self):
         (self.fake / 'active.json').unlink()
@@ -533,6 +545,14 @@ class AcceptTests(Harness):
         self.assertIn('address:0xabc', dispatch)
         self.assertIn('"CTRL"', dispatch)
         self.assertTrue(json.loads(next(self.runtime.glob('transform-*.json')).read_text())['submitted'])
+
+    def test_clipboard_is_restored_before_accept_returns(self):
+        self.write_config(delivery={**self.delivery, 'restore_clipboard': True, 'restore_delay_seconds': .2})
+        service, identity = self.ready('hello')
+        self.put('clipboard', 'what I had copied')
+        self.assertEqual(service.accept(identity)['state'], 'requested')
+        self.assertEqual(self.read('clipboard'), 'what I had copied')
+        self.assertIn('address:0xabc', self.read('dispatch.log'))
 
     def test_changed_window_is_refused_and_nothing_is_touched(self):
         service, identity = self.ready()

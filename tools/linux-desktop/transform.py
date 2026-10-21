@@ -383,6 +383,8 @@ class TransformService:
     def capture(self):
         if self.busy():
             return failure('busy', BUSY)
+        # The text and the window must belong together, so focus is read on both sides of the read.
+        before = self._window()
         try:
             text, source = None, 'primary'
             for source in ('primary', 'clipboard'):
@@ -398,6 +400,9 @@ class TransformService:
         if units(text) > MAX_UNITS:
             return failure('too_long', 'Select up to 16,000 characters.')
         target = self._window()
+        if target != before:
+            return failure('focus_changed', 'The focused window changed while the selection was read. Select the '
+                           'text again.')
         self.store.clear()
         record = {'id': uuid.uuid4().hex, 'created': self.clock(), 'expires': self.clock() + CAPTURE_SECONDS,
                   'source': source, 'text': text, 'target': target, 'result': None, 'kind': None, 'submitted': False}
@@ -567,6 +572,10 @@ class TransformService:
         replacement = restore_boundary_whitespace(record['text'], text)
         with Deadline(self.cancelled, 30.0) as deadline:
             outcome = delivery.submit(replacement, target, cancelled=self.cancelled)
+            # The earlier clipboard is put back on a daemon thread; this process must not exit before it has run.
+            restoring = delivery.restore_thread
+            if restoring is not None:
+                restoring.join(float(delivery_config.get('restore_delay_seconds', delivery.restore_delay_seconds)) + 6)
         if outcome == 'target_changed':
             return self._refuse(identity, 'window_changed', 'The focused window changed since the selection was '
                                 "captured, so Mouthtype won't write into %s. Copy the result instead." % name, record)
