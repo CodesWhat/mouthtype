@@ -250,7 +250,7 @@ final class AccessibilityFocusReader: FocusReading {
     /// it. Ranges count UTF-16 units, so two are read and the last character kept: one alone could be half an emoji.
     /// Falls back to the whole value for apps without `AXStringForRange`. Never call on a secure field.
     /// The selected range, or nil when the element reports none or a negative one. Callers bound the element first.
-    static func selectedRange(_ ref: AXUIElement) -> NSRange? {
+    nonisolated static func selectedRange(_ ref: AXUIElement) -> NSRange? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
               let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }

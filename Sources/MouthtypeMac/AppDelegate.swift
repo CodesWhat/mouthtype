@@ -333,7 +333,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             aiUnavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason },
             capture: { [weak self] in
                 guard let self, AXIsProcessTrusted() else { return .unavailable }
-                return self.selectionCleanupModel.captureForMenu()
+                return await self.selectionCleanupModel.captureForMenuOffMain()
             }))
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(destination: .transcribeFile) }, startsGroup: false)
         if let recovery {
