@@ -83,7 +83,7 @@ def paste_last(identity, text, context):
         restore = getattr(target, 'restore_thread', None)
         if restore is not None:
             # This process is short-lived; let the clipboard go back before it exits.
-            restore.join(float(delivery.get('restore_delay_seconds', target.restore_delay_seconds)) + RESTORE_WAIT_SECONDS)
+            restore.join(float(delivery.get('restore_delay_seconds', getattr(target, 'restore_delay_seconds', 1.5))) + RESTORE_WAIT_SECONDS)
     finally:
         for event, handler in previous:
             signal.signal(event, handler)
