@@ -2,6 +2,7 @@ import QtQuick
 import QtTest
 import ".."
 import "../design"
+import "../pages/library"
 import "../pages/library/LibraryModel.js" as Model
 
 // qmltestrunner scene for slice V5. Loads MouthtypeShell with a FixtureHost, answers the pages' requests from the JSON in
@@ -30,6 +31,9 @@ TestCase {
 
   property var requests: []
   property var handlers: ({})
+  // Replies to hold back until a test releases them, keyed by verb.
+  property var holds: ({})
+  property var held: []
 
   Connections {
     target: shell
@@ -37,8 +41,11 @@ TestCase {
       tc.requests.push([command, args])
       shell.pageBusy = true
       var handler = tc.handlers[command]
-      var reply = handler ? handler(args) : { error: "No handler for " + command }
-      Qt.callLater(function() { shell.pageResult(command, reply); shell.pageBusy = false })
+      // A fresh object per reply, like the shell's JSON.parse.
+      var reply = copy(handler ? handler(args) : { error: "No handler for " + command })
+      var deliver = function() { shell.pageResult(command, reply); shell.pageBusy = false }
+      if (tc.holds[command]) tc.held.push(deliver)
+      else Qt.callLater(deliver)
     }
   }
 
@@ -125,6 +132,8 @@ TestCase {
     shell.pageError = ""
     shell.pageBusy = false
     requests = []
+    holds = ({})
+    held = []
     handlers = handlerMap
     wait(30)
   }
@@ -516,5 +525,121 @@ TestCase {
     wait(120)
     keyClick(Qt.Key_Escape)
     tryVerify(function() { return !p.sheetOpen }, 2000)
+  }
+
+  // -- Request tracking and stale replies
+
+  RequestTracker { id: probe }
+
+  function probeState(busy, results, error) { probe.backend = { busy: busy, results: results, error: error || "", state: {}, dark: false } }
+
+  function test_tracker_finishes_a_null_reply_with_an_error() {
+    var done = []
+    var hook = function(command, reply) { done.push([command, reply]) }
+    probe.finished.connect(hook)
+    probeState(false, {})
+    probe.send("x", [])
+    probeState(true, {})
+    probeState(false, { x: null })
+    wait(50)
+    probe.finished.disconnect(hook)
+    compare(done.length, 1)
+    compare(done[0][1].error, "Mouthtype did not answer")
+    verify(!probe.waiting)
+  }
+
+  function test_tracker_skips_the_request_queued_ahead_of_it() {
+    var done = []
+    var hook = function(command, reply) { done.push([command, reply]) }
+    probe.finished.connect(hook)
+    probeState(true, {})
+    probe.send("x", [])
+    probeState(false, {}, "the earlier request failed")
+    compare(done.length, 0, "the first falling edge belongs to the earlier request")
+    probeState(true, {})
+    var mine = { ok: 1 }
+    probeState(false, { x: mine }, "")
+    wait(50)
+    probe.finished.disconnect(hook)
+    compare(done.length, 1)
+    verify(done[0][1] === mine || done[0][1].ok === 1, "our own reply, not the earlier error")
+    verify(!done[0][1].error)
+  }
+
+  function test_tracker_reports_a_shell_error_when_no_reply_arrives() {
+    var done = []
+    var hook = function(command, reply) { done.push([command, reply]) }
+    probe.finished.connect(hook)
+    probeState(false, {})
+    probe.send("x", [])
+    probeState(true, {})
+    probeState(false, {}, "Mouthtype page request failed")
+    wait(50)
+    probe.finished.disconnect(hook)
+    compare(done.length, 1)
+    compare(done[0][1].error, "Mouthtype page request failed")
+  }
+
+  function test_a_late_reply_does_not_close_or_fill_a_newer_sheet() {
+    var p = openDictionary(lists("spellings-list", "phrases-list", "ready"), false)
+    holds["spellings-add"] = true
+    var after = copy(fixture("spellings-list"))
+    handlers["spellings-add"] = function() { return after }
+    p.openWord(null)
+    wait(120)
+    field("Sean").text = "Sean"
+    field("shawn").text = "shawn"
+    keyClick(Qt.Key_Return, Qt.ControlModifier)
+    tryVerify(function() { return held.length === 1 }, 3000)
+    keyClick(Qt.Key_Escape)
+    tryVerify(function() { return p.sheetKind === "" }, 2000)
+    p.openWord(null)
+    wait(120)
+    field("Sean").text = "Second"
+    held[0]()
+    wait(200)
+    compare(p.sheetKind, "word", "the newer sheet stays open")
+    compare(field("Sean").text, "Second", "and keeps what was typed")
+    compare(p.sheetError, "")
+  }
+
+  function test_a_late_error_does_not_land_on_a_newer_sheet() {
+    var p = openTransforms(lists("spellings-list", "phrases-list", "ready"), false)
+    holds["phrases-add"] = true
+    handlers["phrases-add"] = function() { return { error: "A phrase with this trigger already exists." } }
+    p.openSheet(null)
+    wait(120)
+    field("my work email").text = "a"
+    findAll(function(t) { return t.area !== undefined && t.insertText !== undefined })[0].area.text = "b"
+    keyClick(Qt.Key_Return, Qt.ControlModifier)
+    tryVerify(function() { return held.length === 1 }, 3000)
+    keyClick(Qt.Key_Escape)
+    tryVerify(function() { return !p.sheetOpen }, 2000)
+    p.openSheet(null)
+    wait(120)
+    held[0]()
+    wait(200)
+    verify(p.sheetOpen)
+    compare(p.sheetError, "")
+  }
+
+  function test_a_preview_reply_is_tied_to_the_path_that_was_requested() {
+    var p = openDictionary(lists("spellings-list", "phrases-list", "ready"), false)
+    var reply = fixture("import-valid")
+    handlers["spellings-import-preview"] = function() { return reply }
+    holds["spellings-import-preview"] = true
+    p.openImport()
+    wait(120)
+    var box = field("Path to a .csv file, for example ~/names.csv")
+    box.text = "~/a.csv"
+    box.forceActiveFocus()
+    keyClick(Qt.Key_Return)
+    tryVerify(function() { return held.length === 1 }, 3000)
+    box.text = "~/b.csv"
+    held[0]()
+    tryVerify(function() { return p.importPreview !== null }, 3000)
+    compare(p.importPath, "~/a.csv")
+    wait(60)
+    verify(!button("Import 3 spellings").enabled, "a preview for ~/a.csv cannot import ~/b.csv")
   }
 }

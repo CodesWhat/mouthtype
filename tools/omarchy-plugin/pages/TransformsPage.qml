@@ -24,18 +24,28 @@ Item {
   property string listError: ""
   property bool sheetOpen: false
   property string sheetError: ""
+  // Bumped whenever the sheet opens or closes. A reply for a request sent under an older value must not touch the current sheet.
+  property int generation: 0
+  property int sentGeneration: 0
 
   implicitHeight: content.implicitHeight
 
   function refresh() { tracker.send("phrases-list", []) }
 
+  function send(command, args) {
+    sentGeneration = generation
+    return tracker.send(command, args)
+  }
+
   function openSheet(entry) {
     sheetError = ""
     sheet.pair = entry
+    generation++
     sheetOpen = true
   }
 
   function closeSheet() {
+    generation++
     sheetOpen = false
     sheetError = ""
   }
@@ -53,10 +63,11 @@ Item {
         root.status = reply.error ? { kinds: [], model: { state: "unavailable", reason: String(reply.error) }, error: String(reply.error) } : reply
         return
       }
+      var current = root.sentGeneration === root.generation
       if (reply.error) {
         if (command === "phrases-list") root.listError = String(reply.error)
         else {
-          root.sheetError = String(reply.error)
+          if (current) root.sheetError = String(reply.error)
           root.refresh()
         }
         return
@@ -64,13 +75,13 @@ Item {
       var next = Model.libraryFrom(reply, "phrases")
       if (!next) {
         if (command === "phrases-list") root.listError = "Mouthtype did not return the transforms"
-        else root.sheetError = "Mouthtype did not confirm the change"
+        else if (current) root.sheetError = "Mouthtype did not confirm the change"
         return
       }
       root.library = next
       root.listError = ""
       if (command === "phrases-list") tracker.send("transform-status", [])
-      else root.closeSheet()
+      else if (current) root.closeSheet()
     }
   }
 
@@ -237,12 +248,12 @@ Item {
     onCancelRequested: root.closeSheet()
     onSubmitted: function(trigger, expansion) {
       root.sheetError = ""
-      if (sheet.pair) tracker.send("phrases-edit", [sheet.pair.trigger, trigger, expansion, sheet.pair.expansion])
-      else tracker.send("phrases-add", [trigger, expansion])
+      if (sheet.pair) root.send("phrases-edit", [sheet.pair.trigger, trigger, expansion, sheet.pair.expansion])
+      else root.send("phrases-add", [trigger, expansion])
     }
     onRemoveRequested: {
       root.sheetError = ""
-      tracker.send("phrases-remove", [sheet.pair.trigger, sheet.pair.expansion])
+      root.send("phrases-remove", [sheet.pair.trigger, sheet.pair.expansion])
     }
   }
 }

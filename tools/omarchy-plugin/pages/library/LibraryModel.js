@@ -26,7 +26,7 @@ function adoptedConfig(results, verbs) {
 // Spellings grouped by written form, in order of first appearance. Each form keeps its saved pairs so a row can edit one.
 function groupSpellings(entries) {
   var groups = []
-  var index = {}
+  var index = Object.create(null)
   for (var i = 0; i < (entries || []).length; i++) {
     var entry = entries[i]
     var at = index[entry.written]
@@ -53,7 +53,7 @@ function lineCount(text) {
 }
 
 function variables(text) {
-  var found = {}
+  var found = Object.create(null)
   var pattern = /\{([A-Za-z_]+)\}/g
   var match
   while ((match = pattern.exec(String(text || ""))) !== null) found[match[1].toLowerCase()] = true

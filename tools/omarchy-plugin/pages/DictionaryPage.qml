@@ -25,12 +25,22 @@ Item {
   property string sheetError: ""
   property var importPreview: null
   property string importPath: ""
+  // Bumped whenever a sheet opens or closes. A reply for a request sent under an older value must not touch the current sheet.
+  property int generation: 0
+  property int sentGeneration: 0
+  property string previewRequested: ""
 
   implicitHeight: content.implicitHeight
 
   function refresh() { tracker.send("spellings-list", []) }
 
+  function send(command, args) {
+    sentGeneration = generation
+    return tracker.send(command, args)
+  }
+
   function closeSheet() {
+    generation++
     sheetKind = ""
     sheetError = ""
   }
@@ -38,6 +48,7 @@ Item {
   function openWord(pair) {
     sheetError = ""
     wordSheet.pair = pair
+    generation++
     sheetKind = "word"
   }
 
@@ -45,6 +56,8 @@ Item {
     sheetError = ""
     importPreview = null
     importPath = ""
+    previewRequested = ""
+    generation++
     sheetKind = "import"
   }
 
@@ -62,30 +75,33 @@ Item {
     backend: root.backend
     onDispatch: function(command, args) { root.request(command, args) }
     onFinished: function(command, reply) {
+      // Replies to a sheet that has since closed still refresh the list, but never write into the sheet that is open now.
+      var current = root.sentGeneration === root.generation
       if (reply.error) {
         if (command === "spellings-list") root.listError = String(reply.error)
-        else {
+        else if (current) {
           root.sheetError = String(reply.error)
           if (command === "spellings-import-preview") root.importPreview = null
-          // A refused change usually means the file moved. Show the current list behind the sheet.
-          else root.refresh()
         }
+        // A refused change usually means the file moved. Show the current list behind the sheet.
+        if (command !== "spellings-list" && command !== "spellings-import-preview") root.refresh()
         return
       }
       if (command === "spellings-import-preview") {
+        if (!current) return
         if (reply.problem === undefined && !reply.rows) { root.sheetError = "Mouthtype did not return a preview"; return }
         root.importPreview = reply
-        root.importPath = importSheet.pathText.trim()
+        root.importPath = root.previewRequested
         root.sheetError = ""
         return
       }
       if (!root.absorb(reply)) {
         if (command === "spellings-list") root.listError = "Mouthtype did not return the dictionary"
-        else root.sheetError = "Mouthtype did not confirm the change"
+        else if (current) root.sheetError = "Mouthtype did not confirm the change"
         return
       }
       root.listError = ""
-      if (command !== "spellings-list") root.closeSheet()
+      if (command !== "spellings-list" && current) root.closeSheet()
     }
   }
 
@@ -197,12 +213,12 @@ Item {
     onCancelRequested: root.closeSheet()
     onSubmitted: function(heard, written) {
       root.sheetError = ""
-      if (wordSheet.pair) tracker.send("spellings-edit", [wordSheet.pair.heard, heard, written, wordSheet.pair.written])
-      else tracker.send("spellings-add", [heard, written])
+      if (wordSheet.pair) root.send("spellings-edit", [wordSheet.pair.heard, heard, written, wordSheet.pair.written])
+      else root.send("spellings-add", [heard, written])
     }
     onRemoveRequested: {
       root.sheetError = ""
-      tracker.send("spellings-remove", [wordSheet.pair.heard, wordSheet.pair.written])
+      root.send("spellings-remove", [wordSheet.pair.heard, wordSheet.pair.written])
     }
   }
 
@@ -216,11 +232,12 @@ Item {
     onCancelRequested: root.closeSheet()
     onPreviewRequested: function(path) {
       root.sheetError = ""
-      tracker.send("spellings-import-preview", [path])
+      root.previewRequested = path
+      root.send("spellings-import-preview", [path])
     }
     onImportRequested: function(path, digest, csvDigest) {
       root.sheetError = ""
-      tracker.send("spellings-import", [path, digest, csvDigest])
+      root.send("spellings-import", [path, digest, csvDigest])
     }
   }
 }

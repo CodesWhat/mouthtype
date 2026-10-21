@@ -71,7 +71,7 @@ class PageContractTests(unittest.TestCase):
         commands = control.module_commands()
         sent = {}
         for path in PAGES:
-            for verb, args in re.findall(r'tracker\.send\("([a-z-]+)", (\[[^\n]*\])\)', path.read_text(encoding="utf-8")):
+            for verb, args in re.findall(r'(?:tracker|root)\.send\("([a-z-]+)", (\[[^\n]*\])\)', path.read_text(encoding="utf-8")):
                 sent.setdefault(verb, set()).add(top_level_arguments(args[1:-1]))
         self.assertGreaterEqual(len(sent), 10, sorted(sent))
         for verb, counts in sent.items():
@@ -88,11 +88,11 @@ class PageContractTests(unittest.TestCase):
     def test_edit_remove_and_import_send_their_expect_values(self):
         dictionary = PAGES[0].read_text(encoding="utf-8")
         transforms = PAGES[1].read_text(encoding="utf-8")
-        self.assertIn('tracker.send("spellings-edit", [wordSheet.pair.heard, heard, written, wordSheet.pair.written])', dictionary)
-        self.assertIn('tracker.send("spellings-remove", [wordSheet.pair.heard, wordSheet.pair.written])', dictionary)
-        self.assertIn('tracker.send("spellings-import", [path, digest, csvDigest])', dictionary)
-        self.assertIn('tracker.send("phrases-edit", [sheet.pair.trigger, trigger, expansion, sheet.pair.expansion])', transforms)
-        self.assertIn('tracker.send("phrases-remove", [sheet.pair.trigger, sheet.pair.expansion])', transforms)
+        self.assertIn('root.send("spellings-edit", [wordSheet.pair.heard, heard, written, wordSheet.pair.written])', dictionary)
+        self.assertIn('root.send("spellings-remove", [wordSheet.pair.heard, wordSheet.pair.written])', dictionary)
+        self.assertIn('root.send("spellings-import", [path, digest, csvDigest])', dictionary)
+        self.assertIn('root.send("phrases-edit", [sheet.pair.trigger, trigger, expansion, sheet.pair.expansion])', transforms)
+        self.assertIn('root.send("phrases-remove", [sheet.pair.trigger, sheet.pair.expansion])', transforms)
 
     def test_import_sheet_hands_both_digests_back(self):
         sheet = (LIBRARY / "ImportCsvSheet.qml").read_text(encoding="utf-8")
@@ -227,6 +227,13 @@ class ModelTests(unittest.TestCase):
         self.assertFalse(groups[1]["starred"])
         self.assertEqual(groups[1]["warnings"], ["w"])
         self.assertEqual(self.js("groupSpellings(null)"), [])
+
+    def test_grouping_survives_object_property_names_as_written_forms(self):
+        entries = ('[{heard:"a",written:"constructor"},{heard:"b",written:"__proto__"},{heard:"c",written:"toString"},'
+                   '{heard:"d",written:"constructor"}]')
+        groups = self.js("groupSpellings(%s).map(g=>[g.written,g.pairs.length])" % entries)
+        self.assertEqual(groups, [["constructor", 2], ["__proto__", 1], ["toString", 1]])
+        self.assertEqual(self.js('kindTag("{constructor} {__proto__}")'), "TEXT")
 
     def test_insert_at_the_cursor_or_over_a_selection(self):
         self.assertEqual(self.js('insertAt("Hi ", 3, 3, "{date}")'), {"text": "Hi {date}", "cursor": 9})
