@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Synchronization
 import FnRemapKit
@@ -186,6 +187,18 @@ private final class FakeStore: KeyMappingStore {
         #expect(answered)
         #expect(start.duration(to: .now) < .seconds(1))
         #expect(exits.isEmpty)
+    }
+
+    @Test func aSignalQuitStillRunsWhileAModalOrMenuTrackingLoopIsSpinning() {
+        _ = NSApplication.shared
+        for mode in [RunLoop.Mode("NSModalPanelRunLoopMode"), .eventTracking] {
+            var ran = false
+            // The loop a modal alert or a tracked menu runs: default-mode-only perform blocks never fire in it.
+            FnRemap.requestQuit { ran = true }
+            let end = Date().addingTimeInterval(1)
+            while !ran, Date() < end { RunLoop.main.run(mode: mode, before: Date().addingTimeInterval(0.01)) }
+            #expect(ran, "terminate should run in \(mode.rawValue)")
+        }
     }
 
     @Test func aRealSignalReachesTheQuitRequestOnTheMainQueue() async {

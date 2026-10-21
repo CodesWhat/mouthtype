@@ -89,17 +89,28 @@ struct DraftRecovery {
     /// left alone; a blank draft has nothing to recover and is removed. Never throws.
     func pending() -> Pending {
         let fm = FileManager.default
-        let files = ((try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? [])
+        pruneRecovered()
+        func saved(_ url: URL) -> Date {
+            (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+        }
+        let files = ((try? fm.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [])
             .filter { $0.pathExtension == "json" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .map { (url: $0, saved: saved($0)) }
+            .sorted { ($0.saved, $0.url.lastPathComponent) < ($1.saved, $1.url.lastPathComponent) }
+            .map(\.url)
         var found = Pending()
         for url in files {
-            guard let data = try? Data(contentsOf: url), let draft = try? JSONDecoder().decode(Draft.self, from: data) else {
+            guard let data = try? Data(contentsOf: url) else {
                 if let moved = setAside(url) { found.setAside.append(moved) }
                 continue
             }
-            if draft.version > Draft.currentVersion {
+            // The version is read on its own first: a newer build may have changed `kind` or anything else.
+            if let header = try? JSONDecoder().decode(Header.self, from: data), (header.version ?? 0) > Draft.currentVersion {
                 Log.app.info("draft \(url.lastPathComponent, privacy: .public) is from a newer version, left in place")
+                continue
+            }
+            guard let draft = try? JSONDecoder().decode(Draft.self, from: data) else {
+                if let moved = setAside(url) { found.setAside.append(moved) }
                 continue
             }
             if draft.isEmpty {
@@ -109,6 +120,37 @@ struct DraftRecovery {
             found.drafts.append((draft, url))
         }
         return found
+    }
+
+    private struct Header: Decodable { var version: Int? }
+
+    /// How long a recovered draft stays in `recovered/` before it is deleted.
+    static let recoveredKeepDays = 7
+
+    /// A recovered draft moves to `recovered/` instead of being deleted, so the text survives a card that was replaced or closed.
+    func archiveRecovered(_ url: URL) {
+        let fm = FileManager.default
+        let folder = directory.appendingPathComponent("recovered", isDirectory: true)
+        let target = folder.appendingPathComponent(url.lastPathComponent)
+        do {
+            try fm.createDirectory(at: folder, withIntermediateDirectories: true)
+            if fm.fileExists(atPath: target.path) { try fm.removeItem(at: target) }
+            try fm.moveItem(at: url, to: target)
+            try fm.setAttributes([.modificationDate: Date()], ofItemAtPath: target.path)
+        } catch {
+            Log.app.error("couldn't archive recovered draft \(url.lastPathComponent, privacy: .public): \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func pruneRecovered(now: Date = Date()) {
+        let fm = FileManager.default
+        let folder = directory.appendingPathComponent("recovered", isDirectory: true)
+        let cutoff = now.addingTimeInterval(-Double(Self.recoveredKeepDays) * 86_400)
+        let files = (try? fm.contentsOfDirectory(at: folder, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        for url in files {
+            let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+            if date < cutoff { remove(url) }
+        }
     }
 
     func remove(_ url: URL) {
@@ -136,7 +178,7 @@ struct DraftRecovery {
 
 /// Offers the drafts a signal quit left behind through the same card CrashRecovery uses: Recover shows the text with
 /// Copy, Discard drops it. The editors are never touched, which is what cut the first restore (it dirtied an editor
-/// whose sheet was closed and deleted the file before anyone saw it). Files go only once the user answered the card.
+/// whose sheet was closed and deleted the file before anyone saw it). Files go only once the user answered the card; a recovered one is kept in recovered/ for a week.
 @MainActor
 final class DraftOffer {
     private let recovery: DraftRecovery
@@ -179,7 +221,7 @@ final class DraftOffer {
             ),
             actions: [:]
         )
-        items.forEach { recovery.remove($0.url) }
+        items.forEach { recovery.archiveRecovered($0.url) }
     }
 
     private func discard() {

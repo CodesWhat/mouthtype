@@ -80,7 +80,7 @@ private final class DraftStubCards: DictationCards {
         ((try? FileManager.default.contentsOfDirectory(atPath: recovery.directory.path)) ?? []).sorted()
     }
 
-    @Test func recoverShowsTheTextThenRemovesTheFile() throws {
+    @Test func recoverShowsTheTextThenMovesTheFileToRecovered() throws {
         let recovery = makeRecovery()
         defer { try? FileManager.default.removeItem(at: recovery.directory) }
         try recovery.save(.init(kind: .phrase, trigger: "sig", expansion: "Best,\nScott"), at: Date(timeIntervalSince1970: 1))
@@ -92,7 +92,7 @@ private final class DraftStubCards: DictationCards {
         cards.actions[.recover]?()
         #expect(cards.presented.last?.kind == .recovered)
         #expect(cards.presented.last?.transcript?.contains("Best,\nScott") == true)
-        #expect(names(recovery).isEmpty)
+        #expect(names(recovery) == ["recovered"])
     }
 
     @Test func discardRemovesTheFileWithoutShowingText() throws {
@@ -133,7 +133,7 @@ private final class DraftStubCards: DictationCards {
         cards.actions[.recover]?()
         let text = cards.presented.last?.transcript ?? ""
         #expect(text.contains("second") && text.contains("First"))
-        #expect(names(recovery).isEmpty)
+        #expect(names(recovery) == ["recovered"])
     }
 
     @Test func corruptAndPartialFilesAreMovedAsideNotCrashedOn() throws {
@@ -178,5 +178,40 @@ private final class DraftStubCards: DictationCards {
         let recovery = makeRecovery()
         #expect(DraftOffer(recovery: recovery, cards: DraftStubCards()).offerIfNeeded() == 0)
         #expect(!FileManager.default.fileExists(atPath: recovery.directory.path))
+    }
+
+    @Test func recoveredDraftsAreKeptForAWeekThenPruned() throws {
+        let recovery = makeRecovery()
+        defer { try? FileManager.default.removeItem(at: recovery.directory) }
+        let folder = recovery.directory.appendingPathComponent("recovered", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let old = folder.appendingPathComponent("phrase-1.json"), fresh = folder.appendingPathComponent("phrase-2.json")
+        try Data("{}".utf8).write(to: old)
+        try Data("{}".utf8).write(to: fresh)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-8 * 86_400)], ofItemAtPath: old.path)
+        try FileManager.default.setAttributes([.modificationDate: Date().addingTimeInterval(-6 * 86_400)], ofItemAtPath: fresh.path)
+        _ = recovery.pending()
+        #expect(try FileManager.default.contentsOfDirectory(atPath: folder.path) == ["phrase-2.json"])
+    }
+
+    @Test func aNewerSchemaWithAnUnknownKindIsLeftInPlaceNotMovedAside() throws {
+        let recovery = makeRecovery()
+        defer { try? FileManager.default.removeItem(at: recovery.directory) }
+        try FileManager.default.createDirectory(at: recovery.directory, withIntermediateDirectories: true)
+        try Data("{\"version\":2,\"kind\":\"snippet\",\"body\":\"x\"}".utf8).write(to: recovery.directory.appendingPathComponent("snippet-1.json"))
+        let found = recovery.pending()
+        #expect(found.drafts.isEmpty && found.setAside.isEmpty)
+        #expect(names(recovery) == ["snippet-1.json"])
+    }
+
+    @Test func draftsComeBackOldestSavedFirstAcrossKinds() throws {
+        let recovery = makeRecovery()
+        defer { try? FileManager.default.removeItem(at: recovery.directory) }
+        // Filename order would put phrase- before spelling-, whatever the dates.
+        let newer = try recovery.save(.init(kind: .phrase, trigger: "newer", expansion: "x"), at: Date(timeIntervalSince1970: 2))
+        let older = try recovery.save(.init(kind: .spelling, written: "older"), at: Date(timeIntervalSince1970: 1))
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 2_000)], ofItemAtPath: newer.path)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSince1970: 1_000)], ofItemAtPath: older.path)
+        #expect(recovery.pending().drafts.map(\.url.lastPathComponent) == [older.lastPathComponent, newer.lastPathComponent])
     }
 }

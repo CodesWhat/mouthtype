@@ -179,7 +179,8 @@ public final class FnRemap {
     /// from running the MainActor work that answers it, so every signal quit sat until the fallback (and the fallback
     /// is a main-queue block too). A run-loop block isn't on the queue, so the reply gets through and an idle quit is immediate.
     static func requestQuit(_ terminate: @escaping @MainActor () -> Void) {
-        RunLoop.main.perform { MainActor.assumeIsolated { terminate() } }
+        // Common modes, so a signal during NSAlert.runModal or menu tracking still reaches terminate.
+        RunLoop.main.perform(inModes: [.common]) { MainActor.assumeIsolated { terminate() } }
     }
 
     func handleSignal(requestTermination: (@MainActor () -> Void)?, fallbackDelay: TimeInterval, hardGrace: TimeInterval = 5) {
