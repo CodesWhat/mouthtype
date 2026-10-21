@@ -55,6 +55,28 @@ private final class GatedEngine: DictationEngine {
     }
 }
 
+/// Holds the first bias write open, so a take can arrive while a warm-up's write is in flight.
+@MainActor
+private final class SlowWriteEngine: DictationEngine {
+    var readiness: EngineReadiness { .ready }
+    var biases: [VocabularyBias?] = []
+    var writeHeld = false
+    var transcribed = 0
+    var release: CheckedContinuation<Void, Never>?
+    func setVocabularyBias(_ bias: VocabularyBias?) async { biases.append(bias) }
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        if biases.isEmpty {
+            writeHeld = true
+            await withCheckedContinuation { release = $0 }
+        }
+        biases.append(bias)
+    }
+    func transcribe(samples: [Float]) async throws -> Transcription {
+        transcribed += 1
+        return Transcription(text: "hi", processingSeconds: 0, engineID: "slow")
+    }
+}
+
 private struct Rules: VocabularyProviding {
     var rules: [DictionaryRule]
     func dictionary() -> [DictionaryRule] { rules }
@@ -454,5 +476,28 @@ private struct FakeSource: BoundedTextSource {
         let later = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
         await later.value
         #expect(engine.biases.last??.terms == ["otherEditorName"])
+    }
+
+    @Test func aTakeArrivingMidWarmUpWriteWaitsForItAndThenSetsItsOwnBias() async throws {
+        let clock = SystemDictationClock()
+        let engine = SlowWriteEngine()
+        var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: clock)
+        pipeline.boostSavedWords = { true }
+        pipeline.vocabulary = Rules(rules: [DictionaryRule(heard: "maya", written: "Maya")])
+        // B checked idle and is mid-write when A enters.
+        let warm = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
+        for _ in 0..<1_000 where !engine.writeHeld { await Task.yield() }
+        #expect(engine.writeHeld)
+        let first = DictationSession(id: "a", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        let take = Task { try await pipeline.transcribe(audio(), session: first, voicedMs: 1000) }
+        for _ in 0..<200 { await Task.yield() }
+        #expect(engine.transcribed == 0)
+
+        engine.release?.resume()
+        await warm.value
+        _ = try await take.value
+        // B's write landed before A set its own bias, so A recognised with A's vocabulary and not B's.
+        #expect(engine.biases.map { $0?.terms } == [["Maya", "otherEditorName"], ["Maya"]])
+        #expect(engine.transcribed == 1)
     }
 }
