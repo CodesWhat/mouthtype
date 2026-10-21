@@ -42,12 +42,26 @@ def main(argv=None, *, run=subprocess.run, speech=None):
     parser.add_argument('--plugin-dir', type=Path, help='Omarchy plugin source (default: the packaged or checkout copy)')
     parser.add_argument('--skip-plugin', action='store_true', help='Prepare speech only; no bar plugin or login service')
     parser.add_argument('--no-autostart', action='store_true')
+    parser.add_argument('--uninstall', action='store_true',
+                        help='Remove the per-user pieces: bar plugin, login service, shortcut block, plugin settings')
+    parser.add_argument('--purge', action='store_true', help='With --uninstall, also delete models, recordings and configuration')
     parser.add_argument('--no-restart-shell', action='store_true')
     parser.add_argument('--shortcut', choices=('toggle', 'hold'), help='Also bind the default dictation key')
     args = parser.parse_args(argv)
     if sys.platform != 'linux':
         print('This setup is for Linux (Arch/Omarchy).', file=sys.stderr)
         return 2
+    if args.uninstall:
+        plugin = find_plugin(args.plugin_dir)
+        if plugin is None:
+            print('The Omarchy plugin source was not found; use --plugin-dir.', file=sys.stderr)
+            return 2
+        command = [sys.executable, str(plugin / 'install.py'), '--uninstall'] + (['--purge'] if args.purge else [])
+        status = run(command, timeout=300).returncode
+        if not status:
+            print('Per-user pieces removed. Remove the program itself with: sudo pacman -R mouthtype-linux-git '
+                  '(or python3 tools/linux-desktop/install.py --uninstall for a source install).')
+        return 2 if status else 0
     launcher = find_launcher()
     if launcher is None:
         print('mouthtype-linux is not installed. Install the package, or run: python3 ' +

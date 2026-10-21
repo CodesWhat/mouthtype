@@ -108,6 +108,11 @@ def restart_shell(args):
 def uninstall(args):
     """Undo install: service, shortcut block, bar entry, plugin files, plugin settings. Models and recordings stay unless --purge."""
     systemctl = shutil.which("systemctl")
+    if not UNIT.exists() and systemctl and Path("/usr/lib/systemd/user/mouthtype-linux.service").is_file():
+        # The packaged unit is not ours to delete; just stop it and drop this user's enable link.
+        for verb in ("disable", "stop"):
+            subprocess.run([systemctl, "--user", verb, "mouthtype-linux.service"], check=False, timeout=20,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if UNIT.exists():
         if UNIT_MARKER in UNIT.read_text(encoding="utf-8"):
             if systemctl:

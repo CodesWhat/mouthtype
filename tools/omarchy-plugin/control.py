@@ -26,6 +26,8 @@ RECOVERY = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mout
 LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/omarchy-control.log"
 PREFS = HOME / ".config/mouthtype/omarchy-plugin.json"
 UNIT = HOME / ".config/systemd/user/mouthtype-linux.service"
+# The Arch package ships this unit; with it present the plugin enables it instead of writing its own copy.
+VENDOR_UNIT = Path("/usr/lib/systemd/user/mouthtype-linux.service")
 BINDINGS = HOME / ".config/hypr/bindings.lua"
 BIND_BEGIN = "-- Mouthtype Omarchy plugin shortcut: begin"
 BIND_END = "-- Mouthtype Omarchy plugin shortcut: end"
@@ -997,6 +999,9 @@ def set_autostart(value):
     if value == "on":
         if shutil.which("systemctl") is None:
             raise RuntimeError("systemd user services are unavailable")
+        if not UNIT.exists() and VENDOR_UNIT.is_file():
+            systemctl_user("enable", UNIT.name)
+            return state()
         if legacy_unit_enabled():
             # Older installs linked into default.target; unlink it while the old unit still names that target.
             systemctl_user("disable", UNIT.name)
@@ -1018,7 +1023,7 @@ def set_autostart(value):
                 UNIT.unlink(missing_ok=True)  # Leave nothing half-installed when systemd was not reachable.
             raise
     else:
-        if UNIT.exists():
+        if UNIT.exists() or unit_enabled():
             systemctl_user("disable", UNIT.name)
     return state()
 
