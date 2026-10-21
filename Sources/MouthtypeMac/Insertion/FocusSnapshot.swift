@@ -50,6 +50,13 @@ public struct FocusSnapshot: Sendable {
         if let element, let other = now.element, element != other { return true }
         return false
     }
+
+    /// The focused element belongs to a different process than the frontmost app, as with a non-activating panel.
+    /// Unknown ownership is not a mismatch: Chromium and Electron may expose no focused element yet.
+    var focusOwnerDiffersFromFrontmost: Bool {
+        guard let pid, let focusedOwnerPID else { return false }
+        return pid != focusedOwnerPID
+    }
 }
 
 /// An Accessibility element compared by identity (`CFEqual`).

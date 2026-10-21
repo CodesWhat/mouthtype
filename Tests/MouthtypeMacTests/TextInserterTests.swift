@@ -1010,7 +1010,7 @@ private struct Rig {
         var diagnostics: [String] = []
         let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", windowTitle: "Private window title",
-                                          role: "AXTextField", element: element(100), focusedOwnerPID: 101)
+                                          role: "AXTextField", element: element(100), focusedOwnerPID: 100)
         rig.focus.before = .start
         _ = await rig.inserter.deliver("Private first sentence.", startFocus: nil)
         rig.pasteboard.read()
@@ -1018,10 +1018,59 @@ private struct Rig {
         #expect(result.finalText == " Private next sentence.")
         #expect(rig.poster.targetPIDs == [100, 100])
         #expect(diagnostics == [
-            "source=accessibility preceding=start continuation=no-previous-paste separator=none frontmostPID=100 focusedOwnerPID=101",
-            "source=continuation preceding=punctuation continuation=available separator=space frontmostPID=100 focusedOwnerPID=101",
+            "source=accessibility preceding=start continuation=no-previous-paste separator=none frontmostPID=100 focusedOwnerPID=100",
+            "source=continuation preceding=punctuation continuation=available separator=space frontmostPID=100 focusedOwnerPID=100",
         ])
         #expect(!diagnostics.joined().contains("Private"))
+    }
+
+    @Test func pasteIsRefusedWhenTheFocusedElementBelongsToAnotherProcess() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", element: element(100), focusedOwnerPID: 101)
+        let result = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(result.method == .clipboardOnly && result.finalText == "hello")
+        #expect(rig.poster.posts == 0)
+        #expect(rig.pasteboard.publishedText == "hello")
+    }
+
+    @Test func pasteIsRefusedWhenOwnershipChangesDuringPreparation() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", element: element(100), focusedOwnerPID: 100)
+        rig.focus.afterBeforeRead = { rig.focus.current.focusedOwnerPID = 101 }
+        let result = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(result.method == .clipboardOnly)
+        #expect(rig.poster.posts == 0)
+    }
+
+    @Test func longPasteIsRefusedWhenTheFocusedElementBelongsToAnotherProcess() async {
+        let rig = Rig(chunks: true)
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", element: element(100), focusedOwnerPID: 101)
+        let result = await rig.inserter.deliver(String(repeating: "word ", count: 600), startFocus: nil)
+        #expect(result.method == .clipboardOnly)
+        #expect(rig.poster.posts == 0)
+    }
+
+    @Test func longPasteStopsWhenOwnershipChangesBetweenParts() async {
+        let rig = Rig(chunks: true)
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", element: element(100), focusedOwnerPID: 100)
+        rig.poster.onPost = {
+            Task { @MainActor in
+                rig.pasteboard.read()
+                rig.focus.current.focusedOwnerPID = 101
+            }
+        }
+        let result = await rig.inserter.deliver(String(repeating: "word ", count: 600), startFocus: nil)
+        #expect(rig.poster.posts == 1)
+        #expect(result.outcome == .partialPaste)
+        rig.pending.runAll()
+    }
+
+    @Test func pasteProceedsWhenTheFocusedOwnerIsUnknown() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", element: element(100), focusedOwnerPID: nil)
+        let result = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(result.method == .paste)
+        #expect(rig.poster.posts == 1)
     }
 
     @Test func boundaryDiagnosticsDistinguishUnavailableAndChangedInput() async {
