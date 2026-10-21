@@ -3,6 +3,7 @@
 
 import json
 import os
+import plistlib
 from pathlib import Path
 import shutil
 import subprocess
@@ -15,6 +16,36 @@ SOURCE = Path(__file__).resolve().parent
 CONFIG_ROOT = Path.home() / ".config/omarchy"
 TARGET = CONFIG_ROOT / "plugins/dstahl.mouthtype"
 SHELL = CONFIG_ROOT / "shell.json"
+
+
+def read_versions(source=SOURCE):
+    """The plugin version from manifest.json and, when this is a repository checkout, the app version from packaging/Version.plist."""
+    plugin = app = None
+    try:
+        value = json.loads((source / "manifest.json").read_text(encoding="utf-8")).get("version")
+        plugin = value if isinstance(value, str) else None
+    except (OSError, ValueError, AttributeError):
+        pass
+    try:
+        with open(source.parent.parent / "packaging/Version.plist", "rb") as handle:
+            value = plistlib.load(handle).get("MouthtypeDisplayVersion")
+        app = value if isinstance(value, str) else None
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        pass
+    return {"plugin": plugin, "app": app}
+
+
+def write_versions(target, versions):
+    fd, temporary = tempfile.mkstemp(prefix=".version-", dir=target)
+    try:
+        with os.fdopen(fd, "w") as output:
+            json.dump(versions, output, indent=2)
+            output.write("\n")
+        os.chmod(temporary, 0o644)
+        os.replace(temporary, target / "version.json")
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
 
 
 def parse(argv):
@@ -48,6 +79,7 @@ def main(argv=None):
         os.rename(staging, TARGET)
     else:
         shutil.copytree(SOURCE, TARGET, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    write_versions(TARGET, read_versions())
     (TARGET / "control.py").chmod(0o755)
     (TARGET / "save_dialog.py").chmod(0o755)
 
