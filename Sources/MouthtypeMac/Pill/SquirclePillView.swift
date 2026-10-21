@@ -370,18 +370,20 @@ class SquirclePillView: NSView, PillSkinView {
     private func recFont() -> NSFont {
         switch flavor {
         case .matrix:
-            NSFont(name: FontRegistry.monoName, size: 9 * k) ?? .monospacedSystemFont(ofSize: 9 * k, weight: .medium)
+            FontRegistry.ensureRegistered()
+            return             NSFont(name: FontRegistry.monoName, size: 9 * k) ?? .monospacedSystemFont(ofSize: 9 * k, weight: .medium)
         case .minimal:
-            .systemFont(ofSize: 9.5 * k, weight: .semibold)
+            return .systemFont(ofSize: 9.5 * k, weight: .semibold)
         }
     }
 
     private func clockFont() -> NSFont {
         switch flavor {
         case .matrix:
-            NSFont(name: FontRegistry.monoName, size: 11 * k) ?? .monospacedSystemFont(ofSize: 11 * k, weight: .medium)
+            FontRegistry.ensureRegistered()
+            return             NSFont(name: FontRegistry.monoName, size: 11 * k) ?? .monospacedSystemFont(ofSize: 11 * k, weight: .medium)
         case .minimal:
-            .monospacedDigitSystemFont(ofSize: 12 * k, weight: .medium)
+            return .monospacedDigitSystemFont(ofSize: 12 * k, weight: .medium)
         }
     }
 
