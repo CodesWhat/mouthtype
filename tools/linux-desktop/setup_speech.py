@@ -63,7 +63,7 @@ def setup(destination, *, pins=None, download=None, run=None):
     python = str(venv / 'bin/python')
     requirements = Path(__file__).resolve().parents[1] / 'linux-engine-proof/requirements.txt'
     run([python, '-m', 'pip', 'install', '--disable-pip-version-check', '--no-input',
-         '--only-binary=:all:', '--index-url', 'https://pypi.org/simple',
+         '--only-binary=:all:', '--require-hashes', '--index-url', 'https://pypi.org/simple',
          '--timeout', '30', '--retries', '1', '-r', str(requirements)], 240)
     run([python, '-c', 'import importlib.metadata, sherpa_onnx\n'
          'if importlib.metadata.version("sherpa-onnx") != ' + repr(pins['sherpa']['version']) +
