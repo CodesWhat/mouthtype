@@ -174,6 +174,15 @@ public final class FnRemap {
         }
     }
 
+    /// Runs `terminate` from the run loop instead of inside the signal's main-queue block. NSApp.terminate with a
+    /// terminateLater reply waits in a nested loop, and a main-queue block that is still executing keeps the main queue
+    /// from running the MainActor work that answers it, so every signal quit sat until the fallback (and the fallback
+    /// is a main-queue block too). A run-loop block isn't on the queue, so the reply gets through and an idle quit is immediate.
+    static func requestQuit(_ terminate: @escaping @MainActor () -> Void) {
+        // Common modes, so a signal during NSAlert.runModal or menu tracking still reaches terminate.
+        RunLoop.main.perform(inModes: [.common]) { MainActor.assumeIsolated { terminate() } }
+    }
+
     func handleSignal(requestTermination: (@MainActor () -> Void)?, fallbackDelay: TimeInterval, hardGrace: TimeInterval = 5) {
         guard let requestTermination, !terminationRequested else {
             _ = restore()
