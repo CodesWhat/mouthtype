@@ -173,5 +173,16 @@ class InstallTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 installer.package(ROOT, output)
 
+    def test_launcher_imports_desktop_as_a_module_so_bytecode_is_cached(self):
+        with tempfile.TemporaryDirectory() as temp:
+            prefix = Path(temp) / 'local'
+            launcher = installer.install(ROOT, prefix)
+            text = launcher.read_text()
+            self.assertIn('import desktop', text)
+            self.assertNotIn('runpy', text)
+            subprocess.run([str(launcher), 'capabilities'], capture_output=True, text=True, check=True, timeout=10)
+            self.assertTrue(list((prefix / 'lib/mouthtype-linux/tools/linux-desktop/__pycache__').glob('desktop.*.pyc')))
+
+
 if __name__ == '__main__':
     unittest.main()

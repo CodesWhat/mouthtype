@@ -4,6 +4,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -139,7 +140,7 @@ class RetainedImportResultTests(unittest.TestCase):
             mock.patch.object(control, "LAUNCHER", root / "launcher"),
             mock.patch.object(control, "CONFIG", root / "linux.json"),
             mock.patch.object(control, "cli", lambda *a, **k: mock.Mock(returncode=0, stdout=json.dumps(self.status))),
-            mock.patch.object(control, "recent_dictations", lambda limit=None: []),
+            mock.patch.object(control, "recent_dictations", lambda limit=None, previews=True: []),
             mock.patch.object(control, "words_today", lambda entries: 0),
             mock.patch.object(control, "capabilities", lambda: {}),
             mock.patch.object(control, "config_summary", lambda: {}),
@@ -753,6 +754,298 @@ class CapabilitiesCacheTests(unittest.TestCase):
         self.launcher.unlink()
         self.assertEqual(control.capabilities(), {})
         self.assertEqual(self.calls, [])
+
+
+class SessionSocketTests(unittest.TestCase):
+    """Hotkey verbs talk to the service socket directly and fall back to the CLI only when it is missing."""
+
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.runtime = Path(self.directory.name)
+        patcher = mock.patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(self.runtime)})
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.cli_calls = []
+        patcher = mock.patch.object(control, "cli", self.fake_cli)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+        self.requests = []
+        self.server = None
+
+    def fake_cli(self, *args, timeout=35):
+        self.cli_calls.append(args)
+        return subprocess.CompletedProcess(args, 0, json.dumps({"state": "idle", "via": "cli"}), "")
+
+    def serve(self, reply):
+        import socket as socket_module
+        path = self.runtime / "mouthtype" / "session.sock"
+        path.parent.mkdir()
+        server = socket_module.socket(socket_module.AF_UNIX)
+        server.bind(str(path))
+        server.listen(4)
+        server.settimeout(5)
+        self.addCleanup(server.close)
+
+        def loop():
+            while True:
+                try:
+                    connection, _ = server.accept()
+                except OSError:
+                    return
+                with connection:
+                    raw = b""
+                    while not raw.endswith(b"\n"):
+                        raw += connection.recv(1024)
+                    self.requests.append(json.loads(raw))
+                    connection.sendall(json.dumps(reply).encode() + b"\n")
+        thread = threading.Thread(target=loop, daemon=True)
+        thread.start()
+        return path
+
+    def test_start_stop_toggle_cancel_status_use_the_socket_and_never_spawn_the_cli(self):
+        self.serve({"state": "recording"})
+        for verb in ("start", "stop", "toggle", "cancel", "status"):
+            self.assertEqual(control.deliver(verb)["state"], "recording")
+        self.assertEqual([r["action"] for r in self.requests], ["start", "stop", "toggle", "cancel", "status"])
+        self.assertEqual(self.cli_calls, [])
+        # Same line the CLI sends: a start carries the admission deadline.
+        self.assertIsInstance(self.requests[0]["admit_before"], float)
+
+    def test_missing_socket_falls_back_to_the_cli(self):
+        self.assertEqual(control.deliver("start")["via"], "cli")
+        self.assertEqual(self.cli_calls, [("start",)])
+
+    def test_verbs_that_need_the_cli_still_use_it(self):
+        self.serve({"state": "idle"})
+        control.deliver("transcribe", "a" * 32)
+        control.deliver("shutdown")
+        self.assertEqual(self.requests, [])
+        self.assertEqual(len(self.cli_calls), 2)
+
+    def test_stale_socket_fails_like_the_cli_without_a_second_interpreter(self):
+        import socket as socket_module
+        path = self.runtime / "mouthtype" / "session.sock"
+        path.parent.mkdir()
+        stale = socket_module.socket(socket_module.AF_UNIX)
+        stale.bind(str(path))
+        stale.close()
+        with self.assertRaises(RuntimeError):
+            control.deliver("start")
+        self.assertEqual(self.cli_calls, [])
+
+    def test_state_reads_status_from_the_socket(self):
+        self.serve({"state": "idle", "maximum_takes": 7, "file_import": None})
+        root = self.runtime / "files"
+        root.mkdir()
+        launcher, config = root / "launcher", root / "linux.json"
+        launcher.write_text("")
+        config.write_text("{}")
+        with mock.patch.object(control, "LAUNCHER", launcher), mock.patch.object(control, "CONFIG", config), \
+                mock.patch.object(control, "RECOVERY", root / "recovery"), \
+                mock.patch.object(control, "capabilities", lambda: {}):
+            report = control.state()
+        self.assertTrue(report["running"])
+        self.assertEqual(report["state"], "idle")
+        self.assertEqual(report["history"]["maximum"], 7)
+        self.assertEqual(self.cli_calls, [])
+
+    def test_loading_control_does_not_import_inspect(self):
+        script = "import sys, runpy; runpy.run_path(%r, run_name='control_probe'); print('inspect' in sys.modules)" \
+                 % str(HERE / "control.py")
+        out = subprocess.run([sys.executable, "-I", "-c", script], capture_output=True, text=True, check=True)
+        self.assertEqual(out.stdout.strip(), "False")
+
+
+def reference_recent_dictations(root, limit=5):
+    """The pre-scandir implementation, kept as the oracle the new scan must match."""
+    if not root.is_dir():
+        return []
+    takes = [p for p in root.iterdir()
+             if p.is_dir() and not p.is_symlink() and len(p.name) == 32
+             and all(c in "0123456789abcdef" for c in p.name)]
+    recent = []
+    for path in sorted(takes, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
+        transcript = path / "transcript.txt"
+        preview = ""
+        if transcript.is_file():
+            preview = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
+        recent.append({"id": path.name, "transcript": transcript.is_file(),
+                       "audio": (path / "recording.wav").is_file(),
+                       "preview": preview, "mtime": path.stat().st_mtime})
+    return recent
+
+
+class TakeScanTests(unittest.TestCase):
+    COUNT = 2000
+
+    @classmethod
+    def setUpClass(cls):
+        cls.directory = tempfile.TemporaryDirectory()
+        cls.root = Path(cls.directory.name)
+        cls.build(cls.root, cls.COUNT)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.directory.cleanup()
+
+    def setUp(self):
+        cache = tempfile.TemporaryDirectory()
+        self.addCleanup(cache.cleanup)
+        for patcher in (mock.patch.object(control, "RECOVERY", self.root),
+                        mock.patch.object(control, "created_cache_path", lambda: Path(cache.name) / "take-created.json")):
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    @staticmethod
+    def build(root, count):
+        now = time.time()
+        for index in range(count):
+            path = root / ("%032x" % index)
+            path.mkdir()
+            kind = index % 3
+            if kind != 2:
+                (path / "transcript.txt").write_text("word " * (index % 7 + 1) + "\n tail", encoding="utf-8")
+            if kind != 0:
+                (path / "recording.wav").write_bytes(b"\0" * 44)
+            stamp = now - (count - index) * 700
+            (path / "take.json").write_text(json.dumps({"created": stamp}))
+            os.utime(path, (stamp, stamp))
+        (root / "not-a-take").mkdir()
+        (root / ("f" * 32)).write_text("a file named like a take")
+        (root / ("e" * 32)).symlink_to(root / ("%032x" % 0), target_is_directory=True)
+
+    def test_matches_the_old_implementation_on_two_thousand_takes(self):
+        self.assertEqual(control.recent_dictations(limit=None), reference_recent_dictations(self.root, None))
+        self.assertEqual(control.recent_dictations(), reference_recent_dictations(self.root, 5))
+        self.assertEqual(control.recent_dictations(limit=3), reference_recent_dictations(self.root, 3))
+        old = reference_recent_dictations(self.root, None)
+        light = control.recent_dictations(limit=None, previews=False)
+        self.assertEqual([{**entry, "preview": ""} for entry in old if True][0]["id"], light[0]["id"])
+        self.assertEqual([(e["id"], e["transcript"], e["audio"], e["mtime"]) for e in light],
+                         [(e["id"], e["transcript"], e["audio"], e["mtime"]) for e in old])
+
+    def test_words_today_matches_the_old_count(self):
+        old = reference_recent_dictations(self.root, None)
+        self.assertEqual(control.words_today(), control.words_today(old))
+        self.assertGreater(control.words_today(), 0)
+
+    def test_only_the_rows_shown_have_their_transcript_read(self):
+        reads = []
+        real = Path.read_text
+        control.take_rows()  # the first poll fills the creation-time cache
+        with mock.patch.object(Path, "read_text", lambda path, *a, **k: reads.append(path) or real(path, *a, **k)):
+            control.recent_dictations(limit=5)
+            self.assertLessEqual(len([p for p in reads if p.name == "transcript.txt"]), 5)
+            self.assertFalse([path for path in reads if path.name == "take.json"], "a warm poll must not read take.json")
+            reads.clear()
+            control.recent_dictations(limit=None, previews=False)
+            self.assertEqual([p.name for p in reads], ["take-created.json"])
+
+    def test_state_reads_five_previews_not_the_whole_history(self):
+        reads = []
+        real = Path.read_text
+        files = self.root / "files"
+        files.mkdir()
+        (files / "l").write_text("")
+        (files / "c").write_text("{}")
+        with mock.patch.object(control, "LAUNCHER", files / "l"), mock.patch.object(control, "CONFIG", files / "c"), \
+                mock.patch.object(control, "session_call", lambda *a, **k: subprocess.CompletedProcess(a, 2, "", "")), \
+                mock.patch.object(control, "capabilities", lambda: {}), \
+                mock.patch.object(control, "config_summary", lambda: {}), \
+                mock.patch.object(control, "preferences", lambda: {"sounds": False, "pill": {}, "font": {}}), \
+                mock.patch.object(control, "cleanup_models", lambda: {}), \
+                mock.patch.object(control, "unit_enabled", lambda: False), \
+                mock.patch.object(control, "shortcut_mode", lambda: "off"), \
+                mock.patch.object(control, "shortcut_info", lambda: {"keys": ""}), \
+                mock.patch.object(control, "versions", lambda: {}), \
+                mock.patch.object(Path, "read_text", lambda path, *a, **k: reads.append(path) or real(path, *a, **k)):
+            report = control.state()
+        old = reference_recent_dictations(self.root, None)
+        self.assertEqual(report["history"]["takes"], len(old))
+        self.assertEqual(report["recent"], [e for e in old if e["transcript"]][:5])
+        self.assertEqual(report["saved"], [{**e, "preview": ""} for e in old if e["audio"] and not e["transcript"]])
+        self.assertEqual(report["words_today"], control.words_today(old))
+        previews = [p for p in reads if p.parent.parent == self.root and p.name == "transcript.txt"]
+        # Five previews, plus the transcripts of takes made today for the word count.
+        self.assertLessEqual(len(previews), 5 + sum(1 for e in old if e["transcript"] and time.localtime(e["mtime"]).tm_yday == time.localtime().tm_yday))
+
+    def test_latest_transcript_stops_at_the_newest_take_with_text(self):
+        newest = next(e for e in reference_recent_dictations(self.root, None) if e["transcript"])
+        checked = []
+        real = Path.is_file
+        with mock.patch.object(Path, "is_file", lambda path: checked.append(path) or real(path)), \
+                mock.patch.object(control, "recover", lambda identity: {"text": identity}):
+            self.assertEqual(control.latest_transcript(), newest["id"])
+        self.assertLessEqual(len(checked), 3)
+
+    def test_recent_dictations_order_by_creation_time_after_a_wav_is_retired(self):
+        small = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(shutil.rmtree, small)
+        now = time.time()
+        for name, created in (("a" * 32, now - 100 * 86400), ("b" * 32, now - 60), ("c" * 32, now - 120)):
+            (small / name).mkdir()
+            (small / name / "take.json").write_text(json.dumps({"created": created}))
+            (small / name / "transcript.txt").write_text(name[0] + " words")
+        (small / ("d" * 32)).mkdir()  # no take.json: falls back to its directory mtime
+        (small / ("d" * 32) / "transcript.txt").write_text("d words")
+        os.utime(small / ("d" * 32), (now - 600, now - 600))
+        # Retiring the old take's expired WAV rewrites its directory, so its mtime is the newest.
+        os.utime(small / ("a" * 32), (now + 5, now + 5))
+        with mock.patch.object(control, "RECOVERY", small):
+            order = [entry["id"][0] for entry in control.recent_dictations(limit=None)]
+            self.assertEqual(order, ["b", "c", "d", "a"])
+            self.assertEqual([e["id"][0] for e in control.recent_dictations(limit=2)], ["b", "c"])
+            # A deleted take leaves the cache; a repeat poll gives the same answer from the cache.
+            shutil.rmtree(small / ("c" * 32))
+            self.assertEqual([e["id"][0] for e in control.recent_dictations(limit=None)], ["b", "d", "a"])
+            cached = json.loads(control.created_cache_path().read_text())
+            self.assertEqual(sorted(name[0] for name in cached), ["a", "b"])
+
+    def test_a_reused_take_name_does_not_keep_the_old_creation_time(self):
+        small = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(shutil.rmtree, small)
+        now = time.time()
+        def make(name, created):
+            (small / name).mkdir()
+            (small / name / "take.json").write_text(json.dumps({"created": created}))
+            (small / name / "transcript.txt").write_text(name[0] + " words")
+        make("a" * 32, now - 1000)
+        make("b" * 32, now - 500)
+        with mock.patch.object(control, "RECOVERY", small):
+            self.assertEqual([n[0] for n, _ in control.take_rows()], ["b", "a"])
+            # The name "a" is reused by a newer take (forgotten, then a new take drew the same name).
+            shutil.rmtree(small / ("a" * 32))
+            make("a" * 32, now - 10)
+            self.assertEqual([n[0] for n, _ in control.take_rows()], ["a", "b"])
+            # Same size, same second: only the inode or mtime can tell them apart; a rewrite in place is caught too.
+            (small / ("b" * 32) / "take.json").write_text(json.dumps({"created": now + 50}))
+            self.assertEqual([n[0] for n, _ in control.take_rows()], ["b", "a"])
+
+    def test_latest_transcript_uses_creation_time_not_directory_mtime(self):
+        small = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(shutil.rmtree, small)
+        now = time.time()
+        for name, created, text in (("a" * 32, now - 100 * 86400, "old words"), ("b" * 32, now - 60, "new words")):
+            (small / name).mkdir()
+            (small / name / "take.json").write_text(json.dumps({"created": created}))
+            (small / name / "transcript.txt").write_text(text)
+        # Retiring the old take's expired WAV rewrites its directory, so its mtime is the newest.
+        os.utime(small / ("a" * 32), (now + 5, now + 5))
+        with mock.patch.object(control, "RECOVERY", small), \
+                mock.patch.object(control, "recover", lambda identity: {"text": identity}):
+            self.assertEqual(control.latest_transcript(), "b" * 32)
+
+    def test_prune_selects_targets_from_the_scan(self):
+        small = Path(tempfile.mkdtemp(dir=self.root.parent))
+        self.addCleanup(shutil.rmtree, small)
+        self.build(small, 10)
+        forgotten = []
+        with mock.patch.object(control, "RECOVERY", small), mock.patch.object(control, "cli", lambda *a, **k: forgotten.append(a[1]) or subprocess.CompletedProcess(a, 0, "", "")), \
+                mock.patch.object(control, "state", lambda: {}):
+            control.prune("keep", "4")
+        oldest = [e["id"] for e in reversed(reference_recent_dictations(small, None))][:6]
+        self.assertEqual(forgotten, oldest)
 
 
 if __name__ == "__main__":

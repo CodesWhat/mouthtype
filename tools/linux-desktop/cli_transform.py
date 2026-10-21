@@ -88,7 +88,7 @@ def run(args, context, *, stdin=None, output=None, service=None):
     service = service or TransformService(context.config, context.runtime, cancelled=cancelled,
                                           busy=lambda: service_busy(context),
                                           idle_seconds=transform_host.idle_seconds(),
-                                          hash_cache=transform._desktop().hash_cache())
+                                          hash_cache=lambda: transform._desktop().hash_cache())
     previous = {}
     if threading.current_thread() is threading.main_thread():
         for event in (signal.SIGINT, signal.SIGTERM):

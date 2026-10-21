@@ -4,6 +4,10 @@
 
 var PREVIEW_ROWS = 6
 
+// Most rows a list page builds at once. Every row is a handful of items made synchronously, so an unbounded list froze the
+// shell for seconds at 1000 entries and for tens of seconds at the 5000 a CSV import allows. "Show more" adds another batch.
+var PAGE_ROWS = 120
+
 // A reply the shell published after `before` was read. Every request stores a freshly parsed object.
 function isFresh(reply, before) {
   return reply !== undefined && reply !== null && reply !== before
@@ -41,6 +45,26 @@ function groupSpellings(entries) {
     if (entry.warning) group.warnings.push(entry.warning)
   }
   return groups
+}
+
+// The cap to use after fresh library data lands. A small expansion survives a reload or an edit so the user keeps their place;
+// a large one resets, because rebuilding every revealed row at once is the freeze the cap exists to prevent.
+function capAfterReload(shown) {
+  return shown <= PAGE_ROWS * 2 ? shown : PAGE_ROWS
+}
+
+// The groups whose written form or any heard form contains the query, case-insensitive. An empty query keeps them all.
+function filterGroups(groups, query) {
+  var needle = String(query || "").trim().toLowerCase()
+  if (needle === "") return groups
+  var found = []
+  for (var i = 0; i < groups.length; i++) {
+    var group = groups[i]
+    var hit = group.written.toLowerCase().indexOf(needle) !== -1
+    for (var j = 0; !hit && j < group.pairs.length; j++) hit = String(group.pairs[j].heard).toLowerCase().indexOf(needle) !== -1
+    if (hit) found.push(group)
+  }
+  return found
 }
 
 function oneLine(text) {

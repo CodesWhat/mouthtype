@@ -80,8 +80,12 @@ def install(source, prefix, *, destdir=None):
                 directory.chmod(0o755)
         os.rename(staging, payload)
         placed = True
-        content = ('#!/usr/bin/env python3\nimport runpy\n'
-                   'runpy.run_path(' + repr(str(runtime_prefix / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py')) + ', run_name="__main__")\n')
+        # Imported as a module, not run with runpy.run_path, so Python keeps bytecode for desktop.py and its imports.
+        content = ('#!/usr/bin/env python3\nimport os, sys\n'
+                   'SCRIPT = ' + repr(str(runtime_prefix / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py')) + '\n'
+                   'sys.path.insert(0, os.path.dirname(SCRIPT))\n'
+                   'import desktop\n'
+                   'sys.exit(desktop.main())\n')
         with launcher.open('x') as output:
             output.write(content)
         launcher.chmod(0o755)

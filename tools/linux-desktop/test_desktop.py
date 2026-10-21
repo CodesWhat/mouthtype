@@ -354,6 +354,61 @@ for line in sys.stdin:
             self.assertEqual(ran, [1])
             session.close()
 
+class LightClientTests(unittest.TestCase):
+    """The status, hotkey and capabilities paths must not pay for the service's imports."""
+    HEAVY = ('proof', 'spellings', 'phrases', 'cleanup', 'smart', 'styles', 'tone', 'imports', 'dataclasses', 'inspect')
+
+    def loaded_after(self, argv):
+        script = ('import sys; sys.path.insert(0, %r); import desktop, io, contextlib\n'
+                  'with contextlib.redirect_stdout(io.StringIO()): desktop.main(%r)\n'
+                  'print(sorted(m for m in %r if m in sys.modules))' % (str(Path(__file__).parent), argv, self.HEAVY))
+        out = subprocess.run([sys.executable, '-I', '-c', script], capture_output=True, text=True, check=True, timeout=20)
+        return out.stdout.strip().splitlines()[-1]
+
+    def test_status_loads_none_of_the_service_modules(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertEqual(self.loaded_after(['--runtime', temp, 'status']), '[]')
+        # capabilities reads the file-import limits, which pulls in the imports module and its proof dependency.
+        self.assertEqual(self.loaded_after(['capabilities']), "['imports', 'proof']")
+
+    def test_plain_verbs_take_the_light_path_and_match_the_full_parser(self):
+        import contextlib, io, desktop
+        self.assertEqual(desktop.client_verb(['--runtime', '/r', 'status']), ('status', Path('/r')))
+        self.assertEqual(desktop.client_verb(['--config', 'c', 'start'])[0], 'start')
+        for argv in (['recover', 'x'], ['status', 'extra'], ['--bogus', 'status'], ['--runtime'], []):
+            self.assertIsNone(desktop.client_verb(argv), argv)
+        with tempfile.TemporaryDirectory() as temp:
+            outputs = []
+            for argv in (['--runtime', temp, 'status'], ['--runtime=' + temp, 'status']):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    outputs.append((desktop.main(argv), json.loads(err.getvalue())['error']))
+            self.assertEqual(outputs, [(2, 'unavailable')] * 2)
+
+    def test_public_names_still_resolve_lazily(self):
+        import desktop
+        self.assertTrue(issubclass(desktop.ClipboardTooLarge, desktop.PhraseContextUnavailable))
+        for name in ('Stopped', 'Worker', 'verify_artifacts', 'load_spellings', 'load_phrases', 'BasicCleanup',
+                     'FileError', 'FileTranscription', 'smart', 'style_contexts', 'tone_stage', 'imports'):
+            self.assertTrue(hasattr(desktop, name), name)
+        self.assertEqual(desktop.CAPABILITIES['interface'], desktop.INTERFACE)
+        with self.assertRaises(AttributeError):
+            desktop.not_a_name
+
+    def test_cli_context_is_immutable_and_keeps_its_fields(self):
+        from desktop import CliContext
+        context = CliContext(config=1, recovery=2, imports=3, runtime=4, socket=5, request=6)
+        self.assertEqual((context.config, context.recovery, context.imports, context.runtime, context.socket, context.request),
+                         (1, 2, 3, 4, 5, 6))
+        with self.assertRaises(AttributeError):
+            context.config = 9
+
+    def test_session_client_is_the_one_protocol_implementation(self):
+        import desktop, session_client
+        self.assertIs(desktop.request, session_client.request)
+        self.assertIs(desktop.read_message, session_client.read_message)
+
+
 class RecoveryTests(unittest.TestCase):
     def test_recovery_is_explicit_read_only_and_never_delivers(self):
         from desktop import recovery_result, recovery_list
@@ -720,6 +775,9 @@ class PasteDeliveryTests(unittest.TestCase):
                 return type('Result', (), {'stdout': json.dumps({'locked': False})})()
             if argv[-1] == 'activewindow':
                 return type('Result', (), {'stdout': json.dumps({**target, 'title': 'private'})})()
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                # Hyprland answers a dispatch it can't run with an explicit error, which is what allows the wtype fallback.
+                return type('Result', (), {'returncode': 1, 'stdout': '', 'stderr': 'error: no dispatcher'})()
             return type('Result', (), {'returncode': 0})()
         delivery = HyprlandDelivery({'mode': 'paste', 'allow_unknown_secure_field': True, **config}, run=run)
         delivery.settle_seconds = 0
@@ -999,6 +1057,218 @@ class RetentionTests(unittest.TestCase):
         os.utime(path / 'recording.wav', (stamp, stamp))
         return path
 
+    def owned_elsewhere(self, session):
+        """True when another thread cannot take the session lock right now."""
+        free = []
+        def attempt():
+            got = session.lock.acquire(blocking=False)
+            free.append(got)
+            if got:
+                session.lock.release()
+        probe = threading.Thread(target=attempt)
+        probe.start()
+        probe.join()
+        return not free[0]
+
+    def test_take_count_matches_the_directory_walk_on_two_thousand_takes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index in range(2000):
+                (root / ('%032x' % index)).mkdir(mode=0o700)
+            (root / 'stray.txt').write_text('x')
+            (root / 'link').symlink_to(root / ('%032x' % 1), target_is_directory=True)
+            session = Session(Capture(), Engine(), Delivery(), root)
+            try:
+                old = sum(1 for path in root.iterdir() if path.is_dir() and not path.is_symlink())
+                self.assertEqual(old, 2000)
+                self.assertEqual(session.take_count(), old)
+            finally:
+                session.close()
+
+    def test_prune_walks_outside_the_lock_and_deletes_inside_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, name in enumerate('abcd'):
+                self.take(root, name, age_days=10 - index)
+            session = Session(Capture(), Engine(), Delivery(), root, history_keep=2)
+            walking, deleting = [], []
+            real_time, real_rmdir = Session.known_take_time, Path.rmdir
+            def known_take_time(owner, path):
+                walking.append(self.owned_elsewhere(session))
+                return real_time(owner, path)
+            def rmdir(path):
+                deleting.append(session.lock._is_owned())
+                return real_rmdir(path)
+            try:
+                with unittest.mock.patch.object(Session, 'known_take_time', known_take_time), \
+                        unittest.mock.patch.object(Path, 'rmdir', rmdir):
+                    self.assertEqual(session.prune_history(), 2)
+            finally:
+                session.close()
+            self.assertEqual(walking, [False] * 4)
+            self.assertEqual(deleting, [True, True])
+            self.assertEqual(sorted(path.name[0] for path in root.iterdir()), ['c', 'd'])
+
+    def test_prune_remembers_take_times_between_runs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, name in enumerate('abc'):
+                self.take(root, name, age_days=10 - index)
+            session = Session(Capture(), Engine(), Delivery(), root, history_keep=5)
+            reads = []
+            real = Session.take_time
+            try:
+                with unittest.mock.patch.object(Session, 'take_time', staticmethod(lambda path: reads.append(path) or real(path))):
+                    session.prune_history()
+                    session.prune_history()
+            finally:
+                session.close()
+            self.assertEqual(len(reads), 3)
+
+    def test_retire_walks_outside_the_lock_and_deletes_inside_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old = self.take(root, 'a', age_days=100)
+            self.take(root, 'b', age_days=1)
+            session = Session(Capture(), Engine(), Delivery(), root, audio_days=90)
+            walking, deleting = [], []
+            real_is_file, real_unlink = Path.is_file, Path.unlink
+            def is_file(path):
+                walking.append(self.owned_elsewhere(session))
+                return real_is_file(path)
+            def unlink(path, *args, **kwargs):
+                deleting.append(session.lock._is_owned())
+                return real_unlink(path, *args, **kwargs)
+            try:
+                with unittest.mock.patch.object(Path, 'is_file', is_file), unittest.mock.patch.object(Path, 'unlink', unlink):
+                    self.assertEqual(session.retire_completed_audio(), 1)
+            finally:
+                session.close()
+            self.assertTrue(walking and not any(walking))
+            self.assertEqual(deleting, [True])
+            self.assertFalse((old / 'recording.wav').exists())
+
+    def test_audio_walk_is_throttled_to_every_n_takes_but_pruning_is_not(self):
+        with tempfile.TemporaryDirectory() as temp:
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), history_keep=3)
+            retired, pruned = [], []
+            session.retire_completed_audio = lambda now=None: retired.append(1) or 0
+            session.prune_history = lambda: pruned.append(1) or 0
+            try:
+                for _ in range(session.HOUSEKEEPING_TAKES):
+                    session.housekeep()
+                # The first take after startup walks the audio; the next walk waits for a full interval of takes.
+                self.assertEqual((len(retired), len(pruned)), (1, session.HOUSEKEEPING_TAKES))
+                session.housekeep()
+                self.assertEqual((len(retired), len(pruned)), (2, session.HOUSEKEEPING_TAKES + 1))
+                session.housekeep(force=True)
+                self.assertEqual(len(retired), 3)
+            finally:
+                session.close()
+
+    def test_first_start_waits_for_startup_pruning_instead_of_answering_recovery_full(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'recovery'
+            root.mkdir(mode=0o700)
+            for index in range(4):
+                take = root / ('%032x' % index)
+                take.mkdir(mode=0o700)
+                (take / 'take.json').write_text(json.dumps({'created': 1000 + index}))
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=4, history_keep=2)
+            real = session.prune_history
+            def slow_prune():
+                time.sleep(.4)
+                return real()
+            session.prune_history = slow_prune
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={
+                'lifetime_seconds': 5, 'startup': lambda: session.housekeep(force=True)})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'start')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                self.assertNotEqual(reply.get('error'), 'recovery_full', reply)
+                self.assertEqual(reply['state'], 'recording')
+            finally:
+                stopped.set()
+                thread.join(4)
+                session.close()
+
+    def test_stop_and_toggle_to_stop_never_wait_for_startup_pruning(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'recovery'
+            root.mkdir(mode=0o700)
+            for index in range(2):
+                take = root / ('%032x' % index)
+                take.mkdir(mode=0o700)
+                (take / 'take.json').write_text(json.dumps({'created': 1000 + index}))
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=3, history_keep=2)
+            real = session.prune_history
+            def slow_prune():
+                time.sleep(1.2)
+                return real()
+            session.prune_history = slow_prune
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={
+                'lifetime_seconds': 6, 'startup': lambda: session.housekeep(force=True)})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'start')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                self.assertEqual(reply['state'], 'recording')
+                # The new take fills the store while the prune is still running.
+                self.assertEqual(session.take_count(), 3)
+                begun = time.monotonic()
+                self.assertEqual(request(path, 'toggle')['state'], 'transcribing')
+                self.assertLess(time.monotonic() - begun, .6)
+            finally:
+                stopped.set()
+                thread.join(5)
+                session.close()
+
+    def test_serve_binds_the_socket_before_startup_maintenance_runs(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
+            seen, release = [], threading.Event()
+            def startup():
+                seen.append(path.exists())
+                release.wait(3)
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 3, 'startup': startup})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'status')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                # Maintenance is still blocked, yet the daemon already answers.
+                self.assertEqual(reply['state'], 'idle')
+                self.assertEqual(seen, [True])
+            finally:
+                release.set()
+                stopped.set()
+                thread.join(4)
+                session.close()
+
     def test_cap_is_configurable_and_reported(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1147,16 +1417,15 @@ class RetentionTests(unittest.TestCase):
                 except ValueError:
                     results.append('rejected')
             thread = threading.Thread(target=retry)
-            real = Path.iterdir
-            def iterdir(path):
-                found = list(real(path))
-                if path == root and not thread.ident:
-                    # The retry arrives after the take list is built but before anything is deleted.
+            real = Session.known_take_time
+            def known_take_time(owner, path):
+                if not thread.ident:
+                    # The retry arrives after the walk started but before anything is deleted.
                     thread.start()
                     thread.join(.2)
-                return iter(found)
+                return real(owner, path)
             try:
-                with unittest.mock.patch.object(Path, 'iterdir', iterdir):
+                with unittest.mock.patch.object(Session, 'known_take_time', known_take_time):
                     session.prune_history()
                 thread.join(2)
                 if results == ['accepted']:

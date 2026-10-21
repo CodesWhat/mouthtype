@@ -202,7 +202,7 @@ TestCase {
 
   readonly property var scenes: ["dictionary-list", "dictionary-empty", "dictionary-problem", "dictionary-restart", "dictionary-new-word", "dictionary-edit-word",
     "dictionary-word-error", "dictionary-import-start", "dictionary-import-valid", "dictionary-import-invalid", "dictionary-import-many",
-    "dictionary-import-many-invalid", "dictionary-import-problem", "dictionary-long", "transforms-list", "transforms-bottom", "transforms-empty", "transforms-model-absent",
+    "dictionary-import-many-invalid", "dictionary-import-problem", "dictionary-long", "dictionary-capped", "dictionary-search", "transforms-list", "transforms-bottom", "transforms-empty", "transforms-model-absent",
     "transforms-sheet-new", "transforms-sheet-edit-long", "transforms-sheet-clipboard", "transforms-sheet-error"]
 
   function test_render_data() {
@@ -259,6 +259,19 @@ TestCase {
         bigMap["spellings-list"] = function() { return longList }
         openDictionary(bigMap, data.dark)
         scrollToEnd()
+        break
+      case "dictionary-capped":
+        p = openDictionary(lists("spellings-empty", "phrases-list", "ready"), data.dark)
+        p.library = bigSpellings(1000)
+        wait(60)
+        scrollToEnd()
+        break
+      case "dictionary-search":
+        p = openDictionary(lists("spellings-empty", "phrases-list", "ready"), data.dark)
+        p.library = bigSpellings(1000)
+        wait(60)
+        p.query = "written12"
+        wait(60)
         break
       case "transforms-list": openTransforms(lists("spellings-list", "phrases-list", "ready"), data.dark); break
       case "transforms-bottom": openTransforms(lists("spellings-list", "phrases-list", "ready"), data.dark); scrollToEnd(); break
@@ -641,5 +654,115 @@ TestCase {
     compare(p.importPath, "~/a.csv")
     wait(60)
     verify(!button("Import 3 spellings").enabled, "a preview for ~/a.csv cannot import ~/b.csv")
+  }
+
+  // -- Row cap
+
+  function bigSpellings(n) {
+    var big = copy(fixture("spellings-empty"))
+    big.entries = []
+    for (var k = 0; k < n; k++) {
+      big.entries.push({ heard: "heard " + k, written: "Written" + k, starred: k % 7 === 0, warning: null })
+      if (k % 3 === 0) big.entries.push({ heard: "also heard " + k, written: "Written" + k, starred: false, warning: null })
+    }
+    big.count = big.entries.length
+    return big
+  }
+
+  function bigPhrases(n) {
+    var big = copy(fixture("phrases-empty"))
+    big.entries = []
+    for (var k = 0; k < n; k++) big.entries.push({ trigger: "phrase " + k, expansion: "expansion " + k })
+    big.count = big.entries.length
+    return big
+  }
+
+  function wordRows() { return findAll(function(t) { return t.group !== undefined && t.editRequested !== undefined }).length }
+  function phraseRows() { return findAll(function(t) { return t.entry !== undefined && t.activated !== undefined && t.first !== undefined }).length }
+
+  function test_row_create_time_data() { return [{ tag: "100", n: 100 }, { tag: "1000", n: 1000 }, { tag: "5000", n: 5000 }] }
+
+  function test_row_create_time(data) {
+    var p = openDictionary(lists("spellings-empty", "phrases-list", "ready"), false)
+    var big = bigSpellings(data.n)
+    var started = Date.now()
+    p.library = big
+    var ms = Date.now() - started
+    console.log("PERF dictionary " + data.n + " entries: " + ms + " ms, " + wordRows() + " rows")
+    verify(wordRows() <= 120, "dictionary built " + wordRows() + " rows for " + data.n + " entries")
+  }
+
+  function test_phrase_row_create_time_data() { return test_row_create_time_data() }
+
+  function test_phrase_row_create_time(data) {
+    var p = openTransforms(lists("spellings-list", "phrases-empty", "ready"), false)
+    var started = Date.now()
+    p.library = bigPhrases(data.n)
+    var ms = Date.now() - started
+    console.log("PERF transforms " + data.n + " entries: " + ms + " ms, " + phraseRows() + " rows")
+    verify(phraseRows() <= 120, "transforms built " + phraseRows() + " rows for " + data.n + " entries")
+  }
+
+  function test_search_filters_and_show_more_adds_a_batch() {
+    var p = openDictionary(lists("spellings-empty", "phrases-list", "ready"), false)
+    p.library = bigSpellings(300)
+    wait(30)
+    compare(wordRows(), 120)
+    verify(hasText("Show more"))
+    verify(hasText("120 of 180 more"))
+    p.shown += Model.PAGE_ROWS
+    wait(30)
+    compare(wordRows(), 240)
+    var box = field("Search 400 words")
+    verify(box !== null, "search field not found")
+    box.text = "ALSO HEARD 297"
+    wait(30)
+    compare(p.groups.length, 1, "a heard form matches case-insensitively")
+    compare(wordRows(), 1)
+    verify(findText("Show more") === null)
+    box.text = "no such word"
+    wait(30)
+    verify(hasText("No matches"))
+    box.text = ""
+    wait(30)
+    compare(wordRows(), 120, "clearing the search resets the cap")
+  }
+
+  function test_transforms_cap_and_show_more() {
+    var p = openTransforms(lists("spellings-list", "phrases-empty", "ready"), false)
+    p.library = bigPhrases(300)
+    wait(30)
+    compare(phraseRows(), 120)
+    p.shown += Model.PAGE_ROWS
+    wait(30)
+    compare(phraseRows(), 240)
+  }
+
+  function test_a_reload_resets_a_large_expansion_and_keeps_a_small_one() {
+    var p = openDictionary(lists("spellings-empty", "phrases-list", "ready"), false)
+    var big = bigSpellings(600)
+    p.absorb(big)
+    p.shown = 360
+    wait(30)
+    compare(wordRows(), 360)
+    p.absorb(copy(big))
+    wait(30)
+    compare(wordRows(), 120, "a reload after a large expansion drops back to the cap")
+    p.shown = 240
+    p.absorb(copy(big))
+    wait(30)
+    compare(wordRows(), 240, "a small expansion keeps its place")
+  }
+
+  function test_transforms_reload_resets_a_large_expansion() {
+    var big = bigPhrases(600)
+    var map = lists("spellings-list", "phrases-empty", "ready")
+    map["phrases-list"] = function() { return big }
+    var p = openTransforms(map, false)
+    p.shown = 360
+    wait(30)
+    compare(phraseRows(), 360)
+    p.refresh()
+    tryVerify(function() { return phraseRows() === 120 }, 3000, "reload did not reset the cap")
   }
 }

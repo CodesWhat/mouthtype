@@ -23,7 +23,6 @@ import uuid
 from pathlib import Path
 
 from cleanup import BasicCleanup
-import transform_host
 from vendor.grapheme import graphemes
 
 INTERFACE = 1
@@ -426,6 +425,12 @@ class TransformService:
 
     # -- transform
 
+    def _hash_cache(self):
+        """The hash cache, built on first use when given as a factory, so only the model path pays for it."""
+        if callable(self.hash_cache):
+            self.hash_cache = self.hash_cache()
+        return self.hash_cache
+
     def _model(self, kind, text, settings):
         """Model text, or None when interrupted. Raises RuntimeError, ValueError or OSError on a model fault."""
         desktop = _desktop()
@@ -449,7 +454,7 @@ class TransformService:
                     self._ensure_loaded(cancelled)
 
         engine = Engine(settings, worker=self.worker or Path(__file__).with_name('transform_worker.py'),
-                        startup_seconds=self.load_seconds, hash_cache=self.hash_cache)
+                        startup_seconds=self.load_seconds, hash_cache=self._hash_cache())
         box = {}
 
         def work():
@@ -527,9 +532,10 @@ class TransformService:
 
     def _model_resident(self, kind, text, settings, seconds):
         """Same contract as _model, served by the resident host so the hash, the load and the warm server are shared."""
+        import transform_host
         command = transform_host.host_command(
             self.runtime, worker=self.worker or Path(__file__).with_name('transform_worker.py'),
-            idle=self.idle_seconds, load_seconds=self.load_seconds, hash_cache=self.hash_cache)
+            idle=self.idle_seconds, load_seconds=self.load_seconds, hash_cache=self._hash_cache())
         reply = transform_host.ask(self.runtime, {'settings': settings, 'kind': kind, 'text': text, 'seconds': seconds},
                                    self.cancelled, command=command, seconds=self.load_seconds + seconds + 10)
         if reply is None or reply.get('timeout'):
