@@ -28,6 +28,7 @@ Item {
   readonly property bool enabled: pillPrefs.enabled !== false
   readonly property string skin: pillPrefs.skin === "hifi" ? "hifi" : "classic"
   readonly property int hifiScale: pillPrefs.size === 2 ? 2 : 1
+  readonly property string cardStyle: pillPrefs.card === "minimal" ? "minimal" : "classic"
   property string deliveryMode: "recover"
 
   // Controller state: hidden, recording, processing, message.
@@ -190,6 +191,7 @@ Item {
   // Floating windows owned by later slices load only once their file exists, so a build without them stays quiet.
   FileView {
     path: root.plugin + "/TransformWindow.qml"
+    printErrors: false
     onLoaded: transformWindow.active = true
   }
   Loader {

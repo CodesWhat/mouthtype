@@ -67,9 +67,8 @@ def hue(c):
 
 
 def bodies(p):
-    """The card body at its top and bottom, composited over the worst page: black for dark cards, white for light."""
-    page = (0, 0, 0) if p["dark"] else (255, 255, 255)
-    return [over(rgb(p[k]), p["bodyAlpha"], page) for k in ("bodyTop", "bodyBottom")]
+    """The card body at its top and bottom, over both black and white: a translucent body shifts with what is behind it."""
+    return [over(rgb(p[k]), p["bodyAlpha"], page) for k in ("bodyTop", "bodyBottom") for page in ((0, 0, 0), (255, 255, 255))]
 
 
 STATES = ((False, False), (True, False), (False, True))
