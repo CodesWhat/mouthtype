@@ -2,137 +2,198 @@ import AppKit
 import SwiftUI
 import MouthtypeCore
 
-/// The Transforms page body: one card listing every saved phrase with its kind, plus the built-in Clean Selected Text row. A phrase
-/// opens in a sheet for editing, so the draft, save, cancel and delete rules are the editor's own.
+/// The Transforms page body: a "When you say" card with one row per saved phrase and a New transform row, then an "On selected text"
+/// card that lists the menu bar transforms. A phrase row opens the sheet, so the draft, save, cancel and delete rules are the editor's own.
+/// Long text clips to one line with a fade at the edge, never an ellipsis.
 struct PhraseEditorView: View {
     @Bindable var editor: PhraseEditor
-    @State private var query = ""
+    /// The Thorough model's state, for the status on each AI transform. Nil where the page is built without a model, as in most tests.
+    var cleaner: (any CleanupModelManaging)?
     @State private var sheetOpen = false
 
-    private static let kindColumn: CGFloat = 112
-    private static let triggerColumn: CGFloat = 168
+    private static let triggerColumn: CGFloat = 150
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            toolbar
             if let error = editor.error, editor.loadFailed {
-                Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.red).font(DesignFont.sans(DesignFont.detail))
-                    .fixedSize(horizontal: false, vertical: true)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Label(error, systemImage: "exclamationmark.circle").foregroundStyle(DesignPalette.danger)
+                        .font(DesignFont.sans(DesignFont.detail)).fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                    Button("Reload") { editor.reload() }.buttonStyle(.designSecondary).accessibilityLabel("Reload transform library")
+                }
             }
-            list
-            Text("Works with Basic, Fast and Thorough. Cleanup Off leaves your words unchanged.")
-                .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-                .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
+            whenYouSay
+            onSelectedText
         }
         .sheet(isPresented: $sheetOpen, onDismiss: { editor.cancel() }) {
             PhraseFormSheet(editor: editor) { sheetOpen = false }
         }
     }
 
-    // MARK: Toolbar
+    // MARK: When you say
 
-    private var toolbar: some View {
-        HStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Image(systemName: "magnifyingglass").foregroundStyle(DesignPalette.ink3).accessibilityHidden(true)
-                TextField("Search \(editor.items.count) phrases", text: $query).textFieldStyle(.plain)
-                    .font(DesignFont.sans(DesignFont.body)).accessibilityLabel("Search phrases").accessibilityIdentifier("phrase-search")
-            }
-            .padding(.horizontal, 10).frame(height: 32)
-            .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.surface))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignPalette.hair, lineWidth: 1))
-            Button("Reload Library") { editor.reload() }.buttonStyle(.designSecondary).disabled(editor.isDirty)
-                .accessibilityLabel("Reload phrase library")
-            Button { editor.newPhrase(); sheetOpen = true } label: { Label("New phrase", systemImage: "plus") }
-                .buttonStyle(.designPrimary).disabled(editor.isDirty || editor.loadFailed)
-                .accessibilityLabel("New phrase").accessibilityIdentifier("phrase-new")
+    private var whenYouSay: some View {
+        DesignSection(eyebrow: "When you say") {
+            ForEach(editor.items, id: \.trigger) { phrase in phraseRow(phrase) }
+            addRow
         }
-    }
-
-    // MARK: List
-
-    private var list: some View {
-        let phrases = editor.matching(query)
-        return VStack(spacing: 0) {
-            header
-            DesignHairline()
-            cleanSelectionRow
-            if editor.items.isEmpty {
-                DesignHairline()
-                Text("Your library starts here. Add an email address, a signature, or text you use often.")
-                    .font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
-                    .fixedSize(horizontal: false, vertical: true).padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            } else if phrases.isEmpty {
-                DesignHairline()
-                Text("No phrases match “\(query)”.").font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
-                    .fixedSize(horizontal: false, vertical: true).padding(16).frame(maxWidth: .infinity, alignment: .leading)
-            }
-            ForEach(phrases, id: \.trigger) { phrase in
-                DesignHairline()
-                phraseRow(phrase)
-            }
-        }
-        .background(RoundedRectangle(cornerRadius: 12).fill(DesignPalette.surface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(DesignPalette.hair2, lineWidth: 1))
-    }
-
-    private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text("Kind").frame(width: Self.kindColumn, alignment: .leading)
-            Text("When I say").frame(width: Self.triggerColumn, alignment: .leading)
-            Text("Inserts").frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .designEyebrow().fixedSize(horizontal: false, vertical: true).padding(.horizontal, 16).padding(.vertical, 8)
-        .accessibilityHidden(true)
-    }
-
-    private func kindBadge(_ kind: TransformKind) -> some View {
-        Text(kind.title).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink)
-            .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(RoundedRectangle(cornerRadius: 5).fill(kind == .text ? DesignPalette.sel : DesignPalette.track))
-            .fixedSize()
-            .frame(width: Self.kindColumn, alignment: .leading)
     }
 
     private func phraseRow(_ phrase: Snippet) -> some View {
         let kind = TransformKind.of(phrase)
+        let result = Self.display(phrase.expansion)
         return Button {
             editor.select(phrase)
             sheetOpen = true
         } label: {
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                kindBadge(kind)
-                Text(phrase.trigger).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
-                    .fixedSize(horizontal: false, vertical: true).frame(width: Self.triggerColumn, alignment: .leading)
-                Text(phrase.expansion).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink2)
-                    .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 12) {
+                Color.clear.frame(width: Self.triggerColumn, height: 22).overlay(alignment: .leading) {
+                    Text(phrase.trigger).font(DesignFont.mono(DesignFont.caption)).foregroundStyle(DesignPalette.ink)
+                        .lineLimit(1).fixedSize()
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(RoundedRectangle(cornerRadius: 5).fill(DesignPalette.c0))
+                }
+                .clipped().fadeEdge()
+                Image(systemName: "arrow.right").font(.system(size: 10, weight: .medium)).foregroundStyle(DesignPalette.ink3)
+                    .frame(width: 14).accessibilityHidden(true)
+                Color.clear.frame(maxWidth: .infinity, minHeight: 20, maxHeight: 20).overlay(alignment: .leading) {
+                    Text(result.text).font(result.placeholder ? DesignFont.sans(DesignFont.body).italic() : DesignFont.sans(DesignFont.body))
+                        .foregroundStyle(result.placeholder ? DesignPalette.ink2 : DesignPalette.ink)
+                        .lineLimit(1).fixedSize()
+                }
+                .clipped().fadeEdge()
+                Text(kind.title).font(DesignFont.mono(9)).tracking(0.9).foregroundStyle(DesignPalette.ink3).fixedSize()
+                Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
+                    .frame(width: 12).accessibilityHidden(true)
             }
-            .padding(.horizontal, 16).padding(.vertical, 10).frame(minHeight: 40)
+            .padding(.leading, 14).padding(.trailing, 12).frame(height: 42)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain).disabled(editor.isDirty)
-        .accessibilityLabel("Edit phrase \(phrase.trigger), \(kind.title)")
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Edit transform \(phrase.trigger), \(kind.title.lowercased())")
         .accessibilityHint(phrase.expansion)
+        .accessibilityAddTraits(.isButton)
     }
 
-    /// Clean Selected Text is a menu bar action with no shortcut of its own. It has to stay informational here: opening it from
-    /// this window would make Mouthtype the frontmost app, and it cleans whatever is selected in the app you were using.
-    private var cleanSelectionRow: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            kindBadge(.cleanSelection)
-            Text("Clean Selected Text…").font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
-                .fixedSize(horizontal: false, vertical: true).frame(width: Self.triggerColumn, alignment: .leading)
-            Text("Select text in any app, then choose Clean Selected Text… from the Mouthtype menu bar item. You review a preview before it replaces anything.")
-                .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
-                .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+    private var addRow: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if editor.items.isEmpty {
+                Text("Nothing saved yet. Add an email address, a signature, or text you use often.")
+                    .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                    .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 4)
+            }
+            HStack(spacing: 8) {
+                Button { editor.newPhrase(); sheetOpen = true } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(DesignPalette.accentText)
+                            .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.accentSoft))
+                            .accessibilityHidden(true)
+                        Text("New transform").font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.accentText)
+                    }
+                    .padding(.leading, 6).padding(.trailing, 10).frame(height: 32).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain).disabled(editor.isDirty || editor.loadFailed)
+                .accessibilityLabel("New transform").accessibilityIdentifier("phrase-new")
+                Spacer(minLength: 8)
+                Text("Whole phrases, any capitalization. Works at every cleanup level except Off.")
+                    .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
+                    .fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.trailing).padding(.trailing, 6)
+            }
+            .padding(.leading, 8).padding(.trailing, 10).padding(.vertical, 5)
         }
-        .padding(.horizontal, 16).padding(.vertical, 10).frame(minHeight: 40)
-        .accessibilityElement(children: .combine)
-        .accessibilityIdentifier("transform-clean-selection")
+    }
+
+    /// What a row shows for the typed text. A body that is only a placeholder reads as a description in italics, and line breaks show as ⏎.
+    static func display(_ expansion: String) -> (text: String, placeholder: Bool) {
+        switch expansion.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "{clipboard}": return ("Whatever you copied before you started talking", true)
+        case "{date}": return ("Today\u{2019}s date, like \(Date.now.formatted(date: .abbreviated, time: .omitted))", true)
+        default:
+            let lines = expansion.split(omittingEmptySubsequences: true, whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
+            return (lines.joined(separator: " \u{23CE} "), false)
+        }
+    }
+
+    // MARK: On selected text
+
+    private struct MenuTransform: Identifiable {
+        let id: String
+        let title: String
+        let detail: String
+        let usesModel: Bool
+    }
+
+    private static let menuTransforms = [
+        MenuTransform(id: "cleanUp", title: "Clean up", detail: "Fillers and spoken commands out. Names and numbers untouched.", usesModel: false),
+        MenuTransform(id: TextTransform.fixGrammar.rawValue, title: "Fix grammar", detail: "Grammar, spelling and punctuation. Your wording stays.", usesModel: true),
+        MenuTransform(id: TextTransform.shorter.rawValue, title: "Make shorter", detail: "Cuts words that add nothing. Keeps every fact and name.", usesModel: true),
+        MenuTransform(id: TextTransform.moreFormal.rawValue, title: "More formal", detail: "No slang, no contractions, complete sentences.", usesModel: true),
+        MenuTransform(id: TextTransform.moreCasual.rawValue, title: "More casual", detail: "Contractions and plain words.", usesModel: true),
+    ]
+
+    /// Why the AI transforms can't run, or nil when the model is ready (or the page has no model to ask).
+    private var unavailableReason: String? {
+        guard let cleaner else { return nil }
+        return TransformAvailability.reason(for: cleaner.state, modelName: cleaner.modelName)
+    }
+
+    private var onSelectedText: some View {
+        DesignSection(eyebrow: "On selected text \u{00B7} from the menu bar",
+            footer: "Select text in any app, then choose Transform Selection from the menu bar. You review the result before anything is replaced."
+                + (unavailableReason.map { " \($0)" } ?? "")) {
+            ForEach(Self.menuTransforms) { transform in
+                HStack(alignment: .center, spacing: 12) {
+                    Text(transform.title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
+                        .fixedSize(horizontal: false, vertical: true).frame(width: Self.triggerColumn, alignment: .leading)
+                    Text(transform.detail).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading)
+                    status(transform)
+                }
+                .padding(.leading, 14).padding(.trailing, 12).padding(.vertical, 6).frame(minHeight: 42)
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("transform-" + transform.id)
+            }
+        }
+    }
+
+    @ViewBuilder private func status(_ transform: MenuTransform) -> some View {
+        if !transform.usesModel {
+            Text("NO MODEL \u{00B7} INSTANT").font(DesignFont.mono(9.5)).tracking(0.95).foregroundStyle(DesignPalette.ink3).fixedSize()
+        } else if let cleaner {
+            let ready = TransformAvailability.reason(for: cleaner.state, modelName: cleaner.modelName) == nil
+            HStack(spacing: 5) {
+                Circle().fill(ready ? DesignPalette.accent : DesignPalette.orange).frame(width: 6, height: 6).accessibilityHidden(true)
+                Text("THOROUGH \u{00B7} \(Self.stateWord(cleaner.state))").font(DesignFont.mono(9.5)).tracking(0.95)
+                    .foregroundStyle(DesignPalette.ink3).fixedSize()
+            }
+        } else {
+            Text("NEEDS THOROUGH").font(DesignFont.mono(9.5)).tracking(0.95).foregroundStyle(DesignPalette.ink3).fixedSize()
+        }
+    }
+
+    private static func stateWord(_ state: CleanerState) -> String {
+        switch state {
+        case .absent: "NOT DOWNLOADED"
+        case let .downloading(fraction): "DOWNLOADING \(Int(min(max(fraction, 0), 1) * 100))%"
+        case .failed: "UNAVAILABLE"
+        case .loading, .unloaded, .ready: "READY"
+        }
     }
 }
 
-/// The New phrase and Edit phrase sheet.
+private extension View {
+    /// Fades the last 24 pt to nothing so a clipped line reads as continuing rather than cut off.
+    func fadeEdge() -> some View {
+        mask(HStack(spacing: 0) {
+            Rectangle()
+            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 24)
+        })
+    }
+}
+
+/// The New transform and Edit transform sheet.
 struct PhraseFormSheet: View {
     @Bindable var editor: PhraseEditor
     var close: () -> Void
@@ -141,46 +202,50 @@ struct PhraseFormSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text(editor.original == nil ? "New phrase" : "Edit phrase").designEyebrow()
+                Text(editor.original == nil ? "New transform" : "Edit transform").designEyebrow()
                 Spacer()
                 if editor.isDirty { Text("Unsaved changes").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2) }
                 DesignCloseButton(label: "Close without saving") { editor.cancel(); close() }
                     .keyboardShortcut(.cancelAction).accessibilityIdentifier("phrase-close")
             }
-            Text("Save a phrase.").font(DesignFont.serif(24)).foregroundStyle(DesignPalette.ink)
+            Text("Save a transform.").font(DesignFont.serif(24)).foregroundStyle(DesignPalette.ink)
                 .accessibilityAddTraits(.isHeader)
-            field("When I say", note: "Matches whole phrases, regardless of capitalization.") {
+            field("When you say", note: "Matches the whole phrase, any capitalization.") {
                 TextField("For example, my work email", text: $editor.trigger).textFieldStyle(.plain)
                     .font(DesignFont.sans(14)).padding(.horizontal, 12).frame(height: 34)
                     .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.surface))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignPalette.hair, lineWidth: 1))
-                    .accessibilityLabel("When I say").accessibilityIdentifier("phrase-trigger")
+                    .accessibilityLabel("When you say").accessibilityIdentifier("phrase-trigger")
             }
-            field("Insert", note: "{date} uses today’s date. {clipboard} uses the clipboard text captured for this dictation, or nothing if it’s empty.") {
-                VStack(alignment: .leading, spacing: 8) {
-                    TextEditor(text: $editor.expansion).scrollContentBackground(.hidden)
-                        .font(DesignFont.mono(12)).padding(6).frame(height: 130)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.surface))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignPalette.hair, lineWidth: 1))
-                        .accessibilityLabel("Replacement text").accessibilityIdentifier("phrase-expansion")
-                    HStack(spacing: 8) {
-                        Button("Add Date") { editor.expansion += "{date}" }.buttonStyle(.designSecondary)
-                        Button("Add Clipboard") { editor.expansion += "{clipboard}" }.buttonStyle(.designSecondary)
-                    }
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Type instead").font(DesignFont.sans(DesignFont.detail, .medium)).foregroundStyle(DesignPalette.ink)
+                TextEditor(text: $editor.expansion).scrollContentBackground(.hidden)
+                    .font(DesignFont.mono(12.5)).lineSpacing(3).padding(6).frame(height: 96)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.surface))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignPalette.hair, lineWidth: 1))
+                    .accessibilityLabel("Type instead").accessibilityIdentifier("phrase-expansion")
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Button("+ Date") { editor.expansion += "{date}" }.buttonStyle(.designSecondary)
+                        .accessibilityLabel("Insert date placeholder")
+                    Button("+ Clipboard") { editor.expansion += "{clipboard}" }.buttonStyle(.designSecondary)
+                        .accessibilityLabel("Insert clipboard placeholder")
+                    Text("{date} becomes today\u{2019}s date; {clipboard} becomes whatever you copied before dictating.")
+                        .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
+                        .fixedSize(horizontal: false, vertical: true).padding(.leading, 4)
                 }
             }
             if let error = editor.error {
-                Label(error, systemImage: "exclamationmark.circle").foregroundStyle(.red).font(DesignFont.sans(DesignFont.detail))
-                    .fixedSize(horizontal: false, vertical: true)
+                Label(error, systemImage: "exclamationmark.circle").foregroundStyle(DesignPalette.danger)
+                    .font(DesignFont.sans(DesignFont.detail)).fixedSize(horizontal: false, vertical: true)
             }
             footer
         }
         .padding(.horizontal, 24).padding(.top, 22).padding(.bottom, 20)
-        .frame(width: 500)
+        .frame(width: 520)
         .background(DesignPalette.bg)
-        .confirmationDialog("Delete this phrase?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete Phrase", role: .destructive) { editor.delete(); if editor.error == nil { close() } }
-        } message: { Text("Your other saved phrases will stay in the library.") }
+        .confirmationDialog("Delete this transform?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete Transform", role: .destructive) { editor.delete(); if editor.error == nil { close() } }
+        } message: { Text("Your other saved transforms will stay in the library.") }
     }
 
     private var footer: some View {
@@ -189,10 +254,10 @@ struct PhraseFormSheet: View {
                 Button("Delete", role: .destructive) { confirmDelete = true }.buttonStyle(.designSecondary)
                     .disabled(editor.isDirty || editor.loadFailed)
             }
-            Text("⌘↩ SAVES · ESC CANCELS").designEyebrow().fixedSize(horizontal: false, vertical: true)
+            Text("\u{2318}\u{21A9} SAVES \u{00B7} ESC CANCELS").designEyebrow().fixedSize(horizontal: false, vertical: true)
             Spacer()
             Button("Cancel") { editor.cancel(); close() }.buttonStyle(.designSecondary)
-            Button("Save Phrase") { editor.save(); if editor.error == nil && !editor.isDirty { close() } }
+            Button("Save") { editor.save(); if editor.error == nil && !editor.isDirty { close() } }
                 .buttonStyle(.designPrimary).disabled(!editor.canSave)
                 .keyboardShortcut(.return, modifiers: .command)
         }

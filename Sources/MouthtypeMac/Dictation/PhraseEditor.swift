@@ -78,21 +78,26 @@ import Observation
     }
 }
 
-/// What a row on the Transforms page does. A phrase that uses the clipboard placeholder is a clipboard phrase, every other phrase
-/// is plain text, and Clean Selected Text is the built-in menu action.
-enum TransformKind: String, CaseIterable {
-    case text, clipboard, cleanSelection
+/// The kind tag on a Transforms page row, worked out from the saved text. A clipboard placeholder wins, then a date placeholder,
+/// then a multi-line body, and everything else is plain text. The data format has no kind field.
+enum TransformKind: Equatable {
+    case text, lines(Int), clipboard, date
 
     var title: String {
         switch self {
-        case .text: "text"
-        case .clipboard: "clipboard"
-        case .cleanSelection: "clean selection"
+        case .text: "TEXT"
+        case let .lines(count): "\(count) LINES"
+        case .clipboard: "CLIPBOARD"
+        case .date: "DATE"
         }
     }
 
     static func of(_ phrase: Snippet) -> TransformKind {
-        phrase.expansion.localizedCaseInsensitiveContains("{clipboard}") ? .clipboard : .text
+        let text = phrase.expansion
+        if text.localizedCaseInsensitiveContains("{clipboard}") { return .clipboard }
+        if text.localizedCaseInsensitiveContains("{date}") { return .date }
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).count
+        return lines > 1 ? .lines(lines) : .text
     }
 }
 

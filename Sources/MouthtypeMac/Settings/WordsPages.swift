@@ -24,10 +24,11 @@ struct SavedSpellingsPage: View {
 /// The Transforms page body. The page header and scrolling come from `DesignPage` in `SettingsPageHosts`.
 struct PhrasesPage: View {
     var model: SettingsModel
+    var cleaner: (any CleanupModelManaging)?
 
     var body: some View {
         if let editor = model.phrases {
-            PhraseEditorView(editor: editor)
+            PhraseEditorView(editor: editor, cleaner: cleaner)
         } else {
             Text("Phrases are unavailable.").font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
         }
