@@ -374,9 +374,36 @@ struct StyleMembersCard: View {
     }
 }
 
-/// A letter tile in the app's colour, the app's own icon once you've added it, or a globe for a website.
+/// Looks up an app's real icon by bundle ID, caching hits and misses. Nil means not installed.
+enum AppIconResolver {
+    nonisolated(unsafe) private static let cache = NSCache<NSString, NSImage>()
+    nonisolated(unsafe) private static let misses = NSCache<NSString, NSNumber>()
+
+    static func cachedIcon(bundleIDs: [String]) -> NSImage? {
+        for id in bundleIDs { if let icon = cache.object(forKey: id as NSString) { return icon } }
+        return nil
+    }
+
+    static func icon(bundleIDs: [String]) -> NSImage? {
+        for id in bundleIDs {
+            let key = id as NSString
+            if let icon = cache.object(forKey: key) { return icon }
+            if misses.object(forKey: key) != nil { continue }
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) {
+                let icon = NSWorkspace.shared.icon(forFile: url.path)
+                cache.setObject(icon, forKey: key)
+                return icon
+            }
+            misses.setObject(true, forKey: key)
+        }
+        return nil
+    }
+}
+
+/// The app's real icon, a letter tile in the app's colour when it isn't installed, or a globe for a website.
 struct StyleMemberIcon: View {
     let member: StyleMember
+    @State private var loaded: NSImage?
 
     private static let brand: [String: UInt32] = [
         "Messages": 0x34C759, "WhatsApp": 0x25D366, "Telegram": 0x2AABEE, "Discord": 0x5865F2, "Signal": 0x3A76F0,
@@ -388,21 +415,20 @@ struct StyleMemberIcon: View {
             if member.kind == .site {
                 Image(systemName: "globe").font(.system(size: 12)).foregroundStyle(DesignPalette.ink2)
                     .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.sel))
-            } else if let icon = installedIcon {
+            } else if let icon = loaded ?? AppIconResolver.cachedIcon(bundleIDs: member.keys) {
                 Image(nsImage: icon).resizable().frame(width: 24, height: 24)
             } else {
                 Text(String(member.name.prefix(1)).uppercased()).font(DesignFont.sans(11, .semibold)).foregroundStyle(Color.white)
                     .frame(width: 24, height: 24)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Self.brand[member.name].map { Color(hex: $0) } ?? DesignPalette.ink3))
             }
-        }.accessibilityHidden(true)
-    }
-
-    /// Only for apps you added. The built-ins keep their letter tiles so the page reads the same on every Mac.
-    private var installedIcon: NSImage? {
-        guard !member.isBuiltIn, let id = member.keys.first,
-              let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: id) else { return nil }
-        return NSWorkspace.shared.icon(forFile: url.path)
+        }
+        .accessibilityHidden(true)
+        .task(id: member.keys) {
+            guard member.kind == .app, loaded == nil else { return }
+            let ids = member.keys
+            loaded = await Task.detached(priority: .userInitiated) { AppIconResolver.icon(bundleIDs: ids) }.value
+        }
     }
 }
 
