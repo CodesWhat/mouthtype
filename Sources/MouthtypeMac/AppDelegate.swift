@@ -117,7 +117,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.info("launch \(AppInfo.version, privacy: .public)")
         let arguments = CommandLine.arguments
-        FontRegistry.registerBundledFonts()
         // The two file/visual modes need no permissions and touch neither the remap, the mic nor the real database.
         if let demo = PillDemo.options(in: arguments) {
             let pill = PillController(level: { .silence })
@@ -143,6 +142,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         if PasteSelfTest.isRequested(in: arguments) {
             Task { await PasteSelfTest.run() }
             return
+            FontRegistry.registerBundledFonts()
         }
         if let options = RecoverySelfTest.options(in: arguments) {
             engineHost.start()
@@ -232,6 +232,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         menuBar.add(section: history, startsGroup: false)
         menuBar.add(section: TransformSelectionMenuSection(
             open: { [weak self] in self?.selectionCleanupWindow.present(transform: $0) },
+        // The status item is up; the bundled fonts register off the main thread. Every draw path waits on them first.
+        FontRegistry.registerInBackground()
             editTransforms: { [weak self] in self?.settingsWindow.present(page: .transforms) },
             aiUnavailableReason: { [weak self] in self?.selectionCleanupModel.transformUnavailableReason },
             capture: { [weak self] in
