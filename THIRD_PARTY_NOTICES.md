@@ -287,8 +287,11 @@ embedded in `Mouthtype.app/Contents/Frameworks`, and its `LICENSE` file is the a
 
 ## Models
 
-No model is bundled with Mouthtype. Each is downloaded on request from Hugging Face and runs on the user's machine,
-through Apple frameworks and MLX on the Mac or llama.cpp on Linux. The license named is the one on the model's Hugging
+No model is bundled with Mouthtype. Each model in the table is downloaded on request from Hugging Face and runs on the user's machine.
+On the Mac the speech and cleanup models run through Apple frameworks and MLX. On Linux the cleanup models run through
+llama.cpp, and speech uses the sherpa-onnx runtime with a Parakeet archive fetched from its GitHub release (pinned in
+`tools/linux-engine-proof/pins.json`, which records the Parakeet v3 archive as CC-BY-4.0 and the sherpa-onnx runtime as
+Apache-2.0; the runtime has no entry of its own in this file yet). The license named is the one on the model's Hugging
 Face card; follow the link for the full text and any use restrictions.
 
 | Model | Used for | License | Card |
