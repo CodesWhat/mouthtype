@@ -314,6 +314,24 @@ import Testing
         #expect(SettingsPage.arrowTarget(focused: nil, selected: .appearance, offset: 1) == .appearance)
     }
 
+    /// The ring is AppKit's first responder, not the @FocusState, so a page change has to move the responder itself.
+    @Test func ringMovesToTheNewPageRowOnlyWhenASidebarRowHasIt() throws {
+        let (controller, window) = try keyWindow(page: .stats, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let rows = SettingsView.sidebarRowProxies(in: window)
+        #expect(rows.count == SettingsPage.allCases.count)
+        let stats = try #require(SettingsPage.allCases.firstIndex(of: .stats)), dictionary = try #require(SettingsPage.allCases.firstIndex(of: .dictionary))
+        #expect(window.makeFirstResponder(rows[stats]))
+        #expect(SettingsView.moveSidebarRing(in: window, to: .dictionary))
+        #expect(window.firstResponder === rows[dictionary])
+        let editor = NSTextView(frame: NSRect(x: 300, y: 100, width: 100, height: 30))
+        window.contentView?.addSubview(editor)
+        #expect(window.makeFirstResponder(editor))
+        #expect(!SettingsView.moveSidebarRing(in: window, to: .stats))
+        #expect(window.firstResponder === editor)
+        editor.removeFromSuperview()
+    }
+
     @Test func sidebarFocusFollowsTheSelectionOnlyWhenARowHasFocus() {
         #expect(SettingsPage.focusFollowing(focused: .home, selected: .stats) == .stats)
         #expect(SettingsPage.focusFollowing(focused: .stats, selected: .stats) == .stats)
