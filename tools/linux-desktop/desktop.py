@@ -31,6 +31,7 @@ from phrases import load_phrases, PhraseContextUnavailable
 from cleanup import BasicCleanup
 import imports
 from imports import FileError, FileTranscription
+from hyprland_ipc import HyprlandIPC, IPCError, IPCTimeout
 import smart
 import styles as style_contexts
 import tone as tone_stage
@@ -147,9 +148,11 @@ class Session:
         # True while a delivery runs outside the lock; close() waits longer for it than for inference.
         self.delivering = False
         try:
-            self._cancellable_delivery = 'cancelled' in inspect.signature(delivery.submit).parameters
+            parameters = inspect.signature(delivery.submit).parameters
+            self._cancellable_delivery = 'cancelled' in parameters
+            self._verifiable_delivery = 'verified' in parameters
         except (TypeError, ValueError):
-            self._cancellable_delivery = False
+            self._cancellable_delivery = self._verifiable_delivery = False
 
     @staticmethod
     def _usable_styles(value):
@@ -480,8 +483,11 @@ class Session:
                 # stays 'transcribing', which keeps a new take from starting underneath the paste.
                 try:
                     # A cancel that lands before the clipboard or keys are touched stops the delivery.
-                    outcome = (self.delivery.submit(text, target, cancelled=cancelled) if self._cancellable_delivery
-                               else self.delivery.submit(text, target))
+                    # The snapshot above just confirmed the target, so paste skips its own duplicate of that check.
+                    options = {'cancelled': cancelled} if self._cancellable_delivery else {}
+                    if self._verifiable_delivery:
+                        options['verified'] = True
+                    outcome = self.delivery.submit(text, target, **options)
                 finally:
                     with self.lock:
                         self.delivering = False
@@ -630,21 +636,53 @@ class Session:
             self.engine.close()
 
 class HyprlandDelivery:
-    def __init__(self, config, run=None):
+    IPC_TIMEOUT = .5
+
+    def __init__(self, config, run=None, ipc=None):
         self.config, self.run = config, run or subprocess.run
+        # Only the real subprocess path talks to the socket; an injected runner stands in for hyprctl itself.
+        self.ipc = ipc if ipc is not None else HyprlandIPC() if run is None else None
+
+    def _query(self, name, limit=IPC_TIMEOUT):
+        """Hyprland's JSON reply for one query. The socket answers when it can; any other failure goes to hyprctl."""
+        started = time.monotonic()
+        if self.ipc is not None:
+            try:
+                return self.ipc.request('j/' + name, limit)
+            except IPCTimeout:
+                raise subprocess.TimeoutExpired('hyprctl', limit) from None
+            except IPCError:
+                limit = max(limit - (time.monotonic() - started), .05)
+        return self.run(['hyprctl', '-j', name], capture_output=True, text=True, check=True, timeout=limit).stdout
+
+    def _dispatch(self, argv, limit):
+        """Run a hyprctl dispatch argv through the socket, or through hyprctl when the socket can't take it."""
+        if self.ipc is not None:
+            try:
+                reply = self.ipc.request('/' + ' '.join(argv[1:]), limit)
+                if reply.strip() != 'ok' and 'ok'.startswith(reply.strip()):
+                    # Sent, but the answer is empty or cut short: the chord may have run, so no other form may follow.
+                    raise subprocess.TimeoutExpired('hyprctl', limit)
+                return type('Result', (), {'returncode': 0, 'stdout': reply, 'stderr': ''})()
+            except IPCError as error:
+                if error.sent:
+                    # The dispatcher may have run it; a retry could paste twice.
+                    raise subprocess.TimeoutExpired('hyprctl', limit) from None
+        result = self.run(argv, capture_output=True, text=True, check=False, timeout=limit)
+        output = ((getattr(result, 'stdout', '') or '') + (getattr(result, 'stderr', '') or '')).strip()
+        if output != 'ok' and 'ok'.startswith(output):
+            # The dispatch was issued but nothing, or half an answer, came back: it may have run.
+            raise subprocess.TimeoutExpired('hyprctl', limit)
+        return result
 
     def snapshot(self):
         if self.config.get('mode') not in ('type', 'paste'):
             return None
         try:
-            locked = self.run(['hyprctl', '-j', 'locked'], capture_output=True,
-                              text=True, check=True, timeout=.5)
-            lock_state = json.loads(locked.stdout)
+            lock_state = json.loads(self._query('locked'))
             if not isinstance(lock_state, dict) or lock_state.get('locked') is not False:
                 return None
-            result = self.run(['hyprctl', '-j', 'activewindow'], capture_output=True,
-                              text=True, check=True, timeout=.5)
-            active = json.loads(result.stdout)
+            active = json.loads(self._query('activewindow'))
             if (not isinstance(active.get('address'), str) or not active['address'] or
                     not isinstance(active.get('class'), str) or not active['class'] or
                     type(active.get('pid')) is not int or active['pid'] <= 0):
@@ -659,9 +697,7 @@ class HyprlandDelivery:
         if self.config.get('mode') in ('type', 'paste'):
             return None
         try:
-            result = self.run(['hyprctl', '-j', 'activewindow'], capture_output=True,
-                              text=True, check=True, timeout=.5)
-            window_class = json.loads(result.stdout).get('class')
+            window_class = json.loads(self._query('activewindow')).get('class')
         except (OSError, ValueError, TypeError, AttributeError, subprocess.SubprocessError):
             return None
         return window_class if isinstance(window_class, str) and window_class else None
@@ -703,7 +739,7 @@ class HyprlandDelivery:
         # The kernel truncates comm to 15 characters, so 'gnome-terminal-server' reads back as 'gnome-terminal-'.
         return name is not None and name[:self.COMM_LENGTH] in {item[:self.COMM_LENGTH] for item in executables}
 
-    def submit(self, text, target, cancelled=None):
+    def submit(self, text, target, cancelled=None, verified=False):
         if not self.allowed(target):
             return 'recover_only'
         if cancelled is not None and cancelled.is_set():
@@ -724,9 +760,9 @@ class HyprlandDelivery:
                 # The helper could have sent a prefix. Never replay automatically.
                 return 'unknown'
             return 'unknown'
-        return self.paste(text, target, cancelled)
+        return self.paste(text, target, cancelled, verified)
 
-    def paste(self, text, target, cancelled=None):
+    def paste(self, text, target, cancelled=None, verified=False):
         """Clipboard plus a paste chord. Line breaks and tabs travel as text; other controls are refused."""
         terminal = self.is_terminal(target)
         if terminal:
@@ -736,7 +772,8 @@ class HyprlandDelivery:
             return 'unsupported_text'
         if terminal and ('\n' in text or '\r' in text) and self.config.get('allow_terminal_multiline') is not True:
             return 'unsupported_text'
-        if self.snapshot() != target:
+        # verified: the caller snapshotted this target an instant ago. The check after wl-copy still guards the chord.
+        if not verified and self.snapshot() != target:
             return 'target_changed'
         previous = None
         if self.config.get('restore_clipboard', True):
@@ -829,7 +866,7 @@ class HyprlandDelivery:
             if cancelled is not None and cancelled.is_set():
                 return 'not_attempted'
             try:
-                result = self.run(argv, capture_output=True, text=True, check=False, timeout=5)
+                result = self._dispatch(argv, 5)
             except subprocess.TimeoutExpired:
                 # The dispatcher may still have delivered the chord; a second one could paste twice.
                 return 'unknown'
