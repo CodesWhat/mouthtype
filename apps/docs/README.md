@@ -6,7 +6,7 @@ Fumadocs on Next 16, built as a static export (`output: "export"`) for docs.mout
 cd apps/docs
 npm install
 npm run dev      # syncs docs, serves http://localhost:3000
-npm run build    # static export to out/, then writes per-page CSP headers into vercel.json
+npm run build    # static export to out/, then injects a per-page CSP meta tag into each HTML file
 npm run check    # biome
 npm run test:scripts
 node scripts/serve-export.mjs   # serve out/ with the vercel.json headers applied
@@ -14,7 +14,7 @@ node scripts/serve-export.mjs   # serve out/ with the vercel.json headers applie
 
 ## CSP
 
-`scripts/security-headers.mjs` runs after `next build`. It sha256-hashes every inline script on each page and writes a per-page `Content-Security-Policy` into `vercel.json` (`script-src 'self'` plus those hashes, no `'unsafe-inline'`). `vercel.json` is committed. If a content or dependency change moves an inline script, run `npm run build` and commit the new `vercel.json`. `scripts/csp-coverage.test.mjs` fails in CI when it's stale.
+`scripts/csp-meta.mjs` runs after `next build`. It sha256-hashes every inline script on each page and injects a `<meta http-equiv="Content-Security-Policy">` as the first child of `<head>` (`script-src 'self'` plus those hashes, no `'unsafe-inline'`). `vercel.json` holds one static header on `/(.*)` with the page-independent directives and `frame-ancestors`, which a meta tag can't carry. It deliberately has no `default-src` or `script-src`: browsers enforce the intersection of header and meta, so any script policy there would block the hashed inline scripts. Nothing in `vercel.json` depends on content, so docs edits don't touch it. `scripts/csp-coverage.test.mjs` checks both halves against a fresh build.
 
 ## Config
 
