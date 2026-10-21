@@ -116,4 +116,70 @@ private final class FakeStore: KeyMappingStore {
         #expect(remap.restore() == .clean)
         #expect(store.writes.isEmpty)
     }
+
+    @Test func applyRepairsAMappingSomethingElseReplaced() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        // A login agent runs `hidutil property --set` with its own mapping.
+        store.mapping = [capsToEscape]
+        #expect(remap.apply() == .repaired)
+        #expect(store.mapping == [capsToEscape, FnRemapMapping.entry()])
+        #expect(remap.apply() == .alreadyApplied)
+        // Restore keeps the replacement mapping rather than the stale original.
+        #expect(remap.restore() == .restored)
+        #expect(store.mapping == [capsToEscape])
+    }
+
+    @Test func repairFailsWhenTheWriteIsRefused() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        store.mapping = []
+        store.refuseWrites = true
+        guard case .failed = remap.apply() else { Issue.record("expected failure"); return }
+    }
+
+    @Test func repairFailsWhenTheMappingIsUnreadable() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        #expect(remap.apply() == .applied)
+        store.unreadable = true
+        guard case .failed = remap.apply() else { Issue.record("expected failure"); return }
+    }
+
+    @Test func crashCleanupPutsBackTheDisplacedFnMappingAndRelaunchStaysIdempotent() {
+        let theirFn: FnRemapMapping.Entry = [FnRemapMapping.srcKey: FnRemapMapping.fnSource, FnRemapMapping.dstKey: 0x7_0000_0029]
+        let defaults = makeDefaults()
+        let store = FakeStore([capsToEscape, theirFn])
+        let dead = FnRemap(store: store, defaults: defaults)
+        #expect(dead.apply() == .applied)
+        #expect(dead.displacedEntry == theirFn)
+        // The app is killed. The guard runs with what the app told it.
+        let arguments = FnGuardArguments(parent: 4242, entry: FnRemapMapping.entry(), displaced: dead.displacedEntry)
+        #expect(FnGuard.run(arguments, store: store, wait: { _ in }) == .removed)
+        #expect(Set(store.mapping ?? []) == [capsToEscape, theirFn])
+        // Next launch finds the stale marker and must not duplicate or lose anything.
+        let next = FnRemap(store: store, defaults: defaults)
+        #expect(next.restoreIfStale() == .restored)
+        #expect(store.mapping?.count == 2 && Set(store.mapping ?? []) == [capsToEscape, theirFn])
+        #expect(next.restoreIfStale() == .clean)
+    }
+
+    @Test func repairsAreCappedWithinTheWindowAndResumeAfterIt() {
+        let store = FakeStore(nil)
+        let remap = FnRemap(store: store, defaults: makeDefaults())
+        var clock = Date(timeIntervalSince1970: 1_000_000)
+        remap.now = { clock }
+        #expect(remap.apply() == .applied)
+        for _ in 0..<FnRemap.maxRepairs {
+            store.mapping = []
+            #expect(remap.apply() == .repaired)
+        }
+        store.mapping = []
+        #expect(remap.apply() == .conflict)
+        #expect(store.mapping == [])
+        clock = clock.addingTimeInterval(FnRemap.repairWindow + 1)
+        #expect(remap.apply() == .repaired)
+    }
 }

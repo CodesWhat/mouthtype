@@ -94,6 +94,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let systemSection = SystemAccessMenuSection()
     private let accessibility = AccessibilityAccess()
     private let fnRemap = FnRemap()
+    private var wakeObserver: NSObjectProtocol?
     private lazy var remapCoordinator = FnRemapCoordinator(remap: fnRemap, guardian: FnGuardLauncher())
     private let shortcuts = GlobalShortcuts()
     private var menuBar: MenuBarController?
@@ -438,6 +439,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         systemSection.update(shortcut: ShortcutSettings.load())
         diagnostics.globe = remapCoordinator.isActive ? nil : check
         diagnostics.remapChecked = remapCoordinator.menuChecked
+        diagnostics.remapConflict = remapCoordinator.conflict
         diagnostics.shortcut = ShortcutSettings.load()
         guard log else { return }
         Log.permissions.info("globe key action \(String(describing: check.action), privacy: .public), fn key present \(check.fnKeyPresent, privacy: .public), conflict \(check.hasConflict, privacy: .public)")
@@ -566,6 +568,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.systemSection.update(hotkeyHealth: health)
             self?.diagnostics.hotkeyHealth = health
         }
+        service.onWatchdog = { [weak self] in self?.verifyRemap() }
+        if wakeObserver == nil {
+            wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.didWakeNotification, object: nil, queue: .main
+            ) { [weak self] _ in MainActor.assumeIsolated { self?.verifyRemap() } }
+        }
         do {
             try service.switchSource(source)
             try service.start()
@@ -584,6 +592,18 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         diagnostics.hotkeyHealth = service.health
         guard hotkeyLogTask == nil, let dictation else { return }
         hotkeyLogTask = Task { await dictation.consume(service.events) }
+    }
+
+    /// Something else (a login agent running `hidutil`) can rewrite the key mapping after we applied ours, which
+    /// leaves Fn silently dead. Check at every watchdog tick and on wake; on an unrepairable loss, fall back to raw Fn.
+    private func verifyRemap() {
+        guard let service = hotkeyService, remapCoordinator.isActive, !remapCoordinator.verify() else { return }
+        do {
+            try service.switchSource(remapCoordinator.source)
+        } catch {
+            Log.hotkey.error("hotkey source switch failed: \(String(describing: error), privacy: .public)")
+        }
+        refreshGlobeCheck(log: false)
     }
 
     private func toggleRemap() {

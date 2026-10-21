@@ -16,6 +16,8 @@ final class FnRemapCoordinator {
     private let guardian: (any FnGuarding)?
     private var started = false
     private(set) var isActive = false
+    /// Another app keeps rewriting the key mapping, so the remap was given up for this run.
+    private(set) var conflict = false
 
     init(remap: FnRemap, preferences: UserDefaults = .standard, guardian: (any FnGuarding)? = nil) {
         self.remap = remap
@@ -52,6 +54,35 @@ final class FnRemapCoordinator {
         return source
     }
 
+    /// Re-checks that the remap is still in the HID mapping and repairs it if something else removed it. When it
+    /// can't be repaired the coordinator falls back to the plain Fn flag; the caller moves the service to `source`.
+    /// Returns false when that fallback happened.
+    func verify() -> Bool {
+        guard isActive else { return true }
+        switch remap.apply() {
+        case .applied, .alreadyApplied:
+            return true
+        case .repaired:
+            Log.hotkey.notice("fn remap was removed by something else and has been reapplied")
+            // What the remap displaces may have changed, and the guard only knows what it was started with.
+            guardian?.stop()
+            guardian?.start(restoring: remap.displacedEntry)
+            return true
+        case .conflict:
+            conflict = true
+            return fallBackToFnFlag()
+        case .failed, .restored, .clean:
+            Log.hotkey.error("fn remap was lost and could not be repaired, using the plain Fn key")
+            return fallBackToFnFlag()
+        }
+    }
+
+    /// Stays remapped until the removal is confirmed: if the restore fails our entry may still be installed,
+    /// and the remapped source is the one that works with it. The next tick tries again.
+    private func fallBackToFnFlag() -> Bool {
+        !deactivate()
+    }
+
     /// Takes the remap off. Stays active, and says so, if the HID system won't let it go.
     @discardableResult
     func deactivate() -> Bool {
@@ -60,7 +91,7 @@ final class FnRemapCoordinator {
             isActive = false
             guardian?.stop()
             return true
-        case .applied, .alreadyApplied:
+        case .applied, .alreadyApplied, .repaired, .conflict:
             return false
         case let .failed(reason):
             Log.hotkey.error("fn remap restore failed: \(reason, privacy: .public)")
@@ -69,16 +100,20 @@ final class FnRemapCoordinator {
     }
 
     private func activate() -> Bool {
-        switch remap.apply() {
-        case .applied, .alreadyApplied:
+        let outcome = remap.apply()
+        switch outcome {
+        case .applied, .alreadyApplied, .repaired:
             remap.installSignalHandlers()
-            guardian?.start()
+            // A running guard keeps what it was started with, so a repair must replace it.
+            if outcome == .repaired { guardian?.stop() }
+            guardian?.start(restoring: remap.displacedEntry)
+            conflict = false
             isActive = true
             return true
         case let .failed(reason):
             Log.hotkey.error("fn remap not applied: \(reason, privacy: .public)")
             return false
-        case .restored, .clean:
+        case .restored, .clean, .conflict:
             return false
         }
     }
