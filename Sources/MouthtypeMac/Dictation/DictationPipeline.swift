@@ -10,6 +10,8 @@ struct DictationSession: Sendable {
     var cleanupStyle: StyleOptions?
     /// A rule's cleanup level; nil uses the global one.
     var cleanupLevel: CleanupLevel?
+    /// True when the dictation goes into a terminal, code editor or agent app or site, so spoken slash commands are typed.
+    var codingTarget = false
     /// False when the store is missing or `begin` failed; later writes are then skipped.
     var rowOpen = false
     /// Code names read from the editor for this dictation (see `EditorHintsGatherer`). Held in memory only: never
@@ -308,7 +310,7 @@ struct DictationPipeline: Sendable {
     /// here and dropped.
     func clean(
         _ transcribed: TranscribedDictation, inputs: CleanupInputs, context: InsertionContext?, clipboard: String?,
-        destination: S1MiniControls.Destination = .general, appName: String? = nil
+        destination: S1MiniControls.Destination = .general, appName: String? = nil, codingTarget: Bool = false
     ) async -> CleanedDictation {
         let settings = inputs.settings
         guard settings.enabled else {
@@ -346,7 +348,7 @@ struct DictationPipeline: Sendable {
             var result = textPipeline.run(TextPipelineInput(
                 text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
                 now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases,
-                protectedWords: protectedWords
+                protectedWords: protectedWords, codingTarget: codingTarget
             ))
             // Cleanup may remove a filler or format a number that is part of a saved trigger.
             // Keep the spoken trigger intact rather than silently losing its replacement.
