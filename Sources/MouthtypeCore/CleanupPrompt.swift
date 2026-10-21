@@ -75,12 +75,16 @@ public enum CleanupPrompt {
         (context.map(reference) ?? "") + "<transcript>\n\(transcript)\n</transcript>"
     }
 
-    /// Strips wrapper tags and surrounding whitespace that some models echo back.
-    public static func sanitize(_ output: String) -> String {
+    /// Strips wrapper tags and surrounding whitespace that some models echo back. With `input`, also removes
+    /// framing the model added around the text (a "Here is the cleaned text:" preamble, wrapping quotes, a code
+    /// fence), but only a layer the dictation itself didn't have.
+    public static func sanitize(_ output: String, input: String? = nil) -> String {
         var text = output
         for tag in ["<transcript>", "</transcript>"] {
             text = text.replacingOccurrences(of: tag, with: "")
         }
-        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let input else { return text }
+        return TextTransform.sanitize(text, input: input)
     }
 }
