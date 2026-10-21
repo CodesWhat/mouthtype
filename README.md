@@ -100,12 +100,10 @@ See the [install notes](https://docs.mouthtype.app/getting-started/install-notes
 <td width="50%" align="center"><strong>Dark</strong></td>
 </tr>
 <tr>
-<td><img src="docs/assets/mouthtype-home-light.png" alt="Mouthtype's Home page in light mode, listing recent takes"></td>
-<td><img src="docs/assets/mouthtype-home-dark.png" alt="Mouthtype's Home page in dark mode, listing recent takes"></td>
+<td align="center"><img src="docs/assets/mouthtype-home-light.png" alt="Mouthtype's Home page in light mode, listing recent takes" width="440"></td>
+<td align="center"><img src="docs/assets/mouthtype-home-dark.png" alt="Mouthtype's Home page in dark mode, listing recent takes" width="440"></td>
 </tr>
 </table>
-
-<p align="center"><em>The Home page, rendered with sample takes. Each take has Copy and Recover.</em></p>
 
 <table>
 <tr>
@@ -117,8 +115,6 @@ See the [install notes](https://docs.mouthtype.app/getting-started/install-notes
 <td align="center"><img src="website/public/assets/hifi-recording.png" alt="Mouthtype's Hi-Fi recording pill showing an active take" width="360"></td>
 </tr>
 </table>
-
-<p align="center"><em>Pick a pill style on the Appearance page: Classic, Hi-Fi, Glass, Matrix or Minimal.</em></p>
 
 <hr>
 
@@ -242,6 +238,26 @@ Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includ
 
 <h2 align="center" id="built-with">Built With</h2>
 
+[![Swift 6](https://img.shields.io/badge/Swift_6-F05138?logo=swift&logoColor=fff)](https://www.swift.org/)
+[![macOS 26](https://img.shields.io/badge/macOS_26-000?logo=apple&logoColor=fff)](https://developer.apple.com/macos/)
+[![Core ML](https://img.shields.io/badge/Core_ML-0A84FF?logo=apple&logoColor=fff)](https://developer.apple.com/machine-learning/core-ml/)
+[![MLX](https://img.shields.io/badge/MLX_3.32-6D28D9)](https://github.com/ml-explore/mlx-swift-lm)
+[![FluidAudio](https://img.shields.io/badge/FluidAudio_0.17-0F766E)](https://github.com/FluidInference/FluidAudio)
+[![WhisperKit](https://img.shields.io/badge/WhisperKit_1.1-2563EB)](https://github.com/argmaxinc/WhisperKit)
+[![Sparkle](https://img.shields.io/badge/Sparkle_2.10-D9480F)](https://github.com/sparkle-project/Sparkle)
+[![GRDB](https://img.shields.io/badge/GRDB_7.11-003B57?logo=sqlite&logoColor=fff)](https://github.com/groue/GRDB.swift)
+
+[![Parakeet TDT v3](https://img.shields.io/badge/Parakeet_TDT_v3-76B900?logo=nvidia&logoColor=fff)](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)
+[![Silero VAD](https://img.shields.io/badge/Silero_VAD-3D5AFE)](https://huggingface.co/FluidInference/silero-vad-coreml)
+[![S1-mini](https://img.shields.io/badge/S1--mini-E8590C)](https://huggingface.co/superwhisper/s1-mini)
+[![Gemma 4](https://img.shields.io/badge/Gemma_4-4285F4?logo=google&logoColor=fff)](https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit)
+[![Hugging Face](https://img.shields.io/badge/Hugging_Face-FFD21E?logo=huggingface&logoColor=000)](https://huggingface.co/)
+
+Licenses for each component are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+<details>
+<summary><strong>Components and licenses</strong></summary>
+
 | Component | What it does | License |
 | --- | --- | --- |
 | [FluidAudio](https://github.com/FluidInference/FluidAudio) | Runs the Parakeet speech models on Core ML | Apache-2.0 |
@@ -254,7 +270,9 @@ Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includ
 | [S1-mini](https://huggingface.co/superwhisper/s1-mini) | Fast cleanup | Apache-2.0 plus a naming clause |
 | [Gemma 4 E4B](https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit) | Thorough cleanup | Apache-2.0 |
 
-Speech recognition uses NVIDIA's Parakeet models, converted to Core ML by FluidInference. No model is bundled; each downloads on request. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) lists every dependency and model with its license.
+</details>
+
+Speech recognition uses NVIDIA's Parakeet models, converted to Core ML by FluidInference. No model is bundled; each downloads on request.
 
 <h2 align="center" id="community-and-support">Community and Support</h2>
 
@@ -276,6 +294,14 @@ Mouthtype is the one desktop app here. The other three tools are for Docker host
 
 Mouthtype is licensed under [GPL-3.0](LICENSE). [Corresponding release source](https://mouthtype.app/source) is available separately from the app download. Dependencies, fonts, adapted code and downloaded models have their own terms. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) records adapted code, fonts, the S1-mini model, the Swift package dependencies and the downloaded models.
 
+
+<a href="https://github.com/CodesWhat">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/codeswhat-logo-dark.svg" />
+    <source media="(prefers-color-scheme: light)" srcset="docs/assets/codeswhat-logo-original.svg" />
+    <img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28">
+  </picture>
+</a>
 
 <a href="#mouthtype">Back to top</a>
 
