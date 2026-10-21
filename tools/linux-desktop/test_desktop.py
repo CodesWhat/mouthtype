@@ -1384,6 +1384,72 @@ class DeliveryOutsideLockTests(unittest.TestCase):
         self.assertEqual(self.session.state, 'idle')
 
 
+class CancelDuringDeliveryTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+
+    def test_cancel_before_the_clipboard_is_touched_stops_the_paste(self):
+        delivery, target, calls, restored = PasteDeliveryTests().make({'any_window': True}, hyprland=True)
+        inspecting, release = threading.Event(), threading.Event()
+        def clipboard_types():
+            inspecting.set()
+            release.wait(5)
+            return ['text/plain']
+        delivery.clipboard_types = clipboard_types
+        session = Session(Capture(), Engine(), delivery, Path(self.temp.name))
+        self.addCleanup(session.close)
+        self.addCleanup(release.set)
+        session.command('start')
+        session.command('stop')
+        self.assertTrue(inspecting.wait(3))
+        session.command('cancel')
+        release.set()
+        session.wait()
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype') or a[:2] == ['hyprctl', 'dispatch']])
+        self.assertEqual((session.state, session.outcome), ('idle', 'not_attempted'))
+
+    def test_cancel_after_the_clipboard_is_set_skips_the_chord_and_restores(self):
+        delivery, target, calls, restored = PasteDeliveryTests().make({'any_window': True}, hyprland=True)
+        cancelled = threading.Event()
+        inner = delivery.run
+        def run(argv, **kwargs):
+            result = inner(argv, **kwargs)
+            if argv[0] == 'wl-copy':
+                cancelled.set()
+            return result
+        delivery.run = run
+        self.assertEqual(delivery.submit('text', target, cancelled=cancelled), 'not_attempted')
+        self.assertFalse([a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch'] or a[0] == 'wtype'])
+        self.assertEqual(restored, [('earlier text', 'text')])
+
+    def test_type_mode_honours_a_cancel_before_wtype(self):
+        from desktop import HyprlandDelivery
+        calls = []
+        target = {'address': '0x1', 'class': 'editor', 'pid': 4}
+        def run(argv, **kwargs):
+            calls.append(argv)
+            out = json.dumps({'locked': False}) if argv[-1] == 'locked' else json.dumps(target)
+            return type('Result', (), {'stdout': out, 'returncode': 0})()
+        delivery = HyprlandDelivery({'mode': 'type', 'any_window': True, 'allow_unknown_secure_field': True}, run=run)
+        cancelled = threading.Event()
+        cancelled.set()
+        self.assertEqual(delivery.submit('text', target, cancelled=cancelled), 'not_attempted')
+        self.assertFalse([a for a in calls if a[0] == 'wtype'])
+
+    def test_close_still_closes_the_engine_when_delivery_outlasts_the_wait(self):
+        class Closing(Engine):
+            closed = False
+            def close(self):
+                self.closed = True
+        engine = Closing()
+        session = Session(Capture(), engine, Delivery(), Path(self.temp.name))
+        with unittest.mock.patch.object(Session, 'wait', side_effect=TimeoutError('Inference did not stop')):
+            with self.assertRaises(TimeoutError):
+                session.close()
+        self.assertTrue(engine.closed)
+
+
 class WatcherRaceTests(unittest.TestCase):
     class StubSession:
         def __init__(self):

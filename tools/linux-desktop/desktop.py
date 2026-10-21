@@ -4,6 +4,7 @@ import argparse
 from dataclasses import dataclass
 import fcntl
 import importlib.util
+import inspect
 import json
 import math
 import os
@@ -134,6 +135,12 @@ class Session:
         self.take = None
         self.discard_on_cancel = False
         self.closed = False
+        # True while a delivery runs outside the lock; close() waits longer for it than for inference.
+        self.delivering = False
+        try:
+            self._cancellable_delivery = 'cancelled' in inspect.signature(delivery.submit).parameters
+        except (TypeError, ValueError):
+            self._cancellable_delivery = False
 
     def take_count(self):
         return sum(1 for path in self.recovery.iterdir() if path.is_dir() and not path.is_symlink())
@@ -381,13 +388,20 @@ class Session:
                                                                       'milliseconds': milliseconds, 'reason': outcome[2]}))
                 self.outcome = 'empty' if not text else 'recover_only' if not allow_delivery else 'target_changed'
                 deliver = bool(allow_delivery and text and target == self.delivery.snapshot())
+                self.delivering = deliver
                 if not deliver:
                     self.state = 'idle'
                     self._notify('saved' if text else 'empty')
             if deliver:
                 # Delivery shells out and can take seconds, so status, tick and level must not wait on it. The state
                 # stays 'transcribing', which keeps a new take from starting underneath the paste.
-                outcome = self.delivery.submit(text, target)
+                try:
+                    # A cancel that lands before the clipboard or keys are touched stops the delivery.
+                    outcome = (self.delivery.submit(text, target, cancelled=cancelled) if self._cancellable_delivery
+                               else self.delivery.submit(text, target))
+                finally:
+                    with self.lock:
+                        self.delivering = False
                 with self.lock:
                     if self.cancelled is cancelled:
                         # The text was sent whatever happened meanwhile, so the outcome is recorded either way.
@@ -521,8 +535,11 @@ class Session:
             self._cancel(discard=False)
             if active:
                 self._notify('cancelled')
-        self.wait(3)
-        self.engine.close()
+        try:
+            # A paste already past its last cancel check can take its helpers' full timeouts to finish.
+            self.wait(30 if self.delivering else 3)
+        finally:
+            self.engine.close()
 
 class HyprlandDelivery:
     def __init__(self, config, run=None):
@@ -585,15 +602,19 @@ class HyprlandDelivery:
         # The kernel truncates comm to 15 characters, so 'gnome-terminal-server' reads back as 'gnome-terminal-'.
         return name is not None and name[:self.COMM_LENGTH] in {item[:self.COMM_LENGTH] for item in executables}
 
-    def submit(self, text, target):
+    def submit(self, text, target, cancelled=None):
         if not self.allowed(target):
             return 'recover_only'
+        if cancelled is not None and cancelled.is_set():
+            return 'not_attempted'
         if self.config.get('mode') == 'type':
             # wtype maps these to physical actions (Return, Tab, Escape), not literal text.
             if any(ord(char) < 32 or 127 <= ord(char) <= 159 for char in text):
                 return 'unsupported_text'
             if self.snapshot() != target:
                 return 'target_changed'
+            if cancelled is not None and cancelled.is_set():
+                return 'not_attempted'
             try:
                 self.run(['wtype', '-'], input=text.encode('utf-8'), stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, check=True, timeout=15,
@@ -602,9 +623,9 @@ class HyprlandDelivery:
                 # The helper could have sent a prefix. Never replay automatically.
                 return 'unknown'
             return 'unknown'
-        return self.paste(text, target)
+        return self.paste(text, target, cancelled)
 
-    def paste(self, text, target):
+    def paste(self, text, target, cancelled=None):
         """Clipboard plus a paste chord. Line breaks and tabs travel as text; other controls are refused."""
         terminal = self.is_terminal(target)
         if terminal:
@@ -632,6 +653,8 @@ class HyprlandDelivery:
                     return 'recover_only'
                 except (OSError, ValueError, PhraseContextUnavailable, subprocess.SubprocessError):
                     previous = None
+        if cancelled is not None and cancelled.is_set():
+            return 'not_attempted'
         try:
             self.run(['wl-copy', '--type', 'text/plain;charset=utf-8'], input=text.encode('utf-8'),
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
@@ -640,6 +663,9 @@ class HyprlandDelivery:
                 return 'unknown'
             if self.snapshot() != target:
                 return 'target_changed'
+            if cancelled is not None and cancelled.is_set():
+                # Our text is already on the clipboard; the finally block puts the earlier one back.
+                return 'not_attempted'
             outcome = self.send_paste_chord(target, terminal)
             if outcome:
                 return outcome
