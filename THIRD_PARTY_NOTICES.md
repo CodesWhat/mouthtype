@@ -158,16 +158,24 @@ Copyright (c) 2019 Gerrit Halfmann (https://github.com/halfmage/pixelarticons)
 
 ## S1-mini by Superwhisper
 
-https://huggingface.co/superwhisper/s1-mini, revision 88f6b15896c73bbb13a3b596e0afe8ea0d5150b4
+Mac: https://huggingface.co/superwhisper/s1-mini, revision 88f6b15896c73bbb13a3b596e0afe8ea0d5150b4
+
+Linux: https://huggingface.co/superwhisper/s1-mini-GGUF, revision 34add00a48a2e5d24e5a4ee5405a99620a3a240c, file
+`s1-mini-q4_k_m.gguf`
 
 The local model behind light and medium cleanup. It is not bundled with Mouthtype. The user downloads it from Hugging
-Face on request, and it runs on the Mac through MLX. It is a fine-tune of Qwen3-0.6B (Copyright 2024 Alibaba Cloud,
-Apache License 2.0), Copyright 2026 Superwhisper.
+Face on request. On the Mac it runs through MLX from the first repository above. The Linux client downloads the Q4_K_M
+file from the GGUF repository instead and runs it through llama.cpp. These are two different repositories (the base
+model and its GGUF conversion), so the two revisions above are not a mismatch. Both revisions were the current head of
+their repository when checked on 2026-10-20, and both repositories carry a byte-identical `LICENSE` and a matching
+`NOTICE`. It is a fine-tune of Qwen3-0.6B (Copyright 2024 Alibaba Cloud, Apache License 2.0), Copyright 2026
+Superwhisper.
 
 - Licence: Apache License, Version 2.0, plus one additional term. The full text is the repository's `LICENSE` file
   (https://huggingface.co/superwhisper/s1-mini/blob/main/LICENSE) and `NOTICE`.
 - Used for: cleaning each dictation after the deterministic pass (`Sources/MouthtypeCore/MLXCleaner.swift`,
-  `Sources/MouthtypeCore/Smart/`)
+  `Sources/MouthtypeCore/Smart/`), and on Linux as the Fast cleanup level (`tools/linux-desktop/setup_cleanup.py`,
+  pinned in `tools/linux-engine-proof/pins.json`)
 
 The additional term, quoted from the `LICENSE`:
 
@@ -183,7 +191,37 @@ a product incorporating it is marketed or distributed.
 ```
 
 Wherever the app names the model it writes exactly `S1-mini by Superwhisper`. The string lives in
-`CleanerCatalog.smartCleanupName`.
+`CleanerCatalog.smartCleanupName`. The Linux pin records the same name in the `s1.name` field of `pins.json`.
+
+## llama.cpp
+
+https://github.com/ggml-org/llama.cpp, commit 6420cf5dd588c68e48657a0bbd82bb3bd5ac7209
+
+Used by the Linux client's Fast and Thorough cleanup levels as the local `llama-server`. It is not bundled and not
+modified. `tools/linux-desktop/setup_cleanup.py` clones this exact commit, checks it out and builds `llama-server` for
+the CPU on the user's machine when they ask for cleanup models, then refuses a server that doesn't report the pinned
+revision. The pin is in `tools/linux-engine-proof/pins.json`.
+
+- Licence: MIT, Copyright (c) 2023-2026 The ggml authors. The full text is the `LICENSE` file at that commit
+  (https://github.com/ggml-org/llama.cpp/blob/6420cf5dd588c68e48657a0bbd82bb3bd5ac7209/LICENSE).
+- Used for: running the cleanup GGUF models on Linux. The Mac app doesn't use it.
+
+## Qwen3-4B-Instruct-2507
+
+https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF, revision a06e946bb6b655725eafa393f4a9745d460374c9, file
+`Qwen3-4B-Instruct-2507-Q4_K_M.gguf`
+
+The Linux client's Thorough cleanup model. It is not bundled. The user downloads this Q4_K_M GGUF conversion by Unsloth
+on request and it runs through llama.cpp. It is a conversion of Qwen/Qwen3-4B-Instruct-2507 from Alibaba Cloud
+(https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507). Mouthtype doesn't modify it.
+
+- Licence: Apache License, Version 2.0. The Qwen repository's `LICENSE` is the Apache 2.0 text and carries the line
+  "Copyright 2024 Alibaba Cloud" (https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507/blob/main/LICENSE). Both the Qwen
+  and the Unsloth model cards declare `license: apache-2.0`, and the Unsloth card links to that Qwen `LICENSE`. The
+  Unsloth repository has no `LICENSE` file of its own at this revision and no separate Unsloth copyright statement was
+  found, so the conversion's terms are taken from its card and the upstream licence.
+- Used for: Thorough cleanup on Linux (`tools/linux-desktop/setup_cleanup.py`), pinned in
+  `tools/linux-engine-proof/pins.json` with its SHA-256.
 
 ## OpenWhispr
 
@@ -249,8 +287,12 @@ embedded in `Mouthtype.app/Contents/Frameworks`, and its `LICENSE` file is the a
 
 ## Models
 
-No model is bundled with Mouthtype. Each is downloaded on request from Hugging Face and runs on the Mac. The license
-named is the one on the model's Hugging Face card; follow the link for the full text and any use restrictions.
+No model is bundled with Mouthtype. Each model in the table is downloaded on request from Hugging Face and runs on the user's machine.
+On the Mac the speech and cleanup models run through Apple frameworks and MLX. On Linux the cleanup models run through
+llama.cpp, and speech uses the sherpa-onnx runtime with a Parakeet archive fetched from its GitHub release (pinned in
+`tools/linux-engine-proof/pins.json`, which records the Parakeet v3 archive as CC-BY-4.0 and the sherpa-onnx runtime as
+Apache-2.0; the runtime has no entry of its own in this file yet). The license named is the one on the model's Hugging
+Face card; follow the link for the full text and any use restrictions.
 
 | Model | Used for | License | Card |
 | --- | --- | --- | --- |
@@ -259,12 +301,13 @@ named is the one on the model's Hugging Face card; follow the link for the full 
 | Parakeet CTC 110M (NVIDIA parakeet-tdt_ctc-110m; Core ML conversion by FluidInference) | Vocabulary boosting, only when you turn on "Boost my saved words while recognising" | CC BY 4.0 | https://huggingface.co/nvidia/parakeet-tdt_ctc-110m and https://huggingface.co/FluidInference/parakeet-ctc-110m-coreml |
 | Silero VAD (Core ML conversion by FluidInference) | Speech detection | MIT | https://huggingface.co/FluidInference/silero-vad-coreml |
 | Whisper large-v3 turbo and small.en (OpenAI; Core ML builds by argmax) | Alternative speech recognition | MIT | https://huggingface.co/argmaxinc/whisperkit-coreml |
-| S1-mini (Superwhisper) | Fast cleanup | Apache License 2.0 plus a naming clause, see the S1-mini section above | https://huggingface.co/superwhisper/s1-mini |
-| Gemma 4 E4B it, MLX 4-bit (Google; conversion by mlx-community) | Thorough cleanup | Apache License 2.0, https://ai.google.dev/gemma/docs/gemma_4_license | https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit and https://huggingface.co/google/gemma-4-e4b-it |
+| S1-mini (Superwhisper) | Fast cleanup, Mac (MLX) and Linux (GGUF Q4_K_M) | Apache License 2.0 plus a naming clause, see the S1-mini section above | https://huggingface.co/superwhisper/s1-mini and https://huggingface.co/superwhisper/s1-mini-GGUF |
+| Gemma 4 E4B it, MLX 4-bit (Google; conversion by mlx-community) | Thorough cleanup on the Mac | Apache License 2.0, https://ai.google.dev/gemma/docs/gemma_4_license | https://huggingface.co/mlx-community/gemma-4-e4b-it-4bit and https://huggingface.co/google/gemma-4-e4b-it |
+| Qwen3-4B-Instruct-2507, GGUF Q4_K_M (Alibaba Cloud; conversion by Unsloth) | Thorough cleanup on Linux | Apache License 2.0, see the Qwen3-4B-Instruct-2507 section above | https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507 and https://huggingface.co/unsloth/Qwen3-4B-Instruct-2507-GGUF |
 
 CC BY 4.0 requires attribution: the Parakeet models are by NVIDIA, licensed under
 https://creativecommons.org/licenses/by/4.0/. The Core ML conversions are by FluidInference and are not endorsed by NVIDIA.
 
-The catalog also lists optional cleanup models for benchmarking (Gemma 4 E2B, Qwen3 4B Instruct 2507, Llama 3.2 3B
+The Mac catalog also lists optional cleanup models for benchmarking (Gemma 4 E2B, Qwen3 4B Instruct 2507, Llama 3.2 3B
 Instruct, Phi-4-mini Instruct, all MLX 4-bit from `mlx-community`). They are not offered in the app, and each keeps the
-license on its Hugging Face card.
+license on its Hugging Face card. Those MLX builds are separate from the Linux GGUF listed above.
