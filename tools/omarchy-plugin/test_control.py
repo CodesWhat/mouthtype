@@ -657,5 +657,55 @@ class PanelActionTests(unittest.TestCase):
         self.assertNotIn("cleanup cleanupPage", panel)
 
 
+class CapabilitiesCacheTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.launcher = Path(self.directory.name) / "launcher"
+        self.launcher.write_text("", encoding="utf-8")
+        self.calls = []
+        self.output = json.dumps({"interface": "x", "features": {"a": True}})
+        self.returncode = 0
+        control._CAPABILITIES_CACHE.clear()
+        self.addCleanup(control._CAPABILITIES_CACHE.clear)
+
+        def fake_cli(*args, **kwargs):
+            self.calls.append(args)
+            return mock.Mock(returncode=self.returncode, stdout=self.output)
+        for patch in (mock.patch.object(control, "LAUNCHER", self.launcher),
+                      mock.patch.object(control, "cli", fake_cli)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_repeated_polls_spawn_the_launcher_once(self):
+        first = control.capabilities()
+        self.assertEqual(control.capabilities(), first)
+        self.assertEqual(first["features"], {"a": True})
+        self.assertEqual(len(self.calls), 1)
+
+    def test_replaced_launcher_is_asked_again(self):
+        control.capabilities()
+        stat = self.launcher.stat()
+        import os
+        os.utime(self.launcher, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000_000))
+        control.capabilities()
+        self.assertEqual(len(self.calls), 2)
+
+    def test_failed_answer_is_not_cached(self):
+        self.returncode = 1
+        self.assertEqual(control.capabilities(), {})
+        self.assertEqual(control.capabilities(), {})
+        self.assertEqual(len(self.calls), 2)
+        self.returncode = 0
+        self.assertTrue(control.capabilities())
+        control.capabilities()
+        self.assertEqual(len(self.calls), 3)
+
+    def test_missing_launcher_returns_empty_without_spawning(self):
+        self.launcher.unlink()
+        self.assertEqual(control.capabilities(), {})
+        self.assertEqual(self.calls, [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -84,15 +84,29 @@ def cli_error(result):
         return None
 
 
+_CAPABILITIES_CACHE = {}
+
+
 def capabilities():
-    if not LAUNCHER.is_file():
+    """The report is static for a given launcher, so only a non-empty answer is cached, keyed on the launcher's mtime."""
+    try:
+        stamp = LAUNCHER.stat().st_mtime_ns
+    except OSError:
         return {}
+    cached = _CAPABILITIES_CACHE.get(stamp)
+    if cached is not None:
+        return cached
     try:
         result = cli("capabilities", timeout=10)
         report = json.loads(result.stdout) if result.returncode == 0 else {}
     except (OSError, json.JSONDecodeError, subprocess.SubprocessError):
         report = {}
-    return report if isinstance(report, dict) else {}
+    if not isinstance(report, dict):
+        return {}
+    if report:
+        _CAPABILITIES_CACHE.clear()
+        _CAPABILITIES_CACHE[stamp] = report
+    return report
 
 
 def atomic_json(path, value):
