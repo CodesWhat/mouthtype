@@ -337,6 +337,7 @@ final class DictationController {
                 enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
                 readers: .system, readGate: .shared
             )
+            pipeline.warmEditorBias(current.editorHints)
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
         // The page URL was read off the main actor while the row opened. It belongs to this recording only, and a read that missed
