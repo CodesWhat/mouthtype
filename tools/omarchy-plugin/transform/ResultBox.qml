@@ -67,7 +67,8 @@ Rectangle {
           if (p < end && Math.abs(here.y - top) < 2) { last = p; continue }
           var width = Math.abs(here.y - top) < 2
             ? here.x - left : edit.positionToRectangle(last).x + measure.advanceWidth(value.substring(last, last + (value.charCodeAt(last) >= 0xD800 && value.charCodeAt(last) <= 0xDBFF ? 2 : 1))) - left
-          if (width > 0) out.push({ x: left, y: top, width: width, height: height })
+          // Right-to-left runs walk the cursor leftwards, so the width comes out negative.
+          if (width !== 0) out.push({ x: width < 0 ? left + width : left, y: top, width: Math.abs(width), height: height })
           left = here.x
           top = here.y
           height = here.height

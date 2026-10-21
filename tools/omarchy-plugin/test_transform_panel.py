@@ -74,6 +74,10 @@ class SourceContractTests(unittest.TestCase):
         self.assertLessEqual(verbs, set(control_transform.COMMANDS))
         self.assertIn("transform-open", control_transform.COMMANDS)
 
+    def test_first_run_bypasses_the_busy_guard_and_reload_ignores_old_requests(self):
+        self.assertIn('root.start("clean-up", true)', WINDOW)
+        self.assertIn("lastOpened = Date.now() / 1000", WINDOW)
+
     def test_window_reads_the_file_transform_open_writes(self):
         self.assertIn("/mouthtype/" + control_transform.PANEL_REQUEST, WINDOW)
         self.assertEqual(control_transform.RUNTIME.name, "mouthtype")

@@ -46,7 +46,7 @@ function merge(base, patch) {
 function empty() {
   return {
     phase: "closed", id: "", app: null, original: "", result: "", serverResult: "", serial: 0, diff: null,
-    kind: "clean-up", previousKind: "clean-up", kinds: placeholderKinds(), modelNote: "",
+    kind: "clean-up", previousKind: "clean-up", failedKind: "", kinds: placeholderKinds(), modelNote: "",
     message: "", messageTone: "info", refused: null, submitted: false, source: "primary", fallback: false
   }
 }
@@ -96,7 +96,7 @@ function withStatus(session, status) {
 }
 
 function runStarted(session, kind) {
-  return merge(session, { phase: "running", previousKind: session.kind, kind: kind, refused: null, message: "" })
+  return merge(session, { phase: "running", previousKind: session.kind, failedKind: "", kind: kind, refused: null, message: "" })
 }
 
 function absorbRun(session, reply) {
@@ -111,7 +111,7 @@ function absorbRun(session, reply) {
   if (reply && reply.state === "cancelled")
     return merge(session, { phase: "ready", kind: session.previousKind, message: "Cancelled.", messageTone: "info" })
   return merge(session, {
-    phase: "ready", kind: session.previousKind, modelNote: note,
+    phase: "ready", kind: session.previousKind, failedKind: session.kind, modelNote: note,
     message: reply && reply.state === "unavailable" ? "" : fail(reply, "That transform failed. Retry, or cancel."),
     messageTone: "error"
   })
@@ -157,8 +157,12 @@ function chips(session) {
 }
 
 // Retry shows while an AI transform is the active choice, and works once it has finished.
+function retryKind(session) {
+  return session.failedKind ? session.failedKind : session.kind
+}
+
 function retryVisible(session) {
-  return session.phase !== "error" && isModelKind(session.kind)
+  return session.phase !== "error" && isModelKind(retryKind(session))
 }
 
 function canRetry(session) {

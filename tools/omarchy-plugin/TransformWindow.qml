@@ -75,8 +75,9 @@ Item {
     if (session.phase === "starting") launch(statusProc, [helper, "transform-status"])
   }
 
-  function start(kind) {
-    if (Model.isBusy(session) || session.id === "") return
+  // The first run follows the status reply while the phase is still "starting"; every later run needs a settled session.
+  function start(kind, first) {
+    if ((Model.isBusy(session) && first !== true) || session.id === "") return
     session = Model.runStarted(session, kind)
     launch(runProc, [helper, "transform-run", session.id, kind])
   }
@@ -150,7 +151,7 @@ Item {
       onStreamFinished: {
         if (statusProc.queued !== null || root.session.phase !== "starting") return
         root.session = Model.withStatus(root.session, root.parse(text))
-        root.start("clean-up")
+        root.start("clean-up", true)
       }
     }
     onExited: if (queued !== null) { command = queued; queued = null; running = true }
@@ -202,7 +203,7 @@ Item {
       focus: true
       session: root.session
       onChosen: function(kind) { root.start(kind) }
-      onRetryRequested: root.start(root.session.kind)
+      onRetryRequested: root.start(Model.retryKind(root.session))
       onCopyResultRequested: root.copy("result")
       onCopyOriginalRequested: root.copy("original")
       onAcceptRequested: root.accept()
@@ -210,5 +211,6 @@ Item {
     }
   }
 
-  Component.onCompleted: log("loaded")
+  // Requests older than this window are not for it: a dismissed card must not return when the shell reloads.
+  Component.onCompleted: { lastOpened = Date.now() / 1000; log("loaded") }
 }
