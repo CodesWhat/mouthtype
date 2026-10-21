@@ -1180,6 +1180,45 @@ class RetentionTests(unittest.TestCase):
                 thread.join(4)
                 session.close()
 
+    def test_stop_and_toggle_to_stop_never_wait_for_startup_pruning(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'recovery'
+            root.mkdir(mode=0o700)
+            for index in range(2):
+                take = root / ('%032x' % index)
+                take.mkdir(mode=0o700)
+                (take / 'take.json').write_text(json.dumps({'created': 1000 + index}))
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=3, history_keep=2)
+            real = session.prune_history
+            def slow_prune():
+                time.sleep(1.2)
+                return real()
+            session.prune_history = slow_prune
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={
+                'lifetime_seconds': 6, 'startup': lambda: session.housekeep(force=True)})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'start')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                self.assertEqual(reply['state'], 'recording')
+                # The new take fills the store while the prune is still running.
+                self.assertEqual(session.take_count(), 3)
+                begun = time.monotonic()
+                self.assertEqual(request(path, 'toggle')['state'], 'transcribing')
+                self.assertLess(time.monotonic() - begun, .6)
+            finally:
+                stopped.set()
+                thread.join(5)
+                session.close()
+
     def test_serve_binds_the_socket_before_startup_maintenance_runs(self):
         from desktop import serve, request
         with tempfile.TemporaryDirectory() as temp:

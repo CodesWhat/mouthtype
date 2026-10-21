@@ -1384,10 +1384,12 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                                 if action in ('start', 'toggle') and (
                                         type(admission) not in (int, float) or not math.isfinite(admission)):
                                     raise ValueError('Recording admission deadline is required')
-                                if (action in ('start', 'toggle') and maintenance is not None and maintenance.is_alive()
+                                starting = action == 'start' or (action == 'toggle' and session.state == 'idle')
+                                if (starting and maintenance is not None and maintenance.is_alive()
                                         and session.take_count() >= session.maximum_takes):
                                     # Startup pruning may be about to free a slot; wait for it, within the deadline,
-                                    # rather than answer recovery_full to the first key press.
+                                    # rather than answer recovery_full to the first key press. Stop, cancel and a toggle that
+                                    # ends a recording never wait.
                                     until = min(time.monotonic() + 1.0, admission - .25)
                                     while maintenance.is_alive() and not session.pruned.is_set() and time.monotonic() < until:
                                         time.sleep(.01)
