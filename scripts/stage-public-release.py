@@ -18,7 +18,7 @@ release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
 
-def validate_archive(directory):
+def validate_archive(directory, require_dmg=False):
     manifest = json.loads((directory / 'release-manifest.json').read_text())
     if manifest['notarizationStatus'] != 'Accepted':
         raise RuntimeError('Accepted notarization is required')
@@ -33,7 +33,26 @@ def validate_archive(directory):
         raise RuntimeError('Archive checksum does not match the checked release')
     if archive.stat().st_size != manifest['archiveBytes']:
         raise RuntimeError('Archive length does not match the checked release')
+    if 'dmg' in manifest or require_dmg:
+        validate_disk_image(directory, manifest)
     return manifest
+
+
+def validate_disk_image(directory, manifest):
+    """The DMG is the public download, so it needs its own notarization and checksum evidence."""
+    if manifest.get('dmg') != f"Mouthtype-{manifest['version']}-macos-arm64.dmg":
+        raise RuntimeError('Release version and DMG filename must agree')
+    if manifest.get('dmgNotarizationStatus') != 'Accepted':
+        raise RuntimeError('Accepted DMG notarization is required')
+    if not all(manifest.get(key) is True for key in (
+        'dmgSignatureVerified', 'dmgStapleVerified', 'dmgGatekeeperAccepted'
+    )):
+        raise RuntimeError('All DMG distribution checks must pass')
+    image = directory / manifest['dmg']
+    if hashlib.sha256(image.read_bytes()).hexdigest() != manifest['dmgSHA256']:
+        raise RuntimeError('DMG checksum does not match the checked release')
+    if image.stat().st_size != manifest['dmgBytes']:
+        raise RuntimeError('DMG length does not match the checked release')
 
 
 def retain_public_assets(staged, retained):
@@ -68,7 +87,7 @@ def main():
                         help='Retained public artifact directory; keep it across releases')
     args = parser.parse_args()
     directory = args.release_directory.resolve()
-    manifest = validate_archive(directory)
+    manifest = validate_archive(directory, require_dmg=True)
     version = manifest['version']
     metadata = release.release_metadata(ROOT)
     source = release.verify_source(ROOT, version)
@@ -84,6 +103,7 @@ def main():
         info = plistlib.load(file)
     if info.get('SUPublicEDKey') != public_key or info.get('SURequireSignedFeed') is not True:
         raise RuntimeError('The app must require the feed signing key used for publication')
+    release.verify_disk_image(directory / manifest['dmg'], directory, 'public-dmg')
     with tempfile.TemporaryDirectory(prefix='mouthtype-public-check-') as temporary:
         extracted = Path(temporary)
         release.run(['ditto', '-x', '-k', str(directory / manifest['archive']), str(extracted)], timeout=180)
@@ -101,6 +121,8 @@ def main():
     archive = directory / manifest['archive']
     shutil.copy2(archive, releases / archive.name)
     shutil.copy2(directory / f'{archive.name}.sha256', releases / f'{archive.name}.sha256')
+    for name in (manifest['dmg'], f"{manifest['dmg']}.sha256"):
+        shutil.copy2(directory / name, releases / name)
     source_archive = releases / f'Mouthtype-{version}-source.tar.gz'
     release.run(['git', 'archive', '--format=tar.gz', f'--prefix=Mouthtype-{version}-source/',
                  f'--output={source_archive}', source], cwd=ROOT, timeout=180)
@@ -122,7 +144,8 @@ def main():
         shutil.copy2(feed, updates / 'appcast.xml')
     retain_public_assets(output, args.public_dir.resolve())
     print(json.dumps({'publicDirectory': str(args.public_dir.resolve()), 'version': version,
-                      'archiveSHA256': manifest['archiveSHA256'], 'signedFeedVerified': True,
+                      'archiveSHA256': manifest['archiveSHA256'], 'dmgSHA256': manifest['dmgSHA256'],
+                      'signedFeedVerified': True,
                       'sourceSHA256': source_digest}, indent=2))
 
 
