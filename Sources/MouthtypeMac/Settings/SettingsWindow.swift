@@ -13,6 +13,7 @@ import MouthtypeCore
     private let fullKeyboardAccess: @MainActor () -> Bool
     private let notifications: NotificationCenter
     private nonisolated(unsafe) var transparencyObserver: NSObjectProtocol?
+    private var presentedThisTurn = false
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
     init(model: SettingsModel, actions: SettingsActions = SettingsActions(),
@@ -89,6 +90,9 @@ import MouthtypeCore
         refreshDiagnostics()
         model.refresh()
         reloadHome()
+        // The window becoming key a moment later would repeat all three; skip it within this run-loop turn.
+        presentedThisTurn = true
+        DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.presentedThisTurn = false } }
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
@@ -96,6 +100,7 @@ import MouthtypeCore
 
     func windowDidBecomeKey(_ notification: Notification) {
         startObservingTransparency()
+        guard !presentedThisTurn else { return }
         refreshDiagnostics()
         model.refresh()
         reloadHome()
