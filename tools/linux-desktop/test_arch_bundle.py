@@ -49,7 +49,7 @@ class ArchBundleTests(unittest.TestCase):
             self.assertEqual(receipt['revision'], 'a' * 40)
             self.assertEqual(receipt['source_sha256'], digest)
             self.assertFalse(receipt['physical_desktop_tested'])
-            self.assertEqual(len(receipt['payload_sha256']), len(bundle.installer.FILES))
+            self.assertEqual(len(receipt['payload_sha256']), len(bundle.installer.payload_files(ROOT)))
 
     def test_existing_output_and_invalid_metadata_preserved(self):
         with tempfile.TemporaryDirectory() as directory:

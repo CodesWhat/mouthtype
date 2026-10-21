@@ -1,6 +1,7 @@
 """Install or archive the Linux development client without changing the desktop."""
 
 import argparse
+import fnmatch
 import io
 import os
 from pathlib import Path
@@ -29,6 +30,19 @@ FILES = (['LICENSE', 'THIRD_PARTY_NOTICES.md'] +
          ['tools/linux-desktop/' + name for name in DESKTOP] +
          ['tools/linux-desktop/vendor/grapheme/' + name for name in GRAPHEME] +
          ['tools/linux-engine-proof/' + name for name in ENGINE])
+# Modules the daemon loads at runtime (cli_*.py, library.py, stats.py, transform_worker.py, ...) and their
+# test_*.py files are found by scanning, so a new slice ships without editing the lists above. Tests ship on
+# purpose: the Arch package runs them in check() and the install tests run them from the payload. Dev
+# scripts and tests that need the repository root (test_arch_bundle.py) stay out.
+SCAN_EXCLUDED = ('check_*.py', 'verify_*.py', 'conftest.py', 'test_arch_bundle.py')
+
+
+def payload_files(source):
+    source = Path(source)
+    found = [name for name in sorted(path.name for path in (source / 'tools/linux-desktop').glob('*.py'))
+             if not any(fnmatch.fnmatchcase(name, pattern) for pattern in SCAN_EXCLUDED)]
+    return FILES + ['tools/linux-desktop/' + name for name in found
+                    if 'tools/linux-desktop/' + name not in FILES]
 
 
 def install(source, prefix, *, destdir=None):
@@ -54,7 +68,7 @@ def install(source, prefix, *, destdir=None):
     staging = Path(tempfile.mkdtemp(prefix='.mouthtype-install-', dir=payload.parent))
     placed = False
     try:
-        for name in FILES:
+        for name in payload_files(source):
             destination = staging / name
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(source / name, destination)
@@ -86,7 +100,7 @@ def package(source, output):
     # Exclusive creation prevents overwriting an earlier artifact or another task's output.
     with output.open('xb') as destination:
         with tarfile.open(fileobj=destination, mode='w:gz') as archive:
-            for name in FILES:
+            for name in payload_files(source):
                 data = (source / name).read_bytes()
                 info = tarfile.TarInfo('mouthtype-linux/' + name)
                 info.size, info.mode = len(data), 0o644
