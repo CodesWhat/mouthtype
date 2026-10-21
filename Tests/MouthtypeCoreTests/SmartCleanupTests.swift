@@ -209,6 +209,76 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(cleaner.contexts.last?.correctionsOnly == false)
     }
 
+    private let framed = "can you send the quarterly report to Dana by Friday afternoon so we can review it before the meeting"
+    private let framedClean = "Can you send the quarterly report to Dana by Friday afternoon so we can review it before the meeting."
+
+    /// DR-F9: framing the model adds is removed before the guard and the paste.
+    @Test(arguments: [
+        "Here is the cleaned transcript:\n", "Here's the cleaned text: ", "Sure, here is the corrected version:\n",
+    ], [false, true])
+    func aModelPreambleIsStripped(preamble: String, native: Bool) async {
+        let cleaner = FakeCleaner(returning: preamble + framedClean)
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(request(framed))
+        #expect(result.outcome == .ok && result.text == framedClean)
+    }
+
+    @Test(arguments: [("\"", "\""), ("\u{201C}", "\u{201D}")], [false, true])
+    func wrappingQuotesAreStripped(quotes: (String, String), native: Bool) async {
+        let cleaner = FakeCleaner(returning: quotes.0 + framedClean + quotes.1)
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(request(framed))
+        #expect(result.outcome == .ok && result.text == framedClean)
+    }
+
+    @Test(arguments: [false, true])
+    func aWrappingCodeFenceIsStripped(native: Bool) async {
+        let cleaner = FakeCleaner(returning: "```\n" + framedClean + "\n```")
+        cleaner.usesNativeControls = native
+        let result = await smart(cleaner).run(request(framed))
+        #expect(result.outcome == .ok && result.text == framedClean)
+    }
+
+    @Test func framingThatWasDictatedIsKept() async {
+        for text in [
+            "\"we should leave earlier to beat the traffic\"",
+            "here is the cleaned text: we should leave earlier to beat the traffic",
+            "Here's the cleaned text we should leave earlier to beat the traffic",
+            "```we should leave earlier to beat the traffic```",
+        ] {
+            let cleaner = FakeCleaner { t, _ in t }
+            let result = await smart(cleaner).run(request(text))
+            #expect(result.outcome == .ok && result.text == text, "\(text) became \(result.text)")
+        }
+    }
+
+    @Test func aDictatedPreambleSurvivesPunctuationAndCapitalCleanup() async {
+        let cleaner = FakeCleaner(returning: "Here is the cleaned transcript: We should leave earlier to beat the traffic.")
+        let result = await smart(cleaner).run(request("here is the cleaned transcript we should leave earlier to beat the traffic"))
+        #expect(result.text.hasPrefix("Here is the cleaned transcript"), "became \(result.text)")
+    }
+
+    @Test(arguments: [
+        ("\"we should leave earlier\nto beat the traffic\"", "\u{201C}we should leave earlier\nto beat the traffic\u{201D}"),
+        ("\u{201C}we should leave earlier\nto beat the traffic\u{201D}", "\"we should leave earlier\nto beat the traffic\""),
+    ])
+    func dictatedQuotesSurviveAQuoteStyleSwap(pair: (String, String)) async {
+        let cleaner = FakeCleaner(returning: pair.1)
+        let result = await smart(cleaner).run(request(pair.0))
+        #expect(result.text == pair.1, "became \(result.text)")
+    }
+
+    @Test func contentThatMerelyLooksLikeFramingIsKept() async {
+        for text in [
+            "here is the plan for Alice: we should leave earlier to beat the traffic",
+            "she said \"we should leave earlier\" and then we should leave earlier to beat the traffic",
+        ] {
+            let cleaner = FakeCleaner { t, _ in t }
+            let result = await smart(cleaner).run(request(text))
+            #expect(result.outcome == .ok && result.text == text, "\(text) became \(result.text)")
+        }
+    }
+
     @Test func surroundingTextCannotBecomePartOfTheDictation() async {
         let cleaner = FakeCleaner(returning: "Project: Drydock\nThe Drydock project build passed.")
         let result = await smart(cleaner).run(SmartCleanupRequest(text: "the dry dock project build passed", level: .light,

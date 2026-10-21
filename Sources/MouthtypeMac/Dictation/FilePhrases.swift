@@ -32,6 +32,31 @@ final class FilePhrases: Sendable {
         }
     }
 
+    private struct FileStamp: Equatable {
+        var exists: Bool
+        var modified: Date?
+        var size: Int?
+    }
+
+    private let healthCheck = OSAllocatedUnfairLock<(stamp: FileStamp, error: String?)?>(initialState: nil)
+    /// How many times `healthError()` has actually read the file. Lets a test check the gate.
+    let healthReads = OSAllocatedUnfairLock(initialState: 0)
+
+    /// The error a read of the file would give, or nil when it parses. The file is read again only when its modification
+    /// time or size changed since the last check, so polling this on every menu open costs one stat.
+    func healthError() -> String? {
+        // A fresh URL each time: a URL caches its resource values, which would hide a change.
+        let values = try? URL(fileURLWithPath: url.path).resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+        let stamp = FileStamp(exists: values != nil, modified: values?.contentModificationDate, size: values?.fileSize)
+        if let last = healthCheck.withLock({ $0 }), last.stamp == stamp { return last.error }
+        healthReads.withLock { $0 += 1 }
+        let message: String?
+        do { _ = try all(); message = nil }
+        catch { message = error.localizedDescription }
+        healthCheck.withLock { $0 = (stamp, message) }
+        return message
+    }
+
     func snippets() -> [Snippet] {
         do { return try all() }
         catch { return lastGood.withLock { $0 } }

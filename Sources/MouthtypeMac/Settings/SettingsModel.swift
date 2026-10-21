@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import MouthtypeCore
 import Observation
 import UniformTypeIdentifiers
@@ -201,7 +202,26 @@ import UniformTypeIdentifiers
         livePreview = enabled
     }
 
+    /// How many times `refresh()` has run. Lets a test check that bursts coalesce.
+    @ObservationIgnored private(set) var refreshCount = 0
+    @ObservationIgnored private var refreshPending = false
+
+    /// Refreshes once on the next run-loop turn however many callers ask before then. A `refresh()` that runs first
+    /// covers every request made before it, so it cancels the pending one.
+    func scheduleRefresh() {
+        guard !refreshPending else { return }
+        refreshPending = true
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, self.refreshPending else { return }
+                self.refresh()
+            }
+        }
+    }
+
     func refresh() {
+        refreshPending = false
+        refreshCount += 1
         microphone.refresh()
         advancedOptions = defaults.bool(forKey: Self.advancedOptionsKey)
         audioRetention = AudioRetentionPreference.load(defaults)
@@ -215,8 +235,8 @@ import UniformTypeIdentifiers
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
-        FontRegistry.registerBundledFonts()
-        fontFamilies = Array(Set(NSFontManager.shared.availableFontFamilies)).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        FontRegistry.ensureRegistered()
+        fontFamilies = FontFamilyCache.families()
         let savedShortcut = ShortcutSettings.load(defaults)
         shortcut = savedShortcut?.displayName ?? "Fn"
         capsLockShortcut = savedShortcut?.isCapsLock == true
@@ -436,4 +456,37 @@ import UniformTypeIdentifiers
         fontOverrides = TextFontOverrides.load(defaults)
     }
 
+}
+
+/// The installed font families, sorted for the pickers. Listing them costs milliseconds and `SettingsModel.refresh()`
+/// runs on every defaults change, so the list is kept until the system's font set changes.
+@MainActor enum FontFamilyCache {
+    private static var cached: [String]?
+    private(set) static var loads = 0
+    private static var observers: [NSObjectProtocol] = []
+
+    static let changeNotifications: [Notification.Name] = [
+        Notification.Name("NSFontSetChangedNotification"),
+        Notification.Name(kCTFontManagerRegisteredFontsChangedNotification as String),
+    ]
+
+    static func families(list: () -> [String] = { NSFontManager.shared.availableFontFamilies }) -> [String] {
+        observeIfNeeded()
+        if let cached { return cached }
+        loads += 1
+        let sorted = Array(Set(list())).sorted { $0.localizedStandardCompare($1) == .orderedAscending }
+        cached = sorted
+        return sorted
+    }
+
+    static func invalidate() { cached = nil }
+
+    private static func observeIfNeeded() {
+        guard observers.isEmpty else { return }
+        observers = changeNotifications.map { name in
+            NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { invalidate() }
+            }
+        }
+    }
 }

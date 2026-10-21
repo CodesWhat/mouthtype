@@ -49,7 +49,7 @@ struct SettingsView: View {
             seededSidebarFocus = true
             DispatchQueue.main.async { if let follow = SettingsPage.focusFollowing(focused: sidebarFocus, selected: model.page) { sidebarFocus = follow } }
         }
-        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.refresh() }
+        .onReceive(NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification).receive(on: RunLoop.main)) { _ in model.scheduleRefresh() }
     }
 
     // MARK: Sidebar

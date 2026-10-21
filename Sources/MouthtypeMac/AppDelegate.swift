@@ -56,12 +56,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }, activityChanged: { [weak self] in
             self?.appUpdater.refreshActivity()
             self?.menuBar?.refresh()
-            self?.settingsWindow.model.home.refreshRecoverability()
+            self?.builtSettingsWindow?.model.home.refreshRecoverability()
         }, copy: { SystemClipboard().write($0) })
     private lazy var fileTranscriptionWindow = FileTranscriptionWindow(model: fileTranscriptionModel)
     private lazy var spellingEditor = SpellingEditor(store: dictionary)
     private lazy var spellingSuggestions = SpellingSuggestionsModel(vocabulary: dictionary)
-    private lazy var settingsWindow = SettingsWindow(
+    /// Built on first use, which is the first time the window is presented. Launch never touches it, so the models behind it
+    /// (`SettingsModel.init` alone is ~100 ms) stay out of the path to the menu bar item.
+    lazy var settingsWindow: SettingsWindow = wiredSettingsWindow(SettingsWindow(
         model: SettingsModel(onCleanupChanged: { [weak self] in self?.cleanerHost.levelChanged(); self?.refreshDiagnosticModels() },
             onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
             onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
@@ -80,7 +82,47 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             openKeyboardSettings: { NSWorkspace.shared.open(GlobeKeyCheck.settingsURL) },
             editDictionary: { [weak self] in self?.editDictionary() },
             editPhrasesFile: { [weak self] in self?.editPhrasesFile() },
-            chooseFont: { [weak self] in self?.fontChooser.presentFontChooser() }, updater: appUpdater))
+            chooseFont: { [weak self] in self?.fontChooser.presentFontChooser() }, updater: appUpdater)))
+    private(set) var settingsWindowBuilt = false
+    var settingsStore: TranscriptStore?
+    /// The window if something has already presented it. Callbacks that only refresh it use this so they don't build it.
+    private var builtSettingsWindow: SettingsWindow? { settingsWindowBuilt ? settingsWindow : nil }
+
+    /// Hands the store and the recovery hooks to the models the first time the window exists.
+    private func wiredSettingsWindow(_ window: SettingsWindow) -> SettingsWindow {
+        wireSettingsModels(window.model)
+        settingsWindowBuilt = true
+        return window
+    }
+
+    /// Safe to repeat: completeLaunch runs it again for a window something built before the store and recovery existed.
+    private func wireSettingsModels(_ model: SettingsModel) {
+        model.home.store = settingsStore
+        model.stats.store = settingsStore
+        model.spellingSuggestions?.store = settingsStore
+        if let recovery {
+            let home = model.home
+            home.saved = { [weak recovery] in try await recovery?.loadSavedRecordings() ?? [] }
+            home.completedAudio = { [weak recovery] rows in await recovery?.loadCompletedRecordings(for: rows) ?? [] }
+            home.canRecover = recovery.canRecover
+            home.recoverTake = { [weak recovery] item in recovery?.offerSaved(item) }
+        }
+    }
+
+    /// Open-URL events that arrived before launch finished. They replay in order once the store, pill and menu exist.
+    private var pendingOpenURLs: [[URL]] = []
+    private(set) var launchComplete = false
+    var pendingOpenCount: Int { pendingOpenURLs.count }
+
+    /// Re-wires a settings window built early, then replays what arrived during launch.
+    func finishLaunch() {
+        if settingsWindowBuilt { wireSettingsModels(settingsWindow.model) }
+        launchComplete = true
+        let pending = pendingOpenURLs
+        pendingOpenURLs = []
+        for urls in pending { application(NSApp, open: urls) }
+    }
+
     /// Hands the engine the current bias now, so turning the setting on starts the model download without waiting for a take.
     private func refreshVocabularyBias() {
         let bias = VocabularyBoostSetting.bias(enabled: VocabularyBoostSetting.isEnabled(), rules: dictionary.dictionary())
@@ -123,9 +165,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     public func applicationDidFinishLaunching(_ notification: Notification) {
         Log.app.info("launch \(AppInfo.version, privacy: .public)")
         let arguments = CommandLine.arguments
-        FontRegistry.registerBundledFonts()
         // The two file/visual modes need no permissions and touch neither the remap, the mic nor the real database.
         if let demo = PillDemo.options(in: arguments) {
+            FontRegistry.registerBundledFonts()
             let pill = PillController(level: { .silence })
             if let skin = demo.skin { pill.setSkin(skin) }
             let cards = DeliveryCardController()
@@ -162,6 +204,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        // The status item goes up first and fonts start registering off the main thread. Everything that builds a pill or
+        // card (and so draws with a bundled font) waits for the next run-loop turn, after the item has been committed.
+        beginLaunch { [weak self] menuBar in self?.completeLaunch(arguments: arguments, menuBar: menuBar) }
+    }
+
+    /// Creates the status item and starts font registration without touching anything font-dependent, then runs `finish`
+    /// on the next main-queue turn.
+    func beginLaunch(statusItem: () -> MenuBarController = { MenuBarController() }, finish: @escaping @MainActor (MenuBarController) -> Void) {
+        let menuBar = statusItem()
+        FontRegistry.registerInBackground()
+        DispatchQueue.main.async { MainActor.assumeIsolated { finish(menuBar) } }
+    }
+
+    private func completeLaunch(arguments: [String], menuBar: MenuBarController) {
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
         let store = openStore()
@@ -214,12 +270,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictation.corrections = watcher
         correctionWatcher = watcher
 
-        let menuBar = MenuBarController()
         pill.onLevel = { [weak menuBar] level in menuBar?.setLevel(level) }
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
-        settingsWindow.model.home.store = store
-        settingsWindow.model.stats.store = store
-        settingsWindow.model.spellingSuggestions?.store = store
+        settingsStore = store
         let settingsSection = SettingsMenuSection(
             open: { [weak self] in self?.settingsWindow.present(destination: .settings(.general)) },
             openHome: { [weak self] in self?.settingsWindow.present(page: .home) })
@@ -253,13 +306,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 return false
             }
             menuBar.add(section: SavedRecordingsMenuSection(recovery: recovery, canRecover: recovery.canRecover), startsGroup: false)
-            let home = settingsWindow.model.home
-            home.saved = { [weak recovery] in try await recovery?.loadSavedRecordings() ?? [] }
-            home.completedAudio = { [weak recovery] rows in await recovery?.loadCompletedRecordings(for: rows) ?? [] }
-            home.canRecover = recovery.canRecover
-            home.recoverTake = { [weak recovery] item in recovery?.offerSaved(item) }
-            recovery.onFinished = { [weak menuBar] in
+            recovery.onFinished = { [weak self, weak menuBar] in
                 menuBar?.refresh()
+                // An unbuilt window has nothing on screen; its first present reloads the page.
+                guard let home = self?.builtSettingsWindow?.model.home else { return }
                 home.refreshRecoverability()
                 home.startReload()
             }
@@ -274,7 +324,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { _ = await self.prepareCapture() }
         }
         historySection = history
-        dictation.onAttemptFinished = { [weak menuBar, weak home = settingsWindow.model.home] in menuBar?.refresh(); home?.refreshRecoverability() }
+        dictation.onAttemptFinished = { [weak self, weak menuBar] in menuBar?.refresh(); self?.builtSettingsWindow?.model.home.refreshRecoverability() }
         dictation.onHandsFreeChanged = { [weak menuBar] active in menuBar?.setHandsFree(active) }
         dictation.onLockEnded = { [weak self] in self?.hotkeyService?.releaseLock() }
         dictation.onAutomationLock = { [weak self] in self?.hotkeyService?.adoptLockedRecording() }
@@ -311,10 +361,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         accessibility.start(prompt: diagnosticLaunch)
         if showFirstSetup { showSetup() }
         appUpdater.start()
+        finishLaunch()
     }
 
     public func application(_ application: NSApplication, open urls: [URL]) {
         guard !isTerminating else { return }
+        guard launchComplete else { pendingOpenURLs.append(urls); return }
         let router = automationRouter()
         for url in urls {
             if case .disabled = router.handle(url) {
@@ -354,7 +406,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         if isTerminating { return .terminateLater }
-        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : settingsWindow.resolveDraftForQuit() }) else { return .terminateCancel }
+        guard Self.mayQuit(allowsTermination: appUpdater.allowsTermination, resolveDraft: { signalShutdown ? saveDraftsForSignal() : (builtSettingsWindow?.resolveDraftForQuit() ?? true) }) else { return .terminateCancel }
         isTerminating = true
         termination.begin(preserve: { [self] in
             await dictation?.prepareForTermination() ?? true
@@ -376,7 +428,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// A signal can't ask whether to keep a draft, so both editors' drafts go to disk and stay in Application Support/Mouthtype/drafts.
     private func saveDraftsForSignal() -> Bool {
-        let saved = DraftRecovery.standard.saveDrafts(spellings: spellingEditor, phrases: settingsWindow.model.phrases)
+        // Drafts live in the settings window's editors; if it was never built there is nothing to save.
+        guard let window = builtSettingsWindow else { return true }
+        let saved = DraftRecovery.standard.saveDrafts(spellings: window.model.spellings, phrases: window.model.phrases)
         if !saved.isEmpty { Log.app.info("saved \(saved.count, privacy: .public) unsaved draft(s) before quitting on a signal") }
         return true
     }
@@ -475,8 +529,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         dictionary.reloadIfChanged()
         if case .error(let message) = dictionary.status { diagnostics.dictionaryError = message }
         else { diagnostics.dictionaryError = nil }
-        do { _ = try phrases.all(); diagnostics.phrasesError = nil }
-        catch { diagnostics.phrasesError = error.localizedDescription }
+        diagnostics.phrasesError = phrases.healthError()
     }
 
     /// The setup poll refreshes only what `SetupReadiness` reads. Engine state and microphone preparation are observed
