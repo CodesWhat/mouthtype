@@ -119,9 +119,10 @@ public struct DownloadRateMeter: Sendable, Equatable {
     }
 }
 
-/// Turns FluidAudio's per-model reports into one monotonic byte count. FluidAudio fetches Parakeet as several models in a
-/// row, each reporting its own 0...1 (download in the first half, compile in the second), so the raw fraction restarts at
-/// every model. The catalog's byte size for each model weights them.
+/// Turns FluidAudio's per-model reports into one monotonic byte count. FluidAudio makes one loadModels call per Parakeet
+/// model, each reporting its own 0...1 (download in the first half, compile in the second), so the raw fraction restarts at
+/// every call. The first call downloads the whole repo, so its download half is scaled against the full total, and the
+/// bar holds there once it finishes.
 public struct StagedDownloadTracker: Sendable, Equatable {
     public enum Event: Sendable, Equatable {
         case listing
@@ -152,16 +153,15 @@ public struct StagedDownloadTracker: Sendable, Equatable {
     }
 
     public mutating func update(fraction: Double, event: Event) -> ModelDownloadProgress {
-        let current = min(stage, max(stageBytes.count - 1, 0))
         let within: Double
         switch event {
         case .listing: within = 0
         case .downloading: within = min(max((fraction.isFinite ? fraction : 0) / downloadWeight, 0), 1)
         case .compiling, .finished: within = 1
         }
-        let done = stage >= stageBytes.count
-            ? Double(totalBytes)
-            : Double(stageBytes.prefix(stage).reduce(0, +)) + Double(stageBytes[current]) * within
+        // FluidAudio's first loadModels call downloads the whole repo (allModelsExist checks every required model), so
+        // its download fraction spans the full total. Later models only report cached, compiling and finished.
+        let done = stage >= 1 ? Double(totalBytes) : Double(totalBytes) * within
         highWater = max(highWater, done)
         if event == .finished, stage < stageBytes.count { stage += 1 }
         return ModelDownloadProgress(completedBytes: Int64(highWater.rounded()), totalBytes: totalBytes, completedFiles: stage, totalFiles: stageBytes.count)

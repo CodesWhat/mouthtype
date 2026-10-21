@@ -91,35 +91,66 @@ import Testing
 
     // MARK: Staged FluidAudio reports
 
-    @Test func stagedReportsNeverRestartWhenTheNextModelBegins() {
-        var tracker = StagedDownloadTracker(stageBytes: [1_000, 9_000])
-        #expect(tracker.initial.totalBytes == 10_000 && tracker.initial.completedBytes == 0)
+    @Test func realEventOrderDownloadsEverythingInTheFirstModel() throws {
+        // FluidAudio 0.17.7: one long download inside the first loadModels call, then the other three only report
+        // cached, compiling and finished.
+        var tracker = StagedDownloadTracker(stageBytes: [500_000, 446_200_000, 23_600_000, 12_700_000])
+        let total = tracker.totalBytes
+        var meter = DownloadRateMeter()
+        var clock = 0.0
         var last: Int64 = 0
-        func step(_ fraction: Double, _ event: StagedDownloadTracker.Event) -> ModelDownloadProgress {
-            let progress = tracker.update(fraction: fraction, event: event)
+        var etas: [Double] = []
+        func step(_ fraction: Double, _ event: StagedDownloadTracker.Event, tick: Double = 0) -> ModelDownloadProgress {
+            clock += tick
+            var progress = tracker.update(fraction: fraction, event: event)
             #expect(progress.completedBytes >= last, "bar moved back at \(event) \(fraction)")
             last = progress.completedBytes
+            meter.record(fraction: progress.fraction, at: clock)
+            progress.secondsRemaining = meter.secondsRemaining
+            if let eta = progress.secondsRemaining { etas.append(eta) }
             return progress
         }
         _ = step(0, .listing)
-        #expect(step(0.25, .downloading).completedBytes == 500)   // half of stage 1's download half
-        #expect(step(0.5, .downloading).completedBytes == 1_000)
-        #expect(step(0.75, .compiling).completedBytes == 1_000)   // compiling adds no bytes
-        #expect(step(1, .finished).completedBytes == 1_000)
-        #expect(tracker.stage == 1 && !tracker.isComplete)
-        #expect(step(0, .listing).completedBytes == 1_000)        // FluidAudio's fraction restarts for the encoder
-        #expect(step(0.25, .downloading).completedBytes == 1_000 + 4_500)
-        let done = step(1, .finished)
-        #expect(done.completedBytes == 10_000 && done.fraction == 1)
+        // 60 s of steady download: the download half runs 0 to 0.5 in 40 equal steps.
+        var previous = 0.0
+        for index in 1...40 {
+            let progress = step(0.5 * Double(index) / 40, .downloading, tick: 1.5)
+            #expect(progress.fraction - previous < 0.03, "no jump larger than a few percent")
+            previous = progress.fraction
+        }
+        #expect(previous == 1)
+        #expect(last == total)
+        let early = try #require(etas.first)
+        #expect(early < 120, "ETA while downloading stays minutes at most, not hours (\(early) s)")
+        #expect(step(0.75, .compiling).completedBytes == total)
+        #expect(step(1, .finished).completedBytes == total)
+        for _ in 1...3 {
+            #expect(step(0.5, .downloading).completedBytes == total)   // cached
+            #expect(step(0.75, .compiling).completedBytes == total)
+            #expect(step(1, .finished).completedBytes == total)
+        }
         #expect(tracker.isComplete)
+    }
+
+    @Test func compileReportsAddNoBytesAndBarHoldsAtTheTotalAfterTheFirstModel() {
+        var tracker = StagedDownloadTracker(stageBytes: [1_000, 9_000])
+        #expect(tracker.initial.totalBytes == 10_000 && tracker.initial.completedBytes == 0)
+        #expect(tracker.update(fraction: 0, event: .listing).completedBytes == 0)
+        #expect(tracker.update(fraction: 0.25, event: .downloading).completedBytes == 5_000)
+        #expect(tracker.update(fraction: 0.75, event: .compiling).completedBytes == 10_000)
+        #expect(tracker.update(fraction: 1, event: .finished).completedBytes == 10_000)
+        #expect(tracker.stage == 1 && !tracker.isComplete)
+        #expect(tracker.update(fraction: 0, event: .listing).completedBytes == 10_000)
+        let done = tracker.update(fraction: 1, event: .finished)
+        #expect(done.fraction == 1 && tracker.isComplete)
         #expect(done.completedFiles == 2 && done.totalFiles == 2)
     }
 
     @Test func aCachedModelCountsAsDownloadedAtOnce() {
         var tracker = StagedDownloadTracker(stageBytes: [100, 900])
         // FluidAudio's cached path reports the download half as complete with no files.
-        #expect(tracker.update(fraction: 0.5, event: .downloading).completedBytes == 100)
-        #expect(tracker.update(fraction: 1, event: .finished).completedBytes == 100)
+        #expect(tracker.update(fraction: 0.5, event: .downloading).completedBytes == 1_000)
+        #expect(tracker.update(fraction: 1, event: .finished).completedBytes == 1_000)
         #expect(tracker.stage == 1)
     }
 
