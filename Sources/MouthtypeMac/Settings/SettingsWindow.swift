@@ -96,17 +96,23 @@ import MouthtypeCore
         showWindow(nil)
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
-        // The page change above ran before this window was key, so SettingsView's own ring move found no key window and AppKit
-        // restores the old row as first responder on becoming key. Move it here, against this window, now and once AppKit settles.
-        syncSidebarRing()
-        DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.syncSidebarRing() } }
+        // A link or menu open shows no ring, like the cold path. AppKit restores the old sidebar row as first responder when the window
+        // becomes key and SettingsView's page-change handler can move it, so clear it now and once more after both have run.
+        clearSidebarFocus()
+        DispatchQueue.main.async { [weak self] in
+            MainActor.assumeIsolated {
+                self?.clearSidebarFocus()
+                DispatchQueue.main.async { [weak self] in MainActor.assumeIsolated { self?.clearSidebarFocus() } }
+            }
+        }
     }
 
-    /// Puts the sidebar ring on the selected page's row when a sidebar row holds it. Leaves focus alone otherwise, so a cold open
-    /// (no row focused) stays ringless and a text field or page control keeps its focus.
-    func syncSidebarRing() {
-        guard let window else { return }
-        SettingsView.moveSidebarRing(in: window, to: model.page)
+    /// Drops first responder when a sidebar row or the sidebar list holds it, which is what draws the ring. Focus in a text field or
+    /// page control is left alone. The next Tab or arrow key starts keyboard navigation again.
+    func clearSidebarFocus() {
+        guard let window, let responder = window.firstResponder as? NSView, !(responder is NSText) else { return }
+        guard responder.convert(responder.bounds, to: nil).minX < SettingsTheme.sidebarWidth, responder !== window.contentView else { return }
+        _ = window.makeFirstResponder(nil)
     }
 
     func windowDidBecomeKey(_ notification: Notification) {
