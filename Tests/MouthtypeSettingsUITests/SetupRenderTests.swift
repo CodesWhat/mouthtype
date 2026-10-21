@@ -6,6 +6,35 @@ import Testing
 @testable import MouthtypeMac
 
 @MainActor @Suite(.serialized) struct SetupRenderTests {
+    @Test func sidebarSecondaryInkHoldsContrastOverBothGradientEnds() throws {
+        func rgb(_ colour: NSColor) -> [Double] {
+            let c = colour.usingColorSpace(.sRGB) ?? colour
+            return [c.redComponent, c.greenComponent, c.blueComponent].map { Double($0) }
+        }
+        func luminance(_ channels: [Double]) -> Double {
+            let lin = channels.map { $0 <= 0.03928 ? $0 / 12.92 : pow(($0 + 0.055) / 1.055, 2.4) }
+            return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+        }
+        for dark in [false, true] {
+            let appearance = try #require(NSAppearance(named: dark ? .darkAqua : .aqua))
+            var ink: [Double] = [], base: [Double] = [], ends: [(rgb: [Double], alpha: Double)] = []
+            appearance.performAsCurrentDrawingAppearance {
+                ink = rgb(DesignPalette.NS.sideInk)
+                base = rgb(DesignPalette.NS.sideBase)
+                ends = [DesignPalette.NS.sideTop, DesignPalette.NS.sideBottom].map {
+                    let c = $0.usingColorSpace(.sRGB) ?? $0
+                    return (rgb($0), Double(c.alphaComponent))
+                }
+            }
+            for end in ends {
+                // Reduce Transparency lays the wash over the opaque base.
+                let ground = zip(end.rgb, base).map { end.alpha * $0 + (1 - end.alpha) * $1 }
+                let (a, b) = (luminance(ink), luminance(ground))
+                #expect((max(a, b) + 0.05) / (min(a, b) + 0.05) >= 4.5)
+            }
+        }
+    }
+
     @Test func setupRendersPendingReadyAndFailureWithoutOpeningOrRequestingAccess() async throws {
         let name = "SetupRenderTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

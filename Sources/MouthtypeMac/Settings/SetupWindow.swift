@@ -157,7 +157,7 @@ struct SetupView: View {
                             .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
-                        Text(stepCaption).designEyebrow().tracking(1).padding(.top, 4)
+                        Text(stepCaption).designEyebrow().foregroundStyle(DesignPalette.sideInk).tracking(1).padding(.top, 4)
                             .fixedSize(horizontal: false, vertical: true).accessibilityHidden(true)
                     }
                 }
@@ -198,7 +198,7 @@ struct SetupView: View {
     /// One Text so the names wrap onto a second line at narrow widths instead of truncating.
     private var footerSteps: some View {
         let line = SetupStep.footerNames.enumerated().reduce(Text("")) { text, entry in
-            let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? DesignPalette.ink : DesignPalette.ink3)
+            let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? DesignPalette.ink : DesignPalette.sideInk)
             return entry.offset == 0 ? name : text + Text(" · ").foregroundColor(DesignPalette.hair) + name
         }
         return line
