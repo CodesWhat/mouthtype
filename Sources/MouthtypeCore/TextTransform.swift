@@ -76,10 +76,25 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
     /// The text between `open` and `close` when they wrap all of it, and the input didn't start or end with them.
     private static func enclosed(_ text: String, source: String, open: String, close: String) -> String? {
         guard text.count >= open.count + close.count, text.hasPrefix(open), text.hasSuffix(close),
-              !source.hasPrefix(open), !source.hasSuffix(close) else { return nil }
+              !startsWithQuote(source, open), !endsWithQuote(source, close) else { return nil }
         let inner = String(text.dropFirst(open.count).dropLast(close.count))
         guard !inner.contains(open), !inner.contains(close) else { return nil }
         return inner
+    }
+
+    private static let quoteMarks: [Character: Character] = ["\u{201C}": "\"", "\u{201D}": "\"", "\u{2018}": "'", "\u{2019}": "'"]
+
+    /// Straight and curly quotes count as the same mark, so a model swapping styles can't hide that the input was quoted.
+    private static func quoteKey(_ c: Character) -> Character { quoteMarks[c] ?? c }
+
+    private static func startsWithQuote(_ source: String, _ open: String) -> Bool {
+        guard let a = source.first, let b = open.first else { return false }
+        return source.hasPrefix(open) || (quoteMarks[b] != nil || b == "\"") && quoteKey(a) == quoteKey(b)
+    }
+
+    private static func endsWithQuote(_ source: String, _ close: String) -> Bool {
+        guard let a = source.last, let b = close.last else { return false }
+        return source.hasSuffix(close) || (quoteMarks[b] != nil || b == "\"") && quoteKey(a) == quoteKey(b)
     }
 
     private static func unfenced(_ text: String, source: String) -> String? {

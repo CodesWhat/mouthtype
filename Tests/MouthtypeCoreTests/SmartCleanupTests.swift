@@ -258,6 +258,16 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
         #expect(result.text.hasPrefix("Here is the cleaned transcript"), "became \(result.text)")
     }
 
+    @Test(arguments: [
+        ("\"we should leave earlier\nto beat the traffic\"", "\u{201C}we should leave earlier\nto beat the traffic\u{201D}"),
+        ("\u{201C}we should leave earlier\nto beat the traffic\u{201D}", "\"we should leave earlier\nto beat the traffic\""),
+    ])
+    func dictatedQuotesSurviveAQuoteStyleSwap(pair: (String, String)) async {
+        let cleaner = FakeCleaner(returning: pair.1)
+        let result = await smart(cleaner).run(request(pair.0))
+        #expect(result.text == pair.1, "became \(result.text)")
+    }
+
     @Test func contentThatMerelyLooksLikeFramingIsKept() async {
         for text in [
             "here is the plan for Alice: we should leave earlier to beat the traffic",
