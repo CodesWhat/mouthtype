@@ -216,10 +216,12 @@ import MouthtypeCore
 
     @Test func slowReaderTimesOutOffMainAndDisablesItems() async throws {
         let readFinished = OSAllocatedUnfairLock(initialState: false)
+        let releaseRead = DispatchSemaphore(value: 0)
         let editor = AccessibilitySelectionEditor(
             focus: SnapshotOnlyFocus(), readRange: { _ in nil }, readText: { _ in nil }, writeText: { _, _ in false },
             offMainRead: { _, _, _ in
-                Thread.sleep(forTimeInterval: 0.5)
+                // Blocked until the test has checked the result landed on the budget; the cap only bounds a hang.
+                _ = releaseRead.wait(timeout: .now() + 60)
                 readFinished.withLock { $0 = true }
                 return .failure(.unavailable)
             })
@@ -231,6 +233,7 @@ import MouthtypeCore
         await section.pendingCapture?.value
         // The result landed on the budget while the read was still blocked, so nothing waited on it.
         #expect(!readFinished.withLock { $0 })
+        releaseRead.signal()
         #expect(submenu.items.first?.title == "Couldn’t read the selection")
         #expect(submenu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title) == ["Edit Transforms…"])
     }
