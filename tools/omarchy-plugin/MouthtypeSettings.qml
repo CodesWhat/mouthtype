@@ -20,13 +20,13 @@ Item {
   anchors.fill: parent
 
   readonly property var tabs: advanced
-    ? [{ key: "general", title: "General", summary: "Set your shortcut, how it records, and where the text goes." },
-       { key: "linux", title: "Linux", summary: "Launch at login and the notes that only matter on Linux." },
-       { key: "health", title: "Health", summary: "Cleanup models, history and what is installed." },
-       { key: "advanced", title: "Advanced", summary: "History limits and retention." }]
-    : [{ key: "general", title: "General", summary: "Set your shortcut, how it records, and where the text goes." },
-       { key: "linux", title: "Linux", summary: "Launch at login and the notes that only matter on Linux." },
-       { key: "health", title: "Health", summary: "Cleanup models, history and what is installed." }]
+    ? [{ key: "general", title: "General", icon: "gear", summary: "Set your shortcut, how it records, and where the text goes." },
+       { key: "linux", title: "Linux", icon: "linux-logo", summary: "Launch at login and the notes that only matter on Linux." },
+       { key: "health", title: "Health", icon: "heartbeat", summary: "Cleanup models, history and what is installed." },
+       { key: "advanced", title: "Advanced", icon: "sliders-horizontal", summary: "History limits and retention." }]
+    : [{ key: "general", title: "General", icon: "gear", summary: "Set your shortcut, how it records, and where the text goes." },
+       { key: "linux", title: "Linux", icon: "linux-logo", summary: "Launch at login and the notes that only matter on Linux." },
+       { key: "health", title: "Health", icon: "heartbeat", summary: "Cleanup models, history and what is installed." }]
 
   function infoFor(key) {
     for (var i = 0; i < tabs.length; i++) if (tabs[i].key === key) return tabs[i]
@@ -85,6 +85,7 @@ Item {
           delegate: ModalNavRow {
             required property var modelData
             title: modelData.title
+            iconName: modelData.icon
             selected: root.tab === modelData.key
             onActivated: root.tabRequested(modelData.key)
           }

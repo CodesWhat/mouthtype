@@ -1,12 +1,13 @@
 import QtQuick
 import "../design"
 
-// A row in the Settings modal's own nav: 34 high, sel tint when selected, no icon (the V1 set has no General, Linux or Health
-// glyphs). There is no lime bar.
+// A row in the Settings modal's own nav: 34 high, sel tint when selected, a 16 px Phosphor icon
+// ahead of the title. There is no lime bar.
 Item {
   id: root
 
   property string title: ""
+  property string iconName: ""
   property bool selected: false
   signal activated()
 
@@ -31,9 +32,16 @@ Item {
     border.color: Theme.focus
     visible: root.activeFocus
   }
-  Text {
+  Icon {
     x: 12
-    width: parent.width - 24
+    anchors.verticalCenter: parent.verticalCenter
+    name: root.iconName
+    size: 16
+    color: Theme.ink2
+  }
+  Text {
+    x: 12 + 16 + 10
+    width: parent.width - x - 12
     anchors.verticalCenter: parent.verticalCenter
     text: root.title
     wrapMode: Text.Wrap

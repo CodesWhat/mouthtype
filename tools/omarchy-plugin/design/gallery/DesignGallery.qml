@@ -27,13 +27,13 @@ Rectangle {
         y: 16
         width: parent.width - 16
         spacing: 2
-        DesignNavRow { title: "Home"; iconName: "home" }
-        DesignNavRow { title: "Stats"; iconName: "chart"; selected: true }
-        DesignNavRow { title: "Dictionary"; iconName: "book-open" }
-        DesignNavRow { title: "Transforms"; iconName: "arrows-horizontal" }
-        DesignNavRow { title: "Style"; iconName: "a-arrow-up" }
-        DesignNavRow { title: "Appearance"; iconName: "picture-in-picture" }
-        DesignNavRow { title: "Settings"; iconName: "settings-cog" }
+        DesignNavRow { title: "Home"; iconName: "house" }
+        DesignNavRow { title: "Stats"; iconName: "chart-bar"; selected: true }
+        DesignNavRow { title: "Dictionary"; iconName: "book" }
+        DesignNavRow { title: "Transforms"; iconName: "magic-wand" }
+        DesignNavRow { title: "Style"; iconName: "text-aa" }
+        DesignNavRow { title: "Appearance"; iconName: "pill" }
+        DesignNavRow { title: "Settings"; iconName: "gear" }
       }
       Text {
         x: 18

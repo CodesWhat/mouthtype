@@ -115,15 +115,16 @@ class Manifests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_required_icons_exist(self):
-        required = ["home", "chart", "book-open", "arrows-horizontal", "a-arrow-up", "picture-in-picture", "settings-cog",
-                    "close", "plus", "chevron-left", "chevron-right", "chevron-up", "chevron-down", "search", "copy", "fire"]
+        required = ["house", "chart-bar", "book", "magic-wand", "text-aa", "pill", "gear", "heartbeat", "sliders-horizontal", "linux-logo",
+                    "x", "plus", "caret-left", "caret-right", "caret-up", "caret-down", "magnifying-glass", "copy", "fire"]
         for name in required:
             self.assertTrue((HERE / "icons" / f"{name}.svg").is_file(), name)
 
     def test_every_icon_name_used_in_qml_resolves(self):
         data = (HERE / "IconData.js").read_text()
         known = set(re.findall(r'^  "([\w-]+)":', data, re.M))
-        aliases = {"flame": "fire", "warning": "warning-diamond"}
+        aliases = {"flame": "fire", "warning": "warning-diamond", "close": "x", "search": "magnifying-glass",
+                   "chevron-left": "caret-left", "chevron-right": "caret-right", "chevron-up": "caret-up", "chevron-down": "caret-down"}
         for path in HERE.glob("**/*.qml"):
             text = path.read_text()
             for name in re.findall(r'iconName:\s*"([\w-]+)"', text) + re.findall(r'Icon \{[^}]*name:\s*"([\w-]+)"', text) + gallery_names(text):
@@ -132,7 +133,7 @@ class Manifests(unittest.TestCase):
     def test_licences_ship_next_to_the_assets(self):
         for name in ("OFL-InstrumentSans.txt", "OFL-InstrumentSerif.txt", "OFL-JetBrainsMono.txt"):
             self.assertTrue((HERE / "fonts" / name).is_file(), name)
-        self.assertTrue((HERE / "icons" / "MIT-Pixelarticons.txt").is_file())
+        self.assertTrue((HERE / "icons" / "MIT-Phosphor.txt").is_file())
 
     def test_bundled_fonts_match_the_mac_copies(self):
         mac = HERE.parents[2] / "Sources" / "MouthtypeMac" / "Resources" / "Fonts"

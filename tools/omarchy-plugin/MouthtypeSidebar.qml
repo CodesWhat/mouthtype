@@ -12,12 +12,12 @@ Rectangle {
   signal settingsRequested()
 
   readonly property var items: [
-    { key: "home", title: "Home", icon: "home" },
-    { key: "stats", title: "Stats", icon: "chart" },
-    { key: "dictionary", title: "Dictionary", icon: "book-open" },
-    { key: "transforms", title: "Transforms", icon: "arrows-horizontal" },
-    { key: "style", title: "Style", icon: "a-arrow-up" },
-    { key: "appearance", title: "Appearance", icon: "picture-in-picture" }
+    { key: "home", title: "Home", icon: "house" },
+    { key: "stats", title: "Stats", icon: "chart-bar" },
+    { key: "dictionary", title: "Dictionary", icon: "book" },
+    { key: "transforms", title: "Transforms", icon: "magic-wand" },
+    { key: "style", title: "Style", icon: "text-aa" },
+    { key: "appearance", title: "Appearance", icon: "pill" }
   ]
 
   implicitWidth: 220
@@ -64,7 +64,7 @@ Rectangle {
     y: parent.height - height - 12
     width: parent.width - 16
     title: "Settings"
-    iconName: "settings-cog"
+    iconName: "gear"
     selected: root.settingsOpen
     onActivated: root.settingsRequested()
   }
