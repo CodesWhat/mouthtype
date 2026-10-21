@@ -5,7 +5,7 @@ import AppKit
 @MainActor final class DockPresence {
     private let mode: @MainActor () -> DockIconMode
     private let windows: @MainActor (NSWindow?) -> [DockWindowFacts]
-    private let apply: @MainActor (NSApplication.ActivationPolicy) -> Void
+    private let apply: @MainActor (NSApplication.ActivationPolicy, NSWindow?) -> Void
     private let notifications: NotificationCenter
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
     private(set) var policy: NSApplication.ActivationPolicy
@@ -13,7 +13,7 @@ import AppKit
     init(mode: @escaping @MainActor () -> DockIconMode = { DockIconMode.current() },
          windows: @escaping @MainActor (NSWindow?) -> [DockWindowFacts] = { closing in NSApp.windows.map { DockWindowFacts($0, closing: closing) } },
          initial: NSApplication.ActivationPolicy = .accessory,
-         apply: @escaping @MainActor (NSApplication.ActivationPolicy) -> Void = DockPresence.applyToApp,
+         apply: @escaping @MainActor (NSApplication.ActivationPolicy, NSWindow?) -> Void = { DockPresence.applyToApp($0, closing: $1) },
          notifications: NotificationCenter = .default) {
         self.mode = mode
         self.windows = windows
@@ -45,16 +45,46 @@ import AppKit
         let target = mode().policy(windows: windows(closing))
         guard target != policy else { return }
         policy = target
-        apply(target)
+        apply(target, closing)
     }
 
-    /// Going regular re-activates and re-keys the window the switch can knock out of key. Going accessory does
-    /// nothing else, so the app that gets focus next keeps it.
-    static func applyToApp(_ policy: NSApplication.ActivationPolicy) {
+    /// Going regular re-activates and re-keys the window the switch can knock out of key. Going accessory can hide
+    /// windows that should survive and deactivate the app, so it records what was up and puts it back.
+    static func applyToApp(_ policy: NSApplication.ActivationPolicy, closing: NSWindow?) {
         let key = NSApp.keyWindow
+        let wasActive = NSApp.isActive
+        let survivors = NSApp.windows.filter { $0 !== closing && $0.isVisible && ($0.canBecomeMain || $0 is NSPanel) }
         NSApp.setActivationPolicy(policy)
-        guard policy == .regular, let key, key.canBecomeMain else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        key.makeKeyAndOrderFront(nil)
+        if policy == .regular {
+            guard let key, key.canBecomeMain else { return }
+            NSApp.activate(ignoringOtherApps: true)
+            key.makeKeyAndOrderFront(nil)
+            return
+        }
+        let plan = DockRestorePlan.make(visible: survivors.map(ObjectIdentifier.init), wasActive: wasActive, key: key.map(ObjectIdentifier.init))
+        guard !plan.restore.isEmpty else { return }
+        // AppKit can finish hiding on the next turn, so restore after it.
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                for window in survivors where plan.restore.contains(ObjectIdentifier(window)) { window.orderFrontRegardless() }
+                guard plan.activate else { return }
+                NSApp.activate(ignoringOtherApps: true)
+                survivors.first { plan.key == ObjectIdentifier($0) }?.makeKeyAndOrderFront(nil)
+            }
+        }
+    }
+}
+
+/// What to put back after the policy drops to accessory. Windows that were hidden or closing aren't in `visible`, so
+/// they stay that way. An app that wasn't active is never activated, so a floating panel doesn't take focus from the
+/// user's target app.
+struct DockRestorePlan<ID: Hashable>: Equatable {
+    var restore: [ID]
+    var activate: Bool
+    var key: ID?
+
+    static func make(visible: [ID], wasActive: Bool, key: ID?) -> DockRestorePlan {
+        DockRestorePlan(restore: visible, activate: wasActive && !visible.isEmpty,
+                        key: wasActive ? key.flatMap { visible.contains($0) ? $0 : nil } : nil)
     }
 }

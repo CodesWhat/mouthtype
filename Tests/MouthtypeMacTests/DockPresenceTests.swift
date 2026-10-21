@@ -61,7 +61,7 @@ import Testing
         var mode = DockIconMode.whileWindowOpen
         var shown: [DockWindowFacts] = []
         var applied: [NSApplication.ActivationPolicy] = []
-        let presence = DockPresence(mode: { mode }, windows: { _ in shown }, apply: { applied.append($0) }, notifications: NotificationCenter())
+        let presence = DockPresence(mode: { mode }, windows: { _ in shown }, apply: { policy, _ in applied.append(policy) }, notifications: NotificationCenter())
         presence.refresh()
         #expect(applied.isEmpty)
         shown = [window]
@@ -81,7 +81,7 @@ import Testing
 
     @Test func startAppliesTheSavedModeImmediately() {
         var applied: [NSApplication.ActivationPolicy] = []
-        let presence = DockPresence(mode: { .always }, windows: { _ in [] }, apply: { applied.append($0) }, notifications: NotificationCenter())
+        let presence = DockPresence(mode: { .always }, windows: { _ in [] }, apply: { policy, _ in applied.append(policy) }, notifications: NotificationCenter())
         presence.start()
         presence.start()
         #expect(applied == [.regular])
@@ -100,5 +100,28 @@ import Testing
         defaults.set(DockIconMode.never.rawValue, forKey: DockIconMode.key)
         model.refresh()
         #expect(model.dockIconMode == .never)
+    }
+
+    @Test func activeAppRestoresSurvivorsAndRekeys() {
+        let plan = DockRestorePlan.make(visible: [1, 2], wasActive: true, key: 2)
+        #expect(plan == DockRestorePlan(restore: [1, 2], activate: true, key: 2))
+    }
+
+    @Test func inactiveAppRestoresPanelsWithoutActivating() {
+        let plan = DockRestorePlan.make(visible: [7, 8], wasActive: false, key: 7)
+        #expect(plan.restore == [7, 8])
+        #expect(!plan.activate)
+        #expect(plan.key == nil)
+    }
+
+    @Test func nothingVisibleRestoresNothingAndNeverActivates() {
+        let plan = DockRestorePlan.make(visible: [Int](), wasActive: true, key: 3)
+        #expect(plan.restore.isEmpty)
+        #expect(!plan.activate)
+        #expect(plan.key == nil)
+    }
+
+    @Test func aKeyWindowThatWasntVisibleIsNotRekeyed() {
+        #expect(DockRestorePlan.make(visible: [1], wasActive: true, key: 9).key == nil)
     }
 }
