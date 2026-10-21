@@ -1,0 +1,22 @@
+#!/bin/sh
+set -e
+case "$1" in
+    configure)
+        # Keep bytecode so the hotkey path starts fast. prerm removes it again.
+        python3 -m compileall -q /usr/lib/mouthtype-linux >/dev/null 2>&1 || true
+        if [ -z "$2" ]; then
+            cat <<'MSG'
+Mouthtype is installed. Finish setup as your normal user (not root):
+    mouthtype-linux-setup
+That downloads the speech model (about 465 MiB), adds the Mouthtype widget to the Omarchy bar (when present)
+and enables the mouthtype-linux systemd user service. Add --shortcut toggle to bind Super+Alt+M too.
+MSG
+        else
+            cat <<'MSG'
+Mouthtype was upgraded. Refresh the bar plugin copy and restart the service as your normal user:
+    mouthtype-linux-setup && systemctl --user restart mouthtype-linux
+MSG
+        fi
+        ;;
+esac
+exit 0

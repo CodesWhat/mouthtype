@@ -1,0 +1,16 @@
+.TH MOUTHTYPE-LINUX-SETUP 1 "" "mouthtype-linux" "User Commands"
+.SH NAME
+mouthtype-linux-setup \- per-user setup for mouthtype-linux
+.SH SYNOPSIS
+.B mouthtype-linux-setup
+[\fB\-\-skip\-plugin\fR] [\fB\-\-no\-autostart\fR] [\fB\-\-shortcut\fR \fBtoggle\fR|\fBhold\fR]
+.br
+.B mouthtype-linux-setup \-\-uninstall
+[\fB\-\-purge\fR]
+.SH DESCRIPTION
+Run as a normal user, never with sudo. Checks the required helpers, downloads and verifies the speech model,
+runs \fBmouthtype-linux doctor\fR, installs the Omarchy bar plugin when present and enables the
+\fBmouthtype-linux\fR systemd user service. \fB\-\-uninstall\fR reverses the per-user pieces and
+\fB\-\-purge\fR also deletes models, recordings and configuration.
+.SH SEE ALSO
+.BR mouthtype-linux (1)

@@ -1,0 +1,24 @@
+Package: mouthtype-linux
+Version: @VERSION@
+Architecture: amd64
+Maintainer: CodesWhat <80784472+scttbnsn@users.noreply.github.com>
+Installed-Size: @SIZE@
+Depends: python3 (>= 3.10), python3-venv, curl, pipewire-audio, wl-clipboard, wtype, libnotify-bin, ffmpeg
+Recommends: hyprland
+Suggests: quickshell
+Section: sound
+Priority: optional
+Homepage: https://mouthtype.app/linux/
+Description: local voice dictation client for Wayland desktops
+ Mouthtype records on a hotkey, transcribes on this machine with a pinned
+ speech model and delivers the text to the focused window. Nothing leaves the
+ computer.
+ .
+ This package installs the client, the Omarchy bar plugin sources and a
+ systemd user unit. It downloads no model and enables no service. After
+ installing, run "mouthtype-linux-setup" as your normal user to fetch the
+ speech model (about 465 MiB) and enable the per-user service.
+ .
+ Development client for Linux x86_64. Paste and type delivery use Hyprland
+ (recommended). The bar plugin needs Quickshell, which Debian and Ubuntu do
+ not package, so it is only listed as a suggestion.
