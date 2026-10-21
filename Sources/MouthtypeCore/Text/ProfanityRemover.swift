@@ -160,6 +160,22 @@ public struct ProfanityRemover: Sendable {
         "fuck": "mess up", "fucks": "messes up", "fucked": "messed up", "fucking": "messing up",
     ]
     private static let personObjects: Set<String> = ["her", "him", "them", "me", "us", "you"]
+    /// What can sit between "fucked" and "over" in the cheating idiom ("fucked her over").
+    private static let overObjects: Set<String> = personObjects.union(["it"])
+    /// A time word after "over" makes it a preposition of time ("fucked her over the weekend").
+    private static let overTimeWords: Set<String> = [
+        "weekend", "weekends", "summer", "winter", "spring", "autumn", "fall", "week", "weeks", "month", "months", "year", "years",
+        "day", "days", "night", "nights", "morning", "afternoon", "evening", "lunch", "dinner", "breakfast", "holiday", "holidays",
+        "christmas", "easter", "thanksgiving", "break", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday",
+        "decades", "decade", "century", "time", "hour", "hours", "minute", "minutes",
+    ]
+    private static let overDeterminers: Set<String> = ["the", "a", "an", "this", "that", "my", "our", "last", "next", "every", "one", "two", "three"]
+    /// Acronyms said as a word, so "a" or "an" follows how the word sounds, not the first letter's name.
+    private static let spokenAcronyms: [String: String] = [
+        "nasa": "a", "nato": "a", "nafta": "a", "opec": "an", "unesco": "a", "unicef": "a", "fifa": "a", "scuba": "a",
+        "laser": "a", "radar": "a", "sonar": "a", "gif": "a", "jpeg": "a", "ascii": "an", "osha": "an", "fema": "a",
+        "darpa": "a", "nascar": "a", "taser": "a", "swat": "a",
+    ]
     private static let talkVerbs: Set<String> = ["talk", "talks", "talked", "talking"]
     /// Words before a swear word that mark it as a verb ("I shit you not", "to bitch", "they bitch").
     private static let verbLeaders: Set<String> = [
@@ -500,6 +516,15 @@ public struct ProfanityRemover: Sendable {
             k < words.count && words[k].lower != "i" && chars[words[k].start].isUppercase && !isAcronym(words[k])
         }
 
+        /// "fucked her over the weekend": the idiom needs a pronoun between the verb and "over", and no time word after.
+        func isCheatingOver(_ k: Int, _ over: Int) -> Bool {
+            guard over == k + 2, ProfanityRemover.overObjects.contains(words[k + 1].lower) else { return false }
+            var after = over + 1
+            while after < words.count, adjacent(after - 1), ProfanityRemover.overDeterminers.contains(words[after].lower) { after += 1 }
+            guard after < words.count, adjacent(after - 1) else { return true }
+            return !ProfanityRemover.overTimeWords.contains(words[after].lower)
+        }
+
         func isAcronym(_ w: ScanWord) -> Bool {
             w.end - w.start > 1 && chars[w.start..<w.end].allSatisfy { $0.isUppercase }
         }
@@ -622,7 +647,7 @@ public struct ProfanityRemover: Sendable {
                         replace(k, "forget")
                     } else if let cheat = ProfanityRemover.cheatForms[lower], nextIs(k, ["over"]) {
                         replace(k, cheat, through: words[k + 1].end)
-                    } else if let cheat = ProfanityRemover.cheatForms[lower], let over = splitParticle(k, "over") {
+                    } else if let cheat = ProfanityRemover.cheatForms[lower], let over = splitParticle(k, "over"), isCheatingOver(k, over) {
                         replace(k, cheat)
                         spans.append(TextSpan(range: words[over].start..<words[over].end, cut: words[over - 1].end..<words[over].end, replacement: ""))
                     } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k), isFree(k + 1),
@@ -664,9 +689,9 @@ public struct ProfanityRemover: Sendable {
                 if known.contains("\(original):\(key)") { continue }
                 let next = words[k + 1]
                 guard isFree(k), isFree(k + 1), let first = chars[next.start...].first, first.isLetter else { continue }
-                // An acronym ("an MBA", "a UFO") is read letter by letter, so the letter's name decides.
+                // An acronym ("an MBA", "a UFO") is read letter by letter, so the letter's name decides, unless it's said as a word ("a NASA").
                 let wanted = isAcronym(next)
-                    ? ("AEFHILMNORSX".contains(chars[next.start]) ? "an" : "a")
+                    ? (ProfanityRemover.spokenAcronyms[next.lower] ?? ("AEFHILMNORSX".contains(chars[next.start]) ? "an" : "a"))
                     : (ProfanityRemover.startsWithVowelSound(next.lower) ? "an" : "a")
                 guard wanted != words[k].lower else { continue }
                 spans.append(TextSpan(range: words[k].start..<words[k].end, replacement: matchingCase(wanted, like: words[k])))
