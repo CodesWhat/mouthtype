@@ -1,6 +1,6 @@
 # Mouthtype docs
 
-Guides for using and maintaining Mouthtype. The website has a shorter getting-started version at [mouthtype.app/docs](https://mouthtype.app/docs/).
+Guides for using and maintaining Mouthtype. The website has a shorter getting-started version at [docs.mouthtype.app](https://docs.mouthtype.app).
 
 | Guide | What it covers |
 | --- | --- |
@@ -13,6 +13,9 @@ Guides for using and maintaining Mouthtype. The website has a shorter getting-st
 | [AUDIO-RETENTION.md](AUDIO-RETENTION.md) | How long recordings are kept |
 | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) | Fixes for common problems |
 | [KNOWN-LIMITS.md](KNOWN-LIMITS.md) | What this release doesn't cover |
+| [RELEASE-READINESS.md](RELEASE-READINESS.md) | What the current release verified and what it didn't |
+| [MAC-EVALUATIONS.md](MAC-EVALUATIONS.md) | Mac recognition evaluation |
+| [guides/](guides/index.md) | The guides published at docs.mouthtype.app |
 | [SECURITY.md](SECURITY.md) | Security controls and limits |
 | [RELEASING.md](RELEASING.md) | Release procedure (maintainers) |
 | [READ-ME.md](READ-ME.md) | The Read Me shipped inside the app |

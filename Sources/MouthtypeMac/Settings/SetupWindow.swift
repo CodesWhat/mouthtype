@@ -236,7 +236,7 @@ struct SetupView: View {
         case .speech:
             speechStatus + "\nDownloaded once. Recognition runs on your Mac."
         case .shortcut:
-            model.inputDetail + "\nCheck your shortcut in Input settings to continue."
+            model.inputDetail + "\nCheck your shortcut with Change shortcut to continue."
         case .ready:
             model.instructions
         }
@@ -276,7 +276,7 @@ struct SetupView: View {
         case .speech:
             speechControls
         case .shortcut:
-            action("Input settings…", identifier: "setup-input-settings", perform: actions.inputSettings)
+            action("Change shortcut…", identifier: "setup-input-settings", perform: actions.inputSettings)
         case .ready:
             SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel, cancel: model.cancelCleanupDownload)
         }

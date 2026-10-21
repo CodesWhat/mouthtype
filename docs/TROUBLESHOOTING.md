@@ -86,7 +86,7 @@ Likely cause: the microphone disconnected, Mouthtype crashed or was force-quit, 
 Likely cause: checks are off, or an install is waiting for a task to finish.
 
 - Use **Check for Updates…** in the menu. When one is found, **Update Available…** also appears at the top of the menu.
-- Automatic checks are on by default. Turn them off with **Check automatically** in Settings → General.
+- Automatic checks are on by default. Turn them off with **Check for updates automatically** in Settings → Mac.
 - Updates wait while a dictation, recovery or file transcription is running.
 - Checks go over HTTPS and don't send transcripts or recordings.
 

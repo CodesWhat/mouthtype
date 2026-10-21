@@ -63,7 +63,7 @@ The default level is Fast; dictations use Basic until its model finishes downloa
 - Known project spellings can be joined in clear software contexts, while ordinary phrases such as a boat in dry dock are preserved.
 - In model-backed cleanup, dictionary entries that only join words are context hints; Basic retains literal dictionary replacements.
 - Ambiguous names still have gaps, especially with Fast cleanup.
-- Neither model is downloaded until requested. Switching models loads the selected cached model and unloads the inactive one after pending work finishes.
+- Neither model is downloaded until requested. Switching models loads the selected cached model and unloads the inactive one after pending work finishes. A loaded cleanup model unloads after 10 minutes without use and reloads on the next take.
 
 ## Dictionary and Transforms
 
@@ -108,13 +108,13 @@ For a terminal that loses text from large pastes, open **Settings > Advanced > D
 > [!NOTE]
 > Split pastes preserve the text exactly and never send Return. A read permits advancing the clipboard; it does not prove insertion.
 
-Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanup styles are available on the **Style** page. Rules start empty and preserve the global fallback.
+Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanup styles are available on the **Style** page. Your own rules start empty. Built-in app and website lists carry their own tones, and everything else uses the default tone.
 
 Mouthtype also waits for the preceding ordinary paste’s clipboard read before replacing its text. A missing read leaves the next take recoverable instead of overwriting the unread clipboard. A newer user copy remains untouched. Normal Quit first preserves active and queued capture audio, then settles the clipboard change Mouthtype still owns. If preservation fails, the app stays open for a Quit retry. Shutdown blocks late transcription delivery. These checks do not prove that the destination inserted the text; inspect the field before retrying.
 
 ## Choose cleanup strength and writing style
 
-Open **Settings → General → Cleanup** to choose the cleanup path: Off keeps the recognized text, Basic applies local formatting rules, Fast adds S1-mini and Thorough uses Gemma. Both model modes preserve wording; they differ in speed and model capability, independently of Tone. Existing saved Light settings become Fast, and Medium becomes Thorough; Off, Basic and tone settings stay as saved.
+Open the **Cleanup** tab on the **Style** page to choose the cleanup path: Off keeps the recognized text, Basic applies local formatting rules, Fast adds S1-mini and Thorough uses Gemma. Both model modes preserve wording; they differ in speed and model capability, independently of Tone. Existing saved Light settings become Fast, and Medium becomes Thorough; Off, Basic and tone settings stay as saved.
 
 **Tone** is a separate writing-style choice.
 

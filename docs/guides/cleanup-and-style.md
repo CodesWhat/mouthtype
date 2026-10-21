@@ -44,13 +44,13 @@ The Style page has four context tabs plus Cleanup.
 | Email | Mail, Outlook, mail.google.com and outlook.office.com, set to Formal |
 | Other | Everything not listed elsewhere. Its tone is your default |
 
-Entries that ship with the app are tagged BUILT IN. Yours are tagged ADDED BY YOU.
+Entries that ship with the app are tagged BUILT IN. Yours are tagged ADDED BY YOU. Apps show their real icons, and built-in apps that aren't installed are hidden from the Counts as lists.
 
 ## Add an app or website rule
 
 On a context tab, choose **Add an app or website**. Adding one moves it out of any other context. For a website, enter a plain ASCII domain like `slack.com`. A domain rule also matches its subdomains.
 
-Each context can also set **Cleanup here**: Same as everywhere, Off, Basic, Fast or Thorough. That means cleanup can be on for one app while it's off everywhere else. A level whose model isn't installed runs as Basic.
+Each context can also set **Cleanup here**: Same as everywhere, Off, Basic, Fast or Thorough. That means cleanup can be on for one app while it's off everywhere else. A level whose model isn't installed runs as Basic. A loaded cleanup model unloads after 10 minutes without use and reloads on the next take.
 
 The Cleanup tab sets the global level and lists the contexts that override it.
 

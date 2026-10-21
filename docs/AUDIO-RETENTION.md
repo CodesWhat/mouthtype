@@ -1,6 +1,6 @@
 # Saved audio
 
-Mouthtype keeps completed recordings for a limited time and size, and you choose both in **Settings → General → Saved audio**.
+Mouthtype keeps completed recordings for a limited time and size, and you choose both in **Settings → Advanced → Storage**.
 
 | Setting | Choices | Default |
 | --- | --- | --- |

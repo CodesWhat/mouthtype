@@ -31,7 +31,8 @@ let package = Package(
                 .product(name: "HuggingFace", package: "swift-huggingface"),
                 .product(name: "Tokenizers", package: "swift-transformers"),
                 .product(name: "GRDB", package: "GRDB.swift"),
-            ]
+            ],
+            resources: [.copy("Resources/ModelManifest.json")]
         ),
         .target(name: "FnRemapKit"),
         .executableTarget(name: "mouthtype-fn-guard", dependencies: ["FnRemapKit"]),

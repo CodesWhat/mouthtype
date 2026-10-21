@@ -152,7 +152,7 @@ Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/
 
 https://huggingface.co/superwhisper/s1-mini, revision 88f6b15896c73bbb13a3b596e0afe8ea0d5150b4
 
-The local model behind light and medium cleanup. It is not bundled with Mouthtype. The user downloads it from Hugging
+The local model behind Fast cleanup. It is not bundled with Mouthtype. The user downloads it from Hugging
 Face on request, and it runs on the Mac through MLX. It is a fine-tune of Qwen3-0.6B (Copyright 2024 Alibaba Cloud,
 Apache License 2.0), Copyright 2026 Superwhisper.
 
@@ -175,7 +175,7 @@ a product incorporating it is marketed or distributed.
 ```
 
 Wherever the app names the model it writes exactly `S1-mini by Superwhisper`. The string lives in
-`CleanerCatalog.smartCleanupName`.
+`CleanerHost.modelName` in `Sources/MouthtypeMac/Dictation/CleanerHost.swift`.
 
 ## OpenWhispr
 

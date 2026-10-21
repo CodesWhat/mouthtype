@@ -31,6 +31,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     private let booster: VocabularyBooster
 
     init(version: AsrModelVersion, language: Language? = nil) {
+        ModelPins.installFluidAudioRevisions()
         self.version = version
         self.language = language
         switch version {
@@ -88,6 +89,8 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
             return PrepareTimings(downloadSeconds: 0, loadSeconds: 0, downloaded: false)
         }
         let clock = ContinuousClock()
+        await ModelCacheAdoption.adoptCache(of: version == .v2 ? .parakeetV2 : .parakeetV3, pin: version == .v2 ? ModelPins.parakeetV2 : ModelPins.parakeetV3)
+        await ModelCacheAdoption.adoptCache(of: .vad, pin: ModelPins.sileroVAD)
         let alreadyPresent = AsrModels.modelsExist(at: modelDirectory, version: version)
         let tracker = OSAllocatedUnfairLock(initialState: StagedDownloadTracker(stageBytes: Self.downloadStageBytes(for: version)))
         if alreadyPresent {

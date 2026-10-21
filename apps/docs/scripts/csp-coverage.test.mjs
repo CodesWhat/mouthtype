@@ -4,12 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import {
-  buildHeaders,
-  cspForHTML,
-  inlineScriptHashes,
-  routeForOutputPath,
-} from "./security-headers.mjs";
+import { cspForHTML, htmlFiles, injectCspMeta, inlineScriptHashes } from "./csp-meta.mjs";
 
 const projectDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const outDir = path.join(projectDir, "out");
@@ -22,19 +17,13 @@ if (!hasOut && process.env.REQUIRE_OUT) {
 }
 const skip = hasOut ? false : "no out/ directory; run `npm run build` first";
 
-function pages(root = outDir) {
-  const files = [];
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    const target = path.join(root, entry.name);
-    if (entry.isDirectory()) files.push(...pages(target));
-    else if (target.endsWith(".html")) files.push(target);
-  }
-  return files;
+function directive(csp, name) {
+  return csp.split("; ").find((d) => d === name || d.startsWith(`${name} `));
 }
 
-function cspFor(source) {
-  const entry = vercelConfig.headers.find((h) => h.source === source);
-  return entry?.headers.find((h) => h.key === "Content-Security-Policy")?.value;
+function headerCsp() {
+  const all = vercelConfig.headers.filter((h) => h.source === "/(.*)").flatMap((h) => h.headers);
+  return all.find((h) => h.key === "Content-Security-Policy")?.value;
 }
 
 test("hashes inline scripts and ignores external ones", () => {
@@ -42,12 +31,40 @@ test("hashes inline scripts and ignores external ones", () => {
   assert.equal(inlineScriptHashes(html).length, 2);
 });
 
-test("policy has no unsafe-inline or unsafe-eval in script-src", () => {
-  const csp = cspForHTML("<script>1</script>");
-  const scriptSrc = csp.split("; ").find((d) => d.startsWith("script-src"));
+test("meta policy has no unsafe-inline or unsafe-eval in script-src", () => {
+  const scriptSrc = directive(cspForHTML("<script>1</script>"), "script-src");
   assert.ok(scriptSrc);
   assert.doesNotMatch(scriptSrc, /unsafe-/);
+});
+
+test("injection puts the meta first in head and is idempotent", () => {
+  const html = '<html><head><meta charSet="utf-8"/><script>1</script></head><body></body></html>';
+  const once = injectCspMeta(html);
+  assert.ok(once.indexOf("Content-Security-Policy") < once.indexOf("<script>"));
+  assert.ok(once.startsWith('<html><head><meta http-equiv="Content-Security-Policy"'));
+  assert.equal(injectCspMeta(once), once);
+});
+
+test("header carries frame-ancestors and nothing that constrains scripts", () => {
+  const csp = headerCsp();
+  assert.ok(csp, "no static Content-Security-Policy header on /(.*)");
   assert.match(csp, /frame-ancestors 'none'/);
+  // The header can't list per-page hashes, so a script-src or default-src there would block
+  // them. The meta policy owns both directives.
+  assert.equal(directive(csp, "script-src"), undefined);
+  assert.equal(directive(csp, "default-src"), undefined);
+});
+
+test("header script-src has no unsafe-inline", () => {
+  const scriptSrc = directive(headerCsp(), "script-src") ?? "";
+  assert.doesNotMatch(scriptSrc, /unsafe-inline/);
+});
+
+test("vercel.json has no per-page CSP rules", () => {
+  const perPage = vercelConfig.headers.filter(
+    (h) => h.source !== "/(.*)" && h.headers.some((x) => x.key === "Content-Security-Policy"),
+  );
+  assert.deepEqual(perPage, []);
 });
 
 test("HSTS has no includeSubDomains", () => {
@@ -57,24 +74,30 @@ test("HSTS has no includeSubDomains", () => {
   assert.doesNotMatch(hsts.value, /includeSubDomains/i);
 });
 
-test("committed vercel.json headers match a fresh build of out/", { skip }, () => {
-  assert.deepEqual(vercelConfig.headers, buildHeaders(outDir));
-});
-
-test("every page's inline scripts are covered by its CSP hashes", { skip }, () => {
-  const files = pages();
+test("every page has a meta CSP covering all its inline scripts", { skip }, () => {
+  const files = htmlFiles(outDir);
   assert.ok(files.length > 20, "expected the full docs export");
   for (const file of files) {
     const relative = path.relative(outDir, file);
-    const route = routeForOutputPath(relative);
-    const source = route ?? "/(.*)";
-    if (!route && relative !== "404.html") continue;
-    const csp = cspFor(source);
-    assert.ok(csp, `no CSP header for ${source}`);
-    const scriptSrc = csp.split("; ").find((d) => d.startsWith("script-src")) ?? "";
-    assert.doesNotMatch(scriptSrc, /unsafe-inline/, `${source} allows unsafe-inline scripts`);
-    for (const hash of inlineScriptHashes(fs.readFileSync(file, "utf8"))) {
-      assert.ok(scriptSrc.includes(hash), `${source}: inline script ${hash} is not in script-src`);
+    const html = fs.readFileSync(file, "utf8");
+    const metas = [
+      ...html.matchAll(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"\s*\/?>/gi),
+    ];
+    assert.equal(metas.length, 1, `${relative}: expected exactly one CSP meta`);
+    const metaAt = metas[0].index;
+    const firstScript = html.search(/<script[\s>]/i);
+    assert.ok(
+      firstScript === -1 || metaAt < firstScript,
+      `${relative}: CSP meta must precede the first script`,
+    );
+    assert.ok(metaAt > html.search(/<head[\s>]/i), `${relative}: CSP meta must be inside head`);
+    const scriptSrc = directive(metas[0][1], "script-src") ?? "";
+    assert.doesNotMatch(scriptSrc, /unsafe-/, `${relative}: script-src allows unsafe-*`);
+    for (const hash of inlineScriptHashes(html)) {
+      assert.ok(
+        scriptSrc.includes(hash),
+        `${relative}: inline script ${hash} not in meta script-src`,
+      );
     }
   }
 });

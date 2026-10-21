@@ -10,7 +10,7 @@ Transcribe Audio File now opens in its own window, from the menu or from Home. I
 
 Automation. mouthtype:// URLs and a mouthtype command-line script can start, stop, toggle, cancel, copy-last and paste-last, and open a page of the window. The dictation commands are off until you turn on the automation switch, because any web page can open a mouthtype:// link. Opening a page works without it.
 
-Editor hints. With Boost my saved words on, Mouthtype can add up to 40 code names from VS Code, Cursor, Xcode and Terminal (identifiers near the cursor, the file and project names) to the boost for one take. It's off by default and nothing is kept after the take.
+Editor hints. With Boost saved words on, Mouthtype can add up to 40 code names from VS Code, Cursor, Xcode and Terminal (identifiers near the cursor, the file and project names) to the boost for one take. It's off by default and nothing is kept after the take.
 
 Quiet other audio is now on by default. If you turned it off before, it stays off.
 
@@ -36,7 +36,7 @@ Earlier in 0.2.0:
 
 Transform selected text. Select some text in any app and choose Fix grammar, Make shorter, Make more formal or Make more casual. The Thorough model rewrites it into an editable preview, and you choose Accept, Retry or Cancel. Accept replaces the text only if the app, field and selection are still the same. If they changed, Copy original is there, and Cmd-Z undoes a replacement.
 
-Boost my saved words while recognising is a new setting and it's off by default. It favours your saved spellings while Mouthtype is recognising speech. The first time you use it, Mouthtype downloads an English speech model of about 100 MB. Dictation never waits for that download.
+Boost saved words while recognising is a new setting and it's off by default. It favours your saved spellings while Mouthtype is recognising speech. The first time you use it, Mouthtype downloads an English speech model of about 100 MB. Dictation never waits for that download.
 
 App and website rules can now set a cleanup level as well as a tone, so cleanup can be on for one app while it's off everywhere else.
 
@@ -94,7 +94,7 @@ The menu bar icon is now a pair of lips that stays closed when idle and opens wi
 
 Pill size is Automatic, Standard or Large and applies to every style. Automatic picks Large on screens at least 2000 pt wide. Pill style now offers Classic, Hi-Fi, Glass, Matrix and Minimal. Classic stays the default. Glass uses the system glass material and falls back to a solid body only for Reduce Transparency or when the material is unavailable. Matrix and Minimal are compact styles. Delivery cards are drawn for each style and scale with pill size, and Hi-Fi has its own pixel-art card window. Hi-Fi also has a readout colour: Amber, Cool white or Red. Appearance shows a live preview of the pill over a Desktop, Light or Dark swatch.
 
-Update checks are now on by default and no longer ask first. Turn them off in Settings → General. Anyone who already answered the earlier prompt keeps that choice. You still choose when to download and install; automatic installation stays off.
+Update checks are now on by default and no longer ask first. Turn them off with Check for updates automatically in Settings → Mac. Anyone who already answered the earlier prompt keeps that choice. You still choose when to download and install; automatic installation stays off.
 
 The corresponding source also includes experimental Linux file transcription work. Linux remains source-only and is not a supported release.
 
@@ -114,7 +114,7 @@ Clean Selected Text opens an editable Basic cleanup preview. Accept requests rep
 
 Paste delivery rechecks focus and secure input after Accessibility reads, before clipboard writes or key delivery. A focus-change abort keeps the transcript recoverable; a secure destination discards it. This closes a reproduced preflight gap, without claiming the intermittent Chrome incident is explained.
 
-Choose how long to keep completed recordings in Settings → General → Saved audio: 14, 30 or 90 days, or No age limit, with a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch, to completed Mouthtype audio only. Text and timings stay; unfinished recordings and recovery audio are protected. Previously removed recordings cannot be restored.
+Choose how long to keep completed recordings in Settings → Advanced → Storage: 14, 30 or 90 days, or No age limit, with a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. Changes apply at the next launch, to completed Mouthtype audio only. Text and timings stay; unfinished recordings and recovery audio are protected. Previously removed recordings cannot be restored.
 
 Microphone readiness now follows the actual capture result, so setup reflects successful starts and input errors. A missing fixed device still requires reconnecting it or explicitly choosing another input. Priority-list fallback is a separate opt-in.
 

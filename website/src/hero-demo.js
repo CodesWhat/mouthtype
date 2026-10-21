@@ -7,8 +7,8 @@ const phrases = [
   "The blue notebook is on my desk.",
 ];
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-const spokenWordMs = 60000 / 180;
-const typedCharacterMs = 60000 / (45 * 5);
+const spokenWordMs = 60000 / 150;
+const typedCharacterMs = 60000 / (40 * 5);
 let frame;
 let visible = false;
 let suspended = false;

@@ -10,7 +10,7 @@ final class HelpMenuSection: NSObject, MenuSection {
 
         For hands-free dictation, double-tap Fn or press Fn+Space. Tap Fn to stop. Press Esc to cancel; Undo stays available for 5 seconds.
 
-        Speech is transcribed on this Mac. Models download when needed. Text history stays on this Mac. Audio cleanup at launch removes recordings older than 90 days, then the oldest until the archive fits within 2 GB.
+        Speech is transcribed on this Mac. Models download when needed. Text history stays on this Mac. Audio cleanup at launch removes recordings past the age and size limits in Settings (90 days and 2 GB by default).
         """
     private let item = NSMenuItem(title: "How to Use Mouthtype…", action: nil, keyEquivalent: "")
     private let onShow: @MainActor () -> Void
