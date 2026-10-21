@@ -43,6 +43,12 @@ extension SettingsView {
                 Toggle("Launch at login", isOn: Binding(get: { model.loginState != .off }, set: { _ in model.toggleLogin() }))
                     .labelsHidden().toggleStyle(.designSwitch).accessibilityIdentifier("settings-launch-at-login")
             }
+            DesignRow(title: "Show in Dock", detail: "The menu bar icon stays in every mode.") {
+                DesignPopup(title: "Show in Dock",
+                    selection: Binding(get: { model.dockIconMode.rawValue }, set: { if let mode = DockIconMode(rawValue: $0) { model.setDockIconMode(mode) } }),
+                    choices: DockIconMode.allCases.map { DesignChoice($0.label, $0.rawValue) })
+                    .accessibilityIdentifier("settings-show-in-dock")
+            }
         }
         if let updater = actions.updater {
             DesignSection(eyebrow: "UPDATES") {

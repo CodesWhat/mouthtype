@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with **Settings → Diagnostics**. It shows model status, Microphone and Accessibility state, shortcut health and the Globe key check, and has a button for each repair. When something needs attention, the menu shows a line such as "Accessibility access needed…" and clicking it opens Diagnostics. **Refresh status** at the bottom re-reads everything.
+Start with **Settings → Health**. It shows model status, Microphone and Accessibility state, shortcut health and the Globe key check, and has a button for each repair. When something needs attention, the menu shows a line such as "Accessibility access needed…" and clicking it opens Health. **Refresh status** at the bottom re-reads everything.
 
 See [known limits](KNOWN-LIMITS.md) for what hasn't been verified. Install steps are in the [install notes](READ-ME.md).
 
@@ -8,18 +8,18 @@ See [known limits](KNOWN-LIMITS.md) for what hasn't been verified. Install steps
 
 Mouthtype needs both. Microphone records your voice. Accessibility lets the shortcut work and puts text into the app you're using.
 
-- Diagnostics shows "Microphone: not allowed" or "Accessibility: needed". Use **Microphone Settings…** or **Accessibility Settings…** next to it, turn Mouthtype on in System Settings → Privacy & Security, then come back to the app.
+- Health shows "Microphone: not allowed" or "Accessibility: needed". Use **Microphone Settings…** or **Accessibility Settings…** next to it, turn Mouthtype on in System Settings → Privacy & Security, then come back to the app.
 - macOS asks for Microphone when you first record. The Accessibility prompt appears once; after that, use the Health button or the menu line, because Mouthtype won't prompt again.
 - Mouthtype checks Accessibility about once a second, so the shortcut starts working shortly after you grant it. You don't need to relaunch. If the status stays "needed", remove Mouthtype from the Accessibility list, add it again and turn it on. Replacing the app with a build signed differently can invalidate an old grant.
 - If you deferred setup, reopen it with **Set Up Mouthtype…** in Settings > Health. Setup also opens by itself at launch when either permission is missing.
 
 ## Fn doesn't start dictation, or the emoji picker opens
 
-By default Mouthtype remaps Fn so the Globe key doesn't open the emoji picker. That remap is **Settings → Diagnostics → Remap Fn to hide the emoji picker**.
+By default Mouthtype remaps Fn so the Globe key doesn't open the emoji picker. That remap is **Settings → Advanced → Remap Fn to hide the emoji picker**.
 
 - If the toggle is off, or you use a custom shortcut, macOS still sees Fn. Settings > Health shows a Globe key row ("Globe key opens Emoji & Symbols", "Globe key changes input source" or "Globe key starts Dictation") with a **Keyboard Settings…** button. Either turn the remap on, or set the Globe key action to Do Nothing in System Settings → Keyboard.
 - The remap only applies while Mouthtype is running, and only when your shortcut is Fn / Globe. A custom shortcut leaves Fn alone, and the toggle is disabled with a note saying so.
-- If dictation does nothing at all, check Diagnostics for "Dictation input is off…" or "recovering". "Off" usually means Accessibility isn't granted. "Recovering" clears by itself once the shortcut listener restarts.
+- If dictation does nothing at all, check Health for "Dictation input is off…" or "recovering". "Off" usually means Accessibility isn't granted. "Recovering" clears by itself once the shortcut listener restarts.
 - If saving a shortcut fails with "The input listener could not start", check Accessibility, then try again. Your previous shortcut stays saved.
 - Keyboards without a Fn/Globe key (some third-party ones) can't use the default. Pick another shortcut under Settings → General.
 
@@ -31,7 +31,7 @@ If you start a take and the focus lands in a secure field before it ends, the te
 
 ## The speech model won't load, or a download stalls
 
-- Speech model status is in **Settings → Diagnostics** under Local models. If it failed, click **Retry model**. The menu has **Retry Speech Model** too. Downloads need internet access.
+- Speech model status is in **Settings → Health** under Local models. If it failed, click **Retry model**. The menu has **Retry Speech Model** too. Downloads need internet access.
 - The optional cleanup models (Fast, about 1.4 GB; Thorough, about 5.2 GB) download only when you ask. On the Style page (Cleanup tab) or in Settings > Health, choose **Download…**, confirm, and watch the percentage. **Cancel download** stops it.
 - Until the chosen cleanup model is ready, dictations use Basic cleanup. That's expected, not an error.
 - A failed or incomplete cleanup download shows the error in Settings > Health and a **Download…** button. Clicking it repairs an incomplete cache.

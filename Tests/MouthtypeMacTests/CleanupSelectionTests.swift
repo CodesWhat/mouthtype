@@ -21,6 +21,24 @@ import MouthtypeCore
 
     private final class Choice { var level = CleanupLevel.light }
 
+    @Test func aRealKeyDownResetsTheIdleCountdownOfAReadyModel() async {
+        let choice = Choice()
+        let fast = FakeSmartModel(downloaded: true, id: "fast")
+        let selection = CleanupSelection(
+            fast: fast, thorough: FakeSmartModel(downloaded: true, id: "thorough"), level: { choice.level },
+            idleUnloadDelay: .seconds(4))
+        selection.start()
+        for _ in 0..<200 where !fast.isLoaded { try? await Task.sleep(for: .milliseconds(10)) }
+        try? await Task.sleep(for: .milliseconds(2500))
+        selection.recordingStarted(level: .light, take: "take-1")
+        try? await Task.sleep(for: .milliseconds(2500))
+        // 5 s since ready, past the 4 s delay, but the key-down was only 2.5 s ago: a second of slack either way.
+        #expect(fast.isLoaded && fast.unloads == 0)
+        selection.releasePrewarm(for: "take-1")
+        for _ in 0..<1500 where fast.unloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
+        #expect(fast.unloads == 1)
+    }
+
     @Test func readinessAndGenerationUseTheCapturedLevel() async {
         let choice = Choice()
         let fast = FakeSmartModel(downloaded: true, id: "fast", name: "S1-mini by Superwhisper")

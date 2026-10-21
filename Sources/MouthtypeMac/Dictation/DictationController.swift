@@ -325,7 +325,9 @@ final class DictationController {
             recordingLive = true
             let globalLevel = pipeline.settings().level
             pipeline.smart?.recordingStarted(level: cleanupLevel ?? globalLevel, take: current.id)
-            if appStyles.hasWebsiteRules, WebsiteContext.supports(bundleID: startFocus.bundleID) {
+            current.codingTarget = CodingTargets.isCodingApp(bundleID: startFocus.bundleID)
+            let wantsWebsiteHost = appStyles.hasWebsiteRules || (pipeline.settings().slashCommands && !current.codingTarget)
+            if wantsWebsiteHost, WebsiteContext.supports(bundleID: startFocus.bundleID) {
                 websiteRead = inserter.websiteHostReader(for: startFocus).map { read in
                     let budget = websiteBudget
                     return Task { await Self.boundedRead(read, budget: budget) }
@@ -344,6 +346,7 @@ final class DictationController {
         // its budget leaves the app and context resolution above as it was.
         if let websiteRead, startError == nil {
             let websiteHost = await websiteRead.value
+            if CodingTargets.isCodingWebsite(host: websiteHost, bundleID: startFocus.bundleID) { current.codingTarget = true }
             if websiteHost != nil {
                 current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, websiteHost: websiteHost, fallback: cleanupStyle)
                 current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
@@ -631,7 +634,7 @@ final class DictationController {
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
         let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination,
-                                           appName: session.startFocus?.appName)
+                                           appName: session.startFocus?.appName, codingTarget: session.codingTarget)
         releasePrewarm(session)
         guard !cleaned.text.isEmpty else {
             await pipeline.finishEmpty(cleaned, session: session)
