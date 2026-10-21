@@ -14,12 +14,14 @@ final class FnRemapCoordinator {
     private let remap: FnRemap
     private let preferences: UserDefaults
     private let guardian: (any FnGuarding)?
+    private let requestTermination: (@MainActor () -> Void)?
     private var started = false
     private(set) var isActive = false
     /// Another app keeps rewriting the key mapping, so the remap was given up for this run.
     private(set) var conflict = false
 
-    init(remap: FnRemap, preferences: UserDefaults = .standard, guardian: (any FnGuarding)? = nil) {
+    init(remap: FnRemap, preferences: UserDefaults = .standard, guardian: (any FnGuarding)? = nil, requestTermination: (@MainActor () -> Void)? = nil) {
+        self.requestTermination = requestTermination
         self.remap = remap
         self.preferences = preferences
         self.guardian = guardian
@@ -103,7 +105,7 @@ final class FnRemapCoordinator {
         let outcome = remap.apply()
         switch outcome {
         case .applied, .alreadyApplied, .repaired:
-            remap.installSignalHandlers()
+            remap.installSignalHandlers(requestTermination: requestTermination)
             // A running guard keeps what it was started with, so a repair must replace it.
             if outcome == .repaired { guardian?.stop() }
             guardian?.start(restoring: remap.displacedEntry)
