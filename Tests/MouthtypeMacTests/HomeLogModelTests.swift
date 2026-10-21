@@ -186,6 +186,15 @@ import Testing
         #expect(types.isSuperset(of: PasteboardSession.concealedMarkers))
     }
 
+    @Test func cardAndMenuCopiesMarkTheClipboardConcealed() {
+        let board = NSPasteboard(name: NSPasteboard.Name("mouthtype-card-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        SystemClipboard(board).write("secret")
+        let types = Set((board.types ?? []).map(\.rawValue))
+        #expect(board.string(forType: .string) == "secret")
+        #expect(types.isSuperset(of: PasteboardSession.concealedMarkers))
+    }
+
     @Test func observationStopsOnDeactivateAndRestartsFreshOnActivate() async throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
