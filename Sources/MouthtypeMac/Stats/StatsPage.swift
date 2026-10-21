@@ -314,6 +314,14 @@ enum TapeSlots {
         return slots
     }
 
+    /// Which slot the pointer is over, if any. Nil when the pointer is gone or no needle is within `minimumSpacing` of it. The resting
+    /// peak is not a hover, so nothing derived from this (ring, callout) shows once the pointer leaves.
+    static func hoveredIndex(_ slots: [TapeSlot], pointerX: Double?) -> Int? {
+        guard let pointerX else { return nil }
+        let nearest = slots.indices.min { abs(slots[$0].x - pointerX) < abs(slots[$1].x - pointerX) }
+        return nearest.flatMap { abs(slots[$0].x - pointerX) <= minimumSpacing ? $0 : nil }
+    }
+
     /// Square-root scale so one long take doesn't flatten the rest. Still strictly taller for more words.
     static func height(words: Int, maxWords: Int) -> Double {
         guard words > 0 else { return 8 }
@@ -382,7 +390,7 @@ struct StatsTapeCard: View {
             let slots = TapeSlots.merge(takes, range: range, width: Double(width))
             let maxWords = max(1, slots.map(\.words).max() ?? 1)
             let biggest = slots.indices.filter { slots[$0].words > 0 }.max { slots[$0].words < slots[$1].words }
-            let highlighted = hovered.flatMap { $0 < slots.count ? $0 : nil } ?? biggest
+            let hoveredSlot = hovered.flatMap { $0 < slots.count ? $0 : nil }
             ZStack(alignment: .topLeading) {
                 ForEach(range.ticks.dropFirst(), id: \.self) { hour in
                     Rectangle().fill(DesignPalette.hair2).frame(width: 1, height: height)
@@ -390,7 +398,7 @@ struct StatsTapeCard: View {
                 }
                 Rectangle().fill(DesignPalette.hair).frame(width: width, height: 1).offset(y: height - 11)
                 ForEach(slots.indices, id: \.self) { index in
-                    needle(slots[index], maxWords: maxWords, highlighted: index == highlighted, width: width, height: height)
+                    needle(slots[index], maxWords: maxWords, peak: index == biggest, hovered: index == hoveredSlot, width: width, height: height)
                 }
                 let nowX = width * range.fraction(nowSeconds)
                 Rectangle().fill(DesignPalette.ink).frame(width: 1.5, height: height - 12).offset(x: nowX - 0.75, y: 6)
@@ -407,8 +415,7 @@ struct StatsTapeCard: View {
             .onContinuousHover { phase in
                 switch phase {
                 case .active(let point):
-                    let nearest = slots.indices.min { abs(slots[$0].x - point.x) < abs(slots[$1].x - point.x) }
-                    hovered = nearest.flatMap { abs(slots[$0].x - point.x) <= TapeSlots.minimumSpacing ? $0 : nil }
+                    hovered = TapeSlots.hoveredIndex(slots, pointerX: point.x)
                 case .ended:
                     hovered = nil
                 }
@@ -426,12 +433,12 @@ struct StatsTapeCard: View {
         Text(text).font(DesignFont.mono(DesignFont.axis)).foregroundStyle(DesignPalette.ink3).fixedSize()
     }
 
-    private func needle(_ slot: TapeSlot, maxWords: Int, highlighted: Bool, width: CGFloat, height: CGFloat) -> some View {
+    private func needle(_ slot: TapeSlot, maxWords: Int, peak: Bool, hovered: Bool, width: CGFloat, height: CGFloat) -> some View {
         let tall = CGFloat(TapeSlots.height(words: slot.words, maxWords: maxWords))
         let wide: CGFloat = slot.isAllHollow ? 4 : 2.5
-        let pad: CGFloat = highlighted ? 3 : 0
-        // Lime only on the peak or hovered needle; every other needle is grey.
-        let mark = highlighted ? DesignPalette.accent : DesignPalette.neutralMark
+        let pad: CGFloat = hovered ? 3 : 0
+        // Lime only on the peak or hovered needle; every other needle is grey. Ring and callout are hover only.
+        let mark = peak || hovered ? DesignPalette.accent : DesignPalette.neutralMark
         return ZStack {
             if slot.isAllHollow {
                 UnevenRoundedRectangle(topLeadingRadius: 1.5, topTrailingRadius: 1.5).fill(DesignPalette.surface)
@@ -448,9 +455,9 @@ struct StatsTapeCard: View {
             }
         }
         .padding(pad)
-        .overlay(highlighted ? RoundedRectangle(cornerRadius: 3).strokeBorder(DesignPalette.accent, lineWidth: 1) : nil)
+        .overlay(hovered ? RoundedRectangle(cornerRadius: 3).strokeBorder(DesignPalette.accent, lineWidth: 1) : nil)
         .overlay(alignment: callOutAlignment(x: slot.x, width: width)) {
-            if highlighted { callOut(slot).fixedSize().offset(y: -28) }
+            if hovered { callOut(slot).fixedSize().offset(y: -28) }
         }
         .offset(x: slot.x - wide / 2 - pad, y: height - 11 - tall - pad)
         .accessibilityHidden(true)

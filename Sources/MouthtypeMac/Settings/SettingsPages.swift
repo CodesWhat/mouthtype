@@ -25,6 +25,11 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     static func arrowTarget(focused: SettingsPage?, selected: SettingsPage, offset: Int) -> SettingsPage {
         (focused ?? selected).moved(by: offset)
     }
+    /// Where sidebar focus goes when the selected page changes. Follows the selection only while a sidebar row holds focus, so a
+    /// page change from a URL or menu moves the ring with it and never pulls focus out of a text field or other control.
+    static func focusFollowing(focused: SettingsPage?, selected: SettingsPage) -> SettingsPage? {
+        focused == nil ? nil : selected
+    }
     var headline: String {
         switch self {
         case .home: "Your recent takes."
