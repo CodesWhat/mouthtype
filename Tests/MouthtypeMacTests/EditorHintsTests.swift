@@ -9,7 +9,7 @@ private final class EditorEngine: DictationEngine {
     var seen: [VocabularyBias?] = []
     /// The settle budget passed with each bias.
     var budgets: [Duration?] = []
-    private var current: VocabularyBias?
+    private(set) var current: VocabularyBias?
     let applied: [String]?
     init(applied: [String]? = nil) { self.applied = applied }
     func setVocabularyBias(_ bias: VocabularyBias?) async { current = bias }
@@ -384,5 +384,35 @@ private struct FakeSource: BoundedTextSource {
         session.editorHints = Task { [VocabularyBias.Term(text: "applyTheme")] }
         _ = try await withHints.transcribe(audio(), session: session, voicedMs: 1000)
         #expect(hinted.budgets == [VocabularyBias.editorSettle])
+    }
+
+    @Test func keyDownWarmUpSendsTheEditorBiasWithoutWaiting() async throws {
+        let clock = SystemDictationClock()
+        let engine = EditorEngine()
+        var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: clock)
+        pipeline.vocabulary = Rules(rules: [DictionaryRule(heard: "maya", written: "Maya")])
+        pipeline.boostSavedWords = { true }
+        let hints = Task { [VocabularyBias.Term(text: "applyTheme")] }
+        let warm = try #require(pipeline.warmEditorBias(hints))
+        await warm.value
+        #expect(engine.budgets == [nil])
+        #expect(engine.current?.terms == ["Maya", "applyTheme"])
+
+        var session = DictationSession(id: "t", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        session.editorHints = hints
+        _ = try await pipeline.transcribe(audio(), session: session, voicedMs: 1000)
+        // Release still asks with the cap, so a build the warm-up started is waited on only up to it.
+        #expect(engine.budgets == [nil, VocabularyBias.editorSettle])
+        #expect(engine.seen.first??.terms == ["Maya", "applyTheme"])
+    }
+
+    @Test func keyDownWarmUpDoesNothingWithoutEditorNames() async throws {
+        let engine = EditorEngine()
+        var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: SystemDictationClock())
+        pipeline.boostSavedWords = { true }
+        #expect(pipeline.warmEditorBias(nil) == nil)
+        let warm = try #require(pipeline.warmEditorBias(Task { [] }))
+        await warm.value
+        #expect(engine.budgets.isEmpty)
     }
 }

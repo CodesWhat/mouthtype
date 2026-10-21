@@ -146,6 +146,22 @@ struct DictationPipeline: Sendable {
         return capture.durable
     }
 
+    /// Starts the editor-name bias building once the hints are in, so the key-up `transcribe` finds the model built
+    /// (or already part way) instead of starting it. Never waits for the build; `transcribe` still applies its own
+    /// settle cap, which then covers only what is left. Does nothing without editor names.
+    @discardableResult
+    func warmEditorBias(_ hints: Task<[VocabularyBias.Term], Never>?) -> Task<Void, Never>? {
+        guard let hints else { return nil }
+        return Task {
+            let editorTerms = await hints.value
+            guard !editorTerms.isEmpty, !Task.isCancelled else { return }
+            await engine.setVocabularyBias(
+                VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary(), editorTerms: editorTerms),
+                settleWithin: nil
+            )
+        }
+    }
+
     func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
         let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))
         var audioPath: String?
