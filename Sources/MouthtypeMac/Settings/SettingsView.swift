@@ -41,10 +41,8 @@ struct SettingsView: View {
             // Arrows and clicks move sidebarFocus themselves, so nothing here may pull focus onto a row.
             // A ring is never left on a row other than the selected one: arrows already moved focus with the selection, anything else drops it.
             if arrowMovedPage {
+                // moveSidebar already moved the ring with this selection.
                 arrowMovedPage = false
-                // The ring is AppKit's first responder and sidebarFocus can be nil while it is on a row, so move both.
-                let ringMoved = SettingsView.settingsWindow.map { SettingsView.moveSidebarRing(in: $0, to: page) } ?? false
-                if ringMoved || sidebarFocus != nil, sidebarFocus != page { sidebarFocus = page }
             } else {
                 if sidebarFocus != page { sidebarFocus = nil }
                 if let window = SettingsView.settingsWindow { SettingsView.clearStaleSidebarRing(in: window, selected: page) }
@@ -108,12 +106,19 @@ struct SettingsView: View {
     }
 
     private func moveSidebar(by offset: Int) -> KeyPress.Result {
-        let target = SettingsPage.arrowTarget(focused: sidebarFocus, selected: model.page, offset: offset)
-        // The page-change handler moves the ring with this selection instead of dropping it as a change from outside.
+        let window = SettingsView.settingsWindow
+        // The ring is AppKit's first responder and sidebarFocus lags it, so step from the row that really has it.
+        let target = SettingsPage.arrowTarget(focused: window.flatMap { SettingsView.sidebarRingPage(in: $0) } ?? sidebarFocus, selected: model.page, offset: offset)
+        // The page-change handler leaves the ring alone for this selection instead of dropping it as a change from outside.
         arrowMovedPage = true
-        if model.select(target) {
-            if sidebarFocus != nil { sidebarFocus = target }
-        } else { arrowMovedPage = false }
+        let previous = window?.firstResponder
+        // Move the ring here, in the key handler, and leave sidebarFocus to follow it. Moving the ring from the page-change handler
+        // or writing sidebarFocus as well races SwiftUI's own focus update, which puts the ring back on the previous row.
+        let ringMoved = window.map { SettingsView.moveSidebarRing(in: $0, to: target) } ?? false
+        if !model.select(target) {
+            arrowMovedPage = false
+            if ringMoved, let previous { window?.makeFirstResponder(previous) }
+        }
         return .handled
     }
 
@@ -141,6 +146,13 @@ struct SettingsView: View {
     static func isMouseEvent(_ event: NSEvent?) -> Bool {
         guard let type = event?.type else { return false }
         return type == .leftMouseDown || type == .leftMouseUp
+    }
+
+    /// The page whose sidebar row holds first responder, if one does.
+    @MainActor static func sidebarRingPage(in window: NSWindow) -> SettingsPage? {
+        guard let responder = window.firstResponder as? NSView,
+              let index = sidebarRowProxies(in: window).firstIndex(where: { $0 === responder }), index < SettingsPage.allCases.count else { return nil }
+        return SettingsPage.allCases[index]
     }
 
     /// Drops first responder when a sidebar row holds it. Anything else holding focus is left alone.
