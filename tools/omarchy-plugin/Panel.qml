@@ -17,8 +17,10 @@ Panel {
   manageIpc: false
 
   readonly property string helper: Quickshell.env("HOME") + "/.config/omarchy/plugins/dstahl.mouthtype/control.py"
+  // The Mac opens the mouth through recording0/1/2 with the pill's meter level. The bar widget only gets state from the
+  // 1.5 s poll, not the live level the pill service reads, so recording shows the middle frame (the Mac's reduce-motion frame).
   readonly property string glyphState: !serviceRunning ? "unavailable"
-    : sessionState === "recording" ? "recording"
+    : sessionState === "recording" ? "recording1"
     : sessionState === "idle" ? "idle" : "processing"
   property bool hasTranscript: false
   readonly property int savedCount: saved.length
