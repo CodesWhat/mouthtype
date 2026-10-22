@@ -25,4 +25,4 @@ bash ~/scripts/nas-docker.sh build -f linux-desktop/testbed/gnome/acceptance.Doc
 bash ~/scripts/nas-docker.sh run --rm ld-a1-gnome:test
 ```
 
-`testbed/ci-acceptance.sh <evidence-dir> gnome` does both builds and the run. The held-chord take (a mutter-driven GlobalShortcuts press after the paste and secure-field steps) is opt-in: pass `-e MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE=1` to the run, or `--shortcut-take` to `acceptance.py gnome-portal`. It doesn't pass yet, so by default `shortcut_press` reports `{"checked": false, "reason": "opt-in"}`.
+`testbed/ci-acceptance.sh <evidence-dir> gnome` does both builds and the run. The held-chord take (a mutter-driven GlobalShortcuts press after the paste and secure-field steps) runs by default. Skip it with `-e MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE=0` or `--skip-shortcut-take`. The mutter wake click can leave the shell in popup or overview mode (modalCount above 0), where GlobalShortcuts accelerators don't fire, so the take closes the overview and date menu and waits for `Main.actionMode == 1` and `Main.modalCount == 0` before pressing the chord.

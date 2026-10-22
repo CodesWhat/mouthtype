@@ -476,13 +476,13 @@ def gnome_portal_component(root, env, processes):
         # The chord goes last, with no client window open: a focused GTK window kept the grab from firing here.
         stop_process(secure_target.pop('process'))
         wait_for(lambda: not mapped_windows(portal), 10)
-        shortcut_take = os.environ.get('MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE') == '1'
+        shortcut_take = os.environ.get('MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE') != '0'
         shortcut = shortcut_hold_take(root, portal, delivery, atspi) if shortcut_take else None
         return {'component': 'gnome-portal', 'compositor': 'GNOME Shell headless',
                 'native_target': 'GTK3 Wayland', 'target_class': target['class'],
                 'consent': answered, 'grant_persisted': True, 'silent_restart': True,
                 'restart_seconds': restart_seconds, 'unicode_exact': True, 'delivered_once': True,
-                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': shortcut if shortcut_take else {'checked': False, 'reason': 'opt-in'},
+                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': shortcut if shortcut_take else {'checked': False, 'reason': 'skipped'},
                 'fake_engine_take': shortcut_take,
                 'hyprland_acceptance': False, 'omarchy_acceptance': False}
     finally:
@@ -509,6 +509,26 @@ def hold_take_result(calls, state, granted):
 def mapped_windows(portal):
     """True while the shell still lists a client window."""
     return json.loads(json.loads(shell_windows(portal) or '[null, []]'))[1]
+
+
+CLOSE_SCRIPT = ("Main.overview.hide(); Main.panel.statusArea.dateMenu.menu.close();"
+                " Main.panel.closeQuickSettings && Main.panel.closeQuickSettings(); 'closed'")
+MODE_SCRIPT = "JSON.stringify([Main.actionMode, Main.modalCount])"
+
+
+def shell_eval(portal, script):
+    """Run script in GNOME Shell through org.gnome.Shell.Eval; returns the JSON-decoded result, or None on failure."""
+    try:
+        body = portal.call('org.gnome.Shell', 'Eval', 's', (script,), path='/org/gnome/Shell',
+                           bus_name='org.gnome.Shell', timeout=5.0)
+        return json.loads(body[1]) if body[0] else None
+    except Exception:
+        return None
+
+
+def shell_mode(portal):
+    raw = shell_eval(portal, MODE_SCRIPT)
+    return json.loads(raw) if isinstance(raw, str) else None
 
 
 def shortcut_hold_take(root, portal, delivery, atspi):
@@ -553,6 +573,10 @@ def shortcut_hold_take(root, portal, delivery, atspi):
         if shortcuts_portal.HOLD not in status['triggers']:
             raise ValueError('dictate-hold was not granted: ' + json.dumps(status))
         driver.open()  # one click and a Shift_L tap wake the stage, as T2b found
+        # The wake click can leave the shell in popup or overview mode (modalCount > 0), and GlobalShortcuts
+        # accelerators only fire in normal mode. Put it back before the chord.
+        shell_eval(portal, CLOSE_SCRIPT)
+        wait_for(lambda: shell_mode(portal) == [1, 0], 10)
         for keysym in portal_probe.CHORD_KEYSYMS:
             driver.key(keysym, True)
         try:
@@ -837,11 +861,11 @@ def kde_portal_component(root, env, processes):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('component', choices=('capabilities', 'pipewire', 'sway', 'gnome-portal', 'kde-portal'))
-    parser.add_argument('--shortcut-take', action='store_true',
-                        help='gnome-portal only: also hold the dictate chord through mutter (opt-in, still unreliable headless)')
+    parser.add_argument('--skip-shortcut-take', action='store_true',
+                        help='gnome-portal only: skip the held-chord take (same as MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE=0)')
     args = parser.parse_args()
-    if args.shortcut_take:
-        os.environ['MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE'] = '1'
+    if args.skip_shortcut_take:
+        os.environ['MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE'] = '0'
     if sys.platform != 'linux':
         parser.error('Explicit Linux component acceptance only')
     if args.component == 'capabilities':
