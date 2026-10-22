@@ -17,7 +17,7 @@ reproducible for a given commit (`SOURCE_DATE_EPOCH`, sorted file lists, normali
 
 - `/usr/bin/mouthtype-linux`, `/usr/lib/mouthtype-linux/...` (same payload as `install.py --prefix /usr`)
 - `/usr/bin/mouthtype-linux-setup`
-- `/usr/lib/systemd/user/mouthtype-linux.service` (not enabled; `mouthtype-linux-setup` does that per user)
+- `/usr/lib/systemd/user/mouthtype-linux.service` (not enabled by the package; first-run setup or `mouthtype-linux-setup` enables it per user)
 - `/usr/share/mouthtype-linux/omarchy-plugin/...`
 - docs, copyright, man pages, lintian overrides
 
