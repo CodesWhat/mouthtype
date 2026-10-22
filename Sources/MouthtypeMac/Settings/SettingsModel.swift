@@ -10,6 +10,7 @@ import UniformTypeIdentifiers
     private let onCleanupChanged: @MainActor () -> Void
     private let onSkinChanged: @MainActor (PillSkinKind) -> Void
     private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
+    private let onMouseTriggerChanged: @MainActor (MouseTrigger) -> String?
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
     private let onDockIconModeChanged: @MainActor (DockIconMode) -> Void
@@ -51,6 +52,8 @@ import UniformTypeIdentifiers
     private(set) var font: TextFontChoice
     private(set) var recordingMode: RecordingMode
     private(set) var recordingModeError: String?
+    private(set) var mouseTrigger: MouseTrigger
+    private(set) var mouseTriggerError: String?
     private(set) var loginState: NSControl.StateValue = .off
     private(set) var shortcut = "Fn"
     private(set) var learnCorrections = true
@@ -66,6 +69,7 @@ import UniformTypeIdentifiers
         onCleanupChanged: @escaping @MainActor () -> Void = {},
         onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
         onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
+        onMouseTriggerChanged: @escaping @MainActor (MouseTrigger) -> String? = { _ in nil },
         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
         onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
@@ -92,9 +96,11 @@ import UniformTypeIdentifiers
         self.onCleanupChanged = onCleanupChanged
         self.onSkinChanged = onSkinChanged
         self.onRecordingModeChanged = onRecordingModeChanged
+        self.onMouseTriggerChanged = onMouseTriggerChanged
         self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
         self.onBoostSavedWordsChanged = onBoostSavedWordsChanged
         recordingMode = RecordingModePreference.current(defaults)
+        mouseTrigger = MouseTriggerPreference.current(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
@@ -255,6 +261,7 @@ import UniformTypeIdentifiers
         readoutColour = PillReadoutPreference.current(defaults)
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
+        mouseTrigger = MouseTriggerPreference.current(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
         FontRegistry.ensureRegistered()
         fontFamilies = FontFamilyCache.families()
@@ -289,6 +296,16 @@ import UniformTypeIdentifiers
         RecordingModePreference.set(value, in: defaults)
         recordingMode = value
         recordingModeError = nil
+    }
+
+    func setMouseTrigger(_ value: MouseTrigger) {
+        if let error = onMouseTriggerChanged(value) {
+            mouseTriggerError = error
+            return
+        }
+        MouseTriggerPreference.set(value, in: defaults)
+        mouseTrigger = value
+        mouseTriggerError = nil
     }
 
     func updateAppStyles(_ change: (inout AppCleanupStyles) throws -> Void) {

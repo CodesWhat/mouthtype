@@ -19,6 +19,15 @@ extension SettingsView {
                 .accessibilityIdentifier("settings-recording-mode")
             }
             if let error = model.recordingModeError { ModalCardNote(text: error, tone: .red) }
+            DesignRow(title: "Mouse button", detail: "An extra button that dictates like the shortcut. Only that button is used; other clicks are untouched.") {
+                DesignPopup(
+                    title: "Mouse button",
+                    selection: Binding(get: { model.mouseTrigger.rawValue }, set: { if let trigger = MouseTrigger(rawValue: $0) { model.setMouseTrigger(trigger) } }),
+                    choices: MouseTrigger.allCases.map { DesignChoice($0.displayName, $0.rawValue) }
+                )
+                .accessibilityIdentifier("settings-mouse-trigger")
+            }
+            if let error = model.mouseTriggerError { ModalCardNote(text: error, tone: .red) }
             MicrophoneSettingsSection(model: model.microphone)
         }
     }

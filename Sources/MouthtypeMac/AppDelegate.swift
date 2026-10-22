@@ -86,6 +86,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 },
                 onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
                 onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
+                onMouseTriggerChanged: { [weak self] trigger in self?.activateMouseTrigger(trigger) },
                 onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
                 onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
                 onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
@@ -745,7 +746,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
-        let service = hotkeyService ?? HotkeyService(options: .init(source: source, configuration: .init(recordingMode: RecordingModePreference.current())))
+        let service =
+            hotkeyService
+            ?? HotkeyService(
+                options: .init(
+                    source: source, configuration: .init(recordingMode: RecordingModePreference.current()),
+                    mouseTrigger: MouseTriggerPreference.current()))
         service.onHealthChange = { [weak self] health in
             Log.hotkey.info("health \(health.statusText, privacy: .public)")
             self?.systemSection.update(hotkeyHealth: health)
@@ -853,6 +859,16 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             remapCoordinator.deactivate()
             refreshGlobeCheck()
             return "The input listener could not start. Check Accessibility access, then try again. Your previous recording behavior is still saved."
+        }
+    }
+
+    private func activateMouseTrigger(_ trigger: MouseTrigger) -> String? {
+        guard let service = hotkeyService else { return nil }
+        do {
+            try service.switchMouseTrigger(trigger)
+            return nil
+        } catch {
+            return "The mouse button could not be listened to. Check Accessibility access, then try again. Your previous choice is still saved."
         }
     }
 

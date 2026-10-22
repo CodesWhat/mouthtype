@@ -98,6 +98,17 @@ Choose **Hold to talk** or **Press to toggle** under Recording behavior beside t
 > [!NOTE]
 > Changing behavior cancels an active recording instead of inserting it. If the listener cannot change mode, the previous mode remains saved and Settings shows the error.
 
+### Mouse button
+
+**Mouse button** (None, Middle, Back or Forward) sits under Recording behavior and is None by default. Pick a button and it dictates like the shortcut, in whichever recording behavior you chose.
+
+- Hold mode: keep the button down while speaking and release to finish. A press shorter than the minimum hold is discarded.
+- Toggle mode: click once to start and again to finish.
+- It follows the same guards as the keyboard shortcut. A press made while a key or modifier is down is ignored, <kbd>Escape</kbd> cancels, and another key typed early in a hold discards it.
+- While it is set, Mouthtype consumes only that button's presses, releases and drags, so the button no longer reaches other apps. Left and right clicks, scrolling and every other button are untouched, and with None nothing is listened to.
+- It uses the Accessibility permission Mouthtype already needs for the shortcut. No new permission is requested.
+- Changing the button cancels an active recording. If the listener cannot start, the previous choice remains saved and Settings shows the error.
+
 ### Microphone
 
 Choose **System Default** to follow macOS, or select a microphone for Mouthtype only. The explicit choice is remembered by its persistent device identity, so reconnecting it under a new runtime ID keeps the choice. This does not change the Mac's system input. Use Refresh inputs after connecting a device.
