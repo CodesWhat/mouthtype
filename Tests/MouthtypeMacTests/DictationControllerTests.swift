@@ -1951,6 +1951,8 @@ private final class FakeCorrections: CorrectionObserving {
     @Test func aStopQueuedBehindAStartingRecordingStopsIt() async {
         let rig = Rig()
         let gate = StartGate()
+        // Real clock off: a starved runner must not fire the 10 s wait limit and drop the queued command.
+        rig.controller.automationWaitLimit = { try await Task.sleep(for: .seconds(3600)) }
         rig.capture.duringStart = { await gate.wait() }
         rig.controller.enqueueAutomation(.start)
         rig.controller.enqueueAutomation(.stop)
@@ -1968,6 +1970,8 @@ private final class FakeCorrections: CorrectionObserving {
     @Test func aCancelQueuedBehindAStartingRecordingCancelsIt() async {
         let rig = Rig()
         let gate = StartGate()
+        // Real clock off: a starved runner must not fire the 10 s wait limit and drop the queued command.
+        rig.controller.automationWaitLimit = { try await Task.sleep(for: .seconds(3600)) }
         rig.capture.duringStart = { await gate.wait() }
         rig.controller.enqueueAutomation(.start)
         rig.controller.enqueueAutomation(.cancel)
