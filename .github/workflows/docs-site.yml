@@ -2,7 +2,7 @@ name: Docs site
 
 on:
   push:
-    branches: [main, dev/v0.5.0]
+    branches: [main, 'dev/**']
     paths: ["apps/docs/**", "docs/**", "tools/linux-desktop/README.md", "tools/omarchy-plugin/README.md", ".github/workflows/docs-site.yml"]
   pull_request:
     paths: ["apps/docs/**", "docs/**", "tools/linux-desktop/README.md", "tools/omarchy-plugin/README.md", ".github/workflows/docs-site.yml"]
