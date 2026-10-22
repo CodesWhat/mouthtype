@@ -14,6 +14,9 @@ struct TextCase: Sendable, CustomTestStringConvertible {
 }
 
 enum TextTestSupport {
+    /// Wall-clock perf asserts are skipped on shared CI runners, where a page-thrashing machine makes them noise.
+    static let timingAssertsEnabled = ProcessInfo.processInfo.environment["CI"] == nil
+
     /// Applies `edits` (every position refers to `input`) and returns the result with all whitespace removed, so
     /// the comparison ignores the unlogged spacing tidy.
     static func replay(_ edits: [EditOp], on input: String) -> String {

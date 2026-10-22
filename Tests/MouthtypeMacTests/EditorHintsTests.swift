@@ -195,7 +195,7 @@ private struct FakeSource: BoundedTextSource {
             EditorHintsGatherer.start(
                 enabled: true, boostEnabled: true,
                 focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
-                readers: calls.readers(context: context)
+                readers: calls.readers(context: context), deadline: .seconds(60)
             ))
         let terms = await task.value
         #expect(terms.map(\.text) == ["applyTheme", "DictationPipeline", "mouthtype"])

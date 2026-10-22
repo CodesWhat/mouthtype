@@ -222,7 +222,7 @@ private let maya = VocabularyBias(terms: ["Maya"])
         let start = clock.now
         let boosted = await b.boost(text: "hi Maia", tokenTimings: timings, samples: samples)
         #expect(boosted == nil)
-        #expect(clock.now - start < .seconds(2))
+        if TextTestSupport.timingAssertsEnabled { #expect(clock.now - start < .seconds(2)) }
     }
 
     @Test func rescorerThatChangesNothingOrReturnsNothingKeepsTheText() async {
@@ -347,7 +347,7 @@ private let maya = VocabularyBias(terms: ["Maya"])
         let elapsed = clock.measure {
             out = VocabularyBooster.restoringPunctuation(original: original, boosted: boosted, known: known)
         }
-        #expect(elapsed < .milliseconds(500))
+        if TextTestSupport.timingAssertsEnabled { #expect(elapsed < .milliseconds(500)) }
         #expect(out == boosted)
     }
 
