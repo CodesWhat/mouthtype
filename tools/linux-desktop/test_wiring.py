@@ -51,13 +51,18 @@ class FakeRemote:
 
 
 class SelectionTests(unittest.TestCase):
+    def setUp(self):
+        # A real AT-SPI init aborts the process when no accessibility bus is running (CI), so never let a test reach it.
+        patch = mock.patch.object(atspi_target.AtspiTargets, '_module', lambda self: None)
+        patch.start()
+        self.addCleanup(patch.stop)
+
     def build(self, name):
         desktop_name = backends.detect(ENVIRONMENTS[name])
         self.assertEqual(desktop_name, name)
         chosen = backends.delivery_name(desktop_name)
         with mock.patch.object(portal_module, 'Portal', FakePortal), \
-                mock.patch.object(delivery_portal, 'RemoteDesktopSession', FakeRemote), \
-                mock.patch.object(atspi_target.AtspiTargets, '_module', lambda self: None):
+                mock.patch.object(delivery_portal, 'RemoteDesktopSession', FakeRemote):
             return chosen, backends.make_delivery(chosen, {'mode': 'paste'}, store_factory=lambda: mock.Mock()) \
                 if chosen == 'portal' else backends.make_delivery(chosen, {}, run=lambda *a, **k: None)
 
