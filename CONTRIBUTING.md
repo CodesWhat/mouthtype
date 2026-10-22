@@ -16,6 +16,12 @@ Keep changes focused. `main` advances through a reviewed development-branch sync
 
 Use plain Conventional Commits: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `build`, `ci`, `chore` or `revert`, optionally with a scope. Keep local scratch directories out of commits; no build or test may depend on ignored files.
 
+## Code style
+
+- Swift: follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/). The package builds in Swift 6 language mode (`swift-tools-version:6.2`), so strict concurrency checking is on and data-race errors fail the build. Don't silence them with `@unchecked Sendable` or `nonisolated(unsafe)` without a comment saying why it's safe. There's no swift-format configuration in the repo yet. Once a `.swift-format` file lands, format changed Swift files with it.
+- Docs site TypeScript: [Biome](https://biomejs.dev/) with the config in `apps/docs/biome.json`, run through `npm --prefix apps/docs run check`.
+- Commits: plain Conventional Commits, as described above.
+
 ## Checks
 
 - Mac code: Xcode with Swift 6.2 on Apple Silicon and macOS 26 or later, then `scripts/swift-test.sh` (`swift test` that also fails on any reported failure, so a piped or truncated run can't pass). Add meaningful regression coverage for changed behavior. Physical microphone and destination-app checks are separate from logic tests. You don't need a Developer ID or notarization to contribute.
