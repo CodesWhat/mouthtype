@@ -52,6 +52,7 @@ Natural speech in, clean text out.
 | Download | [mouthtype.app/download](https://mouthtype.app/download) |
 | Getting started | [docs.mouthtype.app/getting-started](https://docs.mouthtype.app/getting-started/) |
 | Docs | [docs.mouthtype.app](https://docs.mouthtype.app/) |
+| Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Dictating | [docs.mouthtype.app/dictating](https://docs.mouthtype.app/dictating/) |
 | Install, update and remove | [docs.mouthtype.app/getting-started/install-notes](https://docs.mouthtype.app/getting-started/install-notes/) |
 | Usage and cleanup reference | [docs.mouthtype.app/reference/usage-overview](https://docs.mouthtype.app/reference/usage-overview/) |
