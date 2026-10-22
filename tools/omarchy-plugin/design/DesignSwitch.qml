@@ -26,8 +26,16 @@ Item {
   Rectangle {
     anchors.fill: parent
     radius: height / 2
-    color: root.checked ? Theme.accent : Theme.track
+    color: root.checked ? Theme.accentMark : Theme.track
     Behavior on color { ColorAnimation { duration: 120 } }
+  }
+  Rectangle {
+    anchors.fill: parent
+    anchors.margins: 1
+    radius: height / 2
+    color: Theme.accent
+    opacity: root.checked ? 1 : 0
+    Behavior on opacity { NumberAnimation { duration: 120 } }
   }
 
   Rectangle {

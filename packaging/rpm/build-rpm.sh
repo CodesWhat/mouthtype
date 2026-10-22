@@ -51,6 +51,7 @@ cp "$root/LICENSE" "$root/THIRD_PARTY_NOTICES.md" "$src/"
 cp "$root/packaging/debian/mouthtype-linux-setup" "$root/packaging/debian/mouthtype-desktop" \
    "$root"/packaging/debian/*.1 "$root/packaging/debian/app.mouthtype.Mouthtype.Settings.desktop" "$src/packaging/debian/"
 cp "$root/packaging/arch/aur/mouthtype-linux.service" "$src/packaging/arch/aur/"
+cp "$root/packaging/Version.plist" "$src/packaging/"
 find "$src" -name __pycache__ -type d -prune -exec rm -rf {} +
 tar --sort=name --owner=0 --group=0 --numeric-owner --mtime="@$epoch" -C "$work" -czf "$top/SOURCES/$name.tar.gz" "$name"
 

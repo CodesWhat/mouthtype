@@ -88,6 +88,7 @@ class AutomationTests(unittest.TestCase):
 
     def test_copy_last_copies_the_newest_transcript(self):
         with mock.patch.object(cli_automation.shutil, 'which', return_value='/usr/bin/wl-copy'), \
+                mock.patch.object(cli_automation.concealed, '_supported', False), \
                 mock.patch.object(cli_automation.subprocess, 'run') as run:
             code, out, _ = self.run_verb('copy-last')
         self.assertEqual(code, 0)

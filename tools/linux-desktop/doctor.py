@@ -41,7 +41,8 @@ def probe_llama_server(server, run=subprocess.run):
 
 
 def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
-             runtime_check=None, service_check=None, llama_probe=None, env=None):
+             runtime_check=None, service_check=None, llama_probe=None, env=None, source_lookup=None,
+             mute_check=None):
     from desktop import validate_config, request
     from proof import verify_artifacts
     from spellings import load_spellings
@@ -49,6 +50,9 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
     which = which or shutil.which
     runtime_check = runtime_check or runtime_available
     llama_probe = llama_probe or probe_llama_server
+    from microphones import list_sources, default_muted
+    source_lookup = source_lookup or list_sources
+    mute_check = mute_check or default_muted
     service_check = service_check or (lambda path: request(path, 'status'))
     checks = []
 
@@ -87,6 +91,25 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
     capture = which('pw-record') is not None
     add('capture', 'ok' if capture else 'error', 'PipeWire capture helper is available.' if capture else 'pw-record is missing.',
         '' if capture else 'Install PipeWire audio tools using the normal distro package manager.')
+    if capture:
+        try:
+            sources = source_lookup()
+        except OSError:
+            sources = None
+        target = (config or {}).get('capture_target')
+        if sources is None:
+            add('microphone', 'warning', 'PipeWire could not list microphones, so none was checked.',
+                'Check that pipewire and wireplumber are running (systemctl --user status pipewire wireplumber).')
+        elif not sources:
+            add('microphone', 'error', 'No microphone is available to PipeWire.',
+                'Plug in or enable a microphone, then check it with: wpctl status')
+        elif target and target not in [item['name'] for item in sources]:
+            add('microphone', 'warning', 'The configured microphone ' + target + ' is not connected, so recording uses the default one.',
+                'Plug it back in, or choose a microphone in Settings, General.')
+        elif not target and mute_check() is True:
+            add('microphone', 'warning', 'The default microphone is muted.', 'Unmute it with: wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 0')
+        else:
+            add('microphone', 'ok', 'Microphone found: ' + (target or next((item['description'] for item in sources if item['default']), sources[0]['description'])) + '. Nothing was recorded.')
     if config is not None:
         valid_python = runtime_check(config.get('python', sys.executable))
         add('runtime', 'ok' if valid_python else 'error',

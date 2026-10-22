@@ -33,6 +33,17 @@ Item {
   // Portal-granted shortcut triggers (GNOME and KDE), action name to the trigger text the desktop reports.
   property var shortcutTriggers: ({})
   property bool deliveryNeedsGrant: false
+  property bool welcomed: false
+  // True when control.py reports the client is gone (package removed without the setup uninstall).
+  property bool clientMissing: false
+  // A recovered sheet draft picked on Home. The Dictionary or Transforms page takes it when it opens and sets this back to null.
+  property var pendingDraft: null
+  // Settings, General: the PipeWire microphones (control.py `microphones`) and the last two-second level test (`mic-test`).
+  property var microphoneInfo: ({ sources: [], selected: "default", missing: false, muted: null })
+  property var micLevel: null
+  property bool micTesting: false
+  // Settings, Health: the non-ok rows from control.py `doctor`. Null until the first reply.
+  property var doctorInfo: null
   property bool hasTranscript: false
   readonly property int savedCount: saved.length
 
@@ -74,6 +85,8 @@ Item {
   property bool actionBusy: false
   property bool recoverBusy: false
   property bool importBusy: false
+  property bool micListBusy: false
+  property bool doctorBusy: false
   property bool pageBusy: false
   property string pagePending: ""
   property var pageQueue: []
@@ -106,6 +119,7 @@ Item {
   function close() { closeRequested() }
 
   function absorb(result) {
+    if (result.running !== undefined) clientMissing = result.client === "missing"
     if (result.running !== undefined) serviceRunning = result.running === true
     if (result.state !== undefined) sessionState = String(result.state || "off")
     if (result.recent !== undefined) recent = result.recent || []
@@ -126,6 +140,7 @@ Item {
     if (result.history !== undefined) history = result.history || ({ takes: 0, maximum: 200 })
     if (result.font !== undefined) fontPrefs = result.font || ({})
     if (result.versions !== undefined) versions = result.versions || ({ plugin: null, app: null })
+    if (result.welcomed !== undefined) welcomed = result.welcomed === true
     if (result.file_import !== undefined) {
       fileImport = result.file_import || ({ state: "off" })
       if (!importHasResult || (fileImport.id || "") !== importTextFor) { importText = ""; importTextFor = "" }
@@ -150,6 +165,47 @@ Item {
         if (result.error) errorText = String(result.error)
         else { importText = String(result.text || ""); importTextFor = String(fileImport.id || "") }
       } catch (e) { errorText = "Could not read the file transcript" }
+    })
+  }
+
+  function loadMicrophones() {
+    if (micListBusy) return
+    micListBusy = true
+    Platform.run([helper, "microphones"], function(out, code) {
+      micListBusy = false
+      try {
+        var result = JSON.parse(String(out || "{}"))
+        if (result.error) errorText = String(result.error)
+        else microphoneInfo = result
+      } catch (e) { errorText = "Could not list microphones" }
+    })
+  }
+
+  function loadDoctor() {
+    if (doctorBusy) return
+    doctorBusy = true
+    Platform.run([helper, "doctor"], function(out, code) {
+      doctorBusy = false
+      try {
+        var result = JSON.parse(String(out || "{}"))
+        if (result.error) errorText = String(result.error)
+        else doctorInfo = result.doctor || null
+      } catch (e) { errorText = "Could not run the health checks" }
+    })
+  }
+
+  function testMicrophone() {
+    if (micTesting) return
+    errorText = ""
+    micLevel = null
+    micTesting = true
+    Platform.run([helper, "mic-test"], function(out, code) {
+      micTesting = false
+      try {
+        var result = JSON.parse(String(out || "{}"))
+        if (result.error) errorText = String(result.error)
+        else micLevel = result
+      } catch (e) { errorText = "The microphone test failed" }
     })
   }
 

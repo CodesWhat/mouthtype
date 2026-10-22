@@ -17,6 +17,8 @@ QtObject {
   property int wordsToday: 0
   property bool soundsEnabled: true
   property bool autostartEnabled: true
+  property bool welcomed: false
+  property bool clientMissing: false
   property string shortcutMode: "hold"
   property string shortcutKeys: "F10"
   property string transcript: ""
@@ -34,6 +36,14 @@ QtObject {
   property var shortcutTriggers: ({})
   property bool deliveryNeedsGrant: false
   property var trayAvailable: null
+  property var microphoneInfo: ({ sources: [
+    { name: "alsa_input.usb-headset", description: "USB Headset Mono", default: false },
+    { name: "alsa_input.pci-builtin", description: "Built-in Audio Analog Stereo", default: true } ],
+    selected: "default", missing: false, muted: false })
+  property var micLevel: null
+  property var doctorInfo: null
+  property bool micTesting: false
+  property var pendingDraft: null
   property string transcriptFont: "sans-serif"
   property string pillFont: "sans-serif"
   property var fileImport: ({ state: "off" })
@@ -47,6 +57,9 @@ QtObject {
   readonly property bool importCanExport: fileImport.state === "finished" || importRetained
 
   function run(args) { ran = ran.concat([args]) }
+  function loadMicrophones() { run(["microphones"]) }
+  function loadDoctor() { run(["doctor"]) }
+  function testMicrophone() { run(["mic-test"]) }
   function close() { run(["close"]) }
   function showRecording(id) { run(["recover", id]) }
   function loadImportText() { importText = importText }
@@ -70,6 +83,8 @@ QtObject {
     hasTranscript = true
     soundsEnabled = true
     autostartEnabled = true
+    welcomed = false
+    clientMissing = false
     shortcutMode = "hold"
     shortcutKeys = "F10"
     pillPrefs = { enabled: true, skin: "classic", size: 1 }
@@ -84,7 +99,7 @@ QtObject {
       { id: "e", transcript: true, audio: true, preview: "running ten late, order me whatever", mtime: seconds(29) }
     ]
     saved = [{ id: "f", transcript: false, audio: true, preview: "", mtime: seconds(3.5) }]
-    config = { delivery_mode: "paste", cleanup: "fast", maximum_recording_seconds: 60, notifications: true,
+    config = { delivery_mode: "paste", cleanup: "fast", maximum_recording_seconds: 60, notifications: "errors",
                history_keep: null, maximum_recovery_takes: 200, audio_retention_days: 30, allowed_classes: [] }
     wordsToday = 412
     history = { takes: 6, maximum: 200 }
@@ -106,7 +121,7 @@ QtObject {
     shortcutMode = "off"
     shortcutKeys = ""
     history = { takes: 0, maximum: 200 }
-    cleanupInfo = { models: {}, setup: { state: "downloading", level: "thorough" }, service: null }
+    cleanupInfo = { models: {}, setup: { state: "downloading", level: "thorough", bytes_done: 1000000000, bytes_total: 2497281120 }, service: null }
     versions = { plugin: "1.3.0", app: null }
     pillPrefs = { enabled: true, skin: "hifi", size: 2 }
   }

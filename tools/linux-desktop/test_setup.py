@@ -149,14 +149,14 @@ class SetupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             config = Path(temp) / 'linux.json'
             config.write_text('{"cleanup": "basic"}')
-            args = mock.Mock(cleanup=None)
+            args = mock.Mock(cleanup=None, build_server=False)
             with mock.patch.object(setup.sys.stdin, 'isatty', return_value=False):
                 setup.offer_cleanup(args, config, run=None, ask=lambda prompt: self.fail('prompted without a terminal'))
             prepared = []
             ran = []
             with mock.patch.object(setup.sys.stdin, 'isatty', return_value=True), \
                     mock.patch.object(setup.sys.stdout, 'isatty', return_value=True), \
-                    mock.patch.object(setup, 'missing_packages', lambda table, which=None: []), \
+                    mock.patch.object(setup, 'missing_packages', lambda table, which=None: self.fail('checked build tools without --build-server')), \
                     mock.patch.object(setup, 'CLEANUP_DESTINATION', Path(temp) / 'cleanup'):
                 setup.offer_cleanup(args, config, run=lambda c, **k: ran.append(c), ask=lambda prompt: 'f',
                                     cleanup=lambda argv: prepared.append(argv) or 0)
@@ -172,9 +172,10 @@ class SetupTests(unittest.TestCase):
             built = mock.Mock(return_value=0)
             with mock.patch.object(setup, 'missing_packages', lambda table, which=None: ['cmake']), \
                     mock.patch('builtins.print') as shown:
-                setup.offer_cleanup(mock.Mock(cleanup='fast'), config, run=None, cleanup=built)
+                setup.offer_cleanup(mock.Mock(cleanup='fast', build_server=True), config, run=None, cleanup=built)
             built.assert_not_called()
             self.assertIn('sudo pacman -S --needed cmake', shown.call_args[0][0])
+            self.assertIn('--build-server', shown.call_args[0][0])
 
 
 if __name__ == '__main__':

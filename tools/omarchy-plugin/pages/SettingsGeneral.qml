@@ -3,7 +3,7 @@ import "../design"
 import "../parts"
 
 // Settings, General: shortcut, recording behaviour and length, where the text goes, sounds and desktop cues.
-// Moved from the old Recording Settings, Paste Options and shortcut pages with the same verbs. Microphone choice, live words
+// Moved from the old Recording Settings, Paste Options and shortcut pages with the same verbs. Live words
 // and quiet other audio have no Linux setting yet, so they are not listed.
 Column {
   id: root
@@ -22,6 +22,10 @@ Column {
     return names.length ? String(triggers[names[0]]) : ""
   }
   readonly property var lengths: [30, 60, 120]
+  readonly property var mics: host && host.microphoneInfo ? host.microphoneInfo : ({ sources: [], selected: "default" })
+  readonly property var micNames: ["default"].concat(mics.sources.map(function(item) { return item.name }))
+  readonly property var micLabels: ["System default"].concat(mics.sources.map(function(item) { return item.description }))
+  readonly property var level: host ? host.micLevel : null
 
   width: parent ? parent.width : 520
   spacing: 18
@@ -30,7 +34,7 @@ Column {
     if (!classField.activeFocus) classDraft = config.allowed_classes && config.allowed_classes.length ? config.allowed_classes[0] : ""
   }
   onConfigChanged: syncClass()
-  Component.onCompleted: syncClass()
+  Component.onCompleted: { syncClass(); if (host) host.loadMicrophones() }
 
   function setMode(index) {
     if (index === 0) host.run(["set-shortcut", "off"])
@@ -73,6 +77,29 @@ Column {
           text: "Recording behavior"
           onActivated: function(index) { root.setMode(index) }
         }
+      }
+      DesignRow {
+        title: "Microphone"
+        detail: root.mics.missing
+          ? "The chosen microphone is not connected, so recording uses the system default."
+          : root.mics.muted === true && root.mics.selected === "default" ? "The default microphone is muted." : "Which input Mouthtype records from."
+        StatePopup {
+          model: root.micLabels
+          value: Math.max(0, root.micNames.indexOf(root.mics.selected))
+          text: "Microphone"
+          onActivated: function(index) { root.host.run(["set-config", "microphone", root.micNames[index]]) }
+        }
+      }
+      DesignRow {
+        title: "Test microphone"
+        detail: root.host && root.host.micTesting ? "Listening for two seconds. Say something."
+          : root.level ? (root.level.peak < 0.01 ? "Nothing heard. Check the microphone is plugged in and not muted." : "Heard you. Peak " + Math.round(root.level.peak * 100) + "%.")
+          : "Records two seconds, shows the level, and keeps nothing."
+        Rectangle {
+          width: 80; height: 6; radius: 3; anchors.verticalCenter: parent.verticalCenter; color: Theme.hair2
+          Rectangle { width: parent.width * (root.level ? Math.min(1, root.level.peak) : 0); height: parent.height; radius: 3; color: Theme.accent }
+        }
+        DesignSecondaryButton { text: "Test"; enabled: !!root.host && !root.host.micTesting; onActivated: root.host.testMicrophone() }
       }
       DesignRow {
         title: "Recording length"
@@ -148,12 +175,13 @@ Column {
         }
       }
       DesignRow {
-        title: "Desktop recording cues"
-        detail: "A desktop notification when recording starts and stops."
-        StateSwitch {
-          value: root.config.notifications !== false
-          text: "Desktop recording cues"
-          onToggled: root.host.run(["set-config", "notifications", checked ? "on" : "off"])
+        title: "Desktop notifications"
+        detail: "The bar pill already shows recording and transcribing. Errors only keeps just the problems."
+        StateSegmented {
+          model: ["All", "Errors only", "Off"]
+          value: root.config.notifications === false ? 2 : root.config.notifications === "errors" ? 1 : 0
+          text: "Desktop notifications"
+          onActivated: function(index) { root.host.run(["set-config", "notifications", ["all", "errors", "off"][index]]) }
         }
       }
     }

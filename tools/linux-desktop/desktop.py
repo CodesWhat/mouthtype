@@ -58,6 +58,7 @@ def __getattr__(name):
     if name == 'CAPABILITIES':
         return capabilities_report()
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+import concealed
 from hyprland_ipc import HyprlandIPC, IPCError, IPCTimeout
 
 
@@ -154,12 +155,14 @@ class Session:
     def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
                  dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None, cleanup='off',
                  cleanup_engine=None, maximum_takes=200, audio_days=90, audio_megabytes=2048, history_keep=None,
-                 styles=None, styles_path=None, engine_loader=None):
+                 styles=None, styles_path=None, engine_loader=None, slash_commands=True):
         load_runtime()
         self.capture, self.engine, self.delivery = capture, engine, delivery
         self.maximum_takes, self.audio_days, self.audio_megabytes = maximum_takes, audio_days, audio_megabytes
         self.history_keep = history_keep
         self.cleanup_engine = cleanup_engine
+        if cleanup_engine is not None:
+            self._adopt(cleanup_engine)
         # One resident model per level a take can run at: the global level's, plus any a Style context overrides to.
         self.cleanup_engines = {cleanup: cleanup_engine} if cleanup_engine is not None and cleanup in ('fast', 'thorough') else {}
         self.engine_loader = engine_loader
@@ -167,10 +170,13 @@ class Session:
         self._rejected_stamp = None
         self._refresh_styles()
         self.cleanup_outcome, self.cleanup_ms = None, None
+        # This take's cleanup result, for the pill. Unlike cleanup_outcome it clears when a take skips the model.
+        self.cleanup_take = None
         self.feedback = feedback
         self.dictionary = dictionary
         self.phrases = phrases
         self.cleanup = cleanup
+        self.slash_commands = slash_commands
         self.phrase_clipboard = phrase_clipboard
         self.clipboard = clipboard or read_phrase_clipboard
         self.recovery = Path(recovery)
@@ -240,6 +246,10 @@ class Session:
             return None
         return {'class': window_class} if isinstance(window_class, str) and window_class else None
 
+    def _adopt(self, engine):
+        if hasattr(engine, 'busy'):
+            engine.busy = lambda: self.state == 'recording'
+
     def _plan(self, target):
         """What one take runs: the model level, its engine and the tone to re-apply after the model.
 
@@ -255,6 +265,7 @@ class Session:
             except (OSError, ValueError, KeyError, TypeError):
                 engine = None
             if engine is not None:
+                self._adopt(engine)
                 self.cleanup_engines[wanted] = engine
                 if engine.state == 'idle':
                     engine.warm()
@@ -395,18 +406,22 @@ class Session:
                 'context': 'unsupported', 'secure_field_detection': 'unsupported',
                 'delivery_verified': False,
                 'cleanup': {'level': self.cleanup, 'last_outcome': self.cleanup_outcome, 'last_ms': self.cleanup_ms,
+                            'take': self.cleanup_take,
                             'model': self.cleanup_engine.status() if self.cleanup_engine is not None else None},
                 'feedback': getattr(self.feedback, 'status', 'unavailable') if self.feedback else 'disabled'}
 
     def live_status(self):
         """The fields a watcher snapshot needs, without the take-directory walk that status() does."""
         return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
-                'recovery': self.take.name if self.take else None}
+                'recovery': self.take.name if self.take else None, 'cleanup_take': self.cleanup_take}
 
     def _notify(self, state):
         if self.feedback:
             try:
-                self.feedback.notify(state)
+                if state == 'error':
+                    self.feedback.notify(state, self.error)
+                else:
+                    self.feedback.notify(state)
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
                 pass
 
@@ -440,7 +455,8 @@ class Session:
                     return self.status()
                 self._refresh_styles()
                 try:
-                    cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles)
+                    cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles,
+                                            self.slash_commands)
                 except ValueError:
                     self.error = 'cleanup_unavailable'
                     self._notify('error')
@@ -496,6 +512,10 @@ class Session:
                     self._notify('error')
                     return self.status()
                 self.started, self.state = self.clock(), 'recording'
+                for engine in set(self.cleanup_engines.values()) | {self.cleanup_engine} - {None}:
+                    touch = getattr(engine, 'touch', None)
+                    if touch is not None:
+                        touch()
                 self._notify('recording')
             elif action == 'stop' and self.state == 'recording':
                 try:
@@ -550,6 +570,7 @@ class Session:
             if plan is None:
                 plan = {'level': self.cleanup, 'tone': None, 'engine': self.cleanup_engine}
             basic = cleanup.apply(raw, target if target is not None else style_target)
+            engine_state = getattr(plan['engine'], 'state', None)
             outcome, milliseconds = self._model_cleanup(basic, cancelled, plan['level'], plan['engine'])
             text = basic if outcome is None or not isinstance(outcome[1], str) else outcome[1]
             if outcome is not None and isinstance(outcome[1], str) and plan['tone']:
@@ -560,6 +581,9 @@ class Session:
                 if cancelled.is_set() or self.closed:
                     return
                 private_write(take / 'transcript.txt', text)
+                # The engine state the take met: a cold engine reads loading/idle/unloaded, a fault reads failed.
+                self.cleanup_take = ({'outcome': outcome[0], 'engine': 'failed' if outcome[0] == 'failed' else engine_state}
+                                     if outcome is not None else None)
                 if outcome is not None:
                     self.cleanup_outcome, self.cleanup_ms = outcome[0], milliseconds
                     private_write(take / 'cleanup.json', json.dumps({'level': plan['level'], 'outcome': outcome[0],
@@ -654,7 +678,8 @@ class Session:
                 return self.status()
             self._refresh_styles()
             try:
-                cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles)
+                cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles,
+                                            self.slash_commands)
             except ValueError:
                 self.error = 'cleanup_unavailable'
                 self._notify('error')
@@ -875,32 +900,39 @@ class HyprlandDelivery:
                 types = None
             elif types and not self.restorable(types):
                 # An image or file list can't be put back as text, so overwriting it would destroy it.
-                return 'recover_only'
+                return 'clipboard_kept'
             if types is not None:
                 try:
                     previous = self.clipboard()
                 except ClipboardTooLarge:
-                    return 'recover_only'
+                    return 'clipboard_kept'
                 except (OSError, ValueError, PhraseContextUnavailable, subprocess.SubprocessError):
                     previous = None
         if cancelled is not None and cancelled.is_set():
             return 'not_attempted'
         try:
-            self.run(['wl-copy', '--type', 'text/plain;charset=utf-8'], input=text.encode('utf-8'),
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
-            # The clipboard owner forks; the target only sees the new offer once it is live.
-            if not self.wait_for_clipboard(text):
-                return 'unknown'
+            # Nothing has been sent to the target yet, so a failure here is a clean 'not pasted', never 'unknown'.
+            try:
+                self.run(concealed.copy_command(), input=text.encode('utf-8'),
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
+                # The clipboard owner forks; the target only sees the new offer once it is live.
+                copied = self.wait_for_clipboard(text)
+            except (OSError, subprocess.SubprocessError):
+                copied = False
+            if not copied:
+                return 'clipboard_failed'
             if self.snapshot() != target:
                 return 'target_changed'
             if cancelled is not None and cancelled.is_set():
                 # Our text is already on the clipboard; the finally block puts the earlier one back.
                 return 'not_attempted'
-            outcome = self.send_paste_chord(target, terminal, cancelled)
+            try:
+                outcome = self.send_paste_chord(target, terminal, cancelled)
+            except (OSError, subprocess.SubprocessError):
+                # The chord may have been sent. Never replay automatically.
+                return 'unknown'
             if outcome:
                 return outcome
-        except (OSError, subprocess.SubprocessError):
-            return 'unknown'
         finally:
             if previous is not None:
                 self.schedule_restore(previous, text)
@@ -1049,14 +1081,19 @@ def read_phrase_clipboard(command=None, *, seconds=1, maximum=1024 * 1024, env=N
 
 
 class PipeWireCapture:
-    def __init__(self, target=None, *, errors=subprocess.DEVNULL):
+    def __init__(self, target=None, *, errors=subprocess.DEVNULL, present=None):
         self.target, self.process, self.path = target, None, None
         self.errors = errors
+        self.present = present
 
     def argv(self, path):
         result = ['pw-record', '--rate=16000', '--channels=1', '--format=s16']
+        # A configured microphone that has been unplugged falls back to the default source instead of failing every take.
+        # When PipeWire can't be asked, the target is kept as configured.
         if self.target:
-            result.append('--target=' + self.target)
+            from microphones import target_present
+            if (self.present or target_present)(self.target) is not False:
+                result.append('--target=' + self.target)
         return result + [str(path)]
 
     def start(self, path):
@@ -1176,9 +1213,10 @@ class CleanupEngine:
 
     RETRY_SECONDS = (30, 120, 480, 1800)
     ABSENT_RECHECK_SECONDS = 30
+    IDLE_CHECK_SECONDS = 15
 
     def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic,
-                 hash_cache=None):
+                 hash_cache=None, idle_seconds=600):
         load_runtime()
         if (not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict) or
                 not isinstance(settings.get('server'), str) or settings.get('prompt', 's1') not in ('s1', 'shared')):
@@ -1193,6 +1231,12 @@ class CleanupEngine:
         self.hash_cache = hash_cache
         self.worker = None
         self.lock = threading.Lock()
+        # Idle unload: a take's request, or a recording starting, counts as use. 0 disables. The session sets busy so
+        # the server is never stopped under an active recording.
+        self.idle_seconds = idle_seconds
+        self.last_used = clock()
+        self.busy = lambda: False
+        self.reaper = None
         # close() sets this so a load in progress stops promptly instead of holding the lock for minutes.
         self.shutdown = threading.Event()
         self.warming = None
@@ -1213,7 +1257,7 @@ class CleanupEngine:
         """Called from clean() while not ready. Starts a background load when one is due; never waits."""
         if self.shutdown.is_set():
             return
-        if self.state == 'idle':
+        if self.state in ('idle', 'unloaded'):
             self.warm()
         elif self.state == 'failed' and self.clock() >= self.retry_at:
             self.warm()
@@ -1226,6 +1270,41 @@ class CleanupEngine:
     def status(self):
         return {'state': self.state, 'error': self.error, 'load_ms': self.load_ms,
                 'prompt': self.settings.get('prompt', 's1')}
+
+    def touch(self):
+        """Mark the engine used now, and bring an idle-unloaded server back so it is warm by the time it's needed."""
+        self.last_used = self.clock()
+        if self.state == 'unloaded':
+            self._recover()
+
+    def unload_if_idle(self):
+        """Stop the server after idle_seconds without use. True when it unloaded. Never while a recording is active."""
+        if not self.idle_seconds or self.state != 'ready' or self.busy():
+            return False
+        if self.clock() - self.last_used < self.idle_seconds:
+            return False
+        if not self.lock.acquire(blocking=False):
+            return False
+        try:
+            if self.state != 'ready' or self.busy() or self.clock() - self.last_used < self.idle_seconds:
+                return False
+            self.endpoint = None
+            worker, self.worker = self.worker, None
+            if worker:
+                worker.close()
+            self.state = 'unloaded'
+            return True
+        finally:
+            self.lock.release()
+
+    def _reap(self):
+        while not self.shutdown.wait(min(self.IDLE_CHECK_SECONDS, self.idle_seconds)):
+            self.unload_if_idle()
+
+    def _start_reaper(self):
+        if self.idle_seconds and (self.reaper is None or not self.reaper.is_alive()) and not self.shutdown.is_set():
+            self.reaper = threading.Thread(target=self._reap, daemon=True)
+            self.reaper.start()
 
     def _ensure_loaded(self, cancelled):
         if self.worker is not None:
@@ -1246,7 +1325,9 @@ class CleanupEngine:
         self.endpoint = {'port': port, 'alias': alias} if type(port) is int and isinstance(alias, str) else None
         self.state = 'ready'
         self.error = None
+        self.last_used = self.clock()
         self.failures, self.retry_at = 0, 0.0
+        self._start_reaper()
 
     def warm(self):
         """Load in the background so the first take does not pay the cold start."""
@@ -1290,6 +1371,7 @@ class CleanupEngine:
         if self.worker is None or self.state != 'ready':
             self._recover()
             return None
+        self.last_used = self.clock()
         end = time.monotonic() + seconds
         while not self.lock.acquire(timeout=.05):
             if cancelled.is_set() or time.monotonic() >= end:
@@ -1306,6 +1388,7 @@ class CleanupEngine:
                 result = self.worker.receive(remaining, cancelled)
                 if result.get('id') != identity:
                     raise ValueError('Invalid cleanup result')
+                self.last_used = self.clock()
                 if result.get('event') == 'timeout':
                     return None
                 if result.get('event') == 'error' or not isinstance(result.get('text'), str):
@@ -1336,7 +1419,7 @@ class CleanupEngine:
             worker, self.worker = self.worker, None
             if worker:
                 worker.close()
-            if self.state in ('ready', 'loading'):
+            if self.state in ('ready', 'loading', 'unloaded'):
                 self.state = 'idle'
 
 
@@ -1347,8 +1430,8 @@ def validate_config(value):
     result = {'maximum_recording_seconds': 60, 'request_seconds': 30, 'maximum_recovery_takes': 200,
               'audio_retention_days': 90, 'audio_retention_megabytes': 2048, 'history_keep': None,
               'delivery': {'mode': 'recover'}, 'notifications': True, 'cleanup': 'off', **value}
-    if type(result['notifications']) is not bool:
-        raise ValueError('notifications must be true or false')
+    if type(result['notifications']) is not bool and result['notifications'] != 'errors':
+        raise ValueError('notifications must be true, false or "errors"')
     for field, minimum, maximum in (('maximum_recording_seconds', 1, 120), ('request_seconds', 1, 120),
                                     ('maximum_recovery_takes', 1, 5000)):
         number = result[field]
@@ -1388,6 +1471,10 @@ def validate_config(value):
             raise ValueError('Invalid ' + name)
     if not isinstance(result['cleanup'], str) or result['cleanup'] not in ('off', 'basic', 'fast', 'thorough'):
         raise ValueError('cleanup must be off, basic, fast or thorough')
+    if 'cleanup_idle_seconds' in result:
+        idle = result['cleanup_idle_seconds']
+        if type(idle) not in (int, float) or not math.isfinite(idle) or not 0 <= idle <= 86400:
+            raise ValueError('cleanup_idle_seconds must be between 0 and 86400 (0 disables)')
     if result['cleanup'] in ('fast', 'thorough'):
         engine = result.get('cleanup_engine')
         if not isinstance(engine, str) or not engine or '\0' in engine:
@@ -1407,6 +1494,8 @@ def validate_config(value):
         if section.get(key, 'auto') not in ('auto',) + tuple(allowed):
             raise ValueError('desktop.' + key + ' must be auto or one of ' + ', '.join(allowed))
     result['desktop'] = {'delivery': 'auto', 'shortcuts': 'auto', **section}
+    if type(result.get('slash_commands', True)) is not bool:
+        raise ValueError('slash_commands must be true or false')
     return result
 
 
@@ -1575,7 +1664,8 @@ def state_snapshot(session, files=None):
     """Text-free state for live frontends: session state, outcome, elapsed time, coarse level."""
     status = session.live_status()
     return {'event': 'state', 'state': status['state'], 'error': status['error'], 'delivery': status['delivery'],
-            'recovery': status['recovery'], 'elapsed': session.elapsed(), 'level': session.level(),
+            'recovery': status['recovery'], 'cleanup_take': status.get('cleanup_take'),
+            'elapsed': session.elapsed(), 'level': session.level(),
             'file_import': files.status()['state'] if files is not None else None}
 
 
@@ -1912,14 +2002,16 @@ def main(argv=None, *, cli_directory=None):
             if not cleanup_path.is_absolute():
                 cleanup_path = args.config.resolve().parent / cleanup_path
             cleanup_settings = json.loads(cleanup_path.read_text())['engines'][config['cleanup']]
-            cleanup_engine = CleanupEngine(cleanup_settings, hash_cache=verified)
+            cleanup_engine = CleanupEngine(cleanup_settings, hash_cache=verified,
+                                           idle_seconds=config.get('cleanup_idle_seconds', 600))
         def load_engine(level):
             if not isinstance(config.get('cleanup_engine'), str) or not config['cleanup_engine']:
                 return None
             path = Path(config['cleanup_engine']).expanduser()
             if not path.is_absolute():
                 path = args.config.resolve().parent / path
-            return CleanupEngine(json.loads(path.read_text())['engines'][level], hash_cache=verified)
+            return CleanupEngine(json.loads(path.read_text())['engines'][level], hash_cache=verified,
+                                 idle_seconds=config.get('cleanup_idle_seconds', 600))
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
                           backends.make_delivery(backends.delivery_name(backends.detect(os.environ), config['desktop']['delivery']), config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
@@ -1928,7 +2020,7 @@ def main(argv=None, *, cli_directory=None):
                           cleanup_engine=cleanup_engine, maximum_takes=int(config['maximum_recovery_takes']),
                           audio_days=config['audio_retention_days'], audio_megabytes=config['audio_retention_megabytes'],
                           history_keep=config['history_keep'], styles=config.get('styles'), styles_path=args.config,
-                          engine_loader=load_engine)
+                          engine_loader=load_engine, slash_commands=config.get('slash_commands', True))
         files = FileTranscription(engine, args.imports, request_seconds=config['request_seconds'])
         if cleanup_engine is not None and cleanup_engine.state == 'idle':
             cleanup_engine.warm()
@@ -1987,6 +2079,19 @@ class Notifications:
         'cancelled': ('Mouthtype cancelled', 'The active take will not be delivered.'),
         'error': ('Mouthtype needs attention', 'Check status and saved recordings.'),
     }
+    # One plain title and action line per error code the daemon assigns. Never transcript text, window titles or paths.
+    ERRORS = {
+        'capture_unavailable': ('No microphone found', 'Plug one in or pick it in Mouthtype Settings.'),
+        'capture_interrupted': ('Microphone disconnected', 'Your audio was saved. Check the connection and try again.'),
+        'transcription_failed': ("Couldn't transcribe that", 'Your audio was saved. Retry it from Recent takes.'),
+        'recovery_full': ('Recovery is full', 'Forget some old takes, then try again.'),
+        'recording_limit': ('Recording hit the time limit', 'Your audio was saved. Retry it from Recent takes.'),
+        'dictionary_unavailable': ("Couldn't load your dictionary", 'Run mouthtype-linux doctor to see what is wrong.'),
+        'phrases_unavailable': ("Couldn't load your phrases", 'Run mouthtype-linux doctor to see what is wrong.'),
+        'phrase_context_unavailable': ("Couldn't read phrase context", 'Run mouthtype-linux doctor to see what is wrong.'),
+        'cleanup_unavailable': ('Cleanup is unavailable', 'Run mouthtype-linux doctor to see what is wrong.'),
+        'command_expired': ('That command timed out', 'Press your shortcut again.'),
+    }
 
     def __init__(self, enabled=True, *, command=None):
         self.enabled = enabled
@@ -1994,10 +2099,15 @@ class Notifications:
         self.status = 'unavailable' if enabled else 'disabled'
         self.identity = None
 
-    def notify(self, state):
+    def notify(self, state, error=None):
         if not self.enabled or state not in self.MESSAGES:
             return False
+        # "errors" leaves progress to the bar pill and keeps only the cues the pill can't show.
+        if self.enabled == 'errors' and state not in ('error', 'ready'):
+            return False
         title, body = self.MESSAGES[state]
+        if state == 'error' and error in self.ERRORS:
+            title, body = self.ERRORS[error]
         # Recording cues expire even if a later notification cannot be submitted.
         expiry = 125000 if state in ('recording', 'transcribing') else 5000
         arguments = [*self.command, '--print-id', '--app-name=Mouthtype', '--expire-time=' + str(expiry)]

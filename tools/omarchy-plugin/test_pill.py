@@ -9,11 +9,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 TEXT = (HERE / "CardPalette.js").read_text()
 VAR_RE = r"var %s = \{(.*?)\n\}"
-FIELD_RE = re.compile(r'(\w+):\s*("#[0-9A-Fa-f]{6}"|[0-9.]+|true|false|"\w+")')
+FIELD_RE = re.compile(r'(\w+):\s*("#[0-9A-Fa-f]{6}"|[0-9.]+|true|false|"\w*")')
 VARS = {"classic": "CLASSIC", "minimal-dark": "MINIMAL_DARK", "minimal-light": "MINIMAL_LIGHT"}
 # The Mac accent each palette would sit beside: lime is #A6CD52 on dark and #76A11A on light. Classic is dark.
-ACCENT = {"classic": "#A6CD52", "minimal-dark": "#A6CD52", "minimal-light": "#76A11A"}
-LIME = {(0x76, 0xA1, 0x1A), (0xA6, 0xCD, 0x52)}
+ACCENT = {"classic": "#D3E58B", "minimal-dark": "#D3E58B", "minimal-light": "#D3E58B"}
+LIME = {(0x76, 0xA1, 0x1A), (0xA6, 0xCD, 0x52), (0xD3, 0xE5, 0x8B)}
 
 
 def load():
@@ -135,8 +135,12 @@ class LimeRestraint(unittest.TestCase):
         cls.palettes = load()
 
     def test_minimal_lime_is_the_mac_accent(self):
-        self.assertEqual(rgb(self.palettes["minimal-light"]["primaryFill"]), (0x76, 0xA1, 0x1A))
-        self.assertEqual(rgb(self.palettes["minimal-dark"]["primaryFill"]), (0xA6, 0xCD, 0x52))
+        self.assertEqual(rgb(self.palettes["minimal-light"]["primaryFill"]), (0xD3, 0xE5, 0x8B))
+        self.assertEqual(rgb(self.palettes["minimal-dark"]["primaryFill"]), (0xD3, 0xE5, 0x8B))
+
+    def test_only_minimal_light_wears_the_primary_edge(self):
+        for name, p in self.palettes.items():
+            self.assertEqual(p["primaryEdge"], "#4A6A12" if name == "minimal-light" else "", name)
 
     def test_lime_appears_only_as_the_primary_fill(self):
         for name, p in self.palettes.items():
@@ -193,6 +197,60 @@ class JsHelpers(unittest.TestCase):
                          {"headline": "Too long", "detail": "Saved to recovery", "isError": True})
         self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "empty"}, "paste").headline'), "Nothing heard")
         self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "unknown"}, "type").headline'), "Typed")
+
+    def test_paste_failure_outcomes_have_honest_copy(self):
+        self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "clipboard_failed"}, "paste")'),
+                         {"headline": "Couldn't paste", "detail": "Saved. Copy it from Home", "isError": False})
+        self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "clipboard_kept"}, "paste")'),
+                         {"headline": "Saved", "detail": "Your clipboard held an image, so nothing was pasted",
+                          "isError": False})
+
+    def test_each_error_code_has_its_own_pill_copy(self):
+        for code, headline in (("capture_unavailable", "No microphone"), ("capture_interrupted", "Microphone lost"),
+                               ("transcription_failed", "Couldn't transcribe"), ("recovery_full", "Recovery is full"),
+                               ("recording_limit", "Too long"), ("command_expired", "Timed out"),
+                               ("dictionary_unavailable", "Dictionary unavailable"), ("phrases_unavailable", "Phrases unavailable"),
+                               ("phrase_context_unavailable", "Phrase context unavailable"), ("cleanup_unavailable", "Cleanup unavailable")):
+            result = self.run_js("PillModel.js", 'message({error: "%s"}, "paste")' % code)
+            self.assertEqual(result["headline"], headline, code)
+            self.assertTrue(result["isError"], code)
+
+    def test_unknown_unavailable_codes_still_fall_to_the_generic_pill_copy(self):
+        self.assertEqual(self.run_js("PillModel.js", 'message({error: "mic_unavailable"}, "paste")'),
+                         {"headline": "Needs attention", "detail": "mic unavailable", "isError": True})
+
+    def test_cleanup_note_details(self):
+        cases = ((None, None), ({"outcome": "ok", "engine": "ready"}, None),
+                 ({"outcome": "guard-rejected", "engine": "ready"}, None), ({"outcome": "skipped", "engine": "ready"}, None),
+                 ({"outcome": "timeout", "engine": "ready"}, None), ({"outcome": "timeout", "engine": "absent"}, None),
+                 ({"outcome": "timeout", "engine": "loading"}, "Basic cleanup \u00b7 model loading"),
+                 ({"outcome": "timeout", "engine": "idle"}, "Basic cleanup \u00b7 model loading"),
+                 ({"outcome": "timeout", "engine": "unloaded"}, "Basic cleanup \u00b7 model loading"),
+                 ({"outcome": "failed", "engine": "failed"}, "Basic cleanup \u00b7 model restarting"),
+                 ({"outcome": "timeout", "engine": "failed"}, "Basic cleanup \u00b7 model restarting"))
+        for take, want in cases:
+            got = self.run_js("PillModel.js", "(function(){var n=cleanupNote(%s);return n&&n.text})()" % json.dumps(take))
+            self.assertEqual(got, want, take)
+
+    def test_cleanup_note_shows_once_per_engine_state_change(self):
+        loading = {"outcome": "timeout", "engine": "loading"}
+        failed = {"outcome": "failed", "engine": "failed"}
+        ok = {"outcome": "ok", "engine": "ready"}
+        script = "(function(){var g=new CleanupNoteGate();return [%s].map(function(t){return g.next(t)})})()" % \
+            ",".join(json.dumps(t) for t in (loading, loading, failed, failed, loading, ok, loading))
+        loaded, restarting = "Basic cleanup \u00b7 model loading", "Basic cleanup \u00b7 model restarting"
+        self.assertEqual(self.run_js("PillModel.js", script), [loaded, None, restarting, None, loaded, None, loaded])
+
+    def test_cleanup_note_joins_the_settled_message(self):
+        note = "Basic cleanup \u00b7 model loading"
+        base = 'message({delivery: "unknown"}, "paste")'
+        self.assertEqual(self.run_js("PillModel.js", 'withCleanupNote(%s, "%s")' % (base, note)),
+                         {"headline": "Pasted", "detail": "Check the field \u00b7 " + note, "isError": False})
+        self.assertEqual(self.run_js("PillModel.js", 'withCleanupNote(message({delivery: "empty"}, "paste"), "%s").detail' % note), note)
+        self.assertEqual(self.run_js("PillModel.js", 'withCleanupNote(%s, null).detail' % base), "Check the field")
+        self.assertIsNone(self.run_js("PillModel.js", 'withCleanupNote(null, "%s")' % note))
+        self.assertEqual(self.run_js("PillModel.js", 'withCleanupNote(message({error: "recording_limit"}, "paste"), "%s").detail' % note),
+                         "Saved to recovery")
 
     def test_lips_frame_follows_the_mac_thresholds(self):
         cases = {"0": 0, "0.2499": 0, "0.25": 1, "0.5999": 1, "0.6": 2, "1": 2, "NaN": 0}

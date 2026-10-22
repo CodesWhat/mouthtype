@@ -540,6 +540,90 @@ TestCase {
     tryVerify(function() { return !p.sheetOpen }, 2000)
   }
 
+  // -- Draft recovery
+
+  function draftReply(drafts) { return { drafts: drafts } }
+
+  function test_cancelling_a_dirty_word_sheet_saves_a_draft() {
+    var p = openDictionary(lists("spellings-list", "phrases-list", "ready"), false)
+    handlers["draft-save"] = function() { return draftReply([]) }
+    p.openWord(null)
+    wait(120)
+    field("Sean").text = "Typed"
+    field("shawn").text = "tide"
+    keyClick(Qt.Key_Escape)
+    tryVerify(function() { return p.sheetKind === "" }, 2000)
+    tryVerify(function() { return requested("draft-save") !== null }, 2000, "no draft was saved")
+    var saved = JSON.parse(requested("draft-save")[0])
+    compare(saved.kind, "spelling")
+    compare(saved.written, "Typed")
+    compare(saved.heardInput, "tide")
+  }
+
+  function test_cancelling_an_empty_or_unchanged_sheet_saves_nothing() {
+    var p = openDictionary(lists("spellings-list", "phrases-list", "ready"), false)
+    handlers["draft-save"] = function() { return draftReply([]) }
+    p.openWord(null)
+    wait(120)
+    keyClick(Qt.Key_Escape)
+    tryVerify(function() { return p.sheetKind === "" }, 2000)
+    p.openWord(p.library.entries[0])
+    wait(120)
+    keyClick(Qt.Key_Escape)
+    tryVerify(function() { return p.sheetKind === "" }, 2000)
+    wait(100)
+    compare(requested("draft-save"), null)
+  }
+
+  function test_cancelling_a_dirty_transform_sheet_saves_a_draft() {
+    var p = openTransforms(lists("spellings-list", "phrases-list", "ready"), false)
+    handlers["draft-save"] = function() { return draftReply([]) }
+    p.openSheet(null)
+    wait(120)
+    field("my work email").text = "sig"
+    keyClick(Qt.Key_Escape)
+    tryVerify(function() { return !p.sheetOpen }, 2000)
+    tryVerify(function() { return requested("draft-save") !== null }, 2000, "no draft was saved")
+    var saved = JSON.parse(requested("draft-save")[0])
+    compare(saved.kind, "phrase")
+    compare(saved.trigger, "sig")
+  }
+
+  function test_home_offers_a_draft_and_recover_reopens_the_sheet_prefilled() {
+    var draft = { id: "spelling-1700000000000", kind: "spelling", version: 1, heardForms: [], heardInput: "shawn", written: "Sean",
+                  starred: false, trigger: "", expansion: "", saved: Date.now() / 1000 - 600 }
+    var map = lists("spellings-list", "phrases-list", "ready")
+    map["draft-list"] = function() { return draftReply([draft]) }
+    map["draft-clear"] = function() { return draftReply([]) }
+    begin(false, map)
+    shell.navigate("dictionary")
+    wait(100)
+    shell.navigate("home")
+    tryVerify(function() { return hasText("Unsaved drafts") }, 3000, "recovery row never showed")
+    verify(hasText("Unsaved word \u201cSean\u201d"))
+    var home = page()
+    home.recoverDraft(home.drafts[0])
+    tryVerify(function() { return page() !== null && page().sheetKind === "word" }, 3000, "sheet did not reopen")
+    wait(120)
+    compare(field("Sean").text, "Sean")
+    compare(field("shawn").text, "shawn")
+    verify(host.pendingDraft === null, "the page takes the draft")
+    keyClick(Qt.Key_Escape)
+    tryVerify(function() { return requested("draft-clear") !== null }, 2000, "the recovered draft file was kept")
+    compare(requested("draft-clear"), [draft.id])
+  }
+
+  function test_home_shows_no_draft_row_without_drafts() {
+    var map = lists("spellings-list", "phrases-list", "ready")
+    map["draft-list"] = function() { return draftReply([]) }
+    begin(false, map)
+    shell.navigate("dictionary")
+    wait(100)
+    shell.navigate("home")
+    wait(300)
+    verify(!hasText("Unsaved drafts"))
+  }
+
   // -- Request tracking and stale replies
 
   RequestTracker { id: probe }

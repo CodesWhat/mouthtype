@@ -36,8 +36,17 @@ Column {
     if (setup.state === "building") return "Building the pinned llama.cpp server…"
     if (setup.state === "downloading") return "Downloading and verifying the " + (setup.level || "") + " model…"
     if (setup.state === "preparing") return "Preparing…"
+    if (setup.state === "cancelled") return "Cancelled. Nothing was kept from the partial download."
     if (setup.state === "failed") return "Preparation failed (" + (setup.error || "error") + "). Check the cleanup setup log."
     return ""
+  }
+
+  readonly property bool cancelled: !!setup && setup.state === "cancelled"
+  readonly property bool sized: !!setup && setup.state === "downloading" && setup.bytes_total > 0
+  readonly property real fraction: sized ? Math.min(1, Math.max(0, setup.bytes_done / setup.bytes_total)) : 0
+
+  function megabytes(bytes) {
+    return Math.round(bytes / 1000000) + " MB"
   }
 
   function lastTake() {
@@ -47,6 +56,48 @@ Column {
       : outcome === "timeout" ? "kept Basic (over budget)" : outcome === "skipped" ? "model skipped" : "kept Basic (model error)"
     var ms = service.last_ms !== null && service.last_ms !== undefined ? " · " + service.last_ms + " ms" : ""
     return "Last take: " + text + ms
+  }
+
+  Component.onCompleted: { if (host) host.loadDoctor() }
+
+  readonly property var doctor: host ? host.doctorInfo : null
+
+  function checkTitle(name) {
+    var words = String(name || "").replace(/_/g, " ")
+    return words.charAt(0).toUpperCase() + words.slice(1)
+  }
+
+  Column {
+    width: parent.width
+    spacing: 6
+    DesignEyebrow { text: "Checks" }
+    DesignCard {
+      width: parent.width
+      DesignRow {
+        objectName: "checksLoading"
+        visible: !root.doctor
+        title: "Checking…"
+      }
+      DesignRow {
+        objectName: "checksPass"
+        visible: !!root.doctor && root.doctor.pass === true
+        title: "All checks pass"
+      }
+      Repeater {
+        model: root.doctor && root.doctor.checks ? root.doctor.checks : []
+        DesignRow {
+          required property var modelData
+          objectName: "checkRow"
+          title: root.checkTitle(modelData.name) + (modelData.status === "error" ? " · needs fixing" : " · warning")
+          detail: modelData.detail + (modelData.action ? "\n" + modelData.action : "")
+        }
+      }
+      DesignRow {
+        title: "Copy diagnostics"
+        detail: "Versions, system and check results for a bug report. No transcripts."
+        DesignSecondaryButton { objectName: "copyDiagnostics"; text: "Copy"; onActivated: root.host.run(["copy-diagnostics"]) }
+      }
+    }
   }
 
   Column {
@@ -93,13 +144,13 @@ Column {
         visible: root.models.fast !== "prepared"
         title: "Prepare Fast cleanup"
         detail: "About 480 MB."
-        DesignSecondaryButton { text: "Prepare…"; enabled: !root.setupActive; onActivated: root.host.run(["cleanup-setup", "fast"]) }
+        DesignSecondaryButton { text: root.cancelled ? "Retry" : "Prepare…"; enabled: !root.setupActive; onActivated: root.host.run(["cleanup-setup", "fast"]) }
       }
       DesignRow {
         visible: root.models.thorough !== "prepared"
         title: "Prepare Thorough cleanup"
         detail: "About 2.5 GB."
-        DesignSecondaryButton { text: "Prepare…"; enabled: !root.setupActive; onActivated: root.host.run(["cleanup-setup", "thorough"]) }
+        DesignSecondaryButton { text: root.cancelled ? "Retry" : "Prepare…"; enabled: !root.setupActive; onActivated: root.host.run(["cleanup-setup", "thorough"]) }
       }
     }
     Text {
@@ -110,6 +161,27 @@ Column {
       color: root.setup && root.setup.state === "failed" ? Theme.danger : Theme.ink2
       font: Type.sans(Type.caption)
       text: root.setupText()
+    }
+    DesignSecondaryButton {
+      objectName: "setupCancel"
+      visible: root.setupActive
+      text: "Cancel"
+      onActivated: root.host.run(["cleanup-cancel"])
+    }
+    DesignProgress {
+      objectName: "setupProgress"
+      visible: root.sized
+      width: parent.width
+      value: root.fraction
+    }
+    Text {
+      objectName: "setupBytes"
+      visible: root.sized
+      width: parent.width
+      leftPadding: 4
+      color: Theme.ink2
+      font: Type.sans(Type.caption)
+      text: root.sized ? root.megabytes(Math.min(root.setup.bytes_done || 0, root.setup.bytes_total)) + " of " + root.megabytes(root.setup.bytes_total) : ""
     }
     Text {
       visible: text !== ""
@@ -171,7 +243,10 @@ Column {
       }
       DesignRow {
         title: "How to use"
-        detail: "Press Start Dictation on Home, speak, then Stop. The text is saved under Recent takes. Use Recover on Home to retry audio after a speech error."
+        detail: (!root.host || root.host.shortcutMode === "off" ? "Press Start Dictation on Home, speak, then Stop."
+          : root.host.shortcutMode === "hold" ? "Hold " + root.host.shortcutKeys + " anywhere, speak, then let go."
+          : "Press " + root.host.shortcutKeys + " anywhere to start, speak, then press it again.")
+          + " The text is saved under Recent takes. Use Recover on Home to retry audio after a speech error."
           + (root.host && root.host.canImportFiles ? " Transcribe Audio File turns one WAV, AIFF or M4A file into raw text you can copy or save." : "")
       }
     }

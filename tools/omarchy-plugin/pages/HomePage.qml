@@ -8,9 +8,19 @@ Column {
   id: root
 
   property var host: null
+  property var backend: ({})
+  property bool active: false
+  signal request(string command, var args)
+  // Unsaved Dictionary and Transforms sheets left behind by a quit, from control_library.py draft-list. A dismissed id stays
+  // hidden until the next list reply, so a click answers at once.
+  property var dismissed: []
+  readonly property var drafts: draftRows(backend && backend.results ? backend.results["draft-list"] : null, dismissed)
   readonly property bool recording: !!host && host.sessionState === "recording"
   readonly property bool idle: !!host && (host.sessionState === "off" || host.sessionState === "idle")
   readonly property bool canDeliver: !!host && host.hasTranscript && (host.config.delivery_mode === "type" || host.config.delivery_mode === "paste")
+  // The delivery choice, shown once while Mouthtype only saves takes. Choosing Paste changes the mode, which hides the card
+  // by itself; "Just save them" sets welcomed so it stays hidden.
+  readonly property bool showWelcome: !!host && !host.clientMissing && host.config.delivery_mode === "recover" && !host.welcomed
   readonly property var groups: grouped(host ? host.recent : [], host ? host.saved : [])
 
   width: parent ? parent.width : 520
@@ -43,10 +53,86 @@ Column {
     return result
   }
 
+  function draftRows(reply, hidden) {
+    var rows = reply && reply.drafts ? reply.drafts : []
+    return rows.filter(function(d) { return hidden.indexOf(d.id) < 0 })
+  }
+
+  function draftTitle(d) {
+    return d.kind === "phrase" ? "Unsaved transform \u201c" + (d.trigger || "") + "\u201d" : "Unsaved word \u201c" + (d.written || d.heardInput || "") + "\u201d"
+  }
+
+  function recoverDraft(d) {
+    if (!host) return
+    host.pendingDraft = d
+    dismissed = dismissed.concat([d.id])
+    host.openPage(d.kind === "phrase" ? "transforms" : "dictionary")
+  }
+
+  onActiveChanged: if (active) { dismissed = []; request("draft-list", []) }
+  Component.onCompleted: if (active) request("draft-list", [])
+
   DesignPageHeader {
     width: parent.width
     title: "Your recent takes."
     summary: "Everything you dictated lately, newest first. Copy it or recover it."
+  }
+
+  DesignCard {
+    visible: !!root.host && root.host.clientMissing
+    width: parent.width
+    DesignRow {
+      title: "Mouthtype was removed"
+      detail: "The app is gone, but its bar widget and shortcuts are still here. Clean them up to stop seeing this."
+      DesignPrimaryButton {
+        text: "Remove widget and shortcuts"
+        onActivated: root.host.run(["remove-leftovers"])
+      }
+    }
+  }
+
+  DesignCard {
+    visible: root.showWelcome
+    width: parent.width
+    DesignRow {
+      title: "Where should your words go?"
+      detail: "Linux can't tell password fields apart, so Mouthtype pastes wherever the cursor is."
+      DesignSecondaryButton {
+        text: "Just save them"
+        onActivated: root.host.run(["set-plugin", "welcomed", "on"])
+      }
+      DesignPrimaryButton {
+        text: "Paste where I'm typing (Recommended)"
+        onActivated: root.host.run(["set-config", "delivery", "paste"])
+      }
+    }
+    DesignRow {
+      visible: !!root.host && root.host.shortcutMode !== "off"
+      title: "Dictate from anywhere"
+      detail: root.host && root.host.shortcutMode === "hold" ? "Hold this key, speak, then let go." : "Press this key, speak, then press it again."
+      DesignKbd { text: root.host ? root.host.shortcutKeys : "" }
+    }
+  }
+
+  Column {
+    visible: root.drafts.length > 0
+    width: parent.width
+    spacing: 6
+    DesignEyebrow { text: "Unsaved drafts" }
+    DesignCard {
+      width: parent.width
+      Repeater {
+        model: root.drafts
+        delegate: HomeRow {
+          required property var modelData
+          title: root.draftTitle(modelData)
+          detail: Qt.formatDateTime(new Date((modelData.saved || 0) * 1000), "MMM d, h:mm AP") + " · from when the sheet was closed unsaved"
+          buttonText: "Recover"
+          onActivated: root.recoverDraft(modelData)
+          onButtonActivated: root.recoverDraft(modelData)
+        }
+      }
+    }
   }
 
   Column {

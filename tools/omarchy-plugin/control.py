@@ -223,6 +223,7 @@ def preferences():
     overrides = font.get("overrides") if isinstance(font.get("overrides"), dict) else {}
     return {
         "sounds": value.get("sounds") is True,
+        "welcomed": value.get("welcomed") is True,
         "pill": {"enabled": pill.get("enabled") is not False,
                  "skin": "hifi" if pill.get("skin") == "hifi" else "classic",
                  "size": 2 if pill.get("size") == 2 else 1},
@@ -238,6 +239,15 @@ def valid_family(value):
     if len(value) > 80 or any(ord(c) < 32 for c in value):
         raise RuntimeError("Enter a font family name")
     return value
+
+
+def set_plugin(field, value):
+    if field != "welcomed" or value not in {"on", "off"}:
+        raise RuntimeError("Unsupported plugin setting")
+    prefs = preferences()
+    prefs["welcomed"] = value == "on"
+    atomic_json(PREFS, prefs)
+    return state()
 
 
 def set_pill(field, value):
@@ -340,6 +350,8 @@ def config_summary():
         "audio_retention_days": config.get("audio_retention_days", 90),
         "history_keep": config.get("history_keep"),
         "notifications": config.get("notifications", True),
+        "slash_commands": config.get("slash_commands", True),
+        "microphone": config.get("capture_target") or "default",
         "maximum_recording_seconds": config.get("maximum_recording_seconds", 60),
         "delivery_mode": delivery.get("mode", "recover"),
         "allowed_classes": delivery.get("allowed_classes", []),
@@ -629,7 +641,14 @@ def portal_shortcut_triggers(desktop):
     return triggers if isinstance(triggers, dict) else {}
 
 
+def client_missing():
+    """True when the packaged or user-local client is gone, e.g. after `pacman -R` without the setup uninstall."""
+    return not LAUNCHER.exists()
+
+
 def state():
+    if client_missing():
+        return {"running": False, "state": "unavailable", "client": "missing"}
     if not LAUNCHER.is_file() or not CONFIG.is_file():
         return {"running": False, "state": "unavailable", "error": "Mouthtype installation is missing"}
     result = session_call("status", timeout=5)
@@ -660,6 +679,7 @@ def state():
             "saved": [entry for entry in entries if entry["audio"] and not entry["transcript"]],
             "words_today": words_today(entries),
             "config": config_summary(), "sounds": preferences()["sounds"],
+            "welcomed": preferences().get("welcomed") is True,
             "pill": preferences()["pill"], "font": preferences()["font"],
             "cleanup": {**cleanup_models(), "service": status.get("cleanup") if running else None},
             "autostart": unit_enabled(),
@@ -968,8 +988,16 @@ def set_config(field, value, extra=None):
             raise RuntimeError("Prepare the " + ("Fast" if value == "fast" else "Thorough") + " cleanup model first")
         config["cleanup"] = value
         config["cleanup_engine"] = str(CLEANUP_DIR / "cleanup.json")
-    elif field == "notifications" and value in {"on", "off"}:
-        config["notifications"] = value == "on"
+    elif field == "notifications" and value in {"all", "on", "errors", "off"}:
+        config["notifications"] = {"all": True, "on": True, "errors": "errors", "off": False}[value]
+    elif field == "microphone" and value == "default":
+        config.pop("capture_target", None)
+    elif field == "microphone" and value:
+        if value not in [item["name"] for item in module_commands()["microphones"]()["sources"]]:
+            raise RuntimeError("That microphone is not connected")
+        config["capture_target"] = value
+    elif field == "slash_commands" and value in {"on", "off"}:
+        config["slash_commands"] = value == "on"
     elif field == "maximum_recording_seconds" and value in {"30", "60", "120"}:
         config["maximum_recording_seconds"] = int(value)
     elif field == "maximum_recovery_takes" and value in {"100", "200", "500", "1000"}:
@@ -1042,6 +1070,18 @@ def cleanup_setup(level):
     output = state()
     output["page"] = "cleanup"
     output["message"] = "Preparing " + ("Fast" if level == "fast" else "Thorough") + " cleanup (" + CLEANUP_SIZES[level] + " download)"
+    return output
+
+
+def cleanup_cancel():
+    if not setup_running():
+        raise RuntimeError("Cleanup preparation is not running")
+    CLEANUP_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (CLEANUP_DIR / "cleanup-cancel").write_text("", encoding="utf-8")
+    time.sleep(0.5)
+    output = state()
+    output["page"] = "cleanup"
+    output["message"] = "Cancelling cleanup preparation"
     return output
 
 
@@ -1280,6 +1320,14 @@ def recover(identity):
     return {"id": identity, "text": result.stdout}
 
 
+def concealed_copy_command():
+    """wl-copy argv that keeps the text out of clipboard history; plain when wl-copy predates --sensitive."""
+    if str(DESKTOP) not in sys.path:
+        sys.path.insert(0, str(DESKTOP))
+    import concealed
+    return concealed.copy_command()
+
+
 def latest_transcript(identity=None):
     if identity is None:
         # Newest by creation time, so retiring an old take's WAV cannot promote it.
@@ -1313,7 +1361,7 @@ def copy_transcript(identity=None):
     if shutil.which("wl-copy") is None:
         raise RuntimeError("wl-copy is not installed")
     text = latest_transcript(identity)
-    subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"),
+    subprocess.run(concealed_copy_command(), input=text.encode("utf-8"),
                    check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     result = state()
     result["message"] = "Copied to clipboard"
@@ -1335,6 +1383,10 @@ def paste_last():
     outcome = target.submit(text, snapshot)
     if outcome == "recover_only":
         raise RuntimeError("That app is not allowed for typing")
+    if outcome == "clipboard_kept":
+        raise RuntimeError("Your clipboard holds an image or files, so nothing was pasted")
+    if outcome == "clipboard_failed":
+        raise RuntimeError("Couldn't put the text on the clipboard; nothing was pasted")
     if outcome == "unsupported_text":
         raise RuntimeError("This transcript contains line breaks or control characters")
     if outcome == "target_changed":
@@ -1417,7 +1469,7 @@ def import_copy():
     if shutil.which("wl-copy") is None:
         raise RuntimeError("wl-copy is not installed")
     text = import_result()["text"]
-    subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"),
+    subprocess.run(concealed_copy_command(), input=text.encode("utf-8"),
                    check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     output = state()
     output["message"] = "Copied to clipboard"
@@ -1449,10 +1501,135 @@ VALID_ACTIONS = {
     "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
     "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
     "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
-    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
+    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup", "cleanup-cancel", "set-plugin"
 ,
-    "forget", "prune", "shortcut-status", "shortcut-configure", "shortcut-gnome-install", "shortcut-gnome-remove"
+    "forget", "prune", "shortcut-status", "shortcut-configure", "shortcut-gnome-install", "shortcut-gnome-remove",
+    "remove-leftovers", "doctor", "copy-diagnostics"
 }
+
+# The verbs the shortcut and the bar widget send; with the client gone they notify instead of failing silently.
+SHORTCUT_VERBS = {"start", "stop", "toggle", "cancel", "paste-last"}
+REMOVED_NOTICE = LOG.parent / "removed-notice"
+REMOVED_TEXT = "Mouthtype was removed. Open its bar menu to clean up."
+
+
+def notify_removed(now=None):
+    """One notify-send saying the client is gone, at most once a minute. Returns True when it sent one."""
+    now = time.time() if now is None else now
+    try:
+        if now - REMOVED_NOTICE.stat().st_mtime < 60:
+            return False
+    except OSError:
+        pass
+    command = shutil.which("notify-send")
+    if command is None:
+        return False
+    try:
+        REMOVED_NOTICE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        REMOVED_NOTICE.touch()
+        os.utime(REMOVED_NOTICE, (now, now))
+        subprocess.run([command, "-a", "Mouthtype", "Mouthtype", REMOVED_TEXT], check=False, timeout=5,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def remove_leftovers():
+    """Run this plugin copy's own installer --uninstall, detached: it deletes this directory and restarts the shell."""
+    installer = PLUGIN_DIR / "install.py"
+    if not installer.is_file():
+        raise RuntimeError("The plugin installer is missing")
+    subprocess.Popen([sys.executable, str(installer), "--uninstall"], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+    return {"message": "Removing the widget and shortcuts"}
+
+OS_RELEASE = Path("/etc/os-release")
+DOCTOR_TIMEOUT = 10
+# A developer note about untested hardware, not something a user can fix.
+DOCTOR_HIDDEN = {"physical_acceptance"}
+
+
+def doctor_checks():
+    """Every check from `mouthtype-linux doctor --json`, or one error row when the report can't be had.
+
+    Doctor exits 2 when a check fails but still prints the report, so the exit code is not the signal."""
+    try:
+        result = cli("doctor", "--json", timeout=DOCTOR_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return [{"name": "doctor", "status": "error", "detail": "The health check took longer than 10 seconds.",
+                 "action": "Run mouthtype-linux doctor in a terminal to see where it stops."}]
+    except OSError:
+        return [{"name": "doctor", "status": "error", "detail": "The Mouthtype client could not be started.",
+                 "action": "Reinstall Mouthtype, or run mouthtype-linux-setup."}]
+    try:
+        report = json.loads(result.stdout)
+        checks = report["checks"]
+        if not isinstance(checks, list):
+            raise ValueError("checks")
+    except (ValueError, KeyError, TypeError):
+        return [{"name": "doctor", "status": "error", "detail": "The health check gave an unreadable report.",
+                 "action": "Run mouthtype-linux doctor in a terminal to see the raw output."}]
+    rows = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        rows.append({"name": str(check.get("name", "")), "status": str(check.get("status", "")),
+                     "detail": str(check.get("detail", "")), "action": str(check.get("action", ""))})
+    return rows
+
+
+def doctor():
+    """The panel's Checks list: only what needs attention, plus whether everything passes."""
+    shown = [row for row in doctor_checks() if row["status"] != "ok" and row["name"] not in DOCTOR_HIDDEN]
+    return {"doctor": {"checks": shown, "pass": not shown}}
+
+
+def distro_name():
+    try:
+        for line in OS_RELEASE.read_text(encoding="utf-8").splitlines():
+            if line.startswith("PRETTY_NAME="):
+                return line.split("=", 1)[1].strip().strip('"') or "unknown"
+    except OSError:
+        pass
+    return "unknown"
+
+
+def hyprland_version():
+    try:
+        result = subprocess.run(["hyprctl", "version", "-j"], text=True, capture_output=True, timeout=3, check=False)
+        found = json.loads(result.stdout).get("version")
+        return found if isinstance(found, str) and found else "unknown"
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def diagnostics_text():
+    """A plain-text report for a bug report: versions, system and every check. No transcripts, and the home directory is written as ~."""
+    found = versions()
+    lines = ["Mouthtype diagnostics",
+             "App version: " + (found["app"] or "unknown"),
+             "Plugin version: " + (found["plugin"] or "unknown"),
+             "Distro: " + distro_name(),
+             "Hyprland: " + hyprland_version(),
+             "", "Checks:"]
+    for row in doctor_checks():
+        lines.append("  " + row["status"].upper() + " " + row["name"] + ": " + row["detail"])
+        if row["action"]:
+            lines.append("    " + row["action"])
+    home = str(HOME)
+    return "\n".join(lines).replace(home, "~") + "\n"
+
+
+def copy_diagnostics():
+    if portal_copy(diagnostics_text):
+        return {"message": "Diagnostics copied to clipboard"}
+    if shutil.which("wl-copy") is None:
+        raise RuntimeError("wl-copy is not installed")
+    subprocess.run(concealed_copy_command(), input=diagnostics_text().encode("utf-8"),
+                   check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"message": "Diagnostics copied to clipboard"}
+
 
 MODULE_PATTERN = re.compile(r"control_[a-z0-9_]+\.py")
 _module_commands = None
@@ -1542,15 +1719,19 @@ def main():
     ) or (sys.argv[1] == "copy" and len(sys.argv) not in {2, 3}) or (
         sys.argv[1] in {"set-config", "set-font"} and len(sys.argv) not in {4, 5}
     ) or (
-        sys.argv[1] == "set-pill" and len(sys.argv) != 4
+        sys.argv[1] in {"set-pill", "set-plugin"} and len(sys.argv) != 4
     ) or (sys.argv[1] in {"state", "start-service", "shutdown", "start", "stop", "cancel", "toggle", "paste-last",
                           "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save",
-                          "shortcut-status", "shortcut-configure", "shortcut-gnome-remove"}
+                          "shortcut-status", "shortcut-configure", "shortcut-gnome-remove", "remove-leftovers", "doctor", "copy-diagnostics"}
           and len(sys.argv) != 2):
         print(json.dumps({"error": "Unknown control action"}))
         return 2
     try:
         action = sys.argv[1]
+        if action in SHORTCUT_VERBS and client_missing():
+            notify_removed()
+            print(json.dumps({"client": "missing", "error": "Mouthtype was removed"}))
+            return 1
         if action == "state":
             output = state()
         elif action == "shortcut-status":
@@ -1561,6 +1742,12 @@ def main():
             output = shortcut_gnome_install(sys.argv[2] if len(sys.argv) == 3 else None)
         elif action == "shortcut-gnome-remove":
             output = shortcut_gnome_remove()
+        elif action == "doctor":
+            output = doctor()
+        elif action == "copy-diagnostics":
+            output = copy_diagnostics()
+        elif action == "remove-leftovers":
+            output = remove_leftovers()
         elif action == "import-pick":
             output = import_pick()
         elif action == "import-start":
@@ -1591,6 +1778,10 @@ def main():
             output = prune(sys.argv[2], sys.argv[3])
         elif action == "cleanup-setup":
             output = cleanup_setup(sys.argv[2])
+        elif action == "cleanup-cancel" and len(sys.argv) == 2:
+            output = cleanup_cancel()
+        elif action == "set-plugin":
+            output = set_plugin(sys.argv[2], sys.argv[3])
         elif action == "set-pill":
             output = set_pill(sys.argv[2], sys.argv[3])
         elif action == "set-font":

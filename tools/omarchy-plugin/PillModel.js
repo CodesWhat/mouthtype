@@ -121,13 +121,50 @@ function message(snapshot, deliveryMode) {
   if (error === "capture_unavailable") return { headline: "No microphone", detail: "Check PipeWire", isError: true }
   if (error === "transcription_failed") return { headline: "Couldn't transcribe", detail: "Audio saved for retry", isError: true }
   if (error === "recovery_full") return { headline: "Recovery is full", detail: "Forget old takes first", isError: true }
+  if (error === "command_expired") return { headline: "Timed out", detail: "Try the shortcut again", isError: true }
+  if (error === "dictionary_unavailable") return { headline: "Dictionary unavailable", detail: "Run doctor", isError: true }
+  if (error === "phrases_unavailable") return { headline: "Phrases unavailable", detail: "Run doctor", isError: true }
+  if (error === "phrase_context_unavailable") return { headline: "Phrase context unavailable", detail: "Run doctor", isError: true }
+  if (error === "cleanup_unavailable") return { headline: "Cleanup unavailable", detail: "Run doctor", isError: true }
+  // Only codes added after the table above land here.
   if (error && /unavailable/.test(error)) return { headline: "Needs attention", detail: String(error).replace(/_/g, " "), isError: true }
   if (delivery === "unknown") return { headline: deliveryMode === "type" ? "Typed" : "Pasted", detail: "Check the field", isError: false }
   if (delivery === "recover_only") return { headline: "Saved", detail: deliveryMode === "recover" ? null : "App not allowed", isError: false }
+  if (delivery === "clipboard_failed") return { headline: "Couldn't paste", detail: "Saved. Copy it from Home", isError: false }
+  if (delivery === "clipboard_kept") return { headline: "Saved", detail: "Your clipboard held an image, so nothing was pasted", isError: false }
   if (delivery === "target_changed") return { headline: "Window changed", detail: "Saved to recovery", isError: false }
   if (delivery === "unsupported_text") return { headline: "Saved", detail: "Text can't be typed here", isError: false }
   if (delivery === "empty") return { headline: "Nothing heard", detail: null, isError: false }
   return null
+}
+
+// The note for a take whose Fast or Thorough cleanup fell back to Basic text. `take` is the snapshot's cleanup_take
+// ({outcome, engine}); the guard doing its job and a ready engine that merely ran long are not news.
+function cleanupNote(take) {
+  if (!take) return null
+  if (take.outcome === "failed" || take.engine === "failed") return { key: "restarting", text: "Basic cleanup \u00b7 model restarting" }
+  if (take.outcome === "timeout" && (take.engine === "loading" || take.engine === "idle" || take.engine === "unloaded"))
+    return { key: "loading", text: "Basic cleanup \u00b7 model loading" }
+  return null
+}
+
+// Shows the note once per engine state change, so a cold start doesn't nag every take. A clean take re-arms it.
+function CleanupNoteGate() { this.shown = null }
+CleanupNoteGate.prototype.next = function(take) {
+  var note = cleanupNote(take)
+  if (!note) {
+    if (take && take.outcome === "ok") this.shown = null
+    return null
+  }
+  if (note.key === this.shown) return null
+  this.shown = note.key
+  return note.text
+}
+
+// Adds the cleanup note to a settled message without hiding what the message already says.
+function withCleanupNote(text, note) {
+  if (!text || !note || text.isError) return text
+  return { headline: text.headline, detail: text.detail ? text.detail + " \u00b7 " + note : note, isError: text.isError }
 }
 
 // The bar widget's lips, ported from the Mac's StatusIcon and StatusGlyphGate. The level is the tallest bar of the pill
