@@ -68,6 +68,7 @@ Natural speech in, clean text out.
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Code of conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
+| Governance | [`GOVERNANCE.md`](GOVERNANCE.md) |
 | Security policy | [`SECURITY.md`](SECURITY.md) |
 | Security controls and limits | [docs.mouthtype.app/reference/security](https://docs.mouthtype.app/reference/security/) |
 | Third-party notices | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) |
