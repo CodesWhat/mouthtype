@@ -744,7 +744,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let source = ShortcutSettings.load().map(HotkeySource.shortcut) ?? remapCoordinator.initialSource()
-        let service = hotkeyService ?? HotkeyService(options: .init(source: source, configuration: .init(recordingMode: RecordingModePreference.current()), mouseTrigger: MouseTriggerPreference.current()))
+        let service =
+            hotkeyService
+            ?? HotkeyService(
+                options: .init(
+                    source: source, configuration: .init(recordingMode: RecordingModePreference.current()),
+                    mouseTrigger: MouseTriggerPreference.current()))
         service.onHealthChange = { [weak self] health in
             Log.hotkey.info("health \(health.statusText, privacy: .public)")
             self?.systemSection.update(hotkeyHealth: health)
