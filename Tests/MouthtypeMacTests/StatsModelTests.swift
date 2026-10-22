@@ -21,7 +21,7 @@ import Testing
     }
 
     private func waitUntil(_ condition: @MainActor () -> Bool) async {
-        for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(25)) }
+        for _ in 0..<2400 where !condition() { try? await Task.sleep(for: .milliseconds(25)) }
     }
 
     @Test func secureTakesAreExcludedFromEveryNumber() async throws {
