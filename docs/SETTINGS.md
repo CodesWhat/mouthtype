@@ -20,7 +20,7 @@ The Mouthtype window has six pages in the sidebar: **Home**, **Stats**, **Dictio
 | Automatic update checks | On, with no prompt | Settings > Mac |
 | Boost saved words | Off | Settings > Advanced |
 | Code names from your editor | Off | Settings > Advanced |
-| Names on screen | On (from 0.6.0; stays off if you turned it off before). Still does nothing until Boost saved words is on | Settings > Advanced |
+| Names on screen | On (from 0.6.0; stays off if you turned it off before). Still does nothing until Boost saved words is on. Setup's Get names right button turns both on | Settings > Advanced |
 | Override individual fonts | Off | Appearance |
 
 ## The menu
@@ -249,6 +249,8 @@ Rules you made before the redesign keep working unchanged as explicit overrides.
 
 **Boost saved words** in Settings > Advanced is off by default. It makes the speech model favour the spellings in your dictionary, so a name you saved comes out right while recognising instead of being fixed afterwards.
 
+You can also turn it on from the **Get names right** section on the last Setup card, which turns on Names on screen too and uses the same download and status line.
+
 The first time you turn it on, Mouthtype downloads an extra speech model of about 100 MB (Parakeet CTC 110M, CC BY 4.0, see the third-party notices). The line under the switch shows the download, then ready.
 
 | Fact | Detail |
@@ -431,6 +433,8 @@ On the first ordinary launch with missing Microphone or Accessibility access, **
 Setup presents one focused card at a time: microphone access and preparation, Accessibility, speech model, then shortcut readiness. It advances automatically only when the current prerequisite passes, skips components already ready and returns to an earlier prerequisite if it becomes unavailable. Denials and failures remain on their card with the appropriate settings or retry action. No permission is requested merely by advancing a card.
 
 The last card offers an optional **Try a test take**: it records about four seconds (or until you press Stop), shows the transcript and the input's peak level, and names the microphone. It never pastes, never touches the clipboard and saves no transcript or audio. If nothing came in, it says so and links to Sound settings. It won't start while a dictation is running.
+
+The last card also offers an optional **Get names right** section, shown unless Boost saved words is already on. It says Mouthtype can favour names from your dictionary and from the window you're dictating into, which needs a one-time download of about 100 MB. **Turn on name accuracy** turns on Boost saved words and Names on screen, exactly as the switches in Settings > Advanced do, which starts the extra model download. The section then shows the same progress and ready line as the Boost switch. **Not now** changes nothing. Nothing here touches settings unless you press the button, and existing installs only reach it by reopening setup.
 
 Setup shows real speech download/preparation/warm-up status and a retry after failure. The speech engine's existing download is reused.
 

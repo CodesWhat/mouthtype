@@ -15,11 +15,19 @@ import Observation
     private(set) var instructions = ""
     /// The optional test take on the ready step. Nil where setup has no capture to record with.
     let testTake: SetupTestTake?
+    /// Where the optional "Get names right" offer stands on the ready card. In memory only: Setup asks again next time.
+    enum NamesChoice { case offered, turnedOn, skipped }
+    private(set) var namesChoice = NamesChoice.offered
+    private(set) var boostStatus = VocabularyBoostStatusCenter.current
+    private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
+    private nonisolated(unsafe) var boostObserver: NSObjectProtocol?
 
     init(
         diagnostics: SettingsDiagnostics, engine: EngineHost, microphone: MicrophonePreparation = MicrophonePreparation(),
-        cleanup: (any CleanupModelListing)? = nil, testTake: SetupTestTake? = nil, defaults: UserDefaults = .standard
+        cleanup: (any CleanupModelListing)? = nil, testTake: SetupTestTake? = nil, defaults: UserDefaults = .standard,
+        onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in }
     ) {
+        self.onBoostSavedWordsChanged = onBoostSavedWordsChanged
         self.testTake = testTake
         self.cleanup = cleanup
         self.diagnostics = diagnostics
@@ -27,7 +35,35 @@ import Observation
         self.microphone = microphone
         self.defaults = defaults
         refreshInstructions()
+        boostObserver = NotificationCenter.default.addObserver(forName: .vocabularyBoostStatusChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.boostStatus = VocabularyBoostStatusCenter.current }
+        }
     }
+
+    deinit {
+        if let boostObserver { NotificationCenter.default.removeObserver(boostObserver) }
+    }
+
+    /// The offer shows until declined, and never when Boost saved words is already on (an existing user's choice stands).
+    var offersNames: Bool {
+        switch namesChoice {
+        case .offered: !VocabularyBoostSetting.isEnabled(defaults)
+        case .turnedOn: true
+        case .skipped: false
+        }
+    }
+
+    /// Does what turning on Boost saved words and Names on screen in Settings > Advanced does: the same two settings, and the
+    /// same change callback, which hands the engine the bias and so starts the model download.
+    func turnOnNames() {
+        VocabularyBoostSetting.set(true, in: defaults)
+        ContextNamesSetting.set(true, in: defaults)
+        namesChoice = .turnedOn
+        boostStatus = VocabularyBoostStatusCenter.current
+        onBoostSavedWordsChanged(true)
+    }
+
+    func skipNames() { namesChoice = .skipped }
 
     /// Fast and Thorough, with their download state. Empty when the app gave setup no cleanup models.
     var cleanupModels: [CleanupModelStatus] { cleanup?.cleanupModels() ?? [] }

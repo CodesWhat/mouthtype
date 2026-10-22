@@ -12,7 +12,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let dictionary = FileVocabulary()
     private let phrases = FilePhrases()
     private let diagnostics = SettingsDiagnostics()
-    private lazy var setupModel = SetupModel(diagnostics: diagnostics, engine: engineHost, microphone: micCapture.preparation, cleanup: cleanerHost, testTake: setupTestTake)
+    private lazy var setupModel = SetupModel(
+        diagnostics: diagnostics, engine: engineHost, microphone: micCapture.preparation, cleanup: cleanerHost, testTake: setupTestTake,
+        onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() })
     private lazy var setupTestTake = SetupTestTake(
         capture: micCapture, engine: HostEngine(host: engineHost), readLevel: { [micCapture] in micCapture.capture.reading.db },
         canStart: { [weak self] in self?.dictation.map { $0.phase == .idle } ?? true })
