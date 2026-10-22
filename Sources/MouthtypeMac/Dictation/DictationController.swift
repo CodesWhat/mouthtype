@@ -337,10 +337,15 @@ final class DictationController {
             }
         }
         if startError == nil {
-            current.editorHints = EditorHintsGatherer.start(
+            let editorNames = EditorHintsGatherer.start(
                 enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
                 readers: .system, readGate: .shared
             )
+            let screenNames = ContextNamesGatherer.start(
+                enabled: pipeline.contextNames(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
+                readers: .system
+            )
+            current.editorHints = ContextNamesGatherer.merge(editorNames, screenNames)
             pipeline.warmEditorBias(current.editorHints)
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
@@ -639,10 +644,12 @@ final class DictationController {
         let inputs = pipeline.cleanupInputs(style: session.cleanupStyle, level: session.cleanupLevel)
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
+        let hintNames = await session.editorHints?.value.map(\.text) ?? []
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
         let cleaned = await pipeline.clean(
             transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination,
-            appName: session.startFocus?.appName, codingTarget: session.codingTarget)
+            appName: session.startFocus?.appName, codingTarget: session.codingTarget,
+            hintNames: hintNames)
         releasePrewarm(session)
         guard !cleaned.text.isEmpty else {
             await pipeline.finishEmpty(cleaned, session: session)

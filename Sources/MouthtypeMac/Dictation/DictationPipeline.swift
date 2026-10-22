@@ -113,6 +113,7 @@ struct DictationPipeline: Sendable {
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
     var boostSavedWords: @Sendable () -> Bool = { VocabularyBoostSetting.isEnabled() }
     var editorHints: @Sendable () -> Bool = { EditorHintsSetting.isEnabled() }
+    var contextNames: @Sendable () -> Bool = { ContextNamesSetting.isEnabled() }
     /// What the engine is told about the take's language. English until the setting feeds it.
     var languageRequest: @Sendable () -> DictationLanguageRequest = { .english }
     /// Settles an Auto take's language from its transcript. Without a detector Auto falls back to its first candidate.
@@ -322,11 +323,12 @@ struct DictationPipeline: Sendable {
 
     /// The cleanup. The deterministic pass cannot lose a dictation: past the time budget, or when it leaves nothing
     /// for text that had words, the guarded text is delivered instead. At light and medium the local model then works on
-    /// its output, and anything it does wrong delivers the deterministic text. `context` and `clipboard` are used
-    /// here and dropped.
+    /// its output, and anything it does wrong delivers the deterministic text. `context`, `clipboard` and `hintNames`
+    /// (names read from the screen for this take) are used here and dropped.
     func clean(
         _ transcribed: TranscribedDictation, inputs: CleanupInputs, context: InsertionContext?, clipboard: String?,
-        destination: S1MiniControls.Destination = .general, appName: String? = nil, codingTarget: Bool = false
+        destination: S1MiniControls.Destination = .general, appName: String? = nil, codingTarget: Bool = false,
+        hintNames: [String] = []
     ) async -> CleanedDictation {
         let settings = inputs.settings
         guard settings.enabled else {
@@ -427,7 +429,7 @@ struct DictationPipeline: Sendable {
                 SmartCleanupRequest(
                     text: result.text, level: level, style: settings.style, destination: destination,
                     dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
-                    protectedPhrases: protectedPhrases, language: transcribed.language
+                    protectedPhrases: protectedPhrases, language: transcribed.language, contextNames: hintNames
                 ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text)))
         else {
             if let fallback = fullDictionaryFallback() { return fallback }

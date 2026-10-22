@@ -255,14 +255,14 @@ public enum EditorHints {
         private let running = Mutex(false)
         public init() {}
         public var isBusy: Bool { running.withLock { $0 } }
-        fileprivate func acquire() -> Bool {
+        public func acquire() -> Bool {
             running.withLock { busy in
                 guard !busy else { return false }
                 busy = true
                 return true
             }
         }
-        fileprivate func release() { running.withLock { $0 = false } }
+        public func release() { running.withLock { $0 = false } }
     }
 
     /// The terms for one dictation. The cheap sources are always used; the cursor read and the file source are used

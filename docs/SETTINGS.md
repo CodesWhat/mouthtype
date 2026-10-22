@@ -20,6 +20,7 @@ The Mouthtype window has six pages in the sidebar: **Home**, **Stats**, **Dictio
 | Automatic update checks | On, with no prompt | Settings > Mac |
 | Boost saved words | Off | Settings > Advanced |
 | Code names from your editor | Off | Settings > Advanced |
+| Names on screen | Off | Settings > Advanced |
 | Override individual fonts | Off | Appearance |
 
 ## The menu
@@ -229,7 +230,7 @@ Rules you made before the redesign keep working unchanged as explicit overrides.
 
 **Advanced** holds the set-once options:
 
-- Boost saved words, Learn from my corrections, Code names from your editor and the microphone priority list.
+- Boost saved words, Learn from my corrections, Code names from your editor, Names on screen and the microphone priority list.
 - Remove fillers, Spoken commands and lists, Slash commands in coding apps (on by default; "slash research" types /research in terminals, editors and agent apps), Format numbers, Lowercase sentence starts and Drop the final full stop.
 - Split long pastes per supported terminal. It starts off, applies to the chosen terminal's windows and does not identify the command-line program inside them.
 - Keep finished audio for, Dictionary file, and Remap Fn.
@@ -277,6 +278,16 @@ Nothing is stored: the names live in memory for that one dictation, aren't logge
 
 > [!NOTE]
 > Which of these an editor actually exposes over Accessibility varies, and is unverified for Cursor and VS Code until checked on a real install.
+
+### Names on screen
+
+**Names on screen** in Settings > Advanced is off by default and needs the boost above. In any app except a terminal, it reads up to 2000 characters of the focused text field around your cursor (1500 before, 500 after) and the window title, picks out capitalised names such as people and projects, and adds up to 30 of them to the boost for that one take. A name you were just reading in the message you're replying to comes out spelled right. The same names are also offered to project-name joining in Fast and Thorough cleanup.
+
+- Names nearest the cursor come first, then the window title. Words that only start a sentence, everyday words ("Thanks", "Monday"), all-caps acronyms and words under four letters are dropped.
+- The read has the same 150 ms limit as editor names. A field that answers late is skipped and the title alone is used, so recording never waits for it.
+- Secure (password) fields and terminals are never read, and nothing is read while secure input is on.
+- Slack, VS Code, Discord and other Electron apps hide their text from Accessibility until asked. With this switch on, Mouthtype sets the standard `AXManualAccessibility` flag on that app once, the first time you dictate in it. An app that doesn't support the flag ignores it. The first take in an app you've just opened may see no text yet, since the app builds it after the flag is set.
+- Only Accessibility text is read: no screenshots, no other windows. Nothing is stored or logged, and the names are left out of the spellings saved with each take in history.
 
 ## Appearance
 

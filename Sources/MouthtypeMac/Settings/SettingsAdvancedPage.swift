@@ -15,6 +15,10 @@ extension SettingsView {
                 title: "Code names from your editor",
                 detail: "While you dictate in VS Code, Cursor, Xcode or a terminal, favour file, folder and function names from the window you\u{2019}re in. Needs the boost above. Nothing is stored.",
                 isOn: Binding(get: { model.editorHints }, set: model.setEditorHints), identifier: "settings-editor-hints")
+            ModalToggleRow(
+                title: "Names on screen",
+                detail: "Favour names from the text around your cursor and the window title, in any app. Needs the boost above. Nothing is stored.",
+                isOn: Binding(get: { model.contextNames }, set: model.setContextNames), identifier: "settings-context-names")
             MicrophonePriorityRows(model: model.microphone)
         }
         DesignSection(
