@@ -186,6 +186,7 @@ class Session:
         self.retired_at = time.monotonic()
         self.state, self.error, self.outcome = 'idle', None, 'not_attempted'
         self.shortcuts_status = None
+        self.shortcuts = None
         self.thread = None
         self.cancelled = threading.Event()
         self.take = None
@@ -1474,6 +1475,10 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                                 keep = True
                             elif action == 'engine':
                                 result = engine_info(session)
+                            elif action in ('shortcut-status', 'shortcut-configure'):
+                                import shortcuts_portal
+                                result = (shortcuts_portal.status_of(session.shortcuts) if action == 'shortcut-status'
+                                          else shortcuts_portal.configure(session.shortcuts, os.environ))
                             elif action == 'import':
                                 if files is None:
                                     raise ValueError('File transcription is unavailable')
@@ -1915,6 +1920,7 @@ def main(argv=None, *, cli_directory=None):
         stopped = threading.Event()
         import shortcuts_portal
         shortcuts = shortcuts_portal.attach(session, os.environ, config['desktop']['shortcuts'])
+        session.shortcuts = shortcuts
         for event in (signal.SIGINT, signal.SIGTERM):
             signal.signal(event, lambda *_: stopped.set())
         try:

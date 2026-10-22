@@ -133,6 +133,8 @@ class FakePortal:
             self._send(new_method_return(message))
         elif interface == SHORTCUTS_IFACE and member in ('CreateSession', 'BindShortcuts'):
             self._request(message, sender, member, interface)
+        elif interface == SHORTCUTS_IFACE and member == 'ConfigureShortcuts':
+            self._send(new_method_return(message))
         elif interface == REMOTE_IFACE and member in ('CreateSession', 'SelectDevices', 'Start'):
             self._request(message, sender, member, interface)
         elif interface == CLIPBOARD_IFACE and member == 'RequestClipboard':

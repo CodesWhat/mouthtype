@@ -413,6 +413,32 @@ def shortcut_info():
     return {"mode": "hold" if "release = true" in block else "toggle", "keys": keys}
 
 
+def shortcut_daemon(action):
+    """Ask the service about portal shortcuts (GNOME and KDE). The Hyprland bind block is read by shortcut_info()."""
+    client = session_client()
+    path = client.default_socket() if client is not None else None
+    if path is None or not path.exists():
+        raise RuntimeError("The Mouthtype service is not running")
+    try:
+        reply = client.request(path, action)
+    except (OSError, ValueError):
+        raise RuntimeError("The Mouthtype service did not answer")
+    if not isinstance(reply, dict):
+        raise RuntimeError("The Mouthtype service sent an unexpected reply")
+    return reply
+
+
+def shortcut_status():
+    return shortcut_daemon("shortcut-status")
+
+
+def shortcut_configure():
+    reply = shortcut_daemon("shortcut-configure")
+    if reply.get("error"):
+        raise RuntimeError(reply.get("reason") or "This desktop has no shortcut settings to open")
+    return reply
+
+
 def shortcut_mode():
     return shortcut_info()["mode"]
 
@@ -1345,7 +1371,7 @@ VALID_ACTIONS = {
     "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
     "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
 ,
-    "forget", "prune"
+    "forget", "prune", "shortcut-status", "shortcut-configure"
 }
 
 MODULE_PATTERN = re.compile(r"control_[a-z0-9_]+\.py")
@@ -1437,7 +1463,8 @@ def main():
     ) or (
         sys.argv[1] == "set-pill" and len(sys.argv) != 4
     ) or (sys.argv[1] in {"state", "start-service", "shutdown", "start", "stop", "cancel", "toggle", "paste-last",
-                          "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save"}
+                          "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save",
+                          "shortcut-status", "shortcut-configure"}
           and len(sys.argv) != 2):
         print(json.dumps({"error": "Unknown control action"}))
         return 2
@@ -1445,6 +1472,10 @@ def main():
         action = sys.argv[1]
         if action == "state":
             output = state()
+        elif action == "shortcut-status":
+            output = shortcut_status()
+        elif action == "shortcut-configure":
+            output = shortcut_configure()
         elif action == "import-pick":
             output = import_pick()
         elif action == "import-start":
