@@ -34,3 +34,9 @@ updates:
       # Track the engines Node major (24.x). @types/node must match the runtime, not the latest.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+  - package-ecosystem: pip
+    directory: /scripts/dmg
+    target-branch: dev/v0.6.0
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
