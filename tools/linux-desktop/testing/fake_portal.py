@@ -3,6 +3,8 @@
 Runs on its own thread against a session bus. Tests drive it through the
 attributes below and read `calls` to see what the client sent.
 """
+import os
+import select
 import threading
 import time
 
@@ -42,6 +44,13 @@ class FakePortal:
         self.grant_counter = 0
         self.valid_grants = set()
         self.deny_new_grants = False
+        # Clipboard: `clipboard` is what other apps hold, `owned` is what the client last offered.
+        self.clipboard = {}
+        self.owned = None
+        self.transfers = {}
+        self.read_errors = set()
+        self._transfer_pipes = {}
+        self._serial = 0
         self._conn = None
         self._thread = None
         self._stop = threading.Event()
@@ -52,7 +61,7 @@ class FakePortal:
     def start(self):
         from jeepney.bus_messages import DBus, DBusNameFlags
         from jeepney.io.blocking import open_dbus_connection, Proxy
-        self._conn = open_dbus_connection(bus=self.bus_address)
+        self._conn = open_dbus_connection(bus=self.bus_address, enable_fds=True)
         reply = Proxy(DBus(), self._conn, timeout=5).RequestName(PORTAL_BUS_NAME, DBusNameFlags.do_not_queue)
         if reply[0] != 1:
             self._conn.close()
@@ -135,10 +144,56 @@ class FakePortal:
             self._request(message, sender, member, interface)
         elif interface == REMOTE_IFACE and member in ('CreateSession', 'SelectDevices', 'Start'):
             self._request(message, sender, member, interface)
-        elif interface == CLIPBOARD_IFACE and member == 'RequestClipboard':
+        elif interface == CLIPBOARD_IFACE:
+            self._clipboard(message, member, sender)
+        else:
+            self._send(new_error(message, 'org.freedesktop.DBus.Error.UnknownMethod', 's', (member,)))
+
+    def _clipboard(self, message, member, sender):
+        from jeepney import new_error, new_method_return
+        body = message.body
+        if member == 'RequestClipboard':
+            self._send(new_method_return(message))
+        elif member == 'SetSelection':
+            self.owned = list(unwrap(body[1]).get('mime_types', []))
+            self.clipboard = {}
+            self._send(new_method_return(message))
+            self._emit_owner(body[0], self.owned, True, sender)
+        elif member == 'SelectionRead':
+            mime = body[1]
+            if mime in self.read_errors or mime not in self.clipboard:
+                self._send(new_error(message, 'org.freedesktop.DBus.Error.Failed', 's', (mime,)))
+                return
+            read_end, write_end = os.pipe()
+            os.write(write_end, self.clipboard[mime])
+            os.close(write_end)
+            self._send(new_method_return(message, 'h', (read_end,)))
+            os.close(read_end)
+        elif member == 'SelectionWrite':
+            read_end, write_end = os.pipe()
+            self._transfer_pipes[body[1]] = read_end
+            self._send(new_method_return(message, 'h', (write_end,)))
+            os.close(write_end)
+        elif member == 'SelectionWriteDone':
+            serial, ok = body[1], body[2]
+            read_end = self._transfer_pipes.pop(serial, None)
+            data = b''
+            if read_end is not None:
+                while select.select([read_end], [], [], 1)[0]:
+                    chunk = os.read(read_end, 65536)
+                    if not chunk:
+                        break
+                    data += chunk
+                os.close(read_end)
+            self.transfers[serial] = (bool(ok), data)
             self._send(new_method_return(message))
         else:
             self._send(new_error(message, 'org.freedesktop.DBus.Error.UnknownMethod', 's', (member,)))
+
+    def _emit_owner(self, session, mimes, is_owner, destination=None):
+        self._emit('/org/freedesktop/portal/desktop', CLIPBOARD_IFACE, 'SelectionOwnerChanged', 'oa{sv}',
+                   (session, {'mime_types': ('as', list(mimes)), 'session_is_owner': ('b', is_owner)}),
+                   destination=destination)
 
     def _request(self, message, sender, member, interface=SHORTCUTS_IFACE):
         from jeepney import new_method_return
@@ -197,3 +252,16 @@ class FakePortal:
 
     def emit_session_closed(self, session, destination=None):
         self._emit(session, SESSION_IFACE, 'Closed', 'a{sv}', ({},), destination=destination)
+
+    def external_copy(self, session, offers, destination=None):
+        """Another app takes the selection: `offers` maps mime type to bytes."""
+        self.owned = None
+        self.clipboard = dict(offers)
+        self._emit_owner(session, list(offers), False, destination)
+
+    def request_paste(self, session, mime, destination=None):
+        """A target app asks for our selection. Returns the transfer serial."""
+        self._serial += 1
+        self._emit('/org/freedesktop/portal/desktop', CLIPBOARD_IFACE, 'SelectionTransfer', 'osu',
+                   (session, mime, self._serial), destination=destination)
+        return self._serial

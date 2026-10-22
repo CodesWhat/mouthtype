@@ -99,7 +99,7 @@ class Portal:
         if self._router is not None:
             return self
         try:
-            self._conn = jthreading.open_dbus_connection(bus=self.bus)
+            self._conn = jthreading.open_dbus_connection(bus=self.bus, enable_fds=True)
         except (OSError, KeyError, TimeoutError, RuntimeError) as exc:
             raise PortalUnavailable(f'cannot reach the session bus: {exc}') from exc
         self._router = jthreading.DBusRouter(self._conn)
