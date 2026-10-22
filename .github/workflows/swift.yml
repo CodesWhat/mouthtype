@@ -1,0 +1,55 @@
+name: Swift
+
+on:
+  push:
+    branches: [main, 'dev/**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: swift-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  swift:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Package.swift is tools 6.2 and targets macOS 26, so pin the Xcode 26.6 toolchain instead of trusting the image default.
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version
+          swift --version
+
+      - name: Build (warnings as errors)
+        run: swift build -Xswiftc -warnings-as-errors
+
+      - name: Test with coverage
+        run: scripts/swift-test.sh --enable-code-coverage
+
+      - name: Coverage report
+        run: |
+          set -euo pipefail
+          profdata="$(find .build -name default.profdata -print -quit)"
+          bundle="$(find .build -name 'MouthtypePackageTests.xctest' -print -quit)"
+          binary="$(find "$bundle/Contents/MacOS" -type f -print -quit)"
+          xcrun llvm-cov report "$binary" -instr-profile="$profdata" \
+            -ignore-filename-regex='(\.build|Tests)/' > coverage-report.txt
+          cat coverage-report.txt
+          total="$(awk '/^TOTAL/ {print $(NF-3)}' coverage-report.txt)"
+          echo "Total line coverage: $total"
+          echo "Total line coverage: $total" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: swift-coverage
+          path: coverage-report.txt
+          if-no-files-found: ignore
