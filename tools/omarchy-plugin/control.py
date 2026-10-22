@@ -1282,6 +1282,10 @@ def paste_last():
     outcome = target.submit(text, snapshot)
     if outcome == "recover_only":
         raise RuntimeError("That app is not allowed for typing")
+    if outcome == "clipboard_kept":
+        raise RuntimeError("Your clipboard holds an image or files, so nothing was pasted")
+    if outcome == "clipboard_failed":
+        raise RuntimeError("Couldn't put the text on the clipboard; nothing was pasted")
     if outcome == "unsupported_text":
         raise RuntimeError("This transcript contains line breaks or control characters")
     if outcome == "target_changed":

@@ -979,9 +979,63 @@ class PasteDeliveryTests(unittest.TestCase):
         delivery, target, calls, restored = self.make({'any_window': True})
         delivery.run = lambda argv, **kwargs: calls.append((argv, kwargs)) or type('Result', (), {'returncode': 0, 'stdout': json.dumps({'locked': False}) if argv[-1] == 'locked' else json.dumps({**target, 'title': 'private'}) if argv[-1] == 'activewindow' else ''})()
         delivery.clipboard = lambda: 'earlier text'
-        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(delivery.submit('text', target), 'clipboard_failed')
         self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
         self.assertEqual(restored, [('earlier text', 'text')])
+
+    def test_wl_copy_failure_is_clipboard_failed_and_sends_no_chord(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        inner = delivery.run
+        def failing(argv, **kwargs):
+            if argv[0] == 'wl-copy':
+                calls.append((argv, kwargs))
+                raise subprocess.CalledProcessError(1, argv)
+            return inner(argv, **kwargs)
+        delivery.run = failing
+        self.assertEqual(delivery.submit('text', target), 'clipboard_failed')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
+        missing, target, calls, _ = self.make({'any_window': True})
+        inner = missing.run
+        def absent(argv, **kwargs):
+            if argv[0] == 'wl-copy':
+                raise FileNotFoundError('wl-copy')
+            return inner(argv, **kwargs)
+        missing.run = absent
+        self.assertEqual(missing.submit('text', target), 'clipboard_failed')
+
+    def test_image_or_file_list_clipboard_is_kept_not_blamed_on_the_app(self):
+        for types in ('image/png\n', 'text/uri-list\ntext/plain\n'):
+            delivery, target, calls, _ = self.make({'any_window': True})
+            inner = delivery.run
+            def listing(argv, types=types, inner=inner, **kwargs):
+                if argv[:2] == ['wl-paste', '--list-types']:
+                    return type('Result', (), {'returncode': 0, 'stdout': types})()
+                return inner(argv, **kwargs)
+            delivery.run = listing
+            self.assertEqual(delivery.submit('text', target), 'clipboard_kept', types)
+            self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_oversized_clipboard_is_kept(self):
+        from desktop import ClipboardTooLarge
+        delivery, target, calls, _ = self.make({'any_window': True}, clipboard=ClipboardTooLarge())
+        inner = delivery.run
+        def listing(argv, **kwargs):
+            if argv[:2] == ['wl-paste', '--list-types']:
+                return type('Result', (), {'returncode': 0, 'stdout': 'text/plain\n'})()
+            return inner(argv, **kwargs)
+        delivery.run = listing
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_chord_failure_after_a_live_clipboard_stays_unknown(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        inner = delivery.run
+        def failing(argv, **kwargs):
+            if argv[0] == 'wtype':
+                raise subprocess.CalledProcessError(1, argv)
+            return inner(argv, **kwargs)
+        delivery.run = failing
+        self.assertEqual(delivery.submit('text', target), 'unknown')
 
     @unittest.skipUnless(sys.platform == 'linux', 'reads /proc')
     def test_terminal_with_custom_window_class_is_recognised_by_its_process(self):
@@ -1588,7 +1642,7 @@ class ClipboardGuardTests(unittest.TestCase):
     def test_image_clipboard_is_left_untouched_and_the_transcript_stays_recoverable(self):
         delivery, target, calls, restored = self.make({'any_window': True})
         delivery.clipboard_types = lambda: ['image/png']
-        self.assertEqual(delivery.submit('text', target), 'recover_only')
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
         self.assertFalse(self.copies(calls))
         self.assertEqual(restored, [])
 
@@ -1598,14 +1652,14 @@ class ClipboardGuardTests(unittest.TestCase):
             with self.subTest(types=types):
                 delivery, target, calls, restored = self.make({'any_window': True})
                 delivery.clipboard_types = lambda types=types: types
-                self.assertEqual(delivery.submit('text', target), 'recover_only')
+                self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
                 self.assertFalse(self.copies(calls))
 
     def test_oversized_text_clipboard_is_left_untouched(self):
         from desktop import ClipboardTooLarge
         delivery, target, calls, restored = self.make({'any_window': True}, clipboard=ClipboardTooLarge('big'))
         delivery.clipboard_types = lambda: ['text/plain;charset=utf-8']
-        self.assertEqual(delivery.submit('text', target), 'recover_only')
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
         self.assertFalse(self.copies(calls))
 
     def test_rich_text_is_restored_as_plain_text_and_disabled_restore_skips_the_check(self):

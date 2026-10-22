@@ -130,6 +130,8 @@ function message(snapshot, deliveryMode) {
   if (error && /unavailable/.test(error)) return { headline: "Needs attention", detail: String(error).replace(/_/g, " "), isError: true }
   if (delivery === "unknown") return { headline: deliveryMode === "type" ? "Typed" : "Pasted", detail: "Check the field", isError: false }
   if (delivery === "recover_only") return { headline: "Saved", detail: deliveryMode === "recover" ? null : "App not allowed", isError: false }
+  if (delivery === "clipboard_failed") return { headline: "Couldn't paste", detail: "Saved. Copy it from Home", isError: false }
+  if (delivery === "clipboard_kept") return { headline: "Saved", detail: "Your clipboard held an image, so nothing was pasted", isError: false }
   if (delivery === "target_changed") return { headline: "Window changed", detail: "Saved to recovery", isError: false }
   if (delivery === "unsupported_text") return { headline: "Saved", detail: "Text can't be typed here", isError: false }
   if (delivery === "empty") return { headline: "Nothing heard", detail: null, isError: false }
