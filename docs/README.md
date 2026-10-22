@@ -18,4 +18,5 @@ Guides for using and maintaining Mouthtype. The website has a shorter getting-st
 | [guides/](guides/index.md) | The guides published at docs.mouthtype.app |
 | [SECURITY.md](SECURITY.md) | Security controls and limits |
 | [RELEASING.md](RELEASING.md) | Release procedure (maintainers) |
+| [REPEATABLE-BUILD.md](REPEATABLE-BUILD.md) | Repeatable-build procedure and known exceptions |
 | [READ-ME.md](READ-ME.md) | The Read Me shipped inside the app |

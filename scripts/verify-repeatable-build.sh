@@ -31,7 +31,7 @@ for i in 0 1; do
 done
 
 manifest() { (cd "$1/Mouthtype.app" && find . -type f -o -type l | LC_ALL=C sort | while read -r f; do
-    if [ -L "$f" ]; then echo "link  $(readlink "$f")  $f"; else echo "$(shasum -a 256 "$f" | cut -d' ' -f1)  $f"; fi
+    if [ -L "$f" ]; then echo "link:$(readlink "$f")  $f"; else echo "$(shasum -a 256 "$f" | cut -d' ' -f1)  $f"; fi
 done); }
 manifest "$WORK/out-0" >"$WORK/m0.txt"
 manifest "$WORK/out-1" >"$WORK/m1.txt"
@@ -42,7 +42,7 @@ unsigned_sha() { local t; t="$(mktemp "$WORK/sig.XXXXXX")"; cp "$1" "$t"
     codesign --remove-signature "$t" 2>/dev/null || true; shasum -a 256 "$t" | cut -d' ' -f1; rm -f "$t"; }
 
 BAD=0
-DIFFS="$(diff <(cat "$WORK/m0.txt") <(cat "$WORK/m1.txt") | sed -n 's/^[<>] [^ ]*  \(.*\)$/\1/p; s/^[<>] link  .*  \(.*\)$/\1/p' | sort -u)"
+DIFFS="$({ diff <(cat "$WORK/m0.txt") <(cat "$WORK/m1.txt") | sed -n 's/^[<>] .*  \(.*\)$/\1/p' || true; } | sort -u)"
 while IFS= read -r f; do
     [ -z "$f" ] && continue
     case "$f" in
