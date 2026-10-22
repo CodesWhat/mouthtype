@@ -22,6 +22,7 @@ from desktop import PipeWireCapture, stop_process, read_phrase_clipboard, Hyprla
 from phrases import load_phrases
 from cleanup import BasicCleanup
 import consent_atspi
+import kwin_pill
 
 
 def tone_metrics(path):
@@ -712,9 +713,107 @@ def secure_field_result(snapshot, delivery, text):
     return {'checked': True, 'refused': True, 'delivery': delivery, 'target_class': snapshot['class']}
 
 
+KDE_SCREEN = (1280, 800)
+KDE_HOLD_SECONDS = 1.5
+
+
+class RemoteKeyboardDriver:
+    """Keyboard input through the daemon's own RemoteDesktop session (pre-authorized on KDE), shaped like the
+    portal_probe drivers: key(keysym, down)."""
+    def __init__(self, remote):
+        from delivery_portal import PortalKeyboard
+        self.keyboard = PortalKeyboard(remote)
+    def key(self, keysym, down):
+        self.keyboard.key(keysym, down)
+
+
+def kde_shortcut_pill_take(root, env, processes, session, atspi, driver, call):
+    """Bind the dictate-hold chord through GlobalShortcuts with the consent dialog answered over AT-SPI, start the
+    real Qt host (which draws the pill on a layer-shell surface), then press and hold the chord. A take must start
+    on Activated and stop on Deactivated, and KWin must report the pill's overlay surface mapped during the hold."""
+    import portal_probe
+    import shortcuts_portal
+    calls = []
+    real_command = session.command
+    def recording(action, **kwargs):
+        if action != 'status':
+            calls.append(action)
+        return real_command(action, **kwargs)
+    session.command = recording
+    shortcuts = shortcuts_portal.PortalShortcuts(session)
+    watcher = kwin_pill.KwinWatcher(root, lambda argv: run(argv, env).stdout)
+    outcome = {}
+    def bind():
+        try:
+            shortcuts.start()
+            outcome['bound'] = True
+        except BaseException as exc:
+            outcome['error'] = exc
+    starter = threading.Thread(target=bind, name='acceptance-bind')
+    try:
+        watcher.start()
+        starter.start()
+        answered = None
+        end = time.monotonic() + 40
+        while starter.is_alive() and time.monotonic() < end:
+            dialog = consent_atspi.find_dialog(atspi, consent_atspi.KDE_APPS)
+            if dialog is not None:
+                answered = consent_atspi.answer(dialog, atspi)
+                break
+            time.sleep(.5)
+        starter.join(40)
+        if outcome.get('error') is not None or not outcome.get('bound'):
+            raise ValueError('GlobalShortcuts bind failed: ' + repr(outcome.get('error'))
+                             + ' outline: ' + json.dumps(atspi_outline(atspi)))
+        status = shortcuts.status()
+        if shortcuts_portal.HOLD not in status['triggers']:
+            raise ValueError('dictate-hold was not granted: ' + json.dumps(status))
+        # The host starts in a launcher-fed mode: its `watch --retry` stream reads the daemon socket in root.
+        launcher = root / 'mouthtype-launcher'
+        launcher.write_text('#!/bin/sh\nexec %s %s --runtime %s "$@"\n' % (
+            sys.executable, Path(__file__).with_name('desktop.py'), root))
+        launcher.chmod(0o755)
+        host = Path(__file__).resolve().parent.parent / 'linux-qt' / 'mouthtype_desktop.py'
+        processes.start([sys.executable, str(host), '--launcher', str(launcher), '--config', str(root / 'linux.json'),
+                         '--server-name', 'mouthtype-acceptance'])
+        try:
+            wait_for(lambda: any(e['kind'] == 'added' and e.get('resourceClass') == 'app.mouthtype.Mouthtype'
+                                 for e in watcher.snapshot()), 30)
+        except TimeoutError:
+            raise ValueError('The Qt host never mapped its window: ' + json.dumps(watcher.snapshot()))
+        time.sleep(2)  # the watch stream connects a moment after the window
+        calls.clear()
+        pressed_at = time.monotonic()
+        for keysym in portal_probe.CHORD_KEYSYMS:
+            driver.key(keysym, True)
+        try:
+            wait_for(lambda: session.state == 'recording', 10)
+        except TimeoutError:
+            raise ValueError('Held chord never started a take: ' + json.dumps({'shortcuts': shortcuts.status(), 'calls': calls}))
+        time.sleep(KDE_HOLD_SECONDS)
+        released_at = time.monotonic()
+        for keysym in reversed(portal_probe.CHORD_KEYSYMS):
+            driver.key(keysym, False)
+        wait_for(lambda: session.state == 'idle' and 'stop' in calls, 15)
+        time.sleep(1)
+        result = hold_take_result(calls, session.state, status['triggers'])
+        result['consent'] = answered
+        try:
+            wait_for(lambda: any(kwin_pill.is_pill(e) and e['kind'] == 'removed' for e in watcher.snapshot()), 10)
+        except TimeoutError:
+            pass  # unmapped_after reports it
+        pill = kwin_pill.pill_result(watcher.snapshot(), pressed_at, released_at, KDE_SCREEN)
+        return result, pill
+    finally:
+        watcher.stop()
+        shortcuts.stop()
+        session.command = real_command
+
+
 def kde_portal_component(root, env, processes):
-    """Portal paste on a headless KDE session, started through the daemon's toggle command. The RemoteDesktop
-    grant is pre-authorized in the permission store, so no dialog. GlobalShortcuts needs plasmashell and is out of scope."""
+    """Portal paste on a headless KDE session (kwin, no plasmashell), started through the daemon's toggle command.
+    The RemoteDesktop grant is pre-authorized in the permission store, so no dialog. Then a GlobalShortcuts bind
+    (consent answered over AT-SPI), a held chord that starts and stops a take, and the pill's layer-shell surface."""
     import portal as portal_module
     import desktop
     from atspi_target import AtspiTargets, load_atspi
@@ -819,7 +918,7 @@ def kde_portal_component(root, env, processes):
         secure_path = root / 'secure.json'
         env['MOUTHTYPE_TARGET_SECURE'] = '1'
         env.pop('MOUTHTYPE_TARGET_CLIPBOARD', None)
-        processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(secure_path)])
+        secure_target = processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(secure_path)])
         wait_for(lambda: secure_path.exists())
         try:
             wait_for(lambda: (PortalKeyboard(delivery.remote).tap(0xffe1), time.sleep(.3),
@@ -836,12 +935,16 @@ def kde_portal_component(root, env, processes):
             time.sleep(1)
             secure = secure_field_result(secure_snapshot, secure_final.get('delivery'),
                                          (json.loads(secure_path.read_text()).get('text') or ''))
+        # The chord goes last with no GTK target open, so the GlobalShortcuts grab is the only thing that sees it.
+        stop_process(secure_target)
+        shortcut, pill = kde_shortcut_pill_take(root, env, processes, session, atspi, RemoteKeyboardDriver(delivery.remote),
+                                                lambda argv: run(argv, env))
         return {'component': 'kde-portal', 'compositor': 'kwin_wayland --virtual',
                 'native_target': 'GTK3 Wayland', 'target_class': target['class'],
                 'remote_desktop': 'pre-authorized', 'grant_persisted': grant_persisted,
                 'start_path': 'daemon toggle command', 'unicode_exact': True, 'delivered_once': True,
-                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': False,
-                'fake_engine_take': True, 'pill_check': False,
+                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': shortcut,
+                'fake_engine_take': True, 'pill_check': pill,
                 'hyprland_acceptance': False, 'omarchy_acceptance': False}
     finally:
         stopped.set()
@@ -875,7 +978,7 @@ def main():
         raise TimeoutError('Acceptance lifetime limit')
     for event in (signal.SIGALRM, signal.SIGTERM, signal.SIGINT):
         signal.signal(event, deadline)
-    signal.alarm(180 if args.component == 'gnome-portal' else 120 if args.component == 'kde-portal' else 45)
+    signal.alarm(180 if args.component in ('gnome-portal', 'kde-portal') else 45)
     try:
         with tempfile.TemporaryDirectory(prefix='mouthtype-acceptance-') as temp:
             root = Path(temp)

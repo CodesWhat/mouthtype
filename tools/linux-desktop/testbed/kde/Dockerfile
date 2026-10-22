@@ -12,7 +12,7 @@ RUN dnf -y --setopt=install_weak_deps=False --setopt=tsflags=nocaps install \
       at-spi2-core dbus-daemon dbus-tools \
       python3 python3-jeepney python3-gobject gtk3 \
       mesa-dri-drivers mesa-libEGL mesa-libgbm \
-      qt6-qtwayland procps-ng sudo jq \
+      qt6-qtwayland qt6-qtdeclarative qt6-qtsvg python3-pyside6 procps-ng sudo jq \
  && dnf clean all \
  && rm -rf /var/cache/dnf
 

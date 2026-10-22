@@ -14,6 +14,8 @@ APP_ID=${MOUTHTYPE_APP_ID:-app.mouthtype.Mouthtype}
 acceptance=${MOUTHTYPE_ACCEPTANCE:-/opt/mouthtype/tools/linux-desktop/acceptance.py}
 SOCKET=wayland-mouthtype
 export WAYLAND_DISPLAY=$SOCKET
+# Qt apps started below (the portal backend) export an accessibility tree, so the GlobalShortcuts consent dialog can be answered over AT-SPI.
+export QT_LINUX_ACCESSIBILITY_ALWAYS_ON=1
 
 pids=()
 cleanup() {
