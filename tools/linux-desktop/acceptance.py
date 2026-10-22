@@ -476,13 +476,14 @@ def gnome_portal_component(root, env, processes):
         # The chord goes last, with no client window open: a focused GTK window kept the grab from firing here.
         stop_process(secure_target.pop('process'))
         wait_for(lambda: not mapped_windows(portal), 10)
-        shortcut = shortcut_hold_take(root, portal, delivery, atspi)
+        shortcut_take = os.environ.get('MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE') == '1'
+        shortcut = shortcut_hold_take(root, portal, delivery, atspi) if shortcut_take else None
         return {'component': 'gnome-portal', 'compositor': 'GNOME Shell headless',
                 'native_target': 'GTK3 Wayland', 'target_class': target['class'],
                 'consent': answered, 'grant_persisted': True, 'silent_restart': True,
                 'restart_seconds': restart_seconds, 'unicode_exact': True, 'delivered_once': True,
-                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': True,
-                'shortcut': shortcut, 'fake_engine_take': True,
+                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': shortcut if shortcut_take else {'checked': False, 'reason': 'opt-in'},
+                'fake_engine_take': shortcut_take,
                 'hyprland_acceptance': False, 'omarchy_acceptance': False}
     finally:
         for closer in (getattr(clipboard, 'close', None), getattr(remote, 'close', None), getattr(portal, 'close', None)):
@@ -836,7 +837,11 @@ def kde_portal_component(root, env, processes):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('component', choices=('capabilities', 'pipewire', 'sway', 'gnome-portal', 'kde-portal'))
+    parser.add_argument('--shortcut-take', action='store_true',
+                        help='gnome-portal only: also hold the dictate chord through mutter (opt-in, still unreliable headless)')
     args = parser.parse_args()
+    if args.shortcut_take:
+        os.environ['MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE'] = '1'
     if sys.platform != 'linux':
         parser.error('Explicit Linux component acceptance only')
     if args.component == 'capabilities':
