@@ -58,6 +58,7 @@ Natural speech in, clean text out.
 | Install, update and remove | [docs.mouthtype.app/getting-started/install-notes](https://docs.mouthtype.app/getting-started/install-notes/) |
 | Usage and cleanup reference | [docs.mouthtype.app/reference/usage-overview](https://docs.mouthtype.app/reference/usage-overview/) |
 | Settings, tone rules and input selection | [docs.mouthtype.app/reference/settings](https://docs.mouthtype.app/reference/settings/) |
+| Languages (25 European languages, what runs in each) | [docs.mouthtype.app/reference/languages](https://docs.mouthtype.app/reference/languages/) |
 | Spoken commands and counted lists | [docs.mouthtype.app/reference/spoken-commands](https://docs.mouthtype.app/reference/spoken-commands/) |
 | File transcription | [docs.mouthtype.app/transcribe-audio-files](https://docs.mouthtype.app/transcribe-audio-files/) |
 | Saved audio and retention | [docs.mouthtype.app/privacy-and-data/saved-audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/) |

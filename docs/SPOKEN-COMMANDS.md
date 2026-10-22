@@ -3,6 +3,9 @@
 You can say punctuation, line breaks and lists instead of typing them. The one switch, **Settings → Advanced → Spoken commands and lists**, drives both the commands and counted lists, and it's on by default. This page lists what exists today; nothing else is a command.
 
 > [!NOTE]
+> Spoken commands and counted lists are English only. In another dictation language they are left as the words you said. See [languages](LANGUAGES.md).
+
+> [!NOTE]
 > Commands run in the text rules of the cleanup pass, so Cleanup Off bypasses them.
 
 Mouthtype only treats a phrase as a command when the surrounding words say it is one. Ordinary speech like "the period ended" or "a new line of products" stays as written. Check the result when a command word is also a real word.

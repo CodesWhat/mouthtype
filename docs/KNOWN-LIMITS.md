@@ -25,6 +25,7 @@
 
 - Names and context-dependent words can be recognized wrongly. Check text before sending. Mouthtype doesn't read earlier chat messages to resolve them.
 - Cleanup models don't paraphrase. Ambiguous names are still a gap, especially with Fast.
+- Languages other than English get fewer cleanup rules. Fillers, spoken commands, counted lists, self-correction, number formatting and swearing removal are English only, and Fast cleanup uses Basic. Thorough covers German, Spanish, French, Italian, Portuguese, Dutch, Polish and Russian. Hindi, Tamil and other Indian languages and Japanese aren't supported yet. See [languages](LANGUAGES.md).
 - Linux is experimental and source-only, with no supported desktop release.
 
 > [!WARNING]
