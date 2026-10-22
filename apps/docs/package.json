@@ -35,7 +35,7 @@
     "remark-custom-heading-id": "^2.0.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.12",
+    "@biomejs/biome": "2.5.15",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "25.9.5",
     "@types/react": "19.3.0",
