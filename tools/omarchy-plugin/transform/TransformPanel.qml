@@ -132,7 +132,7 @@ FocusScope {
           height: parent.height
           width: parent.width * 0.3
           radius: 2
-          color: Theme.accent
+          color: Theme.accentMark
           x: parent.width * 0.35
           SequentialAnimation on x {
             running: root.busy

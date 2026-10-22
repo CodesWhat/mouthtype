@@ -10,7 +10,8 @@ case "$1" in
     remove)
         cat <<'MSG'
 Removing Mouthtype. Per-user pieces (bar widget, login service link, shortcut block) live in your home
-directory, so apt leaves them. Run this as your normal user while the package is still installed:
+directory, so apt leaves them. If you installed the Omarchy widget, it shows a removal card with a button
+that cleans them up. To do it by hand as your normal user while the package is still installed:
     mouthtype-linux-setup --uninstall          (add --purge to also delete models and recordings)
 MSG
         ;;

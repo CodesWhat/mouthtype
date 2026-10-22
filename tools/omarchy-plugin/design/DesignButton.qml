@@ -20,8 +20,8 @@ Item {
     anchors.fill: parent
     radius: Theme.controlRadius
     color: root.primary ? Theme.accent : Theme.surface
-    border.width: root.primary ? 0 : 1
-    border.color: Theme.hair
+    border.width: 1
+    border.color: root.primary ? Theme.accentMark : Theme.hair
   }
   Rectangle {
     anchors.fill: parent

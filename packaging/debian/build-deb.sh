@@ -50,6 +50,7 @@ done < <(cd "$root/tools/omarchy-plugin" && find . -type f \
     ! -name 'test_*' ! -name 'tst_*' ! -name 'gen_*' ! -name '*.pyc' \
     ! -path './*-render/*' ! -path './design/gallery/*' ! -path './design/render/*' \
     ! -path '*/fixtures/*' -print0 | sort -z)
+install -Dm644 "$root/packaging/Version.plist" "$stage/usr/share/mouthtype-linux/Version.plist"
 chmod 755 "$plugin/control.py" "$plugin/save_dialog.py" "$plugin/install.py"
 
 install -Dm755 "$here/mouthtype-linux-setup" "$stage/usr/bin/mouthtype-linux-setup"

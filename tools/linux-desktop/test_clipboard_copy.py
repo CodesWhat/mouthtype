@@ -10,6 +10,7 @@ from unittest import mock
 
 import cli_automation
 import clipboard_copy
+import concealed
 import delivery_portal
 import desktop
 import portal
@@ -164,10 +165,11 @@ class CopyLastPortalTests(unittest.TestCase):
 
     def test_a_refused_portal_copy_falls_back_to_wl_copy(self):
         with mock.patch.object(cli_automation.shutil, 'which', return_value='/usr/bin/wl-copy'), \
+                mock.patch.object(concealed, 'sensitive_supported', return_value=True), \
                 mock.patch.object(cli_automation.subprocess, 'run') as run:
             code, _ = self.run_verb({'ok': False}, KDE)
         self.assertEqual(code, 0)
-        self.assertEqual(run.call_args.args[0], cli_automation.COPY)
+        self.assertEqual(run.call_args.args[0], concealed.CONCEALED)
 
     def test_hyprland_makes_no_daemon_request(self):
         with mock.patch.object(cli_automation.shutil, 'which', return_value='/usr/bin/wl-copy'), \

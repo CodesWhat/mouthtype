@@ -293,11 +293,20 @@ for line in sys.stdin:
                 engine.transcribe(Path('/not-used.wav'), threading.Event())
             self.assertIsNone(engine.worker)
             engine.close()
+    def test_slash_commands_config_is_a_boolean_defaulting_on(self):
+        from desktop import validate_config
+        base = {'engine_config': '/local/engines.json'}
+        validate_config(base)
+        validate_config({**base, 'slash_commands': False})
+        for bad in ('yes', 1, None):
+            with self.subTest(slash_commands=bad), self.assertRaises(ValueError):
+                validate_config({**base, 'slash_commands': bad})
+
     def test_configuration_rejects_unbounded_or_ambiguous_delivery(self):
         from desktop import validate_config
         for change in ({'maximum_recording_seconds': float('nan')},
                        {'maximum_recording_seconds': 121},
-                       {'request_seconds': 0}, {'notifications': 'yes'}, {'delivery': {'mode': 'clipboard'}},
+                       {'request_seconds': 0}, {'notifications': 'yes'}, {'notifications': 'all'}, {'notifications': None}, {'delivery': {'mode': 'clipboard'}},
                        {'delivery': {'mode': 'type', 'allowed_classes': ['*']}},
                        {'delivery': {'mode': 'type', 'allowed_classes': []}}):
             with self.subTest(change=change), self.assertRaises(ValueError):
@@ -759,6 +768,86 @@ class FeedbackTests(unittest.TestCase):
             self.assertIn('--replace-id=17', lines[1])
             self.assertIn('Mouthtype is recording', lines[0])
             self.assertEqual(helper.status, 'submitted_unknown')
+    def test_errors_only_notifications_send_just_errors_and_ready(self):
+        from desktop import Notifications, validate_config
+        for value in (True, False, 'errors'):
+            validate_config({'engine_config': '/local/engines.json', 'notifications': value})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'notify.py'
+            record = root / 'arguments.jsonl'
+            script.write_text('import json,sys\nfrom pathlib import Path\nwith Path(sys.argv[1]).open("a") as f:f.write(json.dumps(sys.argv[2:])+"\\n")\nprint(17)\n')
+            helper = Notifications('errors', command=[sys.executable, str(script), str(record)])
+            for state in ('recording', 'transcribing', 'saved', 'delivered', 'empty', 'cancelled'):
+                self.assertFalse(helper.notify(state), state)
+            self.assertFalse(record.exists())
+            self.assertTrue(helper.notify('ready'))
+            self.assertTrue(helper.notify('error', 'capture_unavailable'))
+            self.assertEqual(len(record.read_text().splitlines()), 2)
+
+    def test_error_notification_names_the_code_and_unknown_codes_stay_generic(self):
+        from desktop import Notifications
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'notify.py'
+            record = root / 'arguments.jsonl'
+            script.write_text('import json,sys\nfrom pathlib import Path\nwith Path(sys.argv[1]).open("a") as f:f.write(json.dumps(sys.argv[2:])+"\\n")\nprint(17)\n')
+            helper = Notifications(command=[sys.executable, str(script), str(record)])
+            self.assertTrue(helper.notify('error', 'capture_unavailable'))
+            self.assertTrue(helper.notify('error', 'made_up_code'))
+            self.assertTrue(helper.notify('error'))
+            lines = [json.loads(line) for line in record.read_text().splitlines()]
+            self.assertEqual(lines[0][-2:], list(Notifications.ERRORS['capture_unavailable']))
+            self.assertEqual(lines[1][-2:], list(Notifications.MESSAGES['error']))
+            self.assertEqual(lines[2][-2:], list(Notifications.MESSAGES['error']))
+
+    def test_session_passes_its_error_code_to_the_error_notification(self):
+        class Feedback:
+            status = 'submitted_unknown'
+            def __init__(self): self.calls = []
+            def notify(self, state, error=None): self.calls.append((state, error))
+        with tempfile.TemporaryDirectory() as temp:
+            feedback = Feedback()
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), feedback=feedback)
+            try:
+                session.error = 'recording_limit'
+                session._notify('error')
+                session._notify('recording')
+            finally:
+                session.close()
+            self.assertEqual(feedback.calls[0], ('error', 'recording_limit'))
+
+    def test_every_error_code_the_daemon_assigns_has_notification_and_pill_copy(self):
+        import ast
+        import desktop
+        tree = ast.parse(Path(desktop.__file__).read_text())
+        codes = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                pairs = []
+                if isinstance(target, ast.Tuple) and isinstance(node.value, ast.Tuple):
+                    pairs = list(zip(target.elts, node.value.elts))
+                else:
+                    pairs = [(target, node.value)]
+                for left, right in pairs:
+                    if (isinstance(left, ast.Attribute) and left.attr == 'error' and isinstance(left.value, ast.Name)
+                            and left.value.id == 'self' and isinstance(right, ast.Constant) and isinstance(right.value, str)):
+                        codes.add(right.value)
+        self.assertTrue({'capture_unavailable', 'recovery_full', 'command_expired'} <= codes)
+        for code in sorted(codes):
+            with self.subTest(code=code):
+                self.assertIn(code, desktop.Notifications.ERRORS)
+        # The Arch package bundle ships the client without the plugin, so the pill half only runs in a full checkout.
+        plugin = Path(desktop.__file__).resolve().parents[1] / 'omarchy-plugin' / 'PillModel.js'
+        if not plugin.exists():
+            self.skipTest('PillModel.js not in this source bundle')
+        pill = plugin.read_text()
+        for code in sorted(codes):
+            with self.subTest(code=code):
+                self.assertIn('"%s"' % code, pill)
+
     def test_missing_or_hung_notification_helper_is_bounded_and_nonfatal(self):
         import sys
         from desktop import Notifications
@@ -929,9 +1018,63 @@ class PasteDeliveryTests(unittest.TestCase):
         delivery, target, calls, restored = self.make({'any_window': True})
         delivery.run = lambda argv, **kwargs: calls.append((argv, kwargs)) or type('Result', (), {'returncode': 0, 'stdout': json.dumps({'locked': False}) if argv[-1] == 'locked' else json.dumps({**target, 'title': 'private'}) if argv[-1] == 'activewindow' else ''})()
         delivery.clipboard = lambda: 'earlier text'
-        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(delivery.submit('text', target), 'clipboard_failed')
         self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
         self.assertEqual(restored, [('earlier text', 'text')])
+
+    def test_wl_copy_failure_is_clipboard_failed_and_sends_no_chord(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        inner = delivery.run
+        def failing(argv, **kwargs):
+            if argv[0] == 'wl-copy':
+                calls.append((argv, kwargs))
+                raise subprocess.CalledProcessError(1, argv)
+            return inner(argv, **kwargs)
+        delivery.run = failing
+        self.assertEqual(delivery.submit('text', target), 'clipboard_failed')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
+        missing, target, calls, _ = self.make({'any_window': True})
+        inner = missing.run
+        def absent(argv, **kwargs):
+            if argv[0] == 'wl-copy':
+                raise FileNotFoundError('wl-copy')
+            return inner(argv, **kwargs)
+        missing.run = absent
+        self.assertEqual(missing.submit('text', target), 'clipboard_failed')
+
+    def test_image_or_file_list_clipboard_is_kept_not_blamed_on_the_app(self):
+        for types in ('image/png\n', 'text/uri-list\ntext/plain\n'):
+            delivery, target, calls, _ = self.make({'any_window': True})
+            inner = delivery.run
+            def listing(argv, types=types, inner=inner, **kwargs):
+                if argv[:2] == ['wl-paste', '--list-types']:
+                    return type('Result', (), {'returncode': 0, 'stdout': types})()
+                return inner(argv, **kwargs)
+            delivery.run = listing
+            self.assertEqual(delivery.submit('text', target), 'clipboard_kept', types)
+            self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_oversized_clipboard_is_kept(self):
+        from desktop import ClipboardTooLarge
+        delivery, target, calls, _ = self.make({'any_window': True}, clipboard=ClipboardTooLarge())
+        inner = delivery.run
+        def listing(argv, **kwargs):
+            if argv[:2] == ['wl-paste', '--list-types']:
+                return type('Result', (), {'returncode': 0, 'stdout': 'text/plain\n'})()
+            return inner(argv, **kwargs)
+        delivery.run = listing
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_chord_failure_after_a_live_clipboard_stays_unknown(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        inner = delivery.run
+        def failing(argv, **kwargs):
+            if argv[0] == 'wtype':
+                raise subprocess.CalledProcessError(1, argv)
+            return inner(argv, **kwargs)
+        delivery.run = failing
+        self.assertEqual(delivery.submit('text', target), 'unknown')
 
     @unittest.skipUnless(sys.platform == 'linux', 'reads /proc')
     def test_terminal_with_custom_window_class_is_recognised_by_its_process(self):
@@ -1538,7 +1681,7 @@ class ClipboardGuardTests(unittest.TestCase):
     def test_image_clipboard_is_left_untouched_and_the_transcript_stays_recoverable(self):
         delivery, target, calls, restored = self.make({'any_window': True})
         delivery.clipboard_types = lambda: ['image/png']
-        self.assertEqual(delivery.submit('text', target), 'recover_only')
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
         self.assertFalse(self.copies(calls))
         self.assertEqual(restored, [])
 
@@ -1548,14 +1691,14 @@ class ClipboardGuardTests(unittest.TestCase):
             with self.subTest(types=types):
                 delivery, target, calls, restored = self.make({'any_window': True})
                 delivery.clipboard_types = lambda types=types: types
-                self.assertEqual(delivery.submit('text', target), 'recover_only')
+                self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
                 self.assertFalse(self.copies(calls))
 
     def test_oversized_text_clipboard_is_left_untouched(self):
         from desktop import ClipboardTooLarge
         delivery, target, calls, restored = self.make({'any_window': True}, clipboard=ClipboardTooLarge('big'))
         delivery.clipboard_types = lambda: ['text/plain;charset=utf-8']
-        self.assertEqual(delivery.submit('text', target), 'recover_only')
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
         self.assertFalse(self.copies(calls))
 
     def test_rich_text_is_restored_as_plain_text_and_disabled_restore_skips_the_check(self):

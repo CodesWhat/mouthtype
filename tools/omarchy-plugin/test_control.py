@@ -243,6 +243,23 @@ class SettingsDuringImportTests(unittest.TestCase):
         self.assertEqual(self.shutdowns, ["shutdown"])
         self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["notifications"])
 
+    def test_notifications_accept_all_errors_and_off(self):
+        self.file_import["state"] = "finished"
+        for value, stored in (("errors", "errors"), ("off", False), ("all", True), ("errors", "errors"), ("on", True)):
+            with self.subTest(value=value):
+                control.set_config("notifications", value)
+                self.assertEqual(json.loads(self.config.read_text(encoding="utf-8"))["notifications"], stored)
+        with self.assertRaisesRegex(RuntimeError, "Unsupported"):
+            control.set_config("notifications", "sometimes")
+
+    def test_slash_commands_toggle_is_written_and_summarised(self):
+        self.file_import["state"] = "finished"
+        control.set_config("slash_commands", "off")
+        self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["slash_commands"])
+        self.assertFalse(control.config_summary()["slash_commands"])
+        with self.assertRaisesRegex(RuntimeError, "Unsupported"):
+            control.set_config("slash_commands", "maybe")
+
 
 class RetainedImportResultTests(unittest.TestCase):
     def setUp(self):
@@ -599,6 +616,31 @@ class SetupRunningTests(unittest.TestCase):
                 self.assertFalse(control.setup_running())
 
 
+class CleanupCancelTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def test_cancel_writes_the_flag_next_to_the_setup_status_when_running(self):
+        with mock.patch.object(control, "CLEANUP_DIR", self.root), mock.patch.object(control, "setup_running", lambda: True), \
+                mock.patch.object(control, "state", lambda: {}), mock.patch.object(control.time, "sleep"):
+            output = control.cleanup_cancel()
+        self.assertTrue((self.root / "cleanup-cancel").exists())
+        self.assertEqual(output["page"], "cleanup")
+
+    def test_cancel_when_nothing_is_running_is_an_error_and_writes_no_flag(self):
+        with mock.patch.object(control, "CLEANUP_DIR", self.root), mock.patch.object(control, "setup_running", lambda: False):
+            with self.assertRaisesRegex(RuntimeError, "not running"):
+                control.cleanup_cancel()
+        self.assertFalse((self.root / "cleanup-cancel").exists())
+
+    def test_cancelled_state_passes_through_the_setup_status(self):
+        (self.root / "cleanup-setup.json").write_text(json.dumps({"state": "cancelled", "levels": ["fast"]}), encoding="utf-8")
+        with mock.patch.object(control, "CLEANUP_DIR", self.root):
+            self.assertEqual(control.cleanup_models()["setup"]["state"], "cancelled")
+
+
 class ShortcutBlockTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -636,6 +678,89 @@ class ShortcutBlockTests(unittest.TestCase):
         control.set_shortcut("off")
         self.assertEqual(control.shortcut_info()["mode"], "off")
         self.assertNotIn("Mouthtype", self.bindings.read_text(encoding="utf-8"))
+
+
+class MissingClientTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.notice = self.root / "state" / "removed-notice"
+        patches = [
+            mock.patch.object(control, "LAUNCHER", self.root / "bin" / "mouthtype-linux"),
+            mock.patch.object(control, "REMOVED_NOTICE", self.notice),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_state_reports_the_client_missing(self):
+        reply = control.state()
+        self.assertEqual(reply["client"], "missing")
+        self.assertFalse(reply["running"])
+
+    def test_a_present_client_is_not_missing(self):
+        control.LAUNCHER.parent.mkdir()
+        control.LAUNCHER.write_text("#!/bin/sh\n")
+        self.assertFalse(control.client_missing())
+        self.assertNotEqual(control.state().get("client"), "missing")
+
+    def test_notifies_once_a_minute(self):
+        with mock.patch.object(control.shutil, "which", return_value="/usr/bin/notify-send"), \
+                mock.patch.object(control.subprocess, "run") as run:
+            self.assertTrue(control.notify_removed(now=1000.0))
+            self.assertFalse(control.notify_removed(now=1030.0))
+            self.assertTrue(control.notify_removed(now=1061.0))
+        self.assertEqual(run.call_count, 2)
+        self.assertIn(control.REMOVED_TEXT, run.call_args.args[0])
+
+    def test_no_notify_send_is_quiet(self):
+        with mock.patch.object(control.shutil, "which", return_value=None):
+            self.assertFalse(control.notify_removed())
+
+    def test_shortcut_verb_notifies_instead_of_failing(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", ["control.py", "toggle"]), \
+                mock.patch.object(control, "notify_removed") as notify, contextlib.redirect_stdout(out):
+            code = control.main()
+        self.assertEqual(code, 1)
+        notify.assert_called_once()
+        self.assertEqual(json.loads(out.getvalue())["client"], "missing")
+
+    def test_remove_leftovers_runs_the_plugin_installer(self):
+        with mock.patch.object(control.subprocess, "Popen") as popen:
+            control.remove_leftovers()
+        self.assertEqual(popen.call_args.args[0][1:], [str(control.PLUGIN_DIR / "install.py"), "--uninstall"])
+
+
+class WelcomedTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.prefs = Path(self.directory.name) / "omarchy-plugin.json"
+        patches = [mock.patch.object(control, "PREFS", self.prefs), mock.patch.object(control, "state", lambda: {})]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_defaults_to_not_welcomed(self):
+        self.assertFalse(control.preferences()["welcomed"])
+
+    def test_setter_writes_and_clears_without_touching_other_prefs(self):
+        control.set_pill("size", "2")
+        control.set_plugin("welcomed", "on")
+        self.assertTrue(control.preferences()["welcomed"])
+        self.assertEqual(control.preferences()["pill"]["size"], 2)
+        control.set_pill("skin", "hifi")
+        self.assertTrue(control.preferences()["welcomed"])
+        control.set_plugin("welcomed", "off")
+        self.assertFalse(control.preferences()["welcomed"])
+
+    def test_setter_rejects_other_fields_and_values(self):
+        with self.assertRaises(RuntimeError):
+            control.set_plugin("sounds", "on")
+        with self.assertRaises(RuntimeError):
+            control.set_plugin("welcomed", "maybe")
 
 
 class TransformShortcutTests(ShortcutBlockTests):
@@ -1212,6 +1337,109 @@ class TakeScanTests(unittest.TestCase):
             control.prune("keep", "4")
         oldest = [e["id"] for e in reversed(reference_recent_dictations(small, None))][:6]
         self.assertEqual(forgotten, oldest)
+
+
+class DoctorTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.output = ""
+        self.raised = None
+        self.calls = []
+        self.os_release = self.root / "os-release"
+        self.os_release.write_text('NAME="Arch Linux"\nPRETTY_NAME="Arch Linux"\n', encoding="utf-8")
+        for patch in (mock.patch.object(control, "cli", self.fake_cli),
+                      mock.patch.object(control, "HOME", self.root / "home"),
+                      mock.patch.object(control, "OS_RELEASE", self.os_release),
+                      mock.patch.object(control, "versions", lambda: {"plugin": "1.3.0", "app": "0.4.0"}),
+                      mock.patch.object(control, "hyprland_version", lambda: "0.50.1")):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def fake_cli(self, *args, timeout=35):
+        self.calls.append((args, timeout))
+        if self.raised:
+            raise self.raised
+        return subprocess.CompletedProcess(args, 2, self.output, "")
+
+    def report(self, *checks):
+        self.output = json.dumps({"ready": True, "physical_tested": False, "checks": [
+            {"name": name, "status": status, "detail": detail, "action": action} for name, status, detail, action in checks]})
+
+    def test_all_ok_gives_one_pass_state(self):
+        self.report(("platform", "ok", "Initial target: Linux x86_64.", ""),
+                    ("physical_acceptance", "warning", "Microphone was not tested.", "Run acceptance."))
+        result = control.doctor()["doctor"]
+        self.assertTrue(result["pass"])
+        self.assertEqual(result["checks"], [])
+        self.assertEqual(self.calls, [(("doctor", "--json"), 10)])
+
+    def test_one_error_is_listed_with_its_fix(self):
+        self.report(("platform", "ok", "fine", ""),
+                    ("llama_server", "error", "llama-server did not run.", "Rebuild it."),
+                    ("physical_acceptance", "warning", "untested", "later"))
+        result = control.doctor()["doctor"]
+        self.assertFalse(result["pass"])
+        self.assertEqual([row["name"] for row in result["checks"]], ["llama_server"])
+        self.assertEqual(result["checks"][0]["action"], "Rebuild it.")
+
+    def test_malformed_output_is_an_error_row(self):
+        for output in ("not json", "{}", '{"checks": 3}', ""):
+            self.output = output
+            result = control.doctor()["doctor"]
+            self.assertFalse(result["pass"], output)
+            self.assertEqual(result["checks"][0]["status"], "error", output)
+
+    def test_timeout_is_an_error_row(self):
+        self.raised = subprocess.TimeoutExpired(["doctor"], 10)
+        result = control.doctor()["doctor"]
+        self.assertFalse(result["pass"])
+        self.assertIn("10 seconds", result["checks"][0]["detail"])
+
+    def test_missing_client_is_an_error_row(self):
+        self.raised = FileNotFoundError("mouthtype-linux")
+        self.assertFalse(control.doctor()["doctor"]["pass"])
+
+    def test_diagnostics_report_has_versions_system_and_every_check(self):
+        self.report(("platform", "ok", "Initial target: Linux x86_64.", ""),
+                    ("physical_acceptance", "warning", "untested", "Run acceptance."))
+        text = control.diagnostics_text()
+        for expected in ("App version: 0.4.0", "Plugin version: 1.3.0", "Distro: Arch Linux", "Hyprland: 0.50.1",
+                         "OK platform: Initial target", "WARNING physical_acceptance: untested"):
+            self.assertIn(expected, text)
+
+    def test_diagnostics_replace_the_home_directory(self):
+        home = str(self.root / "home")
+        self.report(("engine", "error", "Missing " + home + "/.local/share/mouthtype/engine.json", "Open " + home + "/x"))
+        text = control.diagnostics_text()
+        self.assertNotIn(home, text)
+        self.assertIn("Missing ~/.local/share/mouthtype/engine.json", text)
+        self.assertIn("Open ~/x", text)
+
+    def test_copy_diagnostics_sends_the_report_to_wl_copy(self):
+        self.report(("platform", "ok", "fine", ""))
+        sent = {}
+
+        def fake_run(command, **kwargs):
+            sent["command"], sent["input"] = command, kwargs["input"]
+            return mock.Mock(returncode=0)
+
+        with mock.patch.object(control.shutil, "which", lambda name: "/usr/bin/" + name), \
+                mock.patch.object(control, "concealed_copy_command", lambda: ["wl-copy"]), \
+                mock.patch.object(control.subprocess, "run", fake_run):
+            result = control.copy_diagnostics()
+        self.assertEqual(sent["command"], ["wl-copy"])
+        self.assertIn(b"App version: 0.4.0", sent["input"])
+        self.assertEqual(result["message"], "Diagnostics copied to clipboard")
+
+    def test_copy_diagnostics_needs_wl_copy(self):
+        with mock.patch.object(control.shutil, "which", lambda name: None):
+            with self.assertRaises(RuntimeError):
+                control.copy_diagnostics()
+
+    def test_verbs_are_valid_control_actions(self):
+        self.assertLessEqual({"doctor", "copy-diagnostics"}, control.VALID_ACTIONS)
 
 
 if __name__ == "__main__":

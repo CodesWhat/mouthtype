@@ -10,6 +10,7 @@ Item {
   id: root
 
   property var backend: ({})
+  property var host: null
   property bool active: false
   signal request(string command, var args)
 
@@ -31,6 +32,7 @@ Item {
   // Bumped whenever the sheet opens or closes. A reply for a request sent under an older value must not touch the current sheet.
   property int generation: 0
   property int sentGeneration: 0
+  property string draftId: ""
 
   implicitHeight: content.implicitHeight
 
@@ -52,6 +54,34 @@ Item {
     generation++
     sheetOpen = false
     sheetError = ""
+    if (draftId !== "") { request("draft-clear", [draftId]); draftId = "" }
+  }
+
+  // Cancel keeps what was typed as a draft the Home page offers back. These requests bypass the tracker on purpose: nothing
+  // here waits on a reply.
+  function cancelSheet() {
+    var draft = sheetOpen ? sheet.draftSnapshot() : null
+    closeSheet()
+    if (draft) request("draft-save", [JSON.stringify(draft)])
+  }
+
+  // A draft picked on Home reopens as a new transform with its text back. Its file goes when the sheet closes.
+  function takeDraft() {
+    var draft = host ? host.pendingDraft : null
+    if (!draft || draft.kind !== "phrase" || sheetOpen) return
+    host.pendingDraft = null
+    sheetError = ""
+    sheet.pair = null
+    sheet.prefill = draft
+    draftId = draft.id || ""
+    generation++
+    sheetOpen = true
+  }
+
+  onHostChanged: takeDraft()
+  Component.onDestruction: if (sheetOpen) {
+    var draft = sheet.draftSnapshot()
+    if (draft) request("draft-save", [JSON.stringify(draft)])
   }
 
   onShownCountChanged: syncRows()
@@ -64,7 +94,7 @@ Item {
   ListModel { id: rowIndexes }
 
   Component.onCompleted: { syncRows(); Qt.callLater(refresh) }
-  onActiveChanged: if (active && !tracker.waiting) refresh()
+  onActiveChanged: { if (active && !tracker.waiting) refresh(); takeDraft() }
 
   RequestTracker {
     id: tracker
@@ -235,7 +265,7 @@ Item {
                   width: 6
                   height: 6
                   radius: 3
-                  color: Theme.accent
+                  color: Theme.accentMark
                 }
                 Text {
                   id: statusText
@@ -265,7 +295,7 @@ Item {
     open: root.sheetOpen
     busy: tracker.waiting && root.sheetOpen
     error: root.sheetOpen ? root.sheetError : ""
-    onCancelRequested: root.closeSheet()
+    onCancelRequested: root.cancelSheet()
     onSubmitted: function(trigger, expansion) {
       root.sheetError = ""
       if (sheet.pair) root.send("phrases-edit", [sheet.pair.trigger, trigger, expansion, sheet.pair.expansion])

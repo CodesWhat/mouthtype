@@ -22,6 +22,7 @@ import time
 import uuid
 from pathlib import Path
 
+import concealed
 from cleanup import BasicCleanup
 from vendor.grapheme import graphemes
 
@@ -664,7 +665,10 @@ class TransformService:
         if outcome == 'unsupported_text':
             return self._refuse(identity, 'unsupported_text', "The result has control characters, or line breaks for "
                                 "a terminal, that can't be sent safely. Copy the result instead.", record)
-        if outcome == 'recover_only':
+        if outcome == 'clipboard_failed':
+            return self._refuse(identity, 'clipboard_failed', "Mouthtype couldn't put the result on the clipboard, "
+                                'so it pasted nothing. Copy the result instead.', record)
+        if outcome in ('recover_only', 'clipboard_kept'):
             return self._refuse(identity, 'clipboard_not_restorable', 'Your clipboard holds something Mouthtype '
                                 "can't put back after pasting, so it didn't paste. Copy the result instead.", record)
         if outcome == 'not_attempted':
@@ -685,7 +689,7 @@ class TransformService:
         if self._copy_via_portal(text):
             return {'state': 'copied', 'id': identity, 'what': 'original' if original else 'result'}
         try:
-            self.run(['wl-copy', '--type', 'text/plain;charset=utf-8'], input=text.encode('utf-8'),
+            self.run(concealed.copy_command(), input=text.encode('utf-8'),
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
         except FileNotFoundError:
             return failure('wl_clipboard_missing', 'Install wl-clipboard (wl-copy) to copy.')

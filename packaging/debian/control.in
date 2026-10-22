@@ -4,7 +4,7 @@ Architecture: amd64
 Maintainer: CodesWhat <80784472+scttbnsn@users.noreply.github.com>
 Installed-Size: @SIZE@
 Depends: python3 (>= 3.10), python3-venv, python3-jeepney, curl, pipewire-audio, libnotify-bin, ffmpeg
-Recommends: wl-clipboard, wtype, hyprland | sway
+Recommends: wl-clipboard, wtype, hyprland | sway, libgomp1
 Suggests: quickshell, mouthtype-linux-desktop
 Section: sound
 Priority: optional
@@ -14,10 +14,12 @@ Description: local voice dictation client for Wayland desktops
  speech model and delivers the text to the focused window. Nothing leaves the
  computer.
  .
- This package installs the client, the Omarchy bar plugin sources and a
- systemd user units. It downloads no model and enables no service. After
- installing, run "mouthtype-linux-setup" as your normal user to fetch the
- speech model (about 465 MiB) and enable the per-user service.
+ This package installs the client, the Omarchy bar plugin sources and two
+ systemd user units. The first-run unit is enabled for every user: at the next
+ login it downloads the pinned speech model (about 465 MiB), sets up the bar
+ widget and shortcuts, and enables the per-user service, reporting progress
+ and any failure as notifications. Run "mouthtype-linux-setup" as your normal
+ user to repeat or repair that by hand.
  .
  Development client for Linux x86_64. On Hyprland, paste and type delivery use
  wl-clipboard and wtype. The bar plugin needs Quickshell, which Debian and

@@ -28,9 +28,9 @@ CLEANUP_DESTINATION = Path.home() / '.local/share/mouthtype/cleanup-candidate'
 CLEANUP_OFFER = """AI cleanup is optional. It runs a small local model after Basic cleanup and needs llama-server.
   fast      S1-mini by Superwhisper. Download about 460 MiB.
   thorough  Qwen3-4B-Instruct. Download about 2.3 GiB.
-Either one also builds the pinned llama.cpp for the CPU (estimate: about 150 MB cloned, around 1 GB of disk while
-building, 10 to 30 minutes depending on cores). Arch's llama-cpp and Debian's llama.cpp packages are not that
-revision and the client refuses them, so the build is the supported path. Nothing is installed with sudo."""
+Either one also downloads the pinned upstream llama-server release (about 17 MB, SHA-256 checked). Arch's
+llama-cpp and Debian's llama.cpp packages are not that revision and the client refuses them. Nothing is built and
+nothing is installed with sudo; --build-server compiles it locally instead."""
 APP_ID = 'app.mouthtype.Mouthtype'
 PORTAL_DESKTOPS = ('gnome', 'kde')
 SERVICE = 'mouthtype-linux.service'
@@ -113,7 +113,7 @@ def offer_cleanup(args, config, *, run, ask=input, cleanup=None):
         return
     if level is None:
         if not (sys.stdin.isatty() and sys.stdout.isatty()):
-            print('AI cleanup (optional, needs a pinned llama-server build): re-run with --cleanup fast or --cleanup thorough.')
+            print('AI cleanup (optional, needs the pinned llama-server): re-run with --cleanup fast or --cleanup thorough.')
             return
         data = json.loads(config.read_text()) if config.is_file() else {}
         if data.get('cleanup') in ('fast', 'thorough'):
@@ -124,17 +124,21 @@ def offer_cleanup(args, config, *, run, ask=input, cleanup=None):
         if level is None:
             print('Skipped. Later: mouthtype-linux-setup --cleanup fast')
             return
-    missing = missing_packages({'git': 'git', 'cmake': 'cmake', 'c++': 'base-devel'})
+    build = bool(getattr(args, 'build_server', False))
+    missing = missing_packages({'git': 'git', 'cmake': 'cmake', 'c++': 'base-devel'}) if build else []
     if missing:
-        print('Building llama-server needs: sudo pacman -S --needed ' + ' '.join(missing) + '\nThen run: mouthtype-linux-setup --cleanup ' + level)
+        print('Building llama-server needs: sudo pacman -S --needed ' + ' '.join(missing) + '\nThen run: mouthtype-linux-setup --cleanup ' + level + ' --build-server')
         return
     if cleanup is None:
         import setup_cleanup
         cleanup = setup_cleanup.main
     destination = CLEANUP_DESTINATION
-    print('Building the pinned llama-server and downloading the ' + level + ' model. This takes a while; output is in ' +
-          str(destination / 'build.log') + '.')
-    status = cleanup(['--destination', str(destination), '--level', level])
+    if build:
+        print('Building the pinned llama-server and downloading the ' + level + ' model. This takes a while; output is in ' +
+              str(destination / 'build.log') + '.')
+    else:
+        print('Downloading the pinned llama-server and the ' + level + ' model. This takes a few minutes.')
+    status = cleanup(['--destination', str(destination), '--level', level] + (['--build-server'] if build else []))
     if status:
         print('AI cleanup was not prepared (see above). Basic cleanup still works; retry with --cleanup ' + level, file=sys.stderr)
         return
@@ -367,7 +371,9 @@ def main(argv=None, *, run=subprocess.run, speech=None, grant=None):
     parser.add_argument('--no-transform-shortcut', action='store_true',
                         help='Do not bind Super+Shift+T for Transform Selection')
     parser.add_argument('--cleanup', choices=('fast', 'thorough', 'skip'),
-                        help='Build llama-server and download the AI cleanup model without asking (skip: do not offer)')
+                        help='Download llama-server and the AI cleanup model without asking (skip: do not offer)')
+    parser.add_argument('--build-server', action='store_true',
+                        help='With --cleanup, compile llama-server locally instead of downloading the pinned release')
     parser.add_argument('--shortcut', choices=('toggle', 'hold'), help='Also bind the default dictation key (Omarchy; GNOME and KDE use the portal)')
     parser.add_argument('--desktop', choices=('auto',) + backends.DESKTOPS, default='auto',
                         help='Treat this session as that desktop instead of detecting it')

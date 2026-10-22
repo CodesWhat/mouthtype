@@ -123,6 +123,8 @@ jobs:
             cp "/home/mouthtype-ci/arch-bundle/$name" linux-desktop-evidence/arch-package/
           done
           timeout --kill-after=5s 180s runuser -u mouthtype-ci -- bash -c 'cd /home/mouthtype-ci/arch-bundle && makepkg --cleanbuild --check' > linux-desktop-evidence/arch-package/build.log 2>&1
+      - name: Check AUR .SRCINFO is current as ordinary user
+        run: timeout --kill-after=5s 60s runuser -u mouthtype-ci -- bash /home/mouthtype-ci/package-source/packaging/arch/aur/check-srcinfo.sh
       - name: Install and check the actual test package without policy changes
         run: |
           set -- /home/mouthtype-ci/arch-bundle/mouthtype-linux-*.pkg.tar.zst

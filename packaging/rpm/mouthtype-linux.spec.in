@@ -86,6 +86,7 @@ done
 chmod 755 "$plugin/control.py" "$plugin/save_dialog.py" "$plugin/install.py"
 chmod 755 %{buildroot}%{payload}/tools/linux-desktop/run-ci.sh %{buildroot}%{payload}/tools/linux-desktop/portal_probe.py
 
+install -Dpm644 packaging/Version.plist %{buildroot}%{_datadir}/mouthtype-linux/Version.plist
 install -Dpm755 packaging/debian/mouthtype-linux-setup %{buildroot}%{_bindir}/mouthtype-linux-setup
 install -Dpm644 packaging/arch/aur/mouthtype-linux.service %{buildroot}%{userunitdir}/mouthtype-linux.service
 # First-run unit, enabled for every user the way `systemctl --global enable` would.

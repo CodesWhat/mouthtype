@@ -2,7 +2,8 @@
 #
 # Development build of the Mouthtype Linux client and Omarchy bar plugin, built from git. Experimental:
 # nothing here has been accepted on a wide range of hardware yet (see https://mouthtype.app/linux/).
-_branch=feat/linux-parity
+# The branch is a build input: MOUTHTYPE_BRANCH=<branch> makepkg builds that branch, the default is main.
+_branch=${MOUTHTYPE_BRANCH:-main}
 pkgname=mouthtype-linux-git
 pkgver=0.0.0
 pkgrel=1
@@ -13,9 +14,9 @@ license=('GPL-3.0-only' 'MIT' 'Unicode-3.0')
 depends=('python' 'curl' 'pipewire-audio' 'wl-clipboard' 'wtype' 'libnotify' 'ffmpeg')
 makedepends=('git')
 optdepends=('hyprland: identify the active window for paste and type delivery (Omarchy ships it)'
-            'git: build the optional AI cleanup server'
-            'cmake: build the optional AI cleanup server'
-            'base-devel: build the optional AI cleanup server')
+            'git: only for mouthtype-linux-setup --build-server (compiles the AI cleanup server locally)'
+            'cmake: only for mouthtype-linux-setup --build-server (compiles the AI cleanup server locally)'
+            'base-devel: only for mouthtype-linux-setup --build-server (compiles the AI cleanup server locally)')
 provides=("${pkgname%-git}")
 conflicts=("${pkgname%-git}")
 install=mouthtype-linux.install
@@ -41,6 +42,7 @@ package() {
         ! -name 'test_*' ! -name 'tst_*' ! -name 'gen_*' ! -name '*.pyc' \
         ! -path './*-render/*' ! -path './design/gallery/*' ! -path './design/render/*' \
         ! -path '*/fixtures/*' -print0)
+    install -Dm644 packaging/Version.plist "$pkgdir/usr/share/mouthtype-linux/Version.plist"
     chmod 755 "$plugin/control.py" "$plugin/save_dialog.py" "$plugin/install.py"
 
     install -Dm755 packaging/arch/aur/mouthtype-linux-setup "$pkgdir/usr/bin/mouthtype-linux-setup"

@@ -16,9 +16,9 @@ HERE = str(Path(__file__).resolve().parent)
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
 import clipboard_copy
+import concealed
 import stats
 
-COPY = ['wl-copy', '--type', 'text/plain;charset=utf-8']
 RESTORE_WAIT_SECONDS = 5  # added to restore_delay_seconds: the helper's own deadline
 
 
@@ -49,7 +49,7 @@ def copy_last(identity, text, context=None):
     if shutil.which('wl-copy') is None:
         return fail('wl_copy_missing')
     try:
-        subprocess.run(COPY, input=text.encode('utf-8'), check=True, timeout=5,
+        subprocess.run(concealed.copy_command(), input=text.encode('utf-8'), check=True, timeout=5,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except (OSError, subprocess.SubprocessError):
         return fail('copy_failed')

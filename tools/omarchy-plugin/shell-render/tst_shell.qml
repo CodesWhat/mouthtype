@@ -67,6 +67,7 @@ TestCase {
     host.shortcutTriggers = ({})
     host.deliveryNeedsGrant = false
     host.trayAvailable = null
+    host.doctorInfo = null
     shell.advancedOptions = false
     shell.settingsOpen = false
     shell.shortcutOpen = false
@@ -74,6 +75,9 @@ TestCase {
     shell.navigate("home")
     switch (scene) {
       case "home-empty": host.empty(); shell.navigate("home"); break
+      case "home-welcome": host.config = Object.assign({}, host.config, { delivery_mode: "recover" }); shell.navigate("home"); break
+      case "home-welcomed": host.config = Object.assign({}, host.config, { delivery_mode: "recover" }); host.welcomed = true; shell.navigate("home"); break
+      case "home-removed": host.clientMissing = true; host.serviceRunning = false; host.sessionState = "off"; shell.navigate("home"); break
       case "stats": shell.navigate("stats"); break
       case "dictionary": shell.navigate("dictionary"); break
       case "transforms": shell.navigate("transforms"); break
@@ -111,6 +115,10 @@ TestCase {
       case "settings-linux-gnome": host.desktop = "gnome"; host.trayAvailable = false; shell.navigate("linux"); break
       case "settings-linux-kde": host.desktop = "kde"; host.trayAvailable = true; shell.navigate("linux"); break
       case "settings-health": shell.navigate("health"); break
+      case "settings-health-error":
+        host.doctorInfo = { pass: false, checks: [{ name: "llama_server", status: "error", detail: "llama-server at ~/.local/share/mouthtype/cleanup-candidate/llama-server did not run.", action: "Rebuild it with tools/linux-desktop/setup_cleanup.py." }] }
+        shell.navigate("health"); break
+      case "settings-health-pass": host.doctorInfo = { pass: true, checks: [] }; shell.navigate("health"); break
       case "settings-health-empty": host.empty(); shell.navigate("health"); break
       case "settings-advanced": shell.navigate("advanced"); break
       case "shortcut": shell.navigate("shortcut"); break
@@ -142,10 +150,10 @@ TestCase {
   }
 
   property var saved: ({})
-  readonly property var scenes: ["home", "home-empty", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
+  readonly property var scenes: ["home", "home-empty", "home-welcome", "home-welcomed", "home-removed", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
     "style-email", "style-other", "style-cleanup", "style-fresh", "style-fresh-cleanup", "style-error", "appearance", "appearance-hifi",
     "transcript", "import-active", "import-done", "import-failed", "settings-general", "settings-general-off", "settings-linux",
-    "settings-general-gnome", "settings-general-kde-grant", "settings-linux-gnome", "settings-linux-kde", "settings-health", "settings-health-empty", "settings-advanced", "shortcut", "error"]
+    "settings-general-gnome", "settings-general-kde-grant", "settings-linux-gnome", "settings-linux-kde", "settings-health", "settings-health-error", "settings-health-pass", "settings-health-empty", "settings-advanced", "shortcut", "error"]
 
   function test_render_data() {
     var rows = []
@@ -236,6 +244,15 @@ TestCase {
     compare(page.backend.error, "nope")
   }
 
+  function findByName(item, name) {
+    if (item.objectName === name) return item
+    for (var i = 0; i < item.children.length; i++) {
+      var found = findByName(item.children[i], name)
+      if (found) return found
+    }
+    return null
+  }
+
   function findText(label) {
     var texts = walk(shell, [])
     for (var i = 0; i < texts.length; i++) if (texts[i].text === label && texts[i].width > 0) return texts[i]
@@ -262,6 +279,34 @@ TestCase {
     host.ran = []
     mouseClick(findText("Copy Last"))
     compare(host.ran[0][0], "copy")
+  }
+
+  function test_welcome_card() {
+    tc.dark = false
+    setScene("home-welcome")
+    verify(findText("Where should your words go?") !== null, "card missing while recover and not welcomed")
+    verify(findText("Dictate from anywhere") !== null, "shortcut row missing")
+    setScene("home-welcomed")
+    compare(findText("Where should your words go?"), null)
+    setScene("home")
+    compare(findText("Where should your words go?"), null)
+    setScene("home-welcome")
+    mouseClick(findText("Just save them"))
+    compare(host.ran[0], ["set-plugin", "welcomed", "on"])
+    host.ran = []
+    mouseClick(findText("Paste where I'm typing (Recommended)"))
+    compare(host.ran[0], ["set-config", "delivery", "paste"])
+  }
+
+  function test_removed_card() {
+    tc.dark = false
+    setScene("home-removed")
+    verify(findText("Mouthtype was removed") !== null, "card missing while the client is gone")
+    compare(findText("Where should your words go?"), null)
+    mouseClick(findText("Remove widget and shortcuts"))
+    compare(host.ran[0], ["remove-leftovers"])
+    setScene("home")
+    compare(findText("Mouthtype was removed"), null)
   }
 
   function findSwitch(label, item) {
@@ -323,6 +368,31 @@ TestCase {
     compare(host.ran[0][0], "shortcut-configure")
     setScene("settings-general-kde-grant")
     verify(allTexts().join("\n").indexOf("Typing is not allowed") >= 0)
+  }
+
+  function notificationsControl() {
+    var found = collect(shell, "model", []).filter(function(item) { return item.text === "Desktop notifications" })
+    verify(found.length === 1, "notifications control not found")
+    return found[0]
+  }
+
+  function test_notifications_segmented_follows_config_and_sends_verbs() {
+    tc.dark = false
+    setScene("settings-general")
+    var control = notificationsControl()
+    compare(control.model, ["All", "Errors only", "Off"])
+    compare(control.currentIndex, 1)
+    host.ran = []
+    control.select(2)
+    compare(host.ran[0], ["set-config", "notifications", "off"])
+    control.select(0)
+    compare(host.ran[1], ["set-config", "notifications", "all"])
+    control.select(1)
+    compare(host.ran[2], ["set-config", "notifications", "errors"])
+    setScene("settings-general-off")
+    compare(notificationsControl().currentIndex, 2)
+    host.config = Object.assign({}, host.config, { notifications: true })
+    tryCompare(notificationsControl(), "currentIndex", 0)
   }
 
   // ---- Style page (slice V6) ----------------------------------------------------------------------------------------------
@@ -542,6 +612,46 @@ TestCase {
     verify(allTexts().join("\n").indexOf("Reading your Style settings") >= 0)
   }
 
+  function test_health_shows_download_bytes_and_bar() {
+    tc.dark = false
+    setScene("settings-health-empty")
+    verify(allTexts().indexOf("1000 MB of 2497 MB") >= 0, "bytes done of total while downloading")
+    var bar = findByName(shell, "setupProgress")
+    verify(bar !== null && bar.visible, "determinate bar is shown")
+    fuzzyCompare(bar.value, 1000000000 / 2497281120, 0.001)
+  }
+
+  function test_health_offers_cancel_while_downloading() {
+    tc.dark = false
+    setScene("settings-health-empty")
+    var cancel = findByName(shell, "setupCancel")
+    verify(cancel !== null && cancel.visible, "Cancel shows while a model downloads")
+    verify(allTexts().indexOf("Cancel") >= 0)
+  }
+
+  function test_health_lists_only_failing_checks() {
+    tc.dark = false
+    setScene("settings-health-error")
+    var texts = allTexts()
+    verify(texts.indexOf("Llama server · needs fixing") >= 0, "the failing check is titled")
+    verify(texts.indexOf("All checks pass") < 0)
+    verify(findByName(shell, "checkRow") !== null)
+  }
+
+  function test_health_says_all_checks_pass() {
+    tc.dark = false
+    setScene("settings-health-pass")
+    verify(allTexts().indexOf("All checks pass") >= 0)
+    compare(findByName(shell, "checkRow"), null)
+  }
+
+  function test_health_copy_diagnostics_runs_the_verb() {
+    tc.dark = false
+    setScene("settings-health-pass")
+    mouseClick(findByName(shell, "copyDiagnostics"))
+    compare(JSON.stringify(host.ran[host.ran.length - 1]), JSON.stringify(["copy-diagnostics"]))
+  }
+
   function test_health_points_to_style() {
     tc.dark = false
     setScene("settings-health")
@@ -552,5 +662,57 @@ TestCase {
     mouseClick(findText("Open Style"))
     compare(shell.page, "style")
     verify(!shell.settingsOpen)
+  }
+
+  function findSidebar(item) {
+    if (item.focusedIndex !== undefined && item.arrowNav !== undefined) return item
+    for (var i = 0; i < item.children.length; i++) {
+      var found = findSidebar(item.children[i])
+      if (found) return found
+    }
+    return null
+  }
+
+  function ringOwner(bar) { return bar.ringKey() }
+
+  function test_sidebar_click_selects_without_a_ring() {
+    tc.dark = false
+    setScene("home")
+    var bar = findSidebar(shell)
+    verify(bar, "sidebar found")
+    mouseClick(findText("Dictionary"))
+    compare(shell.page, "dictionary")
+    compare(bar.focusedIndex(), 2, "the clicked row holds focus")
+    compare(ringOwner(bar), "", "no ring after a click")
+  }
+
+  function test_sidebar_arrows_move_selection_and_ring() {
+    tc.dark = false
+    setScene("home")
+    var bar = findSidebar(shell)
+    mouseClick(findText("Stats"))
+    compare(shell.page, "stats")
+    keyClick(Qt.Key_Down)
+    compare(shell.page, "dictionary")
+    compare(ringOwner(bar), "dictionary")
+    keyClick(Qt.Key_Down)
+    compare(shell.page, "transforms")
+    compare(ringOwner(bar), "transforms")
+    keyClick(Qt.Key_Up)
+    compare(shell.page, "dictionary")
+    compare(ringOwner(bar), "dictionary")
+  }
+
+  function test_sidebar_steps_from_the_focused_row() {
+    tc.dark = false
+    setScene("home")
+    var bar = findSidebar(shell)
+    mouseClick(findText("Style"))
+    // The page moves on from outside while focus stays on the Style row: the next arrow steps from the focused row.
+    shell.navigate("home")
+    compare(ringOwner(bar), "", "an outside page change drops the ring")
+    keyClick(Qt.Key_Up)
+    compare(shell.page, "transforms")
+    compare(ringOwner(bar), "transforms")
   }
 }

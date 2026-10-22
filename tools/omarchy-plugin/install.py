@@ -36,10 +36,15 @@ def read_versions(source=SOURCE):
     except (OSError, ValueError, AttributeError):
         pass
     try:
-        with open(source.parent.parent / "packaging/Version.plist", "rb") as handle:
-            value = plistlib.load(handle).get("MouthtypeDisplayVersion")
-        app = value if isinstance(value, str) else None
-    except (OSError, ValueError, plistlib.InvalidFileException):
+        for path in (source.parent / "Version.plist", source.parent.parent / "packaging/Version.plist"):
+            try:
+                with open(path, "rb") as handle:
+                    value = plistlib.load(handle).get("MouthtypeDisplayVersion")
+            except OSError:
+                continue
+            app = value if isinstance(value, str) else None
+            break
+    except (ValueError, plistlib.InvalidFileException):
         pass
     return {"plugin": plugin, "app": app}
 
@@ -55,6 +60,33 @@ def write_versions(target, versions):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+def quiet_notifications():
+    """The bar pill already shows recording and transcribing, so move a default `notifications: true` to "errors".
+
+    Only the untouched default changes: an explicit false, or a value already set, stands. Returns True when the file changed."""
+    config = Path.home() / ".local/share/mouthtype/speech-candidate/linux.json"
+    try:
+        data = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict) or data.get("notifications") is not True:
+        return False
+    data["notifications"] = "errors"
+    fd, temporary = tempfile.mkstemp(prefix=".linux-", dir=config.parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(data, handle, indent=2)
+            handle.write("\n")
+        os.chmod(temporary, config.stat().st_mode & 0o777)
+        os.replace(temporary, config)
+    except OSError:
+        return False
+    finally:
+        if os.path.exists(temporary):
+            os.unlink(temporary)
+    return True
 
 
 def parse(argv):
@@ -247,6 +279,10 @@ def main(argv=None):
     write_versions(TARGET, read_versions())
     (TARGET / "control.py").chmod(0o755)
     (TARGET / "save_dialog.py").chmod(0o755)
+    if quiet_notifications():
+        print('Desktop notifications set to errors only (the bar pill shows the rest); change it in Settings.')
+        subprocess.run(["systemctl", "--user", "try-restart", "mouthtype-linux.service"], check=False, timeout=20,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
     print(TARGET)
     if not added or entry_added:

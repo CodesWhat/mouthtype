@@ -3,7 +3,7 @@
 // Delivery-card colours for the pill's settled message, mirroring CardPalette.swift and SquirclePalette.swift. Two styles:
 // "classic" is the dark capsule the Classic pill wears in both appearances; "minimal" follows light and dark and is the
 // only one that carries lime, on the single primary action. The accent is a fill, never a text colour: text on lime is
-// primaryText. Minimal's lime takes dark ink, so hover and press lighten it (more contrast) where Classic's darken.
+// primaryText. primaryEdge is a 1px ring on the primary button where lime sits on a light body (about 1.4:1), "" when none. Minimal's lime takes dark ink, so hover and press lighten it (more contrast) where Classic's darken.
 //
 // Plain "#RRGGBB" strings plus separate alphas, so test_pill.py can read this file without Qt.
 
@@ -14,7 +14,7 @@ var CLASSIC = {
   text: "#FFFFEB", error: "#FF6B5E", detailAlpha: 0.62,
   warn: "#FF453A", quiet: "#F4F3E8", rec: "#FF453A",
   showsDot: true, radius: 14,
-  primaryFill: "#F4F3E8", primaryText: "#1D1D1F", primaryLightens: false,
+  primaryFill: "#F4F3E8", primaryText: "#1D1D1F", primaryLightens: false, primaryEdge: "",
   tint: "#808080", tintRest: 0.18, tintHover: 0.30, tintPress: 0.42, secondaryText: "#F1F0E6"
 }
 
@@ -25,7 +25,7 @@ var MINIMAL_DARK = {
   text: "#F4F3E8", error: "#FF6B5E", detailAlpha: 0.62,
   warn: "#FF6B5E", quiet: "#F4F3E8", rec: "#FF453A",
   showsDot: false, radius: 14,
-  primaryFill: "#A6CD52", primaryText: "#1F1F21", primaryLightens: true,
+  primaryFill: "#D3E58B", primaryText: "#1F1F21", primaryLightens: true, primaryEdge: "",
   tint: "#FFFFFF", tintRest: 0.10, tintHover: 0.16, tintPress: 0.24, secondaryText: "#F1F0E6"
 }
 
@@ -36,7 +36,7 @@ var MINIMAL_LIGHT = {
   text: "#1D1D1F", error: "#D70015", detailAlpha: 0.72,
   warn: "#D70015", quiet: "#1D1D1F", rec: "#E0281C",
   showsDot: false, radius: 14,
-  primaryFill: "#76A11A", primaryText: "#1D1D1F", primaryLightens: true,
+  primaryFill: "#D3E58B", primaryText: "#1D1D1F", primaryLightens: true, primaryEdge: "#4A6A12",
   tint: "#000000", tintRest: 0.07, tintHover: 0.12, tintPress: 0.18, secondaryText: "#1D1D1F"
 }
 
