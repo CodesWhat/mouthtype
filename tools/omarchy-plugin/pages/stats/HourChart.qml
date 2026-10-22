@@ -71,7 +71,7 @@ StatsCard {
         height: words === 0 ? 2 : Math.max(3, chart.height * words / card.maxWords)
         y: chart.height - height
         radius: words === 0 ? 0 : 2
-        color: words === 0 ? Theme.track : (index === card.peakHour ? Theme.accent : Theme.neutralMark)
+        color: words === 0 ? Theme.track : (index === card.peakHour ? Theme.accentMark : Theme.neutralMark)
       }
     }
   }

@@ -5,7 +5,7 @@
 // test_design.py parses this file, so keep one `name: "value",` pair per line.
 //
 // Restraint rules from the Mac file: the accent is a fill, never a text colour (text uses accentText); the ring uses
-// focus; orange stays out of ordinary UI (lips, streak flame, warnings only). Lime appears only on primary buttons,
+// focus; a lime shape that has to be seen on a light surface (about 1.4:1) takes a 1px accentMark edge or is drawn in accentMark; orange stays out of ordinary UI (lips, streak flame, warnings only). Lime appears only on primary buttons,
 // switches when on, focus and chart peaks.
 
 var light = {
@@ -16,8 +16,9 @@ var light = {
   ink3: "#6B6B70",
   hair: "#000000/0.12",
   hair2: "#000000/0.07",
-  accent: "#76A11A",
-  accentSoft: "#76A11A/0.14",
+  accent: "#D3E58B",
+  accentSoft: "#D3E58B/0.45",
+  accentMark: "#4A6A12",
   onAccent: "#1D1D1F",
   accentText: "#4A6A12",
   focus: "#4A6A12",
@@ -31,7 +32,7 @@ var light = {
   personalBestInk: "#6B3A0A",
   sel: "#000000/0.08",
   c0: "#EFF4E4",
-  c1: "#CBDBA8",
+  c1: "#D3E58B",
   c2: "#76A11A",
   c3: "#5C7E14",
   c4: "#3B4F0E",
@@ -53,8 +54,9 @@ var dark = {
   ink3: "#9A9A9F",
   hair: "#FFFFFF/0.14",
   hair2: "#FFFFFF/0.08",
-  accent: "#A6CD52",
-  accentSoft: "#A6CD52/0.16",
+  accent: "#D3E58B",
+  accentSoft: "#D3E58B/0.16",
+  accentMark: "#D3E58B",
   onAccent: "#1F1F21",
   accentText: "#A6CD52",
   focus: "#A6CD52",

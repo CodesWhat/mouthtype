@@ -9,11 +9,11 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 TEXT = (HERE / "CardPalette.js").read_text()
 VAR_RE = r"var %s = \{(.*?)\n\}"
-FIELD_RE = re.compile(r'(\w+):\s*("#[0-9A-Fa-f]{6}"|[0-9.]+|true|false|"\w+")')
+FIELD_RE = re.compile(r'(\w+):\s*("#[0-9A-Fa-f]{6}"|[0-9.]+|true|false|"\w*")')
 VARS = {"classic": "CLASSIC", "minimal-dark": "MINIMAL_DARK", "minimal-light": "MINIMAL_LIGHT"}
 # The Mac accent each palette would sit beside: lime is #A6CD52 on dark and #76A11A on light. Classic is dark.
-ACCENT = {"classic": "#A6CD52", "minimal-dark": "#A6CD52", "minimal-light": "#76A11A"}
-LIME = {(0x76, 0xA1, 0x1A), (0xA6, 0xCD, 0x52)}
+ACCENT = {"classic": "#D3E58B", "minimal-dark": "#D3E58B", "minimal-light": "#D3E58B"}
+LIME = {(0x76, 0xA1, 0x1A), (0xA6, 0xCD, 0x52), (0xD3, 0xE5, 0x8B)}
 
 
 def load():
@@ -135,8 +135,12 @@ class LimeRestraint(unittest.TestCase):
         cls.palettes = load()
 
     def test_minimal_lime_is_the_mac_accent(self):
-        self.assertEqual(rgb(self.palettes["minimal-light"]["primaryFill"]), (0x76, 0xA1, 0x1A))
-        self.assertEqual(rgb(self.palettes["minimal-dark"]["primaryFill"]), (0xA6, 0xCD, 0x52))
+        self.assertEqual(rgb(self.palettes["minimal-light"]["primaryFill"]), (0xD3, 0xE5, 0x8B))
+        self.assertEqual(rgb(self.palettes["minimal-dark"]["primaryFill"]), (0xD3, 0xE5, 0x8B))
+
+    def test_only_minimal_light_wears_the_primary_edge(self):
+        for name, p in self.palettes.items():
+            self.assertEqual(p["primaryEdge"], "#4A6A12" if name == "minimal-light" else "", name)
 
     def test_lime_appears_only_as_the_primary_fill(self):
         for name, p in self.palettes.items():

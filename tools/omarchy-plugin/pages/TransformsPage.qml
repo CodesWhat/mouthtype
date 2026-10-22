@@ -235,7 +235,7 @@ Item {
                   width: 6
                   height: 6
                   radius: 3
-                  color: Theme.accent
+                  color: Theme.accentMark
                 }
                 Text {
                   id: statusText

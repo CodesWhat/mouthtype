@@ -77,7 +77,7 @@ Column {
           width: parent.width * 0.3
           height: parent.height
           radius: 2
-          color: Theme.accent
+          color: Theme.accentMark
           SequentialAnimation on x {
             loops: Animation.Infinite
             running: sweep.visible && root.visible
