@@ -77,17 +77,14 @@ import MouthtypeCore
         .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("scripts/mouthtype").path
 
-    private func run(_ arguments: [String]) throws -> (status: Int32, out: String, err: String) {
+    private func run(_ arguments: [String]) async throws -> (status: Int32, out: String, err: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/bin/bash")
         process.arguments = [Self.script] + arguments
         let out = Pipe(), err = Pipe()
         process.standardOutput = out
         process.standardError = err
-        try process.run()
-        let outData = out.fileHandleForReading.readDataToEndOfFile()
-        let errData = err.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
+        let (outData, errData) = try await runProcess(process, stdout: out, stderr: err)
         return (process.terminationStatus, String(decoding: outData, as: UTF8.self), String(decoding: errData, as: UTF8.self))
     }
 
@@ -96,16 +93,16 @@ import MouthtypeCore
         ["open", "nowhere"], ["open", "transcribeFile"], ["open", "savedSpellings"], ["open", "General"], ["open", "settings", "extra"], ["open", "page=general"],
         ["--help", "start"], ["-x"], [""],
     ])
-    func refusesBadInputWithUsageOnStderr(arguments: [String]) throws {
-        let result = try run(arguments)
+    func refusesBadInputWithUsageOnStderr(arguments: [String]) async throws {
+        let result = try await run(arguments)
         #expect(result.status == 64)
         #expect(result.out.isEmpty)
         #expect(result.err.hasPrefix("usage: mouthtype"))
     }
 
     @Test(arguments: ["--help", "-h"])
-    func helpPrintsUsageToStdoutAndSucceeds(flag: String) throws {
-        let result = try run([flag])
+    func helpPrintsUsageToStdoutAndSucceeds(flag: String) async throws {
+        let result = try await run([flag])
         #expect(result.status == 0)
         #expect(result.err.isEmpty)
         #expect(result.out.hasPrefix("usage: mouthtype"))

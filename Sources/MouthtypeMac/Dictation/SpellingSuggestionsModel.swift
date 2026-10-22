@@ -135,8 +135,9 @@ struct DismissedSuggestions: Codable, Equatable {
         let isKnownWord = isKnownWord
         let previous = lastRun
         computeTask?.cancel()
-        let work = Task.detached { () -> Computed? in
-            guard let records = try? fetch(store, limit), let rules = try? vocabulary.allRules(), !Task.isCancelled else { return nil }
+        let work = Task.detached { () async -> Computed? in
+            let records = try? await OffPool.run { try fetch(store, limit) }
+            guard let records, let rules = try? vocabulary.allRules(), !Task.isCancelled else { return nil }
             if let previous, previous.records == records, previous.rules == rules {
                 return previous
             }

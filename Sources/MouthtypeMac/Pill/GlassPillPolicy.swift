@@ -202,7 +202,7 @@ final class GlassBackdropCache {
         inFlight[screen] = key
         let measure = measure
         return Task.detached(priority: .utility) { [weak self] in
-            let result = measure(file, screenFrame, region)
+            let result = await OffPool.run { measure(file, screenFrame, region) }
             await self?.finish(screen: screen, key: key, backdrop: result)
         }
     }
@@ -214,7 +214,7 @@ final class GlassBackdropCache {
         latest[screen] = key
         if let entry = entries[screen], entry.key == key { return entry.backdrop }
         let measure = measure
-        let result = await Task.detached(priority: .userInitiated) { measure(file, screenFrame, region) }.value
+        let result = await OffPool.run { measure(file, screenFrame, region) }
         finish(screen: screen, key: key, backdrop: result)
         return result
     }

@@ -55,7 +55,8 @@ final class FnGuardLauncher: FnGuarding {
         guard let pid else { return }
         self.pid = nil
         kill(pid, SIGTERM)
-        Task.detached {
+        // Reaps on a GCD thread: waitpid blocks, and a cooperative-pool thread must never block in a syscall.
+        DispatchQueue.global(qos: .utility).async {
             var status: Int32 = 0
             waitpid(pid, &status, 0)
         }

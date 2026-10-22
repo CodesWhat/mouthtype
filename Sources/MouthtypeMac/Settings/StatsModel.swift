@@ -89,7 +89,7 @@ import Observation
         issued += 1
         let ticket = issued
         do {
-            let snapshot = try await Task.detached { try read(store, instant, zone) }.value
+            let snapshot = try await OffPool.run { try read(store, instant, zone) }
             guard generation == lifecycleGeneration, ticket > applied, !Task.isCancelled else { return }
             applied = ticket
             apply(snapshot, failure: nil)

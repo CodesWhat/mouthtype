@@ -144,7 +144,7 @@ struct HomeTake: Identifiable, Equatable {
         let fetch = fetchRecent
         let generation = lifecycleGeneration
         do {
-            let records = try await Task.detached { try fetch(store, limit) }.value
+            let records = try await OffPool.run { try fetch(store, limit) }
             guard generation == lifecycleGeneration, !Task.isCancelled else { return }
             apply(records, failure: nil)
         } catch {

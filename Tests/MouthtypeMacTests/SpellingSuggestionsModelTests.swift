@@ -440,18 +440,22 @@ import Testing
         try seed(f.store)
         let model = model(f)
         let probe = CancelProbe()
+        let release = DispatchSemaphore(value: 0)
         model.fetchRecent = { _, _ in
             probe.started()
-            for _ in 0..<500 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
-            probe.finished(cancelled: Task.isCancelled)
+            // Runs on a GCD thread, so holding it never touches the cooperative pool.
+            _ = release.wait(timeout: .now() + 60)
+            probe.finished(cancelled: false)
             return []
         }
         model.activate()
         for _ in 0..<3000 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
         #expect(probe.didStart)
         model.deactivate()
+        release.signal()
         for _ in 0..<3000 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
-        #expect(probe.cancelled == true)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(model.suggestions.isEmpty)
     }
 
     @Test func reopeningCancelsThePreviousComputation() async throws {
@@ -461,11 +465,13 @@ import Testing
         let model = model(f)
         let probe = CancelProbe()
         let calls = Calls()
+        let release = DispatchSemaphore(value: 0)
         model.fetchRecent = { store, limit in
             if calls.next() {
                 probe.started()
-                for _ in 0..<500 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
-                probe.finished(cancelled: Task.isCancelled)
+                // Runs on a GCD thread, so holding it never touches the cooperative pool.
+                _ = release.wait(timeout: .now() + 60)
+                probe.finished(cancelled: false)
                 return []
             }
             return try store.recentTakes(limit: limit)
@@ -473,8 +479,9 @@ import Testing
         model.activate()
         for _ in 0..<3000 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
         await model.reload()
+        release.signal()
         for _ in 0..<3000 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
-        #expect(probe.cancelled == true)
+        try await Task.sleep(for: .milliseconds(100))
         #expect(!model.suggestions.isEmpty)
     }
 }
