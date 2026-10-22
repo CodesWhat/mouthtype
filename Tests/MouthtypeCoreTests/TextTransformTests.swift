@@ -33,13 +33,16 @@ import Testing
     @Test func aPreambleDictatedAfterASelfCorrectionIsKept() {
         let said = "here is the transcript no wait here is the cleaned transcript we leave at nine"
         let out = "Here is the transcript, no wait, here is the cleaned transcript: We leave at nine."
-        #expect(TextTransform.sanitize("Here is the cleaned transcript: We leave at nine.", input: said)
-            == "Here is the cleaned transcript: We leave at nine.")
+        #expect(
+            TextTransform.sanitize("Here is the cleaned transcript: We leave at nine.", input: said)
+                == "Here is the cleaned transcript: We leave at nine.")
         #expect(TextTransform.sanitize(out, input: said) == out)
-        #expect(TextTransform.sanitize("Here is the cleaned transcript: We leave at nine.", input: "we leave at nine")
-            == "We leave at nine.")
-        #expect(TextTransform.sanitize("Here is the cleaned text:\nWe leave at nine.", input: said)
-            == "We leave at nine.")
+        #expect(
+            TextTransform.sanitize("Here is the cleaned transcript: We leave at nine.", input: "we leave at nine")
+                == "We leave at nine.")
+        #expect(
+            TextTransform.sanitize("Here is the cleaned text:\nWe leave at nine.", input: said)
+                == "We leave at nine.")
     }
 
     @Test func onlyPreamblesThatNameTheOutputAreRemoved() {

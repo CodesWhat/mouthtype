@@ -49,10 +49,11 @@ enum SelectionDiff {
         guard !old.isEmpty, !new.isEmpty, withinLimit(old, new) else { return [Segment(text: old, marked: false)] }
         let oldTokens = tokens(old)
         let newKeys = tokens(new).filter(\.isWord).map(\.key)
-        let removed = Set(newKeys.difference(from: oldTokens.filter(\.isWord).map(\.key)).compactMap { change -> Int? in
-            if case let .remove(offset, _, _) = change { return offset }
-            return nil
-        })
+        let removed = Set(
+            newKeys.difference(from: oldTokens.filter(\.isWord).map(\.key)).compactMap { change -> Int? in
+                if case let .remove(offset, _, _) = change { return offset }
+                return nil
+            })
         // `difference(from:)` offsets index the word-only arrays, so walk the words in order alongside the tokens.
         var wordIndex = 0
         var flags: [Bool] = []

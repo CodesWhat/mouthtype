@@ -111,8 +111,10 @@ private func tokenize(_ s: String) -> [Word] {
             if leadTrimmed || trailTrimmed { punctuationSince = true }
             return
         }
-        words.append(Word(text: trimmed, lower: trimmed.lowercased(), startsSentence: startsSentence, isAlpha: trimmed.allSatisfy(\.isLetter),
-                          adjacentToPrevious: !words.isEmpty && !punctuationSince && !leadTrimmed, start: curStart, end: end))
+        words.append(
+            Word(
+                text: trimmed, lower: trimmed.lowercased(), startsSentence: startsSentence, isAlpha: trimmed.allSatisfy(\.isLetter),
+                adjacentToPrevious: !words.isEmpty && !punctuationSince && !leadTrimmed, start: curStart, end: end))
         startsSentence = false
         punctuationSince = trailTrimmed
     }
@@ -484,9 +486,10 @@ private struct Run {
             // casing with an inner capital and forms the dictionary already saves still go through.
             let innerCapital = info.form.dropFirst().contains(where: \.isUppercase)
             if !innerCapital, !info.fromDictionary || !savedExact.contains(info.form), isKnown(lower) { continue }
-            let rawLower = unigrams[lower].map { hits -> [Position] in
-                hits.positions.filter { rawWords[$0.take][$0.word].text == lower }
-            } ?? []
+            let rawLower =
+                unigrams[lower].map { hits -> [Position] in
+                    hits.positions.filter { rawWords[$0.take][$0.word].text == lower }
+                } ?? []
             let sightings = lowerTakes[lower]?.count ?? 0
             guard sightings >= 1 else { continue }
             var conf = Self.sightingConfidence(sightings) + (sightings == 1 ? 0.1 : 0)
@@ -548,9 +551,11 @@ private struct Run {
             let heard = Self.norm(c.heard)
             let corrected = c.corrected.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !heard.isEmpty, !corrected.isEmpty, heard != corrected.lowercased(), !savedHeard.contains(heard),
-                  OrdinaryWords.warning(heard: heard, written: corrected) == nil, (!isKnown(heard) || heard.contains(" ")) else { continue }
+                OrdinaryWords.warning(heard: heard, written: corrected) == nil, (!isKnown(heard) || heard.contains(" "))
+            else { continue }
             let written = known[corrected.lowercased()] ?? corrected
-            add(kind: .misheardVariant, written: written, heard: heard, count: 1, confidence: 0.7,
+            add(
+                kind: .misheardVariant, written: written, heard: heard, count: 1, confidence: 0.7,
                 evidence: [SuggestionEvidence(takeID: "correction", fragment: "\(c.heard) -> \(c.corrected)")])
         }
     }
@@ -568,7 +573,8 @@ private struct Run {
                 let ev = hits.map(evidence) ?? []
                 add(kind: .removeHazard, written: rule.written, heard: rule.heard, count: count, confidence: min(0.75 + 0.04 * Double(count), 0.95), evidence: ev, hazardRule: rule)
             } else if count == 0, takes.count >= SpellingSuggester.minTakesForUnusedHazard,
-                      heard != rule.written.lowercased(), !rule.isJoinedSpelling {
+                heard != rule.written.lowercased(), !rule.isJoinedSpelling
+            {
                 add(kind: .removeHazard, written: rule.written, heard: rule.heard, count: 0, confidence: 0.3, evidence: [], hazardRule: rule)
             }
         }
@@ -586,9 +592,11 @@ private struct Run {
             if forms.allSatisfy({ $0.value.weak }) { confidence = min(confidence, 0.5) }
             var ev: [SuggestionEvidence] = []
             for (_, e) in forms { for x in e.evidence where ev.count < 4 { ev.append(x) } }
-            out.append(SpellingSuggestion(written: group.written, heardForms: forms.map(\.key), kind: group.kind, evidence: ev,
-                                          count: forms.reduce(0) { $0 + $1.value.count }, confidence: (confidence * 100).rounded() / 100,
-                                          hazardRules: group.hazardRules))
+            out.append(
+                SpellingSuggestion(
+                    written: group.written, heardForms: forms.map(\.key), kind: group.kind, evidence: ev,
+                    count: forms.reduce(0) { $0 + $1.value.count }, confidence: (confidence * 100).rounded() / 100,
+                    hazardRules: group.hazardRules))
         }
         out.sort {
             if $0.confidence != $1.confidence { return $0.confidence > $1.confidence }

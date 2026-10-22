@@ -22,7 +22,8 @@ struct InputDevice: Equatable, Sendable {
 
     static func availableMicrophones() throws -> [MicrophoneDevice] {
         let system = AudioObjectID(kAudioObjectSystemObject)
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDevices,
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         var size: UInt32 = 0
         let status = AudioObjectGetPropertyDataSize(system, &address, 0, nil, &size)
@@ -41,7 +42,8 @@ struct InputDevice: Equatable, Sendable {
         return ids.prefix(Int(size) / stride).compactMap { id in
             let input = InputDevice(sampleRate: nominalSampleRate(id), channels: inputChannels(id), id: id)
             guard isAlive(id), (try? validate(sampleRate: input.sampleRate, channels: input.channels)) != nil,
-                  let uid = uid(of: id), !uid.isEmpty else { return nil }
+                let uid = uid(of: id), !uid.isEmpty
+            else { return nil }
             return MicrophoneDevice(uid: uid, name: name(of: id) ?? "Microphone", input: input)
         }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
@@ -49,7 +51,8 @@ struct InputDevice: Equatable, Sendable {
     static func isAlive(_ id: AudioDeviceID) -> Bool {
         var alive: UInt32 = 0
         var size = UInt32(MemoryLayout<UInt32>.size)
-        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyDeviceIsAlive,
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceIsAlive,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         return AudioObjectGetPropertyData(id, &address, 0, nil, &size, &alive) == noErr && alive != 0
     }
@@ -97,7 +100,7 @@ struct InputDevice: Equatable, Sendable {
             mElement: kAudioObjectPropertyElementMain
         )
         guard AudioObjectGetPropertyData(id, &address, 0, nil, &size, &value) == noErr,
-              let string = value?.takeRetainedValue()
+            let string = value?.takeRetainedValue()
         else { return nil }
         return string as String
     }

@@ -36,12 +36,15 @@ import Observation
         try store.statsSnapshot(now: now, timeZone: zone)
     }
     /// Starts the store observation. Replaceable so a test can make it fail.
-    @ObservationIgnored var startObservation: (TranscriptStore, TimeZone, @escaping @Sendable () -> Date,
-                                               @escaping @Sendable (Error) -> Void,
-                                               @escaping @Sendable (StatsSnapshot) -> Void) -> TakesObservation? = {
-        store, zone, clock, onError, onChange in
-        store.observeStats(timeZone: zone, now: clock, onError: onError, onChange: onChange)
-    }
+    @ObservationIgnored var startObservation:
+        (
+            TranscriptStore, TimeZone, @escaping @Sendable () -> Date,
+            @escaping @Sendable (Error) -> Void,
+            @escaping @Sendable (StatsSnapshot) -> Void
+        ) -> TakesObservation? = {
+            store, zone, clock, onError, onChange in
+            store.observeStats(timeZone: zone, now: clock, onError: onError, onChange: onChange)
+        }
     /// Nil until the first load finishes.
     private(set) var snapshot: StatsSnapshot?
     private(set) var error: String?
@@ -110,22 +113,25 @@ import Observation
         let generation = lifecycleGeneration
         let clock = now
         scheduleRollover()
-        observation = startObservation(store, timeZoneProvider(), clock, { [weak self] error in
-            Log.app.error("stats observation failed: \(error.localizedDescription, privacy: .public)")
-            let message = error.localizedDescription
-            MainActor.assumeIsolated {
-                guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
-                self.apply(nil, failure: message)
-            }
-        }, { [weak self] snapshot in
-            MainActor.assumeIsolated {
-                guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
-                // Newer than any read already in flight, so a slower earlier one can't overwrite it.
-                self.issued += 1
-                self.applied = self.issued
-                self.apply(snapshot, failure: nil)
-            }
-        })
+        observation = startObservation(
+            store, timeZoneProvider(), clock,
+            { [weak self] error in
+                Log.app.error("stats observation failed: \(error.localizedDescription, privacy: .public)")
+                let message = error.localizedDescription
+                MainActor.assumeIsolated {
+                    guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
+                    self.apply(nil, failure: message)
+                }
+            },
+            { [weak self] snapshot in
+                MainActor.assumeIsolated {
+                    guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
+                    // Newer than any read already in flight, so a slower earlier one can't overwrite it.
+                    self.issued += 1
+                    self.applied = self.issued
+                    self.apply(snapshot, failure: nil)
+                }
+            })
     }
 
     private func apply(_ snapshot: StatsSnapshot?, failure: String?) {
@@ -157,8 +163,12 @@ import Observation
             rolloverObservers.append((center, center.addObserver(forName: name, object: nil, queue: .main, using: refresh)))
         }
         let workspace = NSWorkspace.shared.notificationCenter
-        rolloverObservers.append((workspace, workspace.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: refresh)))
+        rolloverObservers.append(
+            (
+                workspace,
+                workspace.addObserver(
+                    forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: refresh)
+            ))
 
         rolloverTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
@@ -175,8 +185,10 @@ import Observation
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZoneProvider()
         let current = now()
-        let midnight = calendar.nextDate(after: current, matching: DateComponents(hour: 0, minute: 0, second: 0),
-                                         matchingPolicy: .nextTime) ?? current.addingTimeInterval(3_600)
+        let midnight =
+            calendar.nextDate(
+                after: current, matching: DateComponents(hour: 0, minute: 0, second: 0),
+                matchingPolicy: .nextTime) ?? current.addingTimeInterval(3_600)
         return (.seconds(max(1, midnight.timeIntervalSince(current))), sleep)
     }
 }

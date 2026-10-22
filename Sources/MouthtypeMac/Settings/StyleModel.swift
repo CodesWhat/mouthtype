@@ -36,8 +36,7 @@ extension SettingsModel {
         let keys = member.kind == .app ? (bundleIDs ?? member.keys) : member.keys
         updateAppStyles { styles in
             styles.contexts.remove(member, keys: keys, from: context)
-            if member.kind == .app { keys.forEach { styles.remove(bundleID: $0) } }
-            else { keys.forEach { styles.removeWebsite(domain: $0) } }
+            if member.kind == .app { keys.forEach { styles.remove(bundleID: $0) } } else { keys.forEach { styles.removeWebsite(domain: $0) } }
         }
     }
 
@@ -61,7 +60,8 @@ extension SettingsModel {
             updateAppStyles { _ in throw StyleEditError.noBundleID }
             return
         }
-        let name = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+        let name =
+            bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? url.deletingPathExtension().lastPathComponent
         addContextApp(context, bundleID: bundleID, appName: name)

@@ -80,10 +80,11 @@ public enum PillDemo {
         try? await Task.sleep(for: .seconds(3.5 * scale))
 
         mark("long", controller)
-        controller.showMessage(PillMessage(
-            "The speech engine stopped responding while it was finishing the last dictation",
-            detail: "Restart Mouthtype to try again, and the audio will still be saved in history", isError: true
-        ), duration: 3.5)
+        controller.showMessage(
+            PillMessage(
+                "The speech engine stopped responding while it was finishing the last dictation",
+                detail: "Restart Mouthtype to try again, and the audio will still be saved in history", isError: true
+            ), duration: 3.5)
         try? await Task.sleep(for: .seconds(4 * scale))
 
         for (name, card) in [
@@ -105,7 +106,9 @@ public enum PillDemo {
     }
 
     static let sample = "Can you move the standup to three thirty and send Priya the updated agenda before the end of the day, thanks."
-    static let longSample = sample + " Also remind everyone that the quarterly numbers are due Friday, and ask Marcus whether the vendor call is still on for Monday morning. If it is not, push the review to Tuesday and tell the team. One more thing, the budget sheet needs the new line items before it goes out, and Dana should confirm the travel dates with the venue by Wednesday at the latest."
+    static let longSample =
+        sample
+        + " Also remind everyone that the quarterly numbers are due Friday, and ask Marcus whether the vendor call is still on for Monday morning. If it is not, push the review to Tuesday and tell the team. One more thing, the budget sheet needs the new line items before it goes out, and Dana should confirm the travel dates with the venue by Wednesday at the latest."
 
     /// Clicks Copy on a failure card and Undo on a cancelled one with synthetic mouse events while another app is
     /// frontmost, logging what fired, the clipboard and the frontmost app.
@@ -182,7 +185,9 @@ public enum PillDemo {
             post(.mouseMoved, at: point)
             try? await Task.sleep(for: .milliseconds(400))
             let at = NSEvent.mouseLocation
-            Log.app.info("pill-demo click-test pointer \(Int(at.x), privacy: .public),\(Int(at.y), privacy: .public) panel \(Int(origin.x), privacy: .public),\(Int(origin.y), privacy: .public) frames \(String(describing: frames), privacy: .public)")
+            Log.app.info(
+                "pill-demo click-test pointer \(Int(at.x), privacy: .public),\(Int(at.y), privacy: .public) panel \(Int(origin.x), privacy: .public),\(Int(origin.y), privacy: .public) frames \(String(describing: frames), privacy: .public)"
+            )
             Log.app.info("pill-demo click-test over \(name, privacy: .public) ignoresMouseEvents \(controller.panel.ignoresMouseEvents, privacy: .public)")
             CGWarpMouseCursorPosition(point)
             post(.leftMouseDown, at: point)
@@ -223,10 +228,11 @@ public enum PillDemo {
         var t = 0.4
         for k in 0..<80 {
             let length = 0.18 + 0.22 * unit(k, 1)
-            list.append(DemoWord(
-                start: t, length: length, syllables: 1 + Int(unit(k, 2) * 2.99),
-                peakDb: Float(-34 + 14 * unit(k, 3)), hissy: unit(k, 4) > 0.8
-            ))
+            list.append(
+                DemoWord(
+                    start: t, length: length, syllables: 1 + Int(unit(k, 2) * 2.99),
+                    peakDb: Float(-34 + 14 * unit(k, 3)), hissy: unit(k, 4) > 0.8
+                ))
             t += length + 0.1 + 0.2 * unit(k, 5) + (k % 6 == 5 ? 0.45 : 0)
         }
         return list

@@ -246,7 +246,8 @@ private final class FakeClipboard: ClipboardWriting {
         let offer = DeliveryCard.recoverOffer(seconds: 12, ago: 125, older: 0)
         #expect(offer.header == "Recover your last dictation?\n12 seconds, 2 minutes ago")
         #expect(offer.actions == [.recover, .discard] && offer.countdown == nil && offer.kind.isQuiet)
-        #expect(DeliveryCard.recoverOffer(seconds: 61, ago: 30, older: 2).header
+        #expect(
+            DeliveryCard.recoverOffer(seconds: 61, ago: 30, older: 2).header
                 == "Recover your last dictation?\n1 minute 1 second, just now\nand 2 older ones in Saved Recordings")
         #expect(DeliveryCard.recoverOffer(seconds: 1, ago: 7200, older: 1).header.hasSuffix("1 second, 2 hours ago\nand 1 older one in Saved Recordings"))
         let mic = DeliveryCard.micDisconnected(seconds: 7.4)
@@ -330,10 +331,11 @@ private final class FakeClipboard: ClipboardWriting {
         var fired = 0
         button.onClick = { fired += 1 }
         func event(_ type: NSEvent.EventType, at point: CGPoint) throws -> NSEvent {
-            try #require(NSEvent.mouseEvent(
-                with: type, location: point, modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
-                context: nil, eventNumber: 0, clickCount: 1, pressure: 1
-            ))
+            try #require(
+                NSEvent.mouseEvent(
+                    with: type, location: point, modifierFlags: [], timestamp: 0, windowNumber: panel.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+                ))
         }
         let inside = button.convert(CGPoint(x: 32, y: 13), to: nil)
         #expect(button.acceptsFirstMouse(for: nil) && !button.mouseDownCanMoveWindow)

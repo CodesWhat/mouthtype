@@ -21,8 +21,9 @@ public struct FnGuardArguments: Equatable, Sendable {
     /// `arguments` is the full argv, program name first. Usages are decimal or 0x-prefixed hex.
     public static func parse(_ arguments: [String]) -> FnGuardArguments? {
         guard arguments.count == 4 || arguments.count == 5,
-              let pid = Int32(arguments[1]), pid > 1,
-              let src = usageValue(arguments[2]), let dst = usageValue(arguments[3]) else { return nil }
+            let pid = Int32(arguments[1]), pid > 1,
+            let src = usageValue(arguments[2]), let dst = usageValue(arguments[3])
+        else { return nil }
         var displaced: FnRemapMapping.Entry?
         if arguments.count == 5 {
             guard let value = usageValue(arguments[4]) else { return nil }

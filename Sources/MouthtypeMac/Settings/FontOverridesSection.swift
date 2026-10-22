@@ -9,16 +9,21 @@ struct FontOverridesSection: View {
     private var typography: Typography { Typography(choice: model.font, overrides: model.fontOverrides) }
 
     var body: some View {
-        DesignSection(eyebrow: "Font overrides",
-            footer: model.fontOverrides.enabled ? "Switching overrides off keeps your choices. Hi-Fi\u{2019}s bitmap readouts keep their own artwork." : nil) {
+        DesignSection(
+            eyebrow: "Font overrides",
+            footer: model.fontOverrides.enabled ? "Switching overrides off keeps your choices. Hi-Fi\u{2019}s bitmap readouts keep their own artwork." : nil
+        ) {
             rows
         }
     }
 
     @ViewBuilder var rows: some View {
-        DesignRow(title: "Override individual fonts",
-            detail: model.fontOverrides.enabled ? "Use the base text font, or choose a family for each part."
-                : "Separate heading, body and readout families. Turn it on to pick each one.") {
+        DesignRow(
+            title: "Override individual fonts",
+            detail: model.fontOverrides.enabled
+                ? "Use the base text font, or choose a family for each part."
+                : "Separate heading, body and readout families. Turn it on to pick each one."
+        ) {
             Toggle("Override individual fonts", isOn: Binding(get: { model.fontOverrides.enabled }, set: model.setFontOverridesEnabled))
                 .labelsHidden().toggleStyle(.designSwitch).accessibilityIdentifier("settings-font-overrides")
         }
@@ -53,12 +58,16 @@ struct FontOverridesSection: View {
         var choices = [DesignChoice("Use base font", Self.baseFont)]
         if let family, unavailable { choices.append(DesignChoice(family, family)) }
         choices += model.fontFamilies.map { DesignChoice($0, $0) }
-        return DesignRow(title: group.title,
-            detail: unavailable ? "Unavailable. Using the base font." : nil) {
-            DesignPopup(title: "Choose \(group.title.lowercased()) font",
-                        selection: Binding(get: { family ?? Self.baseFont }, set: { model.setFontFamily($0.isEmpty ? nil : $0, for: group) }),
-                        choices: choices)
-                .accessibilityIdentifier("settings-font-" + group.rawValue)
+        return DesignRow(
+            title: group.title,
+            detail: unavailable ? "Unavailable. Using the base font." : nil
+        ) {
+            DesignPopup(
+                title: "Choose \(group.title.lowercased()) font",
+                selection: Binding(get: { family ?? Self.baseFont }, set: { model.setFontFamily($0.isEmpty ? nil : $0, for: group) }),
+                choices: choices
+            )
+            .accessibilityIdentifier("settings-font-" + group.rawValue)
         }
     }
 }

@@ -176,7 +176,9 @@ struct DesignSwitchStyle: ToggleStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let width: CGFloat = compact ? 36 : 42, height: CGFloat = compact ? 20 : 24, knob = height - 4
-        Button { configuration.isOn.toggle() } label: {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
             ZStack(alignment: configuration.isOn ? .trailing : .leading) {
                 if configuration.isOn {
                     Capsule().fill(DesignPalette.accentMark)
@@ -247,7 +249,9 @@ struct DesignSegmented<Value: Hashable>: View {
         HStack(spacing: 2) {
             ForEach(choices) { choice in
                 let selected = choice.value == selection
-                Button { selection = choice.value } label: {
+                Button {
+                    selection = choice.value
+                } label: {
                     HStack(spacing: 6) {
                         if let dot = choice.dot { Circle().fill(dot).frame(width: 9, height: 9) }
                         Text(choice.label).font(DesignFont.sans(DesignFont.detail, selected ? .medium : .regular))

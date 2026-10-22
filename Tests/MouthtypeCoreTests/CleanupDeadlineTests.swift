@@ -37,11 +37,13 @@ private final class CancellationWake: @unchecked Sendable {
         let work = Task { await gate.stream.first(where: { _ in true }) }
         let timer = CancellationWake()
         let result = Task {
-            let completed = await SmartCleanup.waitForCompletion(work, sleep: { try await timer.sleep() }, cancelTimer: {
-                $0.cancel()
-                // Let the awakened timer settle before the completing watcher continues.
-                _ = timer.returned.wait(timeout: .now() + 2)
-            })
+            let completed = await SmartCleanup.waitForCompletion(
+                work, sleep: { try await timer.sleep() },
+                cancelTimer: {
+                    $0.cancel()
+                    // Let the awakened timer settle before the completing watcher continues.
+                    _ = timer.returned.wait(timeout: .now() + 2)
+                })
             timer.returned.signal()
             return completed
         }
@@ -58,9 +60,11 @@ private final class CancellationWake: @unchecked Sendable {
     @Test func actualDeadlineReturnsWhileUncooperativeWorkIsStillWaiting() async throws {
         let gate = AsyncStream<Void>.makeStream()
         let work = Task { await gate.stream.first(where: { _ in true }) }
-        let completed = await SmartCleanup.waitForCompletion(work, sleep: {
-            try await ContinuousClock().sleep(for: .milliseconds(5))
-        })
+        let completed = await SmartCleanup.waitForCompletion(
+            work,
+            sleep: {
+                try await ContinuousClock().sleep(for: .milliseconds(5))
+            })
         #expect(!completed)
         #expect(!work.isCancelled)
         gate.continuation.yield(())

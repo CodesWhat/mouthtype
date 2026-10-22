@@ -16,7 +16,8 @@ struct EngineWorker: AsyncParsableCommand {
     @Flag(help: "Use the English hint enabled by the Mac app.") var englishHint = false
 
     func run() async throws {
-        var output = WorkerOutput(engineID: engine, displayName: engine, prepare: nil, peakRSSBytes: 0, peakFootprintBytes: nil, firstTranscribeMs: nil, modelBytes: nil, modelPath: nil, clips: [], error: nil)
+        var output = WorkerOutput(
+            engineID: engine, displayName: engine, prepare: nil, peakRSSBytes: 0, peakFootprintBytes: nil, firstTranscribeMs: nil, modelBytes: nil, modelPath: nil, clips: [], error: nil)
         do {
             let transcriber = try EngineCatalog.make(id: engine, englishHint: englishHint)
             output.displayName = transcriber.displayName
@@ -67,19 +68,20 @@ struct EngineWorker: AsyncParsableCommand {
             }
             let median = Stats.median(latencies)
             let counts = TextMetrics.errorCounts(reference: clip.reference, hypothesis: hypothesis)
-            results.append(ClipResult(
-                name: clip.name,
-                set: ClipSet(clipName: clip.name),
-                audioSeconds: audioSeconds,
-                latenciesMs: latencies,
-                medianMs: median,
-                p95Ms: Stats.percentile(latencies, 95),
-                rtfx: median > 0 ? audioSeconds / (median / 1000) : 0,
-                reference: clip.reference,
-                hypothesis: hypothesis,
-                edits: counts.edits,
-                referenceWords: counts.referenceWords
-            ))
+            results.append(
+                ClipResult(
+                    name: clip.name,
+                    set: ClipSet(clipName: clip.name),
+                    audioSeconds: audioSeconds,
+                    latenciesMs: latencies,
+                    medianMs: median,
+                    p95Ms: Stats.percentile(latencies, 95),
+                    rtfx: median > 0 ? audioSeconds / (median / 1000) : 0,
+                    reference: clip.reference,
+                    hypothesis: hypothesis,
+                    edits: counts.edits,
+                    referenceWords: counts.referenceWords
+                ))
         }
         return (results, firstTranscribeMs)
     }
@@ -91,9 +93,11 @@ struct EngineWorker: AsyncParsableCommand {
     }
 
     static func directorySize(_ url: URL) -> Int? {
-        guard let enumerator = FileManager.default.enumerator(
-            at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]
-        ) else { return nil }
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]
+            )
+        else { return nil }
         var total = 0
         for case let file as URL in enumerator {
             let values = try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey])

@@ -78,7 +78,8 @@ public enum CorrectionLearner {
                 continue
             }
             guard looksLikeVocabularyFix(heard: before, corrected: after, heardWords: gap.original.count, correctedWords: gap.edited.count),
-                  seen.insert(beforeKey + "\u{1F}" + afterKey).inserted else { continue }
+                seen.insert(beforeKey + "\u{1F}" + afterKey).inserted
+            else { continue }
             result.proposals.append(CorrectionProposal(heard: before, corrected: after))
         }
         return result
@@ -144,7 +145,8 @@ public enum CorrectionLearner {
         }
         var bestEnd = 0
         for j in 1...m {
-            let better = cost[j] < cost[bestEnd]
+            let better =
+                cost[j] < cost[bestEnd]
                 || (cost[j] == cost[bestEnd] && j - Int(start[j]) > bestEnd - Int(start[bestEnd]))
             if better { bestEnd = j }
         }

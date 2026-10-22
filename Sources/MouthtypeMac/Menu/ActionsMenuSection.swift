@@ -8,8 +8,10 @@ import AppKit
     private let copyItem = NSMenuItem(title: "Copy Last Take", action: nil, keyEquivalent: "c")
     var items: [NSMenuItem] { [pasteItem, copyItem] }
 
-    init(defaults: UserDefaults = .standard,
-         onPasteLast: @escaping @MainActor () -> Void, onCopyLast: @escaping @MainActor () -> Void) {
+    init(
+        defaults: UserDefaults = .standard,
+        onPasteLast: @escaping @MainActor () -> Void, onCopyLast: @escaping @MainActor () -> Void
+    ) {
         self.defaults = defaults
         self.onPasteLast = onPasteLast
         self.onCopyLast = onCopyLast

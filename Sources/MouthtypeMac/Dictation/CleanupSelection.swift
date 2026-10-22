@@ -25,9 +25,11 @@ final class CleanupSelection: CleanupModelManaging, CleanupModelListing {
     /// The level each take is holding a model for, from its recording start until its cleanup ends.
     private var holds: [String: CleanupLevel] = [:]
 
-    init(fast: any SmartModel, thorough: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-         budget: (@Sendable (Int) -> Duration)? = nil,
-         idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay) {
+    init(
+        fast: any SmartModel, thorough: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
+        budget: (@Sendable (Int) -> Duration)? = nil,
+        idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay
+    ) {
         let demand = CleanupDemand(level: level)
         self.demand = demand
         self.fast = CleanerHost(model: fast, level: { demand.wanted(.light) }, budget: budget, idleUnloadDelay: idleUnloadDelay)
@@ -48,7 +50,8 @@ final class CleanupSelection: CleanupModelManaging, CleanupModelListing {
     func cleanupModels() -> [CleanupModelStatus] {
         [CleanupLevel.light, .medium].map { level in
             let host = host(for: level)
-            return CleanupModelStatus(level: level, name: host.modelName, sizeMB: host.downloadSizeMB,
+            return CleanupModelStatus(
+                level: level, name: host.modelName, sizeMB: host.downloadSizeMB,
                 status: host.downloadStatus, selected: demand.level() == level)
         }
     }

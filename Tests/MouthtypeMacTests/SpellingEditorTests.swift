@@ -51,10 +51,12 @@ import MouthtypeCore
         #expect(editor.isDirty && editor.canSave)
         editor.save()
         #expect(!editor.isEditing && !editor.isDirty)
-        #expect(try store.allRules() == [
-            DictionaryRule(heard: "mouth type", written: "Mouthtype"),
-            DictionaryRule(heard: "shaun", written: "Sean", starred: true),
-            DictionaryRule(heard: "shorn", written: "Sean", starred: true)])
+        #expect(
+            try store.allRules() == [
+                DictionaryRule(heard: "mouth type", written: "Mouthtype"),
+                DictionaryRule(heard: "shaun", written: "Sean", starred: true),
+                DictionaryRule(heard: "shorn", written: "Sean", starred: true),
+            ])
     }
 
     @Test func newWordWithoutAHeardFormFixesTheWrittenFormOnly() throws {

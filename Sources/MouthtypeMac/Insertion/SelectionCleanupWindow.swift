@@ -9,17 +9,20 @@ import SwiftUI
     init(model: SelectionCleanupModel, maximumContentHeight: CGFloat? = nil) {
         self.model = model
         self.maximumContentHeight = max(260, min(620, maximumContentHeight ?? ((NSScreen.main?.visibleFrame.height ?? 684) - 64)))
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 640, height: 300),
-                            styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
+        let panel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 640, height: 300),
+            styleMask: [.titled, .closable, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.title = "Transform Selection"
         panel.isReleasedWhenClosed = false
         panel.hidesOnDeactivate = false
         panel.level = .floating
         super.init(window: panel)
         panel.delegate = self
-        panel.contentView = NSHostingView(rootView: SelectionCleanupView(model: model,
-            maximumContentHeight: self.maximumContentHeight,
-            close: { [weak self] in self?.close() }, resize: { [weak self] in self?.resizeToFitContent() }))
+        panel.contentView = NSHostingView(
+            rootView: SelectionCleanupView(
+                model: model,
+                maximumContentHeight: self.maximumContentHeight,
+                close: { [weak self] in self?.close() }, resize: { [weak self] in self?.resizeToFitContent() }))
         resizeToFitContent()
         panel.center()
     }
@@ -64,15 +67,20 @@ struct SelectionCleanupView: View {
                     Text(Self.originalText(model.original, result: model.result))
                         .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.ink2).textSelection(.enabled)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                }.frame(height: textHeight(model.original, width: 592, minimum: compact ? 18 : 22,
-                                           maximum: max(22, min(120, (maximumContentHeight - 240) / 3))))
+                }.frame(
+                    height: textHeight(
+                        model.original, width: 592, minimum: compact ? 18 : 22,
+                        maximum: max(22, min(120, (maximumContentHeight - 240) / 3))))
             }
             VStack(alignment: .leading, spacing: 4) {
                 if !compact { Text("Result · edit it before you accept").designEyebrow() }
                 TextEditor(text: resultBinding).font(DesignFont.sans(Self.bodySize)).foregroundStyle(DesignPalette.ink)
                     .scrollContentBackground(.hidden).disabled(!model.isEditable)
-                    .frame(height: textHeight(model.result, width: 580, minimum: 44,
-                                              maximum: max(44, min(240, (maximumContentHeight - 240) * 2 / 3 - 12))))
+                    .frame(
+                        height: textHeight(
+                            model.result, width: 580, minimum: 44,
+                            maximum: max(44, min(240, (maximumContentHeight - 240) * 2 / 3 - 12)))
+                    )
                     .padding(.horizontal, 6).padding(.vertical, 2)
                     .background(DesignPalette.surface, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignPalette.hair, lineWidth: 1))
@@ -118,8 +126,9 @@ struct SelectionCleanupView: View {
 
     private var chips: some View {
         HStack(spacing: 6) {
-            TransformChip(title: "Clean up", active: model.transform == nil, enabled: model.canChooseBasic,
-                          action: model.chooseBasic)
+            TransformChip(
+                title: "Clean up", active: model.transform == nil, enabled: model.canChooseBasic,
+                action: model.chooseBasic)
             ForEach(TextTransform.allCases, id: \.self) { kind in
                 TransformChip(title: kind.chipTitle, active: model.transform == kind, enabled: model.canChooseTransform) {
                     model.choose(kind)
@@ -169,8 +178,9 @@ struct SelectionCleanupView: View {
 
     private func textHeight(_ text: String, width: CGFloat, minimum: CGFloat, maximum: CGFloat) -> CGFloat {
         let bounds = NSAttributedString(string: text + " ", attributes: [.font: NSFont.systemFont(ofSize: Self.bodySize)])
-            .boundingRect(with: NSSize(width: width, height: .greatestFiniteMagnitude),
-                          options: [.usesLineFragmentOrigin, .usesFontLeading])
+            .boundingRect(
+                with: NSSize(width: width, height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading])
         return min(maximum, max(minimum, ceil(bounds.height) + 8))
     }
 }

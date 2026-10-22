@@ -96,14 +96,14 @@ import MouthtypeCore
 @Suite struct JudgeParserTests {
     @Test func parsesCannedResponse() throws {
         let reply = """
-        Here are the grades:
-        ```json
-        [
-          {"id": "1", "meaning": 1, "did_not_obey": 1, "fillers_and_corrections": 2, "formatting": 2, "over_editing": 2},
-          {"id": "2", "meaning": 1, "did_not_obey": 0, "fillers_and_corrections": 1, "formatting": 0, "over_editing": 1}
-        ]
-        ```
-        """
+            Here are the grades:
+            ```json
+            [
+              {"id": "1", "meaning": 1, "did_not_obey": 1, "fillers_and_corrections": 2, "formatting": 2, "over_editing": 2},
+              {"id": "2", "meaning": 1, "did_not_obey": 0, "fillers_and_corrections": 1, "formatting": 0, "over_editing": 1}
+            ]
+            ```
+            """
         let parsed = try JudgeResponseParser.parse(reply)
         #expect(parsed.count == 2)
         #expect(parsed["1"] == Judgment(meaning: 1, didNotObey: 1, fillersAndCorrections: 2, formatting: 2, overEditing: 2))
@@ -133,8 +133,11 @@ import MouthtypeCore
     @Test func comparisonControlsReachTheModelWithoutReplacingDestination() async throws {
         let base = FakeCleaner { text, _ in text }
         let observed = ObservedCleaner(base, styling: .semiCasual, structure: .prose)
-        _ = try await observed.clean("hello there", context: CleanupContext(s1Controls:
-            S1MiniControls(destination: .email)))
+        _ = try await observed.clean(
+            "hello there",
+            context: CleanupContext(
+                s1Controls:
+                    S1MiniControls(destination: .email)))
         #expect(base.contexts.first?.s1Controls == S1MiniControls(styling: .semiCasual, structure: .prose, destination: .email))
     }
 
@@ -174,7 +177,9 @@ import MouthtypeCore
     }
 
     @Test func recordsIncludeDeterministicAndTotalCleanupTime() throws {
-        let data = Data(#"{"id":"t","cleanerID":"s1","level":"light","input":"G P U","deterministic":"GPU","delivered":"GPU","outcome":"skipped","milliseconds":0,"deterministicMilliseconds":0.5,"totalCleanupMilliseconds":0.7}"#.utf8)
+        let data = Data(
+            #"{"id":"t","cleanerID":"s1","level":"light","input":"G P U","deterministic":"GPU","delivered":"GPU","outcome":"skipped","milliseconds":0,"deterministicMilliseconds":0.5,"totalCleanupMilliseconds":0.7}"#
+                .utf8)
         let record = try JSONDecoder().decode(SmartDeliveryRecord.self, from: data)
         let encoded = try JSONEncoder().encode(record)
         let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])

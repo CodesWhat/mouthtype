@@ -19,8 +19,9 @@ struct StatsHostPage: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let snapshot = model.snapshot, Self.showsTape(snapshot) {
                     TimelineView(.periodic(from: .now, by: 60)) { context in
-                        StatsTapeCard(takes: snapshot.todayTakes, nowSeconds: StatsTimeline.secondsIntoDay(of: context.date, in: .autoupdatingCurrent),
-                                      typingWPM: snapshot.report.typingWPM)
+                        StatsTapeCard(
+                            takes: snapshot.todayTakes, nowSeconds: StatsTimeline.secondsIntoDay(of: context.date, in: .autoupdatingCurrent),
+                            typingWPM: snapshot.report.typingWPM)
                     }
                 }
                 DesignSection(eyebrow: "STATS") {
@@ -46,10 +47,12 @@ struct StatsPage: View {
         VStack(alignment: .leading, spacing: 16) {
             StatsHeroCard(report: report)
             StatsTapeCard(takes: snapshot.todayTakes, nowSeconds: nowSeconds, typingWPM: report.typingWPM)
-            pair(left: { StatsSpeedCard(report: report) },
-                 right: { StatsStreakCard(daily: snapshot.daily, current: report.currentStreakDays, longest: report.longestStreakDays) })
-            pair(left: { StatsDayCard(hourly: snapshot.hourlyWords) },
-                 right: { StatsHighScoresCard(records: snapshot.records, today: today) })
+            pair(
+                left: { StatsSpeedCard(report: report) },
+                right: { StatsStreakCard(daily: snapshot.daily, current: report.currentStreakDays, longest: report.longestStreakDays) })
+            pair(
+                left: { StatsDayCard(hourly: snapshot.hourlyWords) },
+                right: { StatsHighScoresCard(records: snapshot.records, today: today) })
             Text("Worked out on this Mac. Nothing is sent anywhere.")
                 .font(DesignFont.sans(11)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.leading, 4)
@@ -60,7 +63,9 @@ struct StatsPage: View {
     private var nowSeconds: Int { StatsTimeline.secondsIntoDay(of: now, in: timeZone) }
 
     private func pair<Left: View, Right: View>(@ViewBuilder left: () -> Left, @ViewBuilder right: () -> Right) -> some View {
-        StatsPair { left(); right() }
+        StatsPair {
+            left(); right()
+        }
     }
 }
 
@@ -86,8 +91,9 @@ struct StatsPair: Layout {
         if sideBySide(ProposedViewSize(width: bounds.width, height: nil)) {
             let each = (bounds.width - Self.spacing) / 2
             for (index, view) in subviews.enumerated() {
-                view.place(at: CGPoint(x: bounds.minX + CGFloat(index) * (each + Self.spacing), y: bounds.minY), anchor: .topLeading,
-                           proposal: ProposedViewSize(width: each, height: bounds.height))
+                view.place(
+                    at: CGPoint(x: bounds.minX + CGFloat(index) * (each + Self.spacing), y: bounds.minY), anchor: .topLeading,
+                    proposal: ProposedViewSize(width: each, height: bounds.height))
             }
         } else {
             var y = bounds.minY
@@ -139,8 +145,12 @@ struct StatsHeroCard: View {
     var body: some View {
         StatsCard(padding: EdgeInsets(top: 18, leading: 20, bottom: 18, trailing: 20)) {
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .center, spacing: 24) { counterBlock; Spacer(minLength: 0); savedBlock(alignment: .trailing) }
-                VStack(alignment: .leading, spacing: 16) { counterBlock; savedBlock(alignment: .leading) }
+                HStack(alignment: .center, spacing: 24) {
+                    counterBlock; Spacer(minLength: 0); savedBlock(alignment: .trailing)
+                }
+                VStack(alignment: .leading, spacing: 16) {
+                    counterBlock; savedBlock(alignment: .leading)
+                }
             }
         }
         .accessibilityElement(children: .combine)
@@ -307,8 +317,10 @@ enum TapeSlots {
                 last.take = nil
                 slots[slots.count - 1] = last
             } else {
-                slots.append(TapeSlot(x: x, count: 1, words: take.words, hollow: take.hasTranscript ? 0 : 1,
-                                      firstSeconds: take.secondsIntoDay, lastSeconds: take.secondsIntoDay, take: take))
+                slots.append(
+                    TapeSlot(
+                        x: x, count: 1, words: take.words, hollow: take.hasTranscript ? 0 : 1,
+                        firstSeconds: take.secondsIntoDay, lastSeconds: take.secondsIntoDay, take: take))
             }
         }
         return slots
@@ -348,9 +360,15 @@ struct StatsTapeCard: View {
                 }
                 tape.padding(.top, 14)
                 ViewThatFits(in: .horizontal) {
-                    HStack(alignment: .center, spacing: 14) { readouts(summary); Spacer(minLength: 0); legend }
-                    VStack(alignment: .leading, spacing: 8) { HStack(spacing: 14) { readouts(summary) }; legend }
-                    VStack(alignment: .leading, spacing: 8) { readouts(summary); legend }
+                    HStack(alignment: .center, spacing: 14) {
+                        readouts(summary); Spacer(minLength: 0); legend
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack(spacing: 14) { readouts(summary) }; legend
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        readouts(summary); legend
+                    }
                 }
             }
         }
@@ -601,8 +619,9 @@ struct StatsStreakCard: View {
                             Circle().fill(dotColor(index, lit: lit))
                                 .aspectRatio(1, contentMode: .fit)
                                 .frame(minWidth: 0)
-                                .overlay(index == daily.count - 1 && daily[index].words == 0
-                                         ? Circle().strokeBorder(DesignPalette.accentMark, lineWidth: 1.5).background(Circle().fill(DesignPalette.surface)) : nil)
+                                .overlay(
+                                    index == daily.count - 1 && daily[index].words == 0
+                                        ? Circle().strokeBorder(DesignPalette.accentMark, lineWidth: 1.5).background(Circle().fill(DesignPalette.surface)) : nil)
                         }
                     }
                     .padding(.horizontal, 2)
@@ -701,12 +720,15 @@ struct StatsDayCard: View {
                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .bottom)
             }
             .frame(minHeight: 64, maxHeight: .infinity)
-            HStack { Text("12 AM"); Spacer(); Text("NOON"); Spacer(); Text("11 PM") }
-                .font(DesignFont.mono(DesignFont.axis)).tracking(0.5).foregroundStyle(DesignPalette.ink3)
+            HStack {
+                Text("12 AM"); Spacer(); Text("NOON"); Spacer(); Text("11 PM")
+            }
+            .font(DesignFont.mono(DesignFont.axis)).tracking(0.5).foregroundStyle(DesignPalette.ink3)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(peak.map { "Words by hour of day over the last \(StatsTimeline.hourWindowDays) days, peaking at \(StatsFormat.hourName($0))" }
-                            ?? "Words by hour of day over the last \(StatsTimeline.hourWindowDays) days, no takes")
+        .accessibilityLabel(
+            peak.map { "Words by hour of day over the last \(StatsTimeline.hourWindowDays) days, peaking at \(StatsFormat.hourName($0))" }
+                ?? "Words by hour of day over the last \(StatsTimeline.hourWindowDays) days, no takes")
     }
 }
 
@@ -723,8 +745,9 @@ struct StatsHighScoresCard: View {
                 score("01", "Fastest speaking", records.wpm.map { "\(Int($0.value.rounded())) WPM" }, records.wpm?.setOn)
                 score("02", "Biggest day", records.biggestDay.map { StatsFormat.number($0.value) }, records.biggestDay?.setOn)
                 score("03", "Longest streak", records.longestStreak.map { StatsFormat.days($0.value).uppercased() }, records.longestStreak?.setOn)
-                score("04", "Longest take", records.longestDictation.map { StatsFormat.number($0.value.words) }, records.longestDictation?.setOn,
-                      extra: StatsFormat.speaking(ms: records.longestDictation?.value.durationMs))
+                score(
+                    "04", "Longest take", records.longestDictation.map { StatsFormat.number($0.value.words) }, records.longestDictation?.setOn,
+                    extra: StatsFormat.speaking(ms: records.longestDictation?.value.durationMs))
             }
         }
     }

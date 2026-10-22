@@ -28,8 +28,7 @@ import UniformTypeIdentifiers
         panel.nameFieldStringValue = (model.filename as NSString).deletingPathExtension + ".txt"
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
-            do { try model.save(to: url) }
-            catch {
+            do { try model.save(to: url) } catch {
                 let alert = NSAlert()
                 alert.messageText = "Couldn't save the transcript"
                 alert.informativeText = error.localizedDescription

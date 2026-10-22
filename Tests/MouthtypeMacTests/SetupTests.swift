@@ -6,7 +6,8 @@ import MouthtypeCore
 
 @MainActor @Suite struct SetupTests {
     private var ready: SetupReadiness {
-        SetupReadiness(microphone: .authorized, accessibility: true, input: .listening,
+        SetupReadiness(
+            microphone: .authorized, accessibility: true, input: .listening,
             speech: .ready(engineID: "parakeet-tdt-v3", loadSeconds: 1), captureReady: true)
     }
 
@@ -96,7 +97,7 @@ import MouthtypeCore
         diagnostics.accessibilityGranted = true
         diagnostics.hotkeyHealth = .listening
         _ = try await model.microphone.prepare { true }
-        #expect(!model.readiness.isReady) // Speech still loading.
+        #expect(!model.readiness.isReady)  // Speech still loading.
         diagnostics.globe = GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true)
         #expect(model.readiness.globeConflict)
         diagnostics.remapChecked = true

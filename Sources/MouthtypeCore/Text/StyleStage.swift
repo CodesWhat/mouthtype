@@ -156,7 +156,8 @@ public struct StyleStage: Sendable {
         guard e >= 1, chars[e] == ".", chars[e - 1] != ".", chars[e - 1] != "\u{2026}" else { return nil }
         guard !hasListLine(chars) else { return nil }
         guard TextMetrics.wordCount(String(chars)) < Self.shortMessageWords,
-              sentenceCount(chars, upTo: e) <= Self.shortMessageSentences else { return nil }
+            sentenceCount(chars, upTo: e) <= Self.shortMessageSentences
+        else { return nil }
 
         var tokenStart = e
         while tokenStart > 0, !chars[tokenStart - 1].isWhitespace { tokenStart -= 1 }

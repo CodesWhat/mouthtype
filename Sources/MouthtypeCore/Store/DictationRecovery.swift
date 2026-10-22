@@ -71,10 +71,11 @@ public enum DictationRecovery {
                 lost += 1
                 continue
             }
-            recoverable.append(RecoverableDictation(
-                id: row.id, startedAt: Date(timeIntervalSince1970: row.startedAt), audioURL: audio.url,
-                seconds: audio.seconds, isPartial: audio.url == archive.partialURL(for: row.id)
-            ))
+            recoverable.append(
+                RecoverableDictation(
+                    id: row.id, startedAt: Date(timeIntervalSince1970: row.startedAt), audioURL: audio.url,
+                    seconds: audio.seconds, isPartial: audio.url == archive.partialURL(for: row.id)
+                ))
         }
         var newest = recoverable.first
         if let latestTerminalStart, let candidate = newest, latestTerminalStart > candidate.startedAt { newest = nil }

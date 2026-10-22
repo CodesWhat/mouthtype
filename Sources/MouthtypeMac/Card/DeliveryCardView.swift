@@ -21,9 +21,10 @@ class CardControlView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(
-            rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil
-        ))
+        addTrackingArea(
+            NSTrackingArea(
+                rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil
+            ))
     }
 
     override func mouseEntered(with event: NSEvent) { set(hovered: true, pressed: isPressed) }
@@ -286,7 +287,8 @@ final class DeliveryCardView: NSView {
     }
 
     private func resolvePalette() {
-        glassDecision = style == .glass && !embedded
+        glassDecision =
+            style == .glass && !embedded
             ? GlassPillPolicy.decide(
                 materialAvailable: environment.materialAvailable(), reduceTransparency: environment.reduceTransparency(),
                 backdrop: backdrop
@@ -373,12 +375,13 @@ final class DeliveryCardView: NSView {
         for action in card.actions {
             labels[action] = Self.labels(for: action, in: new, primary: card.actions.first == action, palette: palette, buttonFont: buttonFont, numericFont: numericFont, remaining: card.countdown)
         }
-        let layout = CardLayout.make(.init(
-            headerTextHeight: headerHeight, headerLineHeight: Typography.lineHeight(headerFont),
-            transcriptTextHeight: transcriptHeight, transcriptLineHeight: lineHeight,
-            buttonLabelWidths: card.actions.map { action in (labels[action] ?? []).map { $0.size().width }.max() ?? 0 },
-            hasCountdownBar: card.countdown != nil && !embedded, maxHeight: embedded ? maxFaceHeight : nil
-        ), scale: k, showsDot: palette.showsDot)
+        let layout = CardLayout.make(
+            .init(
+                headerTextHeight: headerHeight, headerLineHeight: Typography.lineHeight(headerFont),
+                transcriptTextHeight: transcriptHeight, transcriptLineHeight: lineHeight,
+                buttonLabelWidths: card.actions.map { action in (labels[action] ?? []).map { $0.size().width }.max() ?? 0 },
+                hasCountdownBar: card.countdown != nil && !embedded, maxHeight: embedded ? maxFaceHeight : nil
+            ), scale: k, showsDot: palette.showsDot)
         frames = layout
 
         let margin = embedded ? 0 : CardLayout.shadowMargin * k
@@ -545,10 +548,12 @@ final class DeliveryCardView: NSView {
         guard let state, let layout = frames, let remaining, let total = state.card.countdown else { return }
         if !state.copied {
             for entry in buttons where entry.action == .undo {
-                entry.view.label = Self.labels(
-                    for: .undo, in: state, primary: state.card.actions.first == .undo, palette: palette, buttonFont: typography.font(.button, scale: k), numericFont: typography.font(.numeric, scale: k),
-                    remaining: remaining
-                )[0]
+                entry.view.label =
+                    Self.labels(
+                        for: .undo, in: state, primary: state.card.actions.first == .undo, palette: palette, buttonFont: typography.font(.button, scale: k),
+                        numericFont: typography.font(.numeric, scale: k),
+                        remaining: remaining
+                    )[0]
                 entry.view.needsDisplay = true
             }
         }
@@ -613,9 +618,12 @@ final class DeliveryCardView: NSView {
         let plain: [NSAttributedString.Key: Any] = [.font: bodyFont, .foregroundColor: palette.body, .paragraphStyle: style]
         let bold = NSFont(descriptor: emphasis.fontDescriptor, size: bodyFont.pointSize) ?? bodyFont
         let result = NSMutableAttributedString(string: "\(pair.heard) \u{2192} ", attributes: plain)
-        result.append(NSAttributedString(string: pair.corrected, attributes: [
-            .font: bold, .foregroundColor: palette.emphasis, .paragraphStyle: style,
-        ]))
+        result.append(
+            NSAttributedString(
+                string: pair.corrected,
+                attributes: [
+                    .font: bold, .foregroundColor: palette.emphasis, .paragraphStyle: style,
+                ]))
         return result
     }
 

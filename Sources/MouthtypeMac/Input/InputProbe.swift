@@ -44,11 +44,12 @@ enum InputProbe {
     }
 
     static func describe(_ sample: TapSample) -> String {
-        let type = switch sample.kind {
-        case .flagsChanged: "flagsChanged"
-        case .keyDown: "keyDown"
-        case .keyUp: "keyUp"
-        }
+        let type =
+            switch sample.kind {
+            case .flagsChanged: "flagsChanged"
+            case .keyDown: "keyDown"
+            case .keyUp: "keyUp"
+            }
         let fn = sample.flags & CGEventFlags.maskSecondaryFn.rawValue != 0
         return "type=\(type) keyCode=\(sample.keyCode) flags=0x\(String(sample.flags, radix: 16)) fn=\(fn)"
             + " autorepeat=\(sample.isAutorepeat) synthetic=\(sample.userData == SyntheticEvents.stamp) ts=\(sample.timestamp)"

@@ -107,7 +107,7 @@ public struct BlendStage: Sendable {
     private func lowercasedFirst(_ word: String) -> String? {
         guard let first = word.first, first.isUppercase else { return nil }
         let rest = word.dropFirst()
-        if rest.contains(where: { $0.isUppercase }) { return nil }   // acronym or mixed case
+        if rest.contains(where: { $0.isUppercase }) { return nil }  // acronym or mixed case
         return first.lowercased() + rest
     }
 }

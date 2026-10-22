@@ -124,7 +124,8 @@ final class DeliveryCardController: CardSurface {
         let firstStyle = first?.style ?? .classic
         let firstScale = first?.scale ?? .standard
         if firstStyle.mergesIntoPill, let merger = first?.merger,
-           renderMerged(state, style: firstStyle, scale: firstScale, maxFaceHeight: first?.maxFaceHeight, merger: merger) {
+            renderMerged(state, style: firstStyle, scale: firstScale, maxFaceHeight: first?.maxFaceHeight, merger: merger)
+        {
             return
         }
         guard firstStyle.mergesIntoPill else {

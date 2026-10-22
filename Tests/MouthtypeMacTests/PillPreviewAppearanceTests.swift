@@ -58,11 +58,13 @@ import Testing
             let cg = try #require(image?.cgImage(forProposedRect: nil, context: nil, hints: nil))
             let rep = NSBitmapImageRep(cgImage: cg)
             var total = 0.0, count = 0.0
-            for y in 0..<rep.pixelsHigh { for x in 0..<rep.pixelsWide {
-                guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), c.alphaComponent > 0.9 else { continue }
-                total += 0.2126 * Double(c.redComponent) + 0.7152 * Double(c.greenComponent) + 0.0722 * Double(c.blueComponent)
-                count += 1
-            } }
+            for y in 0..<rep.pixelsHigh {
+                for x in 0..<rep.pixelsWide {
+                    guard let c = rep.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), c.alphaComponent > 0.9 else { continue }
+                    total += 0.2126 * Double(c.redComponent) + 0.7152 * Double(c.greenComponent) + 0.0722 * Double(c.blueComponent)
+                    count += 1
+                }
+            }
             return count > 0 ? total / count : 0
         }
         for kind in [PillSkinKind.matrix, .minimal] {

@@ -16,17 +16,20 @@ import MouthtypeCore
     private var presentedThisTurn = false
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
-    init(model: SettingsModel, actions: SettingsActions = SettingsActions(),
-         reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
-         fullKeyboardAccess: @escaping @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess,
-         notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+    init(
+        model: SettingsModel, actions: SettingsActions = SettingsActions(),
+        reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+        fullKeyboardAccess: @escaping @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess,
+        notifications: NotificationCenter = NSWorkspace.shared.notificationCenter
+    ) {
         self.model = model
         self.fullKeyboardAccess = fullKeyboardAccess
         self.actions = actions
         self.reduceTransparency = reduceTransparency
         self.notifications = notifications
         refreshDiagnostics = actions.refreshDiagnostics
-        let window = SettingsNSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+        let window = SettingsNSWindow(
+            contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Mouthtype Settings"
         window.titlebarAppearsTransparent = true
@@ -229,7 +232,8 @@ final class SettingsNSWindow: NSWindow {
         var target = responder as? NSView
         if let editor = responder as? NSText, editor.isFieldEditor, let owner = editor.delegate as? NSView { target = owner }
         guard let view = target, view.enclosingScrollView != nil,
-              view.convert(view.bounds, to: nil).minX >= SettingsTheme.sidebarWidth else { return }
+            view.convert(view.bounds, to: nil).minX >= SettingsTheme.sidebarWidth
+        else { return }
         view.scrollToVisible(view.bounds.insetBy(dx: 0, dy: -12))
     }
 }

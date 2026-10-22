@@ -35,7 +35,9 @@ import Testing
         let termination = AppTermination()
         var canSave = false, saves = 0, settles = 0
         var replies: [Bool] = []
-        let preserve: @MainActor () async -> Bool = { saves += 1; return canSave }
+        let preserve: @MainActor () async -> Bool = {
+            saves += 1; return canSave
+        }
         let settle: @MainActor () async -> Void = { settles += 1 }
         let reply: @MainActor (Bool) -> Void = { replies.append($0) }
         termination.begin(preserve: preserve, settleClipboard: settle, reply: reply)

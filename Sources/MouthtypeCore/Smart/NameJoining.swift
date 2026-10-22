@@ -64,7 +64,9 @@ enum NameJoining {
     static func preservesOrdinary(_ candidates: [Candidate], in output: String) -> Bool {
         let required = Dictionary(grouping: candidates, by: { $0.heard.lowercased() })
         return required.allSatisfy { phrase, occurrences in
-            let pattern = #"(?<![\p{L}\p{N}_])"# + phrase.split(whereSeparator: \.isWhitespace)
+            let pattern =
+                #"(?<![\p{L}\p{N}_])"#
+                + phrase.split(whereSeparator: \.isWhitespace)
                 .map { NSRegularExpression.escapedPattern(for: String($0)) }.joined(separator: #"\s+"#) + #"(?![\p{L}\p{N}_])"#
             guard let regex = try? NSRegularExpression(pattern: pattern, options: .caseInsensitive) else { return false }
             return regex.numberOfMatches(in: output, range: NSRange(output.startIndex..., in: output)) >= occurrences.count

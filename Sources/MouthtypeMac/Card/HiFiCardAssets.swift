@@ -61,14 +61,17 @@ struct HiFiCardAssets {
     static func load(bundle: Bundle = .module) throws -> HiFiCardAssets {
         func url(_ file: String) throws -> URL {
             let name = file as NSString
-            guard let found = bundle.url(
-                forResource: name.deletingPathExtension, withExtension: name.pathExtension, subdirectory: directory
-            ) else { throw LoadError.missing(file) }
+            guard
+                let found = bundle.url(
+                    forResource: name.deletingPathExtension, withExtension: name.pathExtension, subdirectory: directory
+                )
+            else { throw LoadError.missing(file) }
             return found
         }
         func image(_ file: String) throws -> CGImage {
             guard let source = CGImageSourceCreateWithURL(try url(file) as CFURL, nil),
-                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw LoadError.undecodable(file) }
+                let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else { throw LoadError.undecodable(file) }
             return image
         }
         let decoder = JSONDecoder()
@@ -100,10 +103,12 @@ final class HiFiCanvas {
     private let context: CGContext
 
     init?(width: Int, height: Int) {
-        guard width > 0, height > 0, let context = CGContext(
-            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
+        guard width > 0, height > 0,
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { return nil }
         self.width = width
         self.height = height
         self.context = context
@@ -129,10 +134,14 @@ final class HiFiCanvas {
 
     /// Stretches nothing: each of the nine regions is tiled from its source slice, so edges and centre stay pixel-exact.
     func nineSlice(_ image: CGImage, slices s: HiFiCardSpec.Slices, in rect: PillLayout.Rect) {
-        let columns = [(0, s.left, rect.x, s.left), (s.left, image.width - s.left - s.right, rect.x + s.left, rect.w - s.left - s.right),
-                       (image.width - s.right, s.right, rect.x + rect.w - s.right, s.right)]
-        let rows = [(0, s.top, rect.y, s.top), (s.top, image.height - s.top - s.bottom, rect.y + s.top, rect.h - s.top - s.bottom),
-                    (image.height - s.bottom, s.bottom, rect.y + rect.h - s.bottom, s.bottom)]
+        let columns = [
+            (0, s.left, rect.x, s.left), (s.left, image.width - s.left - s.right, rect.x + s.left, rect.w - s.left - s.right),
+            (image.width - s.right, s.right, rect.x + rect.w - s.right, s.right),
+        ]
+        let rows = [
+            (0, s.top, rect.y, s.top), (s.top, image.height - s.top - s.bottom, rect.y + s.top, rect.h - s.top - s.bottom),
+            (image.height - s.bottom, s.bottom, rect.y + rect.h - s.bottom, s.bottom),
+        ]
         for (sy, sh, dy, dh) in rows {
             for (sx, sw, dx, dw) in columns where sw > 0 && sh > 0 && dw > 0 && dh > 0 {
                 var oy = 0

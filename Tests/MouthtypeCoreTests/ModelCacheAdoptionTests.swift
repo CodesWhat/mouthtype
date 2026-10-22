@@ -21,10 +21,16 @@ import Testing
 
     /// An LFS weights file inside a bundle and a plain root file.
     private var manifest: ModelCacheAdoption.Manifest {
-        ModelCacheAdoption.Manifest(schema: 1, repos: [pin.repo: .init(revision: pin.revision, files: [
-            .init(path: "Model.mlmodelc/weights/weight.bin", size: weights.count, sha256: hex(SHA256.hash(data: weights)), blob: nil),
-            .init(path: "config.json", size: config.count, sha256: nil, blob: gitBlobID(config)),
-        ])])
+        ModelCacheAdoption.Manifest(
+            schema: 1,
+            repos: [
+                pin.repo: .init(
+                    revision: pin.revision,
+                    files: [
+                        .init(path: "Model.mlmodelc/weights/weight.bin", size: weights.count, sha256: hex(SHA256.hash(data: weights)), blob: nil),
+                        .init(path: "config.json", size: config.count, sha256: nil, blob: gitBlobID(config)),
+                    ])
+            ])
     }
 
     private func makeCache() throws -> URL {

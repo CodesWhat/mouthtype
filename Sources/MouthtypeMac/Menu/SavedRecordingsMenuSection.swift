@@ -15,8 +15,10 @@ final class SavedRecordingsMenuSection: NSObject, MenuSection, NSMenuDelegate {
     private static let pageSize = 20
     var items: [NSMenuItem] { [parent] }
 
-    init(recovery: CrashRecovery, canRecover: @escaping @MainActor () -> Bool,
-         load: (@MainActor () async throws -> [RecoverableDictation])? = nil) {
+    init(
+        recovery: CrashRecovery, canRecover: @escaping @MainActor () -> Bool,
+        load: (@MainActor () async throws -> [RecoverableDictation])? = nil
+    ) {
         self.recovery = recovery
         self.canRecover = canRecover
         self.load = load ?? { try await recovery.loadSavedRecordings() }

@@ -32,8 +32,8 @@ public struct SpokenNumberFormatter: NumberFormatting {
     }
 
     private struct Run {
-        var end: Int          // exclusive word index
-        var value: Int?       // nil when the run does not parse as one number
+        var end: Int  // exclusive word index
+        var value: Int?  // nil when the run does not parse as one number
     }
 
     private struct Scanner {
@@ -98,11 +98,15 @@ public struct SpokenNumberFormatter: NumberFormatting {
 
         func dimension(at i: Int) -> (TextSpan, Int)? {
             guard i + 1 < words.count, words[i + 1].lower == "d", gap(i, i + 1),
-                  let value = NumberWords.units[words[i].lower] ?? Int(words[i].lower),
-                  (2...4).contains(value) else { return nil }
+                let value = NumberWords.units[words[i].lower] ?? Int(words[i].lower),
+                (2...4).contains(value)
+            else { return nil }
             // D can also name a musical pitch, battery size or letter grade.
             if i + 2 < words.count, gap(i + 1, i + 2),
-               ["chord", "chords", "note", "notes", "battery", "batteries", "cell", "cells", "grade", "grades"].contains(words[i + 2].lower) { return nil }
+                ["chord", "chords", "note", "notes", "battery", "batteries", "cell", "cells", "grade", "grades"].contains(words[i + 2].lower)
+            {
+                return nil
+            }
             return (span(i, i + 1, "\(value)-D"), i + 2)
         }
 
@@ -110,7 +114,8 @@ public struct SpokenNumberFormatter: NumberFormatting {
             let run = scanRun(from: i)
             let end = run.end > i ? run.end : i + 1
             guard end + 1 < words.count, words[end].lower == "k", gap(end - 1, end), gap(end, end + 1),
-                  let value = run.end > i ? run.value : Int(words[i].lower), (1...32).contains(value) else { return nil }
+                let value = run.end > i ? run.value : Int(words[i].lower), (1...32).contains(value)
+            else { return nil }
             let noun = words[end + 1].lower
             let devices = ["monitor", "camera", "display", "screen", "resolution", "video", "footage", "panel", "projector", "television"]
             guard devices.contains(noun) || (noun.hasSuffix("s") && devices.contains(String(noun.dropLast()))) else { return nil }
@@ -182,7 +187,8 @@ public struct SpokenNumberFormatter: NumberFormatting {
                 var k = r.end + 1
                 var prevIdx = r.end
                 while k < words.count, gap(prevIdx, k),
-                      let d = words[k].lower == "zero" ? 0 : NumberWords.units[words[k].lower] {
+                    let d = words[k].lower == "zero" ? 0 : NumberWords.units[words[k].lower]
+                {
                     digits += String(d)
                     prevIdx = k
                     k += 1
@@ -198,15 +204,18 @@ public struct SpokenNumberFormatter: NumberFormatting {
             }
             // Dollars (whole amounts only)
             if !hasDecimal, endWord + 1 < words.count,
-               words[endWord + 1].lower == "dollar" || words[endWord + 1].lower == "dollars",
-               gap(endWord, endWord + 1) {
+                words[endWord + 1].lower == "dollar" || words[endWord + 1].lower == "dollars",
+                gap(endWord, endWord + 1)
+            {
                 let d = endWord + 1
                 if d + 2 < words.count, words[d + 1].lower == "and", gap(d, d + 1), gap(d + 1, d + 2),
-                   isNumberToken(d + 2) {
+                    isNumberToken(d + 2)
+                {
                     let cents = scanRun(from: d + 2)
                     if let c = cents.value, c >= 1, c <= 99, cents.end < words.count,
-                       words[cents.end].lower == "cents" || words[cents.end].lower == "cent",
-                       gap(cents.end - 1, cents.end) {
+                        words[cents.end].lower == "cents" || words[cents.end].lower == "cent",
+                        gap(cents.end - 1, cents.end)
+                    {
                         let cc = c < 10 ? "0\(c)" : "\(c)"
                         return (span(i, cents.end, "$\(value).\(cc)"), cents.end + 1)
                     }
@@ -246,8 +255,10 @@ public struct SpokenNumberFormatter: NumberFormatting {
             }
             // <hour> <meridiem>
             if let m = meridiem(after: wordEnd) {
-                return (TextSpan(range: words[i].start..<m.end, replacement: "\(hour) \(m.isPM ? "PM" : "AM")"),
-                        firstWord(atOrAfter: m.end))
+                return (
+                    TextSpan(range: words[i].start..<m.end, replacement: "\(hour) \(m.isPM ? "PM" : "AM")"),
+                    firstWord(atOrAfter: m.end)
+                )
             }
             // <hour> <minutes> <meridiem>
             guard i + 1 < n, gap(i, i + 1) else { return nil }

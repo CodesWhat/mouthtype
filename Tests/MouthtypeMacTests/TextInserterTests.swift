@@ -200,10 +200,12 @@ private struct Rig {
         let pending = pending
         let clock = clock
         let input = input
-        inserter = TextInserter(focus: focus, pasteboard: pasteboard, poster: poster, keys: keys, schedule: { delay, work in
-            pending.add(delay, work)
-        }, sleep: { delay in if chunks { await pauses.pause(delay) } }, now: { clock.instant }, inputGeneration: { input.value },
-                                restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, observeBoundary: observeBoundary)
+        inserter = TextInserter(
+            focus: focus, pasteboard: pasteboard, poster: poster, keys: keys,
+            schedule: { delay, work in
+                pending.add(delay, work)
+            }, sleep: { delay in if chunks { await pauses.pause(delay) } }, now: { clock.instant }, inputGeneration: { input.value },
+            restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, observeBoundary: observeBoundary)
     }
 }
 
@@ -362,8 +364,12 @@ private struct Rig {
     @Test func terminationWaitsForAnUnreadPasteThenRestoresAndInvalidatesCallbacks() async {
         let rig = Rig(chunks: true)
         defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
-        let original = PasteboardSnapshot(items: [[text("original"),
-            PasteboardRepresentation(type: "public.png", data: Data([0, 1, 2]))]])
+        let original = PasteboardSnapshot(items: [
+            [
+                text("original"),
+                PasteboardRepresentation(type: "public.png", data: Data([0, 1, 2])),
+            ]
+        ])
         rig.pasteboard.contents = original
         _ = await rig.inserter.deliver("first", startFocus: nil)
         var waits = 0
@@ -414,8 +420,7 @@ private struct Rig {
         rig.pauses.observe = { delay in
             if delay == 0.02, !copied {
                 copied = true
-                if explicit { _ = rig.inserter.copyLast() }
-                else { rig.pasteboard.externalCopy("newer") }
+                if explicit { _ = rig.inserter.copyLast() } else { rig.pasteboard.externalCopy("newer") }
             }
         }
         await rig.inserter.prepareForTermination()
@@ -622,9 +627,13 @@ private struct Rig {
     @Test func aConsumedLeaseRestoredDuringTheWaitPreservesAllRichRepresentations() async {
         let rig = Rig(chunks: true)
         defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
-        let original = PasteboardSnapshot(items: [[text("original"),
-            PasteboardRepresentation(type: "public.png", data: Data([0, 1, 2]))],
-            [PasteboardRepresentation(type: "public.file-url", data: Data("file:///example".utf8))]])
+        let original = PasteboardSnapshot(items: [
+            [
+                text("original"),
+                PasteboardRepresentation(type: "public.png", data: Data([0, 1, 2])),
+            ],
+            [PasteboardRepresentation(type: "public.file-url", data: Data("file:///example".utf8))],
+        ])
         rig.pasteboard.contents = original
         _ = await rig.inserter.deliver("first", startFocus: nil)
         var restored = false
@@ -669,8 +678,9 @@ private struct Rig {
         rig.pasteboard.contents = PasteboardSnapshot(items: [[text("original clipboard")]])
         let original = rig.pasteboard.contents
         rig.focus.afterBeforeRead = {
-            rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other",
-                                              isSecure: secureDestination, element: element(200))
+            rig.focus.current = FocusSnapshot(
+                pid: 200, bundleID: "com.example.other",
+                isSecure: secureDestination, element: element(200))
         }
 
         let result = await rig.inserter.deliver("keep this transcript", startFocus: nil)
@@ -701,8 +711,7 @@ private struct Rig {
             rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other", element: element(200))
         }
         rig.inserter.observeVerification { _ in }
-        if duringFieldRead { rig.focus.afterFieldRead = changeFocus }
-        else { rig.focus.afterBeforeRead = changeFocus }
+        if duringFieldRead { rig.focus.afterFieldRead = changeFocus } else { rig.focus.afterBeforeRead = changeFocus }
 
         let result = await rig.inserter.deliver("keep this transcript", startFocus: nil)
 
@@ -734,8 +743,9 @@ private struct Rig {
         let rig = Rig()
         rig.focus.current.element = element(100)
         rig.focus.afterBeforeRead = {
-            if secureField { rig.focus.current.isSecure = true }
-            else {
+            if secureField {
+                rig.focus.current.isSecure = true
+            } else {
                 rig.focus.isSecureInputEnabled = true
                 rig.focus.current.element = nil
             }
@@ -923,10 +933,12 @@ private struct Rig {
         var types: [CGEventType] = []
         var flags: [CGEventFlags] = []
         var stamps: [Int64] = []
-        let poster = SystemPasteEventPoster(stamp: 1234, post: { event, pid in
-            pids.append(pid); types.append(event.type); flags.append(event.flags)
-            stamps.append(event.getIntegerValueField(.eventSourceUserData))
-        })
+        let poster = SystemPasteEventPoster(
+            stamp: 1234,
+            post: { event, pid in
+                pids.append(pid); types.append(event.type); flags.append(event.flags)
+                stamps.append(event.getIntegerValueField(.eventSourceUserData))
+            })
         #expect(poster.postPaste(keyCode: 9, targetPID: 321))
         #expect(pids == [321, 321])
         #expect(types == [.keyDown, .keyUp])
@@ -1004,9 +1016,10 @@ private struct Rig {
         #expect(rig.poster.posts == 1)
         let write = try? #require(rig.pasteboard.writes.first)
         #expect(write?.text == "hello")
-        #expect(Set(write?.markers ?? []) == [
-            "org.nspasteboard.TransientType", "org.nspasteboard.ConcealedType", "org.nspasteboard.AutoGeneratedType",
-        ])
+        #expect(
+            Set(write?.markers ?? []) == [
+                "org.nspasteboard.TransientType", "org.nspasteboard.ConcealedType", "org.nspasteboard.AutoGeneratedType",
+            ])
     }
 
     @Test func restoresEveryItemAndTypeAfterTheDelay() async {
@@ -1153,18 +1166,20 @@ private struct Rig {
     @Test func boundaryDiagnosticsClassifyContinuationWithoutLeakingTextOrChangingTheDestination() async {
         var diagnostics: [String] = []
         let rig = Rig(observeBoundary: { diagnostics.append($0.metadata) })
-        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.stablyai.orca", windowTitle: "Private window title",
-                                          role: "AXTextField", element: element(100), focusedOwnerPID: 100)
+        rig.focus.current = FocusSnapshot(
+            pid: 100, bundleID: "com.stablyai.orca", windowTitle: "Private window title",
+            role: "AXTextField", element: element(100), focusedOwnerPID: 100)
         rig.focus.before = .start
         _ = await rig.inserter.deliver("Private first sentence.", startFocus: nil)
         rig.pasteboard.read()
         let result = await rig.inserter.deliver("Private next sentence.", startFocus: nil)
         #expect(result.finalText == " Private next sentence.")
         #expect(rig.poster.targetPIDs == [100, 100])
-        #expect(diagnostics == [
-            "source=accessibility preceding=start continuation=no-previous-paste separator=none frontmostPID=100 focusedOwnerPID=100",
-            "source=continuation preceding=punctuation continuation=available separator=space frontmostPID=100 focusedOwnerPID=100",
-        ])
+        #expect(
+            diagnostics == [
+                "source=accessibility preceding=start continuation=no-previous-paste separator=none frontmostPID=100 focusedOwnerPID=100",
+                "source=continuation preceding=punctuation continuation=available separator=space frontmostPID=100 focusedOwnerPID=100",
+            ])
         #expect(!diagnostics.joined().contains("Private"))
     }
 
@@ -1180,7 +1195,9 @@ private struct Rig {
     @Test func pasteIsRefusedWhenOwnershipChangesDuringPreparation() async {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", element: element(100), focusedOwnerPID: 100)
-        rig.focus.afterBeforeRead = { rig.focus.current.focusedOwnerPID = 101; rig.focus.current.focusedApplicationPID = 101 }
+        rig.focus.afterBeforeRead = {
+            rig.focus.current.focusedOwnerPID = 101; rig.focus.current.focusedApplicationPID = 101
+        }
         let result = await rig.inserter.deliver("hello", startFocus: nil)
         #expect(result.method == .clipboardOnly)
         #expect(rig.poster.posts == 0)
@@ -1212,8 +1229,9 @@ private struct Rig {
 
     @Test func pasteProceedsWhenARendererProcessOwnsTheFieldInsideTheFrontmostApp() async {
         let rig = Rig()
-        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", element: element(100),
-                                          focusedOwnerPID: 101, focusedApplicationPID: 100)
+        rig.focus.current = FocusSnapshot(
+            pid: 100, role: "AXTextField", element: element(100),
+            focusedOwnerPID: 101, focusedApplicationPID: 100)
         let result = await rig.inserter.deliver("hello", startFocus: nil)
         #expect(result.method == .paste)
         #expect(rig.poster.posts == 1)
@@ -1221,8 +1239,9 @@ private struct Rig {
 
     @Test func pasteProceedsWhenTheFocusedAncestryIsUnreadable() async {
         let rig = Rig()
-        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", element: element(100),
-                                          focusedOwnerPID: 101, focusedApplicationPID: nil)
+        rig.focus.current = FocusSnapshot(
+            pid: 100, role: "AXTextField", element: element(100),
+            focusedOwnerPID: 101, focusedApplicationPID: nil)
         let result = await rig.inserter.deliver("hello", startFocus: nil)
         #expect(result.method == .paste)
         #expect(rig.poster.posts == 1)
@@ -1264,10 +1283,11 @@ private struct Rig {
         rig.pasteboard.read()
         rig.focus.before = .character("x")
         _ = await rig.inserter.deliver("- confidential item", startFocus: nil)
-        #expect(diagnostics == [
-            "source=accessibility preceding=letter continuation=not-needed separator=none frontmostPID=100 focusedOwnerPID=unknown",
-            "source=accessibility preceding=letter continuation=not-needed separator=newline frontmostPID=100 focusedOwnerPID=unknown",
-        ])
+        #expect(
+            diagnostics == [
+                "source=accessibility preceding=letter continuation=not-needed separator=none frontmostPID=100 focusedOwnerPID=unknown",
+                "source=accessibility preceding=letter continuation=not-needed separator=newline frontmostPID=100 focusedOwnerPID=unknown",
+            ])
         #expect(!diagnostics.joined().contains("秘密"))
         #expect(!diagnostics.joined().contains("confidential"))
     }

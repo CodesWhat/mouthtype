@@ -76,8 +76,7 @@ private enum OutputFailure: Error { case unavailable }
         let output = QuietOutputFake()
         let quiet = RecordingAudioQuiet(output: output, enabled: { true })
         quiet.begin()
-        if remute { output.userChanged(muted: false); output.userChanged(muted: true) }
-        else { output.userChanged() } // Volume change while still muted.
+        if remute { output.userChanged(muted: false); output.userChanged(muted: true) } else { output.userChanged() }  // Volume change while still muted.
         quiet.end()
         #expect(output.writes.map { $0.1 } == [true])
         #expect(output.muted)

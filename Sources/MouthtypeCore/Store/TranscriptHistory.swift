@@ -19,11 +19,13 @@ public enum TranscriptHistory {
         configuration.readonly = true
         let queue = try DatabaseQueue(path: url.path, configuration: configuration)
         let rows = try queue.read { db in
-            try Row.fetchAll(db, sql: """
-                SELECT id, started_at, raw_text, det_text, final_text FROM dictation
-                WHERE raw_text IS NOT NULL AND raw_text != '' AND started_at >= ?
-                ORDER BY started_at DESC LIMIT ?
-                """, arguments: [since?.timeIntervalSince1970 ?? 0, limit ?? -1])
+            try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT id, started_at, raw_text, det_text, final_text FROM dictation
+                    WHERE raw_text IS NOT NULL AND raw_text != '' AND started_at >= ?
+                    ORDER BY started_at DESC LIMIT ?
+                    """, arguments: [since?.timeIntervalSince1970 ?? 0, limit ?? -1])
         }
         return rows.reversed().map { row in
             HistoryEntry(

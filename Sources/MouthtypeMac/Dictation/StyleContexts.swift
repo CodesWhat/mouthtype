@@ -84,15 +84,21 @@ struct StyleContexts: Equatable, Sendable {
         func site(_ domain: String) -> StyleMember { StyleMember(kind: .site, name: domain, keys: [domain], isBuiltIn: true) }
         switch id {
         case .personal:
-            return [app("Messages", "com.apple.MobileSMS"), app("WhatsApp", "net.whatsapp.WhatsApp"),
-                    app("Telegram", "ru.keepcoder.Telegram", "com.tdesktop.Telegram"), app("Discord", "com.hnc.Discord"),
-                    app("Signal", "org.whispersystems.signal-desktop")]
+            return [
+                app("Messages", "com.apple.MobileSMS"), app("WhatsApp", "net.whatsapp.WhatsApp"),
+                app("Telegram", "ru.keepcoder.Telegram", "com.tdesktop.Telegram"), app("Discord", "com.hnc.Discord"),
+                app("Signal", "org.whispersystems.signal-desktop"),
+            ]
         case .work:
-            return [app("Slack", "com.tinyspeck.slackmacgap"), app("Microsoft Teams", "com.microsoft.teams2", "com.microsoft.teams"),
-                    site("linkedin.com"), site("teams.microsoft.com")]
+            return [
+                app("Slack", "com.tinyspeck.slackmacgap"), app("Microsoft Teams", "com.microsoft.teams2", "com.microsoft.teams"),
+                site("linkedin.com"), site("teams.microsoft.com"),
+            ]
         case .email:
-            return [app("Mail", "com.apple.mail"), app("Outlook", "com.microsoft.Outlook"),
-                    site("mail.google.com"), site("outlook.office.com")]
+            return [
+                app("Mail", "com.apple.mail"), app("Outlook", "com.microsoft.Outlook"),
+                site("mail.google.com"), site("outlook.office.com"),
+            ]
         case .other:
             return []
         }
@@ -181,7 +187,9 @@ struct StyleContexts: Equatable, Sendable {
         detachApp(bundleID: bundleID)
         let builtIn = Self.builtIns(id).first { $0.kind == .app && $0.keys.contains(bundleID) }
         update(id) { config in
-            if let builtIn { config.removed.removeAll { $0 == builtIn.id || $0 == Self.keyMark(bundleID) } } else {
+            if let builtIn {
+                config.removed.removeAll { $0 == builtIn.id || $0 == Self.keyMark(bundleID) }
+            } else {
                 config.apps.append(.init(bundleID: bundleID, appName: appName))
             }
         }
@@ -254,7 +262,8 @@ struct StyleContexts: Equatable, Sendable {
     /// Unreadable data falls back to the built-in contexts rather than blocking dictation.
     static func load(_ defaults: UserDefaults = .standard) -> StyleContexts {
         guard let data = defaults.data(forKey: preferenceKey),
-              let document = try? JSONDecoder().decode(Document.self, from: data), document.version == 1 else { return StyleContexts() }
+            let document = try? JSONDecoder().decode(Document.self, from: data), document.version == 1
+        else { return StyleContexts() }
         var result = StyleContexts()
         for (key, config) in document.contexts {
             if let id = StyleContextID(rawValue: key), !config.isDefault { result.configs[id] = config }

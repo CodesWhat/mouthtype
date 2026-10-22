@@ -184,7 +184,8 @@ public struct TextPipeline: Sendable {
             run(FillerRemover.stageName) { FillerRemover().apply($0) }
         }
         if options.slashCommands, input.codingTarget {
-            let phrases = input.protectedPhrases
+            let phrases =
+                input.protectedPhrases
                 + (options.dictionary ? input.dictionary.flatMap { [$0.heard, $0.written] } : [])
                 + (options.snippets ? input.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
             run(SlashCommands.stageName) { SlashCommands(protectedPhrases: phrases).apply($0) }
@@ -199,7 +200,8 @@ public struct TextPipeline: Sendable {
             run(CountedLists.stageName) { CountedLists().apply($0) }
         }
         if options.notation {
-            let phrases = (options.dictionary ? input.dictionary.flatMap { [$0.heard, $0.written] } : [])
+            let phrases =
+                (options.dictionary ? input.dictionary.flatMap { [$0.heard, $0.written] } : [])
                 + (options.snippets ? input.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
             let nearby = CleanupPrompt.nearbySpellings(CleanupContext(before: input.context?.before, after: input.context?.after))
             run(TechnicalNotation.stageName) { TechnicalNotation(protectedPhrases: phrases + nearby).apply($0) }

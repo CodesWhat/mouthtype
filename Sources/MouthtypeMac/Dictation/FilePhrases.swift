@@ -51,15 +51,13 @@ final class FilePhrases: Sendable {
         if let last = healthCheck.withLock({ $0 }), last.stamp == stamp { return last.error }
         healthReads.withLock { $0 += 1 }
         let message: String?
-        do { _ = try all(); message = nil }
-        catch { message = error.localizedDescription }
+        do { _ = try all(); message = nil } catch { message = error.localizedDescription }
         healthCheck.withLock { $0 = (stamp, message) }
         return message
     }
 
     func snippets() -> [Snippet] {
-        do { return try all() }
-        catch { return lastGood.withLock { $0 } }
+        do { return try all() } catch { return lastGood.withLock { $0 } }
     }
 
     func save(original: Snippet?, phrase: Snippet) throws {
@@ -114,8 +112,7 @@ final class FilePhrases: Sendable {
         let data = try Data(contentsOf: url)
         guard data.count <= 1_048_576 else { throw Failure.invalid("The phrase library is larger than 1 MB.") }
         let entries: [Snippet]
-        do { entries = try JSONDecoder().decode([Snippet].self, from: data) }
-        catch { throw Failure.invalid("The phrase library could not be read. Fix phrases.json and reload it.") }
+        do { entries = try JSONDecoder().decode([Snippet].self, from: data) } catch { throw Failure.invalid("The phrase library could not be read. Fix phrases.json and reload it.") }
         return try Self.validate(entries)
     }
 

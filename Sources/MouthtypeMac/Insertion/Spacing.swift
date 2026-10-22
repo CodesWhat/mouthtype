@@ -76,13 +76,13 @@ enum Spacing {
     private static func isSpaceless(_ character: Character) -> Bool {
         guard let scalar = character.unicodeScalars.first else { return false }
         switch scalar.value {
-        case 0x0E00...0x0E7F, // Thai
-             0x3000...0x303F, // CJK symbols and punctuation
-             0x3040...0x30FF, // Hiragana and Katakana
-             0x3400...0x4DBF, // CJK Extension A
-             0x4E00...0x9FFF, // CJK Unified Ideographs
-             0xFF00...0xFFEF, // Fullwidth forms
-             0x20000...0x2FA1F: // CJK Extensions B and later
+        case 0x0E00...0x0E7F,  // Thai
+            0x3000...0x303F,  // CJK symbols and punctuation
+            0x3040...0x30FF,  // Hiragana and Katakana
+            0x3400...0x4DBF,  // CJK Extension A
+            0x4E00...0x9FFF,  // CJK Unified Ideographs
+            0xFF00...0xFFEF,  // Fullwidth forms
+            0x20000...0x2FA1F:  // CJK Extensions B and later
             return true
         default:
             return false

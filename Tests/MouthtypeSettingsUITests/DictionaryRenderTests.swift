@@ -27,9 +27,11 @@ import MouthtypeCore
         return Fixture(dir: dir, store: store, editor: editor, suggestions: suggestions, model: model)
     }
 
-    private let sample = [("priya", "Priya"), ("pre ya", "Priya"), ("mouth type", "Mouthtype"), ("mouse type", "Mouthtype"),
-                          ("tahoe", "Tahoe"), ("win", "Nguyen"),
-                          ("a very long phrase that people say out loud before it becomes one name", "Hyprland")]
+    private let sample = [
+        ("priya", "Priya"), ("pre ya", "Priya"), ("mouth type", "Mouthtype"), ("mouse type", "Mouthtype"),
+        ("tahoe", "Tahoe"), ("win", "Nguyen"),
+        ("a very long phrase that people say out loud before it becomes one name", "Hyprland"),
+    ]
 
     @Test func dictionaryPageRendersWordsInLightAndDark() throws {
         let f = try fixture(words: sample)

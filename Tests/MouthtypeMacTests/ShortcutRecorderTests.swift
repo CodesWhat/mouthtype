@@ -32,7 +32,9 @@ import Testing
             recorder.receive(event(.flagsChanged, reverse ? 59 : 61, control | option))
             recorder.receive(event(.flagsChanged, reverse ? 59 : 61, reverse ? option : control))
             recorder.receive(event(.flagsChanged, reverse ? 61 : 59))
-            let expected = reverse ? DictationShortcut(keyCode: 59, modifiers: option, keyName: "Left Control")
+            let expected =
+                reverse
+                ? DictationShortcut(keyCode: 59, modifiers: option, keyName: "Left Control")
                 : DictationShortcut(keyCode: 61, modifiers: control, keyName: "Right Option")
             #expect(recorder.draft == expected && recorder.canSave)
         }
@@ -86,8 +88,10 @@ import Testing
     }
 
     private func keyEvent(_ characters: String, code: UInt16, flags: NSEvent.ModifierFlags = [], in window: NSWindow) throws -> NSEvent {
-        try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
-            windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
+        try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: code))
     }
 
     @Test func sheetCapturesCommandQBeforeMenuShortcutsAndCanRenderOffscreen() throws {
@@ -122,7 +126,11 @@ import Testing
         var applied: [DictationShortcut?] = []
         let parent = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 400), styleMask: [.titled], backing: .buffered, defer: false)
         parent.isReleasedWhenClosed = false
-        let sheet = ShortcutRecorderSheet(saved: nil, apply: { applied.append($0); return nil }, onClose: { closed += 1 })
+        let sheet = ShortcutRecorderSheet(
+            saved: nil,
+            apply: {
+                applied.append($0); return nil
+            }, onClose: { closed += 1 })
         sheet.present(over: parent)
         // Mid-recording, Escape is a shortcut candidate like any other key and does not close the sheet.
         sheet.recorder.begin()
@@ -154,8 +162,10 @@ import Testing
     @Test func aReleasedComboStillConsumesItsKeyUpAndRepeats() {
         let shortcut = DictationShortcut(keyCode: 40, modifiers: DictationShortcutTests.control, keyName: "K")
         let up = TapSample(kind: .keyUp, keyCode: 40, flags: 0, timestamp: 0)
-        #expect(TapPolicy.decide(up, role: .keys, recording: false, swallowedKey: nil, pending: .shortcut,
-            shortcut: shortcut) == TapDecision(swallow: true, deliver: true))
+        #expect(
+            TapPolicy.decide(
+                up, role: .keys, recording: false, swallowedKey: nil, pending: .shortcut,
+                shortcut: shortcut) == TapDecision(swallow: true, deliver: true))
         let typed = TapSample(kind: .keyDown, keyCode: 40, flags: 0, timestamp: 0)
         let decision = TapPolicy.decide(typed, role: .keys, recording: false, swallowedKey: nil, shortcut: shortcut)
         #expect(!decision.swallow)
@@ -192,7 +202,8 @@ import Testing
             let kind: TapSample.Kind = code == 57 ? .flagsChanged : .keyDown
             service.process(TapSample(kind: kind, keyCode: code, flags: code == 57 ? CGEventFlags.maskAlphaShift.rawValue : 0, timestamp: 0))
             service.process(TapSample(kind: code == 57 ? .flagsChanged : .keyUp, keyCode: code, flags: 0, timestamp: 1_000_000_000))
-            let expected: [HotkeyEvent] = code == 57
+            let expected: [HotkeyEvent] =
+                code == 57
                 ? [.pressed(at: 0), .locked(at: 0, trigger: .fnSpace), .released(at: 1_000_000_000)]
                 : [.pressed(at: 0), .released(at: 1_000_000_000)]
             #expect(await events(service, count: expected.count) == expected)
@@ -205,7 +216,10 @@ import Testing
         service.process(TapSample(kind: .flagsChanged, keyCode: 57, flags: CGEventFlags.maskAlphaShift.rawValue, timestamp: 0))
         service.process(TapSample(kind: .keyDown, keyCode: 53, flags: 0, timestamp: 100))
         service.process(TapSample(kind: .flagsChanged, keyCode: 57, flags: 0, timestamp: 200))
-        #expect(await events(service, count: 5) == [.pressed(at: 0), .locked(at: 0, trigger: .fnSpace),
-            .cancelled(reason: .escape), .pressed(at: 200), .locked(at: 200, trigger: .fnSpace)])
+        #expect(
+            await events(service, count: 5) == [
+                .pressed(at: 0), .locked(at: 0, trigger: .fnSpace),
+                .cancelled(reason: .escape), .pressed(at: 200), .locked(at: 200, trigger: .fnSpace),
+            ])
     }
 }

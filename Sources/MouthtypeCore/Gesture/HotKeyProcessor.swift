@@ -80,11 +80,11 @@ import Foundation
 ///
 public struct HotKeyProcessor: Sendable {
     // MARK: - Configuration
-    
+
     /// The hotkey combination to detect (key + modifiers)
     public var hotkey: HotKey
     public var recordingMode: RecordingMode
-    
+
     /// If true, only double-tap activates recording (press-and-hold disabled)
     /// Only applies to key+modifier hotkeys; modifier-only always allows press-and-hold
     public var useDoubleTapOnly: Bool = false
@@ -92,36 +92,36 @@ public struct HotKeyProcessor: Sendable {
     /// If false, the quick double-tap lock gesture is disabled.
     /// Press-and-hold still works normally.
     public var doubleTapLockEnabled: Bool = true
-    
+
     /// Minimum duration before very quick taps are considered valid
     /// For modifier-only hotkeys, this is overridden to 0.3s minimum
     public var minimumKeyTime: TimeInterval = 0.15
 
     // MARK: - State
-    
+
     /// Current state of the processor
     public private(set) var state: State = .idle
-    
+
     /// Timestamp of the most recent hotkey release (for double-tap detection)
     private var lastTapAt: Date?
     private var toggleChordHeld = false
-    
+
     /// When true, all input is ignored until full keyboard release
     /// Prevents accidental re-triggering after cancellation or during complex key combos
     private var isDirty: Bool = false
 
     // MARK: - Timing Thresholds
-    
+
     /// Maximum time between two taps to be considered a double-tap (0.3 seconds)
     /// Chosen to feel responsive while avoiding accidental double-taps
     public static let doubleTapThreshold: TimeInterval = GestureConstants.doubleTapWindow
-    
+
     /// Time window for canceling press-and-hold on different key press (1 second)
     /// For key+modifier hotkeys: different key within 1s = accidental, after 1s = intentional
     public static let pressAndHoldCancelThreshold: TimeInterval = GestureConstants.pressAndHoldCancelWindow
 
     // MARK: - Initialization
-    
+
     /// Creates a new hotkey processor
     /// - Parameters:
     ///   - hotkey: The key combination to detect
@@ -143,7 +143,7 @@ public struct HotKeyProcessor: Sendable {
     }
 
     // MARK: - Public API
-    
+
     /// Returns true if recording is currently active (press-and-hold or double-tap locked)
     public var isMatched: Bool {
         switch state {
@@ -262,7 +262,7 @@ public struct HotKeyProcessor: Sendable {
             // For modifier-only hotkeys, use the same threshold as RecordingDecisionEngine
             // (max of minimumKeyTime and 0.3s) to be consistent
             let effectiveMinimum = max(minimumKeyTime, RecordingDecisionEngine.modifierOnlyMinimumDuration)
-            
+
             // Only discard if within threshold - after threshold, ignore clicks (only ESC cancels)
             if elapsed < effectiveMinimum {
                 isDirty = true
@@ -286,11 +286,11 @@ public extension HotKeyProcessor {
     enum State: Equatable, Sendable {
         /// Idle, waiting for hotkey activation
         case idle
-        
+
         /// Press-and-hold recording active
         /// - Parameter startTime: When the hotkey was first pressed (for duration calculation)
         case pressAndHold(startTime: Date)
-        
+
         /// Double-tap lock active - recording continues until explicit stop
         case doubleTapLock
     }
@@ -299,14 +299,14 @@ public extension HotKeyProcessor {
     enum Output: Equatable, Sendable {
         /// Begin a new recording session
         case startRecording
-        
+
         /// Stop the current recording and process audio
         case stopRecording
-        
+
         /// Explicit user cancellation via ESC key
         /// Plays cancel sound to provide feedback
         case cancel
-        
+
         /// Silent discard of accidental/short activation
         /// Used for very quick taps or mouse click conflicts
         case discard
@@ -404,18 +404,17 @@ extension HotKeyProcessor {
         switch state {
         case .idle:
             // Handle double-tap detection for key+modifier combinations
-            if isDoubleTapOnlyEnabledForCurrentHotkey &&
-               chordIsFullyReleased(e) &&
-               lastTapAt != nil {
+            if isDoubleTapOnlyEnabledForCurrentHotkey && chordIsFullyReleased(e) && lastTapAt != nil {
                 // If we've seen a tap recently, and now we see a full release, and we're in idle state
                 // Check if the time between taps is within the threshold
                 if let prevTapTime = lastTapAt,
-                   now.timeIntervalSince(prevTapTime) < Self.doubleTapThreshold {
+                    now.timeIntervalSince(prevTapTime) < Self.doubleTapThreshold
+                {
                     // This is the second tap - activate recording in double-tap lock mode
                     state = .doubleTapLock
                     return .startRecording
                 }
-                
+
                 // Reset the tap timer as we've fully released
                 lastTapAt = nil
             }
@@ -426,8 +425,8 @@ extension HotKeyProcessor {
             if isReleaseForActiveHotkey(e) {
                 // Check if this release is close to the prior release => double-tap lock
                 if doubleTapLockEnabled,
-                   let prevReleaseTime = lastTapAt,
-                   now.timeIntervalSince(prevReleaseTime) < Self.doubleTapThreshold
+                    let prevReleaseTime = lastTapAt,
+                    now.timeIntervalSince(prevReleaseTime) < Self.doubleTapThreshold
                 {
                     // => Switch to doubleTapLock, remain matched, no new output
                     state = .doubleTapLock
@@ -441,11 +440,11 @@ extension HotKeyProcessor {
             } else {
                 // User pressed a different key/modifier while holding hotkey
                 let elapsed = now.timeIntervalSince(startTime)
-                
+
                 // Modifier-only hotkeys: Only discard within threshold, ignore after
                 if hotkey.key == nil {
                     let effectiveMinimum = max(minimumKeyTime, RecordingDecisionEngine.modifierOnlyMinimumDuration)
-                    
+
                     if elapsed < effectiveMinimum {
                         // Within threshold => discard silently (accidental trigger)
                         isDirty = true

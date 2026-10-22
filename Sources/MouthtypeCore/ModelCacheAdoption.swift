@@ -41,7 +41,7 @@ enum ModelCacheAdoption {
 
     static let bundledManifest: Manifest? = {
         guard let url = Bundle.module.url(forResource: "ModelManifest", withExtension: "json"),
-              let data = try? Data(contentsOf: url)
+            let data = try? Data(contentsOf: url)
         else { return nil }
         return try? JSONDecoder().decode(Manifest.self, from: data)
     }()
@@ -75,7 +75,7 @@ enum ModelCacheAdoption {
             let url = folder.appendingPathComponent(file.path)
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), !isDirectory.boolValue,
-                  fileSize(url) == file.size
+                fileSize(url) == file.size
             else { return false }
             present.append((url, file))
         }

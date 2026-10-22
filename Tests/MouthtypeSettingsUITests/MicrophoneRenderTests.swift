@@ -17,9 +17,11 @@ import Testing
             }
             if state == "damaged" { defaults.set(Data("bad".utf8), forKey: PreferredMicrophone.defaultsKey) }
             let model = MicrophoneSettingsModel(defaults: defaults, devices: { state == "missing" ? [] : [device] }, defaultInput: { 42 })
-            let view = NSHostingView(rootView: MicrophoneSettingsSection(model: model).padding()
-                .frame(width: 590, height: 180).background(Color(nsColor: .textBackgroundColor)))
-            let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 590, height: 180),
+            let view = NSHostingView(
+                rootView: MicrophoneSettingsSection(model: model).padding()
+                    .frame(width: 590, height: 180).background(Color(nsColor: .textBackgroundColor)))
+            let window = NSWindow(
+                contentRect: NSRect(x: 0, y: 0, width: 590, height: 180),
                 styleMask: [.titled], backing: .buffered, defer: false)
             window.appearance = NSAppearance(named: .aqua)
             window.contentView = view

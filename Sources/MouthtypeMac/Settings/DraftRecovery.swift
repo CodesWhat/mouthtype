@@ -203,10 +203,12 @@ final class DraftOffer {
         let noun = count == 1 ? "draft" : "drafts"
         var card = DeliveryCard.recoverOffer(seconds: 1, ago: 0, older: 0)
         card.header = "Recover an unsaved \(noun)?\n\(count) \(noun) from when Mouthtype was quit"
-        cards.present(card, actions: [
-            .recover: { [weak self] in self?.recover() },
-            .discard: { [weak self] in self?.discard() },
-        ])
+        cards.present(
+            card,
+            actions: [
+                .recover: { [weak self] in self?.recover() },
+                .discard: { [weak self] in self?.discard() },
+            ])
         return count
     }
 
