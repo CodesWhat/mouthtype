@@ -439,6 +439,34 @@ def shortcut_configure():
     return reply
 
 
+def gnome_shortcuts():
+    """The GNOME command-shortcut module. It lives with the daemon, so a plugin-only install can't offer it."""
+    session_client()
+    for directory in (DESKTOP, PLUGIN_DIR.parent / "linux-desktop"):
+        if (directory / "shortcuts_gnome.py").is_file():
+            if str(directory) not in sys.path:
+                sys.path.insert(0, str(directory))
+            import shortcuts_gnome
+            return shortcuts_gnome
+    raise RuntimeError("GNOME shortcuts are not part of this install")
+
+
+def shortcut_gnome_install(binding=None):
+    module = gnome_shortcuts()
+    try:
+        return module.install(binding) if binding else module.install()
+    except module.GnomeShortcutError as error:
+        raise RuntimeError(str(error))
+
+
+def shortcut_gnome_remove():
+    module = gnome_shortcuts()
+    try:
+        return {"removed": module.remove()}
+    except module.GnomeShortcutError as error:
+        raise RuntimeError(str(error))
+
+
 def shortcut_mode():
     return shortcut_info()["mode"]
 
@@ -1371,7 +1399,7 @@ VALID_ACTIONS = {
     "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
     "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
 ,
-    "forget", "prune", "shortcut-status", "shortcut-configure"
+    "forget", "prune", "shortcut-status", "shortcut-configure", "shortcut-gnome-install", "shortcut-gnome-remove"
 }
 
 MODULE_PATTERN = re.compile(r"control_[a-z0-9_]+\.py")
@@ -1458,13 +1486,14 @@ def main():
         and len(sys.argv) != 3
     ) or (sys.argv[1] == "prune" and len(sys.argv) != 4
     ) or (sys.argv[1] in {"set-shortcut", "set-transform-shortcut"} and len(sys.argv) not in {3, 4}
+    ) or (sys.argv[1] == "shortcut-gnome-install" and len(sys.argv) not in {2, 3}
     ) or (sys.argv[1] == "copy" and len(sys.argv) not in {2, 3}) or (
         sys.argv[1] in {"set-config", "set-font"} and len(sys.argv) not in {4, 5}
     ) or (
         sys.argv[1] == "set-pill" and len(sys.argv) != 4
     ) or (sys.argv[1] in {"state", "start-service", "shutdown", "start", "stop", "cancel", "toggle", "paste-last",
                           "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save",
-                          "shortcut-status", "shortcut-configure"}
+                          "shortcut-status", "shortcut-configure", "shortcut-gnome-remove"}
           and len(sys.argv) != 2):
         print(json.dumps({"error": "Unknown control action"}))
         return 2
@@ -1476,6 +1505,10 @@ def main():
             output = shortcut_status()
         elif action == "shortcut-configure":
             output = shortcut_configure()
+        elif action == "shortcut-gnome-install":
+            output = shortcut_gnome_install(sys.argv[2] if len(sys.argv) == 3 else None)
+        elif action == "shortcut-gnome-remove":
+            output = shortcut_gnome_remove()
         elif action == "import-pick":
             output = import_pick()
         elif action == "import-start":
