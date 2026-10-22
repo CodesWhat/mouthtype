@@ -51,11 +51,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
-        with:
-          languages: ${{ matrix.language }}
-          build-mode: ${{ matrix.build-mode }}
-
       # mlx-swift compiles Metal shaders, and Xcode ships the Metal toolchain as a separate component.
       - name: Metal toolchain
         if: matrix.language == 'swift'
@@ -64,6 +59,11 @@ jobs:
             xcodebuild -downloadComponent MetalToolchain
           fi
           xcrun metal --version
+
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
 
       - name: Build Swift package
         if: matrix.language == 'swift'
