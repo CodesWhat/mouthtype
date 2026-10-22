@@ -17,11 +17,11 @@ SIDEBAR = ["Home", "Stats", "Dictionary", "Transforms", "Style", "Appearance", "
 
 def sources():
     files = sorted((HERE / "pages").glob("*.qml")) + sorted((HERE / "parts").glob("*.qml")) + sorted(HERE.glob("Mouthtype*.qml"))
-    return files + [HERE / "Panel.qml"]
+    return files + [HERE / "Panel.qml", HERE / "AppState.qml"]
 
 
 def pages_files():
-    return sorted((HERE / "pages").glob("*.qml")) + sorted(HERE.glob("Mouthtype*.qml")) + [HERE / "Panel.qml"]
+    return sorted((HERE / "pages").glob("*.qml")) + sorted(HERE.glob("Mouthtype*.qml")) + [HERE / "Panel.qml", HERE / "AppState.qml"]
 
 
 class PageContractTests(unittest.TestCase):
