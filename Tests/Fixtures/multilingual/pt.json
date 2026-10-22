@@ -1,0 +1,44 @@
+[
+  {
+    "id": "pt-collision-filler-um",
+    "language": "pt",
+    "raw": "Um dia eu vou embora.",
+    "notes": "Damage table: 'um' means 'a/one', 0.5.0 filler removal writes 'Dia eu vou embora.'"
+  },
+  {
+    "id": "pt-short-1",
+    "language": "pt",
+    "raw": "Por favor, me envie o arquivo antes do almoço.",
+    "notes": "Short, 9 words."
+  },
+  {
+    "id": "pt-short-2",
+    "language": "pt",
+    "raw": "A reunião começa amanhã de manhã às nove.",
+    "notes": "Short, 8 words."
+  },
+  {
+    "id": "pt-medium-1",
+    "language": "pt",
+    "raw": "Podemos adiar a reunião para quinta-feira, porque o cliente só chega a Curitiba às onze?",
+    "notes": "Medium, 15 words."
+  },
+  {
+    "id": "pt-medium-2",
+    "language": "pt",
+    "raw": "Revi os números de novo esta manhã e o segundo trimestre está melhor do que esperávamos.",
+    "notes": "Medium, 16 words."
+  },
+  {
+    "id": "pt-long-1",
+    "language": "pt",
+    "raw": "Olá a todos, uma atualização rápida sobre o estado da migração. A troca do banco de dados terminou ontem à noite sem nenhuma interrupção, e as réplicas de leitura já estão em dia com o servidor principal.",
+    "notes": "Long, 37 words."
+  },
+  {
+    "id": "pt-long-2",
+    "language": "pt",
+    "raw": "Obrigado por enviar a proposta revisada. Analisei o cronograma e o orçamento com a equipe esta manhã, e estamos em grande parte de acordo com o plano para o próximo trimestre.",
+    "notes": "Long, 31 words."
+  }
+]

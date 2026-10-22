@@ -11,6 +11,8 @@ struct CleanupCase: Codable, Sendable, Equatable {
     var minLengthRatio: Double?
     var appName: String?
     var reference: String
+    /// ISO 639-1 code of the language the case is written in. Nil means English.
+    var language: String?
 }
 
 enum LengthBucket: String, Codable, CaseIterable {

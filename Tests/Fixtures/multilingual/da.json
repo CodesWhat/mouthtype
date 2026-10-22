@@ -1,0 +1,26 @@
+[
+  {
+    "id": "da-collision-filler-er",
+    "language": "da",
+    "raw": "Han er her.",
+    "notes": "Damage table: 'er' means 'is', 0.5.0 filler removal writes 'Han her.'"
+  },
+  {
+    "id": "da-short-1",
+    "language": "da",
+    "raw": "Send mig venligst filen før frokost.",
+    "notes": "Short, 6 words."
+  },
+  {
+    "id": "da-medium-1",
+    "language": "da",
+    "raw": "Kan vi flytte mødet til torsdag, fordi kunden først lander i Aarhus klokken elleve?",
+    "notes": "Medium, 14 words."
+  },
+  {
+    "id": "da-long-1",
+    "language": "da",
+    "raw": "Hej alle sammen, en hurtig opdatering om status på migreringen. Skiftet af databasen blev afsluttet i går aftes uden nedetid, og læsekopierne er allerede opdateret i forhold til den primære server.",
+    "notes": "Long, 31 words."
+  }
+]

@@ -1,0 +1,56 @@
+[
+  {
+    "id": "de-collision-filler-er-um",
+    "language": "de",
+    "raw": "Er kommt um drei.",
+    "notes": "Damage table: 'er' and 'um' are in the English filler set, 0.5.0 writes 'Kommt drei.'"
+  },
+  {
+    "id": "de-collision-stutter-das-das",
+    "language": "de",
+    "raw": "Ich glaube, dass das das Beste ist.",
+    "notes": "Damage table: grammatical 'das das' collapsed by stutter removal, 0.5.0 writes 'Ich glaube, dass das Beste ist.'"
+  },
+  {
+    "id": "de-collision-blend-noun",
+    "language": "de",
+    "raw": "Hund gekauft",
+    "notes": "Damage table: blend lowercases the first word mid-sentence. Used with the text 'Wir haben einen ' before the cursor, 0.5.0 writes 'hund gekauft'."
+  },
+  {
+    "id": "de-short-1",
+    "language": "de",
+    "raw": "Bitte schicken Sie mir die Datei vor dem Mittagessen.",
+    "notes": "Short, 9 words."
+  },
+  {
+    "id": "de-short-2",
+    "language": "de",
+    "raw": "Das Treffen beginnt morgen früh um neun.",
+    "notes": "Short, 7 words."
+  },
+  {
+    "id": "de-medium-1",
+    "language": "de",
+    "raw": "Können wir das Treffen auf Donnerstag verschieben, weil der Kunde erst um elf Uhr in Berlin ankommt?",
+    "notes": "Medium, 17 words."
+  },
+  {
+    "id": "de-medium-2",
+    "language": "de",
+    "raw": "Ich habe mir die Zahlen heute Morgen noch einmal angesehen, und das zweite Quartal ist besser als erwartet.",
+    "notes": "Medium, 18 words."
+  },
+  {
+    "id": "de-long-1",
+    "language": "de",
+    "raw": "Hallo zusammen, kurzes Update zum Stand der Migration. Die Umstellung der Datenbank wurde gestern Abend ohne Ausfallzeit abgeschlossen, und die Lesereplikate sind bereits auf dem gleichen Stand wie der Primärserver.",
+    "notes": "Long, 30 words."
+  },
+  {
+    "id": "de-long-2",
+    "language": "de",
+    "raw": "Vielen Dank für den überarbeiteten Vorschlag. Ich habe den Zeitplan und das Budget heute Morgen mit dem Team durchgesprochen, und wir sind uns bei der Planung für das nächste Quartal weitgehend einig.",
+    "notes": "Long, 32 words."
+  }
+]
