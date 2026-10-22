@@ -8,7 +8,7 @@ export const source = loader(docs.toFumadocsSource(), {
 });
 
 /** Frontmatter + body type for a docs page, derived from the generated collection. */
-export type DocsPageData = (typeof docs.docs)[number];
+type DocsPageData = (typeof docs.docs)[number];
 
 /** Typed getPage, avoids `as any` while preserving fumadocs' slug typing. */
 export function getDocsPage(slugs?: string[]) {
