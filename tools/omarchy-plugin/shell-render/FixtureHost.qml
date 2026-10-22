@@ -30,6 +30,10 @@ QtObject {
   property var fontPrefs: ({ preset: "default", family: "", overrides: {} })
   property var versions: ({ plugin: "1.3.0", app: "0.4.0" })
   property var lastState: ({})
+  property string desktop: "hyprland"
+  property var shortcutTriggers: ({})
+  property bool deliveryNeedsGrant: false
+  property var trayAvailable: null
   property string transcriptFont: "sans-serif"
   property string pillFont: "sans-serif"
   property var fileImport: ({ state: "off" })
