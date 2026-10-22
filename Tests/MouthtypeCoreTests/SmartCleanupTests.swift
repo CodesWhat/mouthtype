@@ -722,8 +722,11 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
 
     @Test func aLongGeneralModelPassCanFinishBeyondFourSeconds() async {
         let text = String(repeating: "I want to keep this sentence. ", count: 23).trimmingCharacters(in: .whitespaces)
+        // The allowance is checked directly so a starved CI runner can't turn a 4.2 s sleep into a missed deadline.
+        #expect(SmartCleanup.qualityBudget(words: text.split(separator: " ").count) > .milliseconds(4200))
+        let delay: Duration = TextTestSupport.timingAssertsEnabled ? .milliseconds(4200) : .milliseconds(50)
         let cleaner = FakeCleaner { _, _ in
-            try await Task.sleep(for: .milliseconds(4200))
+            try await Task.sleep(for: delay)
             return text
         }
         cleaner.usesNativeControls = false
