@@ -51,7 +51,9 @@ enum PipelineSelfTest {
                 engine: HostEngine(host: engineHost), clock: clock
             )
             if let level = SmartTestOptions.level(in: CommandLine.arguments) {
-                pipeline.settings = { var settings = CleanupSettings.load(); settings.level = level; return settings }
+                pipeline.settings = {
+                    var settings = CleanupSettings.load(); settings.level = level; return settings
+                }
             }
             pipeline.smart = cleanerHost
             if pipeline.settings().level.needsModel { try await waitForCleaner(cleanerHost) }
@@ -78,11 +80,13 @@ enum PipelineSelfTest {
             }
 
             let words = transcribed?.words ?? []
-            let monotonic = zip(words, words.dropFirst()).allSatisfy { $0.start <= $1.start }
+            let monotonic =
+                zip(words, words.dropFirst()).allSatisfy { $0.start <= $1.start }
                 && words.allSatisfy { $0.start <= $0.end }
             let lastEnd = words.last?.end ?? 0
             let text = transcribed?.rawText ?? ""
-            let line = "pipeline selftest transcript=\"\(text)\" cleaned=\"\(cleanedText.replacingOccurrences(of: "\n", with: "\\n"))\""
+            let line =
+                "pipeline selftest transcript=\"\(text)\" cleaned=\"\(cleanedText.replacingOccurrences(of: "\n", with: "\\n"))\""
                 + " words=\(TextMetrics.wordCount(text))"
                 + " timings=\(words.count) monotonic=\(monotonic) lastEndS=\(String(format: "%.2f", lastEnd))"
                 + " clipS=\(String(format: "%.2f", audioMs / 1000)) asrMs=\(transcribed?.asrDoneMs.description ?? "none")"

@@ -127,11 +127,13 @@ private struct Rig {
         var requests: [Int: CheckedContinuation<[RecoverableDictation], Error>] = [:]
         var calls = 0
         defer { requests.values.forEach { $0.resume(returning: []) } }
-        let section = SavedRecordingsMenuSection(recovery: rig.recovery, canRecover: { true }, load: {
-            calls += 1
-            let request = calls
-            return try await withCheckedThrowingContinuation { requests[request] = $0 }
-        })
+        let section = SavedRecordingsMenuSection(
+            recovery: rig.recovery, canRecover: { true },
+            load: {
+                calls += 1
+                let request = calls
+                return try await withCheckedThrowingContinuation { requests[request] = $0 }
+            })
         let menu = try #require(section.items.first?.submenu)
         for _ in 0..<100 { section.refresh() }
         #expect(calls == 0)

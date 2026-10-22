@@ -81,7 +81,8 @@ struct BoostedText: Sendable, Equatable {
 /// Builds and caches one rescoring session per vocabulary and runs it, bounded, after the primary transcript.
 /// Every failure path returns nil so the caller keeps the unboosted text.
 actor VocabularyBooster {
-    typealias Prepare = @Sendable (VocabularyBias, @escaping @Sendable (VocabularyBoostStatus) -> Void) async throws
+    typealias Prepare =
+        @Sendable (VocabularyBias, @escaping @Sendable (VocabularyBoostStatus) -> Void) async throws
         -> any VocabularyRescoring
 
     static let defaultTimeout: Duration = .milliseconds(1500)
@@ -134,7 +135,8 @@ actor VocabularyBooster {
                 return
             }
             guard new != nil, session == nil, building == nil, let failedAt,
-                  ContinuousClock.now - failedAt >= retryAfter else { return }
+                ContinuousClock.now - failedAt >= retryAfter
+            else { return }
         }
         generation += 1
         building?.cancel()
@@ -270,7 +272,8 @@ extension VocabularyBooster {
         }
         var tail = 0
         while tail < old.count - head, tail < new.count - head,
-              old[old.count - 1 - tail] == new[new.count - 1 - tail] { tail += 1 }
+            old[old.count - 1 - tail] == new[new.count - 1 - tail]
+        { tail += 1 }
         let oldEnd = old.count - tail, newEnd = new.count - tail
         var runs: [Run] = (0..<head).map { .same(old: $0, new: $0) }
         runs += alignMiddle(old, head..<oldEnd, new, head..<newEnd)
@@ -552,10 +555,11 @@ extension VocabularyBooster {
                 let step = (last.end - first.start) / Double(newRange.count)
                 let confidence = replaced.map(\.confidence).min() ?? first.confidence
                 for (offset, index) in newRange.enumerated() {
-                    result.append(WordTiming(
-                        word: new[index], start: first.start + step * Double(offset),
-                        end: first.start + step * Double(offset + 1), confidence: confidence
-                    ))
+                    result.append(
+                        WordTiming(
+                            word: new[index], start: first.start + step * Double(offset),
+                            end: first.start + step * Double(offset + 1), confidence: confidence
+                        ))
                 }
             }
         }

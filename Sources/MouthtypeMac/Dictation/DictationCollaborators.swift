@@ -171,10 +171,11 @@ final class MicCapture: DictationCapturing {
 
     func start(keyDownAtNanos: UInt64) async throws {
         try await preparation.start {
-            await capture.setInterruptionHandler(CaptureInterruption.hop { [weak self] in
-                self?.preparation.invalidate()
-                self?.onInterrupted?()
-            })
+            await capture.setInterruptionHandler(
+                CaptureInterruption.hop { [weak self] in
+                    self?.preparation.invalidate()
+                    self?.onInterrupted?()
+                })
             try await capture.start(keyDownAtNanos: keyDownAtNanos)
         }
     }

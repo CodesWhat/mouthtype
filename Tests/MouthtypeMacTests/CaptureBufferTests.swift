@@ -5,9 +5,10 @@ import Testing
 @testable import MouthtypeMac
 
 func makePCM(sampleRate: Double, channels: AVAudioChannelCount, frames: AVAudioFrameCount) throws -> AVAudioPCMBuffer {
-    let format = try #require(AVAudioFormat(
-        commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: channels, interleaved: false
-    ))
+    let format = try #require(
+        AVAudioFormat(
+            commonFormat: .pcmFormatFloat32, sampleRate: sampleRate, channels: channels, interleaved: false
+        ))
     let buffer = try #require(AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frames))
     buffer.frameLength = frames
     let data = try #require(buffer.floatChannelData)
@@ -223,7 +224,9 @@ func makePCM(sampleRate: Double, channels: AVAudioChannelCount, frames: AVAudioF
     /// isolation check firing.
     @Test @MainActor func theHandlerRunsOnTheMainActorWhenCalledFromAnotherThread() async {
         var ran = 0
-        let hop = CaptureInterruption.hop { MainActor.assertIsolated(); ran += 1 }
+        let hop = CaptureInterruption.hop {
+            MainActor.assertIsolated(); ran += 1
+        }
         await withCheckedContinuation { continuation in
             DispatchQueue.global().async {
                 hop()

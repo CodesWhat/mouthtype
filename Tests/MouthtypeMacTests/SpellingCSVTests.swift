@@ -41,7 +41,9 @@ import MouthtypeCore
         defer { try? FileManager.default.removeItem(at: dir) }
         try store.save(heard: "shawn", written: "Sean")
         let original = try Data(contentsOf: store.url)
-        for csv in ["heard,written\nnew,New\nSHAWN,Shaun", "heard,written\nnew,New\nNEW,Other", "heard,written\nnew,New\n,Blank", "heard,written\nnew,New\n" + String(repeating: "x", count: 129) + ",Long"] {
+        for csv in [
+            "heard,written\nnew,New\nSHAWN,Shaun", "heard,written\nnew,New\nNEW,Other", "heard,written\nnew,New\n,Blank", "heard,written\nnew,New\n" + String(repeating: "x", count: 129) + ",Long",
+        ] {
             let preview = try store.previewImport(Data(csv.utf8))
             #expect(!preview.canImport)
             #expect(preview.rows.contains { if case .invalid = $0.status { true } else { false } })
@@ -53,7 +55,10 @@ import MouthtypeCore
     @Test func malformedCSVAndUnsupportedHeadersAreRejected() throws {
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }
-        for csv in ["", "word,alias\na,b", "heard,written,extra\na,b,c", "heard,heard\na,b", "heard,written\n\"unfinished,b", "heard,written\na,\"b\"junk", "heard,written\na,b,c", "heard,written\nqu\"ote,b", "heard,written\nonly-one", "name\nSea\u{0}n", "name\n" + Array(repeating: "Sean", count: 5001).joined(separator: "\n")] {
+        for csv in [
+            "", "word,alias\na,b", "heard,written,extra\na,b,c", "heard,heard\na,b", "heard,written\n\"unfinished,b", "heard,written\na,\"b\"junk", "heard,written\na,b,c", "heard,written\nqu\"ote,b",
+            "heard,written\nonly-one", "name\nSea\u{0}n", "name\n" + Array(repeating: "Sean", count: 5001).joined(separator: "\n"),
+        ] {
             let preview = try store.previewImport(Data(csv.utf8))
             #expect(!preview.canImport)
             #expect(preview.problem != nil || preview.rows.contains { if case .invalid = $0.status { true } else { false } })

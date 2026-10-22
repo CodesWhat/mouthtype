@@ -12,13 +12,15 @@ public enum TextMetrics {
         let folded = text.lowercased()
             .replacingOccurrences(of: "\u{2019}", with: "'")
             .replacingOccurrences(of: "\u{2018}", with: "'")
-        let cleaned = String(folded.unicodeScalars.map { scalar -> Character in
-            if CharacterSet.letters.contains(scalar) || CharacterSet.decimalDigits.contains(scalar) || scalar == "'" {
-                return Character(scalar)
-            }
-            return " "
-        })
-        return cleaned
+        let cleaned = String(
+            folded.unicodeScalars.map { scalar -> Character in
+                if CharacterSet.letters.contains(scalar) || CharacterSet.decimalDigits.contains(scalar) || scalar == "'" {
+                    return Character(scalar)
+                }
+                return " "
+            })
+        return
+            cleaned
             .split(whereSeparator: { $0 == " " })
             .map { $0.trimmingCharacters(in: CharacterSet(charactersIn: "'")) }
             .filter { !$0.isEmpty }

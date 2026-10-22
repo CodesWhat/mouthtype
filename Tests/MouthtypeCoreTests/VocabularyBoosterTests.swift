@@ -6,7 +6,11 @@ import Testing
 private final class Counter: Sendable {
     private let value = NSLock()
     nonisolated(unsafe) private var n = 0
-    func next() -> Int { value.withLock { n += 1; return n } }
+    func next() -> Int {
+        value.withLock {
+            n += 1; return n
+        }
+    }
     var count: Int { value.withLock { n } }
 }
 
@@ -46,10 +50,12 @@ private let maya = VocabularyBias(terms: ["Maya"])
         delay: Duration = .zero, timeout: Duration = .milliseconds(1500), retryAfter: Duration = .seconds(300),
         builds: Counter = Counter(), failures: Int = 0, releases: Counter = Counter()
     ) -> VocabularyBooster {
-        VocabularyBooster(timeout: timeout, retryAfter: retryAfter, prepare: { _, _ in
-            if builds.next() <= failures { throw Boom() }
-            return FakeRescorer(result: result, delay: delay)
-        }, release: { _ = releases.next() }, report: { _ in })
+        VocabularyBooster(
+            timeout: timeout, retryAfter: retryAfter,
+            prepare: { _, _ in
+                if builds.next() <= failures { throw Boom() }
+                return FakeRescorer(result: result, delay: delay)
+            }, release: { _ = releases.next() }, report: { _ in })
     }
 
     @Test func usesRescoredTextAndReportsAppliedTerms() async {
@@ -88,10 +94,11 @@ private let maya = VocabularyBias(terms: ["Maya"])
 
     @Test func notReadyMeansUnboostedAndNeverWaitsForTheBuild() async {
         let gate = Counter()
-        let b = VocabularyBooster(prepare: { _, _ in
-            while gate.count == 0 { try await Task.sleep(for: .milliseconds(5)) }
-            return FakeRescorer(result: nil)
-        }, report: { _ in })
+        let b = VocabularyBooster(
+            prepare: { _, _ in
+                while gate.count == 0 { try await Task.sleep(for: .milliseconds(5)) }
+                return FakeRescorer(result: nil)
+            }, report: { _ in })
         await b.setBias(maya)
         #expect(await b.boost(text: "hi", tokenTimings: timings, samples: samples) == nil)
         _ = gate.next()
@@ -147,15 +154,16 @@ private let maya = VocabularyBias(terms: ["Maya"])
 
     /// A booster whose build blocks until `gate` is bumped.
     private func gatedBooster(gate: Counter, started: Counter) -> VocabularyBooster {
-        VocabularyBooster(prepare: { _, _ in
-            _ = started.next()
-            while gate.count == 0 {
-                await withCheckedContinuation { continuation in
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 0.005) { continuation.resume() }
+        VocabularyBooster(
+            prepare: { _, _ in
+                _ = started.next()
+                while gate.count == 0 {
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.global().asyncAfter(deadline: .now() + 0.005) { continuation.resume() }
+                    }
                 }
-            }
-            return FakeRescorer(result: nil)
-        }, report: { _ in })
+                return FakeRescorer(result: nil)
+            }, report: { _ in })
     }
 
     @Test func setBiasWithoutABudgetReturnsWhileTheBuildIsStillGated() async {
@@ -218,8 +226,10 @@ private let maya = VocabularyBias(terms: ["Maya"])
     }
 
     @Test func rescorerThatChangesNothingOrReturnsNothingKeepsTheText() async {
-        for result in [nil, VocabularyRescore(text: "hi", wasModified: false, appliedTerms: []),
-                       VocabularyRescore(text: "  ", wasModified: true, appliedTerms: [])] {
+        for result in [
+            nil, VocabularyRescore(text: "hi", wasModified: false, appliedTerms: []),
+            VocabularyRescore(text: "  ", wasModified: true, appliedTerms: []),
+        ] {
             let b = booster(result: result)
             await b.setBias(maya)
             await b.waitUntilSettled()
@@ -228,9 +238,10 @@ private let maya = VocabularyBias(terms: ["Maya"])
     }
 
     @Test func termsBecomeFluidAudioVocabularyWithAliases() {
-        let context = FluidVocabularyRescorer.context(for: VocabularyBias(entries: [
-            VocabularyBias.Term(text: "Sockguard", aliases: ["sock guard"]), VocabularyBias.Term(text: "Maya"),
-        ]))
+        let context = FluidVocabularyRescorer.context(
+            for: VocabularyBias(entries: [
+                VocabularyBias.Term(text: "Sockguard", aliases: ["sock guard"]), VocabularyBias.Term(text: "Maya"),
+            ]))
         #expect(context.terms.map(\.text) == ["Sockguard", "Maya"])
         #expect(context.terms[0].aliases == ["sock guard"])
         #expect(context.terms[1].aliases == nil)
@@ -346,9 +357,11 @@ private let maya = VocabularyBias(terms: ["Maya"])
     }
 
     @Test func rescorerReplacementsTeachTheMatching() {
-        let known = VocabularyBooster.knownTerms(bias: nil, replacements: [
-            .init(heard: "sock guard", term: "Sockguard"), .init(heard: "openai", term: "Open AI"),
-        ])
+        let known = VocabularyBooster.knownTerms(
+            bias: nil,
+            replacements: [
+                .init(heard: "sock guard", term: "Sockguard"), .init(heard: "openai", term: "Open AI"),
+            ])
         #expect(VocabularyBooster.restoringPunctuation(original: "Try sock guard, openai.", boosted: "Try Sockguard Open AI", known: known) == "Try Sockguard, Open AI.")
     }
 

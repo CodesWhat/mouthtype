@@ -21,21 +21,21 @@ public struct SpokenCommand: Sendable, Equatable {
 
     /// The spoken list commands. All but `.end` and the item separators work anywhere; those only inside a list.
     public enum ListAction: Sendable, Equatable {
-        case bullet       // "bullet", "bullet point": needs item text after it
-        case newBullet    // "new bullet"
-        case numbered     // "numbered list": needs item text after it
-        case nextItem     // "next item", "new item": inside a list, needs item text
-        case next         // bare "next": inside a list, needs item text, with extra prose guards
-        case end          // "end list", "end of list": inside a list
+        case bullet  // "bullet", "bullet point": needs item text after it
+        case newBullet  // "new bullet"
+        case numbered  // "numbered list": needs item text after it
+        case nextItem  // "next item", "new item": inside a list, needs item text
+        case next  // bare "next": inside a list, needs item text, with extra prose guards
+        case end  // "end list", "end of list": inside a list
     }
 
     /// How the symbol sits against its neighbours.
     public enum Attach: Sendable, Equatable {
-        case previous      // glued to the word before, space after: , . ? ! : ; …
-        case next          // space before, glued to the word after: ( open-quote
-        case both          // glued on both sides: - @
-        case spaced        // a space on each side: dash, &
-        case newline       // replaces the surrounding spaces
+        case previous  // glued to the word before, space after: , . ? ! : ; …
+        case next  // space before, glued to the word after: ( open-quote
+        case both  // glued on both sides: - @
+        case spaced  // a space on each side: dash, &
+        case newline  // replaces the surrounding spaces
     }
 
     public var words: [String]

@@ -395,13 +395,15 @@ public final class HotkeyService {
             destinationDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(code))
         }
         if let shortcut { destinationDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(shortcut.keyCode)) }
-        guard let sample = Self.resyncSample(
-            source: options.source,
-            hotkeyHeld: mapper.hotkeyHeld,
-            currentFlags: flags,
-            destinationKeyDown: destinationDown,
-            timestampNanos: HostClock.now()
-        ) else { return }
+        guard
+            let sample = Self.resyncSample(
+                source: options.source,
+                hotkeyHeld: mapper.hotkeyHeld,
+                currentFlags: flags,
+                destinationKeyDown: destinationDown,
+                timestampNanos: HostClock.now()
+            )
+        else { return }
         shared.hotkeyHeld.store(false, ordering: .relaxed)
         if let shortcut { shared.shortcutMatcher.withLock { _ = $0.update(sample, shortcut: shortcut) } }
         Log.hotkey.info("resyncing a missed hotkey release")
@@ -420,7 +422,8 @@ public final class HotkeyService {
         case let .shortcut(shortcut):
             guard !shortcut.isCapsLock else { return nil }
             guard !destinationKeyDown || currentFlags & shortcut.requiredFlags != shortcut.requiredFlags else { return nil }
-            return TapSample(kind: shortcut.isModifier ? .flagsChanged : .keyUp, keyCode: shortcut.keyCode,
+            return TapSample(
+                kind: shortcut.isModifier ? .flagsChanged : .keyUp, keyCode: shortcut.keyCode,
                 flags: currentFlags & ~DictationShortcut.modifierFlag(for: shortcut.keyCode), timestamp: timestampNanos)
         }
     }

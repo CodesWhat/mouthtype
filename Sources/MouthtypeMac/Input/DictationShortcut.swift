@@ -37,16 +37,20 @@ public struct DictationShortcut: Codable, Equatable, Sendable {
             && !keyName.isEmpty && keyName.count <= 40 && !keyName.unicodeScalars.contains(where: CharacterSet.controlCharacters.contains)
     }
     var displayName: String {
-        let flags: [(UInt64, String)] = [(CGEventFlags.maskControl.rawValue, "⌃"), (CGEventFlags.maskAlternate.rawValue, "⌥"),
-            (CGEventFlags.maskShift.rawValue, "⇧"), (CGEventFlags.maskCommand.rawValue, "⌘"), (CGEventFlags.maskSecondaryFn.rawValue, "Fn+")]
+        let flags: [(UInt64, String)] = [
+            (CGEventFlags.maskControl.rawValue, "⌃"), (CGEventFlags.maskAlternate.rawValue, "⌥"),
+            (CGEventFlags.maskShift.rawValue, "⇧"), (CGEventFlags.maskCommand.rawValue, "⌘"), (CGEventFlags.maskSecondaryFn.rawValue, "Fn+"),
+        ]
         return flags.filter { modifiers & $0.0 != 0 }.map(\.1).joined() + keyName
     }
 }
 
 enum ShortcutSettings {
     static let preferenceKey = "dictationShortcut"
-    static func apply(_ shortcut: DictationShortcut?, in defaults: UserDefaults = .standard,
-                      activate: (DictationShortcut?) -> String?) -> String? {
+    static func apply(
+        _ shortcut: DictationShortcut?, in defaults: UserDefaults = .standard,
+        activate: (DictationShortcut?) -> String?
+    ) -> String? {
         if let shortcut, !shortcut.isValid { return "That shortcut is not valid. Record another key." }
         if let error = activate(shortcut) { return error }
         _ = save(shortcut, in: defaults)
@@ -55,7 +59,8 @@ enum ShortcutSettings {
 
     static func load(_ defaults: UserDefaults = .standard) -> DictationShortcut? {
         guard let data = defaults.data(forKey: preferenceKey),
-              let shortcut = try? JSONDecoder().decode(DictationShortcut.self, from: data), shortcut.isValid, !shortcut.isDefault else { return nil }
+            let shortcut = try? JSONDecoder().decode(DictationShortcut.self, from: data), shortcut.isValid, !shortcut.isDefault
+        else { return nil }
         return shortcut
     }
 

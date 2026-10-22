@@ -202,8 +202,7 @@ final class DictationController {
                 let saving = endTimers()
                 endHandsFree()
                 var audio: CapturedAudio?
-                do { audio = try await capture.stopSalvaging() }
-                catch { await capture.cancel() }
+                do { audio = try await capture.stopSalvaging() } catch { await capture.cancel() }
                 audioQuiet?.end()
                 await saving?.value
                 releasePrewarm(current)
@@ -390,7 +389,9 @@ final class DictationController {
         private var continuation: CheckedContinuation<String?, Never>?
         init(_ continuation: CheckedContinuation<String?, Never>) { self.continuation = continuation }
         func resume(_ value: String?) {
-            let taken = lock.withLock { () -> CheckedContinuation<String?, Never>? in defer { continuation = nil }; return continuation }
+            let taken = lock.withLock { () -> CheckedContinuation<String?, Never>? in
+                defer { continuation = nil }; return continuation
+            }
             taken?.resume(returning: value)
         }
     }
@@ -471,10 +472,12 @@ final class DictationController {
         if previewEnabled() {
             let capture = capture
             let engine = engine
-            preview.start(source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0) }, update: { [weak self] text in
-                guard let self, self.phase == .recording, self.session?.id == session.id else { return }
-                self.pill.showPreview(text)
-            })
+            preview.start(
+                source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0) },
+                update: { [weak self] text in
+                    guard let self, self.phase == .recording, self.session?.id == session.id else { return }
+                    self.pill.showPreview(text)
+                })
         }
         capTimer?.cancel()
         let warning = limits.warningAfter
@@ -633,8 +636,9 @@ final class DictationController {
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
-        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination,
-                                           appName: session.startFocus?.appName, codingTarget: session.codingTarget)
+        let cleaned = await pipeline.clean(
+            transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination,
+            appName: session.startFocus?.appName, codingTarget: session.codingTarget)
         releasePrewarm(session)
         guard !cleaned.text.isEmpty else {
             await pipeline.finishEmpty(cleaned, session: session)
@@ -843,10 +847,12 @@ final class DictationController {
         interrupted = PendingInterruption(session: current, audio: audio, features: features, keyUpAt: keyUpAt)
         Log.app.info("microphone lost mid-recording; kept \(audio.samples.count, privacy: .public) samples")
         guard !shuttingDown else { finished(); return }
-        cards.present(.micDisconnected(seconds: audio.audioMs / 1000), actions: [
-            .insert: { [weak self] in Task { await self?.insertInterrupted() } },
-            .discard: { [weak self] in Task { await self?.discardInterrupted() } },
-        ])
+        cards.present(
+            .micDisconnected(seconds: audio.audioMs / 1000),
+            actions: [
+                .insert: { [weak self] in Task { await self?.insertInterrupted() } },
+                .discard: { [weak self] in Task { await self?.discardInterrupted() } },
+            ])
         finished()
     }
 

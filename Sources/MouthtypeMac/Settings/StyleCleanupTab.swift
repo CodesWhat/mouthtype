@@ -35,7 +35,9 @@ struct StyleCleanupTab: View {
     private func card(_ level: CleanupLevel) -> some View {
         let selected = model.cleanup.level == level
         return VStack(alignment: .leading, spacing: 8) {
-            Button { model.setLevel(level) } label: {
+            Button {
+                model.setLevel(level)
+            } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(level.title).font(DesignFont.serif(20)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
                     Text(blurb(level)).font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
@@ -83,7 +85,10 @@ struct StyleCleanupTab: View {
             statusText("NO MODEL · INSTANT")
         } else if selected, let cleaner = actions.cleaner {
             switch cleaner.state {
-            case .ready: HStack(spacing: 6) { Circle().fill(DesignPalette.success).frame(width: 6, height: 6).accessibilityHidden(true); statusText("READY") }
+            case .ready:
+                HStack(spacing: 6) {
+                    Circle().fill(DesignPalette.success).frame(width: 6, height: 6).accessibilityHidden(true); statusText("READY")
+                }
             case .absent, .failed:
                 HStack(spacing: 8) {
                     statusText(cleaner.state == .absent ? "NOT DOWNLOADED" : "FAILED")
@@ -143,8 +148,10 @@ struct StyleCleanupTab: View {
                     }
                 }
                 if ownLevels > 0 {
-                    DesignRow(title: "\(ownLevels) of your own app or website \(ownLevels == 1 ? "rule sets" : "rules set") a cleanup level",
-                              detail: "They win over the lists. Find them on the Other tab, or under the context their tone matches.") { EmptyView() }
+                    DesignRow(
+                        title: "\(ownLevels) of your own app or website \(ownLevels == 1 ? "rule sets" : "rules set") a cleanup level",
+                        detail: "They win over the lists. Find them on the Other tab, or under the context their tone matches."
+                    ) { EmptyView() }
                 }
                 DesignRow(title: followText(following, level: model.cleanup.level)) {
                     Text("\(following.count) OF \(StyleContextID.allCases.count) FOLLOW").font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8)

@@ -112,7 +112,8 @@ public struct ProfanityRemover: Sendable {
                 return edit
             }
         }
-        let swapMap = swaps.isEmpty
+        let swapMap =
+            swaps.isEmpty
             ? origin
             : Self.originalOffsets(of: swaps, count: tidied.count).map { $0 < origin.count ? origin[$0] : chars.count }
         var edits = removed.edits + (swaps.isEmpty ? [] : inOriginal(swapped.edits, through: origin))
@@ -134,7 +135,8 @@ public struct ProfanityRemover: Sendable {
         let ordered = spans.sorted { ($0.range.lowerBound, $0.range.upperBound) < ($1.range.lowerBound, $1.range.upperBound) }
         for span in ordered {
             guard span.range.lowerBound >= cursor, span.cut.upperBound <= count,
-                  span.cut.lowerBound <= span.range.lowerBound, span.cut.upperBound >= span.range.upperBound else { continue }
+                span.cut.lowerBound <= span.range.lowerBound, span.cut.upperBound >= span.range.upperBound
+            else { continue }
             let cutStart = max(span.cut.lowerBound, cursor)
             map.append(contentsOf: cursor..<cutStart)
             for i in 0..<span.replacement.count { map.append(min(span.range.lowerBound + i, span.cut.upperBound - 1)) }
@@ -305,9 +307,10 @@ public struct ProfanityRemover: Sendable {
 
         func isTheHell(_ k: Int) -> Bool {
             guard k > 0, ProfanityRemover.afterThe.contains(words[k].lower), words[k - 1].lower == "the", !protectedWords.contains(words[k].lower),
-                  !isProtected(words[k]), !isProtected(words[k - 1]), !insideToken(words[k]), !insideToken(words[k - 1]),
-                  chars[words[k - 1].end..<words[k].start].allSatisfy(TextScan.isSpace),
-                  words[k].start > words[k - 1].end else { return false }
+                !isProtected(words[k]), !isProtected(words[k - 1]), !insideToken(words[k]), !insideToken(words[k - 1]),
+                chars[words[k - 1].end..<words[k].start].allSatisfy(TextScan.isSpace),
+                words[k].start > words[k - 1].end
+            else { return false }
             return true
         }
 
@@ -375,7 +378,8 @@ public struct ProfanityRemover: Sendable {
         /// "Holy shit" as an exclamation: both words go.
         func holyEnd(from k: Int) -> Int? {
             guard words[k].lower == "holy", isFree(k), adjacent(k), isProfane(k + 1),
-                  ["shit", "crap", "fuck"].contains(words[k + 1].lower) else { return nil }
+                ["shit", "crap", "fuck"].contains(words[k + 1].lower)
+            else { return nil }
             return k + 1
         }
 
@@ -395,7 +399,10 @@ public struct ProfanityRemover: Sendable {
             let after = words[k + 1].end
             if after >= n || isPunctuation(chars[after]) || isClauseEnd(after) { return k + 1 }
             if target == "it", sentenceStart(before: words[k].start), adjacent(k + 1), k + 2 < words.count,
-               startsClause(at: k + 2) || ["i", "we", "they", "he", "she"].contains(words[k + 2].lower) { return k + 1 }
+                startsClause(at: k + 2) || ["i", "we", "they", "he", "she"].contains(words[k + 2].lower)
+            {
+                return k + 1
+            }
             return nil
         }
 
@@ -421,8 +428,9 @@ public struct ProfanityRemover: Sendable {
             guard k < words.count else { return false }
             if Self.contractedSubjects.contains(words[k].lower) { return true }
             guard k + 1 < words.count, adjacent(k),
-                  let a = tags.lexicalClass(at: words[k].start), a == .pronoun || a == .determiner,
-                  let b = tags.lexicalClass(at: words[k + 1].start), b == .verb else { return false }
+                let a = tags.lexicalClass(at: words[k].start), a == .pronoun || a == .determiner,
+                let b = tags.lexicalClass(at: words[k + 1].start), b == .verb
+            else { return false }
             return true
         }
 
@@ -597,7 +605,8 @@ public struct ProfanityRemover: Sendable {
                 } else if lower == "fuck", nextIs(k, ["this", "that"]), adjacent(k + 1) {
                     replace(k, "forget")
                 } else if lower == "ass", k >= 3, adjacent(k - 1), adjacent(k - 2), adjacent(k - 3),
-                          words[k - 1].lower == "the", words[k - 2].lower == "in", words[k - 3].lower == "pain" {
+                    words[k - 1].lower == "the", words[k - 2].lower == "in", words[k - 3].lower == "pain"
+                {
                     replace(k, "neck")
                 } else if ProfanityRemover.droppedAdjectives.contains(lower), adjacent(k), modifiesNext(k) {
                     // Only the adjective goes; the noun after it still gets its own swap ("damned asshole" is "jerk").
@@ -635,7 +644,8 @@ public struct ProfanityRemover: Sendable {
                     // The verb ("stop bitchin'", "he bitchin' about it") complains; only the adjective is great.
                     let prev = previous(k) ?? ""
                     let aboutNext = k + 1 < words.count && TextScan.onlySpaces(chars, end, words[k + 1].start) && words[k + 1].lower == "about"
-                    let isVerb = aboutNext || ProfanityRemover.gerundTriggers.contains(prev)
+                    let isVerb =
+                        aboutNext || ProfanityRemover.gerundTriggers.contains(prev)
                         || ["i", "we", "they", "you", "he", "she"].contains(prev)
                     replace(k, isVerb ? "complaining" : "great", through: end)
                 } else if lower == "fuck" || lower == "fucks" || lower == "fucked" || lower == "fucking" || lower == "motherfucking" {
@@ -651,7 +661,8 @@ public struct ProfanityRemover: Sendable {
                         replace(k, cheat)
                         spans.append(TextSpan(range: words[over].start..<words[over].end, cut: words[over - 1].end..<words[over].end, replacement: ""))
                     } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k), isFree(k + 1),
-                              ProfanityRemover.personObjects.contains(words[k + 1].lower) {
+                        ProfanityRemover.personObjects.contains(words[k + 1].lower)
+                    {
                         replace(k, sleep)
                     } else if let mess = ProfanityRemover.messUpForms[lower] {
                         replace(k, mess)
@@ -690,7 +701,8 @@ public struct ProfanityRemover: Sendable {
                 let next = words[k + 1]
                 guard isFree(k), isFree(k + 1), let first = chars[next.start...].first, first.isLetter else { continue }
                 // An acronym ("an MBA", "a UFO") is read letter by letter, so the letter's name decides, unless it's said as a word ("a NASA").
-                let wanted = isAcronym(next)
+                let wanted =
+                    isAcronym(next)
                     ? (ProfanityRemover.spokenAcronyms[next.lower] ?? ("AEFHILMNORSX".contains(chars[next.start]) ? "an" : "a"))
                     : (ProfanityRemover.startsWithVowelSound(next.lower) ? "an" : "a")
                 guard wanted != words[k].lower else { continue }
@@ -772,7 +784,8 @@ public struct ProfanityRemover: Sendable {
                 let cutStart = atEnd ? trailingBack() : s
                 add(core: s..<afterWord, cut: cutStart..<(atEnd ? afterWord : afterSpaces))
                 if !atEnd, afterSpaces < n, let next = words.firstIndex(where: { $0.start == afterSpaces }),
-                   !nextUnitStarts.contains(next), !keepsCase(words[next]), let up = TextScan.capitalized(chars, words[next]) {
+                    !nextUnitStarts.contains(next), !keepsCase(words[next]), let up = TextScan.capitalized(chars, words[next])
+                {
                     spans.append(TextSpan(range: words[next].start..<words[next].end, replacement: up))
                     lastCutEnd = max(lastCutEnd, words[next].end)
                 }

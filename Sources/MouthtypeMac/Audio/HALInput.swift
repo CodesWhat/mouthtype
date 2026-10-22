@@ -154,10 +154,11 @@ final class HALInput: @unchecked Sendable {
                 inputProc: halInputCallback,
                 inputProcRefCon: Unmanaged.passUnretained(context).toOpaque()
             )
-            try Self.check(AudioUnitSetProperty(
-                unit, kAudioOutputUnitProperty_SetInputCallback, kAudioUnitScope_Global, 0,
-                &callback, UInt32(MemoryLayout<AURenderCallbackStruct>.size)
-            ), "SetInputCallback")
+            try Self.check(
+                AudioUnitSetProperty(
+                    unit, kAudioOutputUnitProperty_SetInputCallback, kAudioUnitScope_Global, 0,
+                    &callback, UInt32(MemoryLayout<AURenderCallbackStruct>.size)
+                ), "SetInputCallback")
             try Self.check(AudioUnitInitialize(unit), "AudioUnitInitialize")
 
             self.unit = unit
@@ -227,10 +228,11 @@ final class HALInput: @unchecked Sendable {
         try check(AudioUnitSetProperty(unit, kAudioOutputUnitProperty_EnableIO, kAudioUnitScope_Input, 1, &on, flagSize), "EnableIO input")
         try check(AudioUnitSetProperty(unit, kAudioOutputUnitProperty_EnableIO, kAudioUnitScope_Output, 0, &off, flagSize), "EnableIO output")
         var id = device.id
-        try check(AudioUnitSetProperty(
-            unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
-            &id, UInt32(MemoryLayout<AudioDeviceID>.size)
-        ), "CurrentDevice")
+        try check(
+            AudioUnitSetProperty(
+                unit, kAudioOutputUnitProperty_CurrentDevice, kAudioUnitScope_Global, 0,
+                &id, UInt32(MemoryLayout<AudioDeviceID>.size)
+            ), "CurrentDevice")
 
         // What the device delivers into the unit.
         var hardware = AudioStreamBasicDescription()
@@ -240,10 +242,11 @@ final class HALInput: @unchecked Sendable {
             throw CaptureError.invalidInputFormat(sampleRate: hardware.mSampleRate, channels: hardware.mChannelsPerFrame)
         }
         var asbd = client.streamDescription.pointee
-        try check(AudioUnitSetProperty(
-            unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1,
-            &asbd, UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-        ), "client format")
+        try check(
+            AudioUnitSetProperty(
+                unit, kAudioUnitProperty_StreamFormat, kAudioUnitScope_Output, 1,
+                &asbd, UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+            ), "client format")
         return client
     }
 
@@ -390,7 +393,8 @@ private final class RenderContext: @unchecked Sendable {
             return status
         }
         let stamp = timestamp.pointee
-        let firstFrame = stamp.mFlags.contains(.hostTimeValid)
+        let firstFrame =
+            stamp.mFlags.contains(.hostTimeValid)
             ? HostClock.nanoseconds(fromHostTime: stamp.mHostTime)
             : now &- UInt64(Double(frames) / pcm.format.sampleRate * 1_000_000_000)
         sink.deliver(pcm, firstFrame, now)

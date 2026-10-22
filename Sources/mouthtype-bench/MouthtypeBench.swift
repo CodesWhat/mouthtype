@@ -50,7 +50,8 @@ struct Run: AsyncParsableCommand {
     private static let warmTimeout: TimeInterval = 45 * 60
 
     func run() async throws {
-        let ids = engines.map { $0.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) } }
+        let ids =
+            engines.map { $0.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) } }
             ?? EngineCatalog.ids
         for id in ids { _ = try EngineCatalog.make(id: id) }
 
@@ -121,17 +122,18 @@ struct Run: AsyncParsableCommand {
     ) async -> (output: WorkerOutput?, error: String?) {
         let resultURL = tempDir.appendingPathComponent("\(id)-\(mode).json")
         let logURL = logDir.appendingPathComponent("\(id)-\(mode).log")
-        let arguments = [
-            "engine-worker", id, "--mode", mode, "--corpus", corpus,
-            "--runs", String(runs), "--warmups", String(Self.warmups), "--result", resultURL.path,
-        ] + (boostTerms.map { ["--boost-terms", $0] } ?? [])
+        let arguments =
+            [
+                "engine-worker", id, "--mode", mode, "--corpus", corpus,
+                "--runs", String(runs), "--warmups", String(Self.warmups), "--result", resultURL.path,
+            ] + (boostTerms.map { ["--boost-terms", $0] } ?? [])
         do {
             let outcome = try await runChild(executable: executable, arguments: arguments, logURL: logURL, timeout: timeout)
             if outcome.timedOut {
                 return (nil, "failed by timeout after \(Int(timeout / 60)) minutes")
             }
             guard let data = try? Data(contentsOf: resultURL),
-                  let output = try? JSONDecoder().decode(WorkerOutput.self, from: data)
+                let output = try? JSONDecoder().decode(WorkerOutput.self, from: data)
             else {
                 return (nil, "worker exited with status \(outcome.exitStatus) without a result. Log tail:\n\(outcome.logTail)")
             }

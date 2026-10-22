@@ -55,7 +55,10 @@ import Testing
         let state = MicrophonePreparation(), gate = PreparationGate()
         let task = Task { try await state.prepare { try await gate.next() } }
         try await waitFor(1, gate)
-        #expect(try await !state.prepare { Issue.record("must coalesce duplicate request"); return true })
+        #expect(
+            try await !state.prepare {
+                Issue.record("must coalesce duplicate request"); return true
+            })
         gate.complete(.success(false))
         #expect(try await !task.value)
         #expect(!state.isPrepared)

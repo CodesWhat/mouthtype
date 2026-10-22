@@ -7,9 +7,12 @@ import Testing
 @MainActor @Suite struct MicCaptureReadinessTests {
     @Test func successfulExplicitStartRecoversFailedPreparation() async throws {
         let driver = ReadinessInputDriver()
-        let capture = MicCapture(capture: AudioCapture(input: driver, resolveInput: {
-            .init(device: .init(sampleRate: 48_000, channels: 1, id: 99), followsDefault: false)
-        }))
+        let capture = MicCapture(
+            capture: AudioCapture(
+                input: driver,
+                resolveInput: {
+                    .init(device: .init(sampleRate: 48_000, channels: 1, id: 99), followsDefault: false)
+                }))
         driver.fails.withLock { $0 = true }
         await #expect(throws: CaptureError.self) { try await capture.prepare() }
         #expect(!capture.isPrepared)
@@ -21,9 +24,12 @@ import Testing
 
     @Test func failedExplicitStartClearsPreviouslyReadyInput() async throws {
         let driver = ReadinessInputDriver()
-        let capture = MicCapture(capture: AudioCapture(input: driver, resolveInput: {
-            .init(device: .init(sampleRate: 48_000, channels: 1, id: 99), followsDefault: false)
-        }))
+        let capture = MicCapture(
+            capture: AudioCapture(
+                input: driver,
+                resolveInput: {
+                    .init(device: .init(sampleRate: 48_000, channels: 1, id: 99), followsDefault: false)
+                }))
         #expect(try await capture.prepare())
         driver.fails.withLock { $0 = true }
         await #expect(throws: CaptureError.self) { try await capture.start(keyDownAtNanos: HostClock.now()) }
@@ -32,12 +38,19 @@ import Testing
 
     @Test func setupObservesTheCaptureResultAndSelectionInvalidation() async throws {
         let driver = ReadinessInputDriver()
-        let capture = MicCapture(capture: AudioCapture(input: driver, resolveInput: {
-            .init(device: .init(sampleRate: 48_000, channels: 1, id: 99), followsDefault: false)
-        }))
+        let capture = MicCapture(
+            capture: AudioCapture(
+                input: driver,
+                resolveInput: {
+                    .init(device: .init(sampleRate: 48_000, channels: 1, id: 99), followsDefault: false)
+                }))
         let model = SetupModel(diagnostics: SettingsDiagnostics(), engine: EngineHost(), microphone: capture.preparation)
         let changed = Mutex(false)
-        withObservationTracking { _ = model.captureReady } onChange: { changed.withLock { $0 = true } }
+        withObservationTracking {
+            _ = model.captureReady
+        } onChange: {
+            changed.withLock { $0 = true }
+        }
         try await capture.start(keyDownAtNanos: HostClock.now())
         #expect(model.captureReady)
         #expect(changed.withLock { $0 })
@@ -57,9 +70,12 @@ import Testing
 
     @Test func interruptionInvalidatesReadinessBeforeNotifyingTheController() async throws {
         let driver = ReadinessInputDriver()
-        let capture = MicCapture(capture: AudioCapture(input: driver, resolveInput: {
-            .init(device: .init(sampleRate: 48_000, channels: 1, id: 99), followsDefault: false)
-        }))
+        let capture = MicCapture(
+            capture: AudioCapture(
+                input: driver,
+                resolveInput: {
+                    .init(device: .init(sampleRate: 48_000, channels: 1, id: 99), followsDefault: false)
+                }))
         try await capture.start(keyDownAtNanos: HostClock.now())
         #expect(capture.isPrepared)
         await withCheckedContinuation { continuation in

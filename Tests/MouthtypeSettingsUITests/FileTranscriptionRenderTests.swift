@@ -6,9 +6,10 @@ import Testing
 
 @MainActor @Suite(.serialized) struct FileTranscriptionRenderTests {
     private func model(gate: RenderGate? = nil, failing: Bool = false) -> FileTranscriptionModel {
-        FileTranscriptionModel(makeJob: {
-            AudioFileTranscription(decoder: RenderFileDecoder(failing: failing), engine: RenderFileEngine(gate: gate))
-        }, copy: { _ in })
+        FileTranscriptionModel(
+            makeJob: {
+                AudioFileTranscription(decoder: RenderFileDecoder(failing: failing), engine: RenderFileEngine(gate: gate))
+            }, copy: { _ in })
     }
 
     @Test func emptyBusyDoneAndFailedRenderInLightAndDark() async throws {
@@ -38,9 +39,10 @@ import Testing
 
     @Test func aFailedImportOverAResultRendersWithTheKeptTranscript() async throws {
         var fail = false
-        let transcription = FileTranscriptionModel(makeJob: {
-            AudioFileTranscription(decoder: RenderFileDecoder(failing: fail), engine: RenderFileEngine(gate: nil))
-        }, copy: { _ in })
+        let transcription = FileTranscriptionModel(
+            makeJob: {
+                AudioFileTranscription(decoder: RenderFileDecoder(failing: fail), engine: RenderFileEngine(gate: nil))
+            }, copy: { _ in })
         transcription.start(URL(fileURLWithPath: "/not-opened/standup.m4a"))
         for _ in 0..<500 where transcription.isBusy { await Task.yield() }
         fail = true
@@ -52,9 +54,10 @@ import Testing
 
     @Test func renderingNeverCopiesOrOpensAFile() async throws {
         var copies = 0
-        let transcription = FileTranscriptionModel(makeJob: {
-            AudioFileTranscription(decoder: RenderFileDecoder(failing: false), engine: RenderFileEngine(gate: nil))
-        }, copy: { _ in copies += 1 })
+        let transcription = FileTranscriptionModel(
+            makeJob: {
+                AudioFileTranscription(decoder: RenderFileDecoder(failing: false), engine: RenderFileEngine(gate: nil))
+            }, copy: { _ in copies += 1 })
         transcription.start(URL(fileURLWithPath: "/not-opened/recording.wav"))
         for _ in 0..<500 where transcription.isBusy { await Task.yield() }
         try renderBoth(transcription, name: "transcribe-no-side-effects")

@@ -36,10 +36,12 @@ enum MicrophoneChoice: Hashable {
         return "Next dictation follows System Default" + (systemDefaultName.map { " (\($0))." } ?? ".")
     }
 
-    init(defaults: UserDefaults = .standard,
-         devices: @escaping () throws -> [MicrophoneDevice] = { try InputDevice.availableMicrophones() },
-         defaultInput: @escaping () -> AudioDeviceID? = { InputDevice.defaultInputID() },
-         onChanged: @escaping () -> Void = {}) {
+    init(
+        defaults: UserDefaults = .standard,
+        devices: @escaping () throws -> [MicrophoneDevice] = { try InputDevice.availableMicrophones() },
+        defaultInput: @escaping () -> AudioDeviceID? = { InputDevice.defaultInputID() },
+        onChanged: @escaping () -> Void = {}
+    ) {
         self.defaults = defaults
         self.devices = devices
         self.defaultInput = defaultInput
@@ -117,7 +119,8 @@ enum MicrophoneChoice: Hashable {
 
     func movePriority(uid: String, offset: Int) {
         guard let index = priority?.devices.firstIndex(where: { $0.uid == uid }),
-              let count = priority?.devices.count, (0..<count).contains(index + offset) else { return }
+            let count = priority?.devices.count, (0..<count).contains(index + offset)
+        else { return }
         updatePriority { $0.devices.swapAt(index, index + offset) }
     }
 

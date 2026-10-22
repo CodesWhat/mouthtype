@@ -213,7 +213,11 @@ import MouthtypeCore
         let selection = CleanupSelection(
             fast: FakeSmartModel(downloaded: false), thorough: FakeSmartModel(downloaded: false), level: { choice.level })
         let changed = Mutex(false)
-        withObservationTracking { _ = selection.state } onChange: { changed.withLock { $0 = true } }
+        withObservationTracking {
+            _ = selection.state
+        } onChange: {
+            changed.withLock { $0 = true }
+        }
         choice.level = .medium
         selection.levelChanged()
         selection.startDownload()
@@ -228,9 +232,11 @@ import MouthtypeCore
         let suite = "mouthtype-confirm-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!
         defer { defaults.removePersistentDomain(forName: suite) }
-        let section = CleanupMenuSection(defaults: defaults, cleaner: selection, confirmDownload: { _, _ in
-            choice.level = .medium; return true
-        })
+        let section = CleanupMenuSection(
+            defaults: defaults, cleaner: selection,
+            confirmDownload: { _, _ in
+                choice.level = .medium; return true
+            })
         let item = section.items[0].submenu!.items.first { $0.title.hasPrefix("Download Cleanup") }!
         _ = item.target?.perform(item.action, with: item)
         for _ in 0..<6000 where fast.downloads + thorough.downloads == 0 { try? await Task.sleep(for: .milliseconds(10)) }
@@ -248,7 +254,11 @@ import MouthtypeCore
         defer { defaults.removePersistentDomain(forName: suite) }
         var saved = CleanupSettings(); saved.style = StylePreset.veryCasual.options; saved.save(to: defaults)
         var names: [String] = []
-        let section = CleanupMenuSection(defaults: defaults, cleaner: selection, confirmDownload: { name, _ in names.append(name); return false })
+        let section = CleanupMenuSection(
+            defaults: defaults, cleaner: selection,
+            confirmDownload: { name, _ in
+                names.append(name); return false
+            })
         let menu = section.items[0].submenu!
         let download = menu.items.first { $0.title.hasPrefix("Download Cleanup") }!
         _ = download.target?.perform(download.action, with: download)
@@ -266,8 +276,9 @@ import MouthtypeCore
 @MainActor
 @Suite struct TransformModelStatusTests {
     private func selection(fast: Bool, thorough: Bool, level: CleanupLevel) -> CleanupSelection {
-        CleanupSelection(fast: FakeSmartModel(downloaded: fast, id: "fast", name: "S1-mini"),
-                         thorough: FakeSmartModel(downloaded: thorough, id: "thorough", name: "Gemma"), level: { level })
+        CleanupSelection(
+            fast: FakeSmartModel(downloaded: fast, id: "fast", name: "S1-mini"),
+            thorough: FakeSmartModel(downloaded: thorough, id: "thorough", name: "Gemma"), level: { level })
     }
 
     @Test func fastOnlyWithFastSelectedStillReportsThoroughMissing() {

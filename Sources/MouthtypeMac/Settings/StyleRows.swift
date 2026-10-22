@@ -87,7 +87,8 @@ enum StyleRows {
             var rows = [primary]
             for key in member.keys.dropFirst() {
                 guard let entry = styles.entries.first(where: { $0.bundleID == key }),
-                      entry.style != primary.ruleStyle || entry.level != primary.ruleLevel else { continue }
+                    entry.style != primary.ruleStyle || entry.level != primary.ruleLevel
+                else { continue }
                 rows.append(row([key], split: key))
             }
             return rows
@@ -103,13 +104,15 @@ enum StyleRows {
         for entry in styles.entries {
             let member = StyleMember(kind: .app, name: entry.appName, keys: [entry.bundleID], isBuiltIn: false)
             guard let style = entry.style, !isMember(kind: .app, key: entry.bundleID, in: styles),
-                  claim(member, style: style, in: styles) == id else { continue }
+                claim(member, style: style, in: styles) == id
+            else { continue }
             rows.append(Row(member: member, ownRule: true, ruleStyle: style, ruleLevel: entry.level, targets: [entry.bundleID]))
         }
         for entry in styles.websites {
             let member = StyleMember(kind: .site, name: entry.domain, keys: [entry.domain], isBuiltIn: false)
             guard let style = entry.style, !isMember(kind: .site, key: entry.domain, in: styles),
-                  claim(member, style: style, in: styles) == id else { continue }
+                claim(member, style: style, in: styles) == id
+            else { continue }
             rows.append(Row(member: member, ownRule: true, ruleStyle: style, ruleLevel: entry.level))
         }
         return rows

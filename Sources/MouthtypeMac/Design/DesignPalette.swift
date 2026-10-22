@@ -137,8 +137,9 @@ struct DesignSidebarBackground: View {
     var body: some View {
         ZStack {
             if solid { Color(nsColor: DesignPalette.NS.sideBase) }
-            LinearGradient(colors: [Color(nsColor: DesignPalette.NS.sideTop), Color(nsColor: DesignPalette.NS.sideBottom)],
-                           startPoint: UnitPoint(x: 0.37, y: 0), endPoint: UnitPoint(x: 0.63, y: 1))
+            LinearGradient(
+                colors: [Color(nsColor: DesignPalette.NS.sideTop), Color(nsColor: DesignPalette.NS.sideBottom)],
+                startPoint: UnitPoint(x: 0.37, y: 0), endPoint: UnitPoint(x: 0.63, y: 1))
         }
     }
 }

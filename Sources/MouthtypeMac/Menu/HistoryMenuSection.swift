@@ -17,9 +17,11 @@ final class HistoryMenuSection: NSObject, MenuSection {
 
     var items: [NSMenuItem] { recentItems.isEmpty ? [] : [parent] }
 
-    init(store: TranscriptStore?, now: @escaping @MainActor () -> Date = { Date() },
-         onError: @escaping @MainActor (String?) -> Void = { _ in },
-         copy: @escaping @MainActor (String) -> Void = { SystemClipboard().write($0) }) {
+    init(
+        store: TranscriptStore?, now: @escaping @MainActor () -> Date = { Date() },
+        onError: @escaping @MainActor (String?) -> Void = { _ in },
+        copy: @escaping @MainActor (String) -> Void = { SystemClipboard().write($0) }
+    ) {
         self.store = store
         self.now = now
         self.onError = onError

@@ -19,16 +19,21 @@ import Testing
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let vocabulary = FileVocabulary(url: dir.appendingPathComponent("dictionary.json"))
         for (heard, written) in rules { try vocabulary.save(heard: heard, written: written) }
-        return Fixture(dir: dir, store: try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite")),
-                       vocabulary: vocabulary, dismissedURL: dir.appendingPathComponent("dismissed-suggestions.json"))
+        return Fixture(
+            dir: dir, store: try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite")),
+            vocabulary: vocabulary, dismissedURL: dir.appendingPathComponent("dismissed-suggestions.json"))
     }
 
     private func dictate(_ store: TranscriptStore, _ n: Int, raw: String, final: String? = nil, secure: Bool = false) throws {
-        let id = try store.begin(DictationStart(startedAt: base.addingTimeInterval(Double(n) * 60),
-            target: DictationTarget(appName: "Notes", isSecure: secure ? true : nil)))
-        try store.recordTranscription(id, TranscriptionRecord(
-            transcription: Transcription(text: raw, words: [], confidence: 0.9, processingSeconds: 0.1, engineID: "test", modelRevision: "1"),
-            rawText: raw, boostTerms: ["Siobhan"]))
+        let id = try store.begin(
+            DictationStart(
+                startedAt: base.addingTimeInterval(Double(n) * 60),
+                target: DictationTarget(appName: "Notes", isSecure: secure ? true : nil)))
+        try store.recordTranscription(
+            id,
+            TranscriptionRecord(
+                transcription: Transcription(text: raw, words: [], confidence: 0.9, processingSeconds: 0.1, engineID: "test", modelRevision: "1"),
+                rawText: raw, boostTerms: ["Siobhan"]))
         try store.recordInsertion(id, InsertionRecord(finalText: final ?? raw))
     }
 
@@ -66,8 +71,9 @@ import Testing
 
     @Test func hazardTitleNamesEveryRuleRemoveDeletes() {
         func hazard(_ rules: [DictionaryRule]) -> SpellingSuggestion {
-            SpellingSuggestion(written: "Nguyen", heardForms: rules.map(\.heard), kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
-                               hazardRules: rules)
+            SpellingSuggestion(
+                written: "Nguyen", heardForms: rules.map(\.heard), kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+                hazardRules: rules)
         }
         let will = DictionaryRule(heard: "will", written: "Nguyen")
         let win = DictionaryRule(heard: "win", written: "NGUYEN")
@@ -133,8 +139,9 @@ import Testing
         let f = try fixture()
         defer { try? FileManager.default.removeItem(at: f.dir) }
         let model = model(f)
-        let clash = SpellingSuggestion(written: "Siobhan", heardForms: ["fresh", "Win"], kind: .misheardVariant,
-                                       evidence: [], count: 3, confidence: 0.8)
+        let clash = SpellingSuggestion(
+            written: "Siobhan", heardForms: ["fresh", "Win"], kind: .misheardVariant,
+            evidence: [], count: 3, confidence: 0.8)
         model.add(clash)
         #expect(model.error != nil)
         #expect(try f.vocabulary.allRules().map(\.heard) == ["shivon", "win"])
@@ -185,7 +192,9 @@ import Testing
         try seed(f.store)
         let model = model(f)
         let probe = CheckProbe()
-        model.isKnownWord = { _ in probe.hit(); return false }
+        model.isKnownWord = { _ in
+            probe.hit(); return false
+        }
         await model.reload()
         let first = model.suggestions
         let after = probe.count
@@ -210,7 +219,9 @@ import Testing
         try seed(f.store)
         let model = model(f)
         let probe = CheckProbe()
-        model.isKnownWord = { _ in probe.hit(); return false }
+        model.isKnownWord = { _ in
+            probe.hit(); return false
+        }
         await model.reload()
         let first = model.suggestions
         var count = probe.count
@@ -300,8 +311,9 @@ import Testing
         [{"heard":"win","written":"Nguyen","extra":7},{"heard":"mid","written":"\(long)"},{"heard":"last","written":"Last"}]
         """.write(to: f.vocabulary.url, atomically: true, encoding: .utf8)
         let model = model(f)
-        let hazard = SpellingSuggestion(written: "Nguyen", heardForms: ["win"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
-                                       hazardRules: [DictionaryRule(heard: "win", written: "Nguyen")])
+        let hazard = SpellingSuggestion(
+            written: "Nguyen", heardForms: ["win"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+            hazardRules: [DictionaryRule(heard: "win", written: "Nguyen")])
         model.remove(hazard)
         #expect(try f.vocabulary.allRules().map(\.heard) == ["mid", "last"])
         model.undoLast()
@@ -309,8 +321,9 @@ import Testing
         let entries = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: f.vocabulary.url)) as? [[String: Any]])
         #expect(entries[0]["extra"] as? Int == 7)
 
-        let longHazard = SpellingSuggestion(written: long, heardForms: ["mid"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
-                                           hazardRules: [DictionaryRule(heard: "mid", written: long)])
+        let longHazard = SpellingSuggestion(
+            written: long, heardForms: ["mid"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+            hazardRules: [DictionaryRule(heard: "mid", written: long)])
         model.remove(longHazard)
         model.undoLast()
         #expect(try f.vocabulary.allRules().map(\.written) == ["Nguyen", long, "Last"])
@@ -333,8 +346,9 @@ import Testing
         let f = try fixture(rules: [("a", "Aa"), ("b", "Bb"), ("c", "Cc")])
         defer { try? FileManager.default.removeItem(at: f.dir) }
         let model = model(f)
-        let hazard = SpellingSuggestion(written: "Bb", heardForms: ["b"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
-                                        hazardRules: [DictionaryRule(heard: "b", written: "Bb")])
+        let hazard = SpellingSuggestion(
+            written: "Bb", heardForms: ["b"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+            hazardRules: [DictionaryRule(heard: "b", written: "Bb")])
         // Plain remove then undo restores at the original index.
         model.remove(hazard)
         model.undoLast()
@@ -358,8 +372,10 @@ import Testing
         let f = try fixture(rules: [("a", "Aa"), ("b", "Bb")])
         defer { try? FileManager.default.removeItem(at: f.dir) }
         let model = model(f)
-        model.remove(SpellingSuggestion(written: "Bb", heardForms: ["b"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
-                                        hazardRules: [DictionaryRule(heard: "b", written: "Bb")]))
+        model.remove(
+            SpellingSuggestion(
+                written: "Bb", heardForms: ["b"], kind: .removeHazard, evidence: [], count: 0, confidence: 0.3,
+                hazardRules: [DictionaryRule(heard: "b", written: "Bb")]))
         try f.vocabulary.remove(DictionaryRule(heard: "a", written: "Aa"))
         model.undoLast()
         #expect(model.error == "Your saved spellings changed, so this can't be undone.")
@@ -377,8 +393,9 @@ import Testing
         let group = try #require(hazards.first { Set($0.hazardRules.map(\.heard)) == ["will", "win"] })
         #expect(Set(group.hazardRules) == [DictionaryRule(heard: "will", written: "Nguyen"), DictionaryRule(heard: "win", written: "NGUYEN")])
         // Remove just the NGUYEN one exactly.
-        let single = SpellingSuggestion(written: "NGUYEN", heardForms: ["win"], kind: .removeHazard, evidence: [], count: 5, confidence: 0.9,
-                                        hazardRules: [DictionaryRule(heard: "win", written: "NGUYEN")])
+        let single = SpellingSuggestion(
+            written: "NGUYEN", heardForms: ["win"], kind: .removeHazard, evidence: [], count: 5, confidence: 0.9,
+            hazardRules: [DictionaryRule(heard: "win", written: "NGUYEN")])
         model.remove(single)
         #expect(model.error == nil)
         #expect(try f.vocabulary.allRules() == [DictionaryRule(heard: "will", written: "Nguyen")])

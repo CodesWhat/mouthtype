@@ -161,7 +161,8 @@ final class CleanupMenuSection: NSObject, MenuSection {
     static func askToDownload(name: String, sizeMB: Int) -> Bool {
         let alert = NSAlert()
         alert.messageText = "Download \(name)?"
-        alert.informativeText = "It's \(sizeText(sizeMB)), fetched from Hugging Face, and runs on this Mac. "
+        alert.informativeText =
+            "It's \(sizeText(sizeMB)), fetched from Hugging Face, and runs on this Mac. "
             + "Only the selected cleanup model is downloaded."
         alert.addButton(withTitle: "Download")
         alert.addButton(withTitle: "Cancel")

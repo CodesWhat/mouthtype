@@ -55,8 +55,9 @@ import Testing
 
     @Test func lsFilesTurnsOffTheRepoFsmonitorHookAndLazyFetch() {
         let root = URL(fileURLWithPath: "/tmp/some repo")
-        #expect(ProjectFiles.lsFilesArguments(root: root, versionOutput: "git version 2.45.0")
-            == ["--no-lazy-fetch", "-c", "core.fsmonitor=false", "-C", "/tmp/some repo", "ls-files", "-z"])
+        #expect(
+            ProjectFiles.lsFilesArguments(root: root, versionOutput: "git version 2.45.0")
+                == ["--no-lazy-fetch", "-c", "core.fsmonitor=false", "-C", "/tmp/some repo", "ls-files", "-z"])
     }
 
     @Test(arguments: [
@@ -149,9 +150,13 @@ import Testing
             let group = DispatchGroup()
             var launched = false
             group.enter()
-            DispatchQueue.global().async { launched = handle.launch(); group.leave() }
+            DispatchQueue.global().async {
+                launched = handle.launch(); group.leave()
+            }
             group.enter()
-            DispatchQueue.global().async { handle.cancel(); group.leave() }
+            DispatchQueue.global().async {
+                handle.cancel(); group.leave()
+            }
             group.wait()
             // A launched process must be gone within the grace period plus the kill; one cancelled first never started.
             let deadline = Date().addingTimeInterval(5)
@@ -166,7 +171,7 @@ import Testing
         process.standardOutput = ready
         let handle = ProjectFiles.ProcessHandle(process)
         #expect(handle.launch())
-        _ = try? ready.fileHandleForReading.read(upToCount: 1) // the trap is installed once sh says so
+        _ = try? ready.fileHandleForReading.read(upToCount: 1)  // the trap is installed once sh says so
         handle.terminateBounded()
         process.waitUntilExit()
         #expect(process.terminationReason == .uncaughtSignal)

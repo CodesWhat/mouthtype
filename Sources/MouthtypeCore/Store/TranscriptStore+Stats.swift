@@ -9,15 +9,18 @@ extension TranscriptStore {
     }
 
     static func fetchStatsSamples(_ db: Database) throws -> [DictationSample] {
-        try Row.fetchAll(db, sql: """
+        try Row.fetchAll(
+            db,
+            sql: """
                 SELECT local_day, started_at, utc_offset_s, app_name, words_final, COALESCE(voiced_ms, audio_ms) AS duration_ms
                 FROM dictation WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0 ORDER BY started_at
-                """).map {
-                DictationSample(
-                    day: $0["local_day"], startedAt: Date(timeIntervalSince1970: $0["started_at"]),
-                    words: $0["words_final"], durationMs: $0["duration_ms"],
-                    utcOffsetSeconds: $0["utc_offset_s"], appName: $0["app_name"]
-                )
+                """
+        ).map {
+            DictationSample(
+                day: $0["local_day"], startedAt: Date(timeIntervalSince1970: $0["started_at"]),
+                words: $0["words_final"], durationMs: $0["duration_ms"],
+                utcOffsetSeconds: $0["utc_offset_s"], appName: $0["app_name"]
+            )
         }
     }
 
@@ -30,51 +33,67 @@ extension TranscriptStore {
             AND words_final * 60000.0 / \(duration) <= \(StatsEngine.maxPlausibleWPM)
             """
         let base = "FROM dictation WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0"
-        let days = try Row.fetchAll(db, sql: """
-            SELECT local_day, COUNT(*) AS n, SUM(words_final) AS words,
-                SUM(CASE WHEN \(qualifies) THEN words_final END) AS rated_words,
-                SUM(CASE WHEN \(qualifies) THEN \(duration) END) AS rated_ms,
-                SUM(CASE WHEN \(duration) > 0 THEN words_final END) AS timed_words,
-                SUM(CASE WHEN \(duration) > 0 THEN \(duration) END) AS timed_ms
-            \(base) GROUP BY local_day
-            """).map {
+        let days = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT local_day, COUNT(*) AS n, SUM(words_final) AS words,
+                    SUM(CASE WHEN \(qualifies) THEN words_final END) AS rated_words,
+                    SUM(CASE WHEN \(qualifies) THEN \(duration) END) AS rated_ms,
+                    SUM(CASE WHEN \(duration) > 0 THEN words_final END) AS timed_words,
+                    SUM(CASE WHEN \(duration) > 0 THEN \(duration) END) AS timed_ms
+                \(base) GROUP BY local_day
+                """
+        ).map {
             StatsAggregates.Day(
                 day: $0["local_day"], count: $0["n"], words: $0["words"], ratedWords: $0["rated_words"] ?? 0,
                 ratedMs: $0["rated_ms"] ?? 0, timedWords: $0["timed_words"] ?? 0, timedMs: $0["timed_ms"] ?? 0)
         }
         // Earliest take wins a tie on both records.
-        let best = try Row.fetchOne(db, sql: """
-            SELECT local_day, words_final * 60000.0 / \(duration) AS rate \(base) AND \(qualifies)
-            ORDER BY rate DESC, started_at ASC LIMIT 1
-            """).map { (rate: $0["rate"] as Double, day: $0["local_day"] as String) }
-        let longest = try Row.fetchOne(db, sql: """
-            SELECT local_day, words_final, \(duration) AS duration_ms \(base)
-            ORDER BY words_final DESC, started_at ASC LIMIT 1
-            """).map { LongestDictation(words: $0["words_final"], durationMs: $0["duration_ms"], day: $0["local_day"]) }
+        let best = try Row.fetchOne(
+            db,
+            sql: """
+                SELECT local_day, words_final * 60000.0 / \(duration) AS rate \(base) AND \(qualifies)
+                ORDER BY rate DESC, started_at ASC LIMIT 1
+                """
+        ).map { (rate: $0["rate"] as Double, day: $0["local_day"] as String) }
+        let longest = try Row.fetchOne(
+            db,
+            sql: """
+                SELECT local_day, words_final, \(duration) AS duration_ms \(base)
+                ORDER BY words_final DESC, started_at ASC LIMIT 1
+                """
+        ).map { LongestDictation(words: $0["words_final"], durationMs: $0["duration_ms"], day: $0["local_day"]) }
 
         var hourly = [Int](repeating: 0, count: StatsTimeline.hoursPerDay)
         var takes: [TodayTake] = []
         let today = Streaks.localDay(for: now, in: timeZone)
         if let t = Streaks.dayNumber(today) {
             let from = StatsEngine.dayString(t - (StatsTimeline.hourWindowDays - 1))
-            for row in try Row.fetchAll(db, sql: """
-                SELECT ((CAST(started_at AS INTEGER) + utc_offset_s) % 86400 + 86400) % 86400 / 3600 AS hour,
-                    SUM(words_final) AS words
-                \(base) AND local_day >= ? AND local_day <= ? GROUP BY hour
-                """, arguments: [from, today]) {
+            for row in try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT ((CAST(started_at AS INTEGER) + utc_offset_s) % 86400 + 86400) % 86400 / 3600 AS hour,
+                        SUM(words_final) AS words
+                    \(base) AND local_day >= ? AND local_day <= ? GROUP BY hour
+                    """, arguments: [from, today])
+            {
                 let hour: Int = row["hour"]
                 if hourly.indices.contains(hour) { hourly[hour] = row["words"] }
             }
             // Takes with saved audio and no transcript count here too: they're the hollow needles.
-            takes = try Row.fetchAll(db, sql: """
-                SELECT started_at, utc_offset_s, app_name, COALESCE(words_final, 0) AS words, \(duration) AS duration_ms
-                FROM dictation WHERE local_day = ? AND COALESCE(is_secure, 0) = 0
-                    AND (words_final > 0 OR audio_path IS NOT NULL)
-                """, arguments: [today]).map {
+            takes = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT started_at, utc_offset_s, app_name, COALESCE(words_final, 0) AS words, \(duration) AS duration_ms
+                    FROM dictation WHERE local_day = ? AND COALESCE(is_secure, 0) = 0
+                        AND (words_final > 0 OR audio_path IS NOT NULL)
+                    """, arguments: [today]
+            ).map {
                 let startedAt = Date(timeIntervalSince1970: $0["started_at"])
-                return TodayTake(startedAt: startedAt,
-                                 secondsIntoDay: StatsTimeline.secondsIntoDay(startedAt: startedAt, utcOffsetSeconds: $0["utc_offset_s"]),
-                                 words: $0["words"], durationMs: $0["duration_ms"], appName: $0["app_name"])
+                return TodayTake(
+                    startedAt: startedAt,
+                    secondsIntoDay: StatsTimeline.secondsIntoDay(startedAt: startedAt, utcOffsetSeconds: $0["utc_offset_s"]),
+                    words: $0["words"], durationMs: $0["duration_ms"], appName: $0["app_name"])
             }
         }
         return StatsAggregates(days: days, bestWPM: best, longest: longest, hourlyWords: hourly, todayTakes: takes)
@@ -82,8 +101,10 @@ extension TranscriptStore {
 
     /// Everything the Stats and Records pages show, computed in one read. Runs on the caller's thread; the pages call it
     /// off the main thread.
-    public func statsSnapshot(now: Date, timeZone: TimeZone = .current,
-                              typingWPM: Double = StatsEngine.defaultTypingWPM) throws -> StatsSnapshot {
+    public func statsSnapshot(
+        now: Date, timeZone: TimeZone = .current,
+        typingWPM: Double = StatsEngine.defaultTypingWPM
+    ) throws -> StatsSnapshot {
         let aggregates = try pool.read { db in try Self.fetchStatsAggregates(db, now: now, timeZone: timeZone) }
         return StatsSnapshot.make(aggregates: aggregates, now: now, timeZone: timeZone, typingWPM: typingWPM)
     }
@@ -92,10 +113,12 @@ extension TranscriptStore {
     /// database reader queue, so no statistics work happens on the main thread. A write that leaves the numbers
     /// unchanged (a take that has only just started, a secure take) is recomputed from the covering index but not
     /// delivered.
-    public func observeStats(typingWPM: Double = StatsEngine.defaultTypingWPM, timeZone: TimeZone = .current,
-                             now: @escaping @Sendable () -> Date = { Date() },
-                             onError: @escaping @Sendable (Error) -> Void,
-                             onChange: @escaping @Sendable (StatsSnapshot) -> Void) -> TakesObservation {
+    public func observeStats(
+        typingWPM: Double = StatsEngine.defaultTypingWPM, timeZone: TimeZone = .current,
+        now: @escaping @Sendable () -> Date = { Date() },
+        onError: @escaping @Sendable (Error) -> Void,
+        onChange: @escaping @Sendable (StatsSnapshot) -> Void
+    ) -> TakesObservation {
         let observation = ValueObservation.tracking { db in
             let instant = now()
             return StatsSnapshot.make(aggregates: try Self.fetchStatsAggregates(db, now: instant, timeZone: timeZone), now: instant, timeZone: timeZone, typingWPM: typingWPM)

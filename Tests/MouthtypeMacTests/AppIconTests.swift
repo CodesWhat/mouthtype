@@ -43,9 +43,10 @@ import Testing
 
     private func alphaAt(_ image: CGImage, x: Int, y: Int) throws -> UInt8 {
         var pixel = [UInt8](repeating: 0, count: 4)
-        let context = try #require(CGContext(
-            data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        let context = try #require(
+            CGContext(
+                data: &pixel, width: 1, height: 1, bitsPerComponent: 8, bytesPerRow: 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
         context.draw(image, in: CGRect(x: -x, y: -(image.height - 1 - y), width: image.width, height: image.height))
         return pixel[3]
     }
@@ -67,8 +68,9 @@ import Testing
 
     @Test func theIconBundleHasTileAndLipsLayers() throws {
         let bundle = Self.root.appendingPathComponent("design/icon/AppIcon.icon")
-        let json = try #require(JSONSerialization.jsonObject(
-            with: Data(contentsOf: bundle.appendingPathComponent("icon.json"))) as? [String: Any])
+        let json = try #require(
+            JSONSerialization.jsonObject(
+                with: Data(contentsOf: bundle.appendingPathComponent("icon.json"))) as? [String: Any])
         let groups = try #require(json["groups"] as? [[String: Any]])
         let layers = try #require(groups.first?["layers"] as? [[String: Any]])
         let names = Set(layers.compactMap { $0["name"] as? String })

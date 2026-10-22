@@ -15,7 +15,7 @@ struct PreferredMicrophone: Codable, Equatable, Sendable {
     static func load(_ defaults: UserDefaults = .standard) throws -> Self? {
         guard let stored = defaults.object(forKey: defaultsKey) else { return nil }
         guard let data = stored as? Data,
-              let preference = try? JSONDecoder().decode(Self.self, from: data), !preference.uid.isEmpty
+            let preference = try? JSONDecoder().decode(Self.self, from: data), !preference.uid.isEmpty
         else { throw CaptureError.microphonePreferenceUnreadable }
         return preference
     }

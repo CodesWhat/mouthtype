@@ -260,10 +260,11 @@ import Testing
 
     @Test func theDismissControlIsTheMinimumTarget() {
         #expect(CardLayout.dismissSize == 24 && CardLayout.dismissSize >= PillHit.minTarget)
-        let frames = CardLayout.make(.init(
-            headerTextHeight: 16, headerLineHeight: 16, transcriptTextHeight: 18, transcriptLineHeight: 18,
-            buttonLabelWidths: [30], hasCountdownBar: false
-        ))
+        let frames = CardLayout.make(
+            .init(
+                headerTextHeight: 16, headerLineHeight: 16, transcriptTextHeight: 18, transcriptLineHeight: 18,
+                buttonLabelWidths: [30], hasCountdownBar: false
+            ))
         #expect(frames.dismiss.size == CGSize(width: 24, height: 24) && frames.dismiss.minY >= 0)
         #expect(frames.dismiss.maxX == CardLayout.width - CardLayout.insets.side)
         #expect(!frames.dismiss.intersects(frames.header))

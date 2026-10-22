@@ -299,11 +299,10 @@ import Testing
         #expect(skin.controlFrames.count == 2)
     }
 
-    static let longError = (
-        "The transcription engine stopped before it finished because the model could not be loaded from disk. "
+    static let longError =
+        ("The transcription engine stopped before it finished because the model could not be loaded from disk. "
             + "Check that the model folder still exists and has enough free space, then try again in a moment. "
-            + "If it keeps failing, quit Mouthtype from the menu bar and open it again to reload everything."
-    )
+            + "If it keeps failing, quit Mouthtype from the menu bar and open it again to reload everything.")
 
     @Test(arguments: [PillSkinKind.matrix, .minimal], [PillScale.standard, .large])
     func aLongMessageStaysInThePanelAndScrollsUntilAllOfItHasBeenSeen(kind: PillSkinKind, scale: PillScale) throws {

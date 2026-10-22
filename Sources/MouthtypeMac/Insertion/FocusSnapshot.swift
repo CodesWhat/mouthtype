@@ -220,8 +220,9 @@ final class AccessibilityFocusReader: FocusReading {
 
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
         guard !snapshot.isSecure, !isSecureInputEnabled, WebsiteContext.supports(bundleID: snapshot.bundleID),
-              let element = snapshot.element, let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
-              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return nil }
+            let element = snapshot.element, let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
+            NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+        else { return nil }
         let bundleID = snapshot.bundleID
         return { BrowserURLRead.host(of: element, bundleID: bundleID, timeout: BrowserURLRead.callTimeout) }
     }
@@ -229,11 +230,14 @@ final class AccessibilityFocusReader: FocusReading {
     /// The pid of the application whose window holds `element`: its top-level window's parent when that is the
     /// application element, else the window itself. Nil when the ancestry can't be read.
     func applicationPID(ofElement element: AXUIElement) -> pid_t? {
-        guard let window = elementValue(bounded(element), kAXTopLevelUIElementAttribute)
-                ?? elementValue(bounded(element), kAXWindowAttribute) else { return nil }
-        let owner = elementValue(bounded(window), kAXParentAttribute).flatMap {
-            stringValue(bounded($0), kAXRoleAttribute) == kAXApplicationRole ? $0 : nil
-        } ?? window
+        guard
+            let window = elementValue(bounded(element), kAXTopLevelUIElementAttribute)
+                ?? elementValue(bounded(element), kAXWindowAttribute)
+        else { return nil }
+        let owner =
+            elementValue(bounded(window), kAXParentAttribute).flatMap {
+                stringValue(bounded($0), kAXRoleAttribute) == kAXApplicationRole ? $0 : nil
+            } ?? window
         var pid: pid_t = 0
         guard AXUIElementGetPid(bounded(owner), &pid) == .success, pid > 0 else { return nil }
         return pid
@@ -253,7 +257,8 @@ final class AccessibilityFocusReader: FocusReading {
     nonisolated static func selectedRange(_ ref: AXUIElement) -> NSRange? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+            let value, CFGetTypeID(value) == AXValueGetTypeID()
+        else { return nil }
         var range = CFRange()
         guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
         return NSRange(location: range.location, length: range.length)
@@ -269,14 +274,16 @@ final class AccessibilityFocusReader: FocusReading {
         var before = CFRange(location: range.location - length, length: length)
         var text: CFTypeRef?
         if let query = AXValueCreate(.cfRange, &before),
-           AXUIElementCopyParameterizedAttributeValue(ref, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
-           let character = (text as? String)?.last {
+            AXUIElementCopyParameterizedAttributeValue(ref, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
+            let character = (text as? String)?.last
+        {
             return .character(character)
         }
 
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(ref, kAXValueAttribute as CFString, &value) == .success,
-              let value = value as? String else { return .unknown }
+            let value = value as? String
+        else { return .unknown }
         let units = value.utf16
         guard range.location <= units.count else { return .unknown }
         let end = units.index(units.startIndex, offsetBy: range.location)
@@ -333,13 +340,15 @@ final class AccessibilityFocusReader: FocusReading {
         var range = range
         var text: CFTypeRef?
         if let query = AXValueCreate(.cfRange, &range),
-           AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
-           let string = text as? String {
+            AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
+            let string = text as? String
+        {
             return string
         }
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
-              let value = value as? String else { return nil }
+            let value = value as? String
+        else { return nil }
         let units = value.utf16
         guard range.location + range.length <= units.count else { return nil }
         let start = units.index(units.startIndex, offsetBy: range.location)
@@ -356,7 +365,8 @@ final class AccessibilityFocusReader: FocusReading {
     private func elementValue(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            let value, CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
         return bounded(value as! AXUIElement)
     }
 
@@ -398,18 +408,19 @@ final class AccessibilityFocusReader: FocusReading {
     private func characterCount(_ element: AXUIElement) -> Int? {
         var count: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXNumberOfCharactersAttribute as CFString, &count) == .success,
-           let count = count as? Int {
+            let count = count as? Int
+        {
             return count
         }
         var value: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
-           let value = value as? String {
+            let value = value as? String
+        {
             return value.utf16.count
         }
         return nil
     }
 }
-
 
 /// The page URL read from a browser window's document attribute. Blocking, so callers run it off the main actor under their own
 /// budget; every Accessibility call carries its own messaging timeout so a hung browser cannot hold the thread for long.
@@ -421,7 +432,8 @@ enum BrowserURLRead {
         AXUIElementSetMessagingTimeout(element.ref, timeout)
         var window: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element.ref, kAXWindowAttribute as CFString, &window) == .success,
-              let window, CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+            let window, CFGetTypeID(window) == AXUIElementGetTypeID()
+        else { return nil }
         let windowRef = window as! AXUIElement
         AXUIElementSetMessagingTimeout(windowRef, timeout)
         var document: CFTypeRef?

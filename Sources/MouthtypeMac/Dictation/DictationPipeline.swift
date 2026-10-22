@@ -5,7 +5,7 @@ import MouthtypeCore
 struct DictationSession: Sendable {
     var id: String
     var startedAt: Date
-    var keyDownAt: UInt64 // host nanoseconds (`HostClock`)
+    var keyDownAt: UInt64  // host nanoseconds (`HostClock`)
     var startFocus: FocusSnapshot?
     var cleanupStyle: StyleOptions?
     /// A rule's cleanup level; nil uses the global one.
@@ -225,15 +225,17 @@ struct DictationPipeline: Sendable {
         }
         func rounded(_ ms: Double?) -> Int? { ms.map { Int($0.rounded()) } }
         let recorded = await write(session, "recordCapture") { store in
-            try await store.recordCapture(session.id, CaptureRecord(
-                captureStartMs: rounded(audio.captureStartMs), firstSampleMs: rounded(audio.firstSampleMs),
-                firstNonzeroMs: rounded(audio.firstNonzeroMs), keyUpMs: keyUpMs, audioMs: rounded(audio.audioMs),
-                voicedMs: rounded(features.voicedMs), audioPath: audioPath,
-                audioExpiresAt: audioPath == nil ? nil : audioRetention().expiration(from: clock.now()),
-                inputDeviceUID: audio.deviceUID, inputDeviceName: audio.deviceName, inputTransport: audio.deviceTransport,
-                sampleRateHz: Int(audio.sampleRate), rmsDb: features.rmsDb, peakDb: features.peakDb,
-                noiseFloorDb: features.noiseFloorDb
-            ))
+            try await store.recordCapture(
+                session.id,
+                CaptureRecord(
+                    captureStartMs: rounded(audio.captureStartMs), firstSampleMs: rounded(audio.firstSampleMs),
+                    firstNonzeroMs: rounded(audio.firstNonzeroMs), keyUpMs: keyUpMs, audioMs: rounded(audio.audioMs),
+                    voicedMs: rounded(features.voicedMs), audioPath: audioPath,
+                    audioExpiresAt: audioPath == nil ? nil : audioRetention().expiration(from: clock.now()),
+                    inputDeviceUID: audio.deviceUID, inputDeviceName: audio.deviceName, inputTransport: audio.deviceTransport,
+                    sampleRateHz: Int(audio.sampleRate), rmsDb: features.rmsDb, peakDb: features.peakDb,
+                    noiseFloorDb: features.noiseFloorDb
+                ))
         }
         return (features, audioPath != nil && (recorded || store == nil || !session.rowOpen))
     }
@@ -275,10 +277,12 @@ struct DictationPipeline: Sendable {
         }
         let onset = shifted.words.first.map { Int(((audio.firstSampleMs ?? 0) + $0.start * 1000).rounded()) }
         await write(session, "recordTranscription") { store in
-            try await store.recordTranscription(session.id, TranscriptionRecord(
-                transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset,
-                boostTerms: transcription.boostTermsApplied
-            ))
+            try await store.recordTranscription(
+                session.id,
+                TranscriptionRecord(
+                    transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset,
+                    boostTerms: transcription.boostTermsApplied
+                ))
         }
         let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)
         guard !guarded.isEmpty else {
@@ -321,8 +325,9 @@ struct DictationPipeline: Sendable {
         }
         let clock = ContinuousClock()
         let start = clock.now
-        let phrases = SnippetExpander(snippets: settings.pipelineOptions.snippets ? inputs.snippets : [],
-                                     now: inputs.now, clipboard: clipboard)
+        let phrases = SnippetExpander(
+            snippets: settings.pipelineOptions.snippets ? inputs.snippets : [],
+            now: inputs.now, clipboard: clipboard)
         let spoken = phrases.matchingTriggers(in: transcribed.text)
         var options = settings.pipelineOptions
         options.snippets = false
@@ -330,7 +335,8 @@ struct DictationPipeline: Sendable {
         // or a snippet trigger heard in the text.
         // The same goes for written spellings and snippet text, which the fallback passes run without the dictionary.
         let snippetsOn = settings.pipelineOptions.snippets
-        let protectedPhrases = inputs.dictionary.flatMap { [$0.heard, $0.written] }
+        let protectedPhrases =
+            inputs.dictionary.flatMap { [$0.heard, $0.written] }
             + (snippetsOn ? inputs.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
         let protectedWords = inputs.dictionary.map(\.written) + (snippetsOn ? inputs.snippets.map(\.expansion) : [])
 
@@ -344,12 +350,14 @@ struct DictationPipeline: Sendable {
         }
 
         func deterministic(_ dictionary: [DictionaryRule], startedAt start: ContinuousClock.Instant)
-            -> (result: TextPipelineResult, expanded: StageResult, expected: [String], ms: Double) {
-            var result = textPipeline.run(TextPipelineInput(
-                text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
-                now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases,
-                protectedWords: protectedWords, codingTarget: codingTarget
-            ))
+            -> (result: TextPipelineResult, expanded: StageResult, expected: [String], ms: Double)
+        {
+            var result = textPipeline.run(
+                TextPipelineInput(
+                    text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
+                    now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases,
+                    protectedWords: protectedWords, codingTarget: codingTarget
+                ))
             // Cleanup may remove a filler or format a number that is part of a saved trigger.
             // Keep the spoken trigger intact rather than silently losing its replacement.
             if !spoken.isEmpty, phrases.matchingTriggers(in: result.text) != spoken {
@@ -395,14 +403,18 @@ struct DictationPipeline: Sendable {
                 let heard = asHeard(transcribed.text)
                 return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
             }
-            return CleanedDictation(text: fallback.expanded.text,
+            return CleanedDictation(
+                text: fallback.expanded.text,
                 edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)
         }
-        guard let delivery = await smart.runReady(SmartCleanupRequest(
-            text: result.text, level: level, style: settings.style, destination: destination,
-            dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
-            protectedPhrases: protectedPhrases
-        ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
+        guard
+            let delivery = await smart.runReady(
+                SmartCleanupRequest(
+                    text: result.text, level: level, style: settings.style, destination: destination,
+                    dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
+                    protectedPhrases: protectedPhrases
+                ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text)))
+        else {
             if let fallback = fullDictionaryFallback() { return fallback }
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
@@ -425,8 +437,9 @@ struct DictationPipeline: Sendable {
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         let modelEdits = (modelResult.edit(from: result.text).map { [$0] } ?? []) + modelResult.postEdits
-        return CleanedDictation(text: final.text, edits: edits + modelEdits + final.edits, cleanup: record,
-                                deterministicText: final.text == expanded.text ? nil : expanded.text)
+        return CleanedDictation(
+            text: final.text, edits: edits + modelEdits + final.edits, cleanup: record,
+            deterministicText: final.text == expanded.text ? nil : expanded.text)
     }
 
     static let cleanerID = "deterministic"
@@ -440,12 +453,14 @@ struct DictationPipeline: Sendable {
     func recordInsertion(_ result: DeliveryResult, session: DictationSession, cleaned: CleanedDictation? = nil) async {
         let insertDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
         await write(session, "recordInsertion") { store in
-            try await store.recordInsertion(session.id, InsertionRecord(
-                finalText: result.finalText, detText: cleaned?.deterministicText ?? cleaned?.text, cleanup: cleaned?.cleanup, method: result.storeMethod,
-                outcome: result.storeOutcome, focusMoved: result.focusMoved, pasteReceiptMs: result.pasteReceiptMs,
-                insertDoneMs: insertDoneMs,
-                target: result.target?.target
-            ))
+            try await store.recordInsertion(
+                session.id,
+                InsertionRecord(
+                    finalText: result.finalText, detText: cleaned?.deterministicText ?? cleaned?.text, cleanup: cleaned?.cleanup, method: result.storeMethod,
+                    outcome: result.storeOutcome, focusMoved: result.focusMoved, pasteReceiptMs: result.pasteReceiptMs,
+                    insertDoneMs: insertDoneMs,
+                    target: result.target?.target
+                ))
         }
         if let edits = cleaned?.edits, !edits.isEmpty {
             await write(session, "appendEdits") { try await $0.appendEdits(session.id, edits) }

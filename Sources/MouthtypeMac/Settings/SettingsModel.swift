@@ -61,18 +61,20 @@ import UniformTypeIdentifiers
     private(set) var appStyles = AppCleanupStyles()
     private(set) var appStylesError: String?
 
-    init(defaults: UserDefaults = .standard, loginItem: LoginItem = LoginItem(),
-         onCleanupChanged: @escaping @MainActor () -> Void = {},
-         onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
-         onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
-         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
-         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
-         onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
-         onDockIconModeChanged: @escaping @MainActor (DockIconMode) -> Void = { _ in },
-         home: HomeLogModel = HomeLogModel(observing: false),
-         stats: StatsModel = StatsModel(observing: false),
-         spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil,
-         openTranscribeWindow: @escaping @MainActor () -> Void = {}) {
+    init(
+        defaults: UserDefaults = .standard, loginItem: LoginItem = LoginItem(),
+        onCleanupChanged: @escaping @MainActor () -> Void = {},
+        onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
+        onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
+        microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
+        onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+        onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+        onDockIconModeChanged: @escaping @MainActor (DockIconMode) -> Void = { _ in },
+        home: HomeLogModel = HomeLogModel(observing: false),
+        stats: StatsModel = StatsModel(observing: false),
+        spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil,
+        openTranscribeWindow: @escaping @MainActor () -> Void = {}
+    ) {
         self.openTranscribeWindow = openTranscribeWindow
         self.onDockIconModeChanged = onDockIconModeChanged
         self.home = home
@@ -265,8 +267,7 @@ import UniformTypeIdentifiers
         boostSavedWords = VocabularyBoostSetting.isEnabled(defaults)
         editorHints = EditorHintsSetting.isEnabled(defaults)
         chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
-        do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil }
-        catch { appStylesError = error.localizedDescription }
+        do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil } catch { appStylesError = error.localizedDescription }
     }
 
     var recordingInstructions: String {
@@ -378,7 +379,8 @@ import UniformTypeIdentifiers
             appStylesError = "That application has no readable bundle identifier."
             return
         }
-        let appName = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+        let appName =
+            bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? url.deletingPathExtension().lastPathComponent
         let style = CleanupSettings.load(defaults).style

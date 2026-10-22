@@ -8,7 +8,8 @@ final class CoreAudioQuietOutput: QuietOutputAccess {
     func currentOutput() throws -> QuietOutput {
         var id = AudioDeviceID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultOutputDevice,
             mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
         try check(AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &id))
         guard id != kAudioObjectUnknown, let uid = InputDevice.uid(of: id) else { throw Failure.unavailable }
@@ -40,7 +41,8 @@ final class CoreAudioQuietOutput: QuietOutputAccess {
     }
 
     private var muteAddress: AudioObjectPropertyAddress {
-        AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute,
+        AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyMute,
             mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
     }
 
@@ -75,7 +77,8 @@ private final class CoreAudioQuietObservation: QuietOutputObservation {
 
 private final class QuietOutputListener {
     private let device: AudioDeviceID
-    private var address = AudioObjectPropertyAddress(mSelector: kAudioObjectPropertySelectorWildcard,
+    private var address = AudioObjectPropertyAddress(
+        mSelector: kAudioObjectPropertySelectorWildcard,
         mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementWildcard)
     private let block: AudioObjectPropertyListenerBlock
 
@@ -85,7 +88,8 @@ private final class QuietOutputListener {
             for address in UnsafeBufferPointer(start: addresses, count: Int(count)) {
                 switch address.mSelector {
                 case kAudioDevicePropertyMute:
-                    var property = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyMute,
+                    var property = AudioObjectPropertyAddress(
+                        mSelector: kAudioDevicePropertyMute,
                         mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
                     var muted: UInt32 = 0
                     var size = UInt32(MemoryLayout<UInt32>.size)

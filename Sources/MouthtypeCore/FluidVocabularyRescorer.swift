@@ -57,9 +57,10 @@ struct FluidVocabularyRescorer: VocabularyRescoring {
 
     static func make(bias: VocabularyBias, models: CtcModels) async throws -> FluidVocabularyRescorer {
         try await DependencyLogging.quietingWarnings {
-            FluidVocabularyRescorer(session: try await VocabularyBoostingSession(
-                vocabulary: context(for: bias), ctcModels: models, config: rescorerConfig()
-            ))
+            FluidVocabularyRescorer(
+                session: try await VocabularyBoostingSession(
+                    vocabulary: context(for: bias), ctcModels: models, config: rescorerConfig()
+                ))
         }
     }
 

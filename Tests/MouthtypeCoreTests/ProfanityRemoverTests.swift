@@ -428,8 +428,9 @@ import Testing
         let cleaner = FakeCleaner(returning: "Deploy brain fuck today, it is fucking late.")
         cleaner.usesNativeControls = false
         let result = await SmartCleanup(cleaner: cleaner).run(
-            SmartCleanupRequest(text: "Deploy brain fuck today, it is late.", level: .medium, style: .formal,
-                                dictionary: [DictionaryRule(heard: "brain fuck", written: "Brainfuck")]))
+            SmartCleanupRequest(
+                text: "Deploy brain fuck today, it is late.", level: .medium, style: .formal,
+                dictionary: [DictionaryRule(heard: "brain fuck", written: "Brainfuck")]))
         #expect(result.text.contains("Brainfuck") || result.text.contains("brain fuck"))
         #expect(!result.text.contains("fucking"))
     }

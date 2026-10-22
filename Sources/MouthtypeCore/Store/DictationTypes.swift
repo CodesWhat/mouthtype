@@ -145,7 +145,7 @@ public struct CleanupRecord: Sendable {
     public var level: String?
     public var style: String?
     public var ms: Int?
-    public var outcome: String?   // skipped, ok, timeout, guard-rejected, failed
+    public var outcome: String?  // skipped, ok, timeout, guard-rejected, failed
     public var promptSha: String?
     public var doneMs: Int?
 
@@ -168,8 +168,8 @@ public struct InsertionRecord: Sendable {
     public var finalText: String
     public var detText: String?
     public var cleanup: CleanupRecord?
-    public var method: String?    // paste, typed, clipboard only, none
-    public var outcome: String?   // confirmed, unknown, not landed, secure discard
+    public var method: String?  // paste, typed, clipboard only, none
+    public var outcome: String?  // confirmed, unknown, not landed, secure discard
     public var focusMoved: Bool?
     public var pasteReceiptMs: Int?
     public var insertDoneMs: Int?
@@ -196,7 +196,7 @@ public struct InsertionRecord: Sendable {
 public struct EditOp: Sendable, Equatable {
     public enum Kind: String, Sendable { case delete, replace, insert }
 
-    public var stage: String   // filler, self-correction, spoken command, number format, dictionary, snippet, profanity, blend, llm
+    public var stage: String  // filler, self-correction, spoken command, number format, dictionary, snippet, profanity, blend, llm
     public var kind: Kind
     public var fromText: String?
     public var toText: String?

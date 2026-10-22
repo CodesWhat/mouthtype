@@ -49,7 +49,9 @@ struct StyleTabBar: View {
         HStack(spacing: 24) {
             ForEach(StyleTab.allCases, id: \.self) { tab in
                 let selected = tab == selection
-                Button { selection = tab } label: {
+                Button {
+                    selection = tab
+                } label: {
                     Text(tab.title).font(DesignFont.sans(DesignFont.body, .medium))
                         .foregroundStyle(selected ? DesignPalette.ink : DesignPalette.ink2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -110,8 +112,10 @@ struct StyleContextTab: View {
                 DesignEyebrow(toneEyebrow)
                 HStack(alignment: .top, spacing: 12) {
                     ForEach(StylePreset.allCases, id: \.rawValue) { preset in
-                        StyleToneCard(preset: preset, selected: tone == preset,
-                                      rendered: StyleSamples.render(StyleSamples.lines(for: context), tone: preset)) {
+                        StyleToneCard(
+                            preset: preset, selected: tone == preset,
+                            rendered: StyleSamples.render(StyleSamples.lines(for: context), tone: preset)
+                        ) {
                             model.setContextTone(context, preset)
                         }
                     }
@@ -122,8 +126,12 @@ struct StyleContextTab: View {
                 }
             }
             ViewThatFits(in: .horizontal) {
-                HStack(alignment: .top, spacing: 12) { members.frame(minWidth: 280, maxWidth: .infinity); aside.frame(width: 260) }
-                VStack(alignment: .leading, spacing: 18) { members; aside }
+                HStack(alignment: .top, spacing: 12) {
+                    members.frame(minWidth: 280, maxWidth: .infinity); aside.frame(width: 260)
+                }
+                VStack(alignment: .leading, spacing: 18) {
+                    members; aside
+                }
             }
             if context == .other { StyleOwnRules(model: model) }
         }
@@ -136,8 +144,10 @@ struct StyleContextTab: View {
             VStack(alignment: .leading, spacing: 8) {
                 DesignEyebrow("Counts as other")
                 DesignCard {
-                    DesignRow(title: "Everything not listed under Personal, Work or Email",
-                              detail: "Terminals, editors and any app or website with no list of its own. It uses the tone above.") { EmptyView() }
+                    DesignRow(
+                        title: "Everything not listed under Personal, Work or Email",
+                        detail: "Terminals, editors and any app or website with no list of its own. It uses the tone above."
+                    ) { EmptyView() }
                 }
             }
         }
@@ -151,9 +161,12 @@ struct StyleContextTab: View {
                     Text(cleanupDetail).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                DesignPopup(title: "Cleanup for \(context.noun)", selection: Binding(
-                    get: { model.appStyles.contexts.level(context) }, set: { model.setContextLevel(context, $0) }), choices: levelChoices)
-                    .accessibilityIdentifier("style-cleanup-here")
+                DesignPopup(
+                    title: "Cleanup for \(context.noun)",
+                    selection: Binding(
+                        get: { model.appStyles.contexts.level(context) }, set: { model.setContextLevel(context, $0) }), choices: levelChoices
+                )
+                .accessibilityIdentifier("style-cleanup-here")
             }
             .padding(.horizontal, 16).padding(.vertical, 14).frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 12).fill(DesignPalette.surface))
@@ -276,7 +289,9 @@ struct StyleMembersCard: View {
                 if let error = model.appStylesError { errorRow(error) }
             }
         }
-        .onAppear { AppIconResolver.invalidateMisses(); installRevision += 1 }
+        .onAppear {
+            AppIconResolver.invalidateMisses(); installRevision += 1
+        }
         .onReceive(NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didLaunchApplicationNotification)) { _ in
             AppIconResolver.invalidateMisses(); installRevision += 1
         }
@@ -294,21 +309,25 @@ struct StyleMembersCard: View {
             Spacer(minLength: 8)
             Text(row.isBuiltIn ? "BUILT IN" : "ADDED BY YOU").font(DesignFont.mono(10)).tracking(0.9).foregroundStyle(DesignPalette.ink3)
                 .fixedSize()
-            DesignPopup(title: "Tone for \(member.name)", selection: Binding(
-                get: { row.ruleStyle.map { $0.preset?.rawValue ?? "custom" } ?? "same" },
-                set: { value in
-                    let tone = StylePreset(rawValue: value)
-                    if isApp { model.setAppStyle(bundleIDs: row.targets, appName: member.name, tone: tone) }
-                    else { model.setWebsiteStyle(domain: key, tone: tone) }
-                }), choices: toneChoices(row, contextTone: contextTone))
-                .accessibilityIdentifier("style-member-tone")
-            DesignPopup(title: "Cleanup for \(member.name)", selection: Binding(
-                get: { row.ruleLevel },
-                set: { level in
-                    if isApp { model.setAppCleanupLevel(bundleIDs: row.targets, appName: member.name, level: level) }
-                    else { model.setWebsiteCleanupLevel(domain: key, level: level) }
-                }), choices: levelChoices)
-                .accessibilityIdentifier("style-member-cleanup")
+            DesignPopup(
+                title: "Tone for \(member.name)",
+                selection: Binding(
+                    get: { row.ruleStyle.map { $0.preset?.rawValue ?? "custom" } ?? "same" },
+                    set: { value in
+                        let tone = StylePreset(rawValue: value)
+                        if isApp { model.setAppStyle(bundleIDs: row.targets, appName: member.name, tone: tone) } else { model.setWebsiteStyle(domain: key, tone: tone) }
+                    }), choices: toneChoices(row, contextTone: contextTone)
+            )
+            .accessibilityIdentifier("style-member-tone")
+            DesignPopup(
+                title: "Cleanup for \(member.name)",
+                selection: Binding(
+                    get: { row.ruleLevel },
+                    set: { level in
+                        if isApp { model.setAppCleanupLevel(bundleIDs: row.targets, appName: member.name, level: level) } else { model.setWebsiteCleanupLevel(domain: key, level: level) }
+                    }), choices: levelChoices
+            )
+            .accessibilityIdentifier("style-member-cleanup")
             Button {
                 if row.ownRule {
                     if isApp { model.removeAppStyles(bundleIDs: row.targets) } else { model.removeWebsiteStyle(domain: key) }
@@ -362,7 +381,9 @@ struct StyleMembersCard: View {
                 .accessibilityIdentifier("style-website-domain").onSubmit(commit)
             Button("Add", action: commit).buttonStyle(.designPrimary)
                 .disabled(domain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            Button("Cancel") { addingSite = false; domain = "" }.buttonStyle(.designSecondary)
+            Button("Cancel") {
+                addingSite = false; domain = ""
+            }.buttonStyle(.designSecondary)
         }.padding(.horizontal, 14).padding(.vertical, 8)
     }
 
@@ -472,18 +493,21 @@ struct StyleOwnRules: View {
         let isApp = member.kind == .app
         let key = member.keys.first ?? member.name
         return DesignRow(title: member.name, detail: isApp ? key : nil) {
-            DesignPopup(title: "Tone for \(member.name)", selection: Binding(
-                get: { rule.style.map { $0.preset?.rawValue ?? "custom" } ?? "default" },
-                set: { value in
-                    let tone = StylePreset(rawValue: value)
-                    if isApp { model.setAppStyle(bundleID: key, appName: member.name, tone: tone) } else { model.setWebsiteStyle(domain: key, tone: tone) }
-                }), choices: toneChoices(rule))
-            DesignPopup(title: "Cleanup for \(member.name)", selection: Binding(
-                get: { rule.level },
-                set: { level in
-                    if isApp { model.setAppCleanupLevel(bundleID: key, appName: member.name, level: level) }
-                    else { model.setWebsiteCleanupLevel(domain: key, level: level) }
-                }), choices: levelChoices)
+            DesignPopup(
+                title: "Tone for \(member.name)",
+                selection: Binding(
+                    get: { rule.style.map { $0.preset?.rawValue ?? "custom" } ?? "default" },
+                    set: { value in
+                        let tone = StylePreset(rawValue: value)
+                        if isApp { model.setAppStyle(bundleID: key, appName: member.name, tone: tone) } else { model.setWebsiteStyle(domain: key, tone: tone) }
+                    }), choices: toneChoices(rule))
+            DesignPopup(
+                title: "Cleanup for \(member.name)",
+                selection: Binding(
+                    get: { rule.level },
+                    set: { level in
+                        if isApp { model.setAppCleanupLevel(bundleID: key, appName: member.name, level: level) } else { model.setWebsiteCleanupLevel(domain: key, level: level) }
+                    }), choices: levelChoices)
             Button {
                 if isApp { model.removeAppStyle(bundleID: key) } else { model.removeWebsiteStyle(domain: key) }
             } label: {

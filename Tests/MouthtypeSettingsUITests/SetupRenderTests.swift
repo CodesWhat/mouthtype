@@ -57,12 +57,14 @@ import Testing
         var finishPreparation: CheckedContinuation<Bool, any Error>?
         var preparation: Task<Bool, any Error>!
         await withCheckedContinuation { started in
-            preparation = Task { try await model.microphone.prepare {
-                try await withCheckedThrowingContinuation {
-                    finishPreparation = $0
-                    started.resume()
+            preparation = Task {
+                try await model.microphone.prepare {
+                    try await withCheckedThrowingContinuation {
+                        finishPreparation = $0
+                        started.resume()
+                    }
                 }
-            } }
+            }
         }
         try render(model: model, actions: actions, name: "setup-microphone-preparing", size: NSSize(width: 560, height: 440))
         finishPreparation?.resume(throwing: CaptureError.selectedMicrophoneUnavailable)
@@ -261,7 +263,11 @@ import Testing
         func speechModel(fraction: Double) async -> SetupModel {
             var clock = 0.0
             let engine = ProgressRenderEngine(steps: [fraction - 0.01, fraction].map { .progress(ModelDownloadProgress(fraction: $0, knownTotalBytes: 483_000_000)) }, gate: gate)
-            let host = EngineHost(makeEngine: { _ in engine }, uptime: { defer { clock += 3 }; return clock })
+            let host = EngineHost(
+                makeEngine: { _ in engine },
+                uptime: {
+                    defer { clock += 3 }; return clock
+                })
             host.start()
             for _ in 0..<300 where host.downloadProgress?.fraction != fraction { try? await Task.sleep(for: .milliseconds(10)) }
             return SetupModel(diagnostics: diagnostics, engine: host, microphone: micModel.microphone, defaults: defaults)
@@ -303,8 +309,9 @@ import Testing
 
     private func bitmap(model: SetupModel, actions: SetupActions, size: NSSize, appearance: NSAppearance.Name) throws -> NSBitmapImageRep {
         let dark = appearance == .darkAqua
-        let host = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: true)
-            .environment(\.colorScheme, dark ? .dark : .light))
+        let host = NSHostingView(
+            rootView: SetupView(model: model, actions: actions, solid: true)
+                .environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: appearance)
         window.contentView = host
@@ -327,8 +334,9 @@ import Testing
     private func render(model: SetupModel, actions: SetupActions, name: String, size: NSSize, appearance: NSAppearance.Name? = nil) throws {
         let controller = SetupWindow(model: model, actions: actions)
         let dark = appearance == .darkAqua
-        let host = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: true)
-            .environment(\.colorScheme, dark ? .dark : .light))
+        let host = NSHostingView(
+            rootView: SetupView(model: model, actions: actions, solid: true)
+                .environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.contentView = host

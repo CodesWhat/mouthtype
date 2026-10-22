@@ -131,8 +131,10 @@ public struct StatsSnapshot: Equatable, Sendable {
 
     public var hasHistory: Bool { report.dictationCount > 0 }
 
-    public init(report: StatsReport, records: ArcadeRecords, daily: [DailyWords],
-                hourlyWords: [Int] = Array(repeating: 0, count: StatsTimeline.hoursPerDay), todayTakes: [TodayTake] = []) {
+    public init(
+        report: StatsReport, records: ArcadeRecords, daily: [DailyWords],
+        hourlyWords: [Int] = Array(repeating: 0, count: StatsTimeline.hoursPerDay), todayTakes: [TodayTake] = []
+    ) {
         self.report = report
         self.records = records
         self.daily = daily
@@ -140,17 +142,23 @@ public struct StatsSnapshot: Equatable, Sendable {
         self.todayTakes = todayTakes
     }
 
-    public static func make(samples: [DictationSample], now: Date, timeZone: TimeZone = .current,
-                            typingWPM: Double = StatsEngine.defaultTypingWPM) -> StatsSnapshot {
+    public static func make(
+        samples: [DictationSample], now: Date, timeZone: TimeZone = .current,
+        typingWPM: Double = StatsEngine.defaultTypingWPM
+    ) -> StatsSnapshot {
         let engine = StatsEngine(samples: samples, typingWPM: typingWPM)
         let today = Streaks.localDay(for: now, in: timeZone)
         let report = engine.report(today: today)
-        let daily = report.dictationCount == 0 ? [] : Streaks.dayNumber(today).map {
-            engine.dailyWords(from: StatsEngine.dayString($0 - (dailyWindowDays - 1)), to: today)
-        } ?? []
+        let daily =
+            report.dictationCount == 0
+            ? []
+            : Streaks.dayNumber(today).map {
+                engine.dailyWords(from: StatsEngine.dayString($0 - (dailyWindowDays - 1)), to: today)
+            } ?? []
         let timeline = engine.timeline(today: today)
-        return StatsSnapshot(report: report, records: engine.records(), daily: daily,
-                             hourlyWords: timeline.hourly, todayTakes: timeline.takes)
+        return StatsSnapshot(
+            report: report, records: engine.records(), daily: daily,
+            hourlyWords: timeline.hourly, todayTakes: timeline.takes)
     }
 }
 
@@ -178,8 +186,10 @@ struct StatsAggregates: Sendable {
 
 extension StatsSnapshot {
     /// The same numbers as `make(samples:)`, from SQL aggregates instead of every sample.
-    static func make(aggregates: StatsAggregates, now: Date, timeZone: TimeZone = .current,
-                     typingWPM: Double = StatsEngine.defaultTypingWPM) -> StatsSnapshot {
+    static func make(
+        aggregates: StatsAggregates, now: Date, timeZone: TimeZone = .current,
+        typingWPM: Double = StatsEngine.defaultTypingWPM
+    ) -> StatsSnapshot {
         let typingWPM = typingWPM > 0 ? typingWPM : StatsEngine.defaultTypingWPM
         let days = aggregates.days.filter { $0.words > 0 }
             .compactMap { d in Streaks.dayNumber(d.day).map { (d, $0) } }
@@ -221,8 +231,9 @@ extension StatsSnapshot {
             for d in totals { byNumber[d.number] = d.words }
             daily = ((t - (dailyWindowDays - 1))...t).map { DailyWords(day: StatsEngine.dayString($0), words: byNumber[$0] ?? 0) }
         }
-        return StatsSnapshot(report: report, records: records, daily: daily,
-                             hourlyWords: aggregates.hourlyWords, todayTakes: StatsTimeline.sorted(aggregates.todayTakes))
+        return StatsSnapshot(
+            report: report, records: records, daily: daily,
+            hourlyWords: aggregates.hourlyWords, todayTakes: StatsTimeline.sorted(aggregates.todayTakes))
     }
 }
 
@@ -320,9 +331,11 @@ public struct StatsEngine: Sendable {
                 hourly[StatsTimeline.hour(startedAt: s.startedAt, utcOffsetSeconds: s.utcOffsetSeconds)] += s.words
             }
             if s.day == today {
-                takes.append(TodayTake(startedAt: s.startedAt,
-                                       secondsIntoDay: StatsTimeline.secondsIntoDay(startedAt: s.startedAt, utcOffsetSeconds: s.utcOffsetSeconds),
-                                       words: s.words, durationMs: s.durationMs, appName: s.appName))
+                takes.append(
+                    TodayTake(
+                        startedAt: s.startedAt,
+                        secondsIntoDay: StatsTimeline.secondsIntoDay(startedAt: s.startedAt, utcOffsetSeconds: s.utcOffsetSeconds),
+                        words: s.words, durationMs: s.durationMs, appName: s.appName))
             }
         }
         return (hourly, StatsTimeline.sorted(takes))

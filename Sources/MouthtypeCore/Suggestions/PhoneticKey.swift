@@ -31,10 +31,15 @@ enum PhoneticKey {
             case "b":
                 if !(i == n - 1 && prev == "m") { out.append("B") }
             case "c":
-                if next == "i", next2 == "a" { out.append("X") }
-                else if next == "h" { out.append(prev == "s" ? "K" : "X"); i += 1 }
-                else if let nx = next, "iey".contains(nx) { if prev != "s" { out.append("S") } }
-                else { out.append("K") }
+                if next == "i", next2 == "a" {
+                    out.append("X")
+                } else if next == "h" {
+                    out.append(prev == "s" ? "K" : "X"); i += 1
+                } else if let nx = next, "iey".contains(nx) {
+                    if prev != "s" { out.append("S") }
+                } else {
+                    out.append("K")
+                }
             case "d":
                 if next == "g", let n2 = next2, "eiy".contains(n2) { out.append("J"); i += 1 } else { out.append("T") }
             case "g":
@@ -43,8 +48,11 @@ enum PhoneticKey {
                     i += 1
                 } else if next == "n", next2 == nil || (next2 == "e" && at(i + 3) == "d" && at(i + 4) == nil) {
                     break
-                } else if let nx = next, "iey".contains(nx), prev != "g" { out.append("J") }
-                else { out.append("K") }
+                } else if let nx = next, "iey".contains(nx), prev != "g" {
+                    out.append("J")
+                } else {
+                    out.append("K")
+                }
             case "h":
                 if isVowel(next), !(prev.map { "cgpst".contains($0) } ?? false) { out.append("H") }
             case "k":
@@ -53,13 +61,9 @@ enum PhoneticKey {
                 if next == "h" { out.append("F"); i += 1 } else { out.append("P") }
             case "q": out.append("K")
             case "s":
-                if next == "h" { out.append("X"); i += 1 }
-                else if next == "i", next2 == "o" || next2 == "a" { out.append("X") }
-                else { out.append("S") }
+                if next == "h" { out.append("X"); i += 1 } else if next == "i", next2 == "o" || next2 == "a" { out.append("X") } else { out.append("S") }
             case "t":
-                if next == "i", next2 == "a" || next2 == "o" { out.append("X") }
-                else if next == "h" { out.append("0"); i += 1 }
-                else if !(next == "c" && next2 == "h") { out.append("T") }
+                if next == "i", next2 == "a" || next2 == "o" { out.append("X") } else if next == "h" { out.append("0"); i += 1 } else if !(next == "c" && next2 == "h") { out.append("T") }
             case "v": out.append("F")
             case "w", "y":
                 if isVowel(next) { out.append(Character(c.uppercased())) }

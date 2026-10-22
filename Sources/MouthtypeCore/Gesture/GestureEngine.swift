@@ -99,12 +99,13 @@ public struct GestureEngine: Sendable {
             }
             // A lock was deliberate, so stopping it never counts as too short.
             if locked { return .released }
-            let decision = RecordingDecisionEngine.decide(.init(
-                hotkey: configuration.hotkey,
-                minimumKeyTime: configuration.minimumKeyTime,
-                recordingStartTime: recordingStart,
-                currentTime: now
-            ))
+            let decision = RecordingDecisionEngine.decide(
+                .init(
+                    hotkey: configuration.hotkey,
+                    minimumKeyTime: configuration.minimumKeyTime,
+                    recordingStartTime: recordingStart,
+                    currentTime: now
+                ))
             guard decision == .proceedToTranscription else { return .discarded(.tooShort) }
             // A real hold followed by a quick tap is not a double-tap.
             processor.forgetLastTap()
