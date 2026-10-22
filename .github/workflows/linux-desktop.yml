@@ -41,7 +41,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus dbus-x11 procps sway wtype wl-clipboard
+          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-jeepney python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus dbus-x11 procps sway wtype wl-clipboard
           useradd --create-home --shell /bin/bash mouthtype-ci
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,7 +55,7 @@ jobs:
             uname -srm
             python3 --version
             getconf GNU_LIBC_VERSION
-            dpkg-query -W python3 python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus sway wtype wl-clipboard
+            dpkg-query -W python3 python3-jeepney python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus sway wtype wl-clipboard
           } > linux-desktop-evidence/environment.txt
       - name: Run ordinary-user synthetic components and no-model checks
         run: runuser -u mouthtype-ci -- bash tools/linux-desktop/run-ci.sh "$GITHUB_WORKSPACE/linux-desktop-evidence"
