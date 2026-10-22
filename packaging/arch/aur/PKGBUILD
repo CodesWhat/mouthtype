@@ -1,4 +1,5 @@
-# Maintainer: CodesWhat <https://github.com/CodesWhat>
+# Maintainer: Scott Benson <scottrbenson at gmail dot com>
+# Contributor: CodesWhat <https://github.com/CodesWhat>
 #
 # Development build of the Mouthtype Linux client and Omarchy bar plugin, built from git. Experimental:
 # nothing here has been accepted on a wide range of hardware yet (see https://mouthtype.app/linux/).
@@ -11,7 +12,7 @@ pkgdesc='Local voice dictation for Omarchy and Hyprland (development client)'
 arch=('x86_64')
 url='https://mouthtype.app/linux/'
 license=('GPL-3.0-only' 'MIT' 'Unicode-3.0')
-depends=('python' 'curl' 'pipewire-audio' 'wl-clipboard' 'wtype' 'libnotify' 'ffmpeg')
+depends=('python' 'python-gobject' 'curl' 'pipewire-audio' 'wl-clipboard' 'wtype' 'libnotify' 'ffmpeg')
 makedepends=('git')
 optdepends=('hyprland: identify the active window for paste and type delivery (Omarchy ships it)'
             'git: only for mouthtype-linux-setup --build-server (compiles the AI cleanup server locally)'
