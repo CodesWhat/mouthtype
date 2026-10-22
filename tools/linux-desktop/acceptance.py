@@ -12,6 +12,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import traceback
 import time
 import wave
@@ -285,9 +286,261 @@ def sway_component(root, env, processes):
             'hyprland_adapter_tested': False, 'hyprland_acceptance': False, 'omarchy_acceptance': False}
 
 
+def atspi_walk(node, visit, budget, depth=0):
+    """Depth-first over an AT-SPI tree; visit(node) returning a value stops the walk with that value."""
+    budget[0] -= 1
+    if budget[0] < 0 or depth > 30:
+        return None
+    found = visit(node)
+    if found:
+        return found
+    for index in range(node.get_child_count()):
+        child = node.get_child_at_index(index)
+        if child is None:
+            continue
+        found = atspi_walk(child, visit, budget, depth + 1)
+        if found:
+            return found
+    return None
+
+
+def consent_dialog(atspi):
+    """The portal's Remote Desktop frame, or None while it has not appeared."""
+    desktop = atspi.get_desktop(0)
+    for index in range(desktop.get_child_count()):
+        app = desktop.get_child_at_index(index)
+        if app is not None and app.get_name() == 'xdg-desktop-portal-gnome':
+            for frame in range(app.get_child_count()):
+                window = app.get_child_at_index(frame)
+                if window is not None and window.get_name() == 'Remote Desktop':
+                    return window
+    return None
+
+
+def answer_consent(window, atspi):
+    """Allow the keyboard and clipboard switches, tick Remember This Selection, press Share. Returns what was
+    switched so the evidence shows the dialog really was answered."""
+    found = {}
+    def collect(node):
+        role, name = node.get_role_name(), node.get_name()
+        if role == 'switch' and node.get_action_iface() and name in ('Allow Remote Interaction', 'Allow Clipboard Access'):
+            found[name] = node
+        elif role == 'check box' and 'Remember' in name:
+            found['remember'] = node
+        elif role == 'button' and name == 'Share':
+            found['share'] = node
+        return None
+    atspi_walk(window, collect, [4000])
+    if 'share' not in found:
+        raise ValueError('Consent dialog has no Share button')
+    def checked(node):
+        return node.get_state_set().contains(atspi.StateType.CHECKED)
+    switched = []
+    for name, node in found.items():
+        if name != 'share' and not checked(node):
+            node.get_action_iface().do_action(0)
+            switched.append(name)
+            time.sleep(.2)
+            if not checked(node):
+                raise ValueError('Consent control did not switch on: ' + name)
+    found['share'].get_action_iface().do_action(0)
+    return {'controls': sorted(key for key in found if key != 'share'), 'switched_on': sorted(switched)}
+
+
+FOCUS_SCRIPT = (
+    "(() => { const w = global.get_window_actors().map(a => a.meta_window)"
+    ".find(m => m.get_gtk_application_id() === %r || m.get_wm_class() === %r);"
+    " if (!w) return 'none'; w.activate(global.get_current_time()); return 'activated'; })()")
+
+
+def focus_by_shell_eval(portal, app_id):
+    """Activate the target's MetaWindow through org.gnome.Shell.Eval. Needs gnome-shell --unsafe-mode, which the
+    testbed uses because a headless shell never focuses a new window by itself. Returns True once activated."""
+    body = portal.call('org.gnome.Shell', 'Eval', 's', (FOCUS_SCRIPT % (app_id, app_id),),
+                       path='/org/gnome/Shell', bus_name='org.gnome.Shell', timeout=5.0)
+    sys.stderr.write('shell eval focus: %r\n' % (body,))
+    return bool(body[0]) and 'activated' in str(body[1])
+
+
+WINDOWS_SCRIPT = (
+    "JSON.stringify([global.display.focus_window ? global.display.focus_window.get_title() : null,"
+    " global.get_window_actors().map(a => { const m = a.meta_window; return [m.get_title(), m.get_wm_class(),"
+    " m.get_gtk_application_id(), m.get_window_type(), m.minimized, m.has_focus(), m.get_frame_rect().x,"
+    " m.get_frame_rect().y, m.get_frame_rect().width]; })])")
+
+
+def shell_windows(portal):
+    """The shell's own view of its windows, for the failure message."""
+    try:
+        body = portal.call('org.gnome.Shell', 'Eval', 's', (WINDOWS_SCRIPT,), path='/org/gnome/Shell',
+                           bus_name='org.gnome.Shell', timeout=5.0)
+        return str(body[1])
+    except Exception as exc:
+        return 'unavailable: %s' % exc
+
+
+def focus_by_click(portal, x, y):
+    """Headless mutter gives a new window no focus, so click it through the direct mutter RemoteDesktop API
+    (no portal, no consent dialog): clamp the pointer to the corner, then move to the point and click."""
+    import portal_probe
+    bus, path, iface = portal_probe.MUTTER_BUS, portal_probe.MUTTER_PATH, portal_probe.MUTTER_SESSION_IFACE
+    session = portal.call(bus, 'CreateSession', '', (), path=path, bus_name=bus)[0]
+    try:
+        portal.call(iface, 'Start', '', (), path=session, bus_name=bus)
+        for dx, dy in ((-4000.0, -4000.0), (float(x), float(y))):
+            portal.call(iface, 'NotifyPointerMotionRelative', 'dd', (dx, dy), path=session, bus_name=bus)
+        for down in (True, False):
+            portal.call(iface, 'NotifyPointerButton', 'ib', (0x110, down), path=session, bus_name=bus)
+            time.sleep(.1)
+    finally:
+        portal.call(iface, 'Stop', '', (), path=session, bus_name=bus, timeout=2.0)
+
+
+def atspi_outline(atspi):
+    """Applications and their top-level windows with states, for the failure message."""
+    outline = []
+    desktop = atspi.get_desktop(0)
+    for index in range(desktop.get_child_count()):
+        app = desktop.get_child_at_index(index)
+        if app is None:
+            continue
+        windows = []
+        for frame in range(app.get_child_count()):
+            window = app.get_child_at_index(frame)
+            if window is not None:
+                states = window.get_state_set().get_states()
+                windows.append([window.get_name(), sorted(state.value_nick for state in states)])
+        outline.append([app.get_name(), windows])
+    return outline
+
+
+def gnome_portal_component(root, env, processes):
+    """Portal paste on a headless GNOME session: consent through AT-SPI, a persisted grant that restarts without a
+    prompt, then clipboard + Ctrl+V into the GTK target, with the earlier clipboard put back."""
+    import portal as portal_module
+    from atspi_target import AtspiTargets, load_atspi
+    from delivery_portal import GrantStore, PortalClipboard, PortalDelivery, PortalKeyboard, RemoteDesktopSession
+    atspi = load_atspi()
+    if atspi is None:
+        raise ValueError('AT-SPI is not available')
+    runtime = Path(env['XDG_RUNTIME_DIR'])
+    wayland = wait_for(lambda: next((p for p in runtime.glob('wayland-*') if not p.name.endswith('.lock')), None))
+    env.update(WAYLAND_DISPLAY=wayland.name, GDK_BACKEND='wayland', XDG_SESSION_TYPE='wayland',
+               XDG_CURRENT_DESKTOP='GNOME', LC_ALL='C.UTF-8')
+    previous_env = dict(os.environ)
+    os.environ.update(env)
+    text_path = root / 'target.json'
+    expected = 'Hello, 世界. Émilie 👋 from the portal.'
+    sentinel = 'Mouthtype existing clipboard'
+    store = GrantStore(root / 'state/mouthtype/portal.json')
+    portal = remote = clipboard = None
+    try:
+        targets = AtspiTargets()
+        portal = portal_module.Portal()
+        portal.connect()
+        portal.register()
+        remote = RemoteDesktopSession(portal, store, start_timeout=40)
+        outcome = {}
+        starter = threading.Thread(target=lambda: outcome.setdefault('status', remote.start(interactive=True)))
+        starter.start()
+        dialog = wait_for(lambda: consent_dialog(atspi), 20)
+        answered = answer_consent(dialog, atspi)
+        starter.join(30)
+        if outcome.get('status') != 'active':
+            raise ValueError('Grant did not become active: ' + json.dumps(remote.snapshot()))
+        if not store.load():
+            raise ValueError('No restore grant was stored')
+        remote.close()
+        started = time.monotonic()
+        restored = remote.start(interactive=False)
+        if restored != 'active' or consent_dialog(atspi) is not None:
+            raise ValueError('Stored grant did not restart silently: ' + json.dumps(remote.snapshot()))
+        restart_seconds = round(time.monotonic() - started, 2)
+        clicked = []
+        def focused_snapshot():
+            try:
+                focus_by_shell_eval(portal, 'app.mouthtype.Acceptance')
+            except Exception as exc:
+                sys.stderr.write('shell eval focus failed: %s\n' % exc)
+            try:
+                PortalKeyboard(remote).tap(0xffe1)  # Shift_L: mutter only hands the client keyboard focus on input
+            except Exception as exc:
+                sys.stderr.write('nudge failed: %s\n' % exc)
+            if not clicked:
+                clicked.append(1)
+                try:
+                    focus_by_click(portal, 640, 400)
+                except Exception as exc:
+                    sys.stderr.write('click failed: %s\n' % exc)
+            time.sleep(.3)
+            snap = targets.snapshot()
+            return snap if snap.get('class') not in (None, 'unknown') else None
+        # Headless mutter has no seat keyboard until a RemoteDesktop session adds a virtual one, so the target
+        # starts after the grant is active: a window created earlier never receives keyboard focus.
+        clipboard = PortalClipboard(remote).start()
+        env['MOUTHTYPE_TARGET_CLIPBOARD'] = sentinel
+        processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(text_path)])
+        wait_for(lambda: text_path.exists())
+        try:
+            target = wait_for(focused_snapshot, 20)
+        except TimeoutError:
+            raise ValueError('AT-SPI never reported the target as focused: ' + json.dumps(atspi_outline(atspi))
+                             + ' shell: ' + shell_windows(portal))
+        def earlier_clipboard():
+            PortalKeyboard(remote).tap(0xffe1)
+            time.sleep(.3)
+            return clipboard.read_current().get('text/plain;charset=utf-8')
+        try:
+            taken = wait_for(earlier_clipboard, 10)
+        except TimeoutError:
+            taken = None
+        if taken != sentinel.encode():
+            raise ValueError('Target did not take the earlier clipboard: ' + repr(clipboard._owner_mimes))
+        delivery = PortalDelivery({'mode': 'paste', 'allow_unknown_secure_field': True, 'restore_delay_seconds': .5,
+                                   'allowed_classes': [target['class']]}, remote, clipboard, targets=targets)
+        if delivery.paste(expected, delivery.snapshot()) != 'unknown':
+            raise ValueError('Portal paste did not complete')
+        def contents():
+            try:
+                value = json.loads(text_path.read_text())
+            except (ValueError, OSError):
+                return None
+            return value if value.get('text') else None
+        wait_for(contents, 10)
+        time.sleep(1)
+        actual = contents()
+        if actual is None or actual['text'] != expected:
+            raise ValueError('Target text differs: ' + json.dumps(actual, ensure_ascii=False))
+        if delivery.restore_thread is None:
+            raise ValueError('No clipboard restore was scheduled')
+        delivery.restore_thread.join(5)
+        def restored_clipboard():
+            # read_current is empty while this session owns the selection, which a restore makes true.
+            with clipboard._lock:
+                offers = dict(clipboard._offers)
+            return offers.get('text/plain;charset=utf-8')
+        if wait_for(restored_clipboard, 5) != sentinel.encode():
+            raise ValueError('Clipboard was not restored')
+        return {'component': 'gnome-portal', 'compositor': 'GNOME Shell headless',
+                'native_target': 'GTK3 Wayland', 'target_class': target['class'],
+                'consent': answered, 'grant_persisted': True, 'silent_restart': True,
+                'restart_seconds': restart_seconds, 'unicode_exact': True, 'delivered_once': True,
+                'clipboard_restored': True, 'shortcut_press': False, 'fake_engine_take': False,
+                'hyprland_acceptance': False, 'omarchy_acceptance': False}
+    finally:
+        for closer in (getattr(clipboard, 'close', None), getattr(remote, 'close', None), getattr(portal, 'close', None)):
+            if closer:
+                try:
+                    closer()
+                except Exception:
+                    pass
+        os.environ.clear()
+        os.environ.update(previous_env)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('component', choices=('capabilities', 'pipewire', 'sway'))
+    parser.add_argument('component', choices=('capabilities', 'pipewire', 'sway', 'gnome-portal'))
     args = parser.parse_args()
     if sys.platform != 'linux':
         parser.error('Explicit Linux component acceptance only')
@@ -298,18 +551,24 @@ def main():
         raise TimeoutError('Acceptance lifetime limit')
     for event in (signal.SIGALRM, signal.SIGTERM, signal.SIGINT):
         signal.signal(event, deadline)
-    signal.alarm(45)
+    signal.alarm(120 if args.component == 'gnome-portal' else 45)
     try:
         with tempfile.TemporaryDirectory(prefix='mouthtype-acceptance-') as temp:
             root = Path(temp)
             env = {**os.environ, 'XDG_RUNTIME_DIR': str(root / 'runtime'),
                    'XDG_CONFIG_HOME': str(root / 'config'), 'XDG_STATE_HOME': str(root / 'state'),
                    'XDG_CACHE_HOME': str(root / 'cache')}
-            Path(env['XDG_RUNTIME_DIR']).mkdir(mode=0o700)
-            env.pop('WAYLAND_DISPLAY', None)
-            env.pop('WAYLAND_SOCKET', None)
-            env.pop('DISPLAY', None)
-            env.pop('SWAYSOCK', None)
+            if args.component == 'gnome-portal':
+                # Runs inside the testbed's live GNOME session, so keep its runtime dir and bus.
+                env['XDG_RUNTIME_DIR'] = os.environ['XDG_RUNTIME_DIR']
+                env['XDG_STATE_HOME'] = str(root / 'state')
+                env.pop('DISPLAY', None)
+            else:
+                Path(env['XDG_RUNTIME_DIR']).mkdir(mode=0o700)
+                env.pop('WAYLAND_DISPLAY', None)
+                env.pop('WAYLAND_SOCKET', None)
+                env.pop('DISPLAY', None)
+                env.pop('SWAYSOCK', None)
             for name in ('PIPEWIRE_NODE', 'PIPEWIRE_CONFIG_DIR', 'PIPEWIRE_CONFIG_NAME',
                          'WIREPLUMBER_CONFIG_DIR', 'WIREPLUMBER_STATE_DIR'):
                 env.pop(name, None)
@@ -317,7 +576,8 @@ def main():
             env['PIPEWIRE_REMOTE'] = 'pipewire-0'
             processes = Processes(root, env)
             try:
-                check = pipewire_component if args.component == 'pipewire' else sway_component
+                check = {'pipewire': pipewire_component, 'sway': sway_component,
+                         'gnome-portal': gnome_portal_component}[args.component]
                 result = check(root, env, processes)
             except BaseException:
                 traceback.print_exc(file=sys.stderr)
