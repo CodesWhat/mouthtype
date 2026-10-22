@@ -18,11 +18,17 @@ public final class HotkeyService {
         public var configuration: GestureConfiguration
         /// Keep the key tap on while idle so key events can be logged. Diagnostics only.
         public var observesKeys: Bool
+        /// An extra mouse button that dictates like the shortcut. `.none` installs no mouse tap at all.
+        public var mouseTrigger: MouseTrigger
 
-        public init(source: HotkeySource = .fnFlag, configuration: GestureConfiguration = .default, observesKeys: Bool = false) {
+        public init(
+            source: HotkeySource = .fnFlag, configuration: GestureConfiguration = .default, observesKeys: Bool = false,
+            mouseTrigger: MouseTrigger = .none
+        ) {
             self.source = source
             self.configuration = configuration
             self.observesKeys = observesKeys
+            self.mouseTrigger = mouseTrigger
         }
     }
 
@@ -59,6 +65,7 @@ public final class HotkeyService {
     private let emulator = KeyEmulator()
     private var engine: GestureEngine
     private var mapper: HotkeyInputMapper
+    private var mouseMapper = MouseInputMapper()
     private var thread: TapThread?
     private var slots: [TapRole: Slot] = [:]
     private var secureInput = false
@@ -100,6 +107,11 @@ public final class HotkeyService {
         return nil
     }
 
+    var mouseTrigger: MouseTrigger { options.mouseTrigger }
+
+    /// The mouse button is down and its press was passed to the engine (not refused).
+    private var mouseHeld: Bool { mouseMapper.held }
+
     // MARK: - Lifecycle
 
     /// Creates the always-on tap. Call only after Accessibility is granted, so macOS has no reason to raise an Input Monitoring prompt.
@@ -130,6 +142,14 @@ public final class HotkeyService {
                 throw StartError.tapCreateFailed
             }
             slots[.keys] = Slot(tap: keyTap)
+        }
+        // Same Accessibility grant as the other taps, so no new permission. It consumes only the chosen button.
+        if options.mouseTrigger != .none {
+            guard let mouseTap = makeTap(.mouse) else {
+                stop()
+                throw StartError.tapCreateFailed
+            }
+            slots[.mouse] = Slot(tap: mouseTap)
         }
 
         let messages = self.messages
@@ -171,6 +191,7 @@ public final class HotkeyService {
         shared.reset()
         engine = GestureEngine(configuration: options.configuration)
         mapper = HotkeyInputMapper(source: options.source)
+        mouseMapper.reset()
         health = .off
     }
 
@@ -210,6 +231,26 @@ public final class HotkeyService {
         }
     }
 
+    /// Moves the live taps to another mouse button (or none) without a relaunch. A recording in progress is cancelled,
+    /// since the button that would end it is about to mean something else. On failure the previous button stays.
+    public func switchMouseTrigger(_ trigger: MouseTrigger) throws {
+        guard trigger != options.mouseTrigger else { return }
+        let previous = options.mouseTrigger
+        let wasRunning = thread != nil
+        let interrupted = engine.isRecording
+        stop()
+        options.mouseTrigger = trigger
+        engine = GestureEngine(configuration: options.configuration)
+        if interrupted { eventSink.yield(.cancelled(reason: .inputLost)) }
+        do {
+            if wasRunning { try start() }
+        } catch {
+            stop()
+            options.mouseTrigger = previous
+            throw error
+        }
+    }
+
     /// Ends a locked recording that something other than the key stopped (the menu, the safety cap), so the next press starts fresh.
     public func releaseLock() {
         guard engine.isLocked else { return }
@@ -245,7 +286,7 @@ public final class HotkeyService {
         return TapContext(
             role: role, sink: messageSink, swallowedKey: swallowedKey, shared: shared,
             emulator: remapped ? emulator : nil, tracksFnFlag: swallowedKey == nil, idleKeysReported: options.observesKeys,
-            countsKeys: role == .flags && !keyTapStaysOn, shortcut: shortcut
+            countsKeys: role == .flags && !keyTapStaysOn, shortcut: shortcut, mouseButton: options.mouseTrigger.buttonNumber
         )
     }
 
@@ -254,12 +295,35 @@ public final class HotkeyService {
     private func handle(_ message: TapMessage) {
         switch message {
         case let .sample(_, sample): process(sample)
+        case let .mouse(sample): process(mouse: sample)
         case let .disabled(role): noteDisabled(role)
         }
     }
 
+    /// The chosen mouse button, mapped to an Fn-held chord so the keyboard trigger's rules apply unchanged.
+    func process(mouse sample: MouseSample) {
+        let probe = otherKeysHeldProbe
+        // The keyboard trigger is already down: the button adds nothing, and its release must not end that take.
+        if sample.isDown, mapper.hotkeyHeld { return }
+        guard let mapped = mouseMapper.map(sample, otherKeysHeld: { probe([]) }) else { return }
+        guard let gesture = engine.process(mapped.keyEvent, now: Self.date(nanos: mapped.timestampNanos)) else { return }
+        dispatch(gesture, nanos: mapped.timestampNanos)
+    }
+
     func process(_ sample: TapSample) {
         sampleObserver?(sample)
+        if mouseHeld, !mapper.hotkeyHeld, engine.isRecording, !engine.isLocked, !sample.isAutorepeat,
+            sample.kind == .keyDown, sample.userData != SyntheticEvents.stamp
+        {
+            // Keys typed during a mouse hold follow the keyboard's rules: Esc cancels, another key early discards.
+            if sample.keyCode == FnCombos.spaceKeyCode, let gesture = engine.lockFromChord() {
+                dispatch(gesture, nanos: sample.timestamp)
+                return
+            }
+            let keyEvent = KeyEvent(key: Key(code: sample.keyCode), modifiers: [.fn])
+            if let gesture = engine.process(keyEvent, now: Self.date(nanos: sample.timestamp)) { dispatch(gesture, nanos: sample.timestamp) }
+            return
+        }
         if isLockChord(sample) {
             if let gesture = engine.lockFromChord() { dispatch(gesture, nanos: sample.timestamp) }
             return
@@ -373,6 +437,7 @@ public final class HotkeyService {
         slots[role]!.recovery.enabled(at: Date())
         Log.hotkey.info("\(String(describing: role), privacy: .public) tap re-enabled (\(reason, privacy: .public))")
         refreshHealth()
+        if role == .mouse { resyncMouse() }
         resync()
     }
 
@@ -384,6 +449,14 @@ public final class HotkeyService {
             self?.reenable(role, reason: "retry")
         }
         refreshHealth()
+    }
+
+    /// No way to ask whether an extra button is still down (CGMouseButton only names three), so a held button
+    /// is treated as released: a recording ending early beats one that never ends.
+    private func resyncMouse() {
+        guard mouseHeld else { return }
+        Log.hotkey.info("resyncing a missed mouse release")
+        process(mouse: MouseSample(isDown: false, flags: 0, timestamp: HostClock.now()))
     }
 
     /// While a tap was off the hotkey may have been released unseen. Only a missed release is acted on:

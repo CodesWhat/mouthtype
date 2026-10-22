@@ -6,10 +6,13 @@ enum TapRole: Hashable, Sendable {
     case flags
     /// Active: exists only while recording (or always, for the Fn remap and the probes).
     case keys
+    /// Active, and only when a mouse button is chosen: consumes that one button's presses and nothing else.
+    case mouse
 }
 
 enum TapMessage: Sendable {
     case sample(TapRole, TapSample)
+    case mouse(MouseSample)
     case disabled(TapRole)
 }
 
@@ -200,6 +203,8 @@ final class TapContext: Sendable {
     /// The tap counts keystrokes itself (no other tap does), forwarding nothing. Flag tap only.
     let countsKeys: Bool
     let shortcut: DictationShortcut?
+    /// The `CGEvent` button number the mouse tap consumes. Mouse tap only.
+    let mouseButton: Int64?
 
     func countPassiveKey(_ sample: TapSample) {
         if TapPolicy.countsAsUserInput(sample, decision: .passThrough, swallowedKey: swallowedKey) {
@@ -210,7 +215,7 @@ final class TapContext: Sendable {
     init(
         role: TapRole, sink: AsyncStream<TapMessage>.Continuation, swallowedKey: UInt16?, shared: TapShared,
         emulator: KeyEmulator? = nil, tracksFnFlag: Bool = false, idleKeysReported: Bool = false, countsKeys: Bool = false,
-        shortcut: DictationShortcut? = nil
+        shortcut: DictationShortcut? = nil, mouseButton: Int64? = nil
     ) {
         self.role = role
         self.sink = sink
@@ -221,6 +226,7 @@ final class TapContext: Sendable {
         self.idleKeysReported = idleKeysReported
         self.countsKeys = countsKeys
         self.shortcut = shortcut
+        self.mouseButton = mouseButton
     }
 }
 

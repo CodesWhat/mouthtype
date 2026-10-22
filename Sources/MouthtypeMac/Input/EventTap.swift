@@ -71,6 +71,9 @@ final class EventTap {
                 (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
                 | (context.shortcut == nil ? 0 : 1 << CGEventType.flagsChanged.rawValue)
             options = .defaultTap
+        case .mouse:
+            mask = Self.triggerButtonMask
+            options = .defaultTap
         }
         let retained = Unmanaged.passRetained(context)
         // .cgSessionEventTap is the level for an Accessibility-granted user process; .cghidEventTap needs root.
@@ -101,6 +104,11 @@ final class EventTap {
     static let pointerMask: CGEventMask =
         (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
         | (1 << CGEventType.otherMouseDown.rawValue)
+
+    /// Presses, releases and drags of the extra buttons. Left and right clicks are never in the mask.
+    static let triggerButtonMask: CGEventMask =
+        (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
+        | (1 << CGEventType.otherMouseDragged.rawValue)
 
     var isEnabled: Bool { CGEvent.tapIsEnabled(tap: port) }
 
@@ -139,6 +147,15 @@ private func tapCallback(
     if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
         context.sink.yield(.disabled(context.role))
         return Unmanaged.passUnretained(event)
+    }
+    if context.role == .mouse {
+        guard context.mouseButton == event.getIntegerValueField(.mouseEventButtonNumber),
+            event.getIntegerValueField(.eventSourceUserData) != SyntheticEvents.stamp
+        else { return Unmanaged.passUnretained(event) }
+        if type != .otherMouseDragged {
+            context.sink.yield(.mouse(MouseSample(isDown: type == .otherMouseDown, flags: event.flags.rawValue, timestamp: event.timestamp)))
+        }
+        return nil
     }
     if TapPolicy.isPointerDown(type) {
         if event.getIntegerValueField(.eventSourceUserData) != SyntheticEvents.stamp {
