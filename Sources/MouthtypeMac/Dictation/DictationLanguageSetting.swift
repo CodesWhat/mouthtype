@@ -72,7 +72,8 @@ enum DictationLanguageSetting: Equatable, Sendable {
 
     static let autoDetail = "Picks the language from what you said, among English and your Mac\u{2019}s preferred languages."
     static let detail =
-        "English runs every cleanup rule. Other languages get punctuation, capitalization, your dictionary and snippets, and Thorough cleanup. Fast, spoken commands, number formatting and filler removal are English only for now."
+        "English runs every cleanup rule. Other languages get punctuation, capitalization, your dictionary and snippets, and Thorough cleanup. "
+        + "Fast, spoken commands, number formatting and filler removal are English only for now."
 
     /// What the engine and pipeline are told for a take.
     func request(preferredLanguages: [String] = Locale.preferredLanguages) -> DictationLanguageRequest {
