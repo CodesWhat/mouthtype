@@ -9,6 +9,7 @@ on:
       - "tools/qml-render/**"
       - "scripts/prepare-linux-arch.py"
       - "packaging/arch/**"
+      - "packaging/debian/**"
       - ".github/workflows/linux-desktop.yml"
   push:
     branches: [main, dev/v0.1.0, dev/v0.4.0, feat/linux-parity]
@@ -19,6 +20,7 @@ on:
       - "tools/qml-render/**"
       - "scripts/prepare-linux-arch.py"
       - "packaging/arch/**"
+      - "packaging/debian/**"
       - ".github/workflows/linux-desktop.yml"
   workflow_dispatch:
 
@@ -194,6 +196,42 @@ jobs:
           path: linux-desktop-evidence/
           retention-days: 14
           if-no-files-found: warn
+
+  debian-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      # Official Ubuntu 24.04 index, resolved 2026-10-21.
+      image: ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+      options: --init
+    steps:
+      - name: Install build and lint prerequisites
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates python3 dpkg-dev lintian
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the .deb
+        run: bash packaging/debian/build-deb.sh --output "$RUNNER_TEMP/debs" --version 0.0.0~ci-1
+      - name: Lint the .deb
+        run: lintian --pedantic --fail-on error,warning "$RUNNER_TEMP"/debs/mouthtype-linux_*.deb
+      - name: Install, check, remove and purge on Ubuntu 24.04
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: bash packaging/debian/test-install.sh "$RUNNER_TEMP"/debs/mouthtype-linux_0.0.0~ci-1_amd64.deb
+      - name: Signed apt repository flow with a throwaway key
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: bash packaging/debian/test-apt-repo.sh "$GITHUB_WORKSPACE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-debian-package
+          path: ${{ runner.temp }}/debs/*.deb
+          retention-days: 14
+          if-no-files-found: error
 
   qml-render:
     runs-on: ubuntu-24.04

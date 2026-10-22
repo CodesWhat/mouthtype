@@ -1,0 +1,11 @@
+#!/bin/sh
+set -e
+case "$1" in
+    purge)
+        cat <<'MSG'
+Mouthtype is purged from /usr. Models, configuration and recordings in your home directory were not touched.
+To delete them: rm -rf ~/.local/share/mouthtype ~/.config/mouthtype ~/.local/state/mouthtype
+MSG
+        ;;
+esac
+exit 0
