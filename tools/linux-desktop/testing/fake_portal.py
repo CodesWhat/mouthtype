@@ -49,6 +49,8 @@ class FakePortal:
         self.owned = None
         self.transfers = {}
         self.read_errors = set()
+        self.keysyms = []
+        self.keysym_error = False
         self._transfer_pipes = {}
         self._serial = 0
         self._conn = None
@@ -146,6 +148,12 @@ class FakePortal:
             self._send(new_method_return(message))
         elif interface == REMOTE_IFACE and member in ('CreateSession', 'SelectDevices', 'Start'):
             self._request(message, sender, member, interface)
+        elif interface == REMOTE_IFACE and member == 'NotifyKeyboardKeysym':
+            if self.keysym_error:
+                self._send(new_error(message, 'org.freedesktop.DBus.Error.Failed', 's', ('keysym',)))
+                return
+            self.keysyms.append((message.body[2], message.body[3]))
+            self._send(new_method_return(message))
         elif interface == CLIPBOARD_IFACE:
             self._clipboard(message, member, sender)
         else:

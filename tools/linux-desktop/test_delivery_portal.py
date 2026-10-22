@@ -284,6 +284,119 @@ class RemoteDesktopSessionTests(unittest.TestCase):
         clip.close()
         self.assertFalse([t for t in threading.enumerate() if t.name == 'mouthtype-portal-clipboard'])
 
+    # delivery -----------------------------------------------------------
+
+    def delivery(self, **config):
+        clip = self.clipboard()
+        base = {'mode': 'paste', 'allow_unknown_secure_field': True, 'any_window': True, 'restore_delay_seconds': 0}
+        delivery = delivery_portal.PortalDelivery({**base, **config}, self.remote, clip, targets=self.targets)
+        self.addCleanup(lambda: delivery.restore_thread and delivery.restore_thread.join(2))
+        return delivery
+
+    targets = None
+
+    class Targets:
+        def __init__(self, target, terminal=False):
+            self.target, self.terminal = target, terminal
+
+        def snapshot(self):
+            return self.target
+
+        def is_terminal(self, target):
+            return self.terminal
+
+    def test_paste_sends_ctrl_v_with_the_text_on_the_clipboard(self):
+        delivery = self.delivery()
+        self.assertEqual(delivery.paste('héllo', {'class': 'unknown'}), 'unknown')
+        self.assertEqual(self.fake.keysyms, [(0xFFE3, 1), (0x76, 1), (0x76, 0), (0xFFE3, 0)])
+        self.assertEqual(self.paste('text/plain;charset=utf-8'), (True, 'héllo'.encode()))
+
+    def test_terminal_paste_adds_shift_and_drops_the_trailing_newline(self):
+        self.targets = self.Targets({'class': 'unknown'}, terminal=True)
+        delivery = self.delivery()
+        self.assertEqual(delivery.paste('ls\n', {'class': 'unknown'}), 'unknown')
+        self.assertEqual(self.fake.keysyms, [(0xFFE3, 1), (0xFFE1, 1), (0x76, 1), (0x76, 0), (0xFFE1, 0), (0xFFE3, 0)])
+        self.assertEqual(self.paste('text/plain'), (True, b'ls'))
+        self.assertEqual(delivery.paste('a\nb', {'class': 'unknown'}), 'unsupported_text')
+
+    def test_paste_restores_the_previous_selection(self):
+        delivery = self.delivery()
+        self.external_copy(delivery.clipboard, {'text/plain': b'before'})
+        delivery.paste('dictated', {'class': 'unknown'})
+        self.fake.clipboard = {'text/plain': b'before'}
+        delivery.restore_thread.join(2)
+        self.assertEqual(self.fake.owned, ['text/plain'])
+
+    def test_sensitive_previous_selection_is_not_restored(self):
+        delivery = self.delivery()
+        self.external_copy(delivery.clipboard, {'text/plain': b'pw', 'x-kde-passwordManagerHint': b'secret'})
+        delivery.paste('dictated', {'class': 'unknown'})
+        self.assertIsNone(delivery.restore_thread)
+        self.assertEqual(self.fake.owned, list(delivery_portal.TEXT_MIMES))
+
+    def test_target_change_blocks_the_chord(self):
+        self.targets = self.Targets({'class': 'other'})
+        delivery = self.delivery()
+        self.assertEqual(delivery.paste('x', {'class': 'unknown'}), 'target_changed')
+        self.assertEqual(self.fake.keysyms, [])
+        self.assertEqual(delivery.paste('x', {'class': 'unknown'}, verified=True), 'target_changed')
+
+    def test_cancel_and_control_characters_send_nothing(self):
+        delivery = self.delivery()
+        event = threading.Event()
+        event.set()
+        self.assertEqual(delivery.paste('x', {'class': 'unknown'}, event), 'not_attempted')
+        self.assertEqual(delivery.paste('a\x1bb', {'class': 'unknown'}), 'unsupported_text')
+        self.assertEqual(self.fake.keysyms, [])
+
+    def test_inactive_session_is_recover_only(self):
+        delivery = self.delivery()
+        self.remote.close()
+        self.assertEqual(delivery.submit('x', {'class': 'unknown'}), 'recover_only')
+        self.assertEqual(delivery.paste('x', {'class': 'unknown'}), 'recover_only')
+
+    def test_type_mode_sends_one_keysym_per_character(self):
+        delivery = self.delivery(mode='type')
+        self.assertEqual(delivery.submit('aé→', {'class': 'unknown'}), 'unknown')
+        self.assertEqual(self.fake.keysyms, [(0x61, 1), (0x61, 0), (0xE9, 1), (0xE9, 0),
+                                             (0x01002192, 1), (0x01002192, 0)])
+        self.assertNotIn('SetSelection', [m for _, m, _, _ in self.fake.calls])
+
+    def test_type_mode_falls_back_to_paste_for_multiline_and_long_text(self):
+        delivery = self.delivery(mode='type', type_max_chars=5)
+        self.assertEqual(delivery.submit('a\nb', {'class': 'unknown'}), 'unknown')
+        self.assertEqual(delivery.submit('abcdefghij', {'class': 'unknown'}), 'unknown')
+        self.assertEqual(self.paste('text/plain'), (True, b'abcdefghij'))
+        self.assertEqual({k for k, _ in self.fake.keysyms}, {0xFFE3, 0x76})
+
+    def test_type_mode_falls_back_to_paste_when_the_first_keysym_fails(self):
+        delivery = self.delivery(mode='type')
+        self.fake.keysym_error = True
+        self.assertEqual(delivery.type_text('abc', {'class': 'unknown'}), 'fallback')
+        self.assertEqual(delivery.submit('abc', {'class': 'unknown'}), 'unknown')
+        self.assertEqual(self.paste('text/plain'), (True, b'abc'))
+
+    def test_allowed_follows_the_hyprland_rules(self):
+        delivery = self.delivery(any_window=False, allowed_classes=['firefox'])
+        self.assertTrue(delivery.allowed({'class': 'firefox'}))
+        self.assertFalse(delivery.allowed({'class': 'unknown'}))
+        self.assertEqual(delivery.submit('x', {'class': 'unknown'}), 'recover_only')
+        delivery.config['allow_unknown_secure_field'] = False
+        self.assertFalse(delivery.allowed({'class': 'firefox'}))
+
+
+class KeysymTests(unittest.TestCase):
+    def test_mapping(self):
+        keysym = delivery_portal.keysym_for
+        self.assertEqual(keysym('a'), 0x61)
+        self.assertEqual(keysym('\xe9'), 0xE9)
+        self.assertEqual(keysym('\u20ac'), 0x010020AC)
+        self.assertEqual(keysym('\U0001f600'), 0x0101F600)
+        self.assertEqual(keysym('\n'), 0xFF0D)
+        self.assertEqual(keysym('\t'), 0xFF09)
+        self.assertIsNone(keysym('\x1b'))
+        self.assertIsNone(keysym('\x85'))
+
 
 if __name__ == '__main__':
     unittest.main()
