@@ -302,7 +302,7 @@ final class CleanerHost: CleanupModelManaging {
         downloadTask = Task { [model] in
             do {
                 try await model.downloadReporting(report: { progress in
-                    Task { @MainActor [weak self] in self?.receive(progress) }
+                    Task { @MainActor in self.receive(progress) }
                 })
                 downloadTask = nil
                 downloadProgress = nil

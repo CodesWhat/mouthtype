@@ -200,7 +200,7 @@ struct SetupView: View {
     private var footerSteps: some View {
         let line = SetupStep.footerNames.enumerated().reduce(Text("")) { text, entry in
             let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? DesignPalette.ink : DesignPalette.sideInk)
-            return entry.offset == 0 ? name : text + Text(" · ").foregroundColor(DesignPalette.hair) + name
+            return entry.offset == 0 ? name : Text("\(text)\(Text(" · ").foregroundColor(DesignPalette.hair))\(name)")
         }
         return line
         .font(DesignFont.mono(DesignFont.eyebrow)).tracking(1)
