@@ -4,6 +4,7 @@ mouthtype-linux-setup \- per-user setup for mouthtype-linux
 .SH SYNOPSIS
 .B mouthtype-linux-setup
 [\fB\-\-skip\-plugin\fR] [\fB\-\-no\-autostart\fR] [\fB\-\-shortcut\fR \fBtoggle\fR|\fBhold\fR]
+[\fB\-\-desktop\fR \fIauto|gnome|kde|hyprland\fR] [\fB\-\-grant\fR|\fB\-\-skip\-grant\fR]
 .br
 .B mouthtype-linux-setup \-\-uninstall
 [\fB\-\-purge\fR]
@@ -12,5 +13,11 @@ Run as a normal user, never with sudo. Checks the required helpers, downloads an
 runs \fBmouthtype-linux doctor\fR, installs the Omarchy bar plugin when present and enables the
 \fBmouthtype-linux\fR systemd user service. \fB\-\-uninstall\fR reverses the per-user pieces and
 \fB\-\-purge\fR also deletes models, recordings and configuration.
+.PP
+On GNOME and KDE (Wayland) the Omarchy plugin is skipped. Setup enables the \fBmouthtype-linux\fR user service,
+asks the desktop portal for typing access (a one-time prompt, only on a terminal unless \fB\-\-grant\fR is
+given), and adds the settings window to the XDG autostart when it is installed. The dictation shortcut prompt
+appears when the service starts. \fB\-\-uninstall\fR removes the service, the autostart entry and the GNOME
+fallback shortcut; \fB\-\-purge\fR also removes the stored typing grant.
 .SH SEE ALSO
 .BR mouthtype-linux (1)

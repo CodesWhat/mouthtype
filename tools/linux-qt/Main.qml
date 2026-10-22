@@ -92,6 +92,6 @@ Window {
     Tray.setGlyph(app.glyphState)
     app.refresh()
     app.openPage(Host.startPage)
-    app.open()
+    if (!Host.background) app.open()
   }
 }

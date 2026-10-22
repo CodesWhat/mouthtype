@@ -214,6 +214,10 @@ class Host(QObject):
     def startPage(self):
         return self._args.page
 
+    @Property(bool, constant=True)
+    def background(self):
+        return self._args.background
+
     @Property(int, constant=True)
     def settleMs(self):
         return self._args.settle_ms
@@ -273,6 +277,7 @@ def parse_args(argv):
     parser.add_argument("--pill-screenshot", metavar="PNG", help="show the pill (needs --force-pill and a --launcher that reports a recording take), save it to PNG, exit")
     parser.add_argument("--launcher", default=str(Path.home() / ".local" / "bin" / "mouthtype-linux"), help="mouthtype-linux launcher whose `watch` stream feeds the pill")
     parser.add_argument("--config", default="", help="linux.json passed to the launcher (default: the speech-candidate one)")
+    parser.add_argument("--background", action="store_true", help="start in the tray with no window (login autostart); a later launch opens it")
     parser.add_argument("--no-pill", action="store_true", help="never show the floating pill")
     parser.add_argument("--force-pill", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--settle-ms", type=int, default=300, help=argparse.SUPPRESS)
