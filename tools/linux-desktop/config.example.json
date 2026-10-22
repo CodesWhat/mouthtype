@@ -9,5 +9,6 @@
   },
   "notifications": true,
   "cleanup": "off",
+  "cleanup_idle_seconds": 600,
   "slash_commands": true
 }

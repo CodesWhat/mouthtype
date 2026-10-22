@@ -160,6 +160,8 @@ class Session:
         self.maximum_takes, self.audio_days, self.audio_megabytes = maximum_takes, audio_days, audio_megabytes
         self.history_keep = history_keep
         self.cleanup_engine = cleanup_engine
+        if cleanup_engine is not None:
+            self._adopt(cleanup_engine)
         # One resident model per level a take can run at: the global level's, plus any a Style context overrides to.
         self.cleanup_engines = {cleanup: cleanup_engine} if cleanup_engine is not None and cleanup in ('fast', 'thorough') else {}
         self.engine_loader = engine_loader
@@ -239,6 +241,10 @@ class Session:
             return None
         return {'class': window_class} if isinstance(window_class, str) and window_class else None
 
+    def _adopt(self, engine):
+        if hasattr(engine, 'busy'):
+            engine.busy = lambda: self.state == 'recording'
+
     def _plan(self, target):
         """What one take runs: the model level, its engine and the tone to re-apply after the model.
 
@@ -254,6 +260,7 @@ class Session:
             except (OSError, ValueError, KeyError, TypeError):
                 engine = None
             if engine is not None:
+                self._adopt(engine)
                 self.cleanup_engines[wanted] = engine
                 if engine.state == 'idle':
                     engine.warm()
@@ -498,6 +505,10 @@ class Session:
                     self._notify('error')
                     return self.status()
                 self.started, self.state = self.clock(), 'recording'
+                for engine in set(self.cleanup_engines.values()) | {self.cleanup_engine} - {None}:
+                    touch = getattr(engine, 'touch', None)
+                    if touch is not None:
+                        touch()
                 self._notify('recording')
             elif action == 'stop' and self.state == 'recording':
                 try:
@@ -1176,9 +1187,10 @@ class CleanupEngine:
 
     RETRY_SECONDS = (30, 120, 480, 1800)
     ABSENT_RECHECK_SECONDS = 30
+    IDLE_CHECK_SECONDS = 15
 
     def __init__(self, settings, *, python=sys.executable, worker=None, startup_seconds=300, clock=time.monotonic,
-                 hash_cache=None):
+                 hash_cache=None, idle_seconds=600):
         load_runtime()
         if (not isinstance(settings, dict) or not isinstance(settings.get('artifacts'), dict) or
                 not isinstance(settings.get('server'), str) or settings.get('prompt', 's1') not in ('s1', 'shared')):
@@ -1193,6 +1205,12 @@ class CleanupEngine:
         self.hash_cache = hash_cache
         self.worker = None
         self.lock = threading.Lock()
+        # Idle unload: a take's request, or a recording starting, counts as use. 0 disables. The session sets busy so
+        # the server is never stopped under an active recording.
+        self.idle_seconds = idle_seconds
+        self.last_used = clock()
+        self.busy = lambda: False
+        self.reaper = None
         # close() sets this so a load in progress stops promptly instead of holding the lock for minutes.
         self.shutdown = threading.Event()
         self.warming = None
@@ -1213,7 +1231,7 @@ class CleanupEngine:
         """Called from clean() while not ready. Starts a background load when one is due; never waits."""
         if self.shutdown.is_set():
             return
-        if self.state == 'idle':
+        if self.state in ('idle', 'unloaded'):
             self.warm()
         elif self.state == 'failed' and self.clock() >= self.retry_at:
             self.warm()
@@ -1226,6 +1244,41 @@ class CleanupEngine:
     def status(self):
         return {'state': self.state, 'error': self.error, 'load_ms': self.load_ms,
                 'prompt': self.settings.get('prompt', 's1')}
+
+    def touch(self):
+        """Mark the engine used now, and bring an idle-unloaded server back so it is warm by the time it's needed."""
+        self.last_used = self.clock()
+        if self.state == 'unloaded':
+            self._recover()
+
+    def unload_if_idle(self):
+        """Stop the server after idle_seconds without use. True when it unloaded. Never while a recording is active."""
+        if not self.idle_seconds or self.state != 'ready' or self.busy():
+            return False
+        if self.clock() - self.last_used < self.idle_seconds:
+            return False
+        if not self.lock.acquire(blocking=False):
+            return False
+        try:
+            if self.state != 'ready' or self.busy() or self.clock() - self.last_used < self.idle_seconds:
+                return False
+            self.endpoint = None
+            worker, self.worker = self.worker, None
+            if worker:
+                worker.close()
+            self.state = 'unloaded'
+            return True
+        finally:
+            self.lock.release()
+
+    def _reap(self):
+        while not self.shutdown.wait(min(self.IDLE_CHECK_SECONDS, self.idle_seconds)):
+            self.unload_if_idle()
+
+    def _start_reaper(self):
+        if self.idle_seconds and (self.reaper is None or not self.reaper.is_alive()) and not self.shutdown.is_set():
+            self.reaper = threading.Thread(target=self._reap, daemon=True)
+            self.reaper.start()
 
     def _ensure_loaded(self, cancelled):
         if self.worker is not None:
@@ -1246,7 +1299,9 @@ class CleanupEngine:
         self.endpoint = {'port': port, 'alias': alias} if type(port) is int and isinstance(alias, str) else None
         self.state = 'ready'
         self.error = None
+        self.last_used = self.clock()
         self.failures, self.retry_at = 0, 0.0
+        self._start_reaper()
 
     def warm(self):
         """Load in the background so the first take does not pay the cold start."""
@@ -1290,6 +1345,7 @@ class CleanupEngine:
         if self.worker is None or self.state != 'ready':
             self._recover()
             return None
+        self.last_used = self.clock()
         end = time.monotonic() + seconds
         while not self.lock.acquire(timeout=.05):
             if cancelled.is_set() or time.monotonic() >= end:
@@ -1306,6 +1362,7 @@ class CleanupEngine:
                 result = self.worker.receive(remaining, cancelled)
                 if result.get('id') != identity:
                     raise ValueError('Invalid cleanup result')
+                self.last_used = self.clock()
                 if result.get('event') == 'timeout':
                     return None
                 if result.get('event') == 'error' or not isinstance(result.get('text'), str):
@@ -1336,7 +1393,7 @@ class CleanupEngine:
             worker, self.worker = self.worker, None
             if worker:
                 worker.close()
-            if self.state in ('ready', 'loading'):
+            if self.state in ('ready', 'loading', 'unloaded'):
                 self.state = 'idle'
 
 
@@ -1388,6 +1445,10 @@ def validate_config(value):
             raise ValueError('Invalid ' + name)
     if not isinstance(result['cleanup'], str) or result['cleanup'] not in ('off', 'basic', 'fast', 'thorough'):
         raise ValueError('cleanup must be off, basic, fast or thorough')
+    if 'cleanup_idle_seconds' in result:
+        idle = result['cleanup_idle_seconds']
+        if type(idle) not in (int, float) or not math.isfinite(idle) or not 0 <= idle <= 86400:
+            raise ValueError('cleanup_idle_seconds must be between 0 and 86400 (0 disables)')
     if result['cleanup'] in ('fast', 'thorough'):
         engine = result.get('cleanup_engine')
         if not isinstance(engine, str) or not engine or '\0' in engine:
@@ -1887,14 +1948,16 @@ def main(argv=None, *, cli_directory=None):
             if not cleanup_path.is_absolute():
                 cleanup_path = args.config.resolve().parent / cleanup_path
             cleanup_settings = json.loads(cleanup_path.read_text())['engines'][config['cleanup']]
-            cleanup_engine = CleanupEngine(cleanup_settings, hash_cache=verified)
+            cleanup_engine = CleanupEngine(cleanup_settings, hash_cache=verified,
+                                           idle_seconds=config.get('cleanup_idle_seconds', 600))
         def load_engine(level):
             if not isinstance(config.get('cleanup_engine'), str) or not config['cleanup_engine']:
                 return None
             path = Path(config['cleanup_engine']).expanduser()
             if not path.is_absolute():
                 path = args.config.resolve().parent / path
-            return CleanupEngine(json.loads(path.read_text())['engines'][level], hash_cache=verified)
+            return CleanupEngine(json.loads(path.read_text())['engines'][level], hash_cache=verified,
+                                 idle_seconds=config.get('cleanup_idle_seconds', 600))
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
                           HyprlandDelivery(config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],

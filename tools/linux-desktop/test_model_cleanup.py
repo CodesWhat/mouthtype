@@ -366,5 +366,104 @@ for line in sys.stdin:
         self.assertIsNone(engine.warming)
 
 
+class IdleUnloadTests(unittest.TestCase):
+    worker = CleanupEngineTests.worker
+    run_take = ModelCleanupSessionTests.run_take
+
+    BODY = '''print(json.dumps({'event':'ready'}),flush=True)
+for line in sys.stdin:
+ r=json.loads(line)
+ print(json.dumps({'id':r['id'],'text':r['input'].upper()}),flush=True)
+'''
+
+    def loaded(self, idle_seconds=600):
+        settings, script = self.worker(self.BODY)
+        self.now = 1000.0
+        engine = CleanupEngine(settings, worker=script, clock=lambda: self.now, idle_seconds=idle_seconds)
+        self.addCleanup(engine.close)
+        engine.warm().join(5)
+        self.assertEqual(engine.state, 'ready')
+        return engine
+
+    def test_idle_past_the_limit_unloads_and_stops_the_server(self):
+        engine = self.loaded()
+        process = engine.worker.process
+        self.now += 599
+        self.assertFalse(engine.unload_if_idle())
+        self.assertEqual(engine.state, 'ready')
+        self.now += 2
+        self.assertTrue(engine.unload_if_idle())
+        self.assertEqual(engine.state, 'unloaded')
+        self.assertEqual(engine.status()['state'], 'unloaded')
+        self.assertIsNone(engine.worker)
+        process.wait(5)
+        self.assertIsNotNone(process.poll())
+
+    def test_a_request_resets_the_idle_timer(self):
+        engine = self.loaded()
+        self.now += 500
+        self.assertEqual(engine.clean('hello there', threading.Event(), seconds=2), 'HELLO THERE')
+        self.now += 500
+        self.assertFalse(engine.unload_if_idle())
+        self.assertEqual(engine.state, 'ready')
+        self.now += 101
+        self.assertTrue(engine.unload_if_idle())
+
+    def test_an_active_recording_blocks_unload(self):
+        engine = self.loaded()
+        recording = [True]
+        engine.busy = lambda: recording[0]
+        self.now += 5000
+        self.assertFalse(engine.unload_if_idle())
+        self.assertEqual(engine.state, 'ready')
+        recording[0] = False
+        self.assertTrue(engine.unload_if_idle())
+
+    def test_zero_disables_unload(self):
+        engine = self.loaded(idle_seconds=0)
+        self.now += 10 ** 6
+        self.assertFalse(engine.unload_if_idle())
+        self.assertEqual(engine.state, 'ready')
+        self.assertIsNone(engine.reaper)
+
+    def test_a_take_after_unload_keeps_basic_then_reloads_and_cleans(self):
+        engine = self.loaded()
+        self.now += 601
+        self.assertTrue(engine.unload_if_idle())
+        self.assertIsNone(engine.clean('hello there', threading.Event(), seconds=2))
+        engine.warming.join(5)
+        self.assertEqual(engine.state, 'ready')
+        self.assertEqual(engine.clean('hello there', threading.Event(), seconds=2), 'HELLO THERE')
+
+    def test_recording_start_reloads_an_unloaded_engine_and_reports_loading(self):
+        engine = self.loaded()
+        self.now += 601
+        engine.unload_if_idle()
+        engine.touch()
+        engine.warming.join(5)
+        self.assertEqual(engine.state, 'ready')
+        self.assertEqual(engine.last_used, self.now)
+
+    def test_session_recording_start_touches_engines_and_marks_them_busy(self):
+        cleanup = FakeCleanup('x')
+        cleanup.busy, cleanup.touched = None, 0
+        cleanup.touch = lambda: setattr(cleanup, 'touched', cleanup.touched + 1)
+        session, _ = self.run_take(cleanup)
+        self.assertEqual(cleanup.touched, 1)
+        session.state = 'recording'
+        self.assertTrue(cleanup.busy())
+        session.state = 'idle'
+        self.assertFalse(cleanup.busy())
+
+    def test_idle_seconds_config_is_validated(self):
+        from desktop import validate_config
+        base = {'engine_config': '/local/engines.json'}
+        validate_config({**base, 'cleanup_idle_seconds': 0})
+        validate_config({**base, 'cleanup_idle_seconds': 600})
+        for bad in (-1, True, 'x', float('nan'), 10 ** 7, None):
+            with self.subTest(value=bad), self.assertRaises(ValueError):
+                validate_config({**base, 'cleanup_idle_seconds': bad})
+
+
 if __name__ == '__main__':
     unittest.main()
