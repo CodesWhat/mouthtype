@@ -13,8 +13,7 @@ To repeat or repair that by hand as your normal user (not root): mouthtype-linux
 MSG
         else
             cat <<'MSG'
-Mouthtype was upgraded. Refresh the bar plugin copy and restart the service as your normal user:
-    mouthtype-linux-setup && systemctl --user restart mouthtype-linux
+Mouthtype was upgraded. Log in again, or run mouthtype-linux-setup now.
 MSG
         fi
         ;;

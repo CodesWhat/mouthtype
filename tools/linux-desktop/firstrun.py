@@ -5,10 +5,15 @@ are unset (no speech setup, or no bar plugin on an Omarchy desktop) it runs the 
 (setup.py), with desktop notifications for progress. Everything it decides is recorded in firstrun.json under the XDG
 state directory:
 
-  done         setup finished, or was already complete. Nothing runs again.
+  done         setup finished, or was already complete. Nothing runs again, except the upgrade refresh below.
   uninstalled  the user ran `mouthtype-linux-setup --uninstall`. Nothing runs again until they run setup by hand.
   failed       a step failed. It retries at the next login, at most MAX_ATTEMPTS times, then stops and says so.
   running      an attempt is in progress or was killed; a stale one is retried like a failure.
+
+Upgrades: when the state is `done` and the packaged plugin (or app) version differs from the per-user copy's
+version.json, login re-runs the plugin's `install.py --update`, restarts the service and says what version it
+updated to. `updated_to`, `update_target` and `update_attempts` in firstrun.json cap a failing update at
+MAX_ATTEMPTS tries per version. `uninstalled` never updates.
 
 The unit is Type=oneshot with no Restart=, so a failure cannot loop within a session.
 """
@@ -22,12 +27,14 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import plistlib
 import threading
 import time
 
 HERE = Path(__file__).resolve().parent
 MAX_ATTEMPTS = 3
 HOLD = ('done', 'uninstalled')
+SYSTEM_PLUGIN = Path('/usr/share/mouthtype-linux/omarchy-plugin')
 
 
 def home():
@@ -148,11 +155,92 @@ def final(notifier, identity, summary, body):
         notifier(summary, body)
 
 
-def run_first(*, setup_main=None, notifier=notify, plugin_dir=None, sleep=time.sleep):
+def packaged_plugin(plugin_dir=None):
+    candidates = [Path(plugin_dir)] if plugin_dir else [SYSTEM_PLUGIN, HERE.parent / 'omarchy-plugin']
+    return next((path for path in candidates if (path / 'install.py').is_file()), None)
+
+
+def packaged_versions(plugin):
+    """{'plugin', 'app'} for the packaged plugin copy. The app version comes from Version.plist, shipped next to the
+    plugin directory in packages or under packaging/ in a checkout; either may be absent (None)."""
+    plugin_version = app = None
+    try:
+        value = json.loads((plugin / 'manifest.json').read_text()).get('version')
+        plugin_version = value if isinstance(value, str) else None
+    except (OSError, ValueError, AttributeError):
+        pass
+    for path in (plugin.parent / 'Version.plist', plugin.parent.parent / 'packaging/Version.plist'):
+        try:
+            with open(path, 'rb') as handle:
+                value = plistlib.load(handle).get('MouthtypeDisplayVersion')
+            app = value if isinstance(value, str) else None
+            break
+        except (OSError, ValueError, plistlib.InvalidFileException):
+            continue
+    return {'plugin': plugin_version, 'app': app}
+
+
+def installed_versions():
+    try:
+        value = json.loads((home() / '.config/omarchy/plugins/dstahl.mouthtype/version.json').read_text())
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def refresh_after_upgrade(state, *, notifier=notify, plugin_dir=None, run=subprocess.run):
+    """Bring the per-user plugin copy up to the packaged version. Returns the exit status (0 when nothing to do)."""
+    if not (home() / '.config/omarchy/plugins/dstahl.mouthtype').exists():
+        return 0
+    plugin = packaged_plugin(plugin_dir)
+    if plugin is None:
+        return 0
+    packaged = packaged_versions(plugin)
+    installed = installed_versions()
+    if all(installed.get(key) == value for key, value in packaged.items() if value):
+        return 0
+    label = packaged['app'] or packaged['plugin']
+    if not label:
+        return 0
+    tries = state.get('update_attempts', 0) if state.get('update_target') == label else 0
+    if tries >= MAX_ATTEMPTS:
+        print('Updating the Mouthtype plugin to ' + label + ' failed ' + str(tries) +
+              ' times and will not retry on its own. Run: mouthtype-linux-setup')
+        return 0
+    tries += 1
+    carried = {key: state[key] for key in ('attempts', 'reason', 'updated_to') if key in state}
+    record('done', **{**carried, 'update_target': label, 'update_attempts': tries})
+    try:
+        result = run([sys.executable, str(plugin / 'install.py'), '--update', '--no-restart-shell'], timeout=300,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, check=False)
+        status, output = result.returncode, (result.stderr or result.stdout or '')
+    except (OSError, subprocess.SubprocessError) as error:
+        status, output = 1, str(error)
+    if status != 0:
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        error = lines[-1] if lines else 'plugin update exited with status ' + str(status)
+        record('done', **{**carried, 'update_target': label, 'update_attempts': tries, 'update_error': error})
+        print('Plugin update failed: ' + error, file=sys.stderr)
+        if tries >= MAX_ATTEMPTS:
+            notifier('Mouthtype update failed', error[:200] + ' Run mouthtype-linux-setup to try again.')
+        return 1
+    try:
+        run(['systemctl', '--user', 'try-restart', 'mouthtype-linux'], timeout=30, stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+    except (OSError, subprocess.SubprocessError):
+        pass
+    record('done', **{**carried, 'updated_to': label, 'update_target': label, 'update_attempts': 0})
+    notifier('Mouthtype updated to ' + label, 'The bar widget and dictation service are on the new version.')
+    return 0
+
+
+def run_first(*, setup_main=None, notifier=notify, plugin_dir=None, sleep=time.sleep, run=subprocess.run):
     """Returns the process exit status: 0 when nothing needed doing or setup finished, 1 when it failed."""
     if sys.platform != 'linux':
         return 0
     state = read_state()
+    if state.get('state') == 'done':
+        return refresh_after_upgrade(state, notifier=notifier, plugin_dir=plugin_dir, run=run)
     if state.get('state') in HOLD:
         print('First-run setup already ' + state['state'] + '; run mouthtype-linux-setup to change that.')
         return 0
