@@ -30,6 +30,7 @@ class FakePortal:
         self.response_codes = {}
         self.response_delay = 0.0
         self.sessions = set()
+        self.grants = None
         self._conn = None
         self._thread = None
         self._stop = threading.Event()
@@ -139,7 +140,10 @@ class FakePortal:
             self.sessions.add(session)
             results = {'session_handle': ('s', session)}
         elif code == 0:
-            results = {'shortcuts': ('a(sa{sv})', [(sid, props) for sid, props in message.body[1]])}
+            results = {'shortcuts': ('a(sa{sv})', [
+                (sid, {**props, 'trigger_description': ('s', self.grants[sid]) if self.grants is not None
+                       else ('s', props['preferred_trigger'][1])})
+                for sid, props in message.body[1] if self.grants is None or sid in self.grants])}
         if self.response_delay:
             time.sleep(self.response_delay)
         self._emit(handle, REQUEST_IFACE, 'Response', 'ua{sv}', (code, results), destination=sender)
@@ -156,3 +160,11 @@ class FakePortal:
     def emit_activated(self, session, shortcut_id, timestamp=0, destination=None):
         self._emit('/org/freedesktop/portal/desktop', SHORTCUTS_IFACE, 'Activated', 'osta{sv}',
                    (session, shortcut_id, timestamp, {}), destination=destination)
+
+    def emit_deactivated(self, session, shortcut_id, timestamp=0, destination=None):
+        self._emit('/org/freedesktop/portal/desktop', SHORTCUTS_IFACE, 'Deactivated', 'osta{sv}',
+                   (session, shortcut_id, timestamp, {}), destination=destination)
+
+    def emit_session_closed(self, session):
+        self.sessions.discard(session)
+        self._emit(session, SESSION_IFACE, 'Closed', 'a{sv}', ({},))
