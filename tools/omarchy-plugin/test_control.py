@@ -190,7 +190,7 @@ class RetainedImportResultTests(unittest.TestCase):
         self.assertFalse(control.state()["file_import"]["retained"])
 
     def test_panel_offers_copy_and_save_for_a_retained_result(self):
-        panel = (HERE / "Panel.qml").read_text(encoding="utf-8")
+        panel = (HERE / "AppState.qml").read_text(encoding="utf-8")
         page = (HERE / "pages" / "TranscribeFilePage.qml").read_text(encoding="utf-8")
         self.assertIn("fileImport.retained", panel)
         self.assertIn("root.host.importRetained", page)
@@ -708,7 +708,7 @@ class ControlModuleTests(unittest.TestCase):
 
 class PanelActionTests(unittest.TestCase):
     def test_every_action_the_panel_runs_is_accepted_by_the_dispatcher(self):
-        sources = [HERE / "Panel.qml", *sorted(HERE.glob("Mouthtype*.qml")), *sorted((HERE / "pages").glob("*.qml"))]
+        sources = [HERE / "Panel.qml", HERE / "AppState.qml", *sorted(HERE.glob("Mouthtype*.qml")), *sorted((HERE / "pages").glob("*.qml"))]
         panel = "\n".join(path.read_text(encoding="utf-8") for path in sources)
         actions = set(re.findall(r'(?:root|host)\.run\(\["([^"]+)"', panel))
         self.assertIn("cleanup-setup", actions)
