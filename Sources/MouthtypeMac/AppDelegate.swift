@@ -306,6 +306,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         pipeline.vocabulary = SavedVocabulary(words: dictionary, phrases: phrases)
         pipeline.smart = cleanerHost
+        pipeline.languageRequest = { DictationLanguageSetting.load().request() }
+        pipeline.languageResolver = LanguageResolver(detector: NLLanguageDetector())
         let dictation = DictationController(
             capture: micCapture, engine: engine, pipeline: pipeline,
             inserter: inserter, pill: pill, sounds: sounds, clock: SystemDictationClock(), cards: presenter,
