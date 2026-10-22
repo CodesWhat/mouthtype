@@ -16,7 +16,7 @@ import QtQuick
 QtObject {
   id: root
 
-  readonly property bool isLayerShell: false
+  readonly property bool isLayerShell: PlatformBackend.layerShell
   readonly property var focusedScreen: Qt.application.screens.length ? Qt.application.screens[0] : null
 
   property int nextId: 1

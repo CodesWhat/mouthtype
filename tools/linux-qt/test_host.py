@@ -63,6 +63,57 @@ class SelftestTests(unittest.TestCase):
                     self.assertGreater(len(colors), 3, "the render is blank")
 
 
+def layershell_module():
+    if not HAVE_QT:
+        return False
+    from PySide6.QtCore import QLibraryInfo
+    return (Path(QLibraryInfo.path(QLibraryInfo.LibraryPath.QmlImportsPath)) / "org" / "kde" / "layershell" / "qmldir").is_file()
+
+
+@unittest.skipUnless(HAVE_QT, "PySide6 is not installed")
+class PillTests(unittest.TestCase):
+    def test_layer_shell_needs_wayland_and_the_qml_module(self):
+        sys.path.insert(0, str(HERE))
+        from mouthtype_desktop import layer_shell_available
+        with tempfile.TemporaryDirectory() as directory:
+            module = Path(directory) / "org" / "kde" / "layershell"
+            module.mkdir(parents=True)
+            self.assertFalse(layer_shell_available("wayland", [directory]))
+            (module / "qmldir").write_text("module org.kde.layershell\n")
+            self.assertTrue(layer_shell_available("wayland", ["/nonexistent", directory]))
+            self.assertFalse(layer_shell_available("offscreen", [directory]))
+            self.assertFalse(layer_shell_available("xcb", [directory]))
+
+    def test_the_pill_stays_off_without_layer_shell(self):
+        # Offscreen is not Wayland, so the Loader stays inactive and the launcher is never started.
+        result = run_host("--selftest", "--launcher", "/nonexistent/mouthtype-linux")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("PillWindow", result.stderr)
+
+    @unittest.skipUnless(layershell_module(), "qml6-module-org-kde-layershell is not installed")
+    def test_pill_maps_during_a_recording_take_and_renders(self):
+        launcher = HERE / "fixtures" / "mouthtype-linux"
+        with tempfile.TemporaryDirectory() as directory:
+            for skin in ("classic", "hifi"):
+                with self.subTest(skin=skin):
+                    helper = Path(directory) / ("control-%s.py" % skin)
+                    helper.write_text(FIXTURE.read_text().replace('"skin": "classic"', '"skin": "%s"' % skin))
+                    png = Path(directory) / ("pill-%s.png" % skin)
+                    result = subprocess.run([sys.executable, str(HOST), "--helper", str(helper), "--force-pill", "--launcher", str(launcher),
+                                             "--pill-screenshot", str(png)],
+                                            env=environment(), capture_output=True, text=True, timeout=60)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertNotIn("is not a type", result.stderr)
+                    self.assertNotIn("Unable to assign", result.stderr)
+                    self.assertNotIn("Cannot assign", result.stderr)
+                    self.assertNotIn("PillWindow.qml", result.stderr, result.stderr.replace("This plugin does not support setting window masks\n", ""))
+                    from PySide6.QtGui import QImage
+                    image = QImage(str(png))
+                    self.assertGreater(image.width(), 100)
+                    colors = {image.pixel(x, y) for x in range(0, image.width(), 5) for y in range(0, image.height(), 5)}
+                    self.assertGreater(len(colors), 3, "the pill render is blank")
+
+
 @unittest.skipUnless(HAVE_QT, "PySide6 is not installed")
 class SingleInstanceTests(unittest.TestCase):
     def test_second_launch_hands_its_page_to_the_first_and_exits(self):

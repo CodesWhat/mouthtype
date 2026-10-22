@@ -16,3 +16,7 @@ timeout --kill-after=5s 300s python3 -W error::ResourceWarning -m unittest disco
 for page in home general; do
   timeout --kill-after=5s 60s python3 tools/linux-qt/mouthtype_desktop.py --helper "$here/fixtures/control.py" --page "$page" --screenshot "$out/host-$page.png"
 done
+if compgen -G '/usr/lib/*/qt6/qml/org/kde/layershell/qmldir' >/dev/null; then
+  timeout --kill-after=5s 60s python3 tools/linux-qt/mouthtype_desktop.py --helper "$here/fixtures/control.py" --force-pill \
+    --launcher "$here/fixtures/mouthtype-linux" --pill-screenshot "$out/host-pill.png"
+fi
