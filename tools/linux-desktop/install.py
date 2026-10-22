@@ -26,8 +26,14 @@ ENGINE = ('proof.py', 'worker.py', 'prepare.py', 'pins.json', 'requirements.txt'
 GRAPHEME = ('__init__.py', 'api.py', 'finder.py', 'grapheme_property_group.py', 'incb_property_group.py',
             'data/derived_core_property.json', 'data/grapheme_break_property.json',
             'LICENSE', 'UNICODE-LICENSE', 'provenance.json', 'GraphemeBreakTest.txt')
+APP_ID = 'app.mouthtype.Mouthtype'
+# Source under tools/linux-desktop/share, destination relative to the install prefix. The desktop portals
+# match an unsandboxed caller to the .desktop basename, so this id is the one portal.py registers.
+SHARE = (('app.mouthtype.Mouthtype.desktop', 'share/applications/' + APP_ID + '.desktop'),
+         ('app.mouthtype.Mouthtype.png', 'share/icons/hicolor/128x128/apps/' + APP_ID + '.png'))
 FILES = (['LICENSE', 'THIRD_PARTY_NOTICES.md'] +
          ['tools/linux-desktop/' + name for name in DESKTOP] +
+         ['tools/linux-desktop/share/' + name for name, _ in SHARE] +
          ['tools/linux-desktop/vendor/grapheme/' + name for name in GRAPHEME] +
          ['tools/linux-engine-proof/' + name for name in ENGINE])
 # Modules the daemon loads at runtime (cli_*.py, library.py, stats.py, transform_worker.py, ...) and their
@@ -55,6 +61,10 @@ def uninstall(prefix):
     if launcher.exists() and LAUNCHER_MARKER not in launcher.read_text():
         raise FileExistsError('Not removing ' + str(launcher) + ': it is not a Mouthtype launcher')
     removed = []
+    for _, relative in SHARE:
+        if (prefix / relative).is_file():
+            (prefix / relative).unlink()
+            removed.append(prefix / relative)
     if launcher.exists() or launcher.is_symlink():
         launcher.unlink()
         removed.append(launcher)
@@ -71,6 +81,7 @@ def install(source, prefix, *, destdir=None, update=False):
     runtime_prefix = prefix.resolve()
     destination = (Path(destdir).expanduser().resolve() / runtime_prefix.relative_to('/')
                    if destdir is not None else runtime_prefix)
+    destination_root = destination
     payload, launcher = destination / 'lib/mouthtype-linux', destination / 'bin/mouthtype-linux'
     if payload.exists() or launcher.exists() or launcher.is_symlink():
         if not update or destdir is not None:
@@ -88,6 +99,7 @@ def install(source, prefix, *, destdir=None, update=False):
     launcher.parent.mkdir(parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix='.mouthtype-install-', dir=payload.parent))
     placed = False
+    share_files, share_parents = [], []
     try:
         for name in payload_files(source):
             destination = staging / name
@@ -101,6 +113,19 @@ def install(source, prefix, *, destdir=None, update=False):
                 directory.chmod(0o755)
         os.rename(staging, payload)
         placed = True
+        for name, relative in SHARE:
+            target = destination_root / relative
+            directory = target.parent
+            while not directory.exists():
+                share_parents.append(directory)
+                directory = directory.parent
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source / 'tools/linux-desktop/share' / name, target)
+            share_files.append(target)
+            if destdir is not None:
+                target.chmod(0o644)
+                for created in share_parents:
+                    created.chmod(0o755)
         # Imported as a module, not run with runpy.run_path, so Python keeps bytecode for desktop.py and its imports.
         content = ('#!/usr/bin/env python3\nimport os, sys\n'
                    'SCRIPT = ' + repr(str(runtime_prefix / 'lib/mouthtype-linux/tools/linux-desktop/desktop.py')) + '\n'
@@ -114,6 +139,8 @@ def install(source, prefix, *, destdir=None, update=False):
     except BaseException:
         if placed:
             shutil.rmtree(payload)
+        for target in share_files:
+            target.unlink(missing_ok=True)
         raise
     finally:
         if staging.exists():
