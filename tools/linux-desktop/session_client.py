@@ -30,9 +30,9 @@ def read_message(connection, maximum=4096):
     return json.loads(line)
 
 
-def request(path, action, identity=None, **fields):
+def request(path, action, identity=None, reply_timeout=2.5, **fields):
     with socket.socket(socket.AF_UNIX) as connection:
-        connection.settimeout(2.5)
+        connection.settimeout(reply_timeout)
         connection.connect(str(path))
         connection.sendall(json.dumps({'action': action, 'id': identity,
                                        'admit_before': time.monotonic() + 1.5, **fields}).encode() + b'\n')

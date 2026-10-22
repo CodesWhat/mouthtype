@@ -89,6 +89,35 @@ class GnomeShortcutVerbTests(unittest.TestCase):
             self.assertEqual(control.shortcut_gnome_remove(), {"removed": False})
 
 
+class PortalCopyTests(unittest.TestCase):
+    def test_hyprland_never_reads_the_text_or_the_daemon(self):
+        read = mock.Mock()
+        with mock.patch.dict(os.environ, {"HYPRLAND_INSTANCE_SIGNATURE": "abc"}, clear=False):
+            self.assertFalse(control.portal_copy(read))
+        read.assert_not_called()
+
+    def test_portal_desktop_sends_the_text_to_the_daemon(self):
+        sent = []
+        client = mock.Mock()
+        client.default_socket.return_value = Path(__file__)  # any existing path
+        client.request.side_effect = lambda path, action, **fields: sent.append((action, fields)) or {"ok": True}
+        env = {"XDG_CURRENT_DESKTOP": "GNOME", "XDG_SESSION_TYPE": "wayland"}
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(control, "session_client", lambda: client), \
+                mock.patch.object(control, "CONFIG", Path("/nonexistent/linux.json")):
+            self.assertTrue(control.portal_copy(lambda: "hello"))
+        self.assertEqual(sent[0][0], "copy")
+        self.assertEqual((sent[0][1]["text"], sent[0][1]["concealed"]), ("hello", True))
+
+    def test_a_refused_copy_returns_false_so_wl_copy_runs(self):
+        client = mock.Mock()
+        client.default_socket.return_value = Path(__file__)
+        client.request.return_value = {"ok": False, "error": "copy_unsupported"}
+        env = {"XDG_CURRENT_DESKTOP": "KDE", "XDG_SESSION_TYPE": "wayland"}
+        with mock.patch.dict(os.environ, env, clear=True), mock.patch.object(control, "session_client", lambda: client), \
+                mock.patch.object(control, "CONFIG", Path("/nonexistent/linux.json")):
+            self.assertFalse(control.portal_copy(lambda: "hello"))
+
+
 class AutostartTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

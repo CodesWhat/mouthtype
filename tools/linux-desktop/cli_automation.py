@@ -15,6 +15,7 @@ import threading
 HERE = str(Path(__file__).resolve().parent)
 if HERE not in sys.path:
     sys.path.insert(0, HERE)
+import clipboard_copy
 import stats
 
 COPY = ['wl-copy', '--type', 'text/plain;charset=utf-8']
@@ -37,11 +38,14 @@ def run(args, context):
         return fail('no_dictation')
     identity, text = latest
     if args.action == 'copy-last':
-        return copy_last(identity, text)
+        return copy_last(identity, text, context)
     return paste_last(identity, text, context)
 
 
-def copy_last(identity, text):
+def copy_last(identity, text, context=None):
+    if context is not None and clipboard_copy.copy_via_portal(text, context.request, context.config):
+        print(json.dumps({'ok': True, 'id': identity, 'message': 'Copied to clipboard'}))
+        return 0
     if shutil.which('wl-copy') is None:
         return fail('wl_copy_missing')
     try:

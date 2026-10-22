@@ -336,6 +336,28 @@ for line in sys.stdin:
             self.assertFalse(thread.is_alive())
             self.assertFalse(path.exists())
 
+    def test_copy_verb_takes_long_text_and_other_verbs_stay_bounded(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 2})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 1
+                while not path.exists() and time.monotonic() < deadline:
+                    time.sleep(.005)
+                # The test Delivery has no clipboard session, so the caller is told to copy the old way.
+                reply = request(path, 'copy', text='word ' * 5000, concealed=True)
+                self.assertEqual(reply, {'ok': False, 'error': 'copy_unsupported'})
+                self.assertEqual(request(path, 'status', pad='x' * 5000), {'error': 'invalid_command'})
+                self.assertEqual(request(path, 'status')['state'], 'idle')
+            finally:
+                stopped.set()
+                thread.join(3)
+                session.close()
+
     def test_second_serve_does_not_run_startup_maintenance_without_the_runtime_lock(self):
         import fcntl
         from desktop import serve
