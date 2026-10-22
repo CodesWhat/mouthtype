@@ -797,10 +797,16 @@ class FeedbackTests(unittest.TestCase):
                             and left.value.id == 'self' and isinstance(right, ast.Constant) and isinstance(right.value, str)):
                         codes.add(right.value)
         self.assertTrue({'capture_unavailable', 'recovery_full', 'command_expired'} <= codes)
-        pill = (Path(desktop.__file__).resolve().parents[1] / 'omarchy-plugin' / 'PillModel.js').read_text()
         for code in sorted(codes):
             with self.subTest(code=code):
                 self.assertIn(code, desktop.Notifications.ERRORS)
+        # The Arch package bundle ships the client without the plugin, so the pill half only runs in a full checkout.
+        plugin = Path(desktop.__file__).resolve().parents[1] / 'omarchy-plugin' / 'PillModel.js'
+        if not plugin.exists():
+            self.skipTest('PillModel.js not in this source bundle')
+        pill = plugin.read_text()
+        for code in sorted(codes):
+            with self.subTest(code=code):
                 self.assertIn('"%s"' % code, pill)
 
     def test_missing_or_hung_notification_helper_is_bounded_and_nonfatal(self):
