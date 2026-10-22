@@ -181,7 +181,7 @@ class SpellingTests(Base):
         source = Path(__file__).resolve().parents[2] / 'Sources/MouthtypeCore/OrdinaryWords.swift'
         if not source.is_file():
             self.skipTest('Core sources are not in this archive')
-        block = re.search(r'private static let list = """\n(.*?)\n    """', source.read_text(), re.S).group(1)
+        block = re.search(r'private static let list = """\n(.*?)\n\s*"""', source.read_text(), re.S).group(1)
         self.assertEqual(library._ORDINARY_WORDS, frozenset(block.split()))
 
 
