@@ -47,10 +47,18 @@ jobs:
       - name: Coverage report
         run: |
           set -euo pipefail
-          profdata="$(find .build -name default.profdata -print -quit)"
-          bundle="$(find .build -name 'MouthtypePackageTests.xctest' -print -quit)"
-          binary="$(find "$bundle/Contents/MacOS" -type f -print -quit)"
-          xcrun llvm-cov report "$binary" -instr-profile="$profdata" \
+          codecov_dir="$(dirname "$(swift test --show-codecov-path)")"
+          profdata="$(find "$(dirname "$codecov_dir")" -name default.profdata -print -quit)"
+          test -n "$profdata" || { echo "no default.profdata under $(dirname "$codecov_dir")" >&2; exit 1; }
+          # The Xcode build system emits one .xctest bundle per test target, so pass each binary to llvm-cov.
+          objects=()
+          while IFS= read -r bundle; do
+            binary="$bundle/Contents/MacOS/$(basename "$bundle" .xctest)"
+            [ -f "$binary" ] || { echo "missing test binary $binary" >&2; exit 1; }
+            objects+=("$binary")
+          done < <(find "$(dirname "$codecov_dir")" -maxdepth 1 -name '*.xctest')
+          test "${#objects[@]}" -gt 0 || { echo "no .xctest bundles beside $codecov_dir" >&2; exit 1; }
+          xcrun llvm-cov report "${objects[0]}" "${objects[@]:1}" -instr-profile="$profdata" \
             -ignore-filename-regex='(\.build|Tests)/' > coverage-report.txt
           cat coverage-report.txt
           total="$(awk '/^TOTAL/ {print $(NF-3)}' coverage-report.txt)"
