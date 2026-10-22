@@ -20,7 +20,7 @@ The Mouthtype window has six pages in the sidebar: **Home**, **Stats**, **Dictio
 | Automatic update checks | On, with no prompt | Settings > Mac |
 | Boost saved words | Off | Settings > Advanced |
 | Code names from your editor | Off | Settings > Advanced |
-| Names on screen | Off | Settings > Advanced |
+| Names on screen | On (from 0.6.0; stays off if you turned it off before). Still does nothing until Boost saved words is on | Settings > Advanced |
 | Override individual fonts | Off | Appearance |
 
 ## The menu
@@ -281,7 +281,7 @@ Nothing is stored: the names live in memory for that one dictation, aren't logge
 
 ### Names on screen
 
-**Names on screen** in Settings > Advanced is off by default and needs the boost above. In any app except a terminal, it reads up to 2000 characters of the focused text field around your cursor (1500 before, 500 after) and the window title, picks out capitalised names such as people and projects, and adds up to 30 of them to the boost for that one take. A name you were just reading in the message you're replying to comes out spelled right. The same names are also offered to project-name joining in Fast and Thorough cleanup.
+**Names on screen** in Settings > Advanced is on by default (stays off if you turned it off) but needs the boost above, which is off by default, so it does nothing until you turn that on. In any app except a terminal, it reads up to 2000 characters of the focused text field around your cursor (1500 before, 500 after) and the window title, picks out capitalised names such as people and projects, and adds up to 30 of them to the boost for that one take. A name you were just reading in the message you're replying to comes out spelled right. The same names are also offered to project-name joining in Fast and Thorough cleanup.
 
 - Names nearest the cursor come first, then the window title. Words that only start a sentence, everyday words ("Thanks", "Monday"), all-caps acronyms and words under four letters are dropped.
 - The read has the same 150 ms limit as editor names. A field that answers late is skipped and the title alone is used, so recording never waits for it.
