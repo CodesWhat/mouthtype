@@ -67,7 +67,8 @@ final class EventTap {
             mask = flagsMask
             options = .listenOnly
         case .keys:
-            mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+            mask =
+                (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
                 | (context.shortcut == nil ? 0 : 1 << CGEventType.flagsChanged.rawValue)
             options = .defaultTap
         }
@@ -157,7 +158,9 @@ private func tapCallback(
     let shortcutHeld: Bool
     if context.role == .keys, let shortcut = context.shortcut {
         shortcutHeld = shared.shortcutMatcher.withLock { $0.update(sample, shortcut: shortcut) }
-    } else { shortcutHeld = wasHeld }
+    } else {
+        shortcutHeld = wasHeld
+    }
     let decision = TapPolicy.decide(
         sample,
         role: context.role,
@@ -174,7 +177,8 @@ private func tapCallback(
         shared.hotkeyHeld.store(held, ordering: .relaxed)
     }
     if let combo = decision.replacement, let emulator = context.emulator,
-       emulator.post(combo, keyDown: sample.kind == .keyDown, originalFlags: sample.flags, autorepeat: sample.isAutorepeat) {
+        emulator.post(combo, keyDown: sample.kind == .keyDown, originalFlags: sample.flags, autorepeat: sample.isAutorepeat)
+    {
         shared.emulated.wrappingAdd(1, ordering: .relaxed)
     }
     if context.role == .keys {

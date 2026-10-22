@@ -45,10 +45,12 @@ import Testing
 
     @Test func permissionIsCheckedBeforeDeviceSelection() async {
         let driver = SelectionInputDriver()
-        let capture = AudioCapture(input: driver, resolveInput: {
-            Issue.record("must not resolve a device without permission")
-            throw CaptureError.noInputDevice
-        }, authorization: { .denied })
+        let capture = AudioCapture(
+            input: driver,
+            resolveInput: {
+                Issue.record("must not resolve a device without permission")
+                throw CaptureError.noInputDevice
+            }, authorization: { .denied })
         await #expect(throws: CaptureError.self) { try await capture.start(keyDownAtNanos: HostClock.now()) }
         #expect(driver.state.withLock { $0.started.isEmpty })
     }

@@ -9,7 +9,7 @@ private final class EditorEngine: DictationEngine {
     var seen: [VocabularyBias?] = []
     /// The settle budget passed with each bias.
     var budgets: [Duration?] = []
-    private var current: VocabularyBias?
+    private(set) var current: VocabularyBias?
     let applied: [String]?
     init(applied: [String]? = nil) { self.applied = applied }
     func setVocabularyBias(_ bias: VocabularyBias?) async { current = bias }
@@ -38,6 +38,45 @@ private final class CapturingStore: DictationStoring, @unchecked Sendable {
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws {}
 }
 
+/// Blocks inside `transcribe` until released, so a second take can start while the first is still in the engine.
+@MainActor
+private final class GatedEngine: DictationEngine {
+    var readiness: EngineReadiness { .ready }
+    var biases: [VocabularyBias?] = []
+    var inTranscribe = false
+    var gate: CheckedContinuation<Void, Never>?
+    func setVocabularyBias(_ bias: VocabularyBias?) async { biases.append(bias) }
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async { biases.append(bias) }
+    func transcribe(samples: [Float]) async throws -> Transcription {
+        inTranscribe = true
+        await withCheckedContinuation { gate = $0 }
+        inTranscribe = false
+        return Transcription(text: "hi", processingSeconds: 0, engineID: "gated")
+    }
+}
+
+/// Holds the first bias write open, so a take can arrive while a warm-up's write is in flight.
+@MainActor
+private final class SlowWriteEngine: DictationEngine {
+    var readiness: EngineReadiness { .ready }
+    var biases: [VocabularyBias?] = []
+    var writeHeld = false
+    var transcribed = 0
+    var release: CheckedContinuation<Void, Never>?
+    func setVocabularyBias(_ bias: VocabularyBias?) async { biases.append(bias) }
+    func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
+        if biases.isEmpty {
+            writeHeld = true
+            await withCheckedContinuation { release = $0 }
+        }
+        biases.append(bias)
+    }
+    func transcribe(samples: [Float]) async throws -> Transcription {
+        transcribed += 1
+        return Transcription(text: "hi", processingSeconds: 0, engineID: "slow")
+    }
+}
+
 private struct Rules: VocabularyProviding {
     var rules: [DictionaryRule]
     func dictionary() -> [DictionaryRule] { rules }
@@ -58,11 +97,15 @@ private final class ReaderCalls: @unchecked Sendable {
     func readers(context: InsertionContext? = nil, block: DispatchSemaphore? = nil) -> EditorHintsGatherer.Readers {
         EditorHintsGatherer.Readers(
             cursorContext: { [self] _, deadline in
-                lock.withLock { counts.cursor += 1; onMain.append(Thread.isMainThread); deadlines.append(deadline) }
+                lock.withLock {
+                    counts.cursor += 1; onMain.append(Thread.isMainThread); deadlines.append(deadline)
+                }
                 block?.wait()
                 return context
             },
-            documentURL: { [self] _, _ in lock.withLock { counts.document += 1 }; return nil },
+            documentURL: { [self] _, _ in
+                lock.withLock { counts.document += 1 }; return nil
+            },
             workingDirectory: { _, _ in nil },
             workspaceFolder: { _, _ in nil }
         )
@@ -136,8 +179,10 @@ private struct FakeSource: BoundedTextSource {
     }
 
     @Test func coversEditorsAndSupportedTerminals() {
-        for bundle in ["com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "com.apple.dt.Xcode", "com.apple.Terminal",
-                       "com.mitchellh.ghostty", "com.googlecode.iterm2", "net.kovidgoyal.kitty", "com.github.wez.wezterm"] {
+        for bundle in [
+            "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "com.apple.dt.Xcode", "com.apple.Terminal",
+            "com.mitchellh.ghostty", "com.googlecode.iterm2", "net.kovidgoyal.kitty", "com.github.wez.wezterm",
+        ] {
             #expect(EditorHintsSurface.of(bundleID: bundle) != nil, "\(bundle)")
         }
         #expect(EditorHintsSurface.of(bundleID: "com.apple.finder") == nil)
@@ -146,11 +191,12 @@ private struct FakeSource: BoundedTextSource {
     @Test func gathersTitleAndCursorNamesInAnEditor() async throws {
         let calls = ReaderCalls()
         let context = InsertionContext(before: "func render() { applyTheme(", after: ")")
-        let task = try #require(EditorHintsGatherer.start(
-            enabled: true, boostEnabled: true,
-            focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
-            readers: calls.readers(context: context)
-        ))
+        let task = try #require(
+            EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true,
+                focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
+                readers: calls.readers(context: context)
+            ))
         let terms = await task.value
         #expect(terms.map(\.text) == ["applyTheme", "DictationPipeline", "mouthtype"])
         #expect(calls.cursor == 1)
@@ -173,12 +219,13 @@ private struct FakeSource: BoundedTextSource {
         let calls = ReaderCalls()
         let gate = DispatchSemaphore(value: 0)
         defer { gate.signal() }
-        let task = try #require(EditorHintsGatherer.start(
-            enabled: true, boostEnabled: true,
-            focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
-            readers: calls.readers(context: InsertionContext(before: "applyTheme(", after: nil), block: gate),
-            deadline: .milliseconds(50)
-        ))
+        let task = try #require(
+            EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true,
+                focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
+                readers: calls.readers(context: InsertionContext(before: "applyTheme(", after: nil), block: gate),
+                deadline: .milliseconds(50)
+            ))
         #expect(await task.value.map(\.text) == ["DictationPipeline", "mouthtype"])
         let deadline = try #require(calls.lastDeadline)
         #expect(deadline <= ContinuousClock.now + .milliseconds(50))
@@ -187,10 +234,11 @@ private struct FakeSource: BoundedTextSource {
     @Test func onlyASourceEditorsTextAreaIsRead() async throws {
         for (role, subrole) in [(nil, nil), ("AXTextField", nil), ("AXGroup", nil), ("AXTextArea", "AXSearchField"), ("AXTextArea", "AXTerminal")] as [(String?, String?)] {
             let calls = ReaderCalls()
-            let task = try #require(EditorHintsGatherer.start(
-                enabled: true, boostEnabled: true, focus: focus("com.microsoft.VSCode", title: "a.swift - proj - Visual Studio Code", role: role, subrole: subrole),
-                readers: calls.readers(context: InsertionContext(before: "secretTerminalOutput(", after: nil))
-            ))
+            let task = try #require(
+                EditorHintsGatherer.start(
+                    enabled: true, boostEnabled: true, focus: focus("com.microsoft.VSCode", title: "a.swift - proj - Visual Studio Code", role: role, subrole: subrole),
+                    readers: calls.readers(context: InsertionContext(before: "secretTerminalOutput(", after: nil))
+                ))
             let terms = await task.value
             #expect(calls.cursor == 0, "\(role ?? "nil") \(subrole ?? "nil")")
             #expect(!terms.contains { $0.text == "secretTerminalOutput" })
@@ -248,9 +296,10 @@ private struct FakeSource: BoundedTextSource {
     @Test func terminalsNeverReadTheirScreenText() async throws {
         let calls = ReaderCalls()
         let context = InsertionContext(before: "secretCommandOutput", after: nil)
-        let task = try #require(EditorHintsGatherer.start(
-            enabled: true, boostEnabled: true, focus: focus("com.apple.Terminal"), readers: calls.readers(context: context)
-        ))
+        let task = try #require(
+            EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true, focus: focus("com.apple.Terminal"), readers: calls.readers(context: context)
+            ))
         #expect(await task.value.isEmpty)
         #expect(calls.cursor == 0)
     }
@@ -384,5 +433,81 @@ private struct FakeSource: BoundedTextSource {
         session.editorHints = Task { [VocabularyBias.Term(text: "applyTheme")] }
         _ = try await withHints.transcribe(audio(), session: session, voicedMs: 1000)
         #expect(hinted.budgets == [VocabularyBias.editorSettle])
+    }
+
+    @Test func keyDownWarmUpSendsTheEditorBiasWithoutWaiting() async throws {
+        let clock = SystemDictationClock()
+        let engine = EditorEngine()
+        var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: clock)
+        pipeline.vocabulary = Rules(rules: [DictionaryRule(heard: "maya", written: "Maya")])
+        pipeline.boostSavedWords = { true }
+        let hints = Task { [VocabularyBias.Term(text: "applyTheme")] }
+        let warm = try #require(pipeline.warmEditorBias(hints))
+        await warm.value
+        #expect(engine.budgets == [nil])
+        #expect(engine.current?.terms == ["Maya", "applyTheme"])
+
+        var session = DictationSession(id: "t", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        session.editorHints = hints
+        _ = try await pipeline.transcribe(audio(), session: session, voicedMs: 1000)
+        // Release still asks with the cap, so a build the warm-up started is waited on only up to it.
+        #expect(engine.budgets == [nil, VocabularyBias.editorSettle])
+        #expect(engine.seen.first??.terms == ["Maya", "applyTheme"])
+    }
+
+    @Test func keyDownWarmUpDoesNothingWithoutEditorNames() async throws {
+        let engine = EditorEngine()
+        var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: SystemDictationClock())
+        pipeline.boostSavedWords = { true }
+        #expect(pipeline.warmEditorBias(nil) == nil)
+        let warm = try #require(pipeline.warmEditorBias(Task { [] }))
+        await warm.value
+        #expect(engine.budgets.isEmpty)
+    }
+
+    @Test func keyDownWarmUpWaitsOutAnEarlierTakeStillInTheEngine() async throws {
+        let clock = SystemDictationClock()
+        let engine = GatedEngine()
+        var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: clock)
+        pipeline.boostSavedWords = { true }
+        let first = DictationSession(id: "a", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        let take = Task { try await pipeline.transcribe(audio(), session: first, voicedMs: 1000) }
+        for _ in 0..<1_000 where !engine.inTranscribe { await Task.yield() }
+        #expect(engine.inTranscribe)
+
+        // Take B starts in another editor while A is still being recognised: its names must not reach the engine yet.
+        let warm = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
+        await warm.value
+        #expect(engine.biases.allSatisfy { $0 == nil })
+
+        engine.gate?.resume()
+        _ = try await take.value
+        // Once A is done, B's warm-up goes through.
+        let later = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
+        await later.value
+        #expect(engine.biases.last??.terms == ["otherEditorName"])
+    }
+
+    @Test func aTakeArrivingMidWarmUpWriteWaitsForItAndThenSetsItsOwnBias() async throws {
+        let clock = SystemDictationClock()
+        let engine = SlowWriteEngine()
+        var pipeline = DictationPipeline(store: CapturingStore(), archive: nil, engine: engine, clock: clock)
+        pipeline.boostSavedWords = { true }
+        pipeline.vocabulary = Rules(rules: [DictionaryRule(heard: "maya", written: "Maya")])
+        // B checked idle and is mid-write when A enters.
+        let warm = try #require(pipeline.warmEditorBias(Task { [VocabularyBias.Term(text: "otherEditorName")] }))
+        for _ in 0..<1_000 where !engine.writeHeld { await Task.yield() }
+        #expect(engine.writeHeld)
+        let first = DictationSession(id: "a", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        let take = Task { try await pipeline.transcribe(audio(), session: first, voicedMs: 1000) }
+        for _ in 0..<200 { await Task.yield() }
+        #expect(engine.transcribed == 0)
+
+        engine.release?.resume()
+        await warm.value
+        _ = try await take.value
+        // B's write landed before A set its own bias, so A recognised with A's vocabulary and not B's.
+        #expect(engine.biases.map { $0?.terms } == [["Maya", "otherEditorName"], ["Maya"]])
+        #expect(engine.transcribed == 1)
     }
 }

@@ -18,7 +18,8 @@ struct CleanupCommand: AsyncParsableCommand {
     private static let minimumFreeBytes: Int64 = 25 * 1_073_741_824
 
     func run() async throws {
-        let ids = cleaners.map { $0.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) } }
+        let ids =
+            cleaners.map { $0.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) } }
             ?? CleanerCatalog.ids
         for id in ids { _ = try CleanerCatalog.make(id: id) }
         let cases = try CleanupFixtures.load()
@@ -147,7 +148,7 @@ struct CleanupCommand: AsyncParsableCommand {
                 return (nil, "failed by timeout after \(Int(timeout / 60)) minutes")
             }
             guard let data = try? Data(contentsOf: resultURL),
-                  let output = try? JSONDecoder().decode(CleanupWorkerOutput.self, from: data)
+                let output = try? JSONDecoder().decode(CleanupWorkerOutput.self, from: data)
             else {
                 return (nil, "worker exited with status \(outcome.exitStatus) without a result. Log tail:\n\(outcome.logTail)")
             }

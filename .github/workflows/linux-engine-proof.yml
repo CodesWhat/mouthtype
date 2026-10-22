@@ -2,7 +2,7 @@ name: Linux engine proof
 
 on:
   push:
-    branches: [main, dev/v0.1.0]
+    branches: [main, 'dev/**']
     paths: ["tools/linux-engine-proof/**", ".github/workflows/linux-engine-proof.yml"]
   pull_request:
     paths: ["tools/linux-engine-proof/**", ".github/workflows/linux-engine-proof.yml"]

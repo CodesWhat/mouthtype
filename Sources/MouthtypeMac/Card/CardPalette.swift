@@ -81,17 +81,20 @@ struct CardPalette {
     /// appearance, so these are fixed per appearance rather than the adaptive colours.
     /// Minimal's lime takes dark ink, so hover and press lighten it (more contrast) where the other skins darken on press.
     var primaryLightens = false
+    /// A 1px edge on the primary button where the lime sits on a light body (about 1.4:1 there); nil on a dark body.
+    var primaryEdge: NSColor?
 
     /// The primary button's fill for a state, as the button draws it.
     func primaryFill(hovered: Bool, pressed: Bool) -> NSColor {
         if primaryLightens {
             return primaryFill.blended(withFraction: pressed ? 0.40 : hovered ? 0.25 : 0, of: .white) ?? primaryFill
         }
-        return pressed ? primaryFill.blended(withFraction: 0.18, of: .black) ?? primaryFill
+        return pressed
+            ? primaryFill.blended(withFraction: 0.18, of: .black) ?? primaryFill
             : hovered ? primaryFill.blended(withFraction: 0.5, of: .white) ?? primaryFill : primaryFill
     }
 
-    static func lime(dark: Bool) -> NSColor { NSColor(hex: dark ? 0xA6CD52 : 0x76A11A) }
+    static func lime(dark: Bool) -> NSColor { NSColor(hex: 0xD3E58B) }
     static func onLime(dark: Bool) -> NSColor { NSColor(hex: dark ? 0x1F1F21 : 0x1D1D1F) }
 
     func accent(for kind: DeliveryCard.Kind) -> NSColor {
@@ -142,7 +145,9 @@ struct CardPalette {
         case .matrix, .minimal:
             let flavor: SquircleFlavor = style == .matrix ? .matrix : .minimal
             let s = SquirclePalette.resolve(flavor, dark: dark)
-            let tint = dark ? CardTint(color: .white, rest: 0.10, hover: 0.16, press: 0.24)
+            let tint =
+                dark
+                ? CardTint(color: .white, rest: 0.10, hover: 0.16, press: 0.24)
                 : CardTint(color: .black, rest: 0.07, hover: 0.12, press: 0.18)
             return CardPalette(
                 ink: s.text, body: dark ? classicBody : NSColor(hex: 0x2C2C2E), emphasis: s.text,
@@ -155,7 +160,8 @@ struct CardPalette {
                 bodyFill: nil, border: nil, shadowFill: .clear,
                 rowShade: dark ? NSColor.black.withAlphaComponent(0.25) : NSColor.black.withAlphaComponent(0.04),
                 rowRule: dark ? NSColor.white.withAlphaComponent(0.12) : NSColor.black.withAlphaComponent(0.08),
-                primaryLightens: flavor == .minimal
+                primaryLightens: flavor == .minimal,
+                primaryEdge: flavor == .minimal && !dark ? NSColor(hex: 0x4A6A12) : nil
             )
         }
     }

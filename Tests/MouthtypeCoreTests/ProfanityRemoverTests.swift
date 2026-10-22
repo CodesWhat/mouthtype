@@ -110,6 +110,15 @@ import Testing
         ("He has a fucking MBA.", "He has an MBA."),
         ("It was a fucking UFO.", "It was a UFO."),
         ("It was a fucking FBI agent.", "It was an FBI agent."),
+        ("He is a motherfucking NASA engineer.", "He is a NASA engineer."),
+        ("It was a fucking NATO decision.", "It was a NATO decision."),
+        ("It was a fucking OPEC meeting.", "It was an OPEC meeting."),
+        ("It was a fucking JPEG file.", "It was a JPEG file."),
+        ("He fucked her over the weekend.", "He slept with her over the weekend."),
+        ("He fucked her over the summer.", "He slept with her over the summer."),
+        ("He fucked me over lunch.", "He slept with me over lunch."),
+        ("He fucked her over.", "He cheated her."),
+        ("He fucked her over completely.", "He cheated her completely."),
         ("An asshole wrote 'an jerk'.", "A jerk wrote 'an jerk'."),
         ("That is a pissed off look.", "That is an annoyed look."),
         ("He is a pissed off guy.", "He is an annoyed guy."),
@@ -419,8 +428,9 @@ import Testing
         let cleaner = FakeCleaner(returning: "Deploy brain fuck today, it is fucking late.")
         cleaner.usesNativeControls = false
         let result = await SmartCleanup(cleaner: cleaner).run(
-            SmartCleanupRequest(text: "Deploy brain fuck today, it is late.", level: .medium, style: .formal,
-                                dictionary: [DictionaryRule(heard: "brain fuck", written: "Brainfuck")]))
+            SmartCleanupRequest(
+                text: "Deploy brain fuck today, it is late.", level: .medium, style: .formal,
+                dictionary: [DictionaryRule(heard: "brain fuck", written: "Brainfuck")]))
         #expect(result.text.contains("Brainfuck") || result.text.contains("brain fuck"))
         #expect(!result.text.contains("fucking"))
     }

@@ -51,10 +51,12 @@ import MouthtypeCore
         #expect(editor.isDirty && editor.canSave)
         editor.save()
         #expect(!editor.isEditing && !editor.isDirty)
-        #expect(try store.allRules() == [
-            DictionaryRule(heard: "mouth type", written: "Mouthtype"),
-            DictionaryRule(heard: "shaun", written: "Sean", starred: true),
-            DictionaryRule(heard: "shorn", written: "Sean", starred: true)])
+        #expect(
+            try store.allRules() == [
+                DictionaryRule(heard: "mouth type", written: "Mouthtype"),
+                DictionaryRule(heard: "shaun", written: "Sean", starred: true),
+                DictionaryRule(heard: "shorn", written: "Sean", starred: true),
+            ])
     }
 
     @Test func newWordWithoutAHeardFormFixesTheWrittenFormOnly() throws {
@@ -156,6 +158,14 @@ import MouthtypeCore
         #expect(editor.canSave)
         editor.heardInput = "shivon"
         #expect(editor.everydayWarning == nil)
+    }
+
+    @Test func strayWhitespaceDoesNotMakeAnEverydayWordAPhrase() {
+        let padded = SpellingWord(written: "Nguyen", rules: [DictionaryRule(heard: " win ", written: "Nguyen")])
+        #expect(padded.warning != nil)
+        #expect(!padded.hasEverydayPhrase)
+        let phrase = SpellingWord(written: "Nguyen", rules: [DictionaryRule(heard: "win win", written: "Nguyen")])
+        #expect(phrase.hasEverydayPhrase)
     }
 
     @Test func draftAndLibrarySurviveOutsideChanges() throws {

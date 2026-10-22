@@ -17,15 +17,17 @@ import Testing
 
     @discardableResult
     private func dictate(_ store: TranscriptStore, minutes: Double, text: String, app: String? = nil, secure: Bool = false) throws -> String {
-        let id = try store.begin(DictationStart(
-            startedAt: base.addingTimeInterval(minutes * 60), target: DictationTarget(appName: app, isSecure: secure ? true : nil)))
+        let id = try store.begin(
+            DictationStart(
+                startedAt: base.addingTimeInterval(minutes * 60), target: DictationTarget(appName: app, isSecure: secure ? true : nil)))
         try store.recordInsertion(id, InsertionRecord(finalText: text))
         return id
     }
 
     private func recording(_ id: String, minutes: Double) -> RecoverableDictation {
-        RecoverableDictation(id: id, startedAt: base.addingTimeInterval(minutes * 60),
-                             audioURL: URL(fileURLWithPath: "/tmp/\(id).wav"), seconds: 4, isPartial: false)
+        RecoverableDictation(
+            id: id, startedAt: base.addingTimeInterval(minutes * 60),
+            audioURL: URL(fileURLWithPath: "/tmp/\(id).wav"), seconds: 4, isPartial: false)
     }
 
     @Test func takesAreNewestFirstAndSkipSecureAndBlankRows() async throws {
@@ -186,6 +188,15 @@ import Testing
         #expect(types.isSuperset(of: PasteboardSession.concealedMarkers))
     }
 
+    @Test func cardAndMenuCopiesMarkTheClipboardConcealed() {
+        let board = NSPasteboard(name: NSPasteboard.Name("mouthtype-card-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+        SystemClipboard(board).write("secret")
+        let types = Set((board.types ?? []).map(\.rawValue))
+        #expect(board.string(forType: .string) == "secret")
+        #expect(types.isSuperset(of: PasteboardSession.concealedMarkers))
+    }
+
     @Test func observationStopsOnDeactivateAndRestartsFreshOnActivate() async throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -219,11 +230,13 @@ import Testing
         let id = try dictate(store, minutes: 1, text: "kept")
         let audio = recording(id, minutes: 1)
         var calls = 0
-        let model = HomeLogModel(store: store, saved: {
-            calls += 1
-            if calls == 1 { try await Task.sleep(for: .milliseconds(400)); return [] }
-            return [audio]
-        }, observing: false)
+        let model = HomeLogModel(
+            store: store,
+            saved: {
+                calls += 1
+                if calls == 1 { try await Task.sleep(for: .milliseconds(400)); return [] }
+                return [audio]
+            }, observing: false)
         await model.loadText()
         async let slow: Void = model.reload()
         try await Task.sleep(for: .milliseconds(100))
@@ -238,9 +251,15 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "first")
         var scans = 0
-        let model = HomeLogModel(store: store, saved: { scans += 1; return [] }, observing: false)
+        let model = HomeLogModel(
+            store: store,
+            saved: {
+                scans += 1; return []
+            }, observing: false)
         // The reload's read comes back empty, so applying it would blank the rows the observation delivered.
-        model.fetchRecent = { _, _ in Thread.sleep(forTimeInterval: 0.4); return [] }
+        model.fetchRecent = { _, _ in
+            Thread.sleep(forTimeInterval: 0.4); return []
+        }
         model.activate()
         await waitUntil { model.takes.count == 1 }
         model.startReload()
@@ -284,7 +303,7 @@ import Testing
         #expect(model.takes.first?.recoverable == audio)
     }
 
-    @Test func completedAudioFollowsEachRowsPathAndExpiry() throws {
+    @Test func completedAudioFollowsEachRowsPathAndIgnoresTheStampedExpiry() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         let archive = AudioArchive(supportDirectory: dir)
@@ -299,6 +318,8 @@ import Testing
         }
         try store.recordCapture(missing, CaptureRecord(audioMs: 1000, audioPath: dir.appendingPathComponent("gone.wav").path))
         let found = DictationRecovery.completed(rows: try store.recentTakes(limit: 10), now: base)
-        #expect(found.map(\.id) == [kept] && found.first?.isCompleted == true)
+        // The stamped expiry is stale once the policy changes; maintenance deletes expired files, so a file still
+        // on disk is recoverable.
+        #expect(Set(found.map(\.id)) == [kept, expired] && found.allSatisfy(\.isCompleted))
     }
 }

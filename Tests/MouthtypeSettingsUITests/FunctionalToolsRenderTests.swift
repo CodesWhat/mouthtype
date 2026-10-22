@@ -38,8 +38,10 @@ import MouthtypeCore
         let suite = "functional-render-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let devices = [MicrophoneDevice(uid: "desk", name: "Desk microphone", input: .init(sampleRate: 48_000, channels: 1, id: 1)),
-                       MicrophoneDevice(uid: "builtin", name: "Built-in microphone", input: .init(sampleRate: 48_000, channels: 1, id: 2))]
+        let devices = [
+            MicrophoneDevice(uid: "desk", name: "Desk microphone", input: .init(sampleRate: 48_000, channels: 1, id: 1)),
+            MicrophoneDevice(uid: "builtin", name: "Built-in microphone", input: .init(sampleRate: 48_000, channels: 1, id: 2)),
+        ]
         try MicrophonePriority(enabled: true, devices: devices.map { .init(uid: $0.uid, name: $0.name) }).save(in: defaults)
         let microphone = MicrophoneSettingsModel(defaults: defaults, devices: { devices }, defaultInput: { 2 })
         let model = SettingsModel(defaults: defaults, microphone: microphone)

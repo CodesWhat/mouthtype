@@ -22,6 +22,36 @@ import MouthtypeCore
         #expect(settings.pipelineOptions == TextPipelineOptions())
     }
 
+    @Test func slashCommandsAreOnWhenTheKeyIsAbsentAndRoundTrip() {
+        let d = defaults()
+        #expect(d.object(forKey: CleanupSettings.Key.slashCommands) == nil)
+        #expect(CleanupSettings.load(d).slashCommands)
+        var settings = CleanupSettings()
+        settings.slashCommands = false
+        settings.save(to: d)
+        #expect(!CleanupSettings.load(d).slashCommands)
+        #expect(!settings.pipelineOptions.slashCommands)
+        #expect(CleanupSettings().pipelineOptions.slashCommands)
+    }
+
+    @Test func codingTargetsComeFromTheBundleIDOrTheSite() {
+        for id in [
+            "com.apple.Terminal", "com.googlecode.iterm2", "com.microsoft.VSCode", "com.jetbrains.intellij", "com.jetbrains.pycharm",
+            "dev.zed.Zed", "com.anthropic.claudefordesktop", "com.openai.codex", "com.stablyai.orca",
+        ] {
+            #expect(CodingTargets.isCodingTarget(bundleID: id), Comment(rawValue: id))
+        }
+        for id in ["com.apple.Notes", "com.apple.mail", "com.tinyspeck.slackmacgap", "com.jetbrainsfake.app", nil] {
+            #expect(!CodingTargets.isCodingTarget(bundleID: id))
+        }
+        #expect(CodingTargets.isCodingTarget(bundleID: "com.google.Chrome", websiteHost: "claude.ai"))
+        #expect(CodingTargets.isCodingTarget(bundleID: "com.apple.Safari", websiteHost: "chatgpt.com"))
+        #expect(!CodingTargets.isCodingTarget(bundleID: "com.google.Chrome", websiteHost: "example.com"))
+        #expect(!CodingTargets.isCodingTarget(bundleID: "com.google.Chrome", websiteHost: nil))
+        // A host only counts in a browser that reports one.
+        #expect(!CodingTargets.isCodingTarget(bundleID: "com.apple.Notes", websiteHost: "claude.ai"))
+    }
+
     @Test func settingsRoundTrip() {
         let d = defaults()
         var settings = CleanupSettings()

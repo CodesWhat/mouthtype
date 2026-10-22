@@ -39,11 +39,13 @@ import MouthtypeCore
         let (defaults, name) = preferences()
         defer { defaults.removePersistentDomain(forName: name) }
         var activated: [RecordingMode] = []
-        let model = SettingsModel(defaults: defaults, onRecordingModeChanged: { mode in
-            #expect(RecordingModePreference.current(defaults) == .hold)
-            activated.append(mode)
-            return nil
-        })
+        let model = SettingsModel(
+            defaults: defaults,
+            onRecordingModeChanged: { mode in
+                #expect(RecordingModePreference.current(defaults) == .hold)
+                activated.append(mode)
+                return nil
+            })
         #expect(model.recordingMode == .hold && model.recordingModeError == nil)
         model.refresh()
         #expect(activated.isEmpty)

@@ -6,7 +6,7 @@ import MouthtypeCore
 
 @MainActor @Suite(.serialized) struct StatsPagesRenderTests {
     static let zone = TimeZone(secondsFromGMT: 0)!
-    static let midnight = 1_792_281_600.0 // 2026-10-18 00:00 UTC
+    static let midnight = 1_792_281_600.0  // 2026-10-18 00:00 UTC
     static let now = Date(timeIntervalSince1970: midnight + 14 * 3_600 + 30 * 60)
 
     /// Eighteen October days (two gaps), a few takes spread over today, and one big old take for the records.
@@ -16,13 +16,17 @@ import MouthtypeCore
             let start = midnight - Double(17 - offset) * 86_400
             for take in 0..<3 {
                 let words = 80 + ((offset * 53 + take * 97) % 300)
-                out.append(DictationSample(day: String(format: "2026-10-%02d", 1 + offset),
-                                           startedAt: Date(timeIntervalSince1970: start + Double(9 + take * 3) * 3_600),
-                                           words: words, durationMs: words * 380, appName: ["Slack", "Xcode", "Mail"][take]))
+                out.append(
+                    DictationSample(
+                        day: String(format: "2026-10-%02d", 1 + offset),
+                        startedAt: Date(timeIntervalSince1970: start + Double(9 + take * 3) * 3_600),
+                        words: words, durationMs: words * 380, appName: ["Slack", "Xcode", "Mail"][take]))
             }
         }
-        out.append(DictationSample(day: "2026-10-12", startedAt: Date(timeIntervalSince1970: midnight - 6 * 86_400 + 13 * 3_600 + 600),
-                                   words: 640, durationMs: 190_000, appName: "Notes"))
+        out.append(
+            DictationSample(
+                day: "2026-10-12", startedAt: Date(timeIntervalSince1970: midnight - 6 * 86_400 + 13 * 3_600 + 600),
+                words: 640, durationMs: 190_000, appName: "Notes"))
         return out
     }()
 
@@ -64,8 +68,10 @@ import MouthtypeCore
         var snapshot = StatsSnapshot.make(samples: [], now: Self.now, timeZone: Self.zone)
         snapshot.daily = (0..<30).map { DailyWords(day: "2026-09-\(String(format: "%02d", min(28, $0 + 1)))", words: 0) }
         try render(snapshot, dark: false, name: nil)
-        snapshot.todayTakes = [TodayTake(startedAt: Self.now, secondsIntoDay: 5 * 3_600, words: 12, durationMs: 4_000, appName: nil),
-                               TodayTake(startedAt: Self.now, secondsIntoDay: 22 * 3_600, words: 0, durationMs: nil, appName: nil)]
+        snapshot.todayTakes = [
+            TodayTake(startedAt: Self.now, secondsIntoDay: 5 * 3_600, words: 12, durationMs: 4_000, appName: nil),
+            TodayTake(startedAt: Self.now, secondsIntoDay: 22 * 3_600, words: 0, durationMs: nil, appName: nil),
+        ]
         try render(snapshot, dark: true, name: nil)
     }
 
@@ -112,8 +118,9 @@ import MouthtypeCore
     // MARK: Tape
 
     private func take(_ seconds: Int, words: Int, app: String? = "Slack") -> TodayTake {
-        TodayTake(startedAt: Date(timeIntervalSince1970: Self.midnight + Double(seconds)), secondsIntoDay: seconds, words: words,
-                  durationMs: words * 380, appName: app)
+        TodayTake(
+            startedAt: Date(timeIntervalSince1970: Self.midnight + Double(seconds)), secondsIntoDay: seconds, words: words,
+            durationMs: words * 380, appName: app)
     }
 
     /// 48 takes from 9 AM to 2:30 PM, a cluster of five inside one minute, one long take and two audio-only takes.
@@ -148,6 +155,17 @@ import MouthtypeCore
         #expect(wide.start == 4 && wide.end == 23)
         #expect(wide.fraction(wide.start * 3_600) == 0 && wide.fraction(wide.end * 3_600) == 1)
         #expect(TapeRange.label(12, edge: false) == "NOON" && TapeRange.label(14, edge: false) == "2" && TapeRange.label(20, edge: true) == "8 PM")
+    }
+
+    @Test func hoverClearsWhenThePointerLeaves() {
+        let takes = denseDay
+        let range = TapeRange(takes: takes, nowSeconds: 14 * 3_600 + 30 * 60)
+        let slots = TapeSlots.merge(takes, range: range, width: 600)
+        let over = TapeSlots.hoveredIndex(slots, pointerX: slots[0].x + 1)
+        #expect(over == 0)
+        #expect(TapeSlots.hoveredIndex(slots, pointerX: nil) == nil)
+        #expect(TapeSlots.hoveredIndex(slots, pointerX: slots[0].x - 200) == nil)
+        #expect(TapeSlots.hoveredIndex([], pointerX: 10) == nil)
     }
 
     @Test func slotsNeverOverlapAndKeepTheirWords() {

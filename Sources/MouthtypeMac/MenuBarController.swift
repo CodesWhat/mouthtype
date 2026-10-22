@@ -5,13 +5,16 @@ public protocol MenuSection {
     var items: [NSMenuItem] { get }
     func refresh()
     /// Called as the menu is about to open, before it starts tracking. Anything that reads another app's state through
-    /// Accessibility has to do it here: once the menu is tracking, the system focus belongs to the menu.
+    /// Accessibility has to do it here: once the menu is tracking, the system-wide focused element is empty.
     func prepareForMenuOpen()
+    /// Called when the menu closes, so a read still in flight can be dropped.
+    func menuDidClose()
 }
 
 extension MenuSection {
     public func refresh() {}
     public func prepareForMenuOpen() {}
+    public func menuDidClose() {}
 }
 
 @MainActor final class DailyMenu: NSObject, NSMenuDelegate {
@@ -55,6 +58,11 @@ extension MenuSection {
         refresh()
     }
 
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === self.menu else { return }
+        sections.forEach { $0.section.menuDidClose() }
+    }
+
     private func rebuild() {
         menu.removeAllItems()
         var groups: [[NSMenuItem]] = []
@@ -62,8 +70,7 @@ extension MenuSection {
         for entry in sections where !entry.isFooter {
             let visible = entry.section.items.filter { !$0.isHidden && !$0.isSeparatorItem }
             guard !visible.isEmpty else { continue }
-            if entry.startsGroup || groups.isEmpty { groups.append(visible) }
-            else { groups[groups.count - 1].append(contentsOf: visible) }
+            if entry.startsGroup || groups.isEmpty { groups.append(visible) } else { groups[groups.count - 1].append(contentsOf: visible) }
         }
         let footer = sections.filter(\.isFooter).flatMap { $0.section.items.filter { !$0.isHidden && !$0.isSeparatorItem } } + [aboutItem, quitItem]
         groups.append(footer)
@@ -83,13 +90,16 @@ extension MenuSection {
     private let statusItem: NSStatusItem
     private let daily = DailyMenu()
     var onStopDictation: (@MainActor () -> Void)? {
-        get { daily.onStopDictation } set { daily.onStopDictation = newValue }
+        get { daily.onStopDictation }
+        set { daily.onStopDictation = newValue }
     }
     var onCancelDictation: (@MainActor () -> Void)? {
-        get { daily.onCancelDictation } set { daily.onCancelDictation = newValue }
+        get { daily.onCancelDictation }
+        set { daily.onCancelDictation = newValue }
     }
     var onRefresh: (@MainActor () -> Void)? {
-        get { daily.onRefresh } set { daily.onRefresh = newValue }
+        get { daily.onRefresh }
+        set { daily.onRefresh = newValue }
     }
     var dictationControlItems: [NSMenuItem] { daily.dictationControlItems }
 
@@ -142,10 +152,12 @@ extension MenuSection {
     }
 
     private func applyGlyph() {
-        guard let file = gate.next(
-            icon: icon, level: level, reduceMotion: reduceMotion || isPinned,
-            now: ProcessInfo.processInfo.systemUptime, canShow: { images[$0] != nil }),
-              let image = images[file] else { return }
+        guard
+            let file = gate.next(
+                icon: icon, level: level, reduceMotion: reduceMotion || isPinned,
+                now: ProcessInfo.processInfo.systemUptime, canShow: { images[$0] != nil }),
+            let image = images[file]
+        else { return }
         statusItem.button?.image = image
     }
     func setHandsFree(_ active: Bool) { daily.setHandsFree(active) }

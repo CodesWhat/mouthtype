@@ -32,7 +32,8 @@ enum CaptureSelfTest {
             let entry = try AudioArchive(supportDirectory: directory).write(samples: audio.samples, id: "selftest")
 
             func f(_ value: Double?, _ digits: Int = 0) -> String { value.map { String(format: "%.\(digits)f", $0) } ?? "none" }
-            let line = "selftest device=\(audio.deviceName ?? "unknown") transport=\(audio.deviceTransport)"
+            let line =
+                "selftest device=\(audio.deviceName ?? "unknown") transport=\(audio.deviceTransport)"
                 + " firstSampleMs=\(f(audio.firstSampleMs)) firstNonzeroMs=\(f(audio.firstNonzeroMs))"
                 + " captureStartMs=\(f(audio.captureStartMs)) audioMs=\(f(audio.audioMs))"
                 + " rmsDb=\(f(features.rmsDb, 1)) peakDb=\(f(features.peakDb, 1)) noiseFloorDb=\(f(features.noiseFloorDb, 1))"

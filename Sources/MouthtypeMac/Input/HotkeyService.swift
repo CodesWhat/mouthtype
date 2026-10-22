@@ -36,6 +36,8 @@ public final class HotkeyService {
         didSet { if health != oldValue { onHealthChange?(health) } }
     }
     public var onHealthChange: (@MainActor (HotkeyHealth) -> Void)?
+    /// Runs on every watchdog tick, for checks that live outside the taps (the Fn remap still being in the HID mapping).
+    public var onWatchdog: (@MainActor () -> Void)?
     /// Every sample either tap delivers, before it reaches the processor. For the probes.
     public var sampleObserver: (@MainActor (TapSample) -> Void)?
 
@@ -393,13 +395,15 @@ public final class HotkeyService {
             destinationDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(code))
         }
         if let shortcut { destinationDown = CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(shortcut.keyCode)) }
-        guard let sample = Self.resyncSample(
-            source: options.source,
-            hotkeyHeld: mapper.hotkeyHeld,
-            currentFlags: flags,
-            destinationKeyDown: destinationDown,
-            timestampNanos: HostClock.now()
-        ) else { return }
+        guard
+            let sample = Self.resyncSample(
+                source: options.source,
+                hotkeyHeld: mapper.hotkeyHeld,
+                currentFlags: flags,
+                destinationKeyDown: destinationDown,
+                timestampNanos: HostClock.now()
+            )
+        else { return }
         shared.hotkeyHeld.store(false, ordering: .relaxed)
         if let shortcut { shared.shortcutMatcher.withLock { _ = $0.update(sample, shortcut: shortcut) } }
         Log.hotkey.info("resyncing a missed hotkey release")
@@ -418,7 +422,8 @@ public final class HotkeyService {
         case let .shortcut(shortcut):
             guard !shortcut.isCapsLock else { return nil }
             guard !destinationKeyDown || currentFlags & shortcut.requiredFlags != shortcut.requiredFlags else { return nil }
-            return TapSample(kind: shortcut.isModifier ? .flagsChanged : .keyUp, keyCode: shortcut.keyCode,
+            return TapSample(
+                kind: shortcut.isModifier ? .flagsChanged : .keyUp, keyCode: shortcut.keyCode,
                 flags: currentFlags & ~DictationShortcut.modifierFlag(for: shortcut.keyCode), timestamp: timestampNanos)
         }
     }
@@ -430,6 +435,7 @@ public final class HotkeyService {
             for (role, slot) in slots where slot.retry == nil {
                 if let tap = slot.tap, !tap.isEnabled { noteDisabled(role) }
             }
+            onWatchdog?()
         }
         if !engine.isRecording { secureInput = IsSecureEventInputEnabled() }
         refreshHealth()

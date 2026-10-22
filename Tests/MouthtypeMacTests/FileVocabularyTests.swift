@@ -28,10 +28,11 @@ import MouthtypeCore
         try write(#"[{"heard": "hove", "written": "Hov", "starred": true}, {"heard": "mouth type", "written": "Mouthtype"}]"#, to: url)
         let vocabulary = FileVocabulary(url: url)
         #expect(vocabulary.status == .loaded(count: 2))
-        #expect(vocabulary.dictionary() == [
-            DictionaryRule(heard: "hove", written: "Hov", starred: true),
-            DictionaryRule(heard: "mouth type", written: "Mouthtype", starred: false),
-        ])
+        #expect(
+            vocabulary.dictionary() == [
+                DictionaryRule(heard: "hove", written: "Hov", starred: true),
+                DictionaryRule(heard: "mouth type", written: "Mouthtype", starred: false),
+            ])
     }
 
     @Test func aChangedFileIsReloadedOnTheNextRead() throws {
@@ -211,13 +212,14 @@ import MouthtypeCore
         defer { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("dictionary.json")
         let long = String(repeating: "x", count: 200)
-        try write("""
-        [
-          {"heard":"one","written":"One"},
-          {"heard":"two","written":"\(long)","starred":true,"note":{"a":[1,2]}},
-          {"heard":"three","written":"Three"}
-        ]
-        """, to: url)
+        try write(
+            """
+            [
+              {"heard":"one","written":"One"},
+              {"heard":"two","written":"\(long)","starred":true,"note":{"a":[1,2]}},
+              {"heard":"three","written":"Three"}
+            ]
+            """, to: url)
         let vocabulary = FileVocabulary(url: url)
         let rule = DictionaryRule(heard: "two", written: long, starred: true)
         let removed = try vocabulary.remove(rule)

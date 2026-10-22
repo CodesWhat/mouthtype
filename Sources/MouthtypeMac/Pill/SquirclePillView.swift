@@ -370,18 +370,20 @@ class SquirclePillView: NSView, PillSkinView {
     private func recFont() -> NSFont {
         switch flavor {
         case .matrix:
-            NSFont(name: FontRegistry.monoName, size: 9 * k) ?? .monospacedSystemFont(ofSize: 9 * k, weight: .medium)
+            FontRegistry.ensureRegistered()
+            return NSFont(name: FontRegistry.monoName, size: 9 * k) ?? .monospacedSystemFont(ofSize: 9 * k, weight: .medium)
         case .minimal:
-            .systemFont(ofSize: 9.5 * k, weight: .semibold)
+            return .systemFont(ofSize: 9.5 * k, weight: .semibold)
         }
     }
 
     private func clockFont() -> NSFont {
         switch flavor {
         case .matrix:
-            NSFont(name: FontRegistry.monoName, size: 11 * k) ?? .monospacedSystemFont(ofSize: 11 * k, weight: .medium)
+            FontRegistry.ensureRegistered()
+            return NSFont(name: FontRegistry.monoName, size: 11 * k) ?? .monospacedSystemFont(ofSize: 11 * k, weight: .medium)
         case .minimal:
-            .monospacedDigitSystemFont(ofSize: 12 * k, weight: .medium)
+            return .monospacedDigitSystemFont(ofSize: 12 * k, weight: .medium)
         }
     }
 
@@ -402,8 +404,10 @@ class SquirclePillView: NSView, PillSkinView {
     }
 
     private var allLayers: [CALayer] {
-        [ambient, contact, bodyShape.mask, highlightShape.mask, rim, windowShape.mask, windowEdge, lamp, ghost, lit, idle,
-         recLabel, clockLabel, textClip, textGroup, lips] + lineLayers + processingDots + discs.values.flatMap { [$0.group, $0.shape, $0.glyph] }
+        [
+            ambient, contact, bodyShape.mask, highlightShape.mask, rim, windowShape.mask, windowEdge, lamp, ghost, lit, idle,
+            recLabel, clockLabel, textClip, textGroup, lips,
+        ] + lineLayers + processingDots + discs.values.flatMap { [$0.group, $0.shape, $0.glyph] }
     }
 
     private func capsule(width: CGFloat, height: CGFloat? = nil) -> CGRect {
@@ -440,7 +444,8 @@ class SquirclePillView: NSView, PillSkinView {
         PillMotion.set(ambient, "shadowPath", path, timing)
         PillMotion.set(contact, "shadowPath", path, timing)
         PillMotion.set(rim, "path", MatrixPillLayout.squirclePath(rect.insetBy(dx: 0.25 * k, dy: 0.25 * k), reference: reference), timing)
-        let window = cardWidth == nil
+        let window =
+            cardWidth == nil
             ? MatrixPillLayout.windowFrame(capsule: rect, locked: newWidth == metrics.lockedWidth, metrics: metrics)
             : MatrixPillLayout.windowFrame(capsule: row, locked: !mode.isMessage, metrics: metrics).offsetBy(dx: rowShift, dy: 0)
         let windowPath = MatrixPillLayout.squirclePath(window, reference: window.height)

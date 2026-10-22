@@ -5,14 +5,14 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     case home, stats, dictionary, transforms, style, appearance
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
-    var icon: DesignIcon {
+    var symbol: String {
         switch self {
-        case .home: .home
-        case .stats: .stats
-        case .dictionary: .dictionary
-        case .transforms: .transforms
-        case .style: .style
-        case .appearance: .appearance
+        case .home: "house"
+        case .stats: "chart.bar"
+        case .dictionary: "book.closed"
+        case .transforms: "wand.and.stars"
+        case .style: "textformat"
+        case .appearance: "capsule"
         }
     }
     /// The page `offset` rows away, stopping at the first and last pages.
@@ -24,6 +24,11 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     /// Arrow keys step from the focused sidebar row when there is one, else from the selected page.
     static func arrowTarget(focused: SettingsPage?, selected: SettingsPage, offset: Int) -> SettingsPage {
         (focused ?? selected).moved(by: offset)
+    }
+    /// Where sidebar focus goes when the selected page changes. Follows the selection only while a sidebar row holds focus, so a
+    /// page change from a URL or menu moves the ring with it and never pulls focus out of a text field or other control.
+    static func focusFollowing(focused: SettingsPage?, selected: SettingsPage) -> SettingsPage? {
+        focused == nil ? nil : selected
     }
     var headline: String {
         switch self {
@@ -55,10 +60,10 @@ enum SettingsModalPage: String, CaseIterable, Identifiable {
     /// Line glyphs for now. The handoff leaves pixel versions of these four as a follow-up.
     var symbol: String {
         switch self {
-        case .general: "slider.horizontal.3"
+        case .general: "gearshape"
         case .mac: "laptopcomputer"
-        case .health: "stethoscope"
-        case .advanced: "gearshape.2"
+        case .health: "heart.text.square"
+        case .advanced: "slider.horizontal.3"
         }
     }
     var headline: String { title }

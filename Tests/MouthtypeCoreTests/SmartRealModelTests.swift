@@ -19,7 +19,6 @@ private func cleanupBench(_ arguments: [String]) throws -> (status: Int32, outpu
     return (process.terminationStatus, String(decoding: data, as: UTF8.self))
 }
 
-
 /// The nineteen acceptance dictations against the real S1-mini by Superwhisper, through the bench binary: MLX finds
 /// its Metal library next to the executable it runs in, which the test host is not. Skipped when the model isn't
 /// on disk.
@@ -58,8 +57,10 @@ struct QualityRealModelTests {
         let fixture = root.appendingPathComponent("Tests/Fixtures/long-read-through.json")
         let resultFile = FileManager.default.temporaryDirectory.appendingPathComponent("cleanup-lifetime-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: resultFile) }
-        let result = try cleanupBench(["clean", "--smart", "light", "--file", fixture.path,
-            "--smart-timeout-ms", String(budgetMs), "--result", resultFile.path])
+        let result = try cleanupBench([
+            "clean", "--smart", "light", "--file", fixture.path,
+            "--smart-timeout-ms", String(budgetMs), "--result", resultFile.path,
+        ])
         #expect(result.status == 1, "Expected an ordinary failed-fixture exit, got \(result.status): \(result.output)")
         let records = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: resultFile)) as? [[String: Any]])
         let record = try #require(records.first)
@@ -113,8 +114,10 @@ struct SavedSpellingRealModelTests {
         guard (cleaner as? MLXCleaner)?.isDownloaded == true else { return }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let fixture = root.appendingPathComponent("Tests/Fixtures/saved-spelling-fidelity.json")
-        let result = try cleanupBench(["clean", "--smart", "medium", "--cleaner", model,
-            "--file", fixture.path, "--smart-timeout-ms", "10000"])
+        let result = try cleanupBench([
+            "clean", "--smart", "medium", "--cleaner", model,
+            "--file", fixture.path, "--smart-timeout-ms", "10000",
+        ])
         #expect(result.status == 0, "\(result.output)")
         #expect(result.output.contains("5/5 cases pass"), "\(result.output)")
     }

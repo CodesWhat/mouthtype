@@ -36,7 +36,9 @@ import MouthtypeCore
         let f = try fixture()
         defer { f.cleanup() }
         var asked: [(SettingsModel.DraftExit, SettingsModel.DraftKind)] = []
-        f.model.confirmDiscard = { exit, kind in asked.append((exit, kind)); return false }
+        f.model.confirmDiscard = { exit, kind in
+            asked.append((exit, kind)); return false
+        }
         f.model.page = .dictionary
         f.spellings.newSpelling()
         f.spellings.heardInput = "mouth type"
@@ -59,7 +61,9 @@ import MouthtypeCore
     @Test func aCleanEditorSwitchesWithoutAsking() throws {
         let f = try fixture()
         defer { f.cleanup() }
-        f.model.confirmDiscard = { _, _ in Issue.record("asked about a clean draft"); return false }
+        f.model.confirmDiscard = { _, _ in
+            Issue.record("asked about a clean draft"); return false
+        }
         f.model.page = .transforms
         #expect(f.model.select(.style) && f.model.page == .style)
     }
@@ -68,7 +72,9 @@ import MouthtypeCore
         let f = try fixture()
         defer { f.cleanup() }
         var exits: [SettingsModel.DraftExit] = []
-        f.model.confirmDiscard = { exit, _ in exits.append(exit); return false }
+        f.model.confirmDiscard = { exit, _ in
+            exits.append(exit); return false
+        }
         f.model.page = .dictionary
         #expect(f.model.resolveDraft(.closing))
         f.spellings.newSpelling()
@@ -84,7 +90,9 @@ import MouthtypeCore
         defer { window.close() }
         var exits: [SettingsModel.DraftExit] = []
         var answer = false
-        f.model.confirmDiscard = { exit, _ in exits.append(exit); return answer }
+        f.model.confirmDiscard = { exit, _ in
+            exits.append(exit); return answer
+        }
         f.model.page = .dictionary
         #expect(window.resolveDraftForQuit())
         #expect(exits.isEmpty)
@@ -94,13 +102,30 @@ import MouthtypeCore
         #expect(exits == [.quitting] && f.spellings.isDirty && f.model.page == .dictionary)
         answer = true
         #expect(window.resolveDraftForQuit())
+        #expect(f.spellings.isDirty, "the draft survives until the quit is certain")
+        window.discardDraftForQuit()
         #expect(!f.spellings.isDirty)
+    }
+
+    @Test func settingsSheetsTargetTheMouthtypeWindowDirectly() throws {
+        let f = try fixture()
+        defer { f.cleanup() }
+        let window = SettingsWindow(model: f.model, reduceTransparency: { true })
+        defer { window.close() }
+        window.window?.orderFront(nil)
+        let other = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        other.isReleasedWhenClosed = false
+        other.makeKeyAndOrderFront(nil)
+        defer { other.close() }
+        #expect(SettingsNSWindow.existing === window.window)
     }
 
     @Test func refusedQuitNeverAsksAboutTheDraft() throws {
         let f = try fixture()
         defer { f.cleanup() }
-        f.model.confirmDiscard = { _, _ in Issue.record("asked before quit was certain"); return true }
+        f.model.confirmDiscard = { _, _ in
+            Issue.record("asked before quit was certain"); return true
+        }
         f.model.page = .dictionary
         f.spellings.newSpelling()
         f.spellings.heardInput = "mouth type"
@@ -115,7 +140,9 @@ import MouthtypeCore
     @Test func aDraftOnAnotherPageDoesNotBlockLeavingThisOne() throws {
         let f = try fixture()
         defer { f.cleanup() }
-        f.model.confirmDiscard = { _, _ in Issue.record("asked"); return false }
+        f.model.confirmDiscard = { _, _ in
+            Issue.record("asked"); return false
+        }
         f.model.page = .transforms
         f.spellings.newSpelling()
         f.spellings.heardInput = "left behind"

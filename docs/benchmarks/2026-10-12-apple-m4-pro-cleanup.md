@@ -59,7 +59,7 @@ Judge: ran with `claude -p --model sonnet`, 8 outputs per call, cached in `bench
 
 - Status: ok
 - Model: `mlx-community/gemma-4-e2b-it-4bit`, quantization 4-bit, run through MLX
-- Cached at: `/Users/sbenson/.cache/huggingface/hub/models--mlx-community--gemma-4-e2b-it-4bit`
+- Cached at: `~/.cache/huggingface/hub/models--mlx-community--gemma-4-e2b-it-4bit`
 - Size on disk: 3417 MB
 - First call after load (untimed warm-up): 2469 ms
 
@@ -67,7 +67,7 @@ Judge: ran with `claude -p --model sonnet`, 8 outputs per call, cached in `bench
 
 - Status: ok
 - Model: `mlx-community/gemma-4-e4b-it-4bit`, quantization 4-bit, run through MLX
-- Cached at: `/Users/sbenson/.cache/huggingface/hub/models--mlx-community--gemma-4-e4b-it-4bit`
+- Cached at: `~/.cache/huggingface/hub/models--mlx-community--gemma-4-e4b-it-4bit`
 - Size on disk: 4939 MB
 - First call after load (untimed warm-up): 1027 ms
 
@@ -75,7 +75,7 @@ Judge: ran with `claude -p --model sonnet`, 8 outputs per call, cached in `bench
 
 - Status: ok
 - Model: `mlx-community/Qwen3-4B-Instruct-2507-4bit`, quantization 4-bit, run through MLX
-- Cached at: `/Users/sbenson/.cache/huggingface/hub/models--mlx-community--Qwen3-4B-Instruct-2507-4bit`
+- Cached at: `~/.cache/huggingface/hub/models--mlx-community--Qwen3-4B-Instruct-2507-4bit`
 - Size on disk: 2172 MB
 - First call after load (untimed warm-up): 852 ms
 
@@ -83,7 +83,7 @@ Judge: ran with `claude -p --model sonnet`, 8 outputs per call, cached in `bench
 
 - Status: ok
 - Model: `mlx-community/Llama-3.2-3B-Instruct-4bit`, quantization 4-bit, run through MLX
-- Cached at: `/Users/sbenson/.cache/huggingface/hub/models--mlx-community--Llama-3.2-3B-Instruct-4bit`
+- Cached at: `~/.cache/huggingface/hub/models--mlx-community--Llama-3.2-3B-Instruct-4bit`
 - Size on disk: 1740 MB
 - First call after load (untimed warm-up): 1457 ms
 
@@ -91,7 +91,7 @@ Judge: ran with `claude -p --model sonnet`, 8 outputs per call, cached in `bench
 
 - Status: ok
 - Model: `mlx-community/Phi-4-mini-instruct-4bit`, quantization 4-bit, run through MLX
-- Cached at: `/Users/sbenson/.cache/huggingface/hub/models--mlx-community--Phi-4-mini-instruct-4bit`
+- Cached at: `~/.cache/huggingface/hub/models--mlx-community--Phi-4-mini-instruct-4bit`
 - Size on disk: 2077 MB
 - First call after load (untimed warm-up): 1017 ms
 
@@ -99,7 +99,7 @@ Judge: ran with `claude -p --model sonnet`, 8 outputs per call, cached in `bench
 
 - Status: ok
 - Model: `superwhisper/s1-mini`, quantization bf16, run through MLX
-- Cached at: `/Users/sbenson/.cache/huggingface/hub/models--superwhisper--s1-mini`
+- Cached at: `~/.cache/huggingface/hub/models--superwhisper--s1-mini`
 - Size on disk: 1447 MB
 - License: Apache 2.0 plus a naming clause (the model must keep the name "S1-mini" by "Superwhisper")
 - First call after load (untimed warm-up): 111 ms

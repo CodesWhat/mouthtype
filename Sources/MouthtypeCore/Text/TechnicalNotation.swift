@@ -31,7 +31,8 @@ public struct TechnicalNotation: Sendable {
                 ["label", "spell", "spelled", "identifier", "variable", "symbol"].contains($0.lower)
             }
             if !literal, core == "USB", word.end - word.start == 3, i + 1 < words.count, let letter = piece(words[i + 1], chars),
-               "ABC".contains(letter), horizontal(chars[word.end..<words[i + 1].start]) {
+                "ABC".contains(letter), horizontal(chars[word.end..<words[i + 1].start])
+            {
                 emit(word.start..<(words[i + 1].start + 1), spellings["USB\(letter)".lowercased()] ?? "USB-\(letter)")
                 i += 2
                 continue
@@ -46,7 +47,8 @@ public struct TechnicalNotation: Sendable {
             var last = i
             var dotted = false
             while last + 1 < words.count, words[last].end == words[last].start + 1,
-                  let letter = piece(words[last + 1], chars) {
+                let letter = piece(words[last + 1], chars)
+            {
                 let gap = chars[words[last].end..<words[last + 1].start]
                 guard horizontal(gap) || gap.elementsEqual(".") || gap.elementsEqual("-") else { break }
                 dotted = dotted || gap.elementsEqual(".")
@@ -64,11 +66,13 @@ public struct TechnicalNotation: Sendable {
             var end = words[last].start + 1
             if dotted, end < chars.count, chars[end] == "." {
                 let possessive = end + 2 < chars.count && "'\u{2019}".contains(chars[end + 1]) && chars[end + 2] == "s"
-                let continues = last + 1 < words.count && chars[words[last + 1].start].isLowercase
+                let continues =
+                    last + 1 < words.count && chars[words[last + 1].start].isLowercase
                     && horizontal(chars[(end + 1)..<words[last + 1].start])
                 if possessive || continues { end += 1 }
             }
-            let canonical = !literal && letters.count == 4 && letters.hasPrefix("USB") && "ABC".contains(letters.last!)
+            let canonical =
+                !literal && letters.count == 4 && letters.hasPrefix("USB") && "ABC".contains(letters.last!)
                 ? "USB-\(letters.last!)" : letters
             let replacement = spellings[letters.lowercased()] ?? canonical
             emit(word.start..<end, replacement)

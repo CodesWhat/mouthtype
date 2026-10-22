@@ -121,12 +121,12 @@ public struct AudioArchive: Sendable {
         data.append(le32(riffSize))
         data.append(contentsOf: Array("WAVEfmt ".utf8))
         data.append(le32(16))
-        data.append(le16(1))                            // PCM
-        data.append(le16(1))                            // mono
+        data.append(le16(1))  // PCM
+        data.append(le16(1))  // mono
         data.append(le32(UInt32(sampleRate)))
-        data.append(le32(UInt32(sampleRate * 2)))       // byte rate
-        data.append(le16(2))                            // block align
-        data.append(le16(16))                           // bits per sample
+        data.append(le32(UInt32(sampleRate * 2)))  // byte rate
+        data.append(le16(2))  // block align
+        data.append(le16(16))  // bits per sample
         data.append(contentsOf: Array("data".utf8))
         data.append(le32(dataSize))
         return data

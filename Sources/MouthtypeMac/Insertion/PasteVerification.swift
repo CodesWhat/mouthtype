@@ -59,7 +59,8 @@ enum PasteVerifier {
         guard observation.focusSame, let now = observation.reading else { return false }
         let before = baseline.reading
         if let value = now.value, value.contains(pasted), !(before.value?.contains(pasted) ?? false) { return true }
-        let changed = differs(before.value, now.value) || differs(before.length, now.length)
+        let changed =
+            differs(before.value, now.value) || differs(before.length, now.length)
             || differs(before.selection, now.selection)
         // A change with typing in between may be the typing, not the paste.
         return changed && observation.input != nil && observation.input == baseline.input
@@ -70,10 +71,12 @@ enum PasteVerifier {
         guard let baseline else { return .unknown }
         if observations.contains(where: { confirms($0, baseline: baseline, pasted: pasted) }) { return .confirmed }
         guard baseline.unchangedProvesFailure, observations.count == expected,
-              baseline.reading.isComplete, let input = baseline.input else { return .unknown }
+            baseline.reading.isComplete, let input = baseline.input
+        else { return .unknown }
         for observation in observations {
             guard observation.focusSame, let now = observation.reading, now.isComplete, observation.input == input,
-                  now == baseline.reading else { return .unknown }
+                now == baseline.reading
+            else { return .unknown }
         }
         return .notLanded
     }

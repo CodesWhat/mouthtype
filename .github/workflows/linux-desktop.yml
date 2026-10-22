@@ -12,7 +12,7 @@ on:
       - "packaging/debian/**"
       - ".github/workflows/linux-desktop.yml"
   push:
-    branches: [main, dev/v0.1.0, dev/v0.4.0, feat/linux-parity]
+    branches: [main, 'dev/**', feat/linux-parity]
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"

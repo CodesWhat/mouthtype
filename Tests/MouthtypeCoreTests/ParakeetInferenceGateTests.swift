@@ -11,8 +11,7 @@ private actor InferenceLatch {
         await withCheckedContinuation { waiters.append($0) }
     }
     func release() {
-        if waiters.isEmpty { permits += 1 }
-        else { waiters.removeFirst().resume() }
+        if waiters.isEmpty { permits += 1 } else { waiters.removeFirst().resume() }
     }
 }
 
@@ -43,12 +42,14 @@ private enum InferenceFailure: Error { case failed }
         let hold = InferenceLatch()
         let probe = InferenceProbe()
         let preview = Task {
-            try await access.withPreview(prepare: { 1 }, predict: { _ in
-                await probe.enter("preview")
-                await hold.wait()
-                await probe.leave("preview")
-                return "provisional"
-            })
+            try await access.withPreview(
+                prepare: { 1 },
+                predict: { _ in
+                    await probe.enter("preview")
+                    await hold.wait()
+                    await probe.leave("preview")
+                    return "provisional"
+                })
         }
         await until { await hold.arrivals == 1 }
         let final = Task {
@@ -79,10 +80,12 @@ private enum InferenceFailure: Error { case failed }
         let finalHold = InferenceLatch()
         let probe = InferenceProbe()
         let preview = Task {
-            try await access.withPreview(prepare: { true }, predict: { _ in
-                await previewHold.wait()
-                return "preview"
-            })
+            try await access.withPreview(
+                prepare: { true },
+                predict: { _ in
+                    await previewHold.wait()
+                    return "preview"
+                })
         }
         await until { await previewHold.arrivals == 1 }
         let first = Task {
@@ -126,14 +129,16 @@ private enum InferenceFailure: Error { case failed }
         let setup = InferenceLatch()
         let probe = InferenceProbe()
         let preview = Task {
-            try await access.withPreview(prepare: {
-                await setup.wait()
-                return "prepared"
-            }, predict: { _ in
-                await probe.enter("late prediction")
-                await probe.leave("late prediction")
-                return "must not appear"
-            })
+            try await access.withPreview(
+                prepare: {
+                    await setup.wait()
+                    return "prepared"
+                },
+                predict: { _ in
+                    await probe.enter("late prediction")
+                    await probe.leave("late prediction")
+                    return "must not appear"
+                })
         }
         await until { await setup.arrivals == 1 }
         preview.cancel()
@@ -148,10 +153,12 @@ private enum InferenceFailure: Error { case failed }
         let hold = InferenceLatch()
         let probe = InferenceProbe()
         let preview = Task {
-            try await access.withPreview(prepare: { true }, predict: { _ in
-                await hold.wait()
-                return "preview"
-            })
+            try await access.withPreview(
+                prepare: { true },
+                predict: { _ in
+                    await hold.wait()
+                    return "preview"
+                })
         }
         await until { await hold.arrivals == 1 }
         let cancelled = Task {

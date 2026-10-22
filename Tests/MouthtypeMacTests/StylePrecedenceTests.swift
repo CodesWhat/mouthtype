@@ -88,11 +88,13 @@ import MouthtypeCore
                     if let oldStyle { #expect(newStyle == oldStyle, "\(String(describing: app)) \(String(describing: host))") }
                     if let oldLevel { #expect(newLevel == oldLevel, "\(String(describing: app)) \(String(describing: host))") }
                     if oldStyle == nil, styles.contexts.context(bundleID: app) == nil,
-                       WebsiteContext.supports(bundleID: app) == false || styles.contexts.context(host: host) == nil {
+                        WebsiteContext.supports(bundleID: app) == false || styles.contexts.context(host: host) == nil
+                    {
                         #expect(newStyle == .formal)
                     }
                     if oldLevel == nil, styles.contexts.context(bundleID: app) == nil,
-                       WebsiteContext.supports(bundleID: app) == false || styles.contexts.context(host: host) == nil {
+                        WebsiteContext.supports(bundleID: app) == false || styles.contexts.context(host: host) == nil
+                    {
                         #expect(newLevel == nil)
                     }
                     comparisons += 1

@@ -2,7 +2,7 @@ import Foundation
 
 public struct WordTiming: Sendable, Codable, Equatable {
     public var word: String
-    public var start: Double      // seconds from start of the samples
+    public var start: Double  // seconds from start of the samples
     public var end: Double
     public var confidence: Float
 
@@ -15,13 +15,13 @@ public struct WordTiming: Sendable, Codable, Equatable {
 }
 
 public struct Transcription: Sendable, Codable, Equatable {
-    public var text: String               // trimmed, same string the engine returned before
-    public var words: [WordTiming]        // empty when the engine gave no timings
-    public var confidence: Float?         // overall, nil when the engine gives none
+    public var text: String  // trimmed, same string the engine returned before
+    public var words: [WordTiming]  // empty when the engine gave no timings
+    public var confidence: Float?  // overall, nil when the engine gives none
     public var processingSeconds: Double  // wall time of the engine call, measured here with ContinuousClock
     public var engineID: String
-    public var modelRevision: String?     // model repo/variant identifier; nil when the engine exposes none
-    public var boostTermsApplied: [String]?   // saved spellings vocabulary boosting wrote into the text; nil when none
+    public var modelRevision: String?  // model repo/variant identifier; nil when the engine exposes none
+    public var boostTermsApplied: [String]?  // saved spellings vocabulary boosting wrote into the text; nil when none
 
     public init(
         text: String,

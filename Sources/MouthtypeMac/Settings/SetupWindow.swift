@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import MouthtypeCore
 import SwiftUI
 
 @MainActor struct SetupActions {
@@ -27,9 +28,11 @@ import SwiftUI
     var isPolling: Bool { pollTimer != nil }
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
-    init(model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
-         reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
-         notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+    init(
+        model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
+        reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+        notifications: NotificationCenter = NSWorkspace.shared.notificationCenter
+    ) {
         self.model = model
         self.pollInterval = pollInterval
         self.reduceTransparency = reduceTransparency
@@ -37,7 +40,8 @@ import SwiftUI
         refresh = actions.refresh
         poll = actions.poll
         self.actions = actions
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Set Up Mouthtype"
         window.titlebarAppearsTransparent = true
@@ -184,7 +188,7 @@ struct SetupView: View {
         .frame(width: SetupWindow.contentSize.width, height: SetupWindow.contentSize.height)
         .ignoresSafeArea()
         .font(DesignFont.sans(DesignFont.body))
-        .tint(DesignPalette.accent)
+        .tint(DesignPalette.accentMark)
         .background { DesignSidebarBackground(solid: solid) }
     }
 
@@ -201,12 +205,13 @@ struct SetupView: View {
             let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? DesignPalette.ink : DesignPalette.sideInk)
             return entry.offset == 0 ? name : text + Text(" · ").foregroundColor(DesignPalette.hair) + name
         }
-        return line
-        .font(DesignFont.mono(DesignFont.eyebrow)).tracking(1)
-        .multilineTextAlignment(.trailing)
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
+        return
+            line
+            .font(DesignFont.mono(DesignFont.eyebrow)).tracking(1)
+            .multilineTextAlignment(.trailing)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
     }
 
     private var title: String {
@@ -226,18 +231,38 @@ struct SetupView: View {
             case .notDetermined: "Allow microphone access so Mouthtype can hear you while you dictate. Audio stays on this Mac."
             case .denied, .restricted: "Microphone access is not allowed. Enable Mouthtype in System Settings, then return here."
             case .authorized:
-                if model.capturePreparing { "Preparing your microphone…" }
-                else { model.captureError ?? "Access allowed. Prepare your microphone to continue." }
+                if model.capturePreparing { "Preparing your microphone…" } else { model.captureError ?? "Access allowed. Prepare your microphone to continue." }
             @unknown default: "Check Microphone access in System Settings."
             }
         case .accessibility:
             "Accessibility lets your shortcut work and puts text into your chosen app. Enable Mouthtype in System Settings, then return here."
         case .speech:
-            model.engine.statusText + "\nDownloaded once. Recognition runs on your Mac."
+            speechStatus + "\nDownloaded once. Recognition runs on your Mac."
         case .shortcut:
-            model.inputDetail + "\nCheck your shortcut in Input settings to continue."
+            model.inputDetail + "\nCheck your shortcut with Change shortcut to continue."
         case .ready:
             model.instructions
+        }
+    }
+
+    /// The bar carries the percentage, so the line above it doesn't repeat it.
+    private var speechStatus: String {
+        if case .downloading = model.engine.downloadStatus { return "Downloading the speech model." }
+        return model.engine.statusText
+    }
+
+    @ViewBuilder private var speechControls: some View {
+        switch model.engine.downloadStatus {
+        case .failed:
+            action("Retry model", identifier: "setup-retry-model", perform: actions.retrySpeech)
+        case let .downloading(progress):
+            SetupDownloadMeter(fraction: progress.fraction, caption: ModelDownloadFormat.caption(progress), label: "Speech model download")
+                .accessibilityIdentifier("setup-speech-progress")
+        case .done:
+            SetupDownloadMeter(fraction: 1, caption: "Downloaded", label: "Speech model download")
+                .accessibilityIdentifier("setup-speech-progress")
+        case .preparing, .available:
+            ProgressView().controlSize(.small).accessibilityLabel("Preparing speech model")
         }
     }
 
@@ -252,15 +277,11 @@ struct SetupView: View {
         case .accessibility:
             action("Open System Settings…", identifier: "setup-accessibility", perform: actions.accessibility)
         case .speech:
-            if case .failed = model.engine.state {
-                action("Retry model", identifier: "setup-retry-model", perform: actions.retrySpeech)
-            } else {
-                ProgressView().controlSize(.small).accessibilityLabel("Preparing speech model")
-            }
+            speechControls
         case .shortcut:
-            action("Input settings…", identifier: "setup-input-settings", perform: actions.inputSettings)
+            action("Change shortcut…", identifier: "setup-input-settings", perform: actions.inputSettings)
         case .ready:
-            EmptyView()
+            SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel, cancel: model.cancelCleanupDownload)
         }
     }
 
@@ -278,6 +299,130 @@ struct SetupView: View {
     }
 }
 
+/// A determinate bar over a caption, in the sheet's own colours. The caption wraps rather than truncating.
+struct SetupDownloadMeter: View {
+    var fraction: Double
+    var caption: String
+    var label: String
+
+    var body: some View {
+        VStack(spacing: 6) {
+            SetupProgressBar(fraction: fraction)
+            Text(caption).font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.sideInk)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: 320)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(label)
+        .accessibilityValue("\(Int((min(max(fraction, 0), 1) * 100).rounded())) percent, \(caption)")
+    }
+}
+
+struct SetupProgressBar: View {
+    var fraction: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule().fill(DesignPalette.track)
+                    .overlay(Capsule().strokeBorder(DesignPalette.hair, lineWidth: 1))
+                Capsule().fill(DesignPalette.accent)
+                    .overlay(Capsule().strokeBorder(DesignPalette.accentMark, lineWidth: 1))
+                    .frame(width: max(proxy.size.width * min(max(fraction, 0), 1), fraction > 0 ? 6 : 0))
+            }
+        }
+        .frame(height: 6)
+        .animation(reduceMotion ? nil : .linear(duration: 0.25), value: fraction)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Fast and Thorough on the ready step, each with its own bar. They download in the background, so setup can close first.
+struct SetupCleanupModels: View {
+    var models: [CleanupModelStatus]
+    var download: (CleanupLevel) -> Void
+    var cancel: (CleanupLevel) -> Void
+
+    var body: some View {
+        if !models.isEmpty {
+            DesignSection(eyebrow: "Cleanup models") {
+                ForEach(models) { model in
+                    SetupCleanupRow(model: model, download: { download(model.level) }, cancel: { cancel(model.level) })
+                }
+            }
+            .multilineTextAlignment(.leading)
+            .accessibilityIdentifier("setup-cleanup-models")
+        }
+    }
+}
+
+struct SetupCleanupRow: View {
+    var model: CleanupModelStatus
+    var download: () -> Void
+    var cancel: () -> Void
+
+    private var size: String { ModelDownloadFormat.size(Int64(model.sizeMB) * 1_000_000) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .center, spacing: 12) {
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 6) {
+                        Text(model.level.title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
+                        if model.selected {
+                            Text("Selected").designEyebrow().foregroundStyle(DesignPalette.accentText)
+                        }
+                    }
+                    Text("\(model.name) · \(size)").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 8)
+                trailing
+            }
+            switch model.status {
+            case let .downloading(progress):
+                VStack(alignment: .leading, spacing: 4) {
+                    SetupProgressBar(fraction: progress.fraction)
+                    Text(ModelDownloadFormat.caption(progress)).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(model.level.title) cleanup model download")
+                .accessibilityValue("\(Int((progress.fraction * 100).rounded())) percent, \(ModelDownloadFormat.caption(progress))")
+            case let .failed(message):
+                Text(message).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.danger)
+                    .fixedSize(horizontal: false, vertical: true)
+            default:
+                EmptyView()
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 9)
+        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .accessibilityIdentifier("setup-cleanup-\(model.level.rawValue)")
+    }
+
+    @ViewBuilder private var trailing: some View {
+        switch model.status {
+        case .available:
+            Button("Download", action: download).buttonStyle(.designSecondary)
+                .accessibilityLabel("Download \(model.level.title) cleanup model, \(size)")
+        case .downloading:
+            Button("Cancel", action: cancel).buttonStyle(.designSecondary)
+                .accessibilityLabel("Cancel \(model.level.title) cleanup model download")
+                .accessibilityIdentifier("setup-cleanup-cancel-\(model.level.rawValue)")
+        case .preparing:
+            Text("Downloading").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+        case .done:
+            Label("Done", systemImage: "checkmark.circle.fill").font(DesignFont.sans(DesignFont.detail, .medium))
+                .foregroundStyle(DesignPalette.success)
+        case .failed:
+            Button("Retry", action: download).buttonStyle(.designSecondary)
+                .accessibilityLabel("Retry \(model.level.title) cleanup model download")
+        }
+    }
+}
+
 struct SetupStepDots: View {
     var dots: [SetupDot]
 
@@ -285,6 +430,7 @@ struct SetupStepDots: View {
         HStack(spacing: 6) {
             ForEach(Array(dots.enumerated()), id: \.offset) { _, dot in
                 Capsule().fill(fill(dot)).frame(width: dot == .active ? 18 : 5, height: 5)
+                    .overlay { if dot == .active { Capsule().strokeBorder(DesignPalette.accentMark, lineWidth: 1) } }
             }
         }
         .accessibilityHidden(true)
@@ -305,7 +451,8 @@ struct SetupLips: View {
 
     var body: some View {
         if let url = Bundle.module.url(forResource: "lips-36x22", withExtension: "png", subdirectory: "Settings"),
-           let sprite = NSImage(contentsOf: url) {
+            let sprite = NSImage(contentsOf: url)
+        {
             Image(nsImage: sprite).resizable().interpolation(.none).antialiased(false)
                 .frame(width: Self.size.width * Self.scale, height: Self.size.height * Self.scale)
                 .accessibilityHidden(true)
@@ -323,6 +470,7 @@ private struct SetupActionButtonStyle: ButtonStyle {
             .font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.onAccent)
             .padding(.horizontal, 18).frame(minHeight: 36)
             .background(shape.fill(DesignPalette.accent))
+            .overlay(shape.strokeBorder(DesignPalette.accentMark, lineWidth: 1))
             .overlay { if configuration.isPressed { shape.fill(Color.black.opacity(0.1)) } }
             .contentShape(shape)
             .opacity(isEnabled ? 1 : 0.45)

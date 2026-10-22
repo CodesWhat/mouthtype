@@ -29,8 +29,9 @@ import Testing
     private func shownStage(_ kind: PillSkinKind) throws -> (PillPreviewStage, NSWindow) {
         FontRegistry.registerBundledFonts()
         let size = NSSize(width: 480, height: 200)
-        let host = NSHostingView(rootView: PillPreviewStageView(kind: kind, size: .standard, readout: .amber, wallpaper: .dark)
-            .frame(width: size.width, height: size.height))
+        let host = NSHostingView(
+            rootView: PillPreviewStageView(kind: kind, size: .standard, readout: .amber, wallpaper: .dark)
+                .frame(width: size.width, height: size.height))
         let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 200, y: 200), size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
@@ -55,20 +56,20 @@ import Testing
     @Test(arguments: PillSkinKind.allCases)
     func everySkinReachesRecordingWidthAndKeepsDrivingInARealWindow(kind: PillSkinKind) throws {
         try onscreen {
-                let (stage, window) = try shownStage(kind)
-                defer { stage.shutDown(); window.orderOut(nil); window.close() }
-                #expect(window.isVisible, "\(kind) window visible")
-                #expect(stage.isAnimating, "\(kind) link running")
-                #expect(!stage.showsSnapshot, "\(kind) shows the live skin")
-                let skin = try #require(stage.skin)
-                spin(0.5)
-                if let width = bodyWidth(skin) {
-                    #expect(width > dotWidth(kind, .standard) + 1, "\(kind) at recording width, not the dot (\(width))")
-                }
-                let before = stage.framesDriven
-                spin(0.5)
-                #expect(stage.framesDriven > before, "\(kind) frames driven")
-                #expect(skin.layer?.speed == 1, "\(kind) layers running")
+            let (stage, window) = try shownStage(kind)
+            defer { stage.shutDown(); window.orderOut(nil); window.close() }
+            #expect(window.isVisible, "\(kind) window visible")
+            #expect(stage.isAnimating, "\(kind) link running")
+            #expect(!stage.showsSnapshot, "\(kind) shows the live skin")
+            let skin = try #require(stage.skin)
+            spin(0.5)
+            if let width = bodyWidth(skin) {
+                #expect(width > dotWidth(kind, .standard) + 1, "\(kind) at recording width, not the dot (\(width))")
+            }
+            let before = stage.framesDriven
+            spin(0.5)
+            #expect(stage.framesDriven > before, "\(kind) frames driven")
+            #expect(skin.layer?.speed == 1, "\(kind) layers running")
         }
     }
 

@@ -58,8 +58,9 @@ import MouthtypeCore
         model.setRecordingMode(.toggle)
         for page in [SettingsPage.home, .style, .appearance] {
             model.page = page
-            let bitmap = try SettingsRender.render(model: model, actions: actions, dark: false,
-                                                   size: SettingsTheme.minimumSize)
+            let bitmap = try SettingsRender.render(
+                model: model, actions: actions, dark: false,
+                size: SettingsTheme.minimumSize)
             #expect(bitmap.pixelsWide >= 860 && bitmap.pixelsHigh >= 600)
             try SettingsRender.save(bitmap, name: "settings-\(page.rawValue)-minimum")
         }

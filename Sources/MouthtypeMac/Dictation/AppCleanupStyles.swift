@@ -88,8 +88,9 @@ struct AppCleanupStyles: Equatable, Sendable {
             guard document.version == 1 else { throw ValidationError.invalidPreferences }
             var result = AppCleanupStyles()
             for entry in document.entries {
-                let (style, level) = try Self.decode(capitalisation: entry.capitalisation, ending: entry.endingPunctuation,
-                                                     level: entry.cleanupLevel)
+                let (style, level) = try Self.decode(
+                    capitalisation: entry.capitalisation, ending: entry.endingPunctuation,
+                    level: entry.cleanupLevel)
                 let bundleID = entry.bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !result.entries.contains(where: { $0.bundleID == bundleID }) else {
                     throw ValidationError.invalidPreferences
@@ -97,8 +98,9 @@ struct AppCleanupStyles: Equatable, Sendable {
                 try result.set(bundleID: bundleID, appName: entry.appName, style: style, level: level)
             }
             for entry in document.websites ?? [] {
-                let (style, level) = try Self.decode(capitalisation: entry.capitalisation, ending: entry.endingPunctuation,
-                                                     level: entry.cleanupLevel)
+                let (style, level) = try Self.decode(
+                    capitalisation: entry.capitalisation, ending: entry.endingPunctuation,
+                    level: entry.cleanupLevel)
                 guard !result.websites.contains(where: { $0.domain == Self.normalizedDomain(entry.domain) }) else {
                     throw ValidationError.invalidPreferences
                 }
@@ -112,13 +114,17 @@ struct AppCleanupStyles: Equatable, Sendable {
     }
 
     func save(to defaults: UserDefaults = .standard) throws {
-        let document = Document(entries: entries.map {
-            Record(bundleID: $0.bundleID, appName: $0.appName, capitalisation: $0.style?.capitalisation.rawValue,
-                   endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue)
-        }, websites: websites.map {
-            WebsiteRecord(domain: $0.domain, capitalisation: $0.style?.capitalisation.rawValue,
-                          endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue)
-        })
+        let document = Document(
+            entries: entries.map {
+                Record(
+                    bundleID: $0.bundleID, appName: $0.appName, capitalisation: $0.style?.capitalisation.rawValue,
+                    endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue)
+            },
+            websites: websites.map {
+                WebsiteRecord(
+                    domain: $0.domain, capitalisation: $0.style?.capitalisation.rawValue,
+                    endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue)
+            })
         defaults.set(try JSONEncoder().encode(document), forKey: Self.preferenceKey)
         try contexts.save(to: defaults)
     }
@@ -127,9 +133,11 @@ struct AppCleanupStyles: Equatable, Sendable {
     mutating func set(bundleID: String, appName: String, style: StyleOptions?, level: CleanupLevel? = nil) throws {
         let bundleID = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
-        guard !bundleID.isEmpty, bundleID.split(separator: ".", omittingEmptySubsequences: false).allSatisfy({
-            !$0.isEmpty && $0.unicodeScalars.allSatisfy(allowed.contains)
-        }) else { throw ValidationError.invalidBundleID }
+        guard !bundleID.isEmpty,
+            bundleID.split(separator: ".", omittingEmptySubsequences: false).allSatisfy({
+                !$0.isEmpty && $0.unicodeScalars.allSatisfy(allowed.contains)
+            })
+        else { throw ValidationError.invalidBundleID }
         let appName = appName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !appName.isEmpty else { throw ValidationError.missingAppName }
         guard style != nil || level != nil else { remove(bundleID: bundleID); return }
@@ -154,9 +162,11 @@ struct AppCleanupStyles: Equatable, Sendable {
         if domain.hasSuffix(".") { domain.removeLast() }
         let labels = domain.split(separator: ".", omittingEmptySubsequences: false)
         let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
-        guard domain.utf8.count <= 253, labels.count >= 2, labels.allSatisfy({
-            !$0.isEmpty && $0.utf8.count <= 63 && $0.first != "-" && $0.last != "-" && $0.allSatisfy(allowed.contains)
-        }) else { return nil }
+        guard domain.utf8.count <= 253, labels.count >= 2,
+            labels.allSatisfy({
+                !$0.isEmpty && $0.utf8.count <= 63 && $0.first != "-" && $0.last != "-" && $0.allSatisfy(allowed.contains)
+            })
+        else { return nil }
         return domain
     }
 

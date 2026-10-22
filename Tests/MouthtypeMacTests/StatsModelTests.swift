@@ -13,8 +13,9 @@ import Testing
 
     @discardableResult
     private func dictate(_ store: TranscriptStore, minutes: Double, text: String, secure: Bool = false) throws -> String {
-        let id = try store.begin(DictationStart(
-            startedAt: base.addingTimeInterval(-minutes * 60), target: DictationTarget(isSecure: secure ? true : nil)))
+        let id = try store.begin(
+            DictationStart(
+                startedAt: base.addingTimeInterval(-minutes * 60), target: DictationTarget(isSecure: secure ? true : nil)))
         try store.recordInsertion(id, InsertionRecord(finalText: text))
         return id
     }
@@ -112,7 +113,11 @@ import Testing
         init(_ date: Date) { self.date = date }
         var current: Date { lock.withLock { date } }
         func advance(to new: Date) { lock.withLock { date = new } }
-        func record(_ d: Duration) -> Int { lock.withLock { sleeps.append(d); return sleeps.count } }
+        func record(_ d: Duration) -> Int {
+            lock.withLock {
+                sleeps.append(d); return sleeps.count
+            }
+        }
     }
 
     @Test func numbersRollOverAtMidnightWithTheInjectedClock() async throws {

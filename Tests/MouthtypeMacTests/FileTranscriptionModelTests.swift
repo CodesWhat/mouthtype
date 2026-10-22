@@ -70,7 +70,10 @@ private struct ImportEngine: Transcriber {
     }
     @Test func busyAppDoesNotCreateJobAndEmptySpeechIsTruthful() async {
         var jobs = 0
-        let blocked = FileTranscriptionModel(makeJob: { jobs += 1; throw AudioFileError.busy }, canBegin: { false }, copy: { _ in })
+        let blocked = FileTranscriptionModel(
+            makeJob: {
+                jobs += 1; throw AudioFileError.busy
+            }, canBegin: { false }, copy: { _ in })
         blocked.start(URL(fileURLWithPath: "/audio.wav"))
         #expect(jobs == 0)
         #expect(blocked.state == .failed)
@@ -90,7 +93,8 @@ private struct ImportEngine: Transcriber {
         let alias = root.appendingPathComponent("alias.txt")
         try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: source)
         var activityChanges = 0
-        let model = FileTranscriptionModel(makeJob: { AudioFileTranscription(decoder: ImportDecoder(), engine: ImportEngine(gate: nil)) },
+        let model = FileTranscriptionModel(
+            makeJob: { AudioFileTranscription(decoder: ImportDecoder(), engine: ImportEngine(gate: nil)) },
             activityChanged: { activityChanges += 1 }, copy: { _ in })
         model.start(source)
         await settled(model)

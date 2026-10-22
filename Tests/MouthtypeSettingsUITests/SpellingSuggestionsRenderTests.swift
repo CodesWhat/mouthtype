@@ -17,9 +17,11 @@ import MouthtypeCore
         let base = Date(timeIntervalSince1970: 1_791_806_400)
         func dictate(_ n: Int, _ raw: String, final: String? = nil) throws {
             let id = try store.begin(DictationStart(startedAt: base.addingTimeInterval(Double(n) * 60), target: DictationTarget(appName: "Notes")))
-            try store.recordTranscription(id, TranscriptionRecord(
-                transcription: Transcription(text: raw, words: [], confidence: 0.9, processingSeconds: 0.1, engineID: "test", modelRevision: "1"),
-                rawText: raw, boostTerms: ["Siobhan"]))
+            try store.recordTranscription(
+                id,
+                TranscriptionRecord(
+                    transcription: Transcription(text: raw, words: [], confidence: 0.9, processingSeconds: 0.1, engineID: "test", modelRevision: "1"),
+                    rawText: raw, boostTerms: ["Siobhan"]))
             try store.recordInsertion(id, InsertionRecord(finalText: final ?? raw))
         }
         try dictate(1, "Shaban took a minute to reply")
@@ -31,8 +33,9 @@ import MouthtypeCore
         try dictate(7, "i hope we win the contract")
         for n in 10..<14 { try dictate(n, "we shipped build \(n) after lunch") }
 
-        let suggestions = SpellingSuggestionsModel(vocabulary: vocabulary, store: store,
-                                                   dismissedURL: dir.appendingPathComponent("dismissed-suggestions.json"))
+        let suggestions = SpellingSuggestionsModel(
+            vocabulary: vocabulary, store: store,
+            dismissedURL: dir.appendingPathComponent("dismissed-suggestions.json"))
         await suggestions.reload()
         #expect(suggestions.suggestions.count >= 3)
         FontRegistry.registerBundledFonts()

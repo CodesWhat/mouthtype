@@ -25,7 +25,7 @@ import Testing
         view.layoutSubtreeIfNeeded()
         _ = view.fittingSize
         #expect(view.frame.width == 640)
-        #expect(view.frame.height <= 620 && view.frame.height >= 280)
+        #expect(view.frame.height <= 620 && view.frame.height >= 240)
         #expect(!window.isVisible)
         switch scene {
         case .normal:

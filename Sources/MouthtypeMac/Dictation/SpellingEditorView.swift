@@ -76,10 +76,16 @@ struct SpellingEditorView: View {
             .padding(.horizontal, 10).frame(height: 32)
             .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.surface))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignPalette.hair, lineWidth: 1))
-            Button { chooseCSV() } label: { Text("Import CSV…").frame(minHeight: 32) }
-                .buttonStyle(.designSecondary).disabled(editor.isDirty || editor.loadFailed)
-                .accessibilityLabel("Import CSV").accessibilityIdentifier("spelling-import-csv")
-            Button { editor.newSpelling() } label: {
+            Button {
+                chooseCSV()
+            } label: {
+                Text("Import CSV…").frame(minHeight: 32)
+            }
+            .buttonStyle(.designSecondary).disabled(editor.isDirty || editor.loadFailed)
+            .accessibilityLabel("Import CSV").accessibilityIdentifier("spelling-import-csv")
+            Button {
+                editor.newSpelling()
+            } label: {
                 Label("New word", systemImage: "plus").frame(minHeight: 32)
             }
             .buttonStyle(.designPrimary).disabled(editor.isDirty || editor.loadFailed)
@@ -105,7 +111,9 @@ struct SpellingEditorView: View {
 
     private func wordRow(_ word: SpellingWord) -> some View {
         HStack(alignment: .center, spacing: 12) {
-            Button { editor.toggleStar(word) } label: {
+            Button {
+                editor.toggleStar(word)
+            } label: {
                 Image(systemName: word.starred ? "star.fill" : "star").font(.system(size: 13))
                     .foregroundStyle(word.starred ? DesignPalette.orange : DesignPalette.hair)
                     .frame(width: 24, height: 24).contentShape(Rectangle())
@@ -113,7 +121,9 @@ struct SpellingEditorView: View {
             .buttonStyle(.plain).disabled(editor.isDirty || editor.loadFailed)
             .accessibilityLabel(word.starred ? "Favoured while recognising: \(word.written)" : "Favour \(word.written) while recognising")
             .accessibilityAddTraits(word.starred ? .isSelected : [])
-            Button { editor.select(word) } label: {
+            Button {
+                editor.select(word)
+            } label: {
                 HStack(alignment: .center, spacing: 12) {
                     Text(word.written).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
                         .fixedSize(horizontal: false, vertical: true).frame(width: 160, alignment: .leading)
@@ -146,7 +156,7 @@ struct SpellingEditorView: View {
             editor.previewImport(fileURL: url)
         }
         // A sheet blocks the window, so the page can't change while the picker is open.
-        if let window = NSApp.keyWindow ?? NSApp.mainWindow {
+        if let window = SettingsNSWindow.existing {
             panel.beginSheetModal(for: window, completionHandler: handle)
         } else {
             panel.begin(completionHandler: handle)
@@ -176,7 +186,8 @@ struct HeardFlow: Layout {
     func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
         let layout = arrange(width: bounds.width, subviews: subviews)
         for (index, origin) in layout.origins.enumerated() {
-            subviews[index].place(at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+            subviews[index].place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
                 proposal: ProposedViewSize(width: layout.sizes[index].width, height: layout.sizes[index].height))
         }
     }
@@ -232,7 +243,9 @@ struct SpellingWordSheet: View {
                     ForEach(editor.heardForms, id: \.self) { form in
                         HStack(spacing: 4) {
                             Text(form).font(DesignFont.mono(11)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
-                            Button { editor.removeHeardForm(form) } label: {
+                            Button {
+                                editor.removeHeardForm(form)
+                            } label: {
                                 Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
                                     .frame(width: 18, height: 18).contentShape(Rectangle())
                             }.buttonStyle(.plain).accessibilityLabel("Remove \(form)")
@@ -276,7 +289,9 @@ struct SpellingWordSheet: View {
                 }
                 Spacer(minLength: 8)
                 Button("Cancel") { editor.cancel() }.buttonStyle(.designSecondary).keyboardShortcut(.cancelAction)
-                Button("Save") { editor.commitHeardInput(); editor.save() }.buttonStyle(.designPrimary)
+                Button("Save") {
+                    editor.commitHeardInput(); editor.save()
+                }.buttonStyle(.designPrimary)
                     .keyboardShortcut(.return, modifiers: .command).disabled(!editor.canSave)
                     .accessibilityLabel("Save spelling").accessibilityIdentifier("spelling-save")
             }
@@ -286,7 +301,9 @@ struct SpellingWordSheet: View {
         .onAppear { focus = .written }
         .confirmationDialog("Delete this spelling?", isPresented: $confirmDelete, titleVisibility: .visible) {
             Button("Delete Spelling", role: .destructive) { editor.delete() }
-        } message: { Text("Your other saved spellings will stay in the library.") }
+        } message: {
+            Text("Your other saved spellings will stay in the library.")
+        }
     }
 
     @ViewBuilder private var messages: some View {

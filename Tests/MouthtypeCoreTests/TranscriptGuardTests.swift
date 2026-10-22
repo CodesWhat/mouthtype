@@ -52,9 +52,11 @@ import Testing
     // MARK: Start cue
 
     @Test func cueSoundBeforeAGapIsDropped() {
-        let out = guarded("Tink. Send the notes", [
-            ("Tink.", 0.05, 0.2, 0.3), ("Send", 0.9, 1.1, 0.95), ("the", 1.1, 1.2, 0.9), ("notes", 1.2, 1.5, 0.9),
-        ])
+        let out = guarded(
+            "Tink. Send the notes",
+            [
+                ("Tink.", 0.05, 0.2, 0.3), ("Send", 0.9, 1.1, 0.95), ("the", 1.1, 1.2, 0.9), ("notes", 1.2, 1.5, 0.9),
+            ])
         #expect(out.text == "Send the notes")
         #expect(out.edits == [EditOp(stage: "filler", kind: .delete, fromText: "Tink.", toText: nil, wordDelta: -1, position: 0)])
     }

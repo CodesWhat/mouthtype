@@ -12,18 +12,18 @@ public struct RecordingDecisionEngine {
     /// This is applied regardless of user's minimumKeyTime setting.
     /// See `GestureConstants.modifierOnlyMinimumDuration` for rationale.
     public static let modifierOnlyMinimumDuration: TimeInterval = GestureConstants.modifierOnlyMinimumDuration
-    
+
     /// Context information needed to make a recording decision.
     public struct Context: Equatable, Sendable {
         /// The hotkey configuration that triggered this recording
         public var hotkey: HotKey
-        
+
         /// User's configured minimum key time preference
         public var minimumKeyTime: TimeInterval
-        
+
         /// When recording started (nil if no recording)
         public var recordingStartTime: Date?
-        
+
         /// Current timestamp
         public var currentTime: Date
 
@@ -44,7 +44,7 @@ public struct RecordingDecisionEngine {
     public enum Decision: Equatable, Sendable {
         /// Recording was too short or accidental - discard silently
         case discardShortRecording
-        
+
         /// Recording meets minimum requirements - proceed with transcription
         case proceedToTranscription
     }
@@ -66,13 +66,14 @@ public struct RecordingDecisionEngine {
     public static func decide(_ context: Context) -> Decision {
         let elapsed = context.recordingStartTime.map { context.currentTime.timeIntervalSince($0) } ?? 0
         let includesPrintableKey = context.hotkey.key != nil
-        
+
         // For modifier-only hotkeys, use the higher of minimumKeyTime or modifierOnlyMinimumDuration
         // to prevent conflicts with system shortcuts
-        let effectiveMinimum = includesPrintableKey 
-            ? context.minimumKeyTime 
+        let effectiveMinimum =
+            includesPrintableKey
+            ? context.minimumKeyTime
             : max(context.minimumKeyTime, modifierOnlyMinimumDuration)
-        
+
         let durationIsLongEnough = elapsed >= effectiveMinimum
         return (durationIsLongEnough || includesPrintableKey) ? .proceedToTranscription : .discardShortRecording
     }

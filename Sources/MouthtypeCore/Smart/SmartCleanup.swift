@@ -83,16 +83,29 @@ public actor SmartCleanup {
     public static let minWords = 2
     public static let maxWords = 400
     public static let budgetBase = Duration.milliseconds(400)
-    public static let budgetPerWord = Duration.milliseconds(12)
-    public static let budgetCap = Duration.milliseconds(2500)
+    public static let budgetPerWord = Duration.milliseconds(16)
+    public static let budgetCap = Duration.seconds(5)
+    public static let qualityBase = Duration.milliseconds(1200)
+    public static let qualityPerWord = Duration.milliseconds(45)
+    public static let qualityCap = Duration.seconds(16)
 
-    /// 400 ms plus 12 ms a word, at most 2.5 s.
+    /// 400 ms plus 16 ms a word, at most 5 s. The native model decodes about 8 ms a word on a quiet machine, so this
+    /// leaves room for a loaded one. A take that finishes early returns early; the budget only bounds a stall.
     public static func defaultBudget(words: Int) -> Duration {
         min(budgetBase + budgetPerWord * words, budgetCap)
     }
 
+    /// 1.2 s plus 45 ms a word, at most 16 s. Gemma decodes about 14 ms a token (roughly 20 ms a word) with the shared
+    /// prompt prefix cached, so N words need about 20 ms times N when quiet and two to three times that when busy.
     public static func qualityBudget(words: Int) -> Duration {
-        min(.milliseconds(1200) + .milliseconds(30) * words, .seconds(12))
+        min(qualityBase + qualityPerWord * words, qualityCap)
+    }
+
+    /// The whole take's allowance when it runs `passes` generations one after another (a correction pass, then the
+    /// cleanup pass). Each generation gets the full single-pass budget, so a take with a correction pass never has
+    /// less time per generation than one without. The total tops out at `passes` times the cap.
+    public static func qualityAllowance(words: Int, passes: Int) -> Duration {
+        qualityBudget(words: words) * max(passes, 1)
     }
 
     /// Native cleanup preserves the spoken register; casing and punctuation are applied afterward.
@@ -165,7 +178,11 @@ public actor SmartCleanup {
             do { return .success(try await cleaner.clean(text, context: CleanupContext(transform: kind))) } catch { return .failure(error) }
         }
         transforming = work
-        let outcome = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+        let outcome = await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
         if transforming == work { transforming = nil }
         return try outcome.get()
     }
@@ -193,17 +210,23 @@ public actor SmartCleanup {
         }
         guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
 
-        let context = CleanupContext(vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
+        let context = CleanupContext(
+            vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
             level: request.level, before: request.context?.before, after: request.context?.after,
             omitProfanity: request.style == .formal)
-        let joining = NameJoining.candidates(in: request.text,
+        let joining = NameJoining.candidates(
+            in: request.text,
             spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
         let text = CorrectionCommas.apply(request.text)
-        let settleCorrections = !cleaner.usesNativeControls && text.range(
-            of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
-            options: [.regularExpression, .caseInsensitive]) != nil
-        let allowance = customBudget || cleaner.usesNativeControls ? budget(words)
-            : min(budget(words) * (settleCorrections ? 2 : 1), .seconds(12))
+        let settleCorrections =
+            !cleaner.usesNativeControls
+            && text.range(
+                of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
+                options: [.regularExpression, .caseInsensitive]) != nil
+        let allowance =
+            customBudget || cleaner.usesNativeControls
+            ? budget(words)
+            : Self.qualityAllowance(words: words, passes: settleCorrections ? 2 : 1)
         let deadline = start + allowance
         // A generation that outlived its own timeout still holds the model; wait for it, within this budget.
         while true {
@@ -219,7 +242,8 @@ public actor SmartCleanup {
         }
 
         guard !modelPaused else { return finish(.skipped) }
-        let passes = cleaner.usesNativeControls
+        let passes =
+            cleaner.usesNativeControls
             ? Self.passes(level: request.level, style: request.style, destination: request.destination)
             : [S1MiniControls.benchmark]
         let cleaner = cleaner
@@ -233,7 +257,7 @@ public actor SmartCleanup {
                 var resolvedInput: String?
                 if settleCorrections {
                     try Task.checkCancellation()
-                    output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: correctionContext))
+                    output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: correctionContext), input: guardInput)
                     resolvedInput = output
                     if output.isEmpty { return .success(Draft(text: output, guardInput: guardInput, resolvedInput: resolvedInput, ordinary: ordinary)) }
                 }
@@ -241,7 +265,7 @@ public actor SmartCleanup {
                     try Task.checkCancellation()
                     var passContext = context
                     passContext.s1Controls = controls
-                    output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: passContext))
+                    output = CleanupPrompt.sanitize(try await cleaner.clean(output, context: passContext), input: guardInput)
                     if output.isEmpty { break }
                 }
                 return .success(Draft(text: output, guardInput: guardInput, resolvedInput: resolvedInput, ordinary: ordinary))
@@ -250,7 +274,8 @@ public actor SmartCleanup {
             }
         }
         current = work
-        var description = cleaner.usesNativeControls
+        var description =
+            cleaner.usesNativeControls
             ? ([S1MiniPrompt.system] + passes.map(\.line)).joined(separator: "\n")
             : CleanupPrompt.system(for: context) + CleanupPrompt.reference(context)
         if settleCorrections { description = CleanupPrompt.system(for: correctionContext) + "\n" + description }
@@ -266,14 +291,20 @@ public actor SmartCleanup {
         case let .failure(error):
             return finish(.failed, rejection: String(describing: error), sha: sha)
         case let .success(draft):
-            let model = SmartCleanupGuard.restoringTerminal(input: request.text, output: CleanupPrompt.sanitize(draft.text))
-            if SmartCleanupGuard.copiesSurroundingText(input: request.text, output: model,
-                references: [context.before, context.after].compactMap { $0 }) {
+            let model = SmartCleanupGuard.restoringMeridiem(
+                input: request.text,
+                output: SmartCleanupGuard.restoringTerminal(
+                    input: request.text, output: CleanupPrompt.sanitize(draft.text, input: request.text)))
+            if SmartCleanupGuard.copiesSurroundingText(
+                input: request.text, output: model,
+                references: [context.before, context.after].compactMap { $0 })
+            {
                 return finish(.guardRejected, rejection: "surrounding text copied into output", sha: sha)
             }
             let restoredNames = NameJoining.candidates(in: model, spellings: approved.map(\.written))
                 .filter { NameJoining.isProjectReference($0, in: model) }
-            let post = Self.reapply(NameJoining.applying(restoredNames, to: model), request: request,
+            let post = Self.reapply(
+                NameJoining.applying(restoredNames, to: model), request: request,
                 deferredNames: Set(joining.map(\.written)))
             guard NameJoining.preservesOrdinary(draft.ordinary, in: post.text) else {
                 return finish(.guardRejected, rejection: "ordinary words changed into a name", sha: sha)
@@ -295,9 +326,10 @@ public actor SmartCleanup {
             whitespace: true, style: request.style
         )
         let rules = request.dictionary.filter { !$0.isJoinedSpelling || !deferredNames.contains($0.written) }
-        return TextPipeline().run(TextPipelineInput(
-            text: text, dictionary: rules, context: request.context, options: options,
-            protectedPhrases: request.protectedPhrases + request.dictionary.map(\.heard)))
+        return TextPipeline().run(
+            TextPipelineInput(
+                text: text, dictionary: rules, context: request.context, options: options,
+                protectedPhrases: request.protectedPhrases + request.dictionary.map(\.heard)))
     }
 
     /// Whether `task` finished before `deadline`. The watcher on the task is not a child of this call, so a task
