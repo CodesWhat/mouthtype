@@ -36,12 +36,14 @@ public struct SmartCleanupRequest: Sendable {
     public var protectedPhrases: [String]
     /// The language of the take. Nil means English.
     public var language: DictationLanguage?
+    /// Names read from the focused field and window for this take, offered to name joining beside the nearby spellings.
+    public var contextNames: [String]
 
     public init(
         text: String, level: CleanupLevel, style: StyleOptions = .formal,
         destination: S1MiniControls.Destination = .general, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
         context: InsertionContext? = nil, appName: String? = nil, protectedPhrases: [String] = [],
-        language: DictationLanguage? = nil
+        language: DictationLanguage? = nil, contextNames: [String] = []
     ) {
         self.text = text
         self.level = level
@@ -53,6 +55,7 @@ public struct SmartCleanupRequest: Sendable {
         self.appName = appName
         self.protectedPhrases = protectedPhrases
         self.language = language
+        self.contextNames = contextNames
     }
 }
 
@@ -238,7 +241,7 @@ public actor SmartCleanup {
             language == nil
             ? NameJoining.candidates(
                 in: request.text,
-                spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
+                spellings: CleanupPrompt.nearbySpellings(context) + request.contextNames + request.dictionary.map(\.written))
             : []
         let text = language == nil ? CorrectionCommas.apply(request.text) : request.text
         let settleCorrections =

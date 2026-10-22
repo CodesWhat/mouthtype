@@ -30,6 +30,21 @@ enum EditorAccessibility {
         return context(from: AccessibilityTextSource(ref: ref, deadline: deadline))
     }
 
+    /// Characters read around the cursor when looking for names: 2000 in all. Held for one gather, never stored or logged.
+    static let namesBefore = 1500
+    static let namesAfter = 500
+
+    /// A wider window than `cursorContext`, for names in any app's text field. Nil for a secure field, under secure
+    /// input, in a terminal, or when the app won't answer a range read. Never reads the whole value.
+    static func namesContext(focus: FocusSnapshot, deadline: ContinuousClock.Instant) -> InsertionContext? {
+        guard let ref = readableElement(of: focus),
+            !isTerminalLabel(copy(ref, kAXDescriptionAttribute, deadline) as? String),
+            !isTerminalLabel(copy(ref, kAXTitleAttribute, deadline) as? String)
+        else { return nil }
+        return context(
+            from: AccessibilityTextSource(ref: ref, deadline: deadline), contextBefore: namesBefore, contextAfter: namesAfter)
+    }
+
     /// The window's open file, for Xcode.
     static func documentURL(focus: FocusSnapshot, deadline: ContinuousClock.Instant) -> URL? {
         guard let ref = readableElement(of: focus),
@@ -50,7 +65,10 @@ enum EditorAccessibility {
     }
 
     /// The cursor window from bounded reads only. A field that won't answer a range read gives nothing.
-    static func context(from source: some BoundedTextSource) -> InsertionContext? {
+    static func context(
+        from source: some BoundedTextSource, contextBefore: Int = EditorAccessibility.contextBefore,
+        contextAfter: Int = EditorAccessibility.contextAfter
+    ) -> InsertionContext? {
         guard let range = source.selection() else { return nil }
         let count = source.length()
         if range.location == 0 {
