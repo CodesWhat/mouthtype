@@ -17,3 +17,13 @@ The image installs with `tsflags=nocaps` because the NAS engine's storage can't 
 ## Portal probe
 
 `probe.Dockerfile` layers `portal.py` and `portal_probe.py` onto this image so `run.sh` fills `probe.json` with the real probe (interface versions, Registry, shortcut bind and Activated/Deactivated timing). Build it with `tools/linux-desktop` as the context. The shortcut bind still times out on the consent dialog (no plasmashell in the image), so no Activated/Deactivated timing yet.
+
+## Acceptance
+
+`acceptance.Dockerfile` and `acceptance.sh` layer the daemon sources on this image and run `acceptance.py kde-portal` (item A2a): a take started through the daemon's `toggle` command (fake capture and engine, real portal delivery), pasted into a GTK target exactly once, clipboard restored, and a password field refused when AT-SPI reports focus under kwin. RemoteDesktop is pre-authorized by the permission store; GlobalShortcuts needs plasmashell and is not covered.
+
+```bash
+cd tools
+bash ~/scripts/nas-docker.sh build -f linux-desktop/testbed/kde/acceptance.Dockerfile -t ld-a2a-kde:test .
+bash ~/scripts/nas-docker.sh run --rm --name ld-a2a-run ld-a2a-kde:test
+```
