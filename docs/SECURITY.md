@@ -33,6 +33,62 @@ Workflow credentials have read access to the repository's code, checks, actions,
 
 Revisit the workflow's artifact retention and SARIF handling when the repository's visibility or plan changes. The reviewed development-branch release procedure remains the operating rule.
 
+## Assurance case
+
+This section ties Mouthtype's security requirements to its threat model, design principles and the evidence in this repository. It doesn't claim the app is safe against a compromised Mac. The implemented controls above and the remaining work below are the detail behind it.
+
+### Security requirements
+
+Mouthtype is meant to:
+
+- keep recordings and transcripts on the user's Mac, with no audio sent over the network;
+- deliver text only to the destination the user dictated into, and never into a secure field;
+- fetch only pinned speech and cleanup models, and install only updates signed with the project's Sparkle key;
+- request the narrowest macOS permissions that make dictation work; and
+- ship builds that are signed, notarized and traceable to a reviewed release.
+
+### Threat model and trust boundaries
+
+The user is the only legitimate principal. Relevant threats are a malicious or malformed audio file, a changed upstream model repository or dependency, a tampered update or release asset, text landing in the wrong app or a password field, and a stray secret or real recording committed to the public repo. A person or process already controlling the user's account is out of scope, since it can read the same data and use the same Accessibility grant.
+
+1. **Microphone to app.** macOS microphone permission, with the `com.apple.security.device.audio-input` entitlement in [Mouthtype.entitlements](../packaging/Mouthtype.entitlements). It's the only entitlement requested.
+2. **App to destination app.** Accessibility-based insertion in [Insertion](../Sources/MouthtypeMac/Insertion/). [Delivery.swift](../Sources/MouthtypeMac/Insertion/Delivery.swift) discards the transcript when the focused field is secure or unreadable under secure input, and the focus is rechecked at delivery.
+3. **Files and models to app.** Imported audio is bounded and treated as untrusted. Models come from Hugging Face at exact commits in [ModelPins](../Sources/MouthtypeCore/ModelPins.swift).
+4. **App to update server.** Sparkle fetches the feed over HTTPS. [Info.plist](../packaging/Info.plist) sets `SUPublicEDKey` and `SURequireSignedFeed`, and [AppUpdater](../Sources/MouthtypeMac/Updates/AppUpdater.swift) checks the configured feed URL.
+5. **Source to release.** Pull requests into the dev branch, Security CI, and the [release helpers](../scripts/package-release.py) that sign, notarize and verify.
+
+### Secure design principles applied
+
+- **Local first.** Transcription and the Fast and Thorough cleanup paths run on-device. The only network use in the app targets is model download and update checks. Neither carries audio or transcripts.
+- **Least privilege.** One entitlement, microphone input. Accessibility and input-monitoring access are requested for the features that need them and nothing else. [build-app.sh](../scripts/build-app.sh) signs with the hardened runtime. Editor hints are off by default and read only the minimum from supported editors.
+- **Fail safe.** When the destination changes, can't be verified or is secure, text isn't pasted. It's retained for recovery instead.
+- **Data minimization.** [Audio retention](AUDIO-RETENTION.md) caps completed audio by age and size. Editor hint file names stay in memory for one dictation.
+- **Supply-chain integrity.** Lockfiles, exact model commits, SHA-pinned Actions, signed and notarized releases, and a signed update feed.
+- **Open review.** Source is public under GPL-3.0, with a private reporting channel in [SECURITY.md](../SECURITY.md).
+
+### Countermeasures for common weakness classes
+
+| Weakness class | Countermeasure | Evidence |
+| --- | --- | --- |
+| Sensitive data exposure | No audio upload, bounded retention, editor hint names never persisted or logged, redacted secret scanning in CI. | [AUDIO-RETENTION.md](AUDIO-RETENTION.md), [EditorHintsTests](../Tests/MouthtypeMacTests/EditorHintsTests.swift), [security.yml](../.github/workflows/security.yml) |
+| Input into the wrong target | Focus snapshot recheck, secure-field refusal, recoverable retained text. | [Delivery.swift](../Sources/MouthtypeMac/Insertion/Delivery.swift), [TextInserterTests](../Tests/MouthtypeMacTests/TextInserterTests.swift) |
+| Untrusted input parsing | Single bounded file, original preserved, results need explicit Copy or Save. Git file listings are capped at a byte limit. | [FILE-TRANSCRIPTION.md](FILE-TRANSCRIPTION.md), [ProjectFiles.swift](../Sources/MouthtypeCore/ProjectFiles.swift) |
+| Tampered models or updates | Exact Hugging Face commit pins, bundled manifest check for offline cache adoption, EdDSA-signed feed required. | [ModelPins.swift](../Sources/MouthtypeCore/ModelPins.swift), [Info.plist](../packaging/Info.plist) |
+| Vulnerable dependencies | Lockfiles, weekly Dependabot, npm audit at high severity. | [dependabot.yml](../.github/dependabot.yml), [security.yml](../.github/workflows/security.yml) |
+| CI and workflow abuse | SHA-pinned Actions, non-persisted checkout credentials, explicit minimal permissions, actionlint and zizmor. | [workflows](../.github/workflows/) |
+| Release tampering | Developer ID signing, hardened runtime, notarization, versioned public staging. | [package-release.py](../scripts/package-release.py), [stage-public-release.py](../scripts/stage-public-release.py) |
+
+### Residual risks
+
+- Accessibility access is broad. A compromised Mac, or malware running as the user, can use it the same way Mouthtype does.
+- Text history, recordings and backups aren't encrypted, and text history has no expiry.
+- Swift dependency advisories and downloaded model files aren't covered by automated scanning, and model files aren't hash-checked beyond what each library does.
+- There's no hosted macOS CI lane, so Swift tests run by hand before release. No SBOM, provenance or reproducible-build claim is made.
+- Destination apps differ in how they handle Accessibility and paste, so a partial insertion can still need manual repair.
+- Developer benchmark modes can send input to a Claude CLI and must use synthetic data.
+
+These are tracked in the remaining work below.
+
 ## Remaining assurance work
 
 - [ ] Verify the first scheduled Dependabot processing and Scorecard report after the configuration reaches the default branch. Triage each error or finding, especially review, CI and protection detection.
@@ -44,4 +100,4 @@ Revisit the workflow's artifact retention and SARIF handling when the repository
 - [ ] Add dependency inventory/SBOM and build provenance only with exact source and artifact identity, then verify them. These aren't currently published guarantees.
 - [ ] Keep physical installation, updates, permissions, microphone routing and destination-app acceptance in the release checks. Static scanner results don't replace them.
 
-These are maintainer follow-ups, not claims that the repository has achieved a target Scorecard score or OpenSSF Best Practices certification. See [SECURITY.md](../SECURITY.md) for supported releases and sensitive reporting.
+These are maintainer follow-ups, not claims that the repository has achieved a target Scorecard score or an OpenSSF Best Practices level above passing. See [SECURITY.md](../SECURITY.md) for supported releases and sensitive reporting.
