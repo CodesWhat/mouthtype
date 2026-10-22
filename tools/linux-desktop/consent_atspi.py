@@ -16,6 +16,8 @@ AFFIRMATIVE = ('allow', 'share', 'accept', 'add', 'bind', 'confirm', 'ok', 'cont
 SWITCH_ROLES = ('switch', 'check box', 'toggle button')
 APPS = ('gnome-control-center-global-shortcuts-provider', 'org.gnome.Settings', 'gnome-control-center',
         'xdg-desktop-portal-gnome')
+# KDE shows the GlobalShortcuts bind dialog from the portal backend itself, a 'Global Shortcuts Requested' window with an OK button.
+KDE_APPS = ('xdg-desktop-portal-kde',)
 MAX_NODES = 4000
 MAX_DEPTH = 30
 

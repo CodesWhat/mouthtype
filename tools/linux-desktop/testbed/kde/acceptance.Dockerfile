@@ -5,6 +5,8 @@ FROM ${BASE}
 USER root
 COPY linux-desktop/ /opt/mouthtype/tools/linux-desktop/
 COPY linux-engine-proof/ /opt/mouthtype/tools/linux-engine-proof/
+COPY linux-qt/ /opt/mouthtype/tools/linux-qt/
+COPY omarchy-plugin/ /opt/mouthtype/tools/omarchy-plugin/
 COPY linux-desktop/share/app.mouthtype.Mouthtype.desktop /usr/share/applications/
 # GIO drops a .desktop whose Exec program is not on PATH, and the portal then has no app info for the id.
 RUN printf '#!/bin/sh\nexit 0\n' > /usr/bin/mouthtype-linux && chmod 0755 /usr/bin/mouthtype-linux
