@@ -54,8 +54,8 @@ class RegistryTests(unittest.TestCase):
         delivery = backends.make_delivery('hyprland', {}, run=lambda *a, **k: None)
         self.assertIsInstance(delivery, desktop.HyprlandDelivery)
 
-    def test_unimplemented_backend_falls_back_to_hyprland(self):
-        delivery = backends.make_delivery('portal', {}, run=lambda *a, **k: None)
+    def test_unregistered_backend_falls_back_to_hyprland(self):
+        delivery = backends.make_delivery('recover', {}, run=lambda *a, **k: None)
         self.assertIsInstance(delivery, desktop.HyprlandDelivery)
 
     def test_shortcuts_without_implementation_is_none(self):

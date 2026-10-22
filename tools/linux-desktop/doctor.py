@@ -40,9 +40,35 @@ def probe_llama_server(server, run=subprocess.run):
     return text.strip().splitlines()[0], names, ''
 
 
+def portal_registry(add, portal_factory=None):
+    """Register with the desktop portal the way the daemon does, so a missing desktop file shows up here and not as a
+    silent recover-only daemon. Read-only: Register changes nothing and no permission is requested."""
+    try:
+        import portal as portal_module
+    except ImportError:
+        add('portal', 'error', 'The portal client could not be imported.', 'Install python3-jeepney.')
+        return
+    portal = None
+    try:
+        portal = (portal_factory or portal_module.Portal)().connect()
+        portal.register()
+        add('portal', 'ok', 'Desktop portal answered and accepted the Mouthtype app id.')
+    except portal_module.AppInfoNotFound as error:
+        add('portal', 'error', 'The desktop portal does not know Mouthtype: Registry reported "App info not found".',
+            str(error))
+    except portal_module.PortalError as error:
+        add('portal', 'warning', 'The desktop portal could not be used: ' + str(error),
+            'Check that xdg-desktop-portal and your desktop portal backend are running (systemctl --user status xdg-desktop-portal).')
+    except ImportError as error:
+        add('portal', 'error', 'The portal client could not be imported: ' + str(error), 'Install python3-jeepney.')
+    finally:
+        if portal is not None:
+            portal.close()
+
+
 def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
              runtime_check=None, service_check=None, llama_probe=None, env=None, source_lookup=None,
-             mute_check=None):
+             mute_check=None, portal_factory=None):
     from desktop import validate_config, request
     from proof import verify_artifacts
     from spellings import load_spellings
@@ -85,9 +111,9 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
             return 'set by desktop.' + setting if chosen != 'auto' else 'auto for ' + desktop
         add('desktop', 'ok', 'Desktop: ' + desktop + '. Delivery backend: ' + delivery + ' (' + why(override['delivery'], 'delivery') +
             '). Shortcut backend: ' + shortcuts + ' (' + why(override['shortcuts'], 'shortcuts') + ').',
-            'Initial support is Hyprland; GNOME and KDE backends are still being built, so delivery falls back to the Hyprland path.'
-            if desktop in ('gnome', 'kde') else
             'X11 sessions are not supported; use a Wayland session.' if desktop == 'unknown' and (env or os.environ).get('XDG_SESSION_TYPE', '').lower() == 'x11' else '')
+        if 'portal' in (delivery, shortcuts):
+            portal_registry(add, portal_factory)
     capture = which('pw-record') is not None
     add('capture', 'ok' if capture else 'error', 'PipeWire capture helper is available.' if capture else 'pw-record is missing.',
         '' if capture else 'Install PipeWire audio tools using the normal distro package manager.')

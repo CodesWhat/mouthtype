@@ -21,6 +21,7 @@ import time
 import threading
 from pathlib import Path
 
+import backends
 import portal as portal_mod
 
 REMOTE_IFACE = 'org.freedesktop.portal.RemoteDesktop'
@@ -513,6 +514,15 @@ class PortalDelivery:
         self.targets = targets
         self.restore_thread = None
 
+    def close(self):
+        """Release the clipboard thread, the RemoteDesktop session and the portal connection."""
+        for part in (self.clipboard, self.remote, getattr(self, 'portal', None)):
+            if part is not None:
+                try:
+                    part.close()
+                except Exception:
+                    log.exception('closing portal delivery failed')
+
     def snapshot(self):
         if self.targets is not None:
             return self.targets.snapshot()
@@ -636,3 +646,56 @@ class PortalDelivery:
         thread = threading.Thread(target=restore, name='mouthtype-portal-restore', daemon=True)
         self.restore_thread = thread
         thread.start()
+
+
+class UnavailableRemote:
+    """Stands in for a RemoteDesktopSession when the portal can't be reached, so delivery stays recover-only."""
+    active = False
+    session = None
+    portal = None
+    status = 'unavailable'
+
+    def __init__(self, detail=''):
+        self.detail = detail
+
+    def check(self):
+        return self.status
+
+    def close(self):
+        pass
+
+
+def make_delivery(config, *, portal_factory=None, store_factory=None, session_factory=None, targets=None):
+    """The 'portal' delivery backend: a connected, registered Portal, a RemoteDesktop session from the stored grant
+    (never a prompt), the portal clipboard when the session is active, and AT-SPI for the focused target.
+
+    A missing jeepney, an unreachable bus or a missing grant leaves a PortalDelivery that answers recover_only."""
+    if targets is None:
+        import atspi_target
+        targets = atspi_target.AtspiTargets()
+        if not targets.available():
+            log.warning('AT-SPI is unavailable (python3-gi and gir1.2-atspi-2.0), so the focused window is unknown')
+    store = (store_factory or (lambda: GrantStore(grant_store_path())))()
+    portal = None
+    try:
+        portal = (portal_factory or portal_mod.Portal)().connect()
+        portal.register()
+        remote = (session_factory or RemoteDesktopSession)(portal, store)
+        status = remote.start(interactive=False)
+        clipboard = PortalClipboard(remote)
+        if status == 'active':
+            clipboard.start()
+        else:
+            log.warning('portal keyboard delivery is %s: %s. Run mouthtype-linux-setup --grant.', status, remote.detail)
+    except (portal_mod.PortalError, ImportError) as exc:
+        log.warning('portal delivery unavailable, recover-only: %s', exc)
+        if portal is not None:
+            portal.close()
+        remote = UnavailableRemote(str(exc))
+        clipboard = None
+    delivery = PortalDelivery(config, remote, clipboard, targets=targets)
+    delivery.portal = portal
+    return delivery
+
+
+backends.register_delivery('portal', make_delivery)

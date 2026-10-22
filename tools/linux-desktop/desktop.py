@@ -1030,6 +1030,7 @@ class HyprlandDelivery:
 
 
 backends.register_delivery('hyprland', HyprlandDelivery)
+import delivery_portal  # noqa: E402,F401  registers the 'portal' backend; jeepney and gi load only when it is built
 
 
 def stop_process(process, first=signal.SIGTERM):
@@ -2044,6 +2045,9 @@ def main(argv=None, *, cli_directory=None):
             finally:
                 try:
                     session.close()
+                    closer = getattr(session.delivery, 'close', None)
+                    if closer is not None:
+                        closer()
                 finally:
                     try:
                         engine.stop()
