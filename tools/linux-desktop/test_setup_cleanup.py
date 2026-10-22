@@ -116,6 +116,59 @@ class SlowHandler(BaseHTTPRequestHandler):
         pass
 
 
+class CancelTests(unittest.TestCase):
+    def test_flag_during_download_removes_partial_and_records_cancelled_without_an_engine(self):
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            weights = b'w' * 1000
+            pins = {'llama': {'revision': '6420cf5dd588c68e48657a0bbd82bb3bd5ac7209'},
+                    's1': {'source': 'https://example.invalid/s1', 'sha256': hashlib.sha256(weights).hexdigest(), 'bytes': 1000}}
+            server = root / 'llama-server'
+            server.write_text('#!/bin/sh\n')
+            server.chmod(0o755)
+            destination = root / 'cleanup'
+
+            def download(url, target, progress=None):
+                partial = target.with_suffix(target.suffix + '.part')
+                partial.write_bytes(b'w' * 300)
+                progress(300)
+                (destination / setup_cleanup.CANCEL_FLAG).write_text('')
+                deadline = time.monotonic() + 5
+                while time.monotonic() < deadline:
+                    progress(400)
+                    time.sleep(0.05)
+                raise AssertionError('cancel flag was never honored')
+
+            result = setup_cleanup.setup(destination, ['fast'], server=server, pins=pins, download_fn=download,
+                                         check_fn=lambda found: 'fake runtime')
+            self.assertIsNone(result)
+            self.assertEqual(json.loads((destination / 'cleanup-setup.json').read_text())['state'], 'cancelled')
+            self.assertEqual(list(destination.glob('*.part')), [])
+            self.assertFalse((destination / 'cleanup.json').exists())
+            self.assertFalse((destination / setup_cleanup.CANCEL_FLAG).exists())
+
+    @unittest.skipUnless(shutil.which('curl'), 'curl is needed for the local download fixture')
+    def test_real_download_stops_curl_and_removes_the_partial_when_cancelled(self):
+        server = ThreadingHTTPServer(('127.0.0.1', 0), SlowHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 5)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        with tempfile.TemporaryDirectory() as name:
+            root = Path(name)
+            calls = []
+
+            def progress(size):
+                calls.append(size)
+                if len(calls) >= 2:
+                    raise setup_cleanup.SetupCancelled()
+            with self.assertRaises(setup_cleanup.SetupCancelled):
+                setup_cleanup.download('http://127.0.0.1:%d/m' % server.server_port, root / 'm.gguf', seconds=30,
+                                       progress=progress)
+            self.assertEqual(list(root.glob('*.part')), [])
+
+
 class ProgressTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()

@@ -978,6 +978,18 @@ def cleanup_setup(level):
     return output
 
 
+def cleanup_cancel():
+    if not setup_running():
+        raise RuntimeError("Cleanup preparation is not running")
+    CLEANUP_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (CLEANUP_DIR / "cleanup-cancel").write_text("", encoding="utf-8")
+    time.sleep(0.5)
+    output = state()
+    output["page"] = "cleanup"
+    output["message"] = "Cancelling cleanup preparation"
+    return output
+
+
 def set_sounds(value):
     if value not in {"on", "off"}:
         raise RuntimeError("Unsupported sound setting")
@@ -1365,7 +1377,7 @@ VALID_ACTIONS = {
     "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
     "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
     "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
-    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup", "set-plugin"
+    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup", "cleanup-cancel", "set-plugin"
 ,
     "forget", "prune"
 }
@@ -1497,6 +1509,8 @@ def main():
             output = prune(sys.argv[2], sys.argv[3])
         elif action == "cleanup-setup":
             output = cleanup_setup(sys.argv[2])
+        elif action == "cleanup-cancel" and len(sys.argv) == 2:
+            output = cleanup_cancel()
         elif action == "set-plugin":
             output = set_plugin(sys.argv[2], sys.argv[3])
         elif action == "set-pill":

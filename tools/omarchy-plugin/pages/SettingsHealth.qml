@@ -36,10 +36,12 @@ Column {
     if (setup.state === "building") return "Building the pinned llama.cpp server…"
     if (setup.state === "downloading") return "Downloading and verifying the " + (setup.level || "") + " model…"
     if (setup.state === "preparing") return "Preparing…"
+    if (setup.state === "cancelled") return "Cancelled. Nothing was kept from the partial download."
     if (setup.state === "failed") return "Preparation failed (" + (setup.error || "error") + "). Check the cleanup setup log."
     return ""
   }
 
+  readonly property bool cancelled: !!setup && setup.state === "cancelled"
   readonly property bool sized: !!setup && setup.state === "downloading" && setup.bytes_total > 0
   readonly property real fraction: sized ? Math.min(1, Math.max(0, setup.bytes_done / setup.bytes_total)) : 0
 
@@ -100,13 +102,13 @@ Column {
         visible: root.models.fast !== "prepared"
         title: "Prepare Fast cleanup"
         detail: "About 480 MB."
-        DesignSecondaryButton { text: "Prepare…"; enabled: !root.setupActive; onActivated: root.host.run(["cleanup-setup", "fast"]) }
+        DesignSecondaryButton { text: root.cancelled ? "Retry" : "Prepare…"; enabled: !root.setupActive; onActivated: root.host.run(["cleanup-setup", "fast"]) }
       }
       DesignRow {
         visible: root.models.thorough !== "prepared"
         title: "Prepare Thorough cleanup"
         detail: "About 2.5 GB."
-        DesignSecondaryButton { text: "Prepare…"; enabled: !root.setupActive; onActivated: root.host.run(["cleanup-setup", "thorough"]) }
+        DesignSecondaryButton { text: root.cancelled ? "Retry" : "Prepare…"; enabled: !root.setupActive; onActivated: root.host.run(["cleanup-setup", "thorough"]) }
       }
     }
     Text {
@@ -117,6 +119,12 @@ Column {
       color: root.setup && root.setup.state === "failed" ? Theme.danger : Theme.ink2
       font: Type.sans(Type.caption)
       text: root.setupText()
+    }
+    DesignSecondaryButton {
+      objectName: "setupCancel"
+      visible: root.setupActive
+      text: "Cancel"
+      onActivated: root.host.run(["cleanup-cancel"])
     }
     DesignProgress {
       objectName: "setupProgress"
