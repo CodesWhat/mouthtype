@@ -57,7 +57,7 @@ class FakePortal:
 
 
 def args(**extra):
-    base = dict(driver='none', rounds=2, hold=0.0, bind_timeout=1.0, wait=0.2)
+    base = dict(driver='none', rounds=2, hold=0.0, bind_timeout=1.0, wait=0.2, consent='none')
     base.update(extra)
     return types.SimpleNamespace(**base)
 

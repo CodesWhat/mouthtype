@@ -36,7 +36,15 @@ dbus-update-activation-environment --systemd WAYLAND_DISPLAY=wayland-0 XDG_CURRE
   || dbus-update-activation-environment WAYLAND_DISPLAY=wayland-0 XDG_CURRENT_DESKTOP=GNOME
 sleep 3
 
+if [[ -n "${MOUTHTYPE_PROBE_MONITOR:-}" ]]; then
+  dbus-monitor --session > "$out/dbus.log" 2>&1 &
+  trap 'kill "$shell_pid" 2>/dev/null || true; kill $! 2>/dev/null || true' EXIT
+fi
+
 status=0
-python3 "$probe" --driver mutter > "$out/probe.json" || status=$?
+python3 "$probe" --driver ${MOUTHTYPE_PROBE_DRIVER:-mutter} --consent atspi > "$out/probe.json" || status=$?
 cat "$out/probe.json"
+if [[ -n "${MOUTHTYPE_PROBE_MONITOR:-}" ]]; then
+  grep -E -A14 'member=(GrabAccelerators|AcceleratorActivated|AcceleratorDeactivated)|member=(Activated|Deactivated);' "$out/dbus.log" | head -150 >&2 || true
+fi
 exit "$status"

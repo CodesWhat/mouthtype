@@ -1,0 +1,194 @@
+{
+  "app_id": "app.mouthtype.Mouthtype",
+  "desktop": "GNOME",
+  "driver": "mutter-keycode",
+  "interfaces": {
+    "ok": true,
+    "versions": {
+      "Clipboard": 1,
+      "GlobalShortcuts": 1,
+      "Registry": 1,
+      "RemoteDesktop": 2
+    }
+  },
+  "introspection": {
+    "desktop_path": {
+      "interfaces": [
+        "org.freedesktop.DBus.Introspectable",
+        "org.freedesktop.DBus.Peer",
+        "org.freedesktop.DBus.Properties",
+        "org.freedesktop.host.portal.Registry",
+        "org.freedesktop.portal.Account",
+        "org.freedesktop.portal.Background",
+        "org.freedesktop.portal.Camera",
+        "org.freedesktop.portal.Clipboard",
+        "org.freedesktop.portal.DynamicLauncher",
+        "org.freedesktop.portal.Email",
+        "org.freedesktop.portal.FileChooser",
+        "org.freedesktop.portal.GameMode",
+        "org.freedesktop.portal.GlobalShortcuts",
+        "org.freedesktop.portal.Inhibit",
+        "org.freedesktop.portal.InputCapture",
+        "org.freedesktop.portal.Location",
+        "org.freedesktop.portal.MemoryMonitor",
+        "org.freedesktop.portal.NetworkMonitor",
+        "org.freedesktop.portal.Notification",
+        "org.freedesktop.portal.OpenURI",
+        "org.freedesktop.portal.PowerProfileMonitor",
+        "org.freedesktop.portal.Print",
+        "org.freedesktop.portal.ProxyResolver",
+        "org.freedesktop.portal.Realtime",
+        "org.freedesktop.portal.RemoteDesktop",
+        "org.freedesktop.portal.ScreenCast",
+        "org.freedesktop.portal.Screenshot",
+        "org.freedesktop.portal.Settings",
+        "org.freedesktop.portal.Trash",
+        "org.freedesktop.portal.Usb",
+        "org.freedesktop.portal.Wallpaper",
+        "org.freedesktop.portal.WebExtensions"
+      ],
+      "ok": true
+    },
+    "registry_path": {
+      "interfaces": [
+        "org.freedesktop.DBus.Introspectable",
+        "org.freedesktop.DBus.Peer",
+        "org.freedesktop.DBus.Properties",
+        "org.freedesktop.host.portal.Registry",
+        "org.freedesktop.portal.Account",
+        "org.freedesktop.portal.Background",
+        "org.freedesktop.portal.Camera",
+        "org.freedesktop.portal.Clipboard",
+        "org.freedesktop.portal.DynamicLauncher",
+        "org.freedesktop.portal.Email",
+        "org.freedesktop.portal.FileChooser",
+        "org.freedesktop.portal.GameMode",
+        "org.freedesktop.portal.GlobalShortcuts",
+        "org.freedesktop.portal.Inhibit",
+        "org.freedesktop.portal.InputCapture",
+        "org.freedesktop.portal.Location",
+        "org.freedesktop.portal.MemoryMonitor",
+        "org.freedesktop.portal.NetworkMonitor",
+        "org.freedesktop.portal.Notification",
+        "org.freedesktop.portal.OpenURI",
+        "org.freedesktop.portal.PowerProfileMonitor",
+        "org.freedesktop.portal.Print",
+        "org.freedesktop.portal.ProxyResolver",
+        "org.freedesktop.portal.Realtime",
+        "org.freedesktop.portal.RemoteDesktop",
+        "org.freedesktop.portal.ScreenCast",
+        "org.freedesktop.portal.Screenshot",
+        "org.freedesktop.portal.Settings",
+        "org.freedesktop.portal.Trash",
+        "org.freedesktop.portal.Usb",
+        "org.freedesktop.portal.Wallpaper",
+        "org.freedesktop.portal.WebExtensions"
+      ],
+      "ok": true
+    }
+  },
+  "portal_bus_names": {
+    "names": {
+      "ListActivatableNames": [
+        "org.freedesktop.impl.portal.PermissionStore",
+        "org.freedesktop.impl.portal.desktop.gnome",
+        "org.freedesktop.impl.portal.desktop.gtk",
+        "org.freedesktop.portal.Desktop",
+        "org.freedesktop.portal.Documents",
+        "org.freedesktop.portal.Tracker"
+      ],
+      "ListNames": [
+        "org.freedesktop.impl.portal.PermissionStore",
+        "org.freedesktop.impl.portal.desktop.gnome",
+        "org.freedesktop.impl.portal.desktop.gtk",
+        "org.freedesktop.portal.Desktop"
+      ]
+    },
+    "ok": true
+  },
+  "probe": "portal",
+  "registry": {
+    "ok": true,
+    "registered": true
+  },
+  "shortcuts": {
+    "chord": "CTRL+ALT+m",
+    "consent": {
+      "answers": [
+        {
+          "buttons": [
+            "Add",
+            "Cancel",
+            "Reset Shortcut"
+          ],
+          "dialog": "Add Keyboard Shortcuts",
+          "pressed": "Add",
+          "switched_on": []
+        }
+      ],
+      "dialogs_seen": [
+        [
+          [
+            "gnome-control-center-global-shortcuts-provider",
+            "Add Keyboard Shortcuts",
+            [
+              [
+                "button",
+                "Reset Shortcut"
+              ],
+              [
+                "button",
+                "Cancel"
+              ],
+              [
+                "button",
+                "Add"
+              ]
+            ]
+          ]
+        ]
+      ],
+      "error": null
+    },
+    "deactivated_latency_ms": {
+      "max": 23.8,
+      "mean": 10.7,
+      "min": 3.6
+    },
+    "deactivated_received": 3,
+    "driver": "mutter-keycode",
+    "granted": {
+      "ok": true,
+      "shortcuts": [
+        {
+          "id": "probe-chord",
+          "trigger": "Press <Control><Alt>m"
+        }
+      ]
+    },
+    "ok": true,
+    "rounds": [
+      {
+        "activated_ms": 6.1,
+        "activated_stamp": 3582163092,
+        "deactivated_ms": 23.8,
+        "deactivated_stamp": 3582163599,
+        "held_ms": 506.5
+      },
+      {
+        "activated_ms": 2.1,
+        "activated_stamp": 3582163593,
+        "deactivated_ms": 4.8,
+        "deactivated_stamp": 3582164123,
+        "held_ms": 502.2
+      },
+      {
+        "activated_ms": 2.3,
+        "activated_stamp": 3582163621,
+        "deactivated_ms": 3.6,
+        "deactivated_stamp": 3582164630,
+        "held_ms": 502.6
+      }
+    ]
+  }
+}
