@@ -8,5 +8,6 @@
     "restore_delay_seconds": 1.5
   },
   "notifications": true,
-  "cleanup": "off"
+  "cleanup": "off",
+  "slash_commands": true
 }

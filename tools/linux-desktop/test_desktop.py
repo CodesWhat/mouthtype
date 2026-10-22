@@ -293,6 +293,15 @@ for line in sys.stdin:
                 engine.transcribe(Path('/not-used.wav'), threading.Event())
             self.assertIsNone(engine.worker)
             engine.close()
+    def test_slash_commands_config_is_a_boolean_defaulting_on(self):
+        from desktop import validate_config
+        base = {'engine_config': '/local/engines.json'}
+        validate_config(base)
+        validate_config({**base, 'slash_commands': False})
+        for bad in ('yes', 1, None):
+            with self.subTest(slash_commands=bad), self.assertRaises(ValueError):
+                validate_config({**base, 'slash_commands': bad})
+
     def test_configuration_rejects_unbounded_or_ambiguous_delivery(self):
         from desktop import validate_config
         for change in ({'maximum_recording_seconds': float('nan')},

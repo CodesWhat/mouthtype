@@ -2,7 +2,7 @@ import QtQuick
 import "../design"
 import "../parts"
 
-// Settings, Advanced: history retention. Shown while the Advanced options switch is on. Moved from the old Dictation History
+// Settings, Advanced: spoken slash commands and history retention. Shown while the Advanced options switch is on. Moved from the old Dictation History
 // page with the same set-config keys.
 Column {
   id: root
@@ -19,6 +19,24 @@ Column {
   function indexOfValue(list, value) {
     var at = list.indexOf(String(value))
     return at < 0 ? 0 : at
+  }
+
+  Column {
+    width: parent.width
+    spacing: 6
+    DesignEyebrow { text: "Dictation" }
+    DesignCard {
+      width: parent.width
+      DesignRow {
+        title: "Spoken slash commands"
+        detail: "In terminals, code editors and coding agents, \"slash research\" is typed as /research."
+        StateSwitch {
+          value: root.config.slash_commands !== false
+          text: "Spoken slash commands"
+          onToggled: root.host.run(["set-config", "slash_commands", checked ? "on" : "off"])
+        }
+      }
+    }
   }
 
   Column {

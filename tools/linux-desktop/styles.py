@@ -42,6 +42,22 @@ BUILT_INS = {
     'other': (),
 }
 
+# Window classes where text goes into a terminal, code editor or coding agent. Spoken slash commands convert only
+# here (cleanup.slash_commands). Mac also matches claude.ai and chatgpt.com by page host; Linux has no page-host
+# context, so browser sites are not covered. Exact classes compare case-insensitively; JetBrains IDEs use a prefix.
+CODING_CLASSES = frozenset(name.casefold() for name in (
+    'kitty', 'Alacritty', 'foot', 'ghostty', 'org.wezfurlong.wezterm', 'code', 'cursor', 'zed', 'claude', 'codex',
+    'orca'))
+CODING_PREFIXES = ('jetbrains-',)
+
+
+def is_coding_class(window_class):
+    if not isinstance(window_class, str):
+        return False
+    key = _key(window_class)
+    return key in CODING_CLASSES or key.startswith(CODING_PREFIXES)
+
+
 # Sample dictations for the tone cards, the same lines the Mac Style page uses. `engine` is what the speech engine
 # hands back; the cards run it through the real tone code.
 SAMPLES = {
