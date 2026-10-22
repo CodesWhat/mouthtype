@@ -1046,14 +1046,19 @@ def read_phrase_clipboard(command=None, *, seconds=1, maximum=1024 * 1024, env=N
 
 
 class PipeWireCapture:
-    def __init__(self, target=None, *, errors=subprocess.DEVNULL):
+    def __init__(self, target=None, *, errors=subprocess.DEVNULL, present=None):
         self.target, self.process, self.path = target, None, None
         self.errors = errors
+        self.present = present
 
     def argv(self, path):
         result = ['pw-record', '--rate=16000', '--channels=1', '--format=s16']
+        # A configured microphone that has been unplugged falls back to the default source instead of failing every take.
+        # When PipeWire can't be asked, the target is kept as configured.
         if self.target:
-            result.append('--target=' + self.target)
+            from microphones import target_present
+            if (self.present or target_present)(self.target) is not False:
+                result.append('--target=' + self.target)
         return result + [str(path)]
 
     def start(self, path):

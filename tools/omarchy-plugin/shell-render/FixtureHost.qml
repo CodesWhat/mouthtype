@@ -30,6 +30,12 @@ QtObject {
   property var fontPrefs: ({ preset: "default", family: "", overrides: {} })
   property var versions: ({ plugin: "1.3.0", app: "0.4.0" })
   property var lastState: ({})
+  property var microphoneInfo: ({ sources: [
+    { name: "alsa_input.usb-headset", description: "USB Headset Mono", default: false },
+    { name: "alsa_input.pci-builtin", description: "Built-in Audio Analog Stereo", default: true } ],
+    selected: "default", missing: false, muted: false })
+  property var micLevel: null
+  property bool micTesting: false
   property var pendingDraft: null
   property string transcriptFont: "sans-serif"
   property string pillFont: "sans-serif"
@@ -44,6 +50,8 @@ QtObject {
   readonly property bool importCanExport: fileImport.state === "finished" || importRetained
 
   function run(args) { ran = ran.concat([args]) }
+  function loadMicrophones() { run(["microphones"]) }
+  function testMicrophone() { run(["mic-test"]) }
   function close() { run(["close"]) }
   function showRecording(id) { run(["recover", id]) }
   function loadImportText() { importText = importText }

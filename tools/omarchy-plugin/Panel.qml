@@ -51,6 +51,10 @@ Panel {
   property var pendingDraft: null
   // The last `control.py state` reply, merged. The shell hands it to data pages as backend.state.
   property var lastState: ({})
+  // Settings, General: the PipeWire microphones (control.py `microphones`) and the last two-second level test (`mic-test`).
+  property var microphoneInfo: ({ sources: [], selected: "default", missing: false, muted: null })
+  property var micLevel: null
+  property bool micTesting: false
   readonly property string transcriptFont: Fonts.family({ font: fontPrefs }, "transcript", Style.font.family)
   readonly property string pillFont: Fonts.family({ font: fontPrefs }, "pill", Style.font.family)
   property var fileImport: ({ state: "off" })
@@ -131,6 +135,18 @@ Panel {
     notice = ""
     actionProc.command = [root.helper].concat(args)
     actionProc.running = true
+  }
+
+  function loadMicrophones() {
+    if (!micListProc.running) micListProc.running = true
+  }
+
+  function testMicrophone() {
+    if (micTestProc.running) return
+    errorText = ""
+    micLevel = null
+    micTesting = true
+    micTestProc.running = true
   }
 
   function showRecording(identity) {
@@ -216,6 +232,37 @@ Panel {
         try { root.absorb(JSON.parse(String(text || "{}"))) }
         catch (e) { root.errorText = "Mouthtype action failed" }
         root.refresh()
+      }
+    }
+  }
+
+  Process {
+    id: micListProc
+    command: [root.helper, "microphones"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var result = JSON.parse(String(text || "{}"))
+          if (result.error) root.errorText = String(result.error)
+          else root.microphoneInfo = result
+        } catch (e) { root.errorText = "Could not list microphones" }
+      }
+    }
+  }
+
+  Process {
+    id: micTestProc
+    command: [root.helper, "mic-test"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        root.micTesting = false
+        try {
+          var result = JSON.parse(String(text || "{}"))
+          if (result.error) root.errorText = String(result.error)
+          else root.micLevel = result
+        } catch (e) { root.errorText = "The microphone test failed" }
       }
     }
   }
