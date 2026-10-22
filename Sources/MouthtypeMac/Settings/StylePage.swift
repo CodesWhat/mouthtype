@@ -91,7 +91,7 @@ struct StyleTabBar: View {
 private extension StylePreset {
     var blurb: String {
         switch self {
-        case .formal: "Sentence case. Keeps your punctuation. Softens swearing."
+        case .formal: "Sentence case. Keeps your punctuation. Softens swearing. Swearing removal is English only."
         case .casual: "Sentence case. No full stop at the end."
         case .veryCasual: "Lowercase starts. No full stop at the end."
         }

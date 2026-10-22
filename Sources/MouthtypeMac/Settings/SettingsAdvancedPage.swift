@@ -71,7 +71,9 @@ extension SettingsView {
     private var sharedControlsEnabled: Bool { model.cleanup.enabled || model.appStyles.enablesCleanup }
 
     private var boostDetail: String {
-        var text = "Favours your saved spellings in the speech model. The first time, it downloads an extra speech model of about 100 MB. Dictation works without it until it is ready."
+        var text =
+            "Favours your saved spellings in the speech model, and English only. "
+            + "The first time, it downloads an extra speech model of about 100 MB. Dictation works without it until it is ready."
         let status = model.boostStatus.text
         if model.boostSavedWords, !status.isEmpty { text += " " + status + "." }
         return text

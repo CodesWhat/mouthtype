@@ -19,6 +19,7 @@ final class CleanupMenuSection: NSObject, MenuSection {
     private var levelItems: [CleanupLevel: NSMenuItem] = [:]
     private let modelStatusItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let fallbackItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+    private let languageNoteItem = NSMenuItem(title: DictationLanguageSetting.fastEnglishOnlyNote, action: nil, keyEquivalent: "")
     private let downloadItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
     private let cancelDownloadItem = NSMenuItem(title: "Cancel Download", action: nil, keyEquivalent: "")
     private let learnItem = NSMenuItem(title: "Learn from My Corrections", action: nil, keyEquivalent: "")
@@ -68,9 +69,10 @@ final class CleanupMenuSection: NSObject, MenuSection {
             submenu.addItem(item)
             levelItems[level] = item
         }
-        for item in [modelStatusItem, fallbackItem, dictionaryErrorItem] { item.isEnabled = false }
+        for item in [modelStatusItem, fallbackItem, languageNoteItem, dictionaryErrorItem] { item.isEnabled = false }
         submenu.addItem(modelStatusItem)
         submenu.addItem(fallbackItem)
+        submenu.addItem(languageNoteItem)
         submenu.addItem(downloadItem)
         submenu.addItem(cancelDownloadItem)
         submenu.addItem(.separator())
@@ -174,6 +176,7 @@ final class CleanupMenuSection: NSObject, MenuSection {
         let settings = CleanupSettings.load(defaults)
         for (level, item) in levelItems { item.state = level == settings.level ? .on : .off }
         refreshModelItems()
+        languageNoteItem.isHidden = !(settings.level == .light && DictationLanguageSetting.load(defaults).isExplicitNonEnglish)
         dictionary?.reloadIfChanged()
         editDictionaryItem.isHidden = dictionary == nil
         switch dictionary?.status {
