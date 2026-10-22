@@ -61,6 +61,49 @@ class GuardTests(unittest.TestCase):
         self.assertEqual(smart.budget_seconds('thorough', 400), 30.0)
 
 
+class OrderAndMeridiemTests(unittest.TestCase):
+    def reason(self, source, output):
+        return smart.check(source, output)[1]
+
+    def test_swapped_times_and_numbers_are_rejected(self):
+        for source, output in [
+            ('the shop is open 9 AM to 5 PM', 'The shop is open 5 PM to 9 AM.'),
+            ('call at 3:30 PM then at 9:15 AM', 'Call at 9:15 AM, then at 3:30 PM.'),
+            ('meet at 9 AM then at 9 PM', 'Meet at 9 PM, then at 9 AM.'),
+            ('we need two chairs and five tables', 'We need five tables and two chairs.'),
+            ('the shop is open nine to five', 'The shop is open 5 to 9.'),
+        ]:
+            self.assertIsNotNone(self.reason(source, output), output)
+
+    def test_normal_reformatting_keeps_order(self):
+        for source, output in [
+            ('the shop is open 9 AM to 5 PM', 'The shop is open 9 AM to 5 PM.'),
+            ('we need three to five chairs', 'We need 3\u20135 chairs.'),
+            ('the shop is open nine to five', 'The shop is open 9 to 5.'),
+            ('call at 3:30 PM then at 9:15 AM', 'Call at 3:30 PM, then at 9:15 AM.'),
+            ('we need two chairs and five tables', 'We need 2 chairs and 5 tables.'),
+            ('pick one two three', 'Pick 1, 2, 3.'),
+            ('i have 5 cats then 9 dogs and 5 birds', 'I have 5 cats, 9 dogs, and 5 birds.'),
+            ('meet at five no wait nine', 'Meet at nine.'),
+        ]:
+            self.assertIsNone(self.reason(source, output), output)
+
+    def test_a_spoken_meridiem_stays_with_its_own_hour(self):
+        day = 'meet from nine a m to five p m tomorrow'
+        self.assertIsNone(self.reason(day, 'Meet from 9 AM to 5 PM tomorrow.'))
+        self.assertIsNotNone(self.reason(day, 'Meet from 9 PM to 5 AM tomorrow.'))
+        self.assertIsNotNone(self.reason(day, 'Meet from 5 AM to 9 PM tomorrow.'))
+        self.assertIsNotNone(self.reason(day, 'Meet from 9 AM to 6 PM tomorrow.'))
+        half = 'call at three thirty p m then at nine fifteen a m'
+        self.assertIsNone(self.reason(half, 'Call at 3:30 PM, then at 9:15 AM.'))
+        self.assertIsNotNone(self.reason(half, 'Call at 3:30 AM, then at 9:15 PM.'))
+
+    def test_spoken_meridiem_pairs_read_hours_and_minutes(self):
+        self.assertEqual(smart.spoken_meridiem_pairs('three oh five p m'), {'3:05p'})
+        self.assertEqual(smart.spoken_meridiem_pairs('ten forty five a m'), {'10:45a'})
+        self.assertEqual(smart.spoken_meridiem_pairs('nine a m to five p m'), {'9:00a', '5:00p'})
+
+
 class UnwrapTests(unittest.TestCase):
     FRAMED = ('can you send the quarterly report to Dana by Friday afternoon so we can review it before the meeting')
     CLEAN = 'Can you send the quarterly report to Dana by Friday afternoon so we can review it before the meeting.'

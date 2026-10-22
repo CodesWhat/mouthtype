@@ -77,6 +77,7 @@ def sanitize(output):
     return text.strip()
 
 
+MERIDIEM_TIME = re.compile(r'(?i)(?<![^\W\d_:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b')
 QUOTE_MARKS = {'\u201c': '"', '\u201d': '"', '\u2018': "'", '\u2019': "'"}
 
 PREAMBLE = re.compile(
@@ -234,11 +235,75 @@ def changed_intent(source, output):
         return values
     if not time_of_day(output) <= time_of_day(source):
         return 'time of day added or changed'
+    if not meridiem_pairs(output) <= meridiem_pairs(source) | spoken_meridiem_pairs(source):
+        return 'time of day added or changed'
     first_source = normalized_words(source)[:1]
     first_output = normalized_words(output)[:1]
     if first_source and first_source[0] in QUESTIONS and first_output and first_output[0] not in QUESTIONS:
         return 'question changed into a statement'
     return None
+
+
+def meridiem_pairs(text):
+    """Each clock time that carries its own AM or PM, as "9:00a" or "5:30p", so a meridiem can't move to another time."""
+    return {'%d:%s%s' % (int(m.group(1)), m.group(2) or '00', m.group(3).lower()) for m in MERIDIEM_TIME.finditer(text)}
+
+
+def spoken_meridiem_pairs(text):
+    """Times spoken in words ("nine a m", "three thirty p m", "three oh five p m") as the same "H:MMl" pairs. The hour
+    and minutes come from the number words right before the AM or PM, so the letter belongs to that time only."""
+    found = set()
+    for match in re.finditer(r'(?i)(?<![^\W\d_])([ap])[. \t]*m\b', text):
+        before = [stripped(token).lower() for token in text[:match.start()].split()[-3:]]
+
+        def value(back):
+            return NUMBER_WORDS.get(before[-back]) if back <= len(before) else None
+
+        def is_hour(number):
+            return number is not None and 1 <= number <= 12
+        hour = None
+        minutes = 0
+        if len(before) >= 3 and before[-2] == 'oh' and value(1) is not None and 1 <= value(1) <= 9 and is_hour(value(3)):
+            hour, minutes = value(3), value(1)
+        elif value(1) is not None and 1 <= value(1) <= 9 and value(2) is not None and value(2) >= 20 and is_hour(value(3)):
+            hour, minutes = value(3), value(2) + value(1)
+        elif value(1) is not None and value(1) >= 10 and is_hour(value(2)):
+            hour, minutes = value(2), value(1)
+        elif is_hour(value(1)):
+            hour = value(1)
+        if hour is not None:
+            found.add('%d:%02d%s' % (hour, minutes, match.group(1).lower()))
+    return found
+
+
+def time_sequence(text):
+    """Each clock time that carries its own AM or PM, in reading order, as "9:00a"."""
+    return ['%d:%s%s' % (int(m.group(1)), m.group(2) or '00', m.group(3).lower()) for m in MERIDIEM_TIME.finditer(text)]
+
+
+def number_sequence(text):
+    """The numeric values a text states in reading order, one entry per digit spelling a quantity accepts."""
+    ordered = sorted(enumerate(quantities(text)), key=lambda item: (item[1][1], item[0]))
+    return [value for _, (accepted, _, _) in ordered for value in sorted(a for a in accepted if a[:1].isdigit())]
+
+
+def reordered(source, output):
+    """Whether two values both texts state swapped places: every occurrence of one came before every occurrence of the
+    other in the source, and after it in the output. A value repeated around another doesn't count as moved."""
+    def spans(values):
+        found = {}
+        for index, value in enumerate(values):
+            found[value] = (found[value][0] if value in found else index, index)
+        return found
+    before = spans(source)
+    after = spans(output)
+    shared = sorted(set(before) & set(after))
+    for offset, left in enumerate(shared):
+        for right in shared[offset + 1:]:
+            a, b, c, d = before[left], before[right], after[left], after[right]
+            if (a[1] < b[0] and d[1] < c[0]) or (b[1] < a[0] and c[1] < d[0]):
+                return True
+    return False
 
 
 def written_form(text):
@@ -387,6 +452,10 @@ def rejection(source, output):
     number = missing_number(comparable_source, comparable_output)
     if number is not None:
         return 'number %s missing or changed' % number
+    if reordered(number_sequence(comparable_source), number_sequence(comparable_output)):
+        return 'number order changed'
+    if reordered(time_sequence(comparable_source), time_sequence(comparable_output)):
+        return 'time order changed'
     name = missing_name(comparable_source, comparable_output)
     if name is not None:
         return 'name "%s" missing' % name
