@@ -746,6 +746,69 @@ class FeedbackTests(unittest.TestCase):
             self.assertIn('--replace-id=17', lines[1])
             self.assertIn('Mouthtype is recording', lines[0])
             self.assertEqual(helper.status, 'submitted_unknown')
+    def test_error_notification_names_the_code_and_unknown_codes_stay_generic(self):
+        from desktop import Notifications
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'notify.py'
+            record = root / 'arguments.jsonl'
+            script.write_text('import json,sys\nfrom pathlib import Path\nwith Path(sys.argv[1]).open("a") as f:f.write(json.dumps(sys.argv[2:])+"\\n")\nprint(17)\n')
+            helper = Notifications(command=[sys.executable, str(script), str(record)])
+            self.assertTrue(helper.notify('error', 'capture_unavailable'))
+            self.assertTrue(helper.notify('error', 'made_up_code'))
+            self.assertTrue(helper.notify('error'))
+            lines = [json.loads(line) for line in record.read_text().splitlines()]
+            self.assertEqual(lines[0][-2:], list(Notifications.ERRORS['capture_unavailable']))
+            self.assertEqual(lines[1][-2:], list(Notifications.MESSAGES['error']))
+            self.assertEqual(lines[2][-2:], list(Notifications.MESSAGES['error']))
+
+    def test_session_passes_its_error_code_to_the_error_notification(self):
+        class Feedback:
+            status = 'submitted_unknown'
+            def __init__(self): self.calls = []
+            def notify(self, state, error=None): self.calls.append((state, error))
+        with tempfile.TemporaryDirectory() as temp:
+            feedback = Feedback()
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), feedback=feedback)
+            try:
+                session.error = 'recording_limit'
+                session._notify('error')
+                session._notify('recording')
+            finally:
+                session.close()
+            self.assertEqual(feedback.calls[0], ('error', 'recording_limit'))
+
+    def test_every_error_code_the_daemon_assigns_has_notification_and_pill_copy(self):
+        import ast
+        import desktop
+        tree = ast.parse(Path(desktop.__file__).read_text())
+        codes = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                pairs = []
+                if isinstance(target, ast.Tuple) and isinstance(node.value, ast.Tuple):
+                    pairs = list(zip(target.elts, node.value.elts))
+                else:
+                    pairs = [(target, node.value)]
+                for left, right in pairs:
+                    if (isinstance(left, ast.Attribute) and left.attr == 'error' and isinstance(left.value, ast.Name)
+                            and left.value.id == 'self' and isinstance(right, ast.Constant) and isinstance(right.value, str)):
+                        codes.add(right.value)
+        self.assertTrue({'capture_unavailable', 'recovery_full', 'command_expired'} <= codes)
+        for code in sorted(codes):
+            with self.subTest(code=code):
+                self.assertIn(code, desktop.Notifications.ERRORS)
+        # The Arch package bundle ships the client without the plugin, so the pill half only runs in a full checkout.
+        plugin = Path(desktop.__file__).resolve().parents[1] / 'omarchy-plugin' / 'PillModel.js'
+        if not plugin.exists():
+            self.skipTest('PillModel.js not in this source bundle')
+        pill = plugin.read_text()
+        for code in sorted(codes):
+            with self.subTest(code=code):
+                self.assertIn('"%s"' % code, pill)
+
     def test_missing_or_hung_notification_helper_is_bounded_and_nonfatal(self):
         import sys
         from desktop import Notifications

@@ -514,6 +514,31 @@ class SetupRunningTests(unittest.TestCase):
                 self.assertFalse(control.setup_running())
 
 
+class CleanupCancelTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def test_cancel_writes_the_flag_next_to_the_setup_status_when_running(self):
+        with mock.patch.object(control, "CLEANUP_DIR", self.root), mock.patch.object(control, "setup_running", lambda: True), \
+                mock.patch.object(control, "state", lambda: {}), mock.patch.object(control.time, "sleep"):
+            output = control.cleanup_cancel()
+        self.assertTrue((self.root / "cleanup-cancel").exists())
+        self.assertEqual(output["page"], "cleanup")
+
+    def test_cancel_when_nothing_is_running_is_an_error_and_writes_no_flag(self):
+        with mock.patch.object(control, "CLEANUP_DIR", self.root), mock.patch.object(control, "setup_running", lambda: False):
+            with self.assertRaisesRegex(RuntimeError, "not running"):
+                control.cleanup_cancel()
+        self.assertFalse((self.root / "cleanup-cancel").exists())
+
+    def test_cancelled_state_passes_through_the_setup_status(self):
+        (self.root / "cleanup-setup.json").write_text(json.dumps({"state": "cancelled", "levels": ["fast"]}), encoding="utf-8")
+        with mock.patch.object(control, "CLEANUP_DIR", self.root):
+            self.assertEqual(control.cleanup_models()["setup"]["state"], "cancelled")
+
+
 class ShortcutBlockTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
@@ -551,6 +576,36 @@ class ShortcutBlockTests(unittest.TestCase):
         control.set_shortcut("off")
         self.assertEqual(control.shortcut_info()["mode"], "off")
         self.assertNotIn("Mouthtype", self.bindings.read_text(encoding="utf-8"))
+
+
+class WelcomedTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.prefs = Path(self.directory.name) / "omarchy-plugin.json"
+        patches = [mock.patch.object(control, "PREFS", self.prefs), mock.patch.object(control, "state", lambda: {})]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_defaults_to_not_welcomed(self):
+        self.assertFalse(control.preferences()["welcomed"])
+
+    def test_setter_writes_and_clears_without_touching_other_prefs(self):
+        control.set_pill("size", "2")
+        control.set_plugin("welcomed", "on")
+        self.assertTrue(control.preferences()["welcomed"])
+        self.assertEqual(control.preferences()["pill"]["size"], 2)
+        control.set_pill("skin", "hifi")
+        self.assertTrue(control.preferences()["welcomed"])
+        control.set_plugin("welcomed", "off")
+        self.assertFalse(control.preferences()["welcomed"])
+
+    def test_setter_rejects_other_fields_and_values(self):
+        with self.assertRaises(RuntimeError):
+            control.set_plugin("sounds", "on")
+        with self.assertRaises(RuntimeError):
+            control.set_plugin("welcomed", "maybe")
 
 
 class TransformShortcutTests(ShortcutBlockTests):

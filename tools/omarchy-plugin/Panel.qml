@@ -35,6 +35,7 @@ Panel {
   property int wordsToday: 0
   property bool soundsEnabled: false
   property bool autostartEnabled: false
+  property bool welcomed: false
   property string shortcutMode: "off"
   property string shortcutKeys: ""
   property string transcript: ""
@@ -102,6 +103,7 @@ Panel {
     if (result.words_today !== undefined) wordsToday = Number(result.words_today) || 0
     if (result.sounds !== undefined) soundsEnabled = result.sounds === true
     if (result.autostart !== undefined) autostartEnabled = result.autostart === true
+    if (result.welcomed !== undefined) welcomed = result.welcomed === true
     if (result.shortcut !== undefined) shortcutMode = String(result.shortcut || "off")
     if (result.shortcut_keys !== undefined) shortcutKeys = String(result.shortcut_keys || "")
     if (result.capabilities !== undefined) capabilities = result.capabilities || ({})

@@ -83,7 +83,7 @@ def sanitize(output):
     return text.strip()
 
 
-MERIDIEM_TIME = re.compile(r'(?i)(?<![^\W\d_:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b')
+MERIDIEM_TIME = re.compile(r'(?i)(?<![^\W_]|:)(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b')
 QUOTE_MARKS = {'\u201c': '"', '\u201d': '"', '\u2018': "'", '\u2019': "'"}
 
 PREAMBLE = re.compile(

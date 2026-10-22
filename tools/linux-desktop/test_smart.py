@@ -98,6 +98,17 @@ class OrderAndMeridiemTests(unittest.TestCase):
         self.assertIsNone(self.reason(half, 'Call at 3:30 PM, then at 9:15 AM.'))
         self.assertIsNotNone(self.reason(half, 'Call at 3:30 AM, then at 9:15 PM.'))
 
+    def test_a_spoken_oh_minute_meridiem_stays_with_its_own_time(self):
+        half = 'call at three thirty p m then at nine oh five a m'
+        self.assertIsNone(self.reason(half, 'Call at 3:30 PM, then at 9:05 AM.'))
+        self.assertIsNotNone(self.reason(half, 'Call at 3:30 AM, then at 9:05 PM.'))
+
+    def test_a_digit_or_colon_before_a_number_is_not_a_meridiem_time(self):
+        self.assertEqual(smart.meridiem_pairs('meet at 9 pm'), {'9:00p'})
+        self.assertEqual(smart.meridiem_pairs('123 pm'), set())
+        self.assertEqual(smart.meridiem_pairs('a1 pm'), set())
+        self.assertEqual(smart.meridiem_pairs('10:30:45 pm'), set())
+
     def test_spoken_meridiem_pairs_read_hours_and_minutes(self):
         self.assertEqual(smart.spoken_meridiem_pairs('three oh five p m'), {'3:05p'})
         self.assertEqual(smart.spoken_meridiem_pairs('ten forty five a m'), {'10:45a'})

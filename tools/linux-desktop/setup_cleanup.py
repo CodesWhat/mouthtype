@@ -27,6 +27,24 @@ LEVELS = {
     'thorough': {'pin': 'qwen3_4b', 'file': 'qwen3-4b-instruct-2507-q4_k_m.gguf', 'prompt': 'shared'},
 }
 LLAMA_SOURCE = 'https://github.com/ggml-org/llama.cpp.git'
+CANCEL_FLAG = 'cleanup-cancel'
+
+
+class SetupCancelled(Exception):
+    """The user asked to stop preparing; raised from a progress poll so the transfer is torn down."""
+
+
+def stop_group(process):
+    for action in (signal.SIGTERM, signal.SIGKILL):
+        try:
+            os.killpg(process.pid, action)
+        except ProcessLookupError:
+            pass
+        try:
+            process.wait(timeout=2)
+            break
+        except subprocess.TimeoutExpired:
+            continue
 
 
 def bounded_run(command, seconds, *, poll=None, **kwargs):
@@ -45,17 +63,11 @@ def bounded_run(command, seconds, *, poll=None, **kwargs):
                     poll()
                     continue
                 raise
+    except SetupCancelled:
+        stop_group(process)
+        raise
     except subprocess.TimeoutExpired:
-        for action in (signal.SIGTERM, signal.SIGKILL):
-            try:
-                os.killpg(process.pid, action)
-            except ProcessLookupError:
-                pass
-            try:
-                process.wait(timeout=2)
-                break
-            except subprocess.TimeoutExpired:
-                continue
+        stop_group(process)
         raise TimeoutError('Deadline reached: ' + command[0])
 
 
@@ -73,7 +85,11 @@ def download(url, destination, *, seconds=3600, run=None, progress=None):
                 progress(partial.stat().st_size)
             except OSError:
                 pass
-        status = run(command, seconds + 30, poll=poll)
+        try:
+            status = run(command, seconds + 30, poll=poll)
+        except SetupCancelled:
+            partial.unlink(missing_ok=True)
+            raise
     else:
         status = run(command, seconds + 30)
     if status != 0 or not partial.is_file():
@@ -142,6 +158,13 @@ def setup(destination, levels, *, server=None, pins=None, download_fn=None, buil
     download_fn = download_fn or download
     build_fn = build_fn or build_server
     check_fn = check_fn or check_server
+    cancel_flag = destination / CANCEL_FLAG
+    cancel_flag.unlink(missing_ok=True)
+
+    def check_cancel(done=None):
+        if cancel_flag.exists():
+            raise SetupCancelled()
+
     write_progress(destination, state='preparing', levels=list(levels))
     try:
         if server is None:
@@ -150,6 +173,7 @@ def setup(destination, levels, *, server=None, pins=None, download_fn=None, buil
         server = Path(server).resolve()
         runtime = check_fn(server)
         for level in levels:
+            check_cancel()
             spec = LEVELS[level]
             pin = pins[spec['pin']]
             model = destination / spec['file']
@@ -160,15 +184,20 @@ def setup(destination, levels, *, server=None, pins=None, download_fn=None, buil
                 total = pin.get('bytes')
                 if total:
                     def report(done, total, level=level):
+                        check_cancel()
                         write_progress(destination, state='downloading', level=level, bytes_done=done, bytes_total=total,
                                        levels=list(levels))
                     tracker = DownloadProgress(total, report)
                     tracker(0)
-                    partial = download_fn(pin['source'], model, progress=tracker)
+
+                    def watch(done, tracker=tracker):
+                        check_cancel()
+                        tracker(done)
+                    partial = download_fn(pin['source'], model, progress=watch)
                     tracker.finish()
                 else:
                     write_progress(destination, state='downloading', level=level, levels=list(levels))
-                    partial = download_fn(pin['source'], model)
+                    partial = download_fn(pin['source'], model, progress=check_cancel)
                 verify_and_place(partial, model, pin['sha256'])
             existing['engines'][level] = {
                 'threads': threads or max(2, min(8, (os.cpu_count() or 4) // 2)),
@@ -186,6 +215,12 @@ def setup(destination, levels, *, server=None, pins=None, download_fn=None, buil
                                        'platform': platform.platform(), 'inference_tested': False}, indent=2) + '\n')
         write_progress(destination, state='ready', levels=list(levels))
         return engines_path
+    except SetupCancelled:
+        for level in levels:
+            (destination / (LEVELS[level]['file'] + '.part')).unlink(missing_ok=True)
+        cancel_flag.unlink(missing_ok=True)
+        write_progress(destination, state='cancelled', levels=list(levels))
+        return None
     except BaseException as error:
         write_progress(destination, state='failed', error=type(error).__name__, levels=list(levels))
         raise
@@ -211,6 +246,9 @@ def main(argv=None):
     except (OSError, ValueError, TimeoutError, subprocess.SubprocessError, KeyError) as error:
         print('Cleanup preparation failed: ' + type(error).__name__ + ': ' + str(error), file=sys.stderr)
         return 2
+    if path is None:
+        print('Cleanup preparation cancelled.')
+        return 0
     print('Prepared ' + ', '.join(levels) + ' cleanup: ' + str(path))
     print('Add to linux.json: "cleanup_engine": "' + str(path) + '", "cleanup": "' + levels[0] + '"')
     return 0
