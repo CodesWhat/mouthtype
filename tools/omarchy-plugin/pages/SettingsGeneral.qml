@@ -18,6 +18,7 @@ Column {
   readonly property string desktopName: desktop === "gnome" ? "GNOME" : desktop === "kde" ? "KDE" : "Hyprland"
   readonly property var triggers: host && host.shortcutTriggers ? host.shortcutTriggers : ({})
   readonly property string grantedKeys: {
+    if (triggers["dictate-hold"]) return String(triggers["dictate-hold"])
     var names = Object.keys(triggers)
     return names.length ? String(triggers[names[0]]) : ""
   }
