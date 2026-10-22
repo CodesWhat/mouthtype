@@ -1,0 +1,15 @@
+# Python line and branch coverage for the Linux component tests run by run-ci.sh.
+# Paths are relative to the repository root, which is where run-ci.sh runs.
+[run]
+branch = True
+source =
+    tools/linux-desktop
+    tools/omarchy-plugin
+    tools/linux-engine-proof
+omit =
+    */test_*.py
+    */vendor/*
+
+[report]
+skip_empty = True
+fail_under = 77

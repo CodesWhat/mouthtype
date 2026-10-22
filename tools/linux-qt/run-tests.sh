@@ -12,7 +12,10 @@ out=$(cd "$out" && pwd)
 
 export QT_QPA_PLATFORM=offscreen QT_QUICK_BACKEND=software
 cd "$repo"
-timeout --kill-after=5s 300s python3 -W error::ResourceWarning -m unittest discover -v -s tools/linux-qt -p 'test_*.py' 2>&1 | tee "$out/host-tests.log"
+rcfile=tools/linux-qt/.coveragerc
+export COVERAGE_FILE="$out/.coverage"
+timeout --kill-after=5s 300s python3 -W error::ResourceWarning -m coverage run --rcfile="$rcfile" -m unittest discover -v -s tools/linux-qt -p 'test_*.py' 2>&1 | tee "$out/host-tests.log"
+python3 -m coverage report --rcfile="$rcfile" 2>&1 | tee "$out/host-coverage.txt"
 for page in home general; do
   timeout --kill-after=5s 60s python3 tools/linux-qt/mouthtype_desktop.py --helper "$here/fixtures/control.py" --page "$page" --screenshot "$out/host-$page.png"
 done

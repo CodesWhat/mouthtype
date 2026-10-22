@@ -43,7 +43,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-jeepney python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus dbus-x11 procps sway wtype wl-clipboard
+          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-coverage python3-jeepney python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus dbus-x11 procps sway wtype wl-clipboard
           useradd --create-home --shell /bin/bash mouthtype-ci
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -89,7 +89,7 @@ jobs:
     steps:
       - name: Install signed Arch component prerequisites
         run: |
-          pacman -Syu --noconfirm --needed git python python-pip curl pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols namcap
+          pacman -Syu --noconfirm --needed git python python-coverage python-pip curl pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols namcap
           useradd --create-home --shell /bin/bash mouthtype-ci
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -328,7 +328,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-pyside6.qtquick python3-pyside6.qtqml python3-pyside6.qtnetwork python3-pyside6.qtwidgets qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtqml-workerscript qml6-module-org-kde-layershell qt6-svg-plugins fonts-dejavu-core procps
+          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-coverage python3-pyside6.qtquick python3-pyside6.qtqml python3-pyside6.qtnetwork python3-pyside6.qtwidgets qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtqml-workerscript qml6-module-org-kde-layershell qt6-svg-plugins fonts-dejavu-core procps
           useradd --create-home --shell /bin/bash mouthtype-ci
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
