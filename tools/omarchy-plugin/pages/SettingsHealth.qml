@@ -193,7 +193,10 @@ Column {
       }
       DesignRow {
         title: "How to use"
-        detail: "Press Start Dictation on Home, speak, then Stop. The text is saved under Recent takes. Use Recover on Home to retry audio after a speech error."
+        detail: (!root.host || root.host.shortcutMode === "off" ? "Press Start Dictation on Home, speak, then Stop."
+          : root.host.shortcutMode === "hold" ? "Hold " + root.host.shortcutKeys + " anywhere, speak, then let go."
+          : "Press " + root.host.shortcutKeys + " anywhere to start, speak, then press it again.")
+          + " The text is saved under Recent takes. Use Recover on Home to retry audio after a speech error."
           + (root.host && root.host.canImportFiles ? " Transcribe Audio File turns one WAV, AIFF or M4A file into raw text you can copy or save." : "")
       }
     }
