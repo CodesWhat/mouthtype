@@ -72,6 +72,7 @@ TestCase {
       case "home-empty": host.empty(); shell.navigate("home"); break
       case "home-welcome": host.config = Object.assign({}, host.config, { delivery_mode: "recover" }); shell.navigate("home"); break
       case "home-welcomed": host.config = Object.assign({}, host.config, { delivery_mode: "recover" }); host.welcomed = true; shell.navigate("home"); break
+      case "home-removed": host.clientMissing = true; host.serviceRunning = false; host.sessionState = "off"; shell.navigate("home"); break
       case "stats": shell.navigate("stats"); break
       case "dictionary": shell.navigate("dictionary"); break
       case "transforms": shell.navigate("transforms"); break
@@ -134,7 +135,7 @@ TestCase {
   }
 
   property var saved: ({})
-  readonly property var scenes: ["home", "home-empty", "home-welcome", "home-welcomed", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
+  readonly property var scenes: ["home", "home-empty", "home-welcome", "home-welcomed", "home-removed", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
     "style-email", "style-other", "style-cleanup", "style-fresh", "style-fresh-cleanup", "style-error", "appearance", "appearance-hifi",
     "transcript", "import-active", "import-done", "import-failed", "settings-general", "settings-general-off", "settings-linux",
     "settings-health", "settings-health-empty", "settings-advanced", "shortcut", "error"]
@@ -280,6 +281,17 @@ TestCase {
     host.ran = []
     mouseClick(findText("Paste where I'm typing (Recommended)"))
     compare(host.ran[0], ["set-config", "delivery", "paste"])
+  }
+
+  function test_removed_card() {
+    tc.dark = false
+    setScene("home-removed")
+    verify(findText("Mouthtype was removed") !== null, "card missing while the client is gone")
+    compare(findText("Where should your words go?"), null)
+    mouseClick(findText("Remove widget and shortcuts"))
+    compare(host.ran[0], ["remove-leftovers"])
+    setScene("home")
+    compare(findText("Mouthtype was removed"), null)
   }
 
   function findSwitch(label, item) {

@@ -20,7 +20,7 @@ Column {
   readonly property bool canDeliver: !!host && host.hasTranscript && (host.config.delivery_mode === "type" || host.config.delivery_mode === "paste")
   // The delivery choice, shown once while Mouthtype only saves takes. Choosing Paste changes the mode, which hides the card
   // by itself; "Just save them" sets welcomed so it stays hidden.
-  readonly property bool showWelcome: !!host && host.config.delivery_mode === "recover" && !host.welcomed
+  readonly property bool showWelcome: !!host && !host.clientMissing && host.config.delivery_mode === "recover" && !host.welcomed
   readonly property var groups: grouped(host ? host.recent : [], host ? host.saved : [])
 
   width: parent ? parent.width : 520
@@ -76,6 +76,19 @@ Column {
     width: parent.width
     title: "Your recent takes."
     summary: "Everything you dictated lately, newest first. Copy it or recover it."
+  }
+
+  DesignCard {
+    visible: !!root.host && root.host.clientMissing
+    width: parent.width
+    DesignRow {
+      title: "Mouthtype was removed"
+      detail: "The app is gone, but its bar widget and shortcuts are still here. Clean them up to stop seeing this."
+      DesignPrimaryButton {
+        text: "Remove widget and shortcuts"
+        onActivated: root.host.run(["remove-leftovers"])
+      }
+    }
   }
 
   DesignCard {

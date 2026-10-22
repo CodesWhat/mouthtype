@@ -562,7 +562,14 @@ def versions():
     return found
 
 
+def client_missing():
+    """True when the packaged or user-local client is gone, e.g. after `pacman -R` without the setup uninstall."""
+    return not LAUNCHER.exists()
+
+
 def state():
+    if client_missing():
+        return {"running": False, "state": "unavailable", "client": "missing"}
     if not LAUNCHER.is_file() or not CONFIG.is_file():
         return {"running": False, "state": "unavailable", "error": "Mouthtype installation is missing"}
     result = session_call("status", timeout=5)
@@ -1379,8 +1386,45 @@ VALID_ACTIONS = {
     "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
     "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup", "cleanup-cancel", "set-plugin"
 ,
-    "forget", "prune"
+    "forget", "prune", "remove-leftovers"
 }
+
+# The verbs the shortcut and the bar widget send; with the client gone they notify instead of failing silently.
+SHORTCUT_VERBS = {"start", "stop", "toggle", "cancel", "paste-last"}
+REMOVED_NOTICE = LOG.parent / "removed-notice"
+REMOVED_TEXT = "Mouthtype was removed. Open its bar menu to clean up."
+
+
+def notify_removed(now=None):
+    """One notify-send saying the client is gone, at most once a minute. Returns True when it sent one."""
+    now = time.time() if now is None else now
+    try:
+        if now - REMOVED_NOTICE.stat().st_mtime < 60:
+            return False
+    except OSError:
+        pass
+    command = shutil.which("notify-send")
+    if command is None:
+        return False
+    try:
+        REMOVED_NOTICE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        REMOVED_NOTICE.touch()
+        os.utime(REMOVED_NOTICE, (now, now))
+        subprocess.run([command, "-a", "Mouthtype", "Mouthtype", REMOVED_TEXT], check=False, timeout=5,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def remove_leftovers():
+    """Run this plugin copy's own installer --uninstall, detached: it deletes this directory and restarts the shell."""
+    installer = PLUGIN_DIR / "install.py"
+    if not installer.is_file():
+        raise RuntimeError("The plugin installer is missing")
+    subprocess.Popen([sys.executable, str(installer), "--uninstall"], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+    return {"message": "Removing the widget and shortcuts"}
 
 MODULE_PATTERN = re.compile(r"control_[a-z0-9_]+\.py")
 _module_commands = None
@@ -1471,14 +1515,21 @@ def main():
     ) or (
         sys.argv[1] in {"set-pill", "set-plugin"} and len(sys.argv) != 4
     ) or (sys.argv[1] in {"state", "start-service", "shutdown", "start", "stop", "cancel", "toggle", "paste-last",
-                          "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save"}
+                          "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save",
+                          "remove-leftovers"}
           and len(sys.argv) != 2):
         print(json.dumps({"error": "Unknown control action"}))
         return 2
     try:
         action = sys.argv[1]
+        if action in SHORTCUT_VERBS and client_missing():
+            notify_removed()
+            print(json.dumps({"client": "missing", "error": "Mouthtype was removed"}))
+            return 1
         if action == "state":
             output = state()
+        elif action == "remove-leftovers":
+            output = remove_leftovers()
         elif action == "import-pick":
             output = import_pick()
         elif action == "import-start":
