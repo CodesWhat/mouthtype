@@ -12,6 +12,24 @@ public enum SmartCleanupGuard {
     /// How far after an abandoned number or name its correction cue may appear.
     static let cueReach = 4
 
+    /// The reason to reject an output that isn't in the language of its input, or nil. A cleanup model that answers in
+    /// English (a translation) fails here even when most of its words are kept. Text under three words, or with no
+    /// detector, can't be told apart and passes.
+    public static func languageChange(
+        output: String, language: DictationLanguage?, detector: (any LanguageDetector)?,
+        confidence: Double = languageChangeConfidence
+    ) -> String? {
+        guard let language, !language.isEnglish, let detector, TextMetrics.wordCount(output) >= LanguageResolver.defaultMinimumWords
+        else { return nil }
+        guard let best = detector.hypotheses(for: output, among: [language, .english]).first,
+            best.language != language, best.confidence >= confidence
+        else { return nil }
+        return "output is in \(best.language.englishName), not \(language.englishName)"
+    }
+
+    /// How sure the detector must be that the output switched language before the cleanup is rejected.
+    public static let languageChangeConfidence = 0.6
+
     /// Phrases a speaker uses to replace what they just said. Matched as whole words.
     static let correctionCues: [[String]] = [
         ["actually"], ["no", "wait"], ["wait"], ["i", "mean"], ["scratch", "that"], ["sorry"], ["rather"],
@@ -188,11 +206,14 @@ public enum SmartCleanupGuard {
         return best?.range
     }
 
-    /// A reason to reject, or nil when the output is fine.
+    /// A reason to reject, or nil when the output is fine. Outside English only the language-neutral checks run: the
+    /// negation, certainty, time-of-day, question and number-word checks read English words, so they are left out, the
+    /// stop-word filter is off, and German nouns (always capitalized) are not treated as names.
     public static func rejection(
         input: String, output: String, level: CleanupLevel, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
-        nearbySpellings: [String] = [], resolvedInput: String? = nil
+        nearbySpellings: [String] = [], resolvedInput: String? = nil, language: DictationLanguage? = nil
     ) -> String? {
+        let english = DictationLanguage.isEnglish(language)
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "empty output" }
 
@@ -200,20 +221,25 @@ public enum SmartCleanupGuard {
         let limit = CleanupLimits.maxOutputTokens(for: input)
         if outputWords > limit { return "output has \(outputWords) words, over the \(limit) limit" }
 
-        if let reason = changedIntent(input: input, output: trimmed) { return reason }
+        if english, let reason = changedIntent(input: input, output: trimmed) { return reason }
         if let literal = missingLiteral(input: input, output: trimmed) { return "literal \"\(literal)\" changed" }
-        let comparableInput = writtenForm(input)
-        let comparableOutput = writtenForm(trimmed)
+        let comparableInput = english ? writtenForm(input) : input
+        let comparableOutput = english ? writtenForm(trimmed) : trimmed
         let outputSpellings = Set(comparableOutput.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
         for word in comparableInput.split(whereSeparator: \.isWhitespace).map(stripped)
         where word.count > 1 && word.contains(where: \.isLetter) && word.allSatisfy({ $0.isUppercase || $0.isNumber }) {
             if !outputSpellings.contains(word.lowercased()) { return "acronym \(word) missing or changed" }
         }
 
-        if let missing = missingNumber(input: comparableInput, output: comparableOutput) { return "number \(missing) missing or changed" }
-        if let scale = droppedScale(input: comparableInput, output: comparableOutput) { return "scale word \(scale) missing or changed" }
-        if reordered(numberSequence(comparableInput), numberSequence(comparableOutput)) { return "number order changed" }
-        if reordered(timeSequence(comparableInput), timeSequence(comparableOutput)) { return "time order changed" }
+        if english {
+            if let missing = missingNumber(input: comparableInput, output: comparableOutput) { return "number \(missing) missing or changed" }
+            if let scale = droppedScale(input: comparableInput, output: comparableOutput) { return "scale word \(scale) missing or changed" }
+            if reordered(numberSequence(comparableInput), numberSequence(comparableOutput)) { return "number order changed" }
+            if reordered(timeSequence(comparableInput), timeSequence(comparableOutput)) { return "time order changed" }
+        } else {
+            if let missing = missingDigits(input: input, output: trimmed) { return "number \(missing) missing or changed" }
+            if reordered(digitSequence(input), digitSequence(trimmed)) { return "number order changed" }
+        }
         for source in [input, resolvedInput].compactMap({ $0 }) {
             if let added = DictionaryReplacer.introducedAlias(input: source, output: trimmed, rules: dictionary) {
                 return "dictionary spelling \"\(added)\" added without an exact match"
@@ -222,7 +248,9 @@ public enum SmartCleanupGuard {
         if let missing = missingTerm(input: input, output: trimmed, dictionary: dictionary, snippets: snippets) {
             return "\"\(missing)\" missing"
         }
-        if let missing = missingName(input: comparableInput, output: comparableOutput) { return "name \"\(missing)\" missing" }
+        if language != .german, let missing = missingName(input: comparableInput, output: comparableOutput) {
+            return "name \"\(missing)\" missing"
+        }
 
         let nearbyNames = Set(nearbySpellings.map { $0.lowercased() })
         let inputParts = input.split(whereSeparator: \.isWhitespace).map(String.init)
@@ -238,8 +266,8 @@ public enum SmartCleanupGuard {
             return "nearby spelling \"\(added)\" added"
         }
 
-        let inputWords = contentWords(comparableInput)
-        let outputContent = contentWords(comparableOutput)
+        let inputWords = contentWords(comparableInput, filteringStopWords: english)
+        let outputContent = contentWords(comparableOutput, filteringStopWords: english)
         if !inputWords.isEmpty {
             let kept = Double(inputWords.filter { present($0, in: outputContent) }.count) / Double(inputWords.count)
             if kept < minimumKept(for: level) {
@@ -424,10 +452,11 @@ public enum SmartCleanupGuard {
         }
     }
 
-    static func contentWords(_ text: String) -> [String] {
+    static func contentWords(_ text: String, filteringStopWords: Bool = true) -> [String] {
         var seen = Set<String>()
         return TextMetrics.normalizedWords(text).filter { word in
-            word.count > 2 && !word.contains(where: \.isNumber) && !stopWords.contains(word) && seen.insert(word).inserted
+            word.count > 2 && !word.contains(where: \.isNumber) && !(filteringStopWords && stopWords.contains(word))
+                && seen.insert(word).inserted
         }
     }
 
@@ -639,11 +668,11 @@ public enum SmartCleanupGuard {
         return found
     }
 
-    private static func wordsAndDigits(in text: String) -> [Quantity] {
+    private static func wordsAndDigits(in text: String, includingWords: Bool = true) -> [Quantity] {
         var found: [Quantity] = []
         for (position, token) in text.split(whereSeparator: \.isWhitespace).enumerated() {
             let word = stripped(token).lowercased()
-            if let value = numberWords[word] ?? ordinalWords[word] {
+            if includingWords, let value = numberWords[word] ?? ordinalWords[word] {
                 found.append(Quantity(accepted: [word, String(value)], position: position, label: word))
                 continue
             }
@@ -664,6 +693,21 @@ public enum SmartCleanupGuard {
             }
         }
         return found
+    }
+
+    /// The digit groups an input states that the output doesn't have, for text whose number words aren't English.
+    static func missingDigits(input: String, output: String) -> String? {
+        var spellings = Set<String>()
+        for quantity in wordsAndDigits(in: output, includingWords: false) { spellings.formUnion(quantity.accepted) }
+        for quantity in wordsAndDigits(in: input, includingWords: false) where quantity.accepted.isDisjoint(with: spellings) {
+            return quantity.label
+        }
+        return nil
+    }
+
+    /// The digit groups of a text in reading order.
+    static func digitSequence(_ text: String) -> [String] {
+        wordsAndDigits(in: text, includingWords: false).flatMap { $0.accepted.sorted() }
     }
 
     static func missingNumber(input: String, output: String) -> String? {

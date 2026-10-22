@@ -40,5 +40,23 @@
     "language": "nl",
     "raw": "Bedankt voor het toesturen van het herziene voorstel. Ik heb vanmorgen de planning en het budget met het team doorgenomen, en we zijn het grotendeels eens over het plan voor het volgende kwartaal.",
     "notes": "Long, 33 words."
+  },
+  {
+    "id": "nl-messy-1",
+    "language": "nl",
+    "raw": "Dus, eh, we zien elkaar morgen om, uhm, om tien uur op kantoor en, en bespreken het plan voor volgende week.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "nl-messy-2",
+    "language": "nl",
+    "raw": "Stuur me het bestand voor dinsdag, nee wacht, voor woensdag, en laat het team ook even weten.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "nl-messy-3",
+    "language": "nl",
+    "raw": "We hebben eerst meer tijd nodig voor de tests ten tweede nog een ontwikkelaar en ten derde een duidelijk budget anders wordt het niets",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
   }
 ]

@@ -52,5 +52,23 @@
     "language": "fr",
     "raw": "Voici la liste : pain, lait et œufs.",
     "notes": "French no-break space before ':'."
+  },
+  {
+    "id": "fr-messy-1",
+    "language": "fr",
+    "raw": "Alors, euh, on se retrouve demain à, euh, à dix heures au bureau et, et on parle du plan pour la semaine prochaine.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "fr-messy-2",
+    "language": "fr",
+    "raw": "Envoie-moi le fichier pour mardi, non attends, pour mercredi, et préviens aussi l'équipe.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "fr-messy-3",
+    "language": "fr",
+    "raw": "Il nous faut premièrement plus de temps pour les tests deuxièmement un développeur de plus et troisièmement un budget clair sinon ça ne marchera pas",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
   }
 ]

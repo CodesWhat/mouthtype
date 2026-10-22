@@ -46,5 +46,23 @@
     "language": "pl",
     "raw": "Pojedziemy do Łodzi I W sobotę.",
     "notes": "Technical notation: Polish conjunction 'i' and 'w' must stay as written. Also Łódź casing."
+  },
+  {
+    "id": "pl-messy-1",
+    "language": "pl",
+    "raw": "No więc, yyy, spotykamy się jutro o, yyy, o dziesiątej w biurze i, i omawiamy plan na przyszły tydzień.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "pl-messy-2",
+    "language": "pl",
+    "raw": "Wyślij mi plik do wtorku, nie czekaj, do środy, i daj też znać zespołowi.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "pl-messy-3",
+    "language": "pl",
+    "raw": "Potrzebujemy po pierwsze więcej czasu na testy po drugie jeszcze jednego programisty i po trzecie jasnego budżetu inaczej nic z tego nie będzie",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
   }
 ]
