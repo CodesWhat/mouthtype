@@ -59,10 +59,12 @@ struct BitmapFont {
     func image(for text: String, color: CGColor) -> CGImage? {
         let width = metrics.width(of: text)
         guard width > 0 else { return nil }
-        guard let context = CGContext(
-            data: nil, width: width, height: metrics.cellHeight, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: metrics.cellHeight, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { return nil }
         context.interpolationQuality = .none
         for (index, x) in metrics.placements(of: text) {
             let cell = CGRect(x: index * metrics.cellWidth, y: 0, width: metrics.cellWidth, height: metrics.cellHeight)

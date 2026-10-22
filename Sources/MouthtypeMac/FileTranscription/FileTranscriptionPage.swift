@@ -28,8 +28,7 @@ import UniformTypeIdentifiers
         panel.nameFieldStringValue = (model.filename as NSString).deletingPathExtension + ".txt"
         panel.beginSheetModal(for: window) { response in
             guard response == .OK, let url = panel.url else { return }
-            do { try model.save(to: url) }
-            catch {
+            do { try model.save(to: url) } catch {
                 let alert = NSAlert()
                 alert.messageText = "Couldn't save the transcript"
                 alert.informativeText = error.localizedDescription
@@ -101,7 +100,7 @@ struct FileTranscriptionView: View {
                 }
             }.padding(.horizontal, 16).padding(.vertical, 12)
             if model.isBusy {
-                ProgressView().progressViewStyle(.linear).tint(DesignPalette.accent)
+                ProgressView().progressViewStyle(.linear).tint(DesignPalette.accentMark)
                     .padding(.horizontal, 16).padding(.bottom, 12).accessibilityLabel("Transcribing")
             }
         }
@@ -145,7 +144,7 @@ struct FileTranscriptionView: View {
 
     private var chipTone: (dot: Color, text: Color) {
         switch model.state {
-        case .finished, .preparing, .transcribing: (DesignPalette.accent, DesignPalette.accentText)
+        case .finished, .preparing, .transcribing: (DesignPalette.accentMark, DesignPalette.accentText)
         case .failed: (DesignPalette.danger, DesignPalette.danger)
         case .idle, .cancelling, .empty, .cancelled: (DesignPalette.ink3, DesignPalette.ink3)
         }

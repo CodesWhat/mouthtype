@@ -54,8 +54,11 @@ enum PreviewSwatch {
     static func image(_ wallpaper: PreviewWallpaper, size: CGSize, scale: CGFloat = 2) -> CGImage? {
         let width = max(1, Int((size.width * scale).rounded())), height = max(1, Int((size.height * scale).rounded()))
         let space = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space,
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
         context.scaleBy(x: scale, y: scale)
         let w = size.width, h = size.height
         let palette = palette(wallpaper)
@@ -64,8 +67,10 @@ enum PreviewSwatch {
         if let base = CGGradient(colorsSpace: space, colors: [colour(palette.base.0), colour(palette.base.1)] as CFArray, locations: [0, 1]) {
             context.drawLinearGradient(base, start: point(0.3, 0), end: point(0.7, 1), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
         }
-        for (centre, radius, hex, alpha) in [(point(0.15, 0.1), CGFloat(260), palette.cool, palette.coolAlpha),
-                                             (point(0.85, 0.8), CGFloat(220), palette.warm, palette.warmAlpha)] {
+        for (centre, radius, hex, alpha) in [
+            (point(0.15, 0.1), CGFloat(260), palette.cool, palette.coolAlpha),
+            (point(0.85, 0.8), CGFloat(220), palette.warm, palette.warmAlpha),
+        ] {
             guard let wash = CGGradient(colorsSpace: space, colors: [colour(hex, alpha), colour(hex, 0)] as CFArray, locations: [0, 1]) else { continue }
             context.drawRadialGradient(wash, startCenter: centre, startRadius: 0, endCenter: centre, endRadius: radius, options: [])
         }
@@ -130,7 +135,7 @@ enum PreviewFit {
         case .standard: text = "Standard size."
         case .large: text = "Large size, twice Standard."
         }
-        if scale < 0.995 { text += " Shown at \(Int((scale * 100).rounded()))% to fit."}
+        if scale < 0.995 { text += " Shown at \(Int((scale * 100).rounded()))% to fit." }
         return text
     }
 }
@@ -234,9 +239,10 @@ final class PillPreviewStage: NSView {
         snapshot.imageScaling = .scaleProportionallyUpOrDown
         snapshot.setAccessibilityElement(false)
         addSubview(snapshot)
-        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
-            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
-        ) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } })
+        observers.append(
+            NSWorkspace.shared.notificationCenter.addObserver(
+                forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main
+            ) { [weak self] _ in MainActor.assumeIsolated { self?.refresh() } })
     }
 
     required init?(coder: NSCoder) { fatalError("not used") }
@@ -326,8 +332,9 @@ final class PillPreviewStage: NSView {
         if force || decision != lastDecision || effective != lastAppearance {
             lastDecision = decision
             lastAppearance = effective
-            snapshot.image = SettingsPillImage.make(skin: kind, size: scale == .large ? .large : .standard, readout: readout ?? .default,
-                                                    wallpaper: effective, glassEnvironment: glassEnvironment)
+            snapshot.image = SettingsPillImage.make(
+                skin: kind, size: scale == .large ? .large : .standard, readout: readout ?? .default,
+                wallpaper: effective, glassEnvironment: glassEnvironment)
         }
         let next = PreviewStatus(source: source, decision: decision, backdrop: backdropSource.backdrop)
         if next != status {
@@ -359,16 +366,19 @@ final class PillPreviewStage: NSView {
         windowObservers = []
         if let window {
             let center = NotificationCenter.default
-            for name in [NSWindow.willCloseNotification, NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
-                         NSWindow.didDeminiaturizeNotification, NSWindow.didChangeScreenNotification, NSWindow.didBecomeKeyNotification,
-                         NSWindow.didExposeNotification] {
-                windowObservers.append(center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated {
-                        // willClose arrives while the window still reports visible.
-                        self?.closing = name == NSWindow.willCloseNotification
-                        self?.refresh()
-                    }
-                })
+            for name in [
+                NSWindow.willCloseNotification, NSWindow.didChangeOcclusionStateNotification, NSWindow.didMiniaturizeNotification,
+                NSWindow.didDeminiaturizeNotification, NSWindow.didChangeScreenNotification, NSWindow.didBecomeKeyNotification,
+                NSWindow.didExposeNotification,
+            ] {
+                windowObservers.append(
+                    center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                        MainActor.assumeIsolated {
+                            // willClose arrives while the window still reports visible.
+                            self?.closing = name == NSWindow.willCloseNotification
+                            self?.refresh()
+                        }
+                    })
             }
             closing = false
         }

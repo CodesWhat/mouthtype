@@ -10,7 +10,8 @@ private struct CachedFiles {
         "model.safetensors": Data([1]),
     ]
     var isComplete: Bool {
-        HubDownloader.snapshotIsComplete(files: Array(entries.keys),
+        HubDownloader.snapshotIsComplete(
+            files: Array(entries.keys),
             fileExists: { entries[$0]?.isEmpty == false }, contents: { entries[$0] })
     }
 }
@@ -19,8 +20,10 @@ private final class DownloadProbe: Downloader, @unchecked Sendable {
     private let lock = NSLock()
     private var requests: [Bool] = []
     var latest: [Bool] { lock.withLock { requests } }
-    func download(id: String, revision: String?, matching patterns: [String], useLatest: Bool,
-                  progressHandler: @Sendable @escaping (Progress) -> Void) async throws -> URL {
+    func download(
+        id: String, revision: String?, matching patterns: [String], useLatest: Bool,
+        progressHandler: @Sendable @escaping (Progress) -> Void
+    ) async throws -> URL {
         lock.withLock { requests.append(useLatest) }
         progressHandler(Progress(totalUnitCount: 1))
         return URL(fileURLWithPath: "/virtual/model")
@@ -76,5 +79,23 @@ private final class DownloadProbe: Downloader, @unchecked Sendable {
         let cleaner = MLXCleaner(spec: spec, downloadSource: probe)
         try await cleaner.download { _ in }
         #expect(!probe.latest.isEmpty && probe.latest.allSatisfy { $0 })
+    }
+
+    @Test func discardingAPartialSnapshotKeepsOtherSnapshotsAndTheirBlobs() throws {
+        let fm = FileManager.default
+        let repo = fm.temporaryDirectory.appendingPathComponent("discard-\(UUID().uuidString)", isDirectory: true)
+        defer { try? fm.removeItem(at: repo) }
+        let blobs = repo.appendingPathComponent("blobs")
+        let mine = repo.appendingPathComponent("snapshots/aaaa"), other = repo.appendingPathComponent("snapshots/bbbb")
+        for directory in [blobs, mine, other] { try fm.createDirectory(at: directory, withIntermediateDirectories: true) }
+        for name in ["mine-only", "shared", "other-only", "half.incomplete"] { try Data("x".utf8).write(to: blobs.appendingPathComponent(name)) }
+        try fm.createSymbolicLink(atPath: mine.appendingPathComponent("a.json").path, withDestinationPath: "../../blobs/mine-only")
+        try fm.createSymbolicLink(atPath: mine.appendingPathComponent("b.json").path, withDestinationPath: "../../blobs/shared")
+        try fm.createSymbolicLink(atPath: other.appendingPathComponent("b.json").path, withDestinationPath: "../../blobs/shared")
+        try fm.createSymbolicLink(atPath: other.appendingPathComponent("c.json").path, withDestinationPath: "../../blobs/other-only")
+        HubDownloader.discardPartialSnapshot(repoDirectory: repo, commit: "aaaa")
+        let left = Set(try fm.contentsOfDirectory(atPath: blobs.path))
+        #expect(left == ["shared", "other-only"])
+        #expect(!fm.fileExists(atPath: mine.path) && fm.fileExists(atPath: other.path))
     }
 }

@@ -154,10 +154,12 @@ enum ClassicPillLayout {
         let stack = head.count * Int(headlineLineHeight.rounded()) + tail.count * Int(detailLineHeight.rounded())
         let gap = tail.isEmpty ? 0 : m.detailGap
         let block = CGFloat(stack) + gap
-        let wanted = head.count + tail.count == 1
+        let wanted =
+            head.count + tail.count == 1
             ? m.height
             : max(m.height, evenCeil(block + 2 * m.messageVerticalPadding, scale: scale))
-        let cap = maxHeight.isFinite && maxHeight < .greatestFiniteMagnitude
+        let cap =
+            maxHeight.isFinite && maxHeight < .greatestFiniteMagnitude
             ? max(m.height, 2 * (maxHeight * scale / 2).rounded(.down) / scale)
             : wanted
         let height = min(wanted, cap)

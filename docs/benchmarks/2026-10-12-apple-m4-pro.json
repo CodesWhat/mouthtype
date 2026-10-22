@@ -10,7 +10,7 @@
         "displayName" : "Parakeet TDT 0.6B v3 (multilingual)",
         "engineID" : "parakeet-tdt-v3",
         "modelBytes" : 489193472,
-        "modelPath" : "\/Users\/sbenson\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v3",
+        "modelPath" : "~\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v3",
         "peakRSSBytes" : 46546944,
         "prepare" : {
           "downloadSeconds" : 0,
@@ -314,7 +314,7 @@
         "engineID" : "parakeet-tdt-v3",
         "firstTranscribeMs" : 81.491375,
         "modelBytes" : 489193472,
-        "modelPath" : "\/Users\/sbenson\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v3",
+        "modelPath" : "~\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v3",
         "peakRSSBytes" : 149700608,
         "prepare" : {
           "downloadSeconds" : 0,
@@ -333,7 +333,7 @@
         "displayName" : "Parakeet TDT 0.6B v2 (English)",
         "engineID" : "parakeet-tdt-v2",
         "modelBytes" : 472899584,
-        "modelPath" : "\/Users\/sbenson\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v2",
+        "modelPath" : "~\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v2",
         "peakRSSBytes" : 562053120,
         "prepare" : {
           "downloadSeconds" : 31.528567458,
@@ -637,7 +637,7 @@
         "engineID" : "parakeet-tdt-v2",
         "firstTranscribeMs" : 51.824625,
         "modelBytes" : 472899584,
-        "modelPath" : "\/Users\/sbenson\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v2",
+        "modelPath" : "~\/Library\/Application Support\/FluidAudio\/Models\/parakeet-tdt-0.6b-v2",
         "peakRSSBytes" : 131022848,
         "prepare" : {
           "downloadSeconds" : 0,
@@ -656,7 +656,7 @@
         "displayName" : "Whisper large-v3 turbo",
         "engineID" : "whisper-large-v3-turbo",
         "modelBytes" : 1660149760,
-        "modelPath" : "\/Users\/sbenson\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-large-v3-v20240930_turbo",
+        "modelPath" : "~\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-large-v3-v20240930_turbo",
         "peakRSSBytes" : 1652244480,
         "prepare" : {
           "downloadSeconds" : 40.24358675,
@@ -960,7 +960,7 @@
         "engineID" : "whisper-large-v3-turbo",
         "firstTranscribeMs" : 489.930875,
         "modelBytes" : 1660149760,
-        "modelPath" : "\/Users\/sbenson\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-large-v3-v20240930_turbo",
+        "modelPath" : "~\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-large-v3-v20240930_turbo",
         "peakRSSBytes" : 252084224,
         "prepare" : {
           "downloadSeconds" : 0,
@@ -979,7 +979,7 @@
         "displayName" : "Whisper small.en",
         "engineID" : "whisper-small-en",
         "modelBytes" : 501686272,
-        "modelPath" : "\/Users\/sbenson\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-small.en",
+        "modelPath" : "~\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-small.en",
         "peakRSSBytes" : 881311744,
         "prepare" : {
           "downloadSeconds" : 16.691777708,
@@ -1283,7 +1283,7 @@
         "engineID" : "whisper-small-en",
         "firstTranscribeMs" : 187.856625,
         "modelBytes" : 501686272,
-        "modelPath" : "\/Users\/sbenson\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-small.en",
+        "modelPath" : "~\/Documents\/huggingface\/models\/argmaxinc\/whisperkit-coreml\/openai_whisper-small.en",
         "peakRSSBytes" : 165707776,
         "prepare" : {
           "downloadSeconds" : 0,

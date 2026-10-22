@@ -8,7 +8,8 @@ import SwiftUI
 
     init(model: FileTranscriptionModel) {
         self.model = model
-        let window = TranscribeNSWindow(contentRect: NSRect(origin: .zero, size: FileTranscriptionView.size),
+        let window = TranscribeNSWindow(
+            contentRect: NSRect(origin: .zero, size: FileTranscriptionView.size),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Transcribe Audio File"
         window.titlebarAppearsTransparent = true
@@ -17,10 +18,11 @@ import SwiftUI
         window.isReleasedWhenClosed = false
         window.backgroundColor = .windowBackgroundColor
         super.init(window: window)
-        let hosting = NSHostingView(rootView: FileTranscriptionView(
-            model: model,
-            choose: { [weak self] in FileTranscriptionPanels.chooseFile(model: model, over: self?.window) },
-            save: { [weak self] in FileTranscriptionPanels.saveText(model: model, over: self?.window) }))
+        let hosting = NSHostingView(
+            rootView: FileTranscriptionView(
+                model: model,
+                choose: { [weak self] in FileTranscriptionPanels.chooseFile(model: model, over: self?.window) },
+                save: { [weak self] in FileTranscriptionPanels.saveText(model: model, over: self?.window) }))
         hosting.sizingOptions = []
         window.contentView = hosting
         window.setContentSize(FileTranscriptionView.size)

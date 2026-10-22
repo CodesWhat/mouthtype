@@ -15,6 +15,10 @@ public struct FocusSnapshot: Sendable {
     public var role: String?
     public var subrole: String?
     var focusedOwnerPID: pid_t?
+    /// The pid of the application that owns the focused element's window, read through Accessibility ancestry. Only read
+    /// when `focusedOwnerPID` differs from `pid`. Browsers host web content in renderer processes, so the owner pid
+    /// alone says nothing about which app the field is in.
+    var focusedApplicationPID: pid_t?
     public var isSecure: Bool
     /// For static text only: whether its value or selection can be set. Nil for every other role, or when unread.
     var isTextSettable: Bool?
@@ -24,7 +28,7 @@ public struct FocusSnapshot: Sendable {
     init(
         pid: pid_t? = nil, bundleID: String? = nil, appName: String? = nil, windowTitle: String? = nil,
         role: String? = nil, subrole: String? = nil, isSecure: Bool = false, isTextSettable: Bool? = nil,
-        element: FocusedElement? = nil, focusedOwnerPID: pid_t? = nil
+        element: FocusedElement? = nil, focusedOwnerPID: pid_t? = nil, focusedApplicationPID: pid_t? = nil
     ) {
         self.pid = pid
         self.bundleID = bundleID
@@ -36,6 +40,7 @@ public struct FocusSnapshot: Sendable {
         self.isTextSettable = isTextSettable
         self.element = element
         self.focusedOwnerPID = focusedOwnerPID
+        self.focusedApplicationPID = focusedApplicationPID
     }
 
     public var target: DictationTarget {
@@ -49,6 +54,14 @@ public struct FocusSnapshot: Sendable {
         if pid != now.pid { return true }
         if let element, let other = now.element, element != other { return true }
         return false
+    }
+
+    /// The focused element sits in a different application than the frontmost one, as with a non-activating panel.
+    /// A differing owner pid is not enough, because a browser's renderer process owns its page elements. Unknown
+    /// ownership or unreadable ancestry is not a mismatch: Chromium and Electron may expose no focused element yet.
+    var focusOwnerDiffersFromFrontmost: Bool {
+        guard let pid, let focusedOwnerPID, focusedOwnerPID != pid, let focusedApplicationPID else { return false }
+        return focusedApplicationPID != pid
     }
 }
 
@@ -77,6 +90,8 @@ struct FocusProbe: Sendable {
 protocol FocusReading: AnyObject {
     func snapshotApplication() -> FocusSnapshot
     func snapshot() -> FocusSnapshot
+    /// Like `snapshot()`, for reading the user's selection while a status menu is tracking. Defaults to `snapshot()`.
+    func selectionSnapshot() -> FocusSnapshot
     /// A read of the browser's page URL that is safe to run off the main actor, or nil when the focus rules out reading it.
     /// The cheap checks happen here, on the main actor; the Accessibility calls happen inside the returned closure.
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)?
@@ -86,10 +101,18 @@ protocol FocusReading: AnyObject {
     /// The value, length and selection a paste is verified against. Never call on a secure field.
     func readField(of element: FocusedElement) -> FieldReading
     var isSecureInputEnabled: Bool { get }
+    /// The cheap read right before the paste: only what the focus guards compare (app, element, owner, secure).
+    /// Skips role, settable and window title, which the guards never look at.
+    func recheck() -> FocusSnapshot
+    /// Runs `body` with a shorter bound on each Accessibility call, for reads that sit between the last guard and the paste.
+    func prePaste<T>(_ body: () -> T) -> T
 }
 
 extension FocusReading {
+    func recheck() -> FocusSnapshot { snapshot() }
+    func prePaste<T>(_ body: () -> T) -> T { body() }
     func snapshotApplication() -> FocusSnapshot { snapshot() }
+    func selectionSnapshot() -> FocusSnapshot { snapshot() }
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? { nil }
     func insertionContext(of element: FocusedElement) -> InsertionContext? { nil }
     func readField(of element: FocusedElement) -> FieldReading { FieldReading() }
@@ -102,9 +125,35 @@ final class AccessibilityFocusReader: FocusReading {
     /// Set while a time-boxed read runs (the menu capture). Each call's timeout shrinks to what's left, so the reads together stay near the budget.
     static var deadline: Date?
     static var deadlinePassed: Bool { deadline.map { $0.timeIntervalSinceNow <= 0 } ?? false }
+    /// The bound for reads between the last focus guard and the paste. A slow app costs this much per call, not 250 ms.
+    nonisolated static let prePasteTimeout: Float = 0.1
+    /// Set inside `prePaste`; tightens `callTimeout()` without ever loosening it.
+    static var cap: Float?
     static func callTimeout() -> Float {
-        guard let deadline else { return messagingTimeout }
-        return max(0.005, min(messagingTimeout, Float(deadline.timeIntervalSinceNow)))
+        let limit = min(messagingTimeout, cap ?? messagingTimeout)
+        guard let deadline else { return limit }
+        return max(0.005, min(limit, Float(deadline.timeIntervalSinceNow)))
+    }
+
+    func prePaste<T>(_ body: () -> T) -> T {
+        let previous = Self.cap
+        Self.cap = Self.prePasteTimeout
+        defer { Self.cap = previous }
+        return body()
+    }
+
+    func recheck() -> FocusSnapshot {
+        var snapshot = snapshotApplication()
+        guard let element = elementValue(bounded(AXUIElementCreateSystemWide()), kAXFocusedUIElementAttribute) else { return snapshot }
+        let focused = FocusedElement(element)
+        snapshot.element = focused
+        snapshot.focusedOwnerPID = ownerPID(of: focused)
+        if let owner = snapshot.focusedOwnerPID, owner != snapshot.pid {
+            snapshot.focusedApplicationPID = applicationPID(ofElement: element)
+        }
+        snapshot.subrole = stringValue(bounded(element), kAXSubroleAttribute)
+        snapshot.isSecure = isSecure(bounded(element), subrole: snapshot.subrole)
+        return snapshot
     }
 
     var isSecureInputEnabled: Bool { IsSecureEventInputEnabled() }
@@ -125,8 +174,35 @@ final class AccessibilityFocusReader: FocusReading {
             }
             return snapshot
         }
+        return fill(snapshot, with: element)
+    }
+
+    /// The same read as `snapshot()`, except that when the system-wide focused element is empty it asks the frontmost app
+    /// directly. The system-wide element is empty while a status menu tracks, but the app still knows its own focus.
+    func selectionSnapshot() -> FocusSnapshot {
+        var snapshot = snapshotApplication()
+        let systemWide = bounded(AXUIElementCreateSystemWide())
+        var focused = elementValue(systemWide, kAXFocusedUIElementAttribute)
+        if focused == nil, !Self.deadlinePassed, let pid = snapshot.pid {
+            focused = elementValue(bounded(AXUIElementCreateApplication(pid)), kAXFocusedUIElementAttribute)
+        }
+        guard let element = focused else {
+            if !Self.deadlinePassed, let pid = snapshot.pid {
+                let appElement = bounded(AXUIElementCreateApplication(pid))
+                snapshot.windowTitle = elementValue(appElement, kAXFocusedWindowAttribute).flatMap(title(of:))
+            }
+            return snapshot
+        }
+        return fill(snapshot, with: element)
+    }
+
+    private func fill(_ base: FocusSnapshot, with element: AXUIElement) -> FocusSnapshot {
+        var snapshot = base
         snapshot.element = FocusedElement(element)
         snapshot.focusedOwnerPID = ownerPID(of: FocusedElement(element))
+        if let owner = snapshot.focusedOwnerPID, owner != snapshot.pid {
+            snapshot.focusedApplicationPID = applicationPID(ofElement: element)
+        }
         // Each read below re-derives its timeout from what's left of the deadline, and none is issued once it has passed.
         // The caller sees the expired deadline and treats the whole capture as timed out.
         if Self.deadlinePassed { return snapshot }
@@ -144,10 +220,27 @@ final class AccessibilityFocusReader: FocusReading {
 
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
         guard !snapshot.isSecure, !isSecureInputEnabled, WebsiteContext.supports(bundleID: snapshot.bundleID),
-              let element = snapshot.element, let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
-              NSWorkspace.shared.frontmostApplication?.processIdentifier == pid else { return nil }
+            let element = snapshot.element, let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
+            NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
+        else { return nil }
         let bundleID = snapshot.bundleID
         return { BrowserURLRead.host(of: element, bundleID: bundleID, timeout: BrowserURLRead.callTimeout) }
+    }
+
+    /// The pid of the application whose window holds `element`: its top-level window's parent when that is the
+    /// application element, else the window itself. Nil when the ancestry can't be read.
+    func applicationPID(ofElement element: AXUIElement) -> pid_t? {
+        guard
+            let window = elementValue(bounded(element), kAXTopLevelUIElementAttribute)
+                ?? elementValue(bounded(element), kAXWindowAttribute)
+        else { return nil }
+        let owner =
+            elementValue(bounded(window), kAXParentAttribute).flatMap {
+                stringValue(bounded($0), kAXRoleAttribute) == kAXApplicationRole ? $0 : nil
+            } ?? window
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(bounded(owner), &pid) == .success, pid > 0 else { return nil }
+        return pid
     }
 
     /// Diagnostic ownership only. Event delivery still uses the frontmost application.
@@ -161,10 +254,11 @@ final class AccessibilityFocusReader: FocusReading {
     /// it. Ranges count UTF-16 units, so two are read and the last character kept: one alone could be half an emoji.
     /// Falls back to the whole value for apps without `AXStringForRange`. Never call on a secure field.
     /// The selected range, or nil when the element reports none or a negative one. Callers bound the element first.
-    static func selectedRange(_ ref: AXUIElement) -> NSRange? {
+    nonisolated static func selectedRange(_ ref: AXUIElement) -> NSRange? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(ref, kAXSelectedTextRangeAttribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXValueGetTypeID() else { return nil }
+            let value, CFGetTypeID(value) == AXValueGetTypeID()
+        else { return nil }
         var range = CFRange()
         guard AXValueGetValue(value as! AXValue, .cfRange, &range), range.location >= 0, range.length >= 0 else { return nil }
         return NSRange(location: range.location, length: range.length)
@@ -180,14 +274,16 @@ final class AccessibilityFocusReader: FocusReading {
         var before = CFRange(location: range.location - length, length: length)
         var text: CFTypeRef?
         if let query = AXValueCreate(.cfRange, &before),
-           AXUIElementCopyParameterizedAttributeValue(ref, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
-           let character = (text as? String)?.last {
+            AXUIElementCopyParameterizedAttributeValue(ref, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
+            let character = (text as? String)?.last
+        {
             return .character(character)
         }
 
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(ref, kAXValueAttribute as CFString, &value) == .success,
-              let value = value as? String else { return .unknown }
+            let value = value as? String
+        else { return .unknown }
         let units = value.utf16
         guard range.location <= units.count else { return .unknown }
         let end = units.index(units.startIndex, offsetBy: range.location)
@@ -244,13 +340,15 @@ final class AccessibilityFocusReader: FocusReading {
         var range = range
         var text: CFTypeRef?
         if let query = AXValueCreate(.cfRange, &range),
-           AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
-           let string = text as? String {
+            AXUIElementCopyParameterizedAttributeValue(element, kAXStringForRangeParameterizedAttribute as CFString, query, &text) == .success,
+            let string = text as? String
+        {
             return string
         }
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
-              let value = value as? String else { return nil }
+            let value = value as? String
+        else { return nil }
         let units = value.utf16
         guard range.location + range.length <= units.count else { return nil }
         let start = units.index(units.startIndex, offsetBy: range.location)
@@ -267,7 +365,8 @@ final class AccessibilityFocusReader: FocusReading {
     private func elementValue(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
-              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            let value, CFGetTypeID(value) == AXUIElementGetTypeID()
+        else { return nil }
         return bounded(value as! AXUIElement)
     }
 
@@ -309,18 +408,19 @@ final class AccessibilityFocusReader: FocusReading {
     private func characterCount(_ element: AXUIElement) -> Int? {
         var count: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXNumberOfCharactersAttribute as CFString, &count) == .success,
-           let count = count as? Int {
+            let count = count as? Int
+        {
             return count
         }
         var value: CFTypeRef?
         if AXUIElementCopyAttributeValue(element, kAXValueAttribute as CFString, &value) == .success,
-           let value = value as? String {
+            let value = value as? String
+        {
             return value.utf16.count
         }
         return nil
     }
 }
-
 
 /// The page URL read from a browser window's document attribute. Blocking, so callers run it off the main actor under their own
 /// budget; every Accessibility call carries its own messaging timeout so a hung browser cannot hold the thread for long.
@@ -332,7 +432,8 @@ enum BrowserURLRead {
         AXUIElementSetMessagingTimeout(element.ref, timeout)
         var window: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element.ref, kAXWindowAttribute as CFString, &window) == .success,
-              let window, CFGetTypeID(window) == AXUIElementGetTypeID() else { return nil }
+            let window, CFGetTypeID(window) == AXUIElementGetTypeID()
+        else { return nil }
         let windowRef = window as! AXUIElement
         AXUIElementSetMessagingTimeout(windowRef, timeout)
         var document: CFTypeRef?

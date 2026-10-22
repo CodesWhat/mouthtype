@@ -36,7 +36,9 @@ final class PillPreviewView: NSView {
         let available = NSSize(width: bounds.width - 24, height: bounds.height - 36)
         let attributes: [NSAttributedString.Key: Any] = [.font: words.font!]
         func fits(_ count: Int) -> Bool {
-            let size = NSAttributedString(string: String(candidate.suffix(count)), attributes: attributes).boundingRect(with: NSSize(width: available.width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading]).size
+            let size = NSAttributedString(string: String(candidate.suffix(count)), attributes: attributes).boundingRect(
+                with: NSSize(width: available.width, height: .greatestFiniteMagnitude), options: [.usesLineFragmentOrigin, .usesFontLeading]
+            ).size
             return ceil(size.height) <= available.height && ceil(size.width) <= available.width
         }
         var low = 0

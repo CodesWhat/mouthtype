@@ -129,17 +129,21 @@ import MouthtypeCore
         let vocabulary = FileVocabulary(url: dir.appendingPathComponent("dictionary.json"))
         let spellings = SpellingEditor(store: vocabulary)
         var transcribeOpens = 0
-        let model = SettingsModel(defaults: defaults, spellings: spellings,
+        let model = SettingsModel(
+            defaults: defaults, spellings: spellings,
             spellingSuggestions: SpellingSuggestionsModel(vocabulary: vocabulary, dismissedURL: dir.appendingPathComponent("dismissed.json")),
             phrases: PhraseEditor(store: FilePhrases(url: dir.appendingPathComponent("phrases.json"))),
             openTranscribeWindow: { transcribeOpens += 1 })
         var asked = 0
         var answer = false
-        model.confirmDiscard = { _, _ in asked += 1; return answer }
-        let router = AutomationRouter(actions: AutomationActions(
-            startDictation: {}, stopDictation: {}, toggleDictation: {}, cancelDictation: {}, copyLast: {}, pasteLast: {},
-            open: { if let destination = $0.destination { model.open(destination) } }
-        ), isEnabled: { false })
+        model.confirmDiscard = { _, _ in
+            asked += 1; return answer
+        }
+        let router = AutomationRouter(
+            actions: AutomationActions(
+                startDictation: {}, stopDictation: {}, toggleDictation: {}, cancelDictation: {}, copyLast: {}, pasteLast: {},
+                open: { if let destination = $0.destination { model.open(destination) } }
+            ), isEnabled: { false })
 
         model.page = .dictionary
         spellings.newSpelling()

@@ -3,7 +3,7 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct SnippetExpanderTests {
-    private let now = Date(timeIntervalSince1970: 1_791_763_200)   // 2026-10-12 00:00 UTC
+    private let now = Date(timeIntervalSince1970: 1_791_763_200)  // 2026-10-12 00:00 UTC
     private let fixedDate: SnippetExpander.DateFormatter = { _ in "October 12, 2026" }
 
     private func expander(_ snippets: [Snippet], clipboard: String? = nil) -> SnippetExpander {
@@ -11,8 +11,10 @@ import Testing
     }
 
     @Test func matchingTriggersIncludeIdenticalReplacementsAndRespectBoundaries() {
-        let e = expander([Snippet(trigger: "my email", expansion: "my email"),
-                          Snippet(trigger: "email", expansion: "elsewhere")])
+        let e = expander([
+            Snippet(trigger: "my email", expansion: "my email"),
+            Snippet(trigger: "email", expansion: "elsewhere"),
+        ])
         #expect(e.matchingTriggers(in: "my email, MY EMAIL and emails") == ["my email", "my email"])
         #expect(e.apply("my email").edits.isEmpty)
     }

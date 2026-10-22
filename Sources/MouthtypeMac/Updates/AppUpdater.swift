@@ -20,9 +20,10 @@ import Observation
 enum UpdateLaunchPolicy {
     static func allows(arguments: [String], bundleURL: URL, info: [String: Any]) -> Bool {
         guard arguments.count == 1, bundleURL.pathExtension == "app",
-              info["SUFeedURL"] as? String == "https://mouthtype.app/updates/appcast.xml",
-              let publicKey = info["SUPublicEDKey"] as? String,
-              Data(base64Encoded: publicKey)?.count == 32 else { return false }
+            info["SUFeedURL"] as? String == "https://mouthtype.app/updates/appcast.xml",
+            let publicKey = info["SUPublicEDKey"] as? String,
+            Data(base64Encoded: publicKey)?.count == 32
+        else { return false }
         return true
     }
 }
@@ -106,7 +107,9 @@ enum UpdateLaunchPolicy {
 
     private func observeActivity() {
         var snapshot = UpdateActivity.starting
-        withObservationTracking { snapshot = activity() } onChange: { [weak self] in
+        withObservationTracking {
+            snapshot = activity()
+        } onChange: { [weak self] in
             Task { @MainActor in self?.observeActivity() }
         }
         applyActivity(snapshot)
@@ -114,8 +117,7 @@ enum UpdateLaunchPolicy {
 
     private func startDriver() {
         guard let driver else { return }
-        do { try driver.start(); started = true; errorMessage = nil }
-        catch { errorMessage = error.localizedDescription }
+        do { try driver.start(); started = true; errorMessage = nil } catch { errorMessage = error.localizedDescription }
         refreshDriver()
     }
 
@@ -143,7 +145,8 @@ enum UpdateLaunchPolicy {
 
     func mayCheckForUpdates() throws {
         guard activity() == .idle, !blocksNewWork, pendingInstall == nil else {
-            throw NSError(domain: "MouthtypeUpdates", code: 1,
+            throw NSError(
+                domain: "MouthtypeUpdates", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Finish dictation, recovery, file transcription or selected-text editing before checking for updates."])
         }
     }
@@ -161,8 +164,7 @@ enum UpdateLaunchPolicy {
         pendingInstall = nil
         blocksNewWork = false
         hasUpdate = false
-        if let error = error as NSError?, error.domain != "MouthtypeUpdates" { errorMessage = error.localizedDescription }
-        else { errorMessage = nil }
+        if let error = error as NSError?, error.domain != "MouthtypeUpdates" { errorMessage = error.localizedDescription } else { errorMessage = nil }
         refreshDriver()
     }
 }

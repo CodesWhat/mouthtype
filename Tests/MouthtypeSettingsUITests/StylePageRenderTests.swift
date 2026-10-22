@@ -79,12 +79,12 @@ import MouthtypeCore
         model.addContextSite(.email, domain: "fastmail.com")
         model.addContextApp(.email, bundleID: "com.readdle.smartemail-Mac", appName: "Spark")
         #expect(try AppCleanupStyles.load(defaults).contexts.context(host: "fastmail.com") == .email)
-        let spark = try #require(StyleRows.rows(for: .email, in: model.appStyles).first { $0.member.name == "Spark" })
+        let spark = try #require(StyleRows.rows(for: .email, in: model.appStyles, installed: { _ in true }).first { $0.member.name == "Spark" })
         model.removeContextMember(spark.member, from: .email)
         model.addContextSite(.email, domain: "not a domain")
         #expect(model.appStylesError != nil)
         model.refresh()
-        #expect(StyleRows.rows(for: .email, in: model.appStyles).map(\.member.name) == ["Mail", "Outlook", "mail.google.com", "outlook.office.com", "fastmail.com"])
+        #expect(StyleRows.rows(for: .email, in: model.appStyles, installed: { _ in true }).map(\.member.name) == ["Mail", "Outlook", "mail.google.com", "outlook.office.com", "fastmail.com"])
     }
 
     @Test func existingToneRuleIsReplacedByTheListYouAddItToButALevelRuleStays() throws {
@@ -103,8 +103,10 @@ import MouthtypeCore
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let settings = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
         let advanced = try String(contentsOf: settings.appendingPathComponent("SettingsAdvancedPage.swift"), encoding: .utf8)
-        for title in ["Remove fillers", "Spoken commands and lists", "Format numbers", "Lowercase sentence starts", "Drop the final full stop",
-                      "Learn from my corrections", "Edit dictionary file…"] {
+        for title in [
+            "Remove fillers", "Spoken commands and lists", "Format numbers", "Lowercase sentence starts", "Drop the final full stop",
+            "Learn from my corrections", "Edit dictionary file…",
+        ] {
             #expect(advanced.contains("\"\(title)\""), "missing \(title)")
         }
         #expect(advanced.contains("PasteSettings.supportedTerminals"))

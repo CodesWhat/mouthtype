@@ -29,10 +29,10 @@ struct HomeTake: Identifiable, Equatable {
         didSet { refreshRecoverability() }
     }
     /// Kept audio behind finished takes, from each row's own audio path. Runs off the main thread.
-    @ObservationIgnored var completedAudio: @MainActor ([DictationRecord]) async -> [RecoverableDictation] = { _ in [] }
+    @ObservationIgnored var completedAudio: @MainActor ([TakeRecord]) async -> [RecoverableDictation] = { _ in [] }
     @ObservationIgnored var recoverTake: @MainActor (RecoverableDictation) -> Void
     @ObservationIgnored private let copyText: @MainActor (String) -> Void
-    @ObservationIgnored private var records: [DictationRecord] = []
+    @ObservationIgnored private var records: [TakeRecord] = []
     @ObservationIgnored private var savedGeneration = 0
     @ObservationIgnored private(set) var isActive: Bool
     @ObservationIgnored private var textTakes: [HomeTake] = []
@@ -44,7 +44,7 @@ struct HomeTake: Identifiable, Equatable {
     @ObservationIgnored private var lifecycleGeneration = 0
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     /// The off-main read behind `loadText()`. Replaceable so a test can make it slow.
-    @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [DictationRecord] = { store, limit in
+    @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [TakeRecord] = { store, limit in
         try store.recentTakes(limit: limit)
     }
     private(set) var takes: [HomeTake] = []
@@ -55,14 +55,16 @@ struct HomeTake: Identifiable, Equatable {
     /// covers the state that is not observable.
     private(set) var recoverEnabled = false
 
-    init(store: TranscriptStore? = nil,
-         saved: @escaping @MainActor () async throws -> [RecoverableDictation] = { [] },
-         canRecover: @escaping @MainActor () -> Bool = { true },
-         recover: @escaping @MainActor (RecoverableDictation) -> Void = { _ in },
-         copy: @escaping @MainActor (String) -> Void = { text in
-             HomeLogModel.guardedCopy(text, to: SystemPasteboard(.general))
-         },
-         observing: Bool = true) {
+    init(
+        store: TranscriptStore? = nil,
+        saved: @escaping @MainActor () async throws -> [RecoverableDictation] = { [] },
+        canRecover: @escaping @MainActor () -> Bool = { true },
+        recover: @escaping @MainActor (RecoverableDictation) -> Void = { _ in },
+        copy: @escaping @MainActor (String) -> Void = { text in
+            HomeLogModel.guardedCopy(text, to: SystemPasteboard(.general))
+        },
+        observing: Bool = true
+    ) {
         self.isActive = observing
         self.store = store
         self.saved = saved
@@ -116,7 +118,9 @@ struct HomeTake: Identifiable, Equatable {
     func refreshRecoverability() {
         trackingGeneration += 1
         let generation = trackingGeneration
-        let enabled = withObservationTracking { canRecover() } onChange: { [weak self] in
+        let enabled = withObservationTracking {
+            canRecover()
+        } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, self.trackingGeneration == generation else { return }
                 self.refreshRecoverability()
@@ -153,18 +157,21 @@ struct HomeTake: Identifiable, Equatable {
         observation?.cancel()
         observation = nil
         guard let store else { return }
-        observation = store.observeRecentTakes(limit: Self.limit, onError: { error in
-            Log.app.error("home log observation failed: \(error.localizedDescription, privacy: .public)")
-        }, onChange: { [weak self] records in
-            MainActor.assumeIsolated {
-                self?.apply(records, failure: nil)
-                self?.savedTask?.cancel()
-                self?.savedTask = Task { @MainActor [weak self] in await self?.refreshSaved() }
-            }
-        })
+        observation = store.observeRecentTakes(
+            limit: Self.limit,
+            onError: { error in
+                Log.app.error("home log observation failed: \(error.localizedDescription, privacy: .public)")
+            },
+            onChange: { [weak self] records in
+                MainActor.assumeIsolated {
+                    self?.apply(records, failure: nil)
+                    self?.savedTask?.cancel()
+                    self?.savedTask = Task { @MainActor [weak self] in await self?.refreshSaved() }
+                }
+            })
     }
 
-    private func apply(_ records: [DictationRecord]?, failure: String?) {
+    private func apply(_ records: [TakeRecord]?, failure: String?) {
         self.records = records ?? []
         textTakes = records.map(Self.takes(from:)) ?? []
         error = failure
@@ -188,7 +195,7 @@ struct HomeTake: Identifiable, Equatable {
     }
 
     /// Newest first. Secure rows and blank transcripts are dropped.
-    static func takes(from records: [DictationRecord]) -> [HomeTake] {
+    static func takes(from records: [TakeRecord]) -> [HomeTake] {
         records
             .filter { $0.isSecure != true && !($0.finalText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
             .sorted { $0.startedAt > $1.startedAt }

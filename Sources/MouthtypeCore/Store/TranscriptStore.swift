@@ -32,78 +32,81 @@ public final class TranscriptStore: Sendable {
     static var migrator: DatabaseMigrator {
         var migrator = DatabaseMigrator()
         migrator.registerMigration("v1") { db in
-            try db.execute(sql: """
-                CREATE TABLE dictation (
-                    id TEXT PRIMARY KEY NOT NULL,
-                    started_at REAL NOT NULL,
-                    utc_offset_s INTEGER NOT NULL,
-                    local_day TEXT NOT NULL,
-                    mode TEXT NOT NULL,
-                    trigger TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    error_message TEXT,
+            try db.execute(
+                sql: """
+                    CREATE TABLE dictation (
+                        id TEXT PRIMARY KEY NOT NULL,
+                        started_at REAL NOT NULL,
+                        utc_offset_s INTEGER NOT NULL,
+                        local_day TEXT NOT NULL,
+                        mode TEXT NOT NULL,
+                        trigger TEXT NOT NULL,
+                        status TEXT NOT NULL,
+                        error_message TEXT,
 
-                    capture_start_ms INTEGER, first_sample_ms INTEGER, first_nonzero_ms INTEGER,
-                    speech_onset_ms INTEGER, key_up_ms INTEGER, asr_done_ms INTEGER,
-                    cleanup_done_ms INTEGER, insert_done_ms INTEGER,
+                        capture_start_ms INTEGER, first_sample_ms INTEGER, first_nonzero_ms INTEGER,
+                        speech_onset_ms INTEGER, key_up_ms INTEGER, asr_done_ms INTEGER,
+                        cleanup_done_ms INTEGER, insert_done_ms INTEGER,
 
-                    audio_ms INTEGER, voiced_ms INTEGER, audio_path TEXT, audio_expires_at REAL,
-                    input_device_uid TEXT, input_device_name TEXT, input_transport TEXT, sample_rate_hz INTEGER,
-                    rms_db REAL, peak_db REAL, noise_floor_db REAL,
+                        audio_ms INTEGER, voiced_ms INTEGER, audio_path TEXT, audio_expires_at REAL,
+                        input_device_uid TEXT, input_device_name TEXT, input_transport TEXT, sample_rate_hz INTEGER,
+                        rms_db REAL, peak_db REAL, noise_floor_db REAL,
 
-                    asr_engine_id TEXT, asr_model_rev TEXT, asr_ms INTEGER, asr_confidence REAL, language TEXT,
-                    word_timings_json TEXT, boost_terms_applied_json TEXT,
+                        asr_engine_id TEXT, asr_model_rev TEXT, asr_ms INTEGER, asr_confidence REAL, language TEXT,
+                        word_timings_json TEXT, boost_terms_applied_json TEXT,
 
-                    raw_text TEXT, det_text TEXT, final_text TEXT,
-                    words_raw INTEGER, words_final INTEGER, chars_final INTEGER,
+                        raw_text TEXT, det_text TEXT, final_text TEXT,
+                        words_raw INTEGER, words_final INTEGER, chars_final INTEGER,
 
-                    cleaner_id TEXT, cleaner_rev TEXT, cleanup_level TEXT, style TEXT,
-                    cleanup_ms INTEGER, cleanup_outcome TEXT, prompt_sha TEXT,
+                        cleaner_id TEXT, cleaner_rev TEXT, cleanup_level TEXT, style TEXT,
+                        cleanup_ms INTEGER, cleanup_outcome TEXT, prompt_sha TEXT,
 
-                    app_bundle_id TEXT, app_name TEXT, url_domain TEXT, window_title TEXT,
-                    category TEXT, field_role TEXT, is_secure INTEGER,
+                        app_bundle_id TEXT, app_name TEXT, url_domain TEXT, window_title TEXT,
+                        category TEXT, field_role TEXT, is_secure INTEGER,
 
-                    insert_method TEXT, insert_outcome TEXT, focus_moved INTEGER, paste_receipt_ms INTEGER,
+                        insert_method TEXT, insert_outcome TEXT, focus_moved INTEGER, paste_receipt_ms INTEGER,
 
-                    retry_of TEXT, app_version TEXT, os_version TEXT
-                );
-                CREATE INDEX dictation_local_day ON dictation(local_day);
-                CREATE INDEX dictation_started_at ON dictation(started_at);
-                CREATE INDEX dictation_status ON dictation(status);
+                        retry_of TEXT, app_version TEXT, os_version TEXT
+                    );
+                    CREATE INDEX dictation_local_day ON dictation(local_day);
+                    CREATE INDEX dictation_started_at ON dictation(started_at);
+                    CREATE INDEX dictation_status ON dictation(status);
 
-                CREATE TABLE edit_op (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dictation_id TEXT NOT NULL REFERENCES dictation(id) ON DELETE CASCADE,
-                    stage TEXT NOT NULL,
-                    kind TEXT NOT NULL,
-                    from_text TEXT,
-                    to_text TEXT,
-                    word_delta INTEGER NOT NULL DEFAULT 0,
-                    position INTEGER NOT NULL DEFAULT 0
-                );
-                CREATE INDEX edit_op_dictation_id ON edit_op(dictation_id);
-                """)
+                    CREATE TABLE edit_op (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        dictation_id TEXT NOT NULL REFERENCES dictation(id) ON DELETE CASCADE,
+                        stage TEXT NOT NULL,
+                        kind TEXT NOT NULL,
+                        from_text TEXT,
+                        to_text TEXT,
+                        word_delta INTEGER NOT NULL DEFAULT 0,
+                        position INTEGER NOT NULL DEFAULT 0
+                    );
+                    CREATE INDEX edit_op_dictation_id ON edit_op(dictation_id);
+                    """)
         }
         migrator.registerMigration("v2") { db in
-            try db.execute(sql: """
-                CREATE TABLE correction (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    dictation_id TEXT NOT NULL REFERENCES dictation(id) ON DELETE CASCADE,
-                    kind TEXT NOT NULL DEFAULT 'remember',
-                    heard TEXT NOT NULL,
-                    corrected TEXT NOT NULL,
-                    accepted INTEGER,
-                    created_at REAL NOT NULL
-                );
-                CREATE INDEX correction_dictation_id ON correction(dictation_id);
-                """)
+            try db.execute(
+                sql: """
+                    CREATE TABLE correction (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        dictation_id TEXT NOT NULL REFERENCES dictation(id) ON DELETE CASCADE,
+                        kind TEXT NOT NULL DEFAULT 'remember',
+                        heard TEXT NOT NULL,
+                        corrected TEXT NOT NULL,
+                        accepted INTEGER,
+                        created_at REAL NOT NULL
+                    );
+                    CREATE INDEX correction_dictation_id ON correction(dictation_id);
+                    """)
         }
         migrator.registerMigration("v3") { db in
             // Covers the Stats and Records aggregates so they read one index and never the dictation rows.
-            try db.execute(sql: """
-                CREATE INDEX dictation_stats ON dictation(local_day, words_final, started_at, voiced_ms, audio_ms, is_secure)
-                WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0;
-                """)
+            try db.execute(
+                sql: """
+                    CREATE INDEX dictation_stats ON dictation(local_day, words_final, started_at, voiced_ms, audio_ms, is_secure)
+                    WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0;
+                    """)
         }
         return migrator
     }
@@ -116,12 +119,14 @@ public final class TranscriptStore: Sendable {
         let offset = start.timeZone.secondsFromGMT(for: start.startedAt)
         let target = start.target
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO dictation (id, started_at, utc_offset_s, local_day, mode, trigger, status,
-                    app_bundle_id, app_name, url_domain, window_title, category, field_role, is_secure,
-                    retry_of, app_version, os_version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, arguments: [
+            try db.execute(
+                sql: """
+                    INSERT INTO dictation (id, started_at, utc_offset_s, local_day, mode, trigger, status,
+                        app_bundle_id, app_name, url_domain, window_title, category, field_role, is_secure,
+                        retry_of, app_version, os_version)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                arguments: [
                     start.id, start.startedAt.timeIntervalSince1970, offset,
                     Streaks.localDay(for: start.startedAt, in: start.timeZone),
                     start.mode.rawValue, start.trigger.rawValue, DictationStatus.started,
@@ -139,31 +144,35 @@ public final class TranscriptStore: Sendable {
     }
 
     public func recordCapture(_ id: String, _ capture: CaptureRecord) throws {
-        try update(id, [
-            ("status", DictationStatus.recorded),
-            ("capture_start_ms", capture.captureStartMs), ("first_sample_ms", capture.firstSampleMs),
-            ("first_nonzero_ms", capture.firstNonzeroMs), ("speech_onset_ms", capture.speechOnsetMs),
-            ("key_up_ms", capture.keyUpMs), ("audio_ms", capture.audioMs), ("voiced_ms", capture.voicedMs),
-            ("audio_path", capture.audioPath), ("audio_expires_at", capture.audioExpiresAt?.timeIntervalSince1970),
-            ("input_device_uid", capture.inputDeviceUID), ("input_device_name", capture.inputDeviceName),
-            ("input_transport", capture.inputTransport), ("sample_rate_hz", capture.sampleRateHz),
-            ("rms_db", capture.rmsDb), ("peak_db", capture.peakDb), ("noise_floor_db", capture.noiseFloorDb),
-        ])
+        try update(
+            id,
+            [
+                ("status", DictationStatus.recorded),
+                ("capture_start_ms", capture.captureStartMs), ("first_sample_ms", capture.firstSampleMs),
+                ("first_nonzero_ms", capture.firstNonzeroMs), ("speech_onset_ms", capture.speechOnsetMs),
+                ("key_up_ms", capture.keyUpMs), ("audio_ms", capture.audioMs), ("voiced_ms", capture.voicedMs),
+                ("audio_path", capture.audioPath), ("audio_expires_at", capture.audioExpiresAt?.timeIntervalSince1970),
+                ("input_device_uid", capture.inputDeviceUID), ("input_device_name", capture.inputDeviceName),
+                ("input_transport", capture.inputTransport), ("sample_rate_hz", capture.sampleRateHz),
+                ("rms_db", capture.rmsDb), ("peak_db", capture.peakDb), ("noise_floor_db", capture.noiseFloorDb),
+            ])
     }
 
     public func recordTranscription(_ id: String, _ record: TranscriptionRecord) throws {
         let t = record.transcription
         let timings = String(decoding: try JSONEncoder().encode(t.words), as: UTF8.self)
         let boost = try record.boostTerms.map { String(decoding: try JSONEncoder().encode($0), as: UTF8.self) }
-        try update(id, [
-            ("status", DictationStatus.transcribed),
-            ("asr_engine_id", t.engineID), ("asr_model_rev", t.modelRevision),
-            ("asr_ms", Int((t.processingSeconds * 1000).rounded())),
-            ("asr_confidence", t.confidence.map { Double($0) }), ("language", record.language),
-            ("word_timings_json", timings), ("boost_terms_applied_json", boost),
-            ("asr_done_ms", record.asrDoneMs), ("speech_onset_ms", record.speechOnsetMs),
-            ("raw_text", record.rawText), ("words_raw", TextMetrics.wordCount(record.rawText)),
-        ])
+        try update(
+            id,
+            [
+                ("status", DictationStatus.transcribed),
+                ("asr_engine_id", t.engineID), ("asr_model_rev", t.modelRevision),
+                ("asr_ms", Int((t.processingSeconds * 1000).rounded())),
+                ("asr_confidence", t.confidence.map { Double($0) }), ("language", record.language),
+                ("word_timings_json", timings), ("boost_terms_applied_json", boost),
+                ("asr_done_ms", record.asrDoneMs), ("speech_onset_ms", record.speechOnsetMs),
+                ("raw_text", record.rawText), ("words_raw", TextMetrics.wordCount(record.rawText)),
+            ])
     }
 
     public func recordInsertion(_ id: String, _ record: InsertionRecord) throws {
@@ -211,9 +220,11 @@ public final class TranscriptStore: Sendable {
     /// reopened; the staged writes then carry on from the capture.
     public func reopen(_ id: String) throws {
         try pool.write { db in
-            guard let status = try DictationStatus.fetchOne(
-                db, sql: "SELECT status FROM dictation WHERE id = ?", arguments: [id]
-            ) else { throw TranscriptStoreError.unknownDictation(id) }
+            guard
+                let status = try DictationStatus.fetchOne(
+                    db, sql: "SELECT status FROM dictation WHERE id = ?", arguments: [id]
+                )
+            else { throw TranscriptStoreError.unknownDictation(id) }
             guard status == .cancelled else { throw TranscriptStoreError.notCancelled(status) }
             try db.execute(
                 sql: "UPDATE dictation SET status = ?, error_message = NULL WHERE id = ?",
@@ -228,10 +239,11 @@ public final class TranscriptStore: Sendable {
                 throw TranscriptStoreError.unknownDictation(id)
             }
             for edit in edits {
-                try db.execute(sql: """
-                    INSERT INTO edit_op (dictation_id, stage, kind, from_text, to_text, word_delta, position)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                    """, arguments: [id, edit.stage, edit.kind.rawValue, edit.fromText, edit.toText, edit.wordDelta, edit.position])
+                try db.execute(
+                    sql: """
+                        INSERT INTO edit_op (dictation_id, stage, kind, from_text, to_text, word_delta, position)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, arguments: [id, edit.stage, edit.kind.rawValue, edit.fromText, edit.toText, edit.wordDelta, edit.position])
             }
         }
     }
@@ -242,10 +254,11 @@ public final class TranscriptStore: Sendable {
         dictationID: String, kind: CorrectionKind = .remember, heard: String, corrected: String, at date: Date = Date()
     ) throws -> Int64 {
         try pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO correction (dictation_id, kind, heard, corrected, accepted, created_at)
-                VALUES (?, ?, ?, ?, NULL, ?)
-                """, arguments: [dictationID, kind.rawValue, heard, corrected, date.timeIntervalSince1970])
+            try db.execute(
+                sql: """
+                    INSERT INTO correction (dictation_id, kind, heard, corrected, accepted, created_at)
+                    VALUES (?, ?, ?, ?, NULL, ?)
+                    """, arguments: [dictationID, kind.rawValue, heard, corrected, date.timeIntervalSince1970])
             return db.lastInsertedRowID
         }
     }
@@ -284,9 +297,12 @@ public final class TranscriptStore: Sendable {
     /// Only known completed takes are eligible, so later recordings and unknown WAVs stay untouched.
     public func audioRetentionCandidateIDs() throws -> Set<String> {
         try pool.read { db in
-            Set(try String.fetchAll(db, sql: "SELECT id FROM dictation WHERE status IN (?, ?, ?, ?)", arguments: [
-                DictationStatus.inserted, DictationStatus.cancelled, DictationStatus.tooShort, DictationStatus.empty,
-            ]))
+            Set(
+                try String.fetchAll(
+                    db, sql: "SELECT id FROM dictation WHERE status IN (?, ?, ?, ?)",
+                    arguments: [
+                        DictationStatus.inserted, DictationStatus.cancelled, DictationStatus.tooShort, DictationStatus.empty,
+                    ]))
         }
     }
 
@@ -310,23 +326,30 @@ public final class TranscriptStore: Sendable {
     /// The newest ended attempt's start, including activity after launch. Uses the existing chronological index.
     public func latestTerminalStartedAt() throws -> Date? {
         try pool.read { db in
-            try Double.fetchOne(db, sql: """
-                SELECT started_at FROM dictation INDEXED BY dictation_started_at
-                WHERE status IN (?, ?, ?, ?, ?) ORDER BY started_at DESC LIMIT 1
-                """, arguments: [
+            try Double.fetchOne(
+                db,
+                sql: """
+                    SELECT started_at FROM dictation INDEXED BY dictation_started_at
+                    WHERE status IN (?, ?, ?, ?, ?) ORDER BY started_at DESC LIMIT 1
+                    """,
+                arguments: [
                     DictationStatus.inserted, DictationStatus.cancelled, DictationStatus.tooShort,
                     DictationStatus.empty, DictationStatus.failed,
-                ]).map { Date(timeIntervalSince1970: $0) }
+                ]
+            ).map { Date(timeIntervalSince1970: $0) }
         }
     }
 
     /// Rows that never reached an end state (started, recorded or transcribed) and began in `[start, end)`, newest first.
     public func unfinished(from start: Date, before end: Date) throws -> [DictationRecord] {
         try pool.read { db in
-            try DictationRecord.fetchAll(db, sql: """
-                SELECT * FROM dictation WHERE status IN (?, ?, ?) AND started_at >= ? AND started_at < ?
-                ORDER BY started_at DESC
-                """, arguments: [
+            try DictationRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM dictation WHERE status IN (?, ?, ?) AND started_at >= ? AND started_at < ?
+                    ORDER BY started_at DESC
+                    """,
+                arguments: [
                     DictationStatus.started, DictationStatus.recorded, DictationStatus.transcribed,
                     start.timeIntervalSince1970, end.timeIntervalSince1970,
                 ])
@@ -335,29 +358,35 @@ public final class TranscriptStore: Sendable {
 
     public func recent(limit: Int) throws -> [DictationRecord] {
         try pool.read { db in
-            try DictationRecord.fetchAll(db, sql: """
-                SELECT * FROM dictation WHERE final_text IS NOT NULL ORDER BY started_at DESC LIMIT ?
-                """, arguments: [limit])
+            try DictationRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM dictation WHERE final_text IS NOT NULL ORDER BY started_at DESC LIMIT ?
+                    """, arguments: [limit])
         }
     }
 
     /// The newest takes with usable text, secure-field rows excluded, filtered in SQL so the limit is the row count.
-    public func recentTakes(limit: Int) throws -> [DictationRecord] {
+    public func recentTakes(limit: Int) throws -> [TakeRecord] {
         try pool.read { db in try Self.fetchRecentTakes(db, limit: limit) }
     }
 
-    private static func fetchRecentTakes(_ db: Database, limit: Int) throws -> [DictationRecord] {
-        try DictationRecord.fetchAll(db, sql: """
-            SELECT * FROM dictation
-            WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0
-            ORDER BY started_at DESC LIMIT ?
-            """, arguments: [limit])
+    private static func fetchRecentTakes(_ db: Database, limit: Int) throws -> [TakeRecord] {
+        try TakeRecord.fetchAll(
+            db,
+            sql: """
+                SELECT \(TakeRecord.columns) FROM dictation
+                WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0
+                ORDER BY started_at DESC LIMIT ?
+                """, arguments: [limit])
     }
 
     /// Calls `onChange` on the main queue now and again whenever the dictation table changes: a new take, a status
     /// change, or audio saved, expired or purged. Reads happen off the main thread.
-    public func observeRecentTakes(limit: Int, onError: @escaping @Sendable (Error) -> Void,
-                                   onChange: @escaping @Sendable ([DictationRecord]) -> Void) -> TakesObservation {
+    public func observeRecentTakes(
+        limit: Int, onError: @escaping @Sendable (Error) -> Void,
+        onChange: @escaping @Sendable ([TakeRecord]) -> Void
+    ) -> TakesObservation {
         let observation = ValueObservation.tracking { db in try Self.fetchRecentTakes(db, limit: limit) }
         let cancellable = observation.start(in: pool, scheduling: .async(onQueue: .main), onError: onError, onChange: onChange)
         return TakesObservation(cancellable)
@@ -365,22 +394,27 @@ public final class TranscriptStore: Sendable {
 
     public func lastTranscript() throws -> String? {
         try pool.read { db in
-            try String.fetchOne(db, sql: """
-                SELECT final_text FROM dictation
-                WHERE status = ? AND final_text IS NOT NULL AND TRIM(final_text) != ''
-                    AND COALESCE(is_secure, 0) = 0
-                ORDER BY started_at DESC LIMIT 1
-                """, arguments: [DictationStatus.inserted])
+            try String.fetchOne(
+                db,
+                sql: """
+                    SELECT final_text FROM dictation
+                    WHERE status = ? AND final_text IS NOT NULL AND TRIM(final_text) != ''
+                        AND COALESCE(is_secure, 0) = 0
+                    ORDER BY started_at DESC LIMIT 1
+                    """, arguments: [DictationStatus.inserted])
         }
     }
 
     public func savedRecordingCandidates(from start: Date, before launch: Date) throws -> [DictationRecord] {
         try pool.read { db in
-            try DictationRecord.fetchAll(db, sql: """
-                SELECT * FROM dictation WHERE started_at >= ? AND COALESCE(is_secure, 0) = 0
-                    AND (status = ? OR (status IN (?, ?, ?) AND started_at < ?))
-                ORDER BY started_at DESC
-                """, arguments: [
+            try DictationRecord.fetchAll(
+                db,
+                sql: """
+                    SELECT * FROM dictation WHERE started_at >= ? AND COALESCE(is_secure, 0) = 0
+                        AND (status = ? OR (status IN (?, ?, ?) AND started_at < ?))
+                    ORDER BY started_at DESC
+                    """,
+                arguments: [
                     start.timeIntervalSince1970, DictationStatus.failed,
                     DictationStatus.started, DictationStatus.recorded, DictationStatus.transcribed, launch.timeIntervalSince1970,
                 ])
@@ -391,21 +425,28 @@ public final class TranscriptStore: Sendable {
     public func stats(now: Date, timeZone: TimeZone = .current) throws -> StatsSummary {
         let today = Streaks.localDay(for: now, in: timeZone)
         return try pool.read { db in
-            let wordsToday = try Int.fetchOne(
-                db, sql: "SELECT COALESCE(SUM(words_final), 0) FROM dictation WHERE local_day = ?", arguments: [today]
-            ) ?? 0
+            let wordsToday =
+                try Int.fetchOne(
+                    db, sql: "SELECT COALESCE(SUM(words_final), 0) FROM dictation WHERE local_day = ?", arguments: [today]
+                ) ?? 0
 
-            let recent = try Row.fetchAll(db, sql: """
-                SELECT words_final, COALESCE(voiced_ms, audio_ms) AS duration_ms FROM dictation
-                WHERE words_final > 0 AND audio_ms < \(Self.wpmMaxAudioMs)
-                ORDER BY started_at DESC LIMIT \(Self.wpmSampleSize)
-                """)
+            let recent = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT words_final, COALESCE(voiced_ms, audio_ms) AS duration_ms FROM dictation
+                    WHERE words_final > 0 AND audio_ms < \(Self.wpmMaxAudioMs)
+                    ORDER BY started_at DESC LIMIT \(Self.wpmSampleSize)
+                    """)
             let words = recent.reduce(0) { $0 + ($1["words_final"] as Int) }
             let durationMs = recent.reduce(0) { $0 + ($1["duration_ms"] as Int? ?? 0) }
             let wpm = durationMs > 0 ? Double(words) / (Double(durationMs) / 60_000) : 0
 
             let days = try String.fetchAll(
-                db, sql: "SELECT DISTINCT local_day FROM dictation WHERE words_final > 0 ORDER BY local_day"
+                db,
+                sql: """
+                    SELECT DISTINCT local_day FROM dictation
+                    WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0 ORDER BY local_day
+                    """
             )
             let streaks = Streaks.compute(days: days, today: today)
             return StatsSummary(

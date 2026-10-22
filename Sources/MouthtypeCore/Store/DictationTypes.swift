@@ -145,7 +145,7 @@ public struct CleanupRecord: Sendable {
     public var level: String?
     public var style: String?
     public var ms: Int?
-    public var outcome: String?   // skipped, ok, timeout, guard-rejected, failed
+    public var outcome: String?  // skipped, ok, timeout, guard-rejected, failed
     public var promptSha: String?
     public var doneMs: Int?
 
@@ -168,8 +168,8 @@ public struct InsertionRecord: Sendable {
     public var finalText: String
     public var detText: String?
     public var cleanup: CleanupRecord?
-    public var method: String?    // paste, typed, clipboard only, none
-    public var outcome: String?   // confirmed, unknown, not landed, secure discard
+    public var method: String?  // paste, typed, clipboard only, none
+    public var outcome: String?  // confirmed, unknown, not landed, secure discard
     public var focusMoved: Bool?
     public var pasteReceiptMs: Int?
     public var insertDoneMs: Int?
@@ -196,7 +196,7 @@ public struct InsertionRecord: Sendable {
 public struct EditOp: Sendable, Equatable {
     public enum Kind: String, Sendable { case delete, replace, insert }
 
-    public var stage: String   // filler, self-correction, spoken command, number format, dictionary, snippet, blend, llm
+    public var stage: String  // filler, self-correction, spoken command, number format, dictionary, snippet, profanity, blend, llm
     public var kind: Kind
     public var fromText: String?
     public var toText: String?
@@ -304,6 +304,22 @@ public struct DictationRecord: Codable, FetchableRecord, Sendable, Equatable {
         guard let wordTimingsJson else { return [] }
         return try JSONDecoder().decode([WordTiming].self, from: Data(wordTimingsJson.utf8))
     }
+}
+
+/// The columns the take lists read (Home, Suggestions, the menu, kept-audio lookup), without the heavy ones such as
+/// `word_timings_json`. `TranscriptStore.dictation(id:)` still returns the full `DictationRecord`.
+public struct TakeRecord: Codable, FetchableRecord, Sendable, Equatable {
+    public static let databaseColumnDecodingStrategy = DatabaseColumnDecodingStrategy.convertFromSnakeCase
+    static let columns = "id, started_at, audio_path, boost_terms_applied_json, raw_text, final_text, app_name, is_secure"
+
+    public var id: String
+    public var startedAt: Double
+    public var audioPath: String?
+    public var boostTermsAppliedJson: String?
+    public var rawText: String?
+    public var finalText: String?
+    public var appName: String?
+    public var isSecure: Bool?
 }
 
 public struct StatsSummary: Equatable, Sendable {

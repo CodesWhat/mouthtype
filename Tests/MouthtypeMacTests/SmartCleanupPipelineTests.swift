@@ -118,7 +118,8 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
             #expect(!text.contains("Best regards") && !text.contains("Scott"))
             return text
         }
-        let (pipeline, _) = pipeline(cleaner, level: level, style: style.options,
+        let (pipeline, _) = pipeline(
+            cleaner, level: level, style: style.options,
             snippets: [Snippet(trigger: "my signature", expansion: expansion)])
         let result = await clean(pipeline, text: "my signature")
         #expect(result.text == expansion)
@@ -127,19 +128,22 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
 
     @Test func aConfiguredEmailExpandsWithinASentenceAfterTheModel() async {
         let cleaner = ScriptedCleaner(returning: "Send this to my JSQ email please.")
-        let (pipeline, _) = pipeline(cleaner,
+        let (pipeline, _) = pipeline(
+            cleaner,
             snippets: [Snippet(trigger: "my JSQ email", expansion: "configured@example.com")])
         #expect(await clean(pipeline, text: "send this to my JSQ email please").text == "Send this to configured@example.com please.")
     }
 
     @Test func aTriggerThatDeterministicCleanupWouldRemoveStillExpands() async {
-        let (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: .basic,
+        let (pipeline, _) = pipeline(
+            ScriptedCleaner { text, _ in text }, level: .basic,
             snippets: [Snippet(trigger: "um my email", expansion: "configured@example.com")])
         #expect(await clean(pipeline, text: "um my email").text == "configured@example.com")
     }
 
     @Test func aModelCannotActivateAnUnspokenTrigger() async {
-        let (pipeline, _) = pipeline(ScriptedCleaner(returning: "Write a friendly note with my work email."),
+        let (pipeline, _) = pipeline(
+            ScriptedCleaner(returning: "Write a friendly note with my work email."),
             snippets: [Snippet(trigger: "my work email", expansion: "configured@example.com")])
         let result = await clean(pipeline, text: "write a friendly note")
         #expect(result.text == "Write a friendly note")
@@ -147,21 +151,26 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
     }
 
     @Test func variablesUseTheCapturedDateAndClipboardWithoutModelEdits() async {
-        let (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text },
+        let (pipeline, _) = pipeline(
+            ScriptedCleaner { text, _ in text },
             snippets: [Snippet(trigger: "my note", expansion: "{DATE}\n{CLIPBOARD}")])
         var inputs = pipeline.cleanupInputs()
         inputs.now = Date(timeIntervalSince1970: 1_791_763_200)
         #expect(inputs.needsClipboard)
-        let result = await pipeline.clean(TranscribedDictation(text: "my note", rawText: "my note", asrDoneMs: 0, words: []),
+        let result = await pipeline.clean(
+            TranscribedDictation(text: "my note", rawText: "my note", asrDoneMs: 0, words: []),
             inputs: inputs, context: nil, clipboard: "  unchanged {date}\nsecond line  ")
         let date = SnippetExpander.defaultDateFormatter(inputs.now)
         #expect(result.text == date + "\n  unchanged {date}\nsecond line  ")
     }
 
     @Test func modelCannotRemoveOrChangeASpokenTrigger() async {
-        let (pipeline, _) = pipeline(ScriptedCleaner(returning: "Use my personal email please."),
-            snippets: [Snippet(trigger: "my work email", expansion: "work@example.com"),
-                       Snippet(trigger: "my personal email", expansion: "private@example.com")])
+        let (pipeline, _) = pipeline(
+            ScriptedCleaner(returning: "Use my personal email please."),
+            snippets: [
+                Snippet(trigger: "my work email", expansion: "work@example.com"),
+                Snippet(trigger: "my personal email", expansion: "private@example.com"),
+            ])
         let result = await clean(pipeline, text: "use my work email please")
         #expect(result.text == "Use work@example.com please")
         #expect(result.cleanup.outcome == "guard-rejected")
@@ -185,8 +194,9 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         pipeline.vocabulary = SavedVocabulary(words: FileVocabulary(url: directory.appendingPathComponent("dictionary.json")), phrases: store)
         let captured = pipeline.cleanupInputs()
         try store.save(original: phrase, phrase: Snippet(trigger: phrase.trigger, expansion: "second@example.com"))
-        let result = await pipeline.clean(TranscribedDictation(text: "my email", rawText: "my email", asrDoneMs: 0, words: []),
-                                          inputs: captured, context: nil, clipboard: nil)
+        let result = await pipeline.clean(
+            TranscribedDictation(text: "my email", rawText: "my email", asrDoneMs: 0, words: []),
+            inputs: captured, context: nil, clipboard: nil)
         #expect(result.text == "first@example.com")
         #expect(pipeline.cleanupInputs().snippets.first?.expansion == "second@example.com")
     }
@@ -266,8 +276,9 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         var (pipeline, _) = pipeline(cleaner)
         let diagnostics = CleanupDiagnostics()
         pipeline.smartDiagnostic = { diagnostics.record($0) }
-        let result = await clean(pipeline, text: "send this to jon@example.com",
-                                 context: InsertionContext(before: "Customer: Fixture Person\n"))
+        let result = await clean(
+            pipeline, text: "send this to jon@example.com",
+            context: InsertionContext(before: "Customer: Fixture Person\n"))
         let outcome = modelFails ? "failed" : "guard-rejected"
         #expect(result.cleanup.outcome == outcome && result.text.contains("jon@example.com"))
         #expect(diagnostics.messages.count == 1)
@@ -326,6 +337,34 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
             #expect(fallback.text.contains("Mouthtype"))
             #expect(fallback.edits.contains { $0.stage == "dictionary" })
         }
+    }
+
+    private struct Boom: Error {}
+
+    /// DR-F8: the joined spelling is held back for the model, so any outcome but .ok must still apply it.
+    @Test(arguments: [CleanupLevel.light, .medium], ["timeout", "failed", "guard-rejected", "skipped"])
+    func joinedSpellingsApplyWhenTheModelResultIsNotUsed(level: CleanupLevel, outcome: String) async {
+        let cleaner: ScriptedCleaner
+        var text = "the mouth type build is green"
+        var budgetMs = 2000
+        switch outcome {
+        case "timeout":
+            cleaner = ScriptedCleaner { t, _ in
+                try await Task.sleep(for: .seconds(5)); return t
+            }
+            budgetMs = 50
+        case "failed": cleaner = ScriptedCleaner { _, _ in throw Boom() }
+        case "guard-rejected": cleaner = ScriptedCleaner(returning: "We shipped nothing about quarterly invoices yesterday afternoon.")
+        default:
+            cleaner = ScriptedCleaner(returning: "must not run")
+            text = "the mouth type build is green " + String(repeating: "and so it goes ", count: 135)
+        }
+        let rules = [DictionaryRule(heard: "mouth type", written: "Mouthtype")]
+        let (pipeline, _) = pipeline(cleaner, level: level, budgetMs: budgetMs, rules: rules)
+        let cleaned = await clean(pipeline, text: text)
+        #expect(cleaned.cleanup.outcome == outcome)
+        #expect(cleaned.text.contains("Mouthtype") && !cleaned.text.lowercased().contains("mouth type"))
+        #expect(cleaned.edits.contains { $0.stage == "dictionary" })
     }
 
     @Test func mediumIsRecordedAsMedium() async {
@@ -394,7 +433,9 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
     @Test(arguments: [CleanupLevel.basic, .light, .medium])
     func formalKeepsTheWordsOfASavedSpellingBeforeTheModel(level: CleanupLevel) async {
         let seen = Seen()
-        let cleaner = ScriptedCleaner { text, _ in seen.record(text); return text }
+        let cleaner = ScriptedCleaner { text, _ in
+            seen.record(text); return text
+        }
         let rules = [DictionaryRule(heard: "brain fuck", written: "Brainfuck")]
         let (pipeline, _) = pipeline(cleaner, level: level, rules: rules)
         let cleaned = await clean(pipeline, text: "Deploy brain fuck.")

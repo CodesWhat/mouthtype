@@ -9,10 +9,12 @@ extension SettingsView {
         let page = model.page
         switch page {
         case .home:
-            DesignPage(title: page.headline, summary: page.summary, trailing: {
-                Button("Transcribe a file…") { model.open(.transcribeFile) }
-                    .buttonStyle(.designSecondary).fixedSize().accessibilityIdentifier("home-transcribe")
-            }, content: { HomePage(model: model.home) })
+            DesignPage(
+                title: page.headline, summary: page.summary,
+                trailing: {
+                    Button("Transcribe a file…") { model.open(.transcribeFile) }
+                        .buttonStyle(.designSecondary).fixedSize().accessibilityIdentifier("home-transcribe")
+                }, content: { HomePage(model: model.home) })
         case .stats:
             DesignPage(title: page.headline, summary: page.summary) {
                 StatsHostPage(model: model.stats)

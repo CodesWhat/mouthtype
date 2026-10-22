@@ -29,9 +29,13 @@ import Testing
         TextCase("Meet at three, make that four.", "Meet at four."),
         TextCase("Meet at three, scratch that, four.", "Meet at four."),
         TextCase("Meet at three, no, four.", "Meet at four."),
+        TextCase("At two, no, three.", "At three."),
         TextCase("Meet at three no four.", "Meet at four."),
+        TextCase("Book it at two no one.", "Book it at one."),
+        TextCase("Meet at two thirty, no one thirty.", "Meet at one thirty."),
+        TextCase("It costs two dollars, no one dollar.", "It costs one dollar."),
         TextCase("Meet at three, wait, four.", "Meet at four."),
-                TextCase("Meet at three, Actually four.", "Meet at four."),
+        TextCase("Meet at three, Actually four.", "Meet at four."),
         // Numbers: words, digits, tens, hundreds.
         TextCase("We need twenty one, actually twenty two chairs.", "We need twenty two chairs."),
         TextCase("We need twenty-one, actually twenty-five chairs.", "We need twenty-five chairs."),
@@ -119,6 +123,14 @@ import Testing
         "I mean it, three times.",
         "Make that three.",
         "I said no to three.",
+        // The pronoun "one" after a bare cue is not a corrected value (DR-F7). No comma is required: "one of/else"
+        // is excluded, and "no one" stays a pronoun when more clause follows it.
+        "I'll be there at two, no one else can make it.",
+        "We sold 500, no one believed it.",
+        "I have 2, actually one of them is broken.",
+        "We have two, sorry one of them is broken.",
+        "We sold 500 no one believed it.",
+        "We have 2 no 1 of them is broken.",
         "Please wait Tuesday.",
         "Step one, unplug it. Step two, wait ten seconds. Step three, plug it back in.",
         "Step two, wait ten seconds.",
@@ -170,8 +182,9 @@ import Testing
     @Test func runsInThePipelineBeforeNumbersAndCountedLists() {
         #expect(full("Let's do coffee at two actually three.") == "Let's do coffee at three.")
         #expect(full("we have twenty one actually twenty two chairs") == "We have 22 chairs")
-        let off = TextPipeline().run(TextPipelineInput(
-            text: "Let's do coffee at two actually three.", options: TextPipelineOptions(selfCorrection: false)))
+        let off = TextPipeline().run(
+            TextPipelineInput(
+                text: "Let's do coffee at two actually three.", options: TextPipelineOptions(selfCorrection: false)))
         #expect(off.text == "Let's do coffee at two actually three.")
         #expect(off.edits.allSatisfy { $0.stage != SelfCorrection.stageName })
     }

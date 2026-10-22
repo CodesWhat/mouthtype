@@ -36,13 +36,14 @@ private struct SplitMix64: RandomNumberGenerator {
     }
 
     @Test func misheardVariantsOfASavedNameGroupUnderIt() throws {
-        let takes = [
-            take("a", raw: "Shaban took a minute", boost: ["Siobhan"]),
-            take("b", raw: "then Shaban called back"),
-            take("c", raw: "Shabon took a minute"),
-            take("d", raw: "Shabon agreed"),
-            take("e", raw: "ask Chavon about it"),
-        ] + filler(5)
+        let takes =
+            [
+                take("a", raw: "Shaban took a minute", boost: ["Siobhan"]),
+                take("b", raw: "then Shaban called back"),
+                take("c", raw: "Shabon took a minute"),
+                take("d", raw: "Shabon agreed"),
+                take("e", raw: "ask Chavon about it"),
+            ] + filler(5)
         let out = SpellingSuggester.suggest(takes: takes, rules: rules)
         let s = try #require(out.first { $0.kind == .misheardVariant && $0.written == "Siobhan" })
         // Chavon is a single folded-key sighting, so it stays out.
@@ -244,7 +245,12 @@ private struct SplitMix64: RandomNumberGenerator {
     }
 
     @Test func thousandTakesStayFast() {
-        let brands = ["Drydock", "Sockguard", "Portwing", "Mouthtype", "Wispr Flow", "CodesWhat", "Siobhan", "Priya", "Nguyen", "Kubernetes", "Tailscale", "Postgres", "Grafana", "Terraform", "Cloudflare", "Anthropic", "Figma", "Linear", "Notion", "Vercel", "Supabase", "Stripe", "Datadog", "Sentry", "Raycast", "Obsidian", "Homebrew", "Xcode", "Swiftly", "Cursor", "Ghostty", "Warp", "Zed", "Docker", "Compose", "Nginx", "Traefik", "Caddy", "Prometheus", "Loki", "Tempo", "Mimir", "Alloy", "Vector", "Fluentd", "Kibana", "Elastic", "Mongo", "Redis", "Valkey", "Kafka", "Pulsar", "Temporal", "Dagster", "Airflow", "Metabase", "Superset", "Retool", "Zapier"]
+        let brands = [
+            "Drydock", "Sockguard", "Portwing", "Mouthtype", "Wispr Flow", "CodesWhat", "Siobhan", "Priya", "Nguyen", "Kubernetes", "Tailscale", "Postgres", "Grafana", "Terraform", "Cloudflare",
+            "Anthropic", "Figma", "Linear", "Notion", "Vercel", "Supabase", "Stripe", "Datadog", "Sentry", "Raycast", "Obsidian", "Homebrew", "Xcode", "Swiftly", "Cursor", "Ghostty", "Warp", "Zed",
+            "Docker", "Compose", "Nginx", "Traefik", "Caddy", "Prometheus", "Loki", "Tempo", "Mimir", "Alloy", "Vector", "Fluentd", "Kibana", "Elastic", "Mongo", "Redis", "Valkey", "Kafka", "Pulsar",
+            "Temporal", "Dagster", "Airflow", "Metabase", "Superset", "Retool", "Zapier",
+        ]
         let r = brands.enumerated().map { DictionaryRule(heard: "heard\($0.offset)", written: $0.element) }
         let syllables = ["ka", "lo", "mi", "ra", "te", "vu", "no", "pi", "sa", "du", "fe", "gro", "bli", "tre", "sho", "quan", "zel", "man", "dor", "win"]
         var rng = SplitMix64(seed: 0x4D6F757468)

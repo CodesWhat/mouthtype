@@ -13,10 +13,15 @@ protocol ClipboardWriting: AnyObject {
 
 @MainActor
 final class SystemClipboard: ClipboardWriting {
+    private let pasteboard: NSPasteboard
+
+    init(_ pasteboard: NSPasteboard = .general) {
+        self.pasteboard = pasteboard
+    }
+
+    /// Copies stay on the clipboard but are kept out of clipboard-manager history, like the app's other copies.
     func write(_ text: String) {
-        let pasteboard = NSPasteboard.general
-        pasteboard.clearContents()
-        pasteboard.setString(text, forType: .string)
+        SystemPasteboard(pasteboard).write(text, markers: PasteboardSession.concealedMarkers)
     }
 }
 

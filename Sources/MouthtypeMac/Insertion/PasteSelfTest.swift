@@ -157,8 +157,9 @@ enum PasteSelfTest {
                 presenter.present(card)
             }
             let card = presenter.state?.card
-            check("the card is raised with the headline, detail and Copy",
-                  card?.header == "Paste didn't land\nThe field didn't change" && card?.actions == [.copy] && card?.transcript == result.finalText)
+            check(
+                "the card is raised with the headline, detail and Copy",
+                card?.header == "Paste didn't land\nThe field didn't change" && card?.actions == [.copy] && card?.transcript == result.finalText)
             try? await Task.sleep(for: .milliseconds(700))
             await saveShot(window: cards.panel.windowNumber, name: "card-paste-not-landed.png")
             presenter.dismiss()

@@ -63,8 +63,9 @@ enum CleanupReportBuilder {
         let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         for file in files.filter({ $0.pathExtension == "json" && !$0.lastPathComponent.hasSuffix("-cleanup.json") }).sorted(by: { $0.lastPathComponent > $1.lastPathComponent }) {
             if let data = try? Data(contentsOf: file),
-               let speech = try? JSONDecoder().decode(Speech.self, from: data),
-               let value = speech.engines.first(where: { $0.engineID == "parakeet-tdt-v3" })?.shortClipMedianMs {
+                let speech = try? JSONDecoder().decode(Speech.self, from: data),
+                let value = speech.engines.first(where: { $0.engineID == "parakeet-tdt-v3" })?.shortClipMedianMs
+            {
                 return value
             }
         }
@@ -76,8 +77,10 @@ enum CleanupReportBuilder {
         let m = report.machine
         let v = m.packageVersions
         out += "Machine: \(m.chip), \(m.ramGB) GB, macOS \(m.macOS), \(m.swift). "
-        out += "mlx-swift-lm \(v["mlx-swift-lm"] ?? "?"), mlx-swift \(v["mlx-swift"] ?? "?"), swift-huggingface \(v["swift-huggingface"] ?? "?"), swift-transformers \(v["swift-transformers"] ?? "?").\n\n"
-        out += "Date: \(report.date). \(report.caseCount) cases, \(report.runsPerCase) timed runs per case after 1 untimed warm-up call. Greedy decoding (temperature 0), output capped at 3 tokens per input word plus 48. All cleaners get the same system prompt (`CleanupPrompt.systemPrompt`) except where marked below.\n\n"
+        out +=
+            "mlx-swift-lm \(v["mlx-swift-lm"] ?? "?"), mlx-swift \(v["mlx-swift"] ?? "?"), swift-huggingface \(v["swift-huggingface"] ?? "?"), swift-transformers \(v["swift-transformers"] ?? "?").\n\n"
+        out +=
+            "Date: \(report.date). \(report.caseCount) cases, \(report.runsPerCase) timed runs per case after 1 untimed warm-up call. Greedy decoding (temperature 0), output capped at 3 tokens per input word plus 48. All cleaners get the same system prompt (`CleanupPrompt.systemPrompt`) except where marked below.\n\n"
 
         let ranked = report.cleaners.filter { $0.timingsComparable && $0.buckets[LengthBucket.short.rawValue] != nil }
         if let speech = report.parakeetShortMs, !ranked.isEmpty {
@@ -88,7 +91,8 @@ enum CleanupReportBuilder {
         }
 
         out += "## Summary\n\n"
-        out += "| Cleaner | Status | Cold prepare (s) | Warm load (s) | Short: first / total (ms) | Medium: first / total (ms) | Long: first / total (ms) | Tokens/s | Peak memory (MB) | Size (MB) | Pass rate | Judge (/8) |\n"
+        out +=
+            "| Cleaner | Status | Cold prepare (s) | Warm load (s) | Short: first / total (ms) | Medium: first / total (ms) | Long: first / total (ms) | Tokens/s | Peak memory (MB) | Size (MB) | Pass rate | Judge (/8) |\n"
         out += "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
         for c in report.cleaners {
             let comparable = c.timingsComparable
@@ -98,20 +102,26 @@ enum CleanupReportBuilder {
                 return comparable ? text : "\(text) *not comparable*"
             }
             let judge = c.judge.map { "\(num($0.meanScore, 2))\($0.missing > 0 ? " (\($0.missing) ungraded)" : "")" } ?? "n/a"
-            out += "| \(c.displayName) (`\(c.cleanerID)`) | \(statusCell(c)) | \(coldCell(c)) | \(warmCell(c)) | \(cell(.short)) | \(cell(.medium)) | \(cell(.long)) | \(num(c.tokensPerSecondMedian, 0)) | \(mb(c.warm?.peakFootprintBytes ?? c.cold?.peakFootprintBytes)) | \(mb(c.warm?.modelBytes ?? c.cold?.modelBytes)) | \(pct(c.passRate)) | \(judge) |\n"
+            out +=
+                "| \(c.displayName) (`\(c.cleanerID)`) | \(statusCell(c)) | \(coldCell(c)) | \(warmCell(c)) | \(cell(.short)) | \(cell(.medium)) | \(cell(.long)) | \(num(c.tokensPerSecondMedian, 0)) | \(mb(c.warm?.peakFootprintBytes ?? c.cold?.peakFootprintBytes)) | \(mb(c.warm?.modelBytes ?? c.cold?.modelBytes)) | \(pct(c.passRate)) | \(judge) |\n"
         }
         out += "\nCold prepare is the first process for the cleaner: download plus load. Warm load is `prepare()` in a fresh process with the weights already on disk. "
-        out += "First is time to first non-empty output and total is time to the last chunk, both measured from the start of the call and including prompt processing; each cell is the median over every timed run of every case in that length bucket, with the p95 of total in parentheses. "
+        out +=
+            "First is time to first non-empty output and total is time to the last chunk, both measured from the start of the call and including prompt processing; each cell is the median over every timed run of every case in that length bucket, with the p95 of total in parentheses. "
         out += "Tokens/s is the median decode rate (generated tokens over decode time, excluding prompt processing) across cases, for backends that report it. "
         out += "Peak memory is the warm process's peak `phys_footprint` from `TASK_VM_INFO`, which includes GPU-backed unified memory. Size is the model directory on disk. "
-        out += "Pass rate is the share of cases meeting every `mustContain`, `mustNotContain` and length-ratio constraint (case-insensitive substring checks; length is output characters over input characters). "
-        out += "Judge is the mean of Claude Sonnet's rubric total per case (meaning 0-1, did not obey 0-1, fillers and corrections 0-2, formatting 0-2, over-editing 0-2, maximum 8), graded blind to the producing cleaner; a case that errored scores 0.\n\n"
+        out +=
+            "Pass rate is the share of cases meeting every `mustContain`, `mustNotContain` and length-ratio constraint (case-insensitive substring checks; length is output characters over input characters). "
+        out +=
+            "Judge is the mean of Claude Sonnet's rubric total per case (meaning 0-1, did not obey 0-1, fillers and corrections 0-2, formatting 0-2, over-editing 0-2, maximum 8), graded blind to the producing cleaner; a case that errored scores 0.\n\n"
 
         if report.cleaners.contains(where: { !$0.timingsComparable }) {
-            out += "> The Claude CLI row's timings include CLI startup and a network round trip. They are not comparable to the other rows and are left out of the latency ranking below. That row is a quality ceiling only.\n\n"
+            out +=
+                "> The Claude CLI row's timings include CLI startup and a network round trip. They are not comparable to the other rows and are left out of the latency ranking below. That row is a quality ceiling only.\n\n"
         }
         for c in report.cleaners where c.warm?.usesSharedPrompt == false {
-            out += "> \(c.displayName) used its native prompt from the model card (fixed system prompt plus the control line `\(S1MiniPrompt.controlLine)`, thinking disabled), not the shared prompt, because it was trained on that format. It does not see the custom vocabulary or app name. Its row is not a controlled-prompt comparison.\n\n"
+            out +=
+                "> \(c.displayName) used its native prompt from the model card (fixed system prompt plus the control line `\(S1MiniPrompt.controlLine)`, thinking disabled), not the shared prompt, because it was trained on that format. It does not see the custom vocabulary or app name. Its row is not a controlled-prompt comparison.\n\n"
         }
         if report.judge.requested {
             if report.judge.ran {
@@ -135,7 +145,8 @@ enum CleanupReportBuilder {
         }
 
         out += "## Pass rate by category\n\n"
-        let categories = CleanupFixtures.requiredCategories.filter { report.categories[$0] != nil }
+        let categories =
+            CleanupFixtures.requiredCategories.filter { report.categories[$0] != nil }
             + report.categories.keys.filter { !CleanupFixtures.requiredCategories.contains($0) }.sorted()
         out += "| Category (cases) | " + report.cleaners.map(\.displayName).joined(separator: " | ") + " |\n"
         out += "|---|" + report.cleaners.map { _ in "---" }.joined(separator: "|") + "|\n"

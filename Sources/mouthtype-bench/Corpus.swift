@@ -26,32 +26,43 @@ enum Corpus {
     static let audioExtensions: Set<String> = ["wav", "m4a", "aiff", "aif", "caf", "flac"]
 
     static let syntheticTexts: [(name: String, text: String)] = [
-        ("synthetic-1-slack-2s",
-         "Sounds good, I'll send it over now."),
-        ("synthetic-2-slack-5s",
-         "Hey, can you check the staging deploy before the meeting? The health check looks off."),
-        ("synthetic-3-review-10s",
-         "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. "
-             + "Please log the failure and return a proper status code."),
-        ("synthetic-4-email-20s",
-         "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget "
-             + "with the team this morning, and we're mostly aligned. The one open question is the rollout plan "
-             + "for the second quarter, specifically whether we can stage the migration by region instead of "
-             + "cutting everything over in a single weekend."),
-        ("synthetic-5-email-45s",
-         "Hi everyone, quick update on where the migration stands. The database cutover finished last night "
-             + "without any downtime, and the read replicas are already caught up. Over the next few days I want "
-             + "to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones "
-             + "were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the "
-             + "worker pool still point at the old cluster, so I'll open a pull request to fix that and tag "
-             + "the platform team for review. Third, the dashboards need new alerts, because the latency "
-             + "thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about "
-             + "the schedule, please say so in the thread before Friday, and I'll adjust the plan."),
+        (
+            "synthetic-1-slack-2s",
+            "Sounds good, I'll send it over now."
+        ),
+        (
+            "synthetic-2-slack-5s",
+            "Hey, can you check the staging deploy before the meeting? The health check looks off."
+        ),
+        (
+            "synthetic-3-review-10s",
+            "In this pull request, the OAuth callback swallows errors from the Kubernetes API client. "
+                + "Please log the failure and return a proper status code."
+        ),
+        (
+            "synthetic-4-email-20s",
+            "Hi Dana, thanks for sending over the revised proposal. I went through the timeline and the budget "
+                + "with the team this morning, and we're mostly aligned. The one open question is the rollout plan "
+                + "for the second quarter, specifically whether we can stage the migration by region instead of "
+                + "cutting everything over in a single weekend."
+        ),
+        (
+            "synthetic-5-email-45s",
+            "Hi everyone, quick update on where the migration stands. The database cutover finished last night "
+                + "without any downtime, and the read replicas are already caught up. Over the next few days I want "
+                + "to focus on three things. First, we need to rotate the OAuth client secrets, since the old ones "
+                + "were shared in a few places they shouldn't have been. Second, the Kubernetes manifests for the "
+                + "worker pool still point at the old cluster, so I'll open a pull request to fix that and tag "
+                + "the platform team for review. Third, the dashboards need new alerts, because the latency "
+                + "thresholds we set last quarter don't match what we're seeing now. If anyone has concerns about "
+                + "the schedule, please say so in the thread before Friday, and I'll adjust the plan."
+        ),
     ]
 
     static func load(directory: URL) throws -> [CorpusClip] {
         let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
-        let clips: [CorpusClip] = files
+        let clips: [CorpusClip] =
+            files
             .filter { audioExtensions.contains($0.pathExtension.lowercased()) }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
             .compactMap { audio in
@@ -86,11 +97,13 @@ enum Corpus {
             try await fetchLibriSpeech(count: 10, into: staging)
         } catch {
             realFetched = false
-            FileHandle.standardError.write(Data("""
-            WARNING: could not fetch real speech from LibriSpeech (\(error.localizedDescription)).
-            WARNING: the corpus is SYNTHETIC ONLY. TTS audio flatters WER, so do not judge accuracy from it.
+            FileHandle.standardError.write(
+                Data(
+                    """
+                    WARNING: could not fetch real speech from LibriSpeech (\(error.localizedDescription)).
+                    WARNING: the corpus is SYNTHETIC ONLY. TTS audio flatters WER, so do not judge accuracy from it.
 
-            """.utf8))
+                    """.utf8))
             for file in (try? fm.contentsOfDirectory(at: staging, includingPropertiesForKeys: nil)) ?? []
             where file.lastPathComponent.hasPrefix("real-") {
                 try? fm.removeItem(at: file)

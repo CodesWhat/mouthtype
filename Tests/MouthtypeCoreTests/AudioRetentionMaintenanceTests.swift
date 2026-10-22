@@ -48,7 +48,11 @@ import Testing
             let audio = try archive.write(samples: [0.1, 0.2], id: id)
             try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-days * 86_400)], ofItemAtPath: audio.url.path)
             try store.recordCapture(id, CaptureRecord(audioPath: audio.url.path, audioExpiresAt: now))
-            try store.recordTranscription(id, TranscriptionRecord(transcription: Transcription(text: "Keep café.", words: [WordTiming(word: "Keep", start: 0, end: 0.4, confidence: 1)], processingSeconds: 0.1, engineID: "fake"), rawText: "Keep café."))
+            try store.recordTranscription(
+                id,
+                TranscriptionRecord(
+                    transcription: Transcription(text: "Keep café.", words: [WordTiming(word: "Keep", start: 0, end: 0.4, confidence: 1)], processingSeconds: 0.1, engineID: "fake"),
+                    rawText: "Keep café."))
             try store.recordInsertion(id, InsertionRecord(finalText: "Keep café."))
         }
         let before = try #require(try store.dictation(id: "old"))

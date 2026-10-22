@@ -110,7 +110,8 @@ struct CleanTextCommand: AsyncParsableCommand {
         }
         try await cleaner.load()
         _ = try? await cleaner.clean("warm up the model before timing it", context: CleanupContext())
-        let observed = ObservedCleaner(cleaner, styling: s1Style.flatMap(S1MiniControls.Styling.init(rawValue:)),
+        let observed = ObservedCleaner(
+            cleaner, styling: s1Style.flatMap(S1MiniControls.Styling.init(rawValue:)),
             structure: s1Structure.flatMap(S1MiniControls.Structure.init(rawValue:)))
         let smart: SmartCleanup
         if let ms = smartTimeoutMs {
@@ -137,8 +138,9 @@ struct CleanTextCommand: AsyncParsableCommand {
         var records: [SmartDeliveryRecord] = []
         for item in cases {
             await observed.reset()
-            let run = await SmartRunner.run(item.input, rules: item.rules, level: level, style: style.preset.options, smart: smart, selfCorrection: !noSelfCorrection,
-                                            context: item.before == nil && item.after == nil ? nil : InsertionContext(before: item.before, after: item.after), appName: item.appName)
+            let run = await SmartRunner.run(
+                item.input, rules: item.rules, level: level, style: style.preset.options, smart: smart, selfCorrection: !noSelfCorrection,
+                context: item.before == nil && item.after == nil ? nil : InsertionContext(before: item.before, after: item.after), appName: item.appName)
             print("[\(item.id)] raw:     \(Self.escaped(item.input))")
             print("         det:     \(Self.escaped(run.deterministic))")
             print("         final:   \(Self.escaped(run.result.text))")
@@ -152,11 +154,13 @@ struct CleanTextCommand: AsyncParsableCommand {
             }
             print("         outcome: \(run.result.outcome.rawValue)\(note)  \(run.result.milliseconds) ms\(verdict)")
             print("")
-            records.append(SmartDeliveryRecord(id: item.id, cleanerID: id, level: level.rawValue, input: item.input,
-                deterministic: run.deterministic, delivered: run.result.text, outcome: run.result.outcome.rawValue,
-                milliseconds: run.result.milliseconds, deterministicMilliseconds: run.deterministicMilliseconds,
-                totalCleanupMilliseconds: run.totalCleanupMilliseconds, rejection: run.result.rejection,
-                failure: item.failure(for: run.result.text), proposed: await observed.proposed))
+            records.append(
+                SmartDeliveryRecord(
+                    id: item.id, cleanerID: id, level: level.rawValue, input: item.input,
+                    deterministic: run.deterministic, delivered: run.result.text, outcome: run.result.outcome.rawValue,
+                    milliseconds: run.result.milliseconds, deterministicMilliseconds: run.deterministicMilliseconds,
+                    totalCleanupMilliseconds: run.totalCleanupMilliseconds, rejection: run.result.rejection,
+                    failure: item.failure(for: run.result.text), proposed: await observed.proposed))
         }
         await smart.waitForPendingWork()
         if let result {
@@ -203,7 +207,8 @@ struct CleanTextCommand: AsyncParsableCommand {
             print("cleaned: \(Self.escaped(result.text))")
             print("vs det_text: \(Self.verdict(detDiffers))   vs final_text: \(Self.verdict(finalDiffers))")
             print("")
-            table += "| \(when) | \(Self.cell(entry.rawText)) | \(Self.cell(result.text)) | "
+            table +=
+                "| \(when) | \(Self.cell(entry.rawText)) | \(Self.cell(result.text)) | "
                 + "\(Self.verdict(detDiffers)) | \(Self.verdict(finalDiffers)) |\n"
         }
         print("\(entries.count) dictations")

@@ -34,17 +34,19 @@ import WhisperKit
             DictionaryRule(heard: "Sock Guard", written: "Sockguard"),
             DictionaryRule(heard: "maya", written: "Maya"),
         ])
-        #expect(bias.entries == [
-            VocabularyBias.Term(text: "Sockguard", aliases: ["sock guard"]),
-            VocabularyBias.Term(text: "Maya", aliases: []),
-        ])
+        #expect(
+            bias.entries == [
+                VocabularyBias.Term(text: "Sockguard", aliases: ["sock guard"]),
+                VocabularyBias.Term(text: "Maya", aliases: []),
+            ])
     }
 
     @Test func duplicatesAfterTheCapStillMergeAliases() {
-        let bias = VocabularyBias(entries: [
-            VocabularyBias.Term(text: "A", aliases: ["x"]), VocabularyBias.Term(text: "B"),
-            VocabularyBias.Term(text: "a", aliases: ["y"]),
-        ], maxTerms: 2)
+        let bias = VocabularyBias(
+            entries: [
+                VocabularyBias.Term(text: "A", aliases: ["x"]), VocabularyBias.Term(text: "B"),
+                VocabularyBias.Term(text: "a", aliases: ["y"]),
+            ], maxTerms: 2)
         #expect(bias.entries == [VocabularyBias.Term(text: "A", aliases: ["x", "y"]), VocabularyBias.Term(text: "B")])
     }
 
@@ -58,7 +60,9 @@ import WhisperKit
         var encoded: [String] = []
         let tokens = WhisperEngine.promptTokens(
             for: VocabularyBias(terms: ["Maya", "Drydock"]),
-            encode: { text in encoded.append(text); return [5, 6, 500, 7] },
+            encode: { text in
+                encoded.append(text); return [5, 6, 500, 7]
+            },
             firstSpecialToken: 100
         )
         #expect(encoded == [" Maya, Drydock"])

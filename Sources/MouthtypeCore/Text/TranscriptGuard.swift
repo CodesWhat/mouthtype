@@ -62,9 +62,10 @@ public struct TranscriptGuard: Sendable {
         if let cue = cueWord(transcription.words) {
             let stripped = Self.dropLeadingToken(text, matching: cue.word)
             if stripped != text {
-                edits.append(EditOp(
-                    stage: Self.stageName, kind: .delete, fromText: cue.word, toText: nil, wordDelta: -1, position: 0
-                ))
+                edits.append(
+                    EditOp(
+                        stage: Self.stageName, kind: .delete, fromText: cue.word, toText: nil, wordDelta: -1, position: 0
+                    ))
                 text = stripped
             }
         }
@@ -121,13 +122,15 @@ public struct TranscriptGuard: Sendable {
             let close: Character? = open == "[" ? "]" : open == "(" ? ")" : open == "*" ? "*" : nil
             let startsToken = i == 0 || chars[i - 1].isWhitespace
             if let close, startsToken, i + 1 < chars.count, let end = chars[(i + 1)...].firstIndex(of: close),
-               chars[..<i].allSatisfy(\.isWhitespace) || chars[(end + 1)...].allSatisfy(\.isWhitespace),
-               end + 1 == chars.count || chars[end + 1].isWhitespace,
-               artefactTags.contains(String(chars[(i + 1)..<end]).lowercased().trimmingCharacters(in: .whitespaces)) {
-                edits.append(EditOp(
-                    stage: stageName, kind: .delete, fromText: String(chars[i...end]), toText: nil, wordDelta: 0,
-                    position: i
-                ))
+                chars[..<i].allSatisfy(\.isWhitespace) || chars[(end + 1)...].allSatisfy(\.isWhitespace),
+                end + 1 == chars.count || chars[end + 1].isWhitespace,
+                artefactTags.contains(String(chars[(i + 1)..<end]).lowercased().trimmingCharacters(in: .whitespaces))
+            {
+                edits.append(
+                    EditOp(
+                        stage: stageName, kind: .delete, fromText: String(chars[i...end]), toText: nil, wordDelta: 0,
+                        position: i
+                    ))
                 i = end + 1
                 while i < chars.count, chars[i].isWhitespace { i += 1 }
                 continue

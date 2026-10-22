@@ -112,7 +112,7 @@ final class ConverterCache: @unchecked Sendable {
             return hit
         }
         guard let converter = AVAudioConverter(from: format, to: targetFormat),
-              let output = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: 4096)
+            let output = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: 4096)
         else { return nil }
         let entry = Entry(format: format, converter: converter, output: output)
         entries.append(entry)

@@ -61,8 +61,9 @@ import Testing
 
     @Test func resyncForRemapReadsTheDestinationKey() {
         let source = HotkeySource.remapped(keyCode: 80)
-        #expect(HotkeyService.resyncSample(source: source, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: false, timestampNanos: 9)
-            == TapSample(kind: .keyUp, keyCode: 80, flags: 0, timestamp: 9))
+        #expect(
+            HotkeyService.resyncSample(source: source, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: false, timestampNanos: 9)
+                == TapSample(kind: .keyUp, keyCode: 80, flags: 0, timestamp: 9))
         #expect(HotkeyService.resyncSample(source: source, hotkeyHeld: true, currentFlags: 0, destinationKeyDown: true, timestampNanos: 9) == nil)
     }
 

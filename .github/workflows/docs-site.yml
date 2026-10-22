@@ -1,0 +1,37 @@
+name: Docs site
+
+on:
+  push:
+    branches: [main, 'dev/**']
+    paths: ["apps/docs/**", "docs/**", "tools/linux-desktop/README.md", "tools/omarchy-plugin/README.md", ".github/workflows/docs-site.yml"]
+  pull_request:
+    paths: ["apps/docs/**", "docs/**", "tools/linux-desktop/README.md", "tools/omarchy-plugin/README.md", ".github/workflows/docs-site.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  docs-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/docs
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/docs/package-lock.json
+      - run: npm ci
+      - run: npm run check
+      - run: npm run type-check
+      - run: npm run build
+      # Needs out/ from the build: asserts every page has a meta CSP that covers its inline scripts
+      # and that the static header in vercel.json has no 'unsafe-inline' in script-src.
+      - run: npm run test:scripts
+        env:
+          REQUIRE_OUT: "1"

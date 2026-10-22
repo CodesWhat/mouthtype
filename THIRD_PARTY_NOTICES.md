@@ -120,7 +120,7 @@ SOFTWARE.
 
 ## Fonts
 
-Three typefaces are bundled in `Sources/MouthtypeMac/Resources/Fonts/` and embedded in `design/board/prototype.html`.
+Three typefaces are bundled in `Sources/MouthtypeMac/Resources/Fonts/`.
 All three are licensed under the SIL Open Font License, Version 1.1. They are bundled unmodified and stay under the
 OFL; they are not sold on their own. The full licence text for each sits beside its font files.
 
@@ -148,14 +148,6 @@ Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/
 - Source: https://github.com/JetBrains/JetBrainsMono, tag v2.304 (commit cd5227bd1f61dff3bbd6c814ceaf7ffd95e947d9), `fonts/ttf/JetBrainsMono-Medium.ttf`
 - Used for: the Systema set's clocks and countdowns
 
-## Pixelarticons
-
-Copyright (c) 2019 Gerrit Halfmann (https://github.com/halfmage/pixelarticons)
-
-- Licence: MIT, `Sources/MouthtypeMac/Resources/Fonts/MIT-Pixelarticons.txt`
-- Source: https://github.com/halfmage/pixelarticons, v2.4.2, `svg/{home,chart,book-open,arrows-horizontal,a-arrow-up,picture-in-picture,settings-cog}.svg`
-- Used for: the seven sidebar icons in `Sources/MouthtypeMac/Resources/Settings/Icons/`, rasterised unchanged at one grid pixel per point to 24, 48 and 96 px template PNGs
-
 ## Phosphor Icons
 
 Copyright (c) 2023 Phosphor Icons (https://github.com/phosphor-icons/core)
@@ -171,7 +163,7 @@ Mac: https://huggingface.co/superwhisper/s1-mini, revision 88f6b15896c73bbb13a3b
 Linux: https://huggingface.co/superwhisper/s1-mini-GGUF, revision 34add00a48a2e5d24e5a4ee5405a99620a3a240c, file
 `s1-mini-q4_k_m.gguf`
 
-The local model behind light and medium cleanup. It is not bundled with Mouthtype. The user downloads it from Hugging
+The local model behind Fast cleanup. It is not bundled with Mouthtype. The user downloads it from Hugging
 Face on request. On the Mac it runs through MLX from the first repository above. The Linux client downloads the Q4_K_M
 file from the GGUF repository instead and runs it through llama.cpp. These are two different repositories (the base
 model and its GGUF conversion), so the two revisions above are not a mismatch. Both revisions were the current head of
@@ -199,7 +191,7 @@ a product incorporating it is marketed or distributed.
 ```
 
 Wherever the app names the model it writes exactly `S1-mini by Superwhisper`. The string lives in
-`CleanerCatalog.smartCleanupName`. The Linux pin records the same name in the `s1.name` field of `pins.json`.
+`CleanerHost.modelName` in `Sources/MouthtypeMac/Dictation/CleanerHost.swift`. The Linux pin records the same name in the `s1.name` field of `pins.json`.
 
 ## llama.cpp
 

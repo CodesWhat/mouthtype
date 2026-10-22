@@ -31,6 +31,8 @@
   --line: #d9dee5;
   --orange: #ef8b43;
   --lime: #d3e58b;
+  --lime-hover: #c4d874;
+  --lime-active: #b6ca62;
   --action: #315b54;
   --action-hover: #24483f;
   --serif: "Instrument Serif", Georgia, serif;
@@ -157,17 +159,6 @@ p {
 .hero > * {
   min-width: 0;
 }
-.platform-status {
-  position: absolute;
-  right: 0;
-  top: 18px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font: 9px var(--mono);
-  letter-spacing: 1px;
-  color: var(--muted);
-}
 .status-dot {
   display: inline-block;
   width: 6px;
@@ -206,9 +197,9 @@ h1 em {
   margin-bottom: 29px;
 }
 .primary {
-  background: var(--action);
-  color: #fff;
-  border: 1px solid var(--action);
+  background: var(--lime);
+  color: var(--ink);
+  border: 1px solid var(--ink);
   display: inline-flex;
   align-items: center;
   gap: 40px;
@@ -217,7 +208,10 @@ h1 em {
   font-size: 14px;
 }
 .primary:hover {
-  background: var(--action-hover);
+  background: var(--lime-hover);
+}
+.primary:active {
+  background: var(--lime-active);
 }
 .download-source {
   margin: 12px 0 0;
@@ -441,6 +435,17 @@ h1 em {
   min-height: 178px;
   font: 34px/1.25 var(--serif);
   margin: 0;
+}
+.example-text {
+  transition: opacity 0.35s ease;
+}
+.example-text.is-fading {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .example-text {
+    transition: none;
+  }
 }
 .example-text mark {
   background: var(--lime);
@@ -693,11 +698,6 @@ footer {
   }
   .nav-alpha span {
     margin-left: 8px;
-  }
-  .platform-status {
-    top: 12px;
-    font-size: 6px;
-    gap: 7px;
   }
   .hero {
     padding-top: 45px;

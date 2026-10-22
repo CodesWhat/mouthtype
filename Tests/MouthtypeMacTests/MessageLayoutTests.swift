@@ -119,9 +119,11 @@ import Testing
     }
 
     @Test func theMessageStringsSplitAtTheirLogicalBreak() {
-        #expect(DictationController.microphoneAccessMessage == PillMessage(
-            "Microphone access needed", detail: "Allow it in System Settings", isError: true
-        ))
+        #expect(
+            DictationController.microphoneAccessMessage
+                == PillMessage(
+                    "Microphone access needed", detail: "Allow it in System Settings", isError: true
+                ))
         let table: [(CaptureError, String, String?)] = [
             (.microphoneDenied, "Microphone access needed", "Allow it in System Settings"),
             (.microphonePending, "Microphone access needed", "Allow it in System Settings"),
@@ -133,8 +135,10 @@ import Testing
             let message = DictationController.pillMessage(for: error)
             #expect(message.headline == headline && message.detail == detail && message.isError)
         }
-        #expect(DictationController.pillMessage(for: NSError(domain: "x", code: 1)) == PillMessage(
-            "Transcription failed", detail: "Try again", isError: true
-        ))
+        #expect(
+            DictationController.pillMessage(for: NSError(domain: "x", code: 1))
+                == PillMessage(
+                    "Transcription failed", detail: "Try again", isError: true
+                ))
     }
 }

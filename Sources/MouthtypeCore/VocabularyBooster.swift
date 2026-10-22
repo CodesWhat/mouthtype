@@ -81,7 +81,8 @@ struct BoostedText: Sendable, Equatable {
 /// Builds and caches one rescoring session per vocabulary and runs it, bounded, after the primary transcript.
 /// Every failure path returns nil so the caller keeps the unboosted text.
 actor VocabularyBooster {
-    typealias Prepare = @Sendable (VocabularyBias, @escaping @Sendable (VocabularyBoostStatus) -> Void) async throws
+    typealias Prepare =
+        @Sendable (VocabularyBias, @escaping @Sendable (VocabularyBoostStatus) -> Void) async throws
         -> any VocabularyRescoring
 
     static let defaultTimeout: Duration = .milliseconds(1500)
@@ -128,8 +129,14 @@ actor VocabularyBooster {
     func setBias(_ new: VocabularyBias?, settleWithin: Duration? = nil) async {
         let new = new?.isEmpty == false ? new : nil
         if new == bias {
+            // Already building (started early, e.g. at key-down): the budget still applies, but only to what is left of the build.
+            if new != nil, let settleWithin, let building {
+                _ = await Self.withTimeout(settleWithin) { await building.value }
+                return
+            }
             guard new != nil, session == nil, building == nil, let failedAt,
-                  ContinuousClock.now - failedAt >= retryAfter else { return }
+                ContinuousClock.now - failedAt >= retryAfter
+            else { return }
         }
         generation += 1
         building?.cancel()
@@ -253,29 +260,121 @@ extension VocabularyBooster {
     }
 
     /// Longest-common-subsequence alignment of two word lists, as shared words and the changed stretches between them.
+    /// The common prefix is matched directly. When no word repeats across the rest, the common suffix is matched too
+    /// and the middle goes through a Myers diff, which is near linear when the rescorer changed a few words. Repeated
+    /// shared words make the tie-break between equal-length alignments matter, so those go through the full table
+    /// with its original forward traversal. A middle with too many edits also falls back to the full table.
     static func align(_ old: [String], _ new: [String]) -> [Run] {
-        let rows = old.count, cols = new.count
+        var head = 0
+        while head < old.count, head < new.count, old[head] == new[head] { head += 1 }
+        if hasRepeatedSharedWord(old[head...], new[head...]) {
+            return (0..<head).map { .same(old: $0, new: $0) } + alignTable(old, head..<old.count, new, head..<new.count)
+        }
+        var tail = 0
+        while tail < old.count - head, tail < new.count - head,
+            old[old.count - 1 - tail] == new[new.count - 1 - tail]
+        { tail += 1 }
+        let oldEnd = old.count - tail, newEnd = new.count - tail
+        var runs: [Run] = (0..<head).map { .same(old: $0, new: $0) }
+        runs += alignMiddle(old, head..<oldEnd, new, head..<newEnd)
+        runs += (0..<tail).map { .same(old: oldEnd + $0, new: newEnd + $0) }
+        return runs
+    }
+
+    private static func hasRepeatedSharedWord(_ old: ArraySlice<String>, _ new: ArraySlice<String>) -> Bool {
+        var oldCounts: [String: Int] = [:]
+        for word in old { oldCounts[word, default: 0] += 1 }
+        var newCounts: [String: Int] = [:]
+        for word in new { newCounts[word, default: 0] += 1 }
+        return oldCounts.contains { word, count in
+            guard let other = newCounts[word] else { return false }
+            return count > 1 || other > 1
+        }
+    }
+
+    /// Edit-distance cap for the Myers pass. Past it the trace storage grows quadratically, so the table takes over.
+    private static let myersEditCap = 512
+
+    /// Matched (old, new) index pairs of a minimal alignment, or nil when it needs more than `myersEditCap` edits.
+    private static func myersMatches(_ old: [String], _ oldRange: Range<Int>, _ new: [String], _ newRange: Range<Int>) -> [(Int, Int)]? {
+        let (o, n) = (oldRange.lowerBound, newRange.lowerBound)
+        let rows = oldRange.count, cols = newRange.count
+        let cap = min(myersEditCap, rows + cols)
+        let offset = cap + 1
+        var v = [Int](repeating: 0, count: 2 * cap + 3)
+        var trace: [[Int]] = []
+        var found = -1
+        search: for d in 0...cap {
+            trace.append(v)
+            for k in stride(from: -d, through: d, by: 2) {
+                var x = (k == -d || (k != d && v[offset + k - 1] < v[offset + k + 1])) ? v[offset + k + 1] : v[offset + k - 1] + 1
+                var y = x - k
+                while x < rows, y < cols, old[o + x] == new[n + y] { x += 1; y += 1 }
+                v[offset + k] = x
+                if x >= rows, y >= cols { found = d; break search }
+            }
+        }
+        guard found >= 0 else { return nil }
+        var matches: [(Int, Int)] = []
+        var x = rows, y = cols
+        for d in stride(from: found, through: 1, by: -1) {
+            let vd = trace[d]
+            let k = x - y
+            let prevK = (k == -d || (k != d && vd[offset + k - 1] < vd[offset + k + 1])) ? k + 1 : k - 1
+            let prevX = vd[offset + prevK], prevY = prevX - prevK
+            while x > prevX, y > prevY { matches.append((o + x - 1, n + y - 1)); x -= 1; y -= 1 }
+            x = prevX
+            y = prevY
+        }
+        while x > 0, y > 0 { matches.append((o + x - 1, n + y - 1)); x -= 1; y -= 1 }
+        matches.reverse()
+        return matches
+    }
+
+    private static func alignMiddle(_ old: [String], _ oldRange: Range<Int>, _ new: [String], _ newRange: Range<Int>) -> [Run] {
+        let rows = oldRange.count, cols = newRange.count
+        guard rows > 0 || cols > 0 else { return [] }
+        if let matches = myersMatches(old, oldRange, new, newRange) {
+            var runs: [Run] = []
+            var r = oldRange.lowerBound, c = newRange.lowerBound
+            for (mo, mn) in matches {
+                if mo > r || mn > c { runs.append(.changed(old: r..<mo, new: c..<mn)) }
+                runs.append(.same(old: mo, new: mn))
+                (r, c) = (mo + 1, mn + 1)
+            }
+            if r < oldRange.upperBound || c < newRange.upperBound {
+                runs.append(.changed(old: r..<oldRange.upperBound, new: c..<newRange.upperBound))
+            }
+            return runs
+        }
+        return alignTable(old, oldRange, new, newRange)
+    }
+
+    private static func alignTable(_ old: [String], _ oldRange: Range<Int>, _ new: [String], _ newRange: Range<Int>) -> [Run] {
+        let rows = oldRange.count, cols = newRange.count
+        guard rows > 0 || cols > 0 else { return [] }
+        let (o, n) = (oldRange.lowerBound, newRange.lowerBound)
         var table = [[Int]](repeating: [Int](repeating: 0, count: cols + 1), count: rows + 1)
         for r in stride(from: rows - 1, through: 0, by: -1) {
             for c in stride(from: cols - 1, through: 0, by: -1) {
-                table[r][c] = old[r] == new[c] ? table[r + 1][c + 1] + 1 : max(table[r + 1][c], table[r][c + 1])
+                table[r][c] = old[o + r] == new[n + c] ? table[r + 1][c + 1] + 1 : max(table[r + 1][c], table[r][c + 1])
             }
         }
         var runs: [Run] = []
         var r = 0, c = 0
         while r < rows || c < cols {
-            if r < rows, c < cols, old[r] == new[c] {
-                runs.append(.same(old: r, new: c))
+            if r < rows, c < cols, old[o + r] == new[n + c] {
+                runs.append(.same(old: o + r, new: n + c))
                 r += 1
                 c += 1
                 continue
             }
             let (startOld, startNew) = (r, c)
             while r < rows || c < cols {
-                if r < rows, c < cols, old[r] == new[c] { break }
+                if r < rows, c < cols, old[o + r] == new[n + c] { break }
                 if c >= cols || (r < rows && table[r + 1][c] >= table[r][c + 1]) { r += 1 } else { c += 1 }
             }
-            runs.append(.changed(old: startOld..<r, new: startNew..<c))
+            runs.append(.changed(old: (o + startOld)..<(o + r), new: (n + startNew)..<(n + c)))
         }
         return runs
     }
@@ -456,10 +555,11 @@ extension VocabularyBooster {
                 let step = (last.end - first.start) / Double(newRange.count)
                 let confidence = replaced.map(\.confidence).min() ?? first.confidence
                 for (offset, index) in newRange.enumerated() {
-                    result.append(WordTiming(
-                        word: new[index], start: first.start + step * Double(offset),
-                        end: first.start + step * Double(offset + 1), confidence: confidence
-                    ))
+                    result.append(
+                        WordTiming(
+                            word: new[index], start: first.start + step * Double(offset),
+                            end: first.start + step * Double(offset + 1), confidence: confidence
+                        ))
                 }
             }
         }

@@ -16,20 +16,30 @@ struct StyleSampleSegment: Equatable, Sendable {
 }
 
 enum StyleSamples {
-    static let personal = [StyleSampleLine(spoken: "hey are we still on for dinner tonight i can be there by seven",
-                                           engine: "Hey, are we still on for dinner tonight? I can be there by seven.")]
-    static let work = [StyleSampleLine(spoken: "quick update the deploy went out and the dashboards look fine",
-                                       engine: "Quick update: the deploy went out, and the dashboards look fine.")]
+    static let personal = [
+        StyleSampleLine(
+            spoken: "hey are we still on for dinner tonight i can be there by seven",
+            engine: "Hey, are we still on for dinner tonight? I can be there by seven.")
+    ]
+    static let work = [
+        StyleSampleLine(
+            spoken: "quick update the deploy went out and the dashboards look fine",
+            engine: "Quick update: the deploy went out, and the dashboards look fine.")
+    ]
     /// An email is dictated a line at a time, so each line is its own take, as it is when you use the app.
     static let email = [
         StyleSampleLine(spoken: "hi Priya", engine: "Hi Priya,"),
-        StyleSampleLine(spoken: "thanks for the signed build the release notes are in the PR",
-                        engine: "Thanks for the signed build. The release notes are in the PR."),
+        StyleSampleLine(
+            spoken: "thanks for the signed build the release notes are in the PR",
+            engine: "Thanks for the signed build. The release notes are in the PR."),
         StyleSampleLine(spoken: "can we do the review Thursday", engine: "Can we do the review Thursday?"),
         StyleSampleLine(spoken: "talk soon", engine: "Talk soon."),
     ]
-    static let other = [StyleSampleLine(spoken: "sure i'll send the invoice tomorrow morning and copy Dan",
-                                        engine: "Sure, I'll send the invoice tomorrow morning and copy Dan.")]
+    static let other = [
+        StyleSampleLine(
+            spoken: "sure i'll send the invoice tomorrow morning and copy Dan",
+            engine: "Sure, I'll send the invoice tomorrow morning and copy Dan.")
+    ]
 
     static func lines(for context: StyleContextID) -> [StyleSampleLine] {
         switch context {
@@ -63,9 +73,7 @@ enum StyleSamples {
         var kept = [Bool](repeating: false, count: b.count)
         var i = 0, j = 0
         while i < a.count, j < b.count {
-            if a[i] == b[j] { kept[j] = true; i += 1; j += 1 }
-            else if table[i + 1][j] >= table[i][j + 1] { i += 1 }
-            else { j += 1 }
+            if a[i] == b[j] { kept[j] = true; i += 1; j += 1 } else if table[i + 1][j] >= table[i][j + 1] { i += 1 } else { j += 1 }
         }
         var result: [StyleSampleSegment] = []
         for (index, character) in b.enumerated() {

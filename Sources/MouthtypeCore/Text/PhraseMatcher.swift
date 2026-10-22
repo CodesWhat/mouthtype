@@ -71,6 +71,27 @@ struct PhraseMatcher: Sendable {
         return result
     }
 
+    /// Every pattern's hits, not just the winning one: at each start every pattern in the first-character bucket is
+    /// tried, so overlapping phrases ("oh my", "my damn project") all report. A pattern still never overlaps its own
+    /// previous hit, exactly as if it had been matched on its own. For marking covered text, not for replacing.
+    func allMatches(_ chars: [Character], lower: [Character]) -> [Match] {
+        guard !buckets.isEmpty else { return [] }
+        let n = chars.count
+        var result: [Match] = []
+        var freeFrom: [Int: Int] = [:]
+        for i in 0..<n {
+            if i > 0, TextScan.isWordChar(chars[i - 1]) { continue }
+            guard let candidates = buckets[lower[i]] else { continue }
+            for pattern in candidates where i >= (freeFrom[pattern.index] ?? 0) {
+                if let end = match(pattern.chars, in: chars, lower: lower, at: i) {
+                    result.append(Match(range: i..<end, pattern: pattern.index))
+                    freeFrom[pattern.index] = end
+                }
+            }
+        }
+        return result
+    }
+
     private func match(_ pattern: [Character], in chars: [Character], lower: [Character], at start: Int) -> Int? {
         let n = chars.count
         var j = start

@@ -121,7 +121,8 @@ import MouthtypeCore
         contexts.addApp(.email, bundleID: "com.tinyspeck.slackmacgap", appName: "Slack")
         #expect(contexts.context(bundleID: "com.tinyspeck.slackmacgap") == .email)
         #expect(!contexts.members(.work).contains { $0.keys.contains("com.tinyspeck.slackmacgap") })
-        #expect(contexts.members(.email).last?.name == "Slack" && contexts.members(.email).last?.isBuiltIn == true || contexts.members(.email).contains { $0.keys.contains("com.tinyspeck.slackmacgap") })
+        #expect(
+            contexts.members(.email).last?.name == "Slack" && contexts.members(.email).last?.isBuiltIn == true || contexts.members(.email).contains { $0.keys.contains("com.tinyspeck.slackmacgap") })
         // Moving it home restores the built-in entry without a duplicate.
         contexts.addApp(.work, bundleID: "com.tinyspeck.slackmacgap", appName: "Slack")
         #expect(contexts.context(bundleID: "com.tinyspeck.slackmacgap") == .work)
@@ -192,12 +193,12 @@ import MouthtypeCore
 
     /// The format shipped before contexts: app and website rules, some with cleanup levels, some without.
     private let legacy = """
-    {"version":1,"entries":[
-      {"bundleID":"com.tinyspeck.slackmacgap","appName":"Slack","capitalisation":"sentence","endingPunctuation":"keep"},
-      {"bundleID":"com.apple.Terminal","appName":"Terminal","cleanupLevel":"basic"},
-      {"bundleID":"org.example.Notes","appName":"Notes","capitalisation":"lowercase","endingPunctuation":"dropFinalFullStop","cleanupLevel":"off"}],
-     "websites":[{"domain":"linkedin.com","cleanupLevel":"light"},{"domain":"example.org","capitalisation":"sentence","endingPunctuation":"dropFinalFullStop"}]}
-    """
+        {"version":1,"entries":[
+          {"bundleID":"com.tinyspeck.slackmacgap","appName":"Slack","capitalisation":"sentence","endingPunctuation":"keep"},
+          {"bundleID":"com.apple.Terminal","appName":"Terminal","cleanupLevel":"basic"},
+          {"bundleID":"org.example.Notes","appName":"Notes","capitalisation":"lowercase","endingPunctuation":"dropFinalFullStop","cleanupLevel":"off"}],
+         "websites":[{"domain":"linkedin.com","cleanupLevel":"light"},{"domain":"example.org","capitalisation":"sentence","endingPunctuation":"dropFinalFullStop"}]}
+        """
 
     @Test func storedRulesMigrateLosslesslyAndKeepWorking() throws {
         let d = defaults()
@@ -228,15 +229,15 @@ import MouthtypeCore
         let styles = try AppCleanupStyles.load(d)
 
         // Slack's own Formal rule stays on its Work row as an editable override.
-        let work = StyleRows.rows(for: .work, in: styles)
+        let work = StyleRows.rows(for: .work, in: styles, installed: { _ in true })
         let slack = try #require(work.first { $0.member.name == "Slack" })
         #expect(slack.isBuiltIn && !slack.ownRule && slack.ruleStyle == .formal)
-        let email = StyleRows.rows(for: .email, in: styles)
+        let email = StyleRows.rows(for: .email, in: styles, installed: { _ in true })
         #expect(!email.contains { $0.member.name == "Slack" })
         #expect(email.allSatisfy { $0.isBuiltIn })
 
         // example.org's Casual rule has no context of its own, so it lands in the first Casual one.
-        let personal = StyleRows.rows(for: .personal, in: styles)
+        let personal = StyleRows.rows(for: .personal, in: styles, installed: { _ in true })
         #expect(personal.contains { $0.member.name == "example.org" && $0.ownRule })
 
         // A level on a built-in site shows on its row without taking it out of its list.
@@ -259,7 +260,7 @@ import MouthtypeCore
 
         var appearances: [String: Int] = [:]
         for id in StyleContextID.allCases {
-            for row in StyleRows.rows(for: id, in: styles) {
+            for row in StyleRows.rows(for: id, in: styles, installed: { _ in true }) {
                 if row.ruleStyle != nil || row.ruleLevel != nil { appearances[row.member.id, default: 0] += 1 }
             }
         }

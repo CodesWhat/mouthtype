@@ -57,12 +57,14 @@ import Testing
         var finishPreparation: CheckedContinuation<Bool, any Error>?
         var preparation: Task<Bool, any Error>!
         await withCheckedContinuation { started in
-            preparation = Task { try await model.microphone.prepare {
-                try await withCheckedThrowingContinuation {
-                    finishPreparation = $0
-                    started.resume()
+            preparation = Task {
+                try await model.microphone.prepare {
+                    try await withCheckedThrowingContinuation {
+                        finishPreparation = $0
+                        started.resume()
+                    }
                 }
-            } }
+            }
         }
         try render(model: model, actions: actions, name: "setup-microphone-preparing", size: NSSize(width: 560, height: 440))
         finishPreparation?.resume(throwing: CaptureError.selectedMicrophoneUnavailable)
@@ -242,13 +244,99 @@ import Testing
         try both("5-ready")
     }
 
+    @Test func speechStepDrawsADeterminateBarAndReadyStepListsBothCleanupModels() async throws {
+        let name = "SetupRenderTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        FontRegistry.registerBundledFonts()
+        let diagnostics = SettingsDiagnostics()
+        diagnostics.microphoneStatus = .authorized
+        diagnostics.accessibilityGranted = true
+        diagnostics.hotkeyHealth = .listening
+        let size = SetupWindow.contentSize
+        let actions = SetupActions()
+        let micModel = SetupModel(diagnostics: diagnostics, engine: EngineHost(makeEngine: { _ in SetupRenderEngine() }), defaults: defaults)
+        _ = try await micModel.microphone.prepare { true }
+
+        // Speech step, mid-download: 213 of 483 MB at 44% with a time estimate, and an earlier 20% for comparison.
+        let gate = ProgressGate()
+        func speechModel(fraction: Double) async -> SetupModel {
+            var clock = 0.0
+            let engine = ProgressRenderEngine(steps: [fraction - 0.01, fraction].map { .progress(ModelDownloadProgress(fraction: $0, knownTotalBytes: 483_000_000)) }, gate: gate)
+            let host = EngineHost(
+                makeEngine: { _ in engine },
+                uptime: {
+                    defer { clock += 3 }; return clock
+                })
+            host.start()
+            for _ in 0..<300 where host.downloadProgress?.fraction != fraction { try? await Task.sleep(for: .milliseconds(10)) }
+            return SetupModel(diagnostics: diagnostics, engine: host, microphone: micModel.microphone, defaults: defaults)
+        }
+        let early = await speechModel(fraction: 0.2)
+        let mid = await speechModel(fraction: 0.44)
+        #expect(early.readiness.step == .speech && mid.readiness.step == .speech)
+        guard case let .downloading(shown) = mid.engine.downloadStatus else { Issue.record("not downloading"); return }
+        #expect(ModelDownloadFormat.caption(shown).hasPrefix("213 of 483 MB"))
+        let earlyBitmap = try bitmap(model: early, actions: actions, size: size, appearance: .aqua)
+        let midBitmap = try bitmap(model: mid, actions: actions, size: size, appearance: .aqua)
+        #expect(earlyBitmap.representation(using: .png, properties: [:]) != midBitmap.representation(using: .png, properties: [:]), "the bar fill moves with progress")
+        try save(midBitmap, name: "setup-progress-speech-light")
+        try save(try bitmap(model: mid, actions: actions, size: size, appearance: .darkAqua), name: "setup-progress-speech-dark")
+
+        // Ready step: Fast downloading, Thorough available.
+        var fast = ModelDownloadProgress(hubCompletedUnits: 612_000_000, hubTotalUnits: 1_447_000_000)
+        fast.secondsRemaining = 95
+        let listing = FakeCleanupListing(models: [
+            CleanupModelStatus(level: .light, name: "S1-mini by Superwhisper", sizeMB: 1447, status: .downloading(fast), selected: true),
+            CleanupModelStatus(level: .medium, name: "Gemma 4 E4B", sizeMB: 5150, status: .available, selected: false),
+        ])
+        let readyHost = EngineHost(makeEngine: { _ in SetupRenderEngine() })
+        await readyHost.load()
+        let ready = SetupModel(diagnostics: diagnostics, engine: readyHost, microphone: micModel.microphone, cleanup: listing, defaults: defaults)
+        #expect(ready.readiness.step == .ready)
+        #expect(ready.cleanupModels.count == 2)
+        try save(try bitmap(model: ready, actions: actions, size: size, appearance: .aqua), name: "setup-progress-ready-light")
+        try save(try bitmap(model: ready, actions: actions, size: size, appearance: .darkAqua), name: "setup-progress-ready-dark")
+        listing.models[0].status = .done
+        listing.models[1].status = .failed(message: "The network connection was lost.")
+        try save(try bitmap(model: ready, actions: actions, size: size, appearance: .aqua), name: "setup-progress-ready-done-failed-light")
+        ready.downloadCleanupModel(.medium)
+        #expect(listing.requested == [.medium])
+        ready.cancelCleanupDownload(.light)
+        #expect(listing.cancelled == [.light])
+        await gate.release()
+    }
+
+    private func bitmap(model: SetupModel, actions: SetupActions, size: NSSize, appearance: NSAppearance.Name) throws -> NSBitmapImageRep {
+        let dark = appearance == .darkAqua
+        let host = NSHostingView(
+            rootView: SetupView(model: model, actions: actions, solid: true)
+                .environment(\.colorScheme, dark ? .dark : .light))
+        let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
+        window.appearance = NSAppearance(named: appearance)
+        window.contentView = host
+        host.setFrameSize(size)
+        host.layoutSubtreeIfNeeded()
+        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        return bitmap
+    }
+
+    private func save(_ bitmap: NSBitmapImageRep, name: String) throws {
+        guard let directory = ProcessInfo.processInfo.environment["MOUTHTYPE_SETTINGS_PREVIEWS"] else { return }
+        let output = URL(fileURLWithPath: directory, isDirectory: true)
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: output.appendingPathComponent(name + ".png"))
+    }
+
     /// Renders the SwiftUI sheet on its solid fallback background. The glass layer doesn't draw into an
     /// offscreen bitmap, so the material itself is only checked structurally (see `windowUsesGlass`).
     private func render(model: SetupModel, actions: SetupActions, name: String, size: NSSize, appearance: NSAppearance.Name? = nil) throws {
         let controller = SetupWindow(model: model, actions: actions)
         let dark = appearance == .darkAqua
-        let host = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: true)
-            .environment(\.colorScheme, dark ? .dark : .light))
+        let host = NSHostingView(
+            rootView: SetupView(model: model, actions: actions, solid: true)
+                .environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.contentView = host
@@ -273,4 +361,46 @@ private struct SetupRenderEngine: Transcriber {
     var fails = false
     func prepare() async throws { if fails { throw CocoaError(.fileReadNoSuchFile) } }
     func transcribe(samples: [Float]) async throws -> Transcription { Transcription(text: "", processingSeconds: 0, engineID: id) }
+}
+
+private actor ProgressGate {
+    private var open = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+    func wait() async {
+        if open { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+    func release() {
+        open = true
+        waiters.forEach { $0.resume() }
+        waiters = []
+    }
+}
+
+/// Reports scripted download progress, then holds the model "downloading" until the test lets go.
+private actor ProgressRenderEngine: PreparationReporting {
+    nonisolated let id = "parakeet-tdt-v3"
+    nonisolated let displayName = "Render only"
+    let steps: [EnginePreparation]
+    let gate: ProgressGate
+    init(steps: [EnginePreparation], gate: ProgressGate) {
+        self.steps = steps
+        self.gate = gate
+    }
+    func prepare() async throws {}
+    func prepare(report: @escaping @Sendable (EnginePreparation) async -> Void) async throws {
+        for step in steps { await report(step) }
+        await gate.wait()
+    }
+    func transcribe(samples: [Float]) async throws -> Transcription { Transcription(text: "", processingSeconds: 0, engineID: id) }
+}
+
+@MainActor private final class FakeCleanupListing: CleanupModelListing {
+    var models: [CleanupModelStatus]
+    private(set) var requested: [CleanupLevel] = []
+    init(models: [CleanupModelStatus]) { self.models = models }
+    func cleanupModels() -> [CleanupModelStatus] { models }
+    func downloadCleanupModel(_ level: CleanupLevel) { requested.append(level) }
+    func cancelCleanupDownload(_ level: CleanupLevel) { cancelled.append(level) }
+    private(set) var cancelled: [CleanupLevel] = []
 }

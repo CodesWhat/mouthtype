@@ -9,7 +9,7 @@ struct SubwordUnit: Equatable {
 }
 
 enum WordAssembly {
-    static let boundaryMarker: Character = "\u{2581}"   // SentencePiece "▁"
+    static let boundaryMarker: Character = "\u{2581}"  // SentencePiece "▁"
 
     private static let skipped: Set<String> = ["", "<blank>", "<pad>"]
     private static let openers: Set<Character> = ["(", "[", "{", "\"", "\u{201C}", "\u{2018}", "\u{00BF}", "\u{00A1}"]

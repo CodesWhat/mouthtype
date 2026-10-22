@@ -33,14 +33,16 @@ import AppKit
         settings.target = self
         add("Mouthtype", [home, settings, .separator(), NSMenuItem(title: "Quit Mouthtype", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")])
         add("File", [NSMenuItem(title: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")])
-        add("Edit", [
-            NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"),
-            .separator(),
-            NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
-            NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
-            NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
-            NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
-        ])
+        add(
+            "Edit",
+            [
+                NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"),
+                .separator(),
+                NSMenuItem(title: "Cut", action: #selector(NSText.cut(_:)), keyEquivalent: "x"),
+                NSMenuItem(title: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c"),
+                NSMenuItem(title: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v"),
+                NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"),
+            ])
         return main
     }
 

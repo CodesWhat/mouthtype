@@ -17,9 +17,11 @@ final class HistoryMenuSection: NSObject, MenuSection {
 
     var items: [NSMenuItem] { recentItems.isEmpty ? [] : [parent] }
 
-    init(store: TranscriptStore?, now: @escaping @MainActor () -> Date = { Date() },
-         onError: @escaping @MainActor (String?) -> Void = { _ in },
-         copy: @escaping @MainActor (String) -> Void = { SystemClipboard().write($0) }) {
+    init(
+        store: TranscriptStore?, now: @escaping @MainActor () -> Date = { Date() },
+        onError: @escaping @MainActor (String?) -> Void = { _ in },
+        copy: @escaping @MainActor (String) -> Void = { SystemClipboard().write($0) }
+    ) {
         self.store = store
         self.now = now
         self.onError = onError
@@ -33,9 +35,7 @@ final class HistoryMenuSection: NSObject, MenuSection {
         guard let store else { onError("Recent takes are unavailable."); return }
         do {
             statsItem.title = Self.statsLine(try store.stats(now: now()))
-            let records = try store.recent(limit: Self.recentCount * 4)
-                .filter { $0.isSecure != true && !($0.finalText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-                .prefix(Self.recentCount)
+            let records = try store.recentTakes(limit: Self.recentCount)
             recentItems = records.compactMap { record in
                 guard let text = record.finalText else { return nil }
                 let item = NSMenuItem(title: Self.shortened(text), action: #selector(copyRecent(_:)), keyEquivalent: "")

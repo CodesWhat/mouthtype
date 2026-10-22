@@ -10,6 +10,7 @@ import MouthtypeCore
     var hotkeyHealth = HotkeyHealth.off
     var globe: GlobeKeyCheck?
     var remapChecked = false
+    var remapConflict = false
     var shortcut: DictationShortcut?
     var cleanupNeedsAttention = false
     var dictionaryError: String?
@@ -36,6 +37,7 @@ import MouthtypeCore
         case .secureInputOn: return "Dictation is paused by Secure Input…"
         case .listening: break
         }
+        if canRemapFn, remapConflict { return "Another app keeps changing the Fn key mapping…" }
         if canRemapFn, !remapChecked, globe?.hasConflict == true { return "Globe key conflicts with dictation…" }
         if cleanupNeedsAttention { return "Cleanup model needs attention…" }
         if dictionaryError != nil { return "Saved spellings need attention…" }

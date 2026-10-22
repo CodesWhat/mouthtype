@@ -8,12 +8,27 @@ protocol SmartModel: TextCleaner {
     var revision: String? { get }
     var downloadSizeMB: Int { get }
     func download(progress: @escaping @Sendable (Double) -> Void) async throws
+    func downloadReporting(report: @escaping @Sendable (ModelDownloadProgress) -> Void) async throws
     func load() async throws
     func unload() async
+    /// Deletes what a cancelled download left on disk.
+    func discardPartialDownload()
+}
+
+extension SmartModel {
+    func discardPartialDownload() {}
 }
 
 extension MLXCleaner: SmartModel {
     nonisolated var downloadSizeMB: Int { spec.downloadSizeMB }
+}
+
+extension SmartModel {
+    /// A model that reports only a fraction still gets a bar, sized from the catalog.
+    func downloadReporting(report: @escaping @Sendable (ModelDownloadProgress) -> Void) async throws {
+        let known = Int64(downloadSizeMB) * 1_000_000
+        try await download(progress: { report(ModelDownloadProgress(fraction: $0, knownTotalBytes: known)) })
+    }
 }
 
 /// What the dictation pipeline asks of the model pass, so tests can stand in for the host.
@@ -83,7 +98,12 @@ enum CleanerState: Equatable, Sendable {
 @MainActor
 @Observable
 final class CleanerHost: CleanupModelManaging {
+    /// How long the model stays in memory with no cleanup use before its GPU memory is handed back.
+    static let defaultIdleUnloadDelay: Duration = .seconds(10 * 60)
+
     private(set) var state: CleanerState
+    /// Bytes fetched so far while `state` is downloading, with a smoothed time remaining.
+    private(set) var downloadProgress: ModelDownloadProgress?
 
     nonisolated let smart: SmartCleanup
     @ObservationIgnored private let model: any SmartModel
@@ -93,11 +113,26 @@ final class CleanerHost: CleanupModelManaging {
     @ObservationIgnored private var downloadTask: Task<Void, Never>?
     @ObservationIgnored private var pressure: (any DispatchSourceMemoryPressure)?
     @ObservationIgnored private var defaultsObserver: NSKeyValueObservation?
+    @ObservationIgnored private var idleTask: Task<Void, Never>?
+    @ObservationIgnored private var activeUses = 0
+    @ObservationIgnored private let idleUnloadDelay: Duration
+    @ObservationIgnored private var loadWaiters: [UUID: LoadWaiter] = [:]
+    @ObservationIgnored private var rateMeter = DownloadRateMeter()
+    @ObservationIgnored private let uptime: () -> TimeInterval
+
+    private struct LoadWaiter {
+        let continuation: CheckedContinuation<Void, Never>
+        let timeout: Task<Void, Never>
+    }
 
     init(
         model: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-        budget: (@Sendable (Int) -> Duration)? = nil
+        budget: (@Sendable (Int) -> Duration)? = nil,
+        idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay,
+        uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
+        self.uptime = uptime
+        self.idleUnloadDelay = idleUnloadDelay
         self.model = model
         self.level = level
         smart = SmartCleanup(cleaner: model, budget: budget)
@@ -112,6 +147,17 @@ final class CleanerHost: CleanupModelManaging {
         }
     }
     var downloadSizeMB: Int { model.downloadSizeMB }
+
+    /// What a download row shows. Nothing is fetched until the user asks, so a model not on disk is available, not pending.
+    var downloadStatus: ModelDownloadStatus {
+        switch state {
+        case .absent: .available
+        case let .downloading(fraction):
+            .downloading(downloadProgress ?? ModelDownloadProgress(fraction: fraction, knownTotalBytes: Int64(model.downloadSizeMB) * 1_000_000))
+        case .loading, .unloaded, .ready: .done
+        case let .failed(message): .failed(message: message)
+        }
+    }
 
     /// Watches for memory pressure and loads the model if the level wants it and it is on disk.
     func start() {
@@ -137,6 +183,8 @@ final class CleanerHost: CleanupModelManaging {
         if level().needsModel {
             if case .failed = state { state = model.isDownloaded ? .unloaded : .absent }
             ensureLoaded()
+            // Selection routes a take's key-down and its cleanup here, so asking for the model counts as use.
+            if case .ready = state { scheduleIdleUnload() }
         } else {
             unload(reason: "level \(level().rawValue)")
         }
@@ -163,8 +211,9 @@ final class CleanerHost: CleanupModelManaging {
                 try await model.load()
                 let loadSeconds = (clock.now - start).seconds
                 let warmStart = clock.now
-                _ = try? await model.clean("warm up the cleanup model", context: CleanupContext())
-                Log.cleaner.info("model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
+                _ = try? await model.clean(Self.warmUpTranscript, context: CleanupContext())
+                Log.cleaner.info(
+                    "model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
                 await smart.resumeAfterModelLoad()
                 finishLoad(.ready(loadSeconds: loadSeconds))
             } catch {
@@ -174,9 +223,14 @@ final class CleanerHost: CleanupModelManaging {
         }
     }
 
+    /// Shaped like a real take, so the warm-up builds the shared prompt prefix and compiles the same kernels.
+    private static let warmUpTranscript = "um so I was thinking we could move the meeting to three thirty, no wait, four, and send the notes to Sam after"
+
     private func finishLoad(_ result: CleanerState) {
         loadTask = nil
         state = result
+        if case .ready = result { scheduleIdleUnload() }
+        resumeLoadWaiters()
         // The level may have dropped to basic or off while it loaded.
         if case .ready = result, !level().needsModel { unload(reason: "level \(level().rawValue)") }
     }
@@ -189,6 +243,8 @@ final class CleanerHost: CleanupModelManaging {
     private func unload(reason: String) {
         guard case .ready = state else { return }
         state = .unloaded
+        idleTask?.cancel()
+        idleTask = nil
         unloadTask = Task { [model, smart] in
             await smart.pauseForModelUnload()
             await model.unload()
@@ -197,26 +253,71 @@ final class CleanerHost: CleanupModelManaging {
         Log.cleaner.info("model unloaded: \(reason, privacy: .public)")
     }
 
+    // MARK: Idle unload
+
+    /// Restarts the idle countdown. Called when the model becomes ready and on every use of it.
+    private func scheduleIdleUnload() {
+        idleTask?.cancel()
+        guard case .ready = state else { idleTask = nil; return }
+        idleTask = Task { [weak self, idleUnloadDelay] in
+            try? await Task.sleep(for: idleUnloadDelay)
+            guard !Task.isCancelled else { return }
+            self?.idleExpired()
+        }
+    }
+
+    private func idleExpired() {
+        idleTask = nil
+        guard case .ready = state else { return }
+        // A generation in flight is use. Its end restarts the countdown.
+        guard activeUses == 0 else { return }
+        unload(reason: "idle \(idleUnloadDelay)")
+    }
+
+    private func beginUse() {
+        activeUses += 1
+        idleTask?.cancel()
+        idleTask = nil
+    }
+
+    private func endUse() {
+        activeUses = max(0, activeUses - 1)
+        if activeUses == 0 { scheduleIdleUnload() }
+    }
+
+    /// A recording that will need this model is in progress. Counts as use, so a take longer than the idle delay
+    /// can't have the model unloaded before its cleanup runs. Every call is paired with `endRecordingHold()`.
+    func beginRecordingHold() { beginUse() }
+
+    /// The take ended, cleaned up or was cancelled. The last release restarts the idle countdown.
+    func endRecordingHold() { endUse() }
+
     // MARK: Download
 
     /// Fetches the model from Hugging Face. Runs only when the user asks; a stopped download resumes.
     func startDownload() {
         guard state == .absent || { if case .failed = state { return true } else { return false } }(), downloadTask == nil else { return }
         state = .downloading(fraction: 0)
+        rateMeter.reset()
+        downloadProgress = ModelDownloadProgress(fraction: 0, knownTotalBytes: Int64(model.downloadSizeMB) * 1_000_000)
         downloadTask = Task { [model] in
             do {
-                try await model.download { fraction in
-                    Task { @MainActor [weak self] in self?.downloadProgress(fraction) }
-                }
+                try await model.downloadReporting(report: { progress in
+                    Task { @MainActor [weak self] in self?.receive(progress) }
+                })
                 downloadTask = nil
+                downloadProgress = nil
                 state = .unloaded
                 Log.cleaner.info("model \(model.id, privacy: .public) downloaded")
                 levelChanged()
             } catch is CancellationError {
+                model.discardPartialDownload()
                 downloadTask = nil
+                downloadProgress = nil
                 state = model.isDownloaded ? .unloaded : .absent
             } catch {
                 downloadTask = nil
+                downloadProgress = nil
                 Log.cleaner.error("model download failed: \(error.localizedDescription, privacy: .public)")
                 state = .failed(message: error.localizedDescription)
             }
@@ -227,24 +328,28 @@ final class CleanerHost: CleanupModelManaging {
         downloadTask?.cancel()
     }
 
-    private func downloadProgress(_ fraction: Double) {
-        guard case .downloading = state else { return }
-        state = .downloading(fraction: min(max(fraction, 0), 1))
+    /// Reports hop to the main actor as separate tasks, so one that lands behind a later one is dropped rather than moving the bar back.
+    private func receive(_ progress: ModelDownloadProgress) {
+        guard case let .downloading(current) = state, progress.fraction >= current else { return }
+        rateMeter.record(fraction: progress.fraction, at: uptime())
+        var update = progress
+        update.secondsRemaining = rateMeter.secondsRemaining
+        downloadProgress = update
+        state = .downloading(fraction: min(max(progress.fraction, 0), 1))
     }
 
     // MARK: SmartCleaning
 
     func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? {
-        let clock = ContinuousClock()
-        let deadline = clock.now + limit
+        let deadline = ContinuousClock.now + limit
         if state == .unloaded { ensureLoaded() }
         while !Task.isCancelled {
             switch state {
             case .ready:
                 return SmartCleanerInfo(id: model.id, revision: model.revision)
             case .loading:
-                guard clock.now < deadline else { return nil }
-                do { try await Task.sleep(for: .milliseconds(20)) } catch { return nil }
+                guard ContinuousClock.now < deadline else { return nil }
+                await waitForLoad(until: deadline)
             default:
                 return nil
             }
@@ -252,8 +357,39 @@ final class CleanerHost: CleanupModelManaging {
         return nil
     }
 
-    nonisolated func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
-        await smart.run(request)
+    /// Suspends until the load in progress finishes, the deadline passes or the caller is cancelled.
+    private func waitForLoad(until deadline: ContinuousClock.Instant) async {
+        let id = UUID()
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                guard !Task.isCancelled else { return continuation.resume() }
+                let timeout = Task { [weak self] in
+                    try? await Task.sleep(until: deadline, clock: .continuous)
+                    self?.resumeLoadWaiter(id)
+                }
+                loadWaiters[id] = LoadWaiter(continuation: continuation, timeout: timeout)
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.resumeLoadWaiter(id) }
+        }
+    }
+
+    private func resumeLoadWaiter(_ id: UUID) {
+        guard let waiter = loadWaiters.removeValue(forKey: id) else { return }
+        waiter.timeout.cancel()
+        waiter.continuation.resume()
+    }
+
+    private func resumeLoadWaiters() {
+        for id in Array(loadWaiters.keys) { resumeLoadWaiter(id) }
+    }
+
+    /// MainActor-isolated so a caller already on the main actor takes its use count before its first suspension.
+    func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult {
+        beginUse()
+        let result = await smart.run(request)
+        endUse()
+        return result
     }
 
     /// Runs one explicit selected-text transform once the model is ready.
@@ -264,12 +400,17 @@ final class CleanerHost: CleanupModelManaging {
             throw CleanerError.unavailable(reason: "\(modelName) isn't loaded yet. Try again in a moment.")
         }
         // Through SmartCleanup so unload, dictation cleanup and a re-requested transform all wait for this generation.
+        beginUse()
+        defer { endUse() }
         return try await smart.transform(kind, text: text)
     }
 
     nonisolated func recordingStarted() {
         Task { @MainActor in
-            if self.level().needsModel { self.ensureLoaded() }
+            guard self.level().needsModel else { return }
+            self.ensureLoaded()
+            // A key-down is use: don't unload under a take that is about to need the model.
+            if case .ready = self.state { self.scheduleIdleUnload() }
         }
     }
 }

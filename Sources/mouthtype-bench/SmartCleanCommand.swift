@@ -115,11 +115,13 @@ enum SmartRunner {
     ) async -> SmartRun {
         let clock = ContinuousClock()
         let start = clock.now
-        let det = TextPipeline().run(TextPipelineInput(
-            text: raw, dictionary: rules.filter { !level.needsModel || !$0.isJoinedSpelling }, context: context, options: TextPipelineOptions(selfCorrection: selfCorrection, style: style)))
+        let det = TextPipeline().run(
+            TextPipelineInput(
+                text: raw, dictionary: rules.filter { !level.needsModel || !$0.isJoinedSpelling }, context: context, options: TextPipelineOptions(selfCorrection: selfCorrection, style: style)))
         let deterministicTime = (clock.now - start).seconds * 1000
         let result = await smart.run(SmartCleanupRequest(text: det.text, level: level, style: style, dictionary: rules, context: context, appName: appName))
-        return SmartRun(raw: raw, deterministic: det.text, result: result, edits: det.edits,
-                        deterministicMilliseconds: deterministicTime, totalCleanupMilliseconds: (clock.now - start).seconds * 1000)
+        return SmartRun(
+            raw: raw, deterministic: det.text, result: result, edits: det.edits,
+            deterministicMilliseconds: deterministicTime, totalCleanupMilliseconds: (clock.now - start).seconds * 1000)
     }
 }

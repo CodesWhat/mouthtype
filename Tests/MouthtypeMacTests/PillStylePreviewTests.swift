@@ -59,10 +59,11 @@ import Testing
             x: (canvas.width - width) / 2, y: 0, width: width, height: fullHeight ? canvas.height : min(canvas.height, 24 + 72 * scale.factor)
         )
         let pixels = (width: Int(crop.width * Self.backing), height: Int(crop.height * Self.backing))
-        let context = try #require(CGContext(
-            data: nil, width: pixels.width, height: pixels.height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil, width: pixels.width, height: pixels.height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
         context.scaleBy(x: Self.backing, y: Self.backing)
         context.translateBy(x: -crop.minX, y: 0)
         let (top, bottom) = backdrop.colors

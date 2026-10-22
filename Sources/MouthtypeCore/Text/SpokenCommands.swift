@@ -60,6 +60,13 @@ public struct SpokenCommands: Sendable {
                 }
                 if ok { found = Match(entry: entry, firstWord: w, lastWord: w + entry.words.count - 1); break }
             }
+            // A word inside a token that starts with "/" is part of a typed slash command ("/newline"), not a command.
+            if found != nil {
+                var tokenStart = words[w].start
+                while tokenStart > 0, !chars[tokenStart - 1].isWhitespace { tokenStart -= 1 }
+                while tokenStart < words[w].start, "([{\"'`\u{201C}\u{2018}<".contains(chars[tokenStart]) { tokenStart += 1 }
+                if tokenStart < words[w].start, chars[tokenStart] == "/" { found = nil }
+            }
             if let found { raw.append(found); w = found.lastWord + 1 } else { w += 1 }
         }
         guard !raw.isEmpty else { return StageResult(text: text) }
@@ -76,17 +83,24 @@ public struct SpokenCommands: Sendable {
             if m.firstWord > 0 {
                 let prev = words[m.firstWord - 1]
                 if TextScan.onlySpaces(chars, prev.end, first.start), prev.end < first.start {
-                    let signals = m.entry.style == .layout
+                    let signals =
+                        m.entry.style == .layout
                         ? SpokenCommandTable.layoutNounSignals : SpokenCommandTable.nounSignals
                     if signals.contains(prev.lower) { continue }
                 }
             }
             if m.entry.style == .punctuation {
                 if m.firstWord > 0, SpokenCommandTable.punctuationVerbs.contains(words[m.firstWord - 1].lower),
-                   TextScan.onlySpaces(chars, words[m.firstWord - 1].end, first.start) { continue }
+                    TextScan.onlySpaces(chars, words[m.firstWord - 1].end, first.start)
+                {
+                    continue
+                }
                 let next = m.lastWord + 1
                 if next < words.count, SpokenCommandTable.punctuationFollowers.contains(words[next].lower),
-                   TextScan.onlySpaces(chars, last.end, words[next].start) { continue }
+                    TextScan.onlySpaces(chars, last.end, words[next].start)
+                {
+                    continue
+                }
             }
             if let action = m.entry.list, !listCommandApplies(action, m, chars, words, listState) { continue }
             var coreStart = first.start
@@ -105,7 +119,8 @@ public struct SpokenCommands: Sendable {
                 // A comma, semicolon or colon the engine put before the break would dangle at the end of the line.
                 // That includes a spoken one ("green comma new line").
                 if let prev = accepted.last, prev.match.entry.style == .punctuation,
-                   [",", ";", ":"].contains(prev.match.entry.output), prev.match.lastWord + 1 == m.firstWord {
+                    [",", ";", ":"].contains(prev.match.entry.output), prev.match.lastWord + 1 == m.firstWord
+                {
                     coreStart = prev.coreStart
                     commandStarts.remove(prev.match.firstWord)
                     accepted.removeLast()

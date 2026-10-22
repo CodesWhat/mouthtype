@@ -7,7 +7,7 @@ import Testing
     private let utc = TimeZone(secondsFromGMT: 0)!
 
     @Test func secondsIntoDayUsesTheStoredOffset() {
-        let at = Date(timeIntervalSince1970: 1_792_000_000) // 2026-10-14 17:46:40 UTC
+        let at = Date(timeIntervalSince1970: 1_792_000_000)  // 2026-10-14 17:46:40 UTC
         #expect(StatsTimeline.secondsIntoDay(startedAt: at, utcOffsetSeconds: 0) == 17 * 3_600 + 46 * 60 + 40)
         #expect(StatsTimeline.hour(startedAt: at, utcOffsetSeconds: 0) == 17)
         #expect(StatsTimeline.hour(startedAt: at, utcOffsetSeconds: -8 * 3_600) == 9)
@@ -36,9 +36,9 @@ import Testing
     @Test func todaySummaryLeavesUntimedTakesOutOfTypingAvoided() {
         let base = Date(timeIntervalSince1970: 0)
         let takes = [
-            TodayTake(startedAt: base, secondsIntoDay: 0, words: 400, durationMs: 60_000, appName: nil),   // 10 min typing, 1 talking
-            TodayTake(startedAt: base, secondsIntoDay: 60, words: 40, durationMs: nil, appName: nil),       // untimed
-            TodayTake(startedAt: base, secondsIntoDay: 120, words: 0, durationMs: 5_000, appName: nil),     // hollow
+            TodayTake(startedAt: base, secondsIntoDay: 0, words: 400, durationMs: 60_000, appName: nil),  // 10 min typing, 1 talking
+            TodayTake(startedAt: base, secondsIntoDay: 60, words: 40, durationMs: nil, appName: nil),  // untimed
+            TodayTake(startedAt: base, secondsIntoDay: 120, words: 0, durationMs: 5_000, appName: nil),  // hollow
         ]
         let summary = TodaySummary(takes: takes)
         #expect(summary.takes == 3)
@@ -56,21 +56,24 @@ import Testing
         return (try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite")), dir)
     }
 
-    private func insert(_ store: TranscriptStore, day: String, at: Double, offset: Int = 0, words: Int?, audioPath: String? = nil,
-                        app: String? = nil, secure: Int? = nil) throws {
+    private func insert(
+        _ store: TranscriptStore, day: String, at: Double, offset: Int = 0, words: Int?, audioPath: String? = nil,
+        app: String? = nil, secure: Int? = nil
+    ) throws {
         try store.pool.write { db in
-            try db.execute(sql: """
-                INSERT INTO dictation (id, started_at, utc_offset_s, local_day, mode, trigger, status, words_final, voiced_ms, audio_ms,
-                    audio_path, app_name, is_secure)
-                VALUES (?, ?, ?, ?, 'dictate', 'hold', 'inserted', ?, 6000, 6000, ?, ?, ?)
-                """, arguments: [UUID().uuidString, at, offset, day, words, audioPath, app, secure])
+            try db.execute(
+                sql: """
+                    INSERT INTO dictation (id, started_at, utc_offset_s, local_day, mode, trigger, status, words_final, voiced_ms, audio_ms,
+                        audio_path, app_name, is_secure)
+                    VALUES (?, ?, ?, ?, 'dictate', 'hold', 'inserted', ?, 6000, 6000, ?, ?, ?)
+                    """, arguments: [UUID().uuidString, at, offset, day, words, audioPath, app, secure])
         }
     }
 
     @Test func hourBucketsAndTodayTapeComeFromTheLog() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let now = Date(timeIntervalSince1970: 1_792_000_000) // 2026-10-14 17:46:40 UTC
+        let now = Date(timeIntervalSince1970: 1_792_000_000)  // 2026-10-14 17:46:40 UTC
         let midnight = 1_792_000_000.0 - Double(17 * 3_600 + 46 * 60 + 40)
         try insert(store, day: "2026-10-14", at: midnight + 9 * 3_600 + 5, words: 30, app: "Slack")
         try insert(store, day: "2026-10-14", at: midnight + 9 * 3_600 + 900, words: 20)

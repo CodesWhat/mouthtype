@@ -46,10 +46,11 @@ private final class PreviewCount { var value = 16_000 }
         let preview = LivePreviewSession(pause: { await cadence.wait() })
         var requested: [Int] = []
         var texts: [String] = []
-        preview.start(source: { maximum in
-            requested.append(maximum)
-            return PreviewAudio(samples: Array(repeating: 0.1, count: maximum + 10), capturedSampleCount: 200_000)
-        }, recognize: { try await recognizer.run($0) }, update: { texts.append($0) })
+        preview.start(
+            source: { maximum in
+                requested.append(maximum)
+                return PreviewAudio(samples: Array(repeating: 0.1, count: maximum + 10), capturedSampleCount: 200_000)
+            }, recognize: { try await recognizer.run($0) }, update: { texts.append($0) })
         await settle()
         #expect(requested.isEmpty)
         await cadence.release()
@@ -67,7 +68,8 @@ private final class PreviewCount { var value = 16_000 }
         let recognizer = PreviewRecognizer()
         let preview = LivePreviewSession(pause: { await cadence.wait() })
         let count = PreviewCount()
-        preview.start(source: { _ in PreviewAudio(samples: Array(repeating: 0.1, count: count.value), capturedSampleCount: count.value) }, recognize: { try await recognizer.run($0) }, update: { _ in })
+        preview.start(
+            source: { _ in PreviewAudio(samples: Array(repeating: 0.1, count: count.value), capturedSampleCount: count.value) }, recognize: { try await recognizer.run($0) }, update: { _ in })
         await settle()
         await cadence.release()
         await settle()
@@ -117,10 +119,11 @@ private final class PreviewCount { var value = 16_000 }
         let preview = LivePreviewSession(pause: { await cadence.wait() })
         var calls = 0
         var texts: [String] = []
-        preview.start(source: { maximum in
-            calls += 1
-            return PreviewAudio(samples: Array(repeating: 0.1, count: maximum), capturedSampleCount: maximum)
-        }, recognize: { _ in throw CocoaError(.fileReadUnknown) }, update: { texts.append($0) })
+        preview.start(
+            source: { maximum in
+                calls += 1
+                return PreviewAudio(samples: Array(repeating: 0.1, count: maximum), capturedSampleCount: maximum)
+            }, recognize: { _ in throw CocoaError(.fileReadUnknown) }, update: { texts.append($0) })
         await settle()
         await cadence.release()
         await settle()
@@ -151,10 +154,11 @@ private final class PreviewCount { var value = 16_000 }
         let preview = LivePreviewSession(pause: {})
         var snapshots = 0
         var inferences = 0
-        preview.start(source: { _ in
-            snapshots += 1
-            return PreviewAudio(samples: [], capturedSampleCount: 0)
-        }, recognize: { _ in "" }, update: { _ in inferences += 1 })
+        preview.start(
+            source: { _ in
+                snapshots += 1
+                return PreviewAudio(samples: [], capturedSampleCount: 0)
+            }, recognize: { _ in "" }, update: { _ in inferences += 1 })
         for _ in 0..<2_000 where snapshots < 600 { await Task.yield() }
         await settle()
         #expect(snapshots == 600)

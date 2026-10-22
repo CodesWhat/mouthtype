@@ -71,8 +71,10 @@ import Testing
         #expect(migrations == ["v1", "v2", "v3"])
         #expect(indexes.contains("dictation_stats"))
         #expect(tables.contains("correction"))
-        for column in ["id", "started_at", "utc_offset_s", "local_day", "first_nonzero_ms", "word_timings_json", "raw_text",
-                       "det_text", "final_text", "prompt_sha", "is_secure", "paste_receipt_ms", "retry_of", "os_version", "error_message"] {
+        for column in [
+            "id", "started_at", "utc_offset_s", "local_day", "first_nonzero_ms", "word_timings_json", "raw_text",
+            "det_text", "final_text", "prompt_sha", "is_secure", "paste_receipt_ms", "retry_of", "os_version", "error_message",
+        ] {
             #expect(columns.contains(column), "missing \(column)")
         }
         #expect(!columns.contains { $0.contains("field") && $0.contains("text") })
@@ -88,10 +90,11 @@ import Testing
         try TranscriptStore.migrator.migrate(pool, upTo: "v1")
         try pool.write { db in
             for n in 0..<3 {
-                try db.execute(sql: """
-                    INSERT INTO dictation (id, started_at, utc_offset_s, local_day, mode, trigger, status, final_text)
-                    VALUES (?, 1, 0, '2026-10-12', 'hold', 'fn', 'inserted', ?)
-                    """, arguments: ["old-\(n)", "text \(n)"])
+                try db.execute(
+                    sql: """
+                        INSERT INTO dictation (id, started_at, utc_offset_s, local_day, mode, trigger, status, final_text)
+                        VALUES (?, 1, 0, '2026-10-12', 'hold', 'fn', 'inserted', ?)
+                        """, arguments: ["old-\(n)", "text \(n)"])
             }
             #expect(try !db.tableExists("correction"))
         }
@@ -146,20 +149,26 @@ import Testing
     }
 
     @Test func reopeningRunsNoMigrationTwice() throws {
-        let (_, dir) = try makeStore()
+        let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
-        _ = try TranscriptStore(url: dir.appendingPathComponent("nested/mouthtype.sqlite"))
+        let id = try dictate(store, at: Self.noon, words: 3, audioMs: 1000)
+        let before = try #require(try store.dictation(id: id))
+        let reopened = try TranscriptStore(url: dir.appendingPathComponent("nested/mouthtype.sqlite"))
+        #expect(try reopened.dictation(id: id) == before)
+        let migrations = try reopened.pool.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations") }
+        #expect(migrations == ["v1", "v2", "v3"])
     }
 
     @Test func stagedLifecycleRoundTrips() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         let aest = try #require(TimeZone(identifier: "Australia/Sydney"))
-        let id = try store.begin(DictationStart(
-            startedAt: Self.noon, timeZone: aest, mode: .hold, trigger: .fn,
-            target: DictationTarget(bundleID: "com.apple.Notes", appName: "Notes", isSecure: false),
-            appVersion: "0.1.0", osVersion: "26.0"
-        ))
+        let id = try store.begin(
+            DictationStart(
+                startedAt: Self.noon, timeZone: aest, mode: .hold, trigger: .fn,
+                target: DictationTarget(bundleID: "com.apple.Notes", appName: "Notes", isSecure: false),
+                appVersion: "0.1.0", osVersion: "26.0"
+            ))
         var row = try #require(try store.dictation(id: id))
         #expect(row.status == .started)
         #expect(row.localDay == "2026-10-12")
@@ -167,20 +176,24 @@ import Testing
         #expect(row.appBundleId == "com.apple.Notes" && row.isSecure == false)
         #expect(row.startedAt == Self.noon.timeIntervalSince1970)
 
-        try store.recordCapture(id, CaptureRecord(
-            captureStartMs: 12, firstSampleMs: 30, firstNonzeroMs: 45, keyUpMs: 2_100, audioMs: 2_000, voicedMs: 1_400,
-            audioPath: "/x/audio/\(id).wav", inputDeviceUID: "uid", inputDeviceName: "MacBook Mic", inputTransport: "built-in",
-            sampleRateHz: 16_000, rmsDb: -30, peakDb: -6, noiseFloorDb: -60
-        ))
+        try store.recordCapture(
+            id,
+            CaptureRecord(
+                captureStartMs: 12, firstSampleMs: 30, firstNonzeroMs: 45, keyUpMs: 2_100, audioMs: 2_000, voicedMs: 1_400,
+                audioPath: "/x/audio/\(id).wav", inputDeviceUID: "uid", inputDeviceName: "MacBook Mic", inputTransport: "built-in",
+                sampleRateHz: 16_000, rmsDb: -30, peakDb: -6, noiseFloorDb: -60
+            ))
         row = try #require(try store.dictation(id: id))
         #expect(row.status == .recorded)
         #expect(row.firstNonzeroMs == 45 && row.audioMs == 2_000 && row.noiseFloorDb == -60)
 
         let words = [WordTiming(word: "hello", start: 0.1, end: 0.4, confidence: 0.9), WordTiming(word: "world", start: 0.5, end: 0.9, confidence: 0.8)]
-        try store.recordTranscription(id, TranscriptionRecord(
-            transcription: Transcription(text: "hello world", words: words, confidence: 0.85, processingSeconds: 0.25, engineID: "parakeet-tdt-v3", modelRevision: "rev1"),
-            rawText: "hello  world um", asrDoneMs: 2_400, language: "en", boostTerms: ["Mouthtype"]
-        ))
+        try store.recordTranscription(
+            id,
+            TranscriptionRecord(
+                transcription: Transcription(text: "hello world", words: words, confidence: 0.85, processingSeconds: 0.25, engineID: "parakeet-tdt-v3", modelRevision: "rev1"),
+                rawText: "hello  world um", asrDoneMs: 2_400, language: "en", boostTerms: ["Mouthtype"]
+            ))
         row = try #require(try store.dictation(id: id))
         #expect(row.status == .transcribed)
         #expect(row.asrEngineId == "parakeet-tdt-v3" && row.asrModelRev == "rev1" && row.asrMs == 250)
@@ -188,10 +201,12 @@ import Testing
         #expect(try row.wordTimings() == words)
         #expect(row.boostTermsAppliedJson == "[\"Mouthtype\"]")
 
-        try store.recordInsertion(id, InsertionRecord(
-            finalText: "Hello world.", cleanup: CleanupRecord(cleanerID: "apple", ms: 80, outcome: "ok", doneMs: 2_500),
-            method: "paste", outcome: "confirmed", focusMoved: false, insertDoneMs: 2_600
-        ))
+        try store.recordInsertion(
+            id,
+            InsertionRecord(
+                finalText: "Hello world.", cleanup: CleanupRecord(cleanerID: "apple", ms: 80, outcome: "ok", doneMs: 2_500),
+                method: "paste", outcome: "confirmed", focusMoved: false, insertDoneMs: 2_600
+            ))
         row = try #require(try store.dictation(id: id))
         #expect(row.status == .inserted)
         #expect(row.finalText == "Hello world." && row.wordsFinal == 2 && row.charsFinal == 12)
@@ -300,7 +315,7 @@ import Testing
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, at: Self.noon, words: 60, audioMs: 30_000, voicedMs: 20_000)
-        try dictate(store, at: Self.noon.addingTimeInterval(10), words: 40, audioMs: 10_000)   // no voiced: audio fallback
+        try dictate(store, at: Self.noon.addingTimeInterval(10), words: 40, audioMs: 10_000)  // no voiced: audio fallback
         // 100 words over 30 s.
         #expect(try store.stats(now: Self.noon, timeZone: Self.utc).recentWPM == 200)
     }
@@ -310,8 +325,8 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         #expect(try store.stats(now: Self.noon, timeZone: Self.utc).recentWPM == 0)
 
-        try dictate(store, at: Self.noon, words: 500, audioMs: 400_000)            // too long, excluded
-        let silent = try start(store, at: Self.noon.addingTimeInterval(1))          // never inserted, excluded
+        try dictate(store, at: Self.noon, words: 500, audioMs: 400_000)  // too long, excluded
+        let silent = try start(store, at: Self.noon.addingTimeInterval(1))  // never inserted, excluded
         try store.recordCapture(silent, CaptureRecord(audioMs: 3_000))
         #expect(try store.stats(now: Self.noon, timeZone: Self.utc).recentWPM == 0)
 
@@ -338,15 +353,58 @@ import Testing
         #expect(stats.longestStreakDays == 4)
     }
 
+    @Test func secureTakesDoNotCountTowardStreaks() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, at: Self.noon, words: 3, audioMs: 1_000)
+        // Yesterday only has a secure take, so it breaks the streak the way it does on the Stats page.
+        let secure = try start(store, at: Self.noon.addingTimeInterval(-86_400))
+        try store.recordInsertion(secure, InsertionRecord(finalText: "a b c", target: DictationTarget(isSecure: true)))
+        try dictate(store, at: Self.noon.addingTimeInterval(-2 * 86_400), words: 3, audioMs: 1_000)
+        let stats = try store.stats(now: Self.noon, timeZone: Self.utc)
+        #expect(stats.currentStreakDays == 1)
+        #expect(stats.longestStreakDays == 1)
+    }
+
+    @Test func streakQueryUsesTheCoveringStatsIndex() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let pool = try DatabasePool(path: dir.appendingPathComponent("nested/mouthtype.sqlite").path)
+        let plan = try pool.read { db in
+            try Row.fetchAll(
+                db,
+                sql: """
+                    EXPLAIN QUERY PLAN SELECT DISTINCT local_day FROM dictation
+                    WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0 ORDER BY local_day
+                    """
+            ).map { $0["detail"] as String }.joined(separator: " ")
+        }
+        #expect(plan.contains("dictation_stats"))
+        _ = store
+    }
+
+    @Test func recentTakesReturnsTheSlimColumnsAndTheFullRowStaysAvailable() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try store.begin(DictationStart(startedAt: Self.noon, target: DictationTarget(appName: "Notes")))
+        try store.recordInsertion(id, InsertionRecord(finalText: "hello there"))
+        let take = try #require(try store.recentTakes(limit: 1).first)
+        #expect(take.id == id && take.finalText == "hello there" && take.appName == "Notes" && take.startedAt == Self.noon.timeIntervalSince1970)
+        #expect(try store.dictation(id: id)?.finalText == "hello there")
+    }
+
     @Test func transcriptionRecordsSpeechOnsetAndInsertionRecordsTheDeliveryTarget() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let id = try store.begin(DictationStart(
-            startedAt: Self.noon, timeZone: Self.utc, target: DictationTarget(bundleID: "com.apple.Notes", appName: "Notes")
-        ))
-        try store.recordTranscription(id, TranscriptionRecord(
-            transcription: Transcription(text: "hi", processingSeconds: 0.1, engineID: "e"), rawText: "hi", speechOnsetMs: 420
-        ))
+        let id = try store.begin(
+            DictationStart(
+                startedAt: Self.noon, timeZone: Self.utc, target: DictationTarget(bundleID: "com.apple.Notes", appName: "Notes")
+            ))
+        try store.recordTranscription(
+            id,
+            TranscriptionRecord(
+                transcription: Transcription(text: "hi", processingSeconds: 0.1, engineID: "e"), rawText: "hi", speechOnsetMs: 420
+            ))
         #expect(try store.dictation(id: id)?.speechOnsetMs == 420)
 
         try store.recordInsertion(id, InsertionRecord(finalText: "hi", target: DictationTarget(bundleID: "com.apple.mail", appName: "Mail", isSecure: false)))
@@ -362,9 +420,11 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         let stale = try start(store, at: Self.noon.addingTimeInterval(-60))
         #expect(try store.recent(limit: 10).isEmpty)
-        #expect(try store.stats(now: Self.noon, timeZone: Self.utc) == StatsSummary(
-            wordsToday: 0, recentWPM: 0, currentStreakDays: 0, longestStreakDays: 0
-        ))
+        #expect(
+            try store.stats(now: Self.noon, timeZone: Self.utc)
+                == StatsSummary(
+                    wordsToday: 0, recentWPM: 0, currentStreakDays: 0, longestStreakDays: 0
+                ))
 
         let next = try dictate(store, at: Self.noon, words: 3, audioMs: 3_000)
         #expect(try store.recent(limit: 10).map(\.id) == [next])

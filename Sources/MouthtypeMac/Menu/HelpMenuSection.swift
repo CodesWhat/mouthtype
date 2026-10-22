@@ -10,7 +10,7 @@ final class HelpMenuSection: NSObject, MenuSection {
 
         For hands-free dictation, double-tap Fn or press Fn+Space. Tap Fn to stop. Press Esc to cancel; Undo stays available for 5 seconds.
 
-        Speech is transcribed on this Mac. Models download when needed. Text history stays on this Mac. Audio cleanup at launch removes recordings older than 90 days, then the oldest until the archive fits within 2 GB.
+        Speech is transcribed on this Mac. Models download when needed. Text history stays on this Mac. Audio cleanup at launch removes recordings past the age and size limits in Settings (90 days and 2 GB by default).
         """
     private let item = NSMenuItem(title: "How to Use Mouthtype…", action: nil, keyEquivalent: "")
     private let onShow: @MainActor () -> Void
@@ -31,7 +31,8 @@ final class HelpMenuSection: NSObject, MenuSection {
         if mode == .toggle || shortcut?.isCapsLock == true {
             text = text.replacingOccurrences(of: "hold \(key) and speak, then release to paste", with: "press \(key) to start, speak, then press it again to stop and paste")
             if let paragraph = text.components(separatedBy: "\n\n").first(where: { $0.hasPrefix("For hands-free") }) {
-                let detail = shortcut?.isCapsLock == true
+                let detail =
+                    shortcut?.isCapsLock == true
                     ? "Caps Lock uses a toggle, not a hold. Its system Caps Lock state may also change."
                     : "Recording stays on after you release the shortcut."
                 text = text.replacingOccurrences(of: paragraph, with: "\(detail) Press Esc to cancel; Undo stays available for 5 seconds.")

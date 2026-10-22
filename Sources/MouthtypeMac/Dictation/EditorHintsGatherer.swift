@@ -208,10 +208,11 @@ enum WorkspaceFolder {
         for entry in entries.prefix(500) {
             let file = storage.appendingPathComponent(entry).appendingPathComponent("workspace.json")
             guard let data = try? Data(contentsOf: file), data.count < 4_096,
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let folder = json["folder"] as? String, folder.hasPrefix("file://"),
-                  let url = URL(string: folder), url.lastPathComponent == projectName,
-                  FileManager.default.fileExists(atPath: url.path) else { continue }
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let folder = json["folder"] as? String, folder.hasPrefix("file://"),
+                let url = URL(string: folder), url.lastPathComponent == projectName,
+                FileManager.default.fileExists(atPath: url.path)
+            else { continue }
             matches.insert(url.path)
         }
         return matches.count == 1 ? matches.first.map { URL(fileURLWithPath: $0) } : nil

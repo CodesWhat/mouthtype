@@ -49,10 +49,11 @@ import Testing
     }
 
     private func canvas(_ size: CGSize, look: Look) throws -> CGContext {
-        let context = try #require(CGContext(
-            data: nil, width: Int(size.width * Self.backing), height: Int(size.height * Self.backing), bitsPerComponent: 8,
-            bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil, width: Int(size.width * Self.backing), height: Int(size.height * Self.backing), bitsPerComponent: 8,
+                bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
         context.scaleBy(x: Self.backing, y: Self.backing)
         let gradient = try #require(CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: look.colors as CFArray, locations: [0, 1]))
         context.drawLinearGradient(gradient, start: CGPoint(x: 0, y: size.height), end: CGPoint(x: size.width, y: 0), options: [])

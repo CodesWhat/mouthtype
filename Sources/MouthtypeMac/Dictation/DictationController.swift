@@ -202,8 +202,7 @@ final class DictationController {
                 let saving = endTimers()
                 endHandsFree()
                 var audio: CapturedAudio?
-                do { audio = try await capture.stopSalvaging() }
-                catch { await capture.cancel() }
+                do { audio = try await capture.stopSalvaging() } catch { await capture.cancel() }
                 audioQuiet?.end()
                 await saving?.value
                 releasePrewarm(current)
@@ -325,7 +324,9 @@ final class DictationController {
             recordingLive = true
             let globalLevel = pipeline.settings().level
             pipeline.smart?.recordingStarted(level: cleanupLevel ?? globalLevel, take: current.id)
-            if appStyles.hasWebsiteRules, WebsiteContext.supports(bundleID: startFocus.bundleID) {
+            current.codingTarget = CodingTargets.isCodingApp(bundleID: startFocus.bundleID)
+            let wantsWebsiteHost = appStyles.hasWebsiteRules || (pipeline.settings().slashCommands && !current.codingTarget)
+            if wantsWebsiteHost, WebsiteContext.supports(bundleID: startFocus.bundleID) {
                 websiteRead = inserter.websiteHostReader(for: startFocus).map { read in
                     let budget = websiteBudget
                     return Task { await Self.boundedRead(read, budget: budget) }
@@ -337,12 +338,14 @@ final class DictationController {
                 enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
                 readers: .system, readGate: .shared
             )
+            pipeline.warmEditorBias(current.editorHints)
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
         // The page URL was read off the main actor while the row opened. It belongs to this recording only, and a read that missed
         // its budget leaves the app and context resolution above as it was.
         if let websiteRead, startError == nil {
             let websiteHost = await websiteRead.value
+            if CodingTargets.isCodingWebsite(host: websiteHost, bundleID: startFocus.bundleID) { current.codingTarget = true }
             if websiteHost != nil {
                 current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, websiteHost: websiteHost, fallback: cleanupStyle)
                 current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
@@ -386,7 +389,9 @@ final class DictationController {
         private var continuation: CheckedContinuation<String?, Never>?
         init(_ continuation: CheckedContinuation<String?, Never>) { self.continuation = continuation }
         func resume(_ value: String?) {
-            let taken = lock.withLock { () -> CheckedContinuation<String?, Never>? in defer { continuation = nil }; return continuation }
+            let taken = lock.withLock { () -> CheckedContinuation<String?, Never>? in
+                defer { continuation = nil }; return continuation
+            }
             taken?.resume(returning: value)
         }
     }
@@ -467,10 +472,12 @@ final class DictationController {
         if previewEnabled() {
             let capture = capture
             let engine = engine
-            preview.start(source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0) }, update: { [weak self] text in
-                guard let self, self.phase == .recording, self.session?.id == session.id else { return }
-                self.pill.showPreview(text)
-            })
+            preview.start(
+                source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0) },
+                update: { [weak self] text in
+                    guard let self, self.phase == .recording, self.session?.id == session.id else { return }
+                    self.pill.showPreview(text)
+                })
         }
         capTimer?.cancel()
         let warning = limits.warningAfter
@@ -629,8 +636,9 @@ final class DictationController {
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
         let destination = S1MiniControls.destination(forBundleID: session.startFocus?.bundleID)
-        let cleaned = await pipeline.clean(transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination,
-                                           appName: session.startFocus?.appName)
+        let cleaned = await pipeline.clean(
+            transcribed, inputs: inputs, context: context, clipboard: clipboard, destination: destination,
+            appName: session.startFocus?.appName, codingTarget: session.codingTarget)
         releasePrewarm(session)
         guard !cleaned.text.isEmpty else {
             await pipeline.finishEmpty(cleaned, session: session)
@@ -776,13 +784,17 @@ final class DictationController {
         undo = nil
         captureFinalizations += 1
         enqueue { [self] previous in
-            await previous?.value
+            // Like process(): the audio is reopened and archived before waiting on the earlier take, so Quit behind a
+            // long one finds it already saved.
             await pipeline.reopen(pending.session)
             showProcessing()
+            let keyUpMs = clock.milliseconds(from: pending.session.keyDownAt, to: pending.cancelledAt)
+            let features = await captureForProcessing(pending.audio, session: pending.session, keyUpMs: keyUpMs)
+            captureFinalizations -= 1
+            let waits = pendingJobs > 1
+            await previous?.value
+            if waits { showProcessing() }
             do {
-                let keyUpMs = clock.milliseconds(from: pending.session.keyDownAt, to: pending.cancelledAt)
-                let features = await captureForProcessing(pending.audio, session: pending.session, keyUpMs: keyUpMs)
-                captureFinalizations -= 1
                 try await transcribeAndDeliver(pending.audio, features: features, session: pending.session)
             } catch {
                 await failJob(pending.session, error)
@@ -835,10 +847,12 @@ final class DictationController {
         interrupted = PendingInterruption(session: current, audio: audio, features: features, keyUpAt: keyUpAt)
         Log.app.info("microphone lost mid-recording; kept \(audio.samples.count, privacy: .public) samples")
         guard !shuttingDown else { finished(); return }
-        cards.present(.micDisconnected(seconds: audio.audioMs / 1000), actions: [
-            .insert: { [weak self] in Task { await self?.insertInterrupted() } },
-            .discard: { [weak self] in Task { await self?.discardInterrupted() } },
-        ])
+        cards.present(
+            .micDisconnected(seconds: audio.audioMs / 1000),
+            actions: [
+                .insert: { [weak self] in Task { await self?.insertInterrupted() } },
+                .discard: { [weak self] in Task { await self?.discardInterrupted() } },
+            ])
         finished()
     }
 
