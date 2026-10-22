@@ -326,15 +326,15 @@ import UniformTypeIdentifiers
     /// Setting the tone keeps the rule's cleanup level; nil is "Use default" and drops the rule once neither is set.
     func setAppStyle(bundleID: String, appName: String, tone: StylePreset?) {
         updateAppStyles {
-            let level = $0.entries.first { $0.bundleID == bundleID }?.level
-            try $0.set(bundleID: bundleID, appName: appName, style: tone?.options, level: level)
+            let rule = $0.entries.first { $0.bundleID == bundleID }
+            try $0.set(bundleID: bundleID, appName: appName, style: tone?.options, level: rule?.level, instructions: rule?.instructions)
         }
     }
 
     func setAppCleanupLevel(bundleID: String, appName: String, level: CleanupLevel?) {
         updateAppStyles {
-            let style = $0.entries.first { $0.bundleID == bundleID }?.style
-            try $0.set(bundleID: bundleID, appName: appName, style: style, level: level)
+            let rule = $0.entries.first { $0.bundleID == bundleID }
+            try $0.set(bundleID: bundleID, appName: appName, style: rule?.style, level: level, instructions: rule?.instructions)
         }
     }
 
@@ -342,8 +342,8 @@ import UniformTypeIdentifiers
     func setAppStyle(bundleIDs: [String], appName: String, tone: StylePreset?) {
         updateAppStyles { styles in
             for id in bundleIDs {
-                let level = styles.entries.first { $0.bundleID == id }?.level
-                try styles.set(bundleID: id, appName: appName, style: tone?.options, level: level)
+                let rule = styles.entries.first { $0.bundleID == id }
+                try styles.set(bundleID: id, appName: appName, style: tone?.options, level: rule?.level, instructions: rule?.instructions)
             }
         }
     }
@@ -351,8 +351,8 @@ import UniformTypeIdentifiers
     func setAppCleanupLevel(bundleIDs: [String], appName: String, level: CleanupLevel?) {
         updateAppStyles { styles in
             for id in bundleIDs {
-                let style = styles.entries.first { $0.bundleID == id }?.style
-                try styles.set(bundleID: id, appName: appName, style: style, level: level)
+                let rule = styles.entries.first { $0.bundleID == id }
+                try styles.set(bundleID: id, appName: appName, style: rule?.style, level: level, instructions: rule?.instructions)
             }
         }
     }
@@ -361,22 +361,43 @@ import UniformTypeIdentifiers
 
     func setWebsiteStyle(domain: String, tone: StylePreset?) {
         updateAppStyles {
-            let level = $0.websiteRule(domain: domain)?.level
-            try $0.setWebsite(domain: domain, style: tone?.options, level: level)
+            let rule = $0.websiteRule(domain: domain)
+            try $0.setWebsite(domain: domain, style: tone?.options, level: rule?.level, instructions: rule?.instructions)
         }
     }
 
     /// The add form sets tone and level together, replacing any rule already on that domain.
     func addWebsiteRule(domain: String, tone: StylePreset?, level: CleanupLevel?) {
-        updateAppStyles { try $0.setWebsite(domain: domain, style: tone?.options, level: level) }
+        updateAppStyles { try $0.setWebsite(domain: domain, style: tone?.options, level: level, instructions: $0.websiteRule(domain: domain)?.instructions) }
     }
 
     func setWebsiteCleanupLevel(domain: String, level: CleanupLevel?) {
         updateAppStyles {
-            let style = $0.websiteRule(domain: domain)?.style
-            try $0.setWebsite(domain: domain, style: style, level: level)
+            let rule = $0.websiteRule(domain: domain)
+            try $0.setWebsite(domain: domain, style: rule?.style, level: level, instructions: rule?.instructions)
         }
     }
+
+    /// Instructions for Thorough on one app, across every identifier a row is bound to. Each keeps its own tone and level. Empty
+    /// clears them, and the rule goes away once it sets nothing else.
+    func setAppInstructions(bundleIDs: [String], appName: String, instructions: String?) {
+        updateAppStyles { styles in
+            for id in bundleIDs {
+                let rule = styles.entries.first { $0.bundleID == id }
+                try styles.set(bundleID: id, appName: appName, style: rule?.style, level: rule?.level, instructions: instructions)
+            }
+        }
+    }
+
+    func setWebsiteInstructions(domain: String, instructions: String?) {
+        updateAppStyles {
+            let rule = $0.websiteRule(domain: domain)
+            try $0.setWebsite(domain: domain, style: rule?.style, level: rule?.level, instructions: instructions)
+        }
+    }
+
+    /// The instructions for everything no rule of its own covers.
+    func setInstructions(_ text: String) { update { $0.instructions = CleanupInstructions.normalize(text) ?? "" } }
     func removeWebsiteStyle(domain: String) { updateAppStyles { $0.removeWebsite(domain: domain) } }
 
     func removeAppStyle(bundleID: String) { updateAppStyles { $0.remove(bundleID: bundleID) } }

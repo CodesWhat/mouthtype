@@ -14,13 +14,14 @@ public enum EndingPunctuation: String, Sendable, Equatable, CaseIterable {
 }
 
 public enum StylePreset: String, Sendable, Equatable, CaseIterable {
-    case formal, casual, veryCasual
+    case formal, casual, veryCasual, excited
 
     public var title: String {
         switch self {
         case .formal: "Formal"
         case .casual: "Casual"
         case .veryCasual: "Very casual"
+        case .excited: "Excited"
         }
     }
 
@@ -29,18 +30,23 @@ public enum StylePreset: String, Sendable, Equatable, CaseIterable {
         case .formal: StyleOptions(capitalisation: .sentence, endingPunctuation: .keep)
         case .casual: StyleOptions(capitalisation: .sentence, endingPunctuation: .dropFinalFullStop)
         case .veryCasual: StyleOptions(capitalisation: .lowercase, endingPunctuation: .dropFinalFullStop)
+        case .excited: StyleOptions(capitalisation: .sentence, endingPunctuation: .keep, excited: true)
         }
     }
 }
 
-/// The two switches under the presets. A combination that matches no preset is "custom".
+/// The switches under the presets. A combination that matches no preset is "custom".
 public struct StyleOptions: Sendable, Equatable {
     public var capitalisation: Capitalisation
     public var endingPunctuation: EndingPunctuation
+    /// The Excited tone: a short message's final full stop becomes an exclamation mark, and the Thorough model is asked to
+    /// use exclamation marks where the speaker sounds enthusiastic. It never adds or changes a word.
+    public var excited: Bool
 
-    public init(capitalisation: Capitalisation = .sentence, endingPunctuation: EndingPunctuation = .keep) {
+    public init(capitalisation: Capitalisation = .sentence, endingPunctuation: EndingPunctuation = .keep, excited: Bool = false) {
         self.capitalisation = capitalisation
         self.endingPunctuation = endingPunctuation
+        self.excited = excited
     }
 
     public static let formal = StylePreset.formal.options
@@ -56,6 +62,8 @@ public struct StyleOptions: Sendable, Equatable {
 /// - `endingPunctuation == .dropFinalFullStop`: removes the final `.` when the whole dictation is short (at most
 ///   two sentences and under 25 words), has no list lines, and does not end in an abbreviation ("etc.", "p.m.").
 ///   Question and exclamation marks stay.
+/// - `excited`: turns that same final `.` into `!` instead of removing it, under the same short-message rules. Ignored when
+///   `endingPunctuation` already drops the stop.
 /// - `capitalisation == .lowercase`: lowercases a word that starts a sentence (start of the text, a line, a list
 ///   item, or after `. ! ? …`) only when it is in `CommonWords` or the same word already appears in lowercase
 ///   elsewhere in the text. Capitalised words in the middle of a sentence are left alone (the engine capitalised
@@ -98,7 +106,8 @@ public struct StyleStage: Sendable {
         if options.capitalisation == .lowercase {
             spans += lowercaseSpans(chars, words, shielded)
         }
-        if options.endingPunctuation == .dropFinalFullStop, let drop = finalStopSpan(chars, words, spans) {
+        let ending = options.endingPunctuation == .dropFinalFullStop ? "" : options.excited ? "!" : nil
+        if let ending, let drop = finalStopSpan(chars, words, spans, replacingWith: ending) {
             spans.removeAll { $0.range.upperBound == drop.range.upperBound - 1 && drop.range.contains($0.range.lowerBound) }
             spans.append(drop)
         }
@@ -150,7 +159,7 @@ public struct StyleStage: Sendable {
         "etc", "vs", "inc", "ltd", "co", "mr", "mrs", "ms", "dr", "jr", "sr", "st", "approx", "dept",
     ]
 
-    private func finalStopSpan(_ chars: [Character], _ words: [ScanWord], _ existing: [TextSpan]) -> TextSpan? {
+    private func finalStopSpan(_ chars: [Character], _ words: [ScanWord], _ existing: [TextSpan], replacingWith mark: String) -> TextSpan? {
         var e = chars.count - 1
         while e >= 0, chars[e].isWhitespace { e -= 1 }
         guard e >= 1, chars[e] == ".", chars[e - 1] != ".", chars[e - 1] != "\u{2026}" else { return nil }
@@ -165,12 +174,12 @@ public struct StyleStage: Sendable {
         if token.contains(".") || Self.abbreviations.contains(token.lowercased()) { return nil }
 
         guard TextScan.isWordChar(chars[e - 1]), let word = words.last(where: { $0.end == e }) else {
-            return TextSpan(range: e..<(e + 1), replacement: "")
+            return TextSpan(range: e..<(e + 1), replacement: mark)
         }
         // Reuse a lowercase change to the same word so the two edits do not collide.
         var replacement = String(chars[word.start..<word.end])
         if let lowered = existing.first(where: { $0.range == word.start..<word.end }) { replacement = lowered.replacement }
-        return TextSpan(range: word.start..<(e + 1), replacement: replacement)
+        return TextSpan(range: word.start..<(e + 1), replacement: replacement + mark)
     }
 
     private func hasListLine(_ chars: [Character]) -> Bool {

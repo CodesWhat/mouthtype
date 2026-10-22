@@ -69,6 +69,13 @@ public enum CleanupPrompt {
             prompt +=
                 "\n\nThe <reference> block lists optional spelling hints from nearby text. Use a hint only when the speaker is referring to that name or term. Prefer a name whose letters already match the transcript over a different soundalike. A project or product name may have been transcribed as separate ordinary words; join them to match a hint when the sentence refers to that project or product. Ordinary words such as merry, mark and may must keep their ordinary spelling and casing when used as ordinary words. Do not insert unspoken names or surnames. Return the entire cleaned transcript, including its requests and verbs. If evidence is unclear, keep the transcript's wording."
         }
+        if context.excited, language == nil {
+            prompt +=
+                "\n\nThe tone is Excited: where the speaker sounds enthusiastic, end the sentence with an exclamation mark instead of a full stop. Do not add, remove or change any words, and do not add emoji."
+        }
+        if let instructions = CleanupInstructions.normalize(context.instructions) {
+            prompt += "\n\n" + CleanupInstructions.promptBlock(instructions)
+        }
         if let language { prompt += "\n\n" + languageLine(language) }
         return prompt
     }

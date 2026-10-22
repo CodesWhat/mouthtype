@@ -22,6 +22,10 @@ struct SmartCase: Codable, Sendable, Equatable {
     var caseSensitive: Bool?
     /// ISO 639-1 code of the language the case is written in. Nil means English.
     var language: String?
+    /// The user instructions the case runs with, as a rule or the global setting would hand them to Thorough.
+    var instructions: String?
+    /// A tone preset by its `--style` name (formal, casual, very-casual, excited). Nil uses the run's `--style`.
+    var style: String?
 
     var rules: [DictionaryRule] { (dictionary ?? []).map { DictionaryRule(heard: $0.heard, written: $0.written) } }
 
@@ -114,7 +118,7 @@ enum SmartRunner {
     static func run(
         _ raw: String, rules: [DictionaryRule] = [], level: CleanupLevel, style: StyleOptions = .formal,
         smart: SmartCleanup, selfCorrection: Bool = true, context: InsertionContext? = nil, appName: String? = nil,
-        language: DictationLanguage? = nil
+        language: DictationLanguage? = nil, instructions: String? = nil
     ) async -> SmartRun {
         let clock = ContinuousClock()
         let start = clock.now
@@ -123,7 +127,7 @@ enum SmartRunner {
                 text: raw, dictionary: rules.filter { !level.needsModel || !$0.isJoinedSpelling }, context: context, options: TextPipelineOptions(selfCorrection: selfCorrection, style: style),
                 language: language))
         let deterministicTime = (clock.now - start).seconds * 1000
-        let result = await smart.run(SmartCleanupRequest(text: det.text, level: level, style: style, dictionary: rules, context: context, appName: appName, language: language))
+        let result = await smart.run(SmartCleanupRequest(text: det.text, level: level, style: style, dictionary: rules, context: context, appName: appName, language: language, instructions: instructions))
         return SmartRun(
             raw: raw, deterministic: det.text, result: result, edits: det.edits,
             deterministicMilliseconds: deterministicTime, totalCleanupMilliseconds: (clock.now - start).seconds * 1000)

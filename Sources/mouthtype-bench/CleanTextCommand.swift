@@ -9,7 +9,7 @@ enum SmartLevel: String, ExpressibleByArgument, CaseIterable {
 }
 
 enum StyleChoice: String, ExpressibleByArgument, CaseIterable {
-    case formal, casual
+    case formal, casual, excited
     case veryCasual = "very-casual"
 
     var preset: StylePreset {
@@ -17,6 +17,7 @@ enum StyleChoice: String, ExpressibleByArgument, CaseIterable {
         case .formal: .formal
         case .casual: .casual
         case .veryCasual: .veryCasual
+        case .excited: .excited
         }
     }
 }
@@ -35,7 +36,7 @@ struct CleanTextCommand: AsyncParsableCommand {
     @Option(help: "History: the newest N dictations.") var limit: Int = 20
     @Option(help: "History: only dictations since this ISO date (2026-10-01 or 2026-10-01T09:00:00Z).") var since: String?
     @Option(help: "History: also write the comparison as a Markdown table to this path.") var markdown: String?
-    @Option(help: "Style preset: formal, casual or very-casual.") var style: StyleChoice = .formal
+    @Option(help: "Style preset: formal, casual, very-casual or excited.") var style: StyleChoice = .formal
     @Option(help: "Also run local smart cleanup at this level: light or medium. --file may be a .json list of cases; with no input the bundled acceptance cases run.")
     var smart: SmartLevel?
     @Flag(help: "--smart: skip the self-correction rule, so the model sees the correction itself.") var noSelfCorrection = false
@@ -139,8 +140,9 @@ struct CleanTextCommand: AsyncParsableCommand {
         for item in cases {
             await observed.reset()
             let run = await SmartRunner.run(
-                item.input, rules: item.rules, level: level, style: style.preset.options, smart: smart, selfCorrection: !noSelfCorrection,
-                context: item.before == nil && item.after == nil ? nil : InsertionContext(before: item.before, after: item.after), appName: item.appName)
+                item.input, rules: item.rules, level: level, style: (item.style.flatMap(StyleChoice.init(argument:)) ?? style).preset.options, smart: smart, selfCorrection: !noSelfCorrection,
+                context: item.before == nil && item.after == nil ? nil : InsertionContext(before: item.before, after: item.after), appName: item.appName,
+                instructions: item.instructions)
             print("[\(item.id)] raw:     \(Self.escaped(item.input))")
             print("         det:     \(Self.escaped(run.deterministic))")
             print("         final:   \(Self.escaped(run.result.text))")

@@ -94,6 +94,7 @@ private extension StylePreset {
         case .formal: "Sentence case. Keeps your punctuation. Softens swearing. Swearing removal is English only."
         case .casual: "Sentence case. No full stop at the end."
         case .veryCasual: "Lowercase starts. No full stop at the end."
+        case .excited: "Sentence case. A short message ends with an exclamation mark. Thorough adds them where you sound enthusiastic."
         }
     }
 }
@@ -276,6 +277,8 @@ struct StyleMembersCard: View {
     @State private var domain = ""
 
     @State private var installRevision = 0
+    /// The row whose instructions box is open.
+    @State private var editingInstructions: String?
 
     private var rows: [StyleRows.Row] { _ = installRevision; return StyleRows.rows(for: context, in: model.appStyles) }
 
@@ -283,7 +286,12 @@ struct StyleMembersCard: View {
         VStack(alignment: .leading, spacing: 8) {
             DesignEyebrow("Counts as \(context.noun)")
             DesignCard {
-                ForEach(rows) { row in memberRow(row) }
+                ForEach(rows) { row in
+                    VStack(alignment: .leading, spacing: 0) {
+                        memberRow(row)
+                        if editingInstructions == row.id { instructionsEditor(row) }
+                    }
+                }
                 if addingSite { siteField }
                 addRow
                 if let error = model.appStylesError { errorRow(error) }
@@ -328,6 +336,7 @@ struct StyleMembersCard: View {
                     }), choices: levelChoices
             )
             .accessibilityIdentifier("style-member-cleanup")
+            instructionsButton(row)
             Button {
                 if row.ownRule {
                     if isApp { model.removeAppStyles(bundleIDs: row.targets) } else { model.removeWebsiteStyle(domain: key) }
@@ -341,6 +350,42 @@ struct StyleMembersCard: View {
             .buttonStyle(.plain).accessibilityLabel("Remove \(member.name) from \(context.noun)")
         }
         .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 6).frame(minHeight: 40)
+        .disabled(model.appStylesError != nil)
+    }
+
+    private func instructionsButton(_ row: StyleRows.Row) -> some View {
+        let open = editingInstructions == row.id
+        return Button {
+            editingInstructions = open ? nil : row.id
+        } label: {
+            Image(systemName: "text.alignleft").font(.system(size: 11, weight: .medium))
+                .foregroundStyle(row.ruleInstructions == nil ? DesignPalette.ink3 : DesignPalette.ink)
+                .frame(width: 28, height: 28).background(RoundedRectangle(cornerRadius: 7).fill(open ? DesignPalette.sel : Color.clear))
+                .overlay(alignment: .topTrailing) {
+                    if row.ruleInstructions != nil { Circle().fill(DesignPalette.ink).frame(width: 6, height: 6).padding(4) }
+                }
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Instructions for \(row.member.name)")
+        .accessibilityValue(row.ruleInstructions == nil ? "None" : "Set")
+        .accessibilityIdentifier("style-member-instructions")
+    }
+
+    private func instructionsEditor(_ row: StyleRows.Row) -> some View {
+        let member = row.member
+        let key = member.keys.first ?? member.name
+        return StyleInstructionsEditor(
+            saved: row.ruleInstructions, placeholder: context.instructionsExample, label: "Instructions for \(member.name)",
+            identifier: "style-instructions-" + row.id
+        ) { text in
+            if member.kind == .app {
+                model.setAppInstructions(bundleIDs: row.targets, appName: member.name, instructions: text)
+            } else {
+                model.setWebsiteInstructions(domain: key, instructions: text)
+            }
+        }
+        .padding(.horizontal, 14).padding(.bottom, 10)
         .disabled(model.appStylesError != nil)
     }
 
@@ -472,6 +517,7 @@ private extension Color {
 /// Rules made before contexts existed that no context's tone matches. They keep winning over the contexts, and stay editable here.
 struct StyleOwnRules: View {
     @Bindable var model: SettingsModel
+    @State private var editingInstructions: String?
 
     var body: some View {
         let rules = StyleRows.ownRules(in: model.appStyles)
@@ -479,7 +525,12 @@ struct StyleOwnRules: View {
             VStack(alignment: .leading, spacing: 8) {
                 DesignEyebrow("Your own rules")
                 DesignCard {
-                    ForEach(rules) { rule in row(rule) }
+                    ForEach(rules) { rule in
+                        VStack(alignment: .leading, spacing: 0) {
+                            row(rule)
+                            if editingInstructions == rule.id { instructionsEditor(rule) }
+                        }
+                    }
                 }
                 Text("Rules you set for one app or website win over its list. A website rule wins over the browser it's in.")
                     .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
@@ -509,6 +560,18 @@ struct StyleOwnRules: View {
                         if isApp { model.setAppCleanupLevel(bundleID: key, appName: member.name, level: level) } else { model.setWebsiteCleanupLevel(domain: key, level: level) }
                     }), choices: levelChoices)
             Button {
+                editingInstructions = editingInstructions == rule.id ? nil : rule.id
+            } label: {
+                Image(systemName: "text.alignleft").font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(rule.instructions == nil ? DesignPalette.ink3 : DesignPalette.ink)
+                    .frame(width: 28, height: 28).overlay(alignment: .topTrailing) {
+                        if rule.instructions != nil { Circle().fill(DesignPalette.ink).frame(width: 6, height: 6).padding(4) }
+                    }
+                    .contentShape(RoundedRectangle(cornerRadius: 7))
+            }
+            .buttonStyle(.plain).accessibilityLabel("Instructions for \(member.name)")
+            .accessibilityValue(rule.instructions == nil ? "None" : "Set")
+            Button {
                 if isApp { model.removeAppStyle(bundleID: key) } else { model.removeWebsiteStyle(domain: key) }
             } label: {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
@@ -516,6 +579,23 @@ struct StyleOwnRules: View {
             }
             .buttonStyle(.plain).accessibilityLabel("Remove rule for \(member.name)")
         }.disabled(model.appStylesError != nil)
+    }
+
+    private func instructionsEditor(_ rule: StyleRows.OwnRule) -> some View {
+        let member = rule.member
+        let key = member.keys.first ?? member.name
+        return StyleInstructionsEditor(
+            saved: rule.instructions, placeholder: StyleContextID.other.instructionsExample, label: "Instructions for \(member.name)",
+            identifier: "style-instructions-" + rule.id
+        ) { text in
+            if member.kind == .app {
+                model.setAppInstructions(bundleIDs: [key], appName: member.name, instructions: text)
+            } else {
+                model.setWebsiteInstructions(domain: key, instructions: text)
+            }
+        }
+        .padding(.horizontal, 14).padding(.bottom, 10)
+        .disabled(model.appStylesError != nil)
     }
 
     private func toneChoices(_ rule: StyleRows.OwnRule) -> [DesignChoice<String>] {

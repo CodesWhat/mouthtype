@@ -91,6 +91,33 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         return await pipeline.clean(transcribed, inputs: pipeline.cleanupInputs(), context: context, clipboard: clipboard, appName: appName)
     }
 
+    private final class InstructionLog: @unchecked Sendable {
+        private let lock = NSLock()
+        private var values: [String?] = []
+        func add(_ value: String?) { lock.withLock { values.append(value) } }
+        var all: [String?] { lock.withLock { values } }
+    }
+
+    @Test func ruleInstructionsReachThoroughAndGlobalOnesStandInWhenTheRuleHasNone() async {
+        let seen = InstructionLog()
+        let (pipeline, _) = pipeline(ScriptedCleaner { text, context in seen.add(context.instructions); return text }, level: .medium)
+        func run(_ instructions: String?, global: String = "") async {
+            var base = CleanupSettings()
+            base.level = .medium
+            base.instructions = global
+            let chosen = base
+            var copy = pipeline
+            copy.settings = { chosen }
+            let inputs = copy.cleanupInputs(instructions: instructions)
+            _ = await copy.clean(
+                TranscribedDictation(text: raw, rawText: raw, asrDoneMs: 0, words: []), inputs: inputs, context: nil, clipboard: nil)
+        }
+        await run("Short and direct.", global: "Warm.")
+        await run(nil, global: "Warm.")
+        await run(nil)
+        #expect(seen.all == ["Short and direct.", "Warm.", nil])
+    }
+
     @Test(arguments: [CleanupLevel.basic, .light, .medium])
     func appToneChangesOnlyPresentationAndPreservesCleanupSelection(level: CleanupLevel) async throws {
         var (pipeline, _) = pipeline(ScriptedCleaner { text, _ in text }, level: level)

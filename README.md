@@ -139,7 +139,7 @@ It's early days. App compatibility, clipboard behavior and fresh-install setup s
 |---|---|---|
 | 🎙️ | **Hold or Hands-Free Dictation** | Hold Fn, double-tap Fn, or use Fn+Space. Recording behavior and shortcuts are configurable. |
 | 🧹 | **Local Cleanup** | Basic formatting works without a cleanup model. Fast (the default level) and Thorough use optional local models and preserve wording. Until the selected model finishes downloading, dictations use Basic. |
-| 🎚️ | **Writing Rules** | Choose Formal, Casual or Very casual, with per-app and website rules for tone and cleanup level. |
+| 🎚️ | **Writing Rules** | Choose Formal, Casual, Very casual or Excited, with per-app and website rules for tone, cleanup level and your own instructions. |
 | 📖 | **Saved Spellings and Phrases** | Keep exact local spelling rules and reusable text, including multiline phrases. Optional Boost my saved words favors them while recognizing. |
 | ✍️ | **Transform Selection** | Preview Clean up, Fix grammar, Make shorter, More formal or More casual on text you've selected in another app, then explicitly accept the replacement. Accept only replaces the text if the app, field and selection are unchanged. |
 | 📁 | **File Transcription** | Import one WAV, AIFF or M4A, up to 10 minutes and 512 MB, then explicitly copy or save the result. |
@@ -215,7 +215,7 @@ High-level themes only, with no dates. [`CHANGELOG.md`](CHANGELOG.md) has per-re
 | **0.3.x** ✅ | Home and Stats | Home page with recent takes and Recover, Stats page, suggested spellings |
 | **0.4.0** ✅ | One window | Single redesigned window, Transform Selection preview, Transforms page, separate Transcribe Audio File window, automation, editor hints |
 | **0.5.0** ✅ | Speed and slash commands | Launch and dictation speed, spoken slash commands in coding apps, Show in Dock, a docs site, Fn remap and quit-path hardening, cleanup fixes, real app icons in Style lists |
-| **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style, custom tones |
+| **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style |
 
 **Still open:** fresh-install, VoiceOver, and Bluetooth and USB microphone verification, and wider app-compatibility testing. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 

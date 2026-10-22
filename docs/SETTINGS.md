@@ -186,9 +186,11 @@ Updates are in **Mac**, and **Check for Updates…** is also in the menu.
 
 ## Style
 
-**Style** has five tabs: Personal messages, Work messages, Email, Other and Cleanup. Each context tab shows three tone cards (Formal, Casual, Very casual) with the same sample dictation run through the real tone rules, and the characters the tone adds are highlighted.
+**Style** has five tabs: Personal messages, Work messages, Email, Other and Cleanup. Each context tab shows four tone cards (Formal, Casual, Very casual, Excited) with the same sample dictation run through the real tone rules, and the characters the tone adds are highlighted.
 
 Tone changes capitalization and ending punctuation. Formal removes or softens swearing at Basic, Fast and Thorough (Off bypasses cleanup): exclamations, emphasis and dismissals like "fuck off" are dropped, and swear nouns and verbs become a plain word ("asshole" becomes "jerk", "fucking around" becomes "messing around"). It does not otherwise authorize paraphrasing.
+
+Excited ends a short message with an exclamation mark instead of a full stop, and Thorough also uses exclamation marks where you sound enthusiastic (English takes only). It never adds or changes a word.
 
 Cleanup Off bypasses the tone-detail switches, which are under Settings > Advanced. Custom tone combinations remain available. Raw file actions use your Mac's default editor and preserve unreadable originals.
 
@@ -210,6 +212,12 @@ Built-in entries are tagged BUILT IN and yours ADDED BY YOU. Apps show their rea
 > [!NOTE]
 > A level that needs a model that isn't installed runs as Basic, and the take records the level that actually ran. Dictations use Basic while the selected cleanup model is unavailable.
 
+### Instructions
+
+Free-text **Instructions** (500 characters at most) tell Thorough how text should read, for example "Keep it warm and short". The Cleanup tab holds the ones for every app and website. Each app or website row has a list icon that opens its own box, and Your own rules on the Other tab have one too. An app or website with its own instructions uses those instead. **Save** keeps them and **Clear** removes them.
+
+Instructions can change tone, wording style and formatting, never meaning. Names, numbers, dates, negations and the language stay as spoken, and a result that drifts from what you said is discarded for the Basic text. Fast ignores instructions because it isn't driven by a prompt. The tone cards don't preview instructions, since that would mean loading the model on the settings page.
+
 ### Which rule wins
 
 The app where recording starts determines the rule for that take. Resolution runs per field, tone and cleanup level each falling through on their own:
@@ -218,6 +226,8 @@ The app where recording starts determines the rule for that take. Resolution run
 2. App rules (your own rule beats the app's context).
 3. Other, for the cleanup level only.
 4. The global default.
+
+Instructions resolve the same way: your website rule, then your app rule, then the instructions for everywhere. Contexts don't carry instructions.
 
 A per-app browser rule applies to that browser, and a website rule can override it for a matching HTTP/HTTPS domain and subdomains when the focused window exposes its document URL. Missing URL support falls back; document URLs are not retained. See [writing tools](WRITING-TOOLS.md).
 

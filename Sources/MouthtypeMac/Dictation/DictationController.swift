@@ -304,11 +304,12 @@ final class DictationController {
         let appStyles = pipeline.appStyles()
         let cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, fallback: pipeline.settings().style)
         let cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID)
+        let cleanupInstructions = appStyles.resolveInstructions(bundleID: startFocus.bundleID)
         // The last release's capture stop finishes first; the audio unit takes one recording at a time.
         _ = try? await stopping?.value
         var current = DictationSession(
             id: UUID().uuidString, startedAt: clock.date(atNanos: nanos), keyDownAt: nanos, startFocus: startFocus,
-            cleanupStyle: cleanupStyle, cleanupLevel: cleanupLevel
+            cleanupStyle: cleanupStyle, cleanupLevel: cleanupLevel, cleanupInstructions: cleanupInstructions
         )
         phase = .recording
         captureStarting = true
@@ -365,6 +366,7 @@ final class DictationController {
             if websiteHost != nil {
                 current.cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, websiteHost: websiteHost, fallback: cleanupStyle)
                 current.cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID, websiteHost: websiteHost)
+                current.cleanupInstructions = appStyles.resolveInstructions(bundleID: startFocus.bundleID, websiteHost: websiteHost)
                 if current.cleanupLevel != cleanupLevel, let level = current.cleanupLevel {
                     pipeline.smart?.recordingStarted(level: level, take: current.id)
                 }
@@ -656,7 +658,7 @@ final class DictationController {
         }
 
         guard await continueProcessing(session) else { return }
-        let inputs = pipeline.cleanupInputs(style: session.cleanupStyle, level: session.cleanupLevel)
+        let inputs = pipeline.cleanupInputs(style: session.cleanupStyle, level: session.cleanupLevel, instructions: session.cleanupInstructions)
         let context = inputs.settings.enabled ? inserter.insertionContext() : nil
         let clipboard = inputs.needsClipboard ? inserter.clipboardText() : nil
         let hintNames = await session.editorHints?.value.map(\.text) ?? []

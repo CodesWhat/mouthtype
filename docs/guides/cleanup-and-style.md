@@ -29,7 +29,9 @@ The default level is Fast. Models download only when you ask:
 
 ## Tone
 
-Tone changes capitalization and ending punctuation. Each context tab shows three cards, **Formal**, **Casual** and **Very casual**, with the same sample sentence run through the real rules, so you can see the difference before you pick.
+Tone changes capitalization and ending punctuation. Each context tab shows four cards, **Formal**, **Casual**, **Very casual** and **Excited**, with the same sample sentence run through the real rules, so you can see the difference before you pick. The characters a tone adds are highlighted.
+
+**Excited** ends a short message with an exclamation mark instead of a full stop, and Thorough also uses exclamation marks where you sound enthusiastic (English takes only). It never adds, drops or changes a word. Questions keep their question mark.
 
 Formal also removes or softens swearing at Basic, Fast and Thorough. Exclamations and emphasis are dropped, and swear nouns and verbs become a plain word. Tone doesn't otherwise rewrite your sentences.
 
@@ -54,6 +56,20 @@ Each context can also set **Cleanup here**: Same as everywhere, Off, Basic, Fast
 
 The Cleanup tab sets the global level and lists the contexts that override it.
 
+## Instructions
+
+Instructions are a few sentences of your own that tell Thorough how the text should read, for example "Keep it warm and short" or "Put action items in a bullet list". You can set them in two places:
+
+- **Everywhere.** On the Cleanup tab, under **Instructions**.
+- **One app or website.** Click the list icon on its row on a context tab, or on a row under Your own rules on the Other tab, and write them in the box that opens. An app or website with its own instructions uses those instead of the ones for everywhere.
+
+Instructions are limited to 500 characters. Choose **Save** to keep them and **Clear** to remove them. A rule that only holds instructions is fine, and clearing them removes a rule that sets nothing else.
+
+Instructions only change tone, wording style and formatting. Thorough is still told to keep what you said: names, numbers, dates, negations and the language stay as spoken. After the model answers, the same checks Thorough always runs compare its text with yours. If the result changed a name or number, dropped a "not", was translated, or answered the dictation instead of cleaning it, it's thrown away and you get the Basic text. So an instruction like "round every number" or "translate to Spanish" can't change what you said.
+
+> [!NOTE]
+> Fast ignores instructions. It isn't driven by a prompt, so only Thorough reads them. The sample cards on the Style page show tone only, because showing the effect of instructions would mean loading the model on the settings page.
+
 ## Which rule wins
 
 The app where recording starts decides the rule for that take. Tone and cleanup level each fall through on their own, in this order:
@@ -62,6 +78,8 @@ The app where recording starts decides the rule for that take. Tone and cleanup 
 2. App rules. Your own rule beats the app's context.
 3. Other, for the cleanup level only.
 4. The global default.
+
+Instructions follow the same order for your own website and app rules, then fall back to the instructions for everywhere. Contexts don't carry instructions.
 
 > [!NOTE]
 > Website rules work in Safari, Chrome, Edge and Brave when the focused window exposes its page URL through macOS Accessibility. If it doesn't, Mouthtype falls back to the app rule. Only HTTP and HTTPS pages count, password fields are excluded, and the URL isn't stored or logged. Mouthtype doesn't scrape the address bar or ask for extra browser permissions.

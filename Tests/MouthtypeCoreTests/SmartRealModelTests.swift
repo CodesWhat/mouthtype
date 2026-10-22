@@ -51,6 +51,16 @@ struct QualityRealModelTests {
         #expect(result.output.contains("12/12 cases pass"), "\(result.output)")
     }
 
+    /// Thorough with the user's own instructions, including ones that try to change the meaning: every delivered text must keep
+    /// the facts, whether the model followed the instruction harmlessly or the guard threw its output away.
+    @Test func instructionCasesKeepWhatWasSaid() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixtures = root.appendingPathComponent("Tests/Fixtures/instruction-cases.json")
+        let result = try cleanupBench(["clean", "--smart", "medium", "--file", fixtures.path, "--smart-timeout-ms", "20000"])
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("8/8 cases pass the automatic checks at medium"), "\(result.output)")
+    }
+
     @Test(arguments: [50, 250])
     func timedOutGenerationExitsWithoutCrashing(budgetMs: Int) throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

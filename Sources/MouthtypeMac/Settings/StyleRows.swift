@@ -18,6 +18,8 @@ enum StyleRows {
         var targets: [String] = []
         /// Set when an app with several identifiers is split into one row per identifier.
         var splitKey: String?
+        /// Instructions your own rule sets for this app or site, if any.
+        var ruleInstructions: String?
         var id: String { member.id + (splitKey.map { "#" + $0 } ?? "") }
         var isBuiltIn: Bool { member.isBuiltIn && !ownRule }
     }
@@ -27,6 +29,7 @@ enum StyleRows {
         let member: StyleMember
         let style: StyleOptions?
         let level: CleanupLevel?
+        var instructions: String? = nil
         var id: String { member.id }
     }
 
@@ -46,6 +49,10 @@ enum StyleRows {
 
     private static func ruleLevel(_ member: StyleMember, in styles: AppCleanupStyles) -> CleanupLevel? {
         member.kind == .app ? appRule(member, in: styles)?.level : siteRule(member, in: styles)?.level
+    }
+
+    private static func ruleInstructions(_ member: StyleMember, in styles: AppCleanupStyles) -> String? {
+        member.kind == .app ? appRule(member, in: styles)?.instructions : siteRule(member, in: styles)?.instructions
     }
 
     /// The context that lists an explicit tone rule: the one the app or site is a member of when the tones agree, otherwise the first
@@ -73,11 +80,17 @@ enum StyleRows {
     /// won't see. With none installed and no stored rule it has no row.
     private static func memberRows(_ member: StyleMember, in styles: AppCleanupStyles, installed: (String) -> Bool) -> [Row] {
         guard member.kind == .app else {
-            return [Row(member: member, ownRule: false, ruleStyle: ruleStyle(member, in: styles), ruleLevel: ruleLevel(member, in: styles))]
+            return [
+                Row(
+                    member: member, ownRule: false, ruleStyle: ruleStyle(member, in: styles), ruleLevel: ruleLevel(member, in: styles),
+                    ruleInstructions: ruleInstructions(member, in: styles))
+            ]
         }
         func row(_ keys: [String], split: String?) -> Row {
             let entry = keys.lazy.compactMap { key in styles.entries.first { $0.bundleID == key } }.first
-            return Row(member: member, ownRule: false, ruleStyle: entry?.style, ruleLevel: entry?.level, targets: keys, splitKey: split)
+            return Row(
+                member: member, ownRule: false, ruleStyle: entry?.style, ruleLevel: entry?.level, targets: keys, splitKey: split,
+                ruleInstructions: entry?.instructions)
         }
         let present = member.keys.filter(installed)
         if present.isEmpty {
@@ -87,7 +100,7 @@ enum StyleRows {
             var rows = [primary]
             for key in member.keys.dropFirst() {
                 guard let entry = styles.entries.first(where: { $0.bundleID == key }),
-                    entry.style != primary.ruleStyle || entry.level != primary.ruleLevel
+                    entry.style != primary.ruleStyle || entry.level != primary.ruleLevel || entry.instructions != primary.ruleInstructions
                 else { continue }
                 rows.append(row([key], split: key))
             }
@@ -106,14 +119,17 @@ enum StyleRows {
             guard let style = entry.style, !isMember(kind: .app, key: entry.bundleID, in: styles),
                 claim(member, style: style, in: styles) == id
             else { continue }
-            rows.append(Row(member: member, ownRule: true, ruleStyle: style, ruleLevel: entry.level, targets: [entry.bundleID]))
+            rows.append(
+                Row(
+                    member: member, ownRule: true, ruleStyle: style, ruleLevel: entry.level, targets: [entry.bundleID],
+                    ruleInstructions: entry.instructions))
         }
         for entry in styles.websites {
             let member = StyleMember(kind: .site, name: entry.domain, keys: [entry.domain], isBuiltIn: false)
             guard let style = entry.style, !isMember(kind: .site, key: entry.domain, in: styles),
                 claim(member, style: style, in: styles) == id
             else { continue }
-            rows.append(Row(member: member, ownRule: true, ruleStyle: style, ruleLevel: entry.level))
+            rows.append(Row(member: member, ownRule: true, ruleStyle: style, ruleLevel: entry.level, ruleInstructions: entry.instructions))
         }
         return rows
     }
@@ -124,13 +140,13 @@ enum StyleRows {
             let member = StyleMember(kind: .app, name: entry.appName, keys: [entry.bundleID], isBuiltIn: false)
             if isMember(kind: .app, key: entry.bundleID, in: styles) { return nil }
             if let style = entry.style, claim(member, style: style, in: styles) != nil { return nil }
-            return OwnRule(member: member, style: entry.style, level: entry.level)
+            return OwnRule(member: member, style: entry.style, level: entry.level, instructions: entry.instructions)
         }
         let sites = styles.websites.compactMap { entry -> OwnRule? in
             let member = StyleMember(kind: .site, name: entry.domain, keys: [entry.domain], isBuiltIn: false)
             if isMember(kind: .site, key: entry.domain, in: styles) { return nil }
             if let style = entry.style, claim(member, style: style, in: styles) != nil { return nil }
-            return OwnRule(member: member, style: entry.style, level: entry.level)
+            return OwnRule(member: member, style: entry.style, level: entry.level, instructions: entry.instructions)
         }
         return apps + sites
     }
