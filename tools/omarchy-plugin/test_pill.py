@@ -198,6 +198,13 @@ class JsHelpers(unittest.TestCase):
         self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "empty"}, "paste").headline'), "Nothing heard")
         self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "unknown"}, "type").headline'), "Typed")
 
+    def test_paste_failure_outcomes_have_honest_copy(self):
+        self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "clipboard_failed"}, "paste")'),
+                         {"headline": "Couldn't paste", "detail": "Saved. Copy it from Home", "isError": False})
+        self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "clipboard_kept"}, "paste")'),
+                         {"headline": "Saved", "detail": "Your clipboard held an image, so nothing was pasted",
+                          "isError": False})
+
     def test_each_error_code_has_its_own_pill_copy(self):
         for code, headline in (("capture_unavailable", "No microphone"), ("capture_interrupted", "Microphone lost"),
                                ("transcription_failed", "Couldn't transcribe"), ("recovery_full", "Recovery is full"),

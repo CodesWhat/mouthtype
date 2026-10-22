@@ -878,32 +878,39 @@ class HyprlandDelivery:
                 types = None
             elif types and not self.restorable(types):
                 # An image or file list can't be put back as text, so overwriting it would destroy it.
-                return 'recover_only'
+                return 'clipboard_kept'
             if types is not None:
                 try:
                     previous = self.clipboard()
                 except ClipboardTooLarge:
-                    return 'recover_only'
+                    return 'clipboard_kept'
                 except (OSError, ValueError, PhraseContextUnavailable, subprocess.SubprocessError):
                     previous = None
         if cancelled is not None and cancelled.is_set():
             return 'not_attempted'
         try:
-            self.run(concealed.copy_command(), input=text.encode('utf-8'),
-                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
-            # The clipboard owner forks; the target only sees the new offer once it is live.
-            if not self.wait_for_clipboard(text):
-                return 'unknown'
+            # Nothing has been sent to the target yet, so a failure here is a clean 'not pasted', never 'unknown'.
+            try:
+                self.run(concealed.copy_command(), input=text.encode('utf-8'),
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
+                # The clipboard owner forks; the target only sees the new offer once it is live.
+                copied = self.wait_for_clipboard(text)
+            except (OSError, subprocess.SubprocessError):
+                copied = False
+            if not copied:
+                return 'clipboard_failed'
             if self.snapshot() != target:
                 return 'target_changed'
             if cancelled is not None and cancelled.is_set():
                 # Our text is already on the clipboard; the finally block puts the earlier one back.
                 return 'not_attempted'
-            outcome = self.send_paste_chord(target, terminal, cancelled)
+            try:
+                outcome = self.send_paste_chord(target, terminal, cancelled)
+            except (OSError, subprocess.SubprocessError):
+                # The chord may have been sent. Never replay automatically.
+                return 'unknown'
             if outcome:
                 return outcome
-        except (OSError, subprocess.SubprocessError):
-            return 'unknown'
         finally:
             if previous is not None:
                 self.schedule_restore(previous, text)

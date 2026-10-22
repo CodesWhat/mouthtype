@@ -665,7 +665,10 @@ class TransformService:
         if outcome == 'unsupported_text':
             return self._refuse(identity, 'unsupported_text', "The result has control characters, or line breaks for "
                                 "a terminal, that can't be sent safely. Copy the result instead.", record)
-        if outcome == 'recover_only':
+        if outcome == 'clipboard_failed':
+            return self._refuse(identity, 'clipboard_failed', "Mouthtype couldn't put the result on the clipboard, "
+                                'so it pasted nothing. Copy the result instead.', record)
+        if outcome in ('recover_only', 'clipboard_kept'):
             return self._refuse(identity, 'clipboard_not_restorable', 'Your clipboard holds something Mouthtype '
                                 "can't put back after pasting, so it didn't paste. Copy the result instead.", record)
         if outcome == 'not_attempted':
