@@ -7,9 +7,19 @@
     "license": "Apache-2.0"
   },
   "llama": {
-    "revision": "6420cf5dd588c68e48657a0bbd82bb3bd5ac7209",
-    "source": "https://github.com/ggml-org/llama.cpp/tree/6420cf5dd588c68e48657a0bbd82bb3bd5ac7209",
+    "revision": "27c7a769da1671c97b2e3f6cb88704a6e1e0d0cd",
+    "source": "https://github.com/ggml-org/llama.cpp/tree/27c7a769da1671c97b2e3f6cb88704a6e1e0d0cd",
     "license": "MIT"
+  },
+  "llama_binary": {
+    "tag": "b11703",
+    "asset": "llama-b11703-bin-ubuntu-x64.tar.gz",
+    "source": "https://github.com/ggml-org/llama.cpp/releases/download/b11703/llama-b11703-bin-ubuntu-x64.tar.gz",
+    "sha256": "c0691ec3876c2e47a213a37822d894fd5b8c38dfccb9977138b097435663cbb0",
+    "bytes": 17914276,
+    "commit": "27c7a769da1671c97b2e3f6cb88704a6e1e0d0cd",
+    "license": "MIT",
+    "note": "Upstream CPU build for Linux x86_64 (RUNPATH $ORIGIN, needs libgomp, libstdc++ and glibc). llama.revision is this tag's commit."
   },
   "parakeet": {
     "archive": "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2",

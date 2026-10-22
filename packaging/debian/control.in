@@ -4,7 +4,7 @@ Architecture: amd64
 Maintainer: CodesWhat <80784472+scttbnsn@users.noreply.github.com>
 Installed-Size: @SIZE@
 Depends: python3 (>= 3.10), python3-venv, curl, pipewire-audio, wl-clipboard, wtype, libnotify-bin, ffmpeg
-Recommends: hyprland
+Recommends: hyprland, libgomp1
 Suggests: quickshell
 Section: sound
 Priority: optional
