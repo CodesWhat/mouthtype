@@ -34,20 +34,24 @@ public actor AudioFileTranscription {
     private let decoder: any AudioFileDecoding
     private let engine: any Transcriber
     private let beforeTranscribing: @Sendable () async -> Void
+    private let language: @Sendable () -> DictationLanguageRequest
     private var current: Task<AudioFileTranscript, Error>?
     /// `beforeTranscribing` runs right before the engine hears the audio, so an import sets its own recognition bias
     /// (the saved words only) instead of inheriting whatever the last dictation left on the shared engine.
     public init(
-        decoder: any AudioFileDecoding, engine: any Transcriber, beforeTranscribing: @escaping @Sendable () async -> Void = {}
+        decoder: any AudioFileDecoding, engine: any Transcriber, beforeTranscribing: @escaping @Sendable () async -> Void = {},
+        language: @escaping @Sendable () -> DictationLanguageRequest = { .english }
     ) {
         self.decoder = decoder
         self.engine = engine
         self.beforeTranscribing = beforeTranscribing
+        self.language = language
     }
     public func run(_ url: URL, didDecode: @escaping @Sendable () async -> Void = {}) async throws -> AudioFileTranscript {
         guard current == nil else { throw AudioFileError.busy }
         try Task.checkCancellation()
         let decoder = decoder
+        let language = language
         let engine = engine
         let beforeTranscribing = beforeTranscribing
         let task = Task {
@@ -62,7 +66,7 @@ public actor AudioFileTranscription {
             try Task.checkCancellation()
             await beforeTranscribing()
             try Task.checkCancellation()
-            let transcription = try await engine.transcribe(samples: audio.samples)
+            let transcription = try await engine.transcribe(samples: audio.samples, language: language())
             try Task.checkCancellation()
             return AudioFileTranscript(transcription: transcription, durationSeconds: audio.durationSeconds)
         }

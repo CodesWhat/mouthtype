@@ -475,8 +475,9 @@ final class DictationController {
         if previewEnabled() {
             let capture = capture
             let engine = engine
+            let language = pipeline.languageRequest
             preview.start(
-                source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0) },
+                source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0, language: language()) },
                 update: { [weak self] text in
                     guard let self, self.phase == .recording, self.session?.id == session.id else { return }
                     self.pill.showPreview(text)

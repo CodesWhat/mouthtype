@@ -63,7 +63,7 @@ struct BoostEvalCommand: AsyncParsableCommand {
         print("tuning \(tuning)")
         let directory = URL(fileURLWithPath: clips)
         let manifest = try JSONDecoder().decode(Manifest.self, from: Data(contentsOf: directory.appendingPathComponent("manifest.json")))
-        let transcriber = try EngineCatalog.make(id: engine, englishHint: true)
+        let transcriber = try EngineCatalog.make(id: engine)
         guard let parakeet = transcriber as? ParakeetEngine else { throw ValidationError("\(engine) is not a Parakeet engine.") }
         try await parakeet.prepare()
         var audio: [String: [Float]] = [:]

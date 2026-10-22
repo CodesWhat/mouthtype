@@ -265,6 +265,8 @@ public struct DictationRecord: Codable, FetchableRecord, Sendable, Equatable {
     public var asrMs: Int?
     public var asrConfidence: Double?
     public var language: String?
+    /// Rows saved before the language was stored, or with a code v3 doesn't cover, read as English.
+    public var dictationLanguage: DictationLanguage { language.flatMap { DictationLanguage(code: $0) } ?? .english }
     public var wordTimingsJson: String?
     public var boostTermsAppliedJson: String?
 

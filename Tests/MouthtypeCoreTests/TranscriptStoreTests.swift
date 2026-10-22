@@ -216,6 +216,20 @@ import Testing
         #expect(try store.recent(limit: 5).map(\.id) == [id])
     }
 
+    @Test func theLanguageIsStoredAndRowsWithoutOneReadAsEnglish() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let german = try start(store)
+        let legacy = try start(store)
+        let transcription = Transcription(text: "hallo", processingSeconds: 0.1, engineID: "parakeet-tdt-v3")
+        try store.recordTranscription(german, TranscriptionRecord(transcription: transcription, rawText: "hallo", language: "de"))
+        try store.recordTranscription(legacy, TranscriptionRecord(transcription: transcription, rawText: "hallo"))
+        let stored = try #require(try store.dictation(id: german))
+        #expect(stored.language == "de" && stored.dictationLanguage == .german)
+        let old = try #require(try store.dictation(id: legacy))
+        #expect(old.language == nil && old.dictationLanguage == .english)
+    }
+
     @Test func aCancelledRowReopensAndThenCompletes() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }

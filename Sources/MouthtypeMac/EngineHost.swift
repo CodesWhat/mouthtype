@@ -66,7 +66,7 @@ public final class EngineHost {
 
     public init(
         engineID: String = EngineHost.defaultEngineID,
-        makeEngine: @escaping @Sendable (String) throws -> any Transcriber = { try EngineCatalog.make(id: $0, englishHint: true) },
+        makeEngine: @escaping @Sendable (String) throws -> any Transcriber = { try EngineCatalog.make(id: $0) },
         uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         self.uptime = uptime
