@@ -219,6 +219,39 @@ class JsHelpers(unittest.TestCase):
         self.assertEqual(self.run_js("PillModel.js", 'message({error: "mic_unavailable"}, "paste")'),
                          {"headline": "Needs attention", "detail": "mic unavailable", "isError": True})
 
+    def test_cleanup_note_details(self):
+        cases = ((None, None), ({"outcome": "ok", "engine": "ready"}, None),
+                 ({"outcome": "guard-rejected", "engine": "ready"}, None), ({"outcome": "skipped", "engine": "ready"}, None),
+                 ({"outcome": "timeout", "engine": "ready"}, None), ({"outcome": "timeout", "engine": "absent"}, None),
+                 ({"outcome": "timeout", "engine": "loading"}, "Basic cleanup \u00b7 model loading"),
+                 ({"outcome": "timeout", "engine": "idle"}, "Basic cleanup \u00b7 model loading"),
+                 ({"outcome": "timeout", "engine": "unloaded"}, "Basic cleanup \u00b7 model loading"),
+                 ({"outcome": "failed", "engine": "failed"}, "Basic cleanup \u00b7 model restarting"),
+                 ({"outcome": "timeout", "engine": "failed"}, "Basic cleanup \u00b7 model restarting"))
+        for take, want in cases:
+            got = self.run_js("PillModel.js", "(function(){var n=cleanupNote(%s);return n&&n.text})()" % json.dumps(take))
+            self.assertEqual(got, want, take)
+
+    def test_cleanup_note_shows_once_per_engine_state_change(self):
+        loading = {"outcome": "timeout", "engine": "loading"}
+        failed = {"outcome": "failed", "engine": "failed"}
+        ok = {"outcome": "ok", "engine": "ready"}
+        script = "(function(){var g=new CleanupNoteGate();return [%s].map(function(t){return g.next(t)})})()" % \
+            ",".join(json.dumps(t) for t in (loading, loading, failed, failed, loading, ok, loading))
+        loaded, restarting = "Basic cleanup \u00b7 model loading", "Basic cleanup \u00b7 model restarting"
+        self.assertEqual(self.run_js("PillModel.js", script), [loaded, None, restarting, None, loaded, None, loaded])
+
+    def test_cleanup_note_joins_the_settled_message(self):
+        note = "Basic cleanup \u00b7 model loading"
+        base = 'message({delivery: "unknown"}, "paste")'
+        self.assertEqual(self.run_js("PillModel.js", 'withCleanupNote(%s, "%s")' % (base, note)),
+                         {"headline": "Pasted", "detail": "Check the field \u00b7 " + note, "isError": False})
+        self.assertEqual(self.run_js("PillModel.js", 'withCleanupNote(message({delivery: "empty"}, "paste"), "%s").detail' % note), note)
+        self.assertEqual(self.run_js("PillModel.js", 'withCleanupNote(%s, null).detail' % base), "Check the field")
+        self.assertIsNone(self.run_js("PillModel.js", 'withCleanupNote(null, "%s")' % note))
+        self.assertEqual(self.run_js("PillModel.js", 'withCleanupNote(message({error: "recording_limit"}, "paste"), "%s").detail' % note),
+                         "Saved to recovery")
+
     def test_lips_frame_follows_the_mac_thresholds(self):
         cases = {"0": 0, "0.2499": 0, "0.25": 1, "0.5999": 1, "0.6": 2, "1": 2, "NaN": 0}
         for level, frame in cases.items():

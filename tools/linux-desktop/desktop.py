@@ -169,6 +169,8 @@ class Session:
         self._rejected_stamp = None
         self._refresh_styles()
         self.cleanup_outcome, self.cleanup_ms = None, None
+        # This take's cleanup result, for the pill. Unlike cleanup_outcome it clears when a take skips the model.
+        self.cleanup_take = None
         self.feedback = feedback
         self.dictionary = dictionary
         self.phrases = phrases
@@ -400,13 +402,14 @@ class Session:
                 'context': 'unsupported', 'secure_field_detection': 'unsupported',
                 'delivery_verified': False,
                 'cleanup': {'level': self.cleanup, 'last_outcome': self.cleanup_outcome, 'last_ms': self.cleanup_ms,
+                            'take': self.cleanup_take,
                             'model': self.cleanup_engine.status() if self.cleanup_engine is not None else None},
                 'feedback': getattr(self.feedback, 'status', 'unavailable') if self.feedback else 'disabled'}
 
     def live_status(self):
         """The fields a watcher snapshot needs, without the take-directory walk that status() does."""
         return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
-                'recovery': self.take.name if self.take else None}
+                'recovery': self.take.name if self.take else None, 'cleanup_take': self.cleanup_take}
 
     def _notify(self, state):
         if self.feedback:
@@ -563,6 +566,7 @@ class Session:
             if plan is None:
                 plan = {'level': self.cleanup, 'tone': None, 'engine': self.cleanup_engine}
             basic = cleanup.apply(raw, target if target is not None else style_target)
+            engine_state = getattr(plan['engine'], 'state', None)
             outcome, milliseconds = self._model_cleanup(basic, cancelled, plan['level'], plan['engine'])
             text = basic if outcome is None or not isinstance(outcome[1], str) else outcome[1]
             if outcome is not None and isinstance(outcome[1], str) and plan['tone']:
@@ -573,6 +577,9 @@ class Session:
                 if cancelled.is_set() or self.closed:
                     return
                 private_write(take / 'transcript.txt', text)
+                # The engine state the take met: a cold engine reads loading/idle/unloaded, a fault reads failed.
+                self.cleanup_take = ({'outcome': outcome[0], 'engine': 'failed' if outcome[0] == 'failed' else engine_state}
+                                     if outcome is not None else None)
                 if outcome is not None:
                     self.cleanup_outcome, self.cleanup_ms = outcome[0], milliseconds
                     private_write(take / 'cleanup.json', json.dumps({'level': plan['level'], 'outcome': outcome[0],
@@ -1623,7 +1630,8 @@ def state_snapshot(session, files=None):
     """Text-free state for live frontends: session state, outcome, elapsed time, coarse level."""
     status = session.live_status()
     return {'event': 'state', 'state': status['state'], 'error': status['error'], 'delivery': status['delivery'],
-            'recovery': status['recovery'], 'elapsed': session.elapsed(), 'level': session.level(),
+            'recovery': status['recovery'], 'cleanup_take': status.get('cleanup_take'),
+            'elapsed': session.elapsed(), 'level': session.level(),
             'file_import': files.status()['state'] if files is not None else None}
 
 
