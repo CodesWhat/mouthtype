@@ -1,0 +1,28 @@
+pkgbase = mouthtype-linux-git
+	pkgdesc = Local voice dictation for Omarchy and Hyprland (development client)
+	pkgver = 0.0.0
+	pkgrel = 1
+	url = https://mouthtype.app/linux/
+	install = mouthtype-linux.install
+	arch = x86_64
+	license = GPL-3.0-only
+	license = MIT
+	license = Unicode-3.0
+	makedepends = git
+	depends = python
+	depends = curl
+	depends = pipewire-audio
+	depends = wl-clipboard
+	depends = wtype
+	depends = libnotify
+	depends = ffmpeg
+	optdepends = hyprland: identify the active window for paste and type delivery (Omarchy ships it)
+	optdepends = git: build the optional AI cleanup server
+	optdepends = cmake: build the optional AI cleanup server
+	optdepends = base-devel: build the optional AI cleanup server
+	provides = mouthtype-linux
+	conflicts = mouthtype-linux
+	source = mouthtype-linux::git+https://github.com/CodesWhat/mouthtype.git#branch=main
+	sha256sums = SKIP
+
+pkgname = mouthtype-linux-git
