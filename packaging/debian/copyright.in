@@ -1,0 +1,22 @@
+Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
+Upstream-Name: mouthtype
+Source: https://github.com/CodesWhat/mouthtype
+
+Files: *
+Copyright: CodesWhat and contributors
+License: GPL-3
+ On Debian systems the full text of the GNU General Public License
+ version 3 is in /usr/share/common-licenses/GPL-3.
+
+Files: usr/lib/mouthtype-linux/tools/linux-desktop/vendor/grapheme/*
+Copyright: 2017 The Python Packaging Authority (PyPA)
+ 2014 Mapbox
+ 2017 Alvin Lindstam
+ 2025 Timendum
+ 1991-2026 Unicode, Inc. (data files)
+License: Expat and Unicode-3.0
+ The grapheme code is licensed under the Expat (MIT) terms; its Unicode
+ data files under the Unicode License v3. Both texts ship in
+ /usr/lib/mouthtype-linux/tools/linux-desktop/vendor/grapheme/LICENSE and
+ UNICODE-LICENSE, and the whole third-party list is in
+ /usr/share/doc/mouthtype-linux/THIRD_PARTY_NOTICES.md.

@@ -3,12 +3,14 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
 from unittest.mock import patch
 
 import setup_speech
+from setup_progress import DownloadProgress
 
 
 class SetupTests(unittest.TestCase):
@@ -30,7 +32,7 @@ class SetupTests(unittest.TestCase):
         self.calls = []
     def tearDown(self):
         self.temp.cleanup()
-    def download(self, source, path):
+    def download(self, source, path, progress=None):
         self.calls.append(('download', source))
         path.write_bytes(self.archive.read_bytes())
     def fake_run(self, command, seconds):
@@ -47,6 +49,7 @@ class SetupTests(unittest.TestCase):
         config = self.setup()
         value = json.loads(config.read_text())
         self.assertEqual(value['delivery'], {'mode': 'recover'})
+        self.assertEqual(value['cleanup'], 'basic')
         self.assertEqual(Path(value['python']), self.destination.resolve() / 'venv/bin/python')
         engines = json.loads(Path(value['engine_config']).read_text())
         self.assertEqual(set(engines['engines']), {'speech'})
@@ -57,6 +60,11 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(Path(value['engine_config']).stat().st_mode & 0o777, 0o600)
         commands = [call for call in self.calls if isinstance(call, list)]
         self.assertTrue(any(call[1:4] == ['-m', 'pip', 'install'] for call in commands))
+        install = next(call for call in commands if call[1:4] == ['-m', 'pip', 'install'])
+        self.assertIn('--require-hashes', install)
+        requirements = (Path(setup_speech.__file__).resolve().parents[1] / 'linux-engine-proof/requirements.txt').read_text()
+        for package in ('sherpa-onnx', 'sherpa-onnx-core'):
+            self.assertRegex(requirements, r'(?m)^' + package + r'==1\.13\.8 \\\n(    --hash=sha256:[0-9a-f]{64}( \\)?\n)+')
         self.assertFalse(any('serve' in call or 'sudo' in call or 'pacman' in call for call in commands))
         receipt = json.loads((self.destination / 'setup-receipt.json').read_text())
         self.assertEqual(receipt['model_sha256'], self.pins['parakeet']['sha256'])
@@ -85,6 +93,42 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(command[command.index('--proto-redir') + 1], '=https')
         self.assertEqual(command[command.index('--output') + 1], str(self.root / 'archive.bz2'))
         self.assertEqual(command[-1], 'https://example.invalid/pinned-model')
+
+    def test_setup_writes_speech_progress_file_with_monotonic_bytes(self):
+        self.pins['parakeet']['bytes'] = len(self.archive.read_bytes())
+        total = self.pins['parakeet']['bytes']
+        status = self.destination / 'speech-setup.json'
+        seen = []
+
+        def download(source, path, progress=None):
+            path.write_bytes(self.archive.read_bytes())
+            for done in (total // 4, total // 2, total // 3, total * 2):
+                progress(done)
+                seen.append(json.loads(status.read_text()))
+
+        with patch('setup_speech.DownloadProgress', lambda t, emit: DownloadProgress(t, emit, interval=0)):
+            setup_speech.setup(self.destination, pins=self.pins, download=download, run=self.fake_run)
+        done = [state['bytes_done'] for state in seen]
+        self.assertEqual(done, sorted(done))
+        self.assertTrue(all(state['bytes_total'] == total and state['bytes_done'] <= total for state in seen))
+        self.assertEqual(json.loads(status.read_text())['state'], 'ready')
+
+    def test_download_archive_polls_progress_with_the_archive_size(self):
+        sizes = []
+
+        def fake(command, seconds, poll=None):
+            Path(command[command.index('--output') + 1]).write_bytes(b'abc')
+            poll()
+            poll()
+
+        with patch('setup_speech.bounded_run', fake):
+            setup_speech.download_archive('https://example.invalid/m', self.root / 'a.bz2', progress=sizes.append)
+        self.assertEqual(sizes, [3, 3])
+
+    def test_bounded_run_polls_while_the_child_runs(self):
+        calls = []
+        setup_speech.bounded_run([sys.executable, '-c', 'import time; time.sleep(1.2)'], 10, poll=lambda: calls.append(1))
+        self.assertGreaterEqual(len(calls), 1)
 
     def test_existing_destination_is_preserved_before_any_download_or_child(self):
         self.destination.mkdir()

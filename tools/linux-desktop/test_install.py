@@ -111,6 +111,36 @@ class InstallTests(unittest.TestCase):
             self.assertEqual(config.read_text(), 'user content')
             with self.assertRaises(FileExistsError):
                 installer.install(ROOT, prefix)
+    def test_update_replaces_and_uninstall_removes_only_what_was_installed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            prefix = Path(temp)
+            installer.install(ROOT, prefix)
+            (prefix / 'lib/mouthtype-linux/stale.txt').write_text('old')
+            (prefix / 'bin/other').write_text('keep')
+            installer.install(ROOT, prefix, update=True)
+            self.assertFalse((prefix / 'lib/mouthtype-linux/stale.txt').exists())
+            self.assertEqual(len(installer.uninstall(prefix)), 2)
+            self.assertFalse((prefix / 'lib/mouthtype-linux').exists())
+            self.assertEqual((prefix / 'bin/other').read_text(), 'keep')
+            self.assertEqual(installer.uninstall(prefix), [])
+
+    def test_uninstall_refuses_a_foreign_launcher(self):
+        with tempfile.TemporaryDirectory() as temp:
+            (Path(temp) / 'bin').mkdir()
+            (Path(temp) / 'bin/mouthtype-linux').write_text('#!/bin/sh\necho mine\n')
+            with self.assertRaises(FileExistsError):
+                installer.uninstall(temp)
+            self.assertTrue((Path(temp) / 'bin/mouthtype-linux').exists())
+
+    def test_existing_install_error_names_the_fix(self):
+        with tempfile.TemporaryDirectory() as temp:
+            installer.install(ROOT, temp)
+            result = subprocess.run(['python3', str(Path(installer.__file__)), '--prefix', temp],
+                                    capture_output=True, text=True, timeout=10)
+            self.assertEqual(result.returncode, 2)
+            self.assertIn('--update', result.stderr)
+            self.assertIn('--uninstall', result.stderr)
+
     def test_existing_launcher_is_not_replaced(self):
         with tempfile.TemporaryDirectory() as temp:
             prefix = Path(temp)
@@ -120,6 +150,41 @@ class InstallTests(unittest.TestCase):
             with self.assertRaises(FileExistsError):
                 installer.install(ROOT, prefix)
             self.assertEqual(launcher.read_text(), 'previous')
+    def fake_source(self, root):
+        for name in installer.FILES:
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('x')
+        desktop = root / 'tools/linux-desktop'
+        for name in ('library.py', 'stats.py', 'tone.py', 'profanity.py', 'cli_library.py', 'cli_style.py',
+                     'cli_transform.py', 'transform_worker.py', 'test_transform.py', 'test_arch_bundle.py',
+                     'check_tone.py', 'verify_tone.py', 'conftest.py', 'notes.txt'):
+            (desktop / name).write_text('x')
+
+    def test_install_ships_runtime_modules_and_their_tests_but_not_dev_scripts(self):
+        with tempfile.TemporaryDirectory() as temp:
+            source = Path(temp) / 'src'
+            self.fake_source(source)
+            prefix = Path(temp) / 'local'
+            installer.install(source, prefix)
+            installed = prefix / 'lib/mouthtype-linux/tools/linux-desktop'
+            for name in ('library.py', 'stats.py', 'tone.py', 'profanity.py', 'cli_library.py',
+                         'cli_style.py', 'cli_transform.py', 'transform_worker.py', 'test_transform.py'):
+                self.assertTrue((installed / name).is_file(), name)
+                self.assertEqual((installed / name).stat().st_mode, (installed / 'desktop.py').stat().st_mode, name)
+            for name in ('test_arch_bundle.py', 'check_tone.py', 'verify_tone.py', 'conftest.py', 'notes.txt'):
+                self.assertFalse((installed / name).exists(), name)
+            output = Path(temp) / 'linux.tar.gz'
+            installer.package(source, output)
+            with tarfile.open(output) as archive:
+                names = archive.getnames()
+            self.assertIn('mouthtype-linux/tools/linux-desktop/tone.py', names)
+            self.assertIn('mouthtype-linux/tools/linux-desktop/cli_transform.py', names)
+            self.assertNotIn('mouthtype-linux/tools/linux-desktop/check_tone.py', names)
+            self.assertIn('mouthtype-linux/tools/linux-desktop/transform_worker.py', names)
+            self.assertIn('mouthtype-linux/tools/linux-desktop/test_transform.py', names)
+            self.assertNotIn('mouthtype-linux/tools/linux-desktop/test_arch_bundle.py', names)
+
     def test_package_has_runtime_license_and_no_private_or_model_files(self):
         with tempfile.TemporaryDirectory() as temp:
             output = Path(temp) / 'linux.tar.gz'
@@ -137,6 +202,17 @@ class InstallTests(unittest.TestCase):
                 self.assertFalse(any('.planning' in name or '.onnx' in name or '.gguf' in name for name in names))
             with self.assertRaises(FileExistsError):
                 installer.package(ROOT, output)
+
+    def test_launcher_imports_desktop_as_a_module_so_bytecode_is_cached(self):
+        with tempfile.TemporaryDirectory() as temp:
+            prefix = Path(temp) / 'local'
+            launcher = installer.install(ROOT, prefix)
+            text = launcher.read_text()
+            self.assertIn('import desktop', text)
+            self.assertNotIn('runpy', text)
+            subprocess.run([str(launcher), 'capabilities'], capture_output=True, text=True, check=True, timeout=10)
+            self.assertTrue(list((prefix / 'lib/mouthtype-linux/tools/linux-desktop/__pycache__').glob('desktop.*.pyc')))
+
 
 if __name__ == '__main__':
     unittest.main()

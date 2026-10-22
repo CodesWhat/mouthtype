@@ -1,5 +1,6 @@
 import os
 import json
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -47,6 +48,10 @@ class Engine:
                 if cancelled.is_set():
                     raise RuntimeError('cancelled')
         return self.text
+    def warm(self):
+        pass
+    def stop(self):
+        pass
     def close(self):
         pass
 
@@ -288,11 +293,20 @@ for line in sys.stdin:
                 engine.transcribe(Path('/not-used.wav'), threading.Event())
             self.assertIsNone(engine.worker)
             engine.close()
+    def test_slash_commands_config_is_a_boolean_defaulting_on(self):
+        from desktop import validate_config
+        base = {'engine_config': '/local/engines.json'}
+        validate_config(base)
+        validate_config({**base, 'slash_commands': False})
+        for bad in ('yes', 1, None):
+            with self.subTest(slash_commands=bad), self.assertRaises(ValueError):
+                validate_config({**base, 'slash_commands': bad})
+
     def test_configuration_rejects_unbounded_or_ambiguous_delivery(self):
         from desktop import validate_config
         for change in ({'maximum_recording_seconds': float('nan')},
                        {'maximum_recording_seconds': 121},
-                       {'request_seconds': 0}, {'notifications': 'yes'}, {'delivery': {'mode': 'clipboard'}},
+                       {'request_seconds': 0}, {'notifications': 'yes'}, {'notifications': 'all'}, {'notifications': None}, {'delivery': {'mode': 'clipboard'}},
                        {'delivery': {'mode': 'type', 'allowed_classes': ['*']}},
                        {'delivery': {'mode': 'type', 'allowed_classes': []}}):
             with self.subTest(change=change), self.assertRaises(ValueError):
@@ -348,6 +362,61 @@ for line in sys.stdin:
             serve(path, session, stopped, lifetime_seconds=1, startup=lambda: ran.append(1))
             self.assertEqual(ran, [1])
             session.close()
+
+class LightClientTests(unittest.TestCase):
+    """The status, hotkey and capabilities paths must not pay for the service's imports."""
+    HEAVY = ('proof', 'spellings', 'phrases', 'cleanup', 'smart', 'styles', 'tone', 'imports', 'dataclasses', 'inspect')
+
+    def loaded_after(self, argv):
+        script = ('import sys; sys.path.insert(0, %r); import desktop, io, contextlib\n'
+                  'with contextlib.redirect_stdout(io.StringIO()): desktop.main(%r)\n'
+                  'print(sorted(m for m in %r if m in sys.modules))' % (str(Path(__file__).parent), argv, self.HEAVY))
+        out = subprocess.run([sys.executable, '-I', '-c', script], capture_output=True, text=True, check=True, timeout=20)
+        return out.stdout.strip().splitlines()[-1]
+
+    def test_status_loads_none_of_the_service_modules(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertEqual(self.loaded_after(['--runtime', temp, 'status']), '[]')
+        # capabilities reads the file-import limits, which pulls in the imports module and its proof dependency.
+        self.assertEqual(self.loaded_after(['capabilities']), "['imports', 'proof']")
+
+    def test_plain_verbs_take_the_light_path_and_match_the_full_parser(self):
+        import contextlib, io, desktop
+        self.assertEqual(desktop.client_verb(['--runtime', '/r', 'status']), ('status', Path('/r')))
+        self.assertEqual(desktop.client_verb(['--config', 'c', 'start'])[0], 'start')
+        for argv in (['recover', 'x'], ['status', 'extra'], ['--bogus', 'status'], ['--runtime'], []):
+            self.assertIsNone(desktop.client_verb(argv), argv)
+        with tempfile.TemporaryDirectory() as temp:
+            outputs = []
+            for argv in (['--runtime', temp, 'status'], ['--runtime=' + temp, 'status']):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    outputs.append((desktop.main(argv), json.loads(err.getvalue())['error']))
+            self.assertEqual(outputs, [(2, 'unavailable')] * 2)
+
+    def test_public_names_still_resolve_lazily(self):
+        import desktop
+        self.assertTrue(issubclass(desktop.ClipboardTooLarge, desktop.PhraseContextUnavailable))
+        for name in ('Stopped', 'Worker', 'verify_artifacts', 'load_spellings', 'load_phrases', 'BasicCleanup',
+                     'FileError', 'FileTranscription', 'smart', 'style_contexts', 'tone_stage', 'imports'):
+            self.assertTrue(hasattr(desktop, name), name)
+        self.assertEqual(desktop.CAPABILITIES['interface'], desktop.INTERFACE)
+        with self.assertRaises(AttributeError):
+            desktop.not_a_name
+
+    def test_cli_context_is_immutable_and_keeps_its_fields(self):
+        from desktop import CliContext
+        context = CliContext(config=1, recovery=2, imports=3, runtime=4, socket=5, request=6)
+        self.assertEqual((context.config, context.recovery, context.imports, context.runtime, context.socket, context.request),
+                         (1, 2, 3, 4, 5, 6))
+        with self.assertRaises(AttributeError):
+            context.config = 9
+
+    def test_session_client_is_the_one_protocol_implementation(self):
+        import desktop, session_client
+        self.assertIs(desktop.request, session_client.request)
+        self.assertIs(desktop.read_message, session_client.read_message)
+
 
 class RecoveryTests(unittest.TestCase):
     def test_recovery_is_explicit_read_only_and_never_delivers(self):
@@ -677,6 +746,86 @@ class FeedbackTests(unittest.TestCase):
             self.assertIn('--replace-id=17', lines[1])
             self.assertIn('Mouthtype is recording', lines[0])
             self.assertEqual(helper.status, 'submitted_unknown')
+    def test_errors_only_notifications_send_just_errors_and_ready(self):
+        from desktop import Notifications, validate_config
+        for value in (True, False, 'errors'):
+            validate_config({'engine_config': '/local/engines.json', 'notifications': value})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'notify.py'
+            record = root / 'arguments.jsonl'
+            script.write_text('import json,sys\nfrom pathlib import Path\nwith Path(sys.argv[1]).open("a") as f:f.write(json.dumps(sys.argv[2:])+"\\n")\nprint(17)\n')
+            helper = Notifications('errors', command=[sys.executable, str(script), str(record)])
+            for state in ('recording', 'transcribing', 'saved', 'delivered', 'empty', 'cancelled'):
+                self.assertFalse(helper.notify(state), state)
+            self.assertFalse(record.exists())
+            self.assertTrue(helper.notify('ready'))
+            self.assertTrue(helper.notify('error', 'capture_unavailable'))
+            self.assertEqual(len(record.read_text().splitlines()), 2)
+
+    def test_error_notification_names_the_code_and_unknown_codes_stay_generic(self):
+        from desktop import Notifications
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'notify.py'
+            record = root / 'arguments.jsonl'
+            script.write_text('import json,sys\nfrom pathlib import Path\nwith Path(sys.argv[1]).open("a") as f:f.write(json.dumps(sys.argv[2:])+"\\n")\nprint(17)\n')
+            helper = Notifications(command=[sys.executable, str(script), str(record)])
+            self.assertTrue(helper.notify('error', 'capture_unavailable'))
+            self.assertTrue(helper.notify('error', 'made_up_code'))
+            self.assertTrue(helper.notify('error'))
+            lines = [json.loads(line) for line in record.read_text().splitlines()]
+            self.assertEqual(lines[0][-2:], list(Notifications.ERRORS['capture_unavailable']))
+            self.assertEqual(lines[1][-2:], list(Notifications.MESSAGES['error']))
+            self.assertEqual(lines[2][-2:], list(Notifications.MESSAGES['error']))
+
+    def test_session_passes_its_error_code_to_the_error_notification(self):
+        class Feedback:
+            status = 'submitted_unknown'
+            def __init__(self): self.calls = []
+            def notify(self, state, error=None): self.calls.append((state, error))
+        with tempfile.TemporaryDirectory() as temp:
+            feedback = Feedback()
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), feedback=feedback)
+            try:
+                session.error = 'recording_limit'
+                session._notify('error')
+                session._notify('recording')
+            finally:
+                session.close()
+            self.assertEqual(feedback.calls[0], ('error', 'recording_limit'))
+
+    def test_every_error_code_the_daemon_assigns_has_notification_and_pill_copy(self):
+        import ast
+        import desktop
+        tree = ast.parse(Path(desktop.__file__).read_text())
+        codes = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Assign):
+                continue
+            for target in node.targets:
+                pairs = []
+                if isinstance(target, ast.Tuple) and isinstance(node.value, ast.Tuple):
+                    pairs = list(zip(target.elts, node.value.elts))
+                else:
+                    pairs = [(target, node.value)]
+                for left, right in pairs:
+                    if (isinstance(left, ast.Attribute) and left.attr == 'error' and isinstance(left.value, ast.Name)
+                            and left.value.id == 'self' and isinstance(right, ast.Constant) and isinstance(right.value, str)):
+                        codes.add(right.value)
+        self.assertTrue({'capture_unavailable', 'recovery_full', 'command_expired'} <= codes)
+        for code in sorted(codes):
+            with self.subTest(code=code):
+                self.assertIn(code, desktop.Notifications.ERRORS)
+        # The Arch package bundle ships the client without the plugin, so the pill half only runs in a full checkout.
+        plugin = Path(desktop.__file__).resolve().parents[1] / 'omarchy-plugin' / 'PillModel.js'
+        if not plugin.exists():
+            self.skipTest('PillModel.js not in this source bundle')
+        pill = plugin.read_text()
+        for code in sorted(codes):
+            with self.subTest(code=code):
+                self.assertIn('"%s"' % code, pill)
+
     def test_missing_or_hung_notification_helper_is_bounded_and_nonfatal(self):
         import sys
         from desktop import Notifications
@@ -700,6 +849,34 @@ class ShutdownFeedbackTests(unittest.TestCase):
             session.close()
             self.assertEqual(feedback.events,['recording','cancelled'])
 
+
+class FailureHintTests(unittest.TestCase):
+    def test_hint_names_the_runtime_directory_or_the_service_without_paths(self):
+        import desktop
+        with tempfile.TemporaryDirectory() as temp:
+            self.assertIn('XDG_RUNTIME_DIR', desktop.failure_hint(Path(temp) / 'missing' / 'mouthtype'))
+            self.assertIn('systemctl --user start mouthtype-linux', desktop.failure_hint(Path(temp) / 'mouthtype'))
+            report = desktop.unavailable_report(FileNotFoundError(), Path(temp) / 'mouthtype')
+            self.assertEqual(report['error'], 'unavailable')
+            self.assertNotIn(temp, json.dumps(report))
+            (Path(temp) / 'mouthtype').mkdir()
+            (Path(temp) / 'mouthtype/session.sock').touch()
+            self.assertIsNone(desktop.failure_hint(Path(temp) / 'mouthtype'))
+
+    def test_default_config_prefers_the_documented_path_then_the_prepared_one(self):
+        import desktop
+        with tempfile.TemporaryDirectory() as temp, unittest.mock.patch.object(Path, 'home', classmethod(lambda cls: Path(temp))):
+            documented = Path(temp) / '.config/mouthtype/linux.json'
+            prepared = Path(temp) / '.local/share/mouthtype/speech-candidate/linux.json'
+            self.assertEqual(desktop.default_config(), documented)
+            prepared.parent.mkdir(parents=True)
+            prepared.write_text('{}')
+            self.assertEqual(desktop.default_config(), prepared)
+            documented.parent.mkdir(parents=True)
+            documented.write_text('{}')
+            self.assertEqual(desktop.default_config(), documented)
+
+
 if __name__ == '__main__':
     unittest.main()
 
@@ -715,6 +892,9 @@ class PasteDeliveryTests(unittest.TestCase):
                 return type('Result', (), {'stdout': json.dumps({'locked': False})})()
             if argv[-1] == 'activewindow':
                 return type('Result', (), {'stdout': json.dumps({**target, 'title': 'private'})})()
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                # Hyprland answers a dispatch it can't run with an explicit error, which is what allows the wtype fallback.
+                return type('Result', (), {'returncode': 1, 'stdout': '', 'stderr': 'error: no dispatcher'})()
             return type('Result', (), {'returncode': 0})()
         delivery = HyprlandDelivery({'mode': 'paste', 'allow_unknown_secure_field': True, **config}, run=run)
         delivery.settle_seconds = 0
@@ -816,9 +996,63 @@ class PasteDeliveryTests(unittest.TestCase):
         delivery, target, calls, restored = self.make({'any_window': True})
         delivery.run = lambda argv, **kwargs: calls.append((argv, kwargs)) or type('Result', (), {'returncode': 0, 'stdout': json.dumps({'locked': False}) if argv[-1] == 'locked' else json.dumps({**target, 'title': 'private'}) if argv[-1] == 'activewindow' else ''})()
         delivery.clipboard = lambda: 'earlier text'
-        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(delivery.submit('text', target), 'clipboard_failed')
         self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
         self.assertEqual(restored, [('earlier text', 'text')])
+
+    def test_wl_copy_failure_is_clipboard_failed_and_sends_no_chord(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        inner = delivery.run
+        def failing(argv, **kwargs):
+            if argv[0] == 'wl-copy':
+                calls.append((argv, kwargs))
+                raise subprocess.CalledProcessError(1, argv)
+            return inner(argv, **kwargs)
+        delivery.run = failing
+        self.assertEqual(delivery.submit('text', target), 'clipboard_failed')
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype' or a[:2] == ['hyprctl', 'dispatch']])
+        missing, target, calls, _ = self.make({'any_window': True})
+        inner = missing.run
+        def absent(argv, **kwargs):
+            if argv[0] == 'wl-copy':
+                raise FileNotFoundError('wl-copy')
+            return inner(argv, **kwargs)
+        missing.run = absent
+        self.assertEqual(missing.submit('text', target), 'clipboard_failed')
+
+    def test_image_or_file_list_clipboard_is_kept_not_blamed_on_the_app(self):
+        for types in ('image/png\n', 'text/uri-list\ntext/plain\n'):
+            delivery, target, calls, _ = self.make({'any_window': True})
+            inner = delivery.run
+            def listing(argv, types=types, inner=inner, **kwargs):
+                if argv[:2] == ['wl-paste', '--list-types']:
+                    return type('Result', (), {'returncode': 0, 'stdout': types})()
+                return inner(argv, **kwargs)
+            delivery.run = listing
+            self.assertEqual(delivery.submit('text', target), 'clipboard_kept', types)
+            self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_oversized_clipboard_is_kept(self):
+        from desktop import ClipboardTooLarge
+        delivery, target, calls, _ = self.make({'any_window': True}, clipboard=ClipboardTooLarge())
+        inner = delivery.run
+        def listing(argv, **kwargs):
+            if argv[:2] == ['wl-paste', '--list-types']:
+                return type('Result', (), {'returncode': 0, 'stdout': 'text/plain\n'})()
+            return inner(argv, **kwargs)
+        delivery.run = listing
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype')])
+
+    def test_chord_failure_after_a_live_clipboard_stays_unknown(self):
+        delivery, target, calls, _ = self.make({'any_window': True}, hyprland=False)
+        inner = delivery.run
+        def failing(argv, **kwargs):
+            if argv[0] == 'wtype':
+                raise subprocess.CalledProcessError(1, argv)
+            return inner(argv, **kwargs)
+        delivery.run = failing
+        self.assertEqual(delivery.submit('text', target), 'unknown')
 
     @unittest.skipUnless(sys.platform == 'linux', 'reads /proc')
     def test_terminal_with_custom_window_class_is_recognised_by_its_process(self):
@@ -994,6 +1228,218 @@ class RetentionTests(unittest.TestCase):
         os.utime(path / 'recording.wav', (stamp, stamp))
         return path
 
+    def owned_elsewhere(self, session):
+        """True when another thread cannot take the session lock right now."""
+        free = []
+        def attempt():
+            got = session.lock.acquire(blocking=False)
+            free.append(got)
+            if got:
+                session.lock.release()
+        probe = threading.Thread(target=attempt)
+        probe.start()
+        probe.join()
+        return not free[0]
+
+    def test_take_count_matches_the_directory_walk_on_two_thousand_takes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index in range(2000):
+                (root / ('%032x' % index)).mkdir(mode=0o700)
+            (root / 'stray.txt').write_text('x')
+            (root / 'link').symlink_to(root / ('%032x' % 1), target_is_directory=True)
+            session = Session(Capture(), Engine(), Delivery(), root)
+            try:
+                old = sum(1 for path in root.iterdir() if path.is_dir() and not path.is_symlink())
+                self.assertEqual(old, 2000)
+                self.assertEqual(session.take_count(), old)
+            finally:
+                session.close()
+
+    def test_prune_walks_outside_the_lock_and_deletes_inside_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, name in enumerate('abcd'):
+                self.take(root, name, age_days=10 - index)
+            session = Session(Capture(), Engine(), Delivery(), root, history_keep=2)
+            walking, deleting = [], []
+            real_time, real_rmdir = Session.known_take_time, Path.rmdir
+            def known_take_time(owner, path):
+                walking.append(self.owned_elsewhere(session))
+                return real_time(owner, path)
+            def rmdir(path):
+                deleting.append(session.lock._is_owned())
+                return real_rmdir(path)
+            try:
+                with unittest.mock.patch.object(Session, 'known_take_time', known_take_time), \
+                        unittest.mock.patch.object(Path, 'rmdir', rmdir):
+                    self.assertEqual(session.prune_history(), 2)
+            finally:
+                session.close()
+            self.assertEqual(walking, [False] * 4)
+            self.assertEqual(deleting, [True, True])
+            self.assertEqual(sorted(path.name[0] for path in root.iterdir()), ['c', 'd'])
+
+    def test_prune_remembers_take_times_between_runs(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for index, name in enumerate('abc'):
+                self.take(root, name, age_days=10 - index)
+            session = Session(Capture(), Engine(), Delivery(), root, history_keep=5)
+            reads = []
+            real = Session.take_time
+            try:
+                with unittest.mock.patch.object(Session, 'take_time', staticmethod(lambda path: reads.append(path) or real(path))):
+                    session.prune_history()
+                    session.prune_history()
+            finally:
+                session.close()
+            self.assertEqual(len(reads), 3)
+
+    def test_retire_walks_outside_the_lock_and_deletes_inside_it(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            old = self.take(root, 'a', age_days=100)
+            self.take(root, 'b', age_days=1)
+            session = Session(Capture(), Engine(), Delivery(), root, audio_days=90)
+            walking, deleting = [], []
+            real_is_file, real_unlink = Path.is_file, Path.unlink
+            def is_file(path):
+                walking.append(self.owned_elsewhere(session))
+                return real_is_file(path)
+            def unlink(path, *args, **kwargs):
+                deleting.append(session.lock._is_owned())
+                return real_unlink(path, *args, **kwargs)
+            try:
+                with unittest.mock.patch.object(Path, 'is_file', is_file), unittest.mock.patch.object(Path, 'unlink', unlink):
+                    self.assertEqual(session.retire_completed_audio(), 1)
+            finally:
+                session.close()
+            self.assertTrue(walking and not any(walking))
+            self.assertEqual(deleting, [True])
+            self.assertFalse((old / 'recording.wav').exists())
+
+    def test_audio_walk_is_throttled_to_every_n_takes_but_pruning_is_not(self):
+        with tempfile.TemporaryDirectory() as temp:
+            session = Session(Capture(), Engine(), Delivery(), Path(temp), history_keep=3)
+            retired, pruned = [], []
+            session.retire_completed_audio = lambda now=None: retired.append(1) or 0
+            session.prune_history = lambda: pruned.append(1) or 0
+            try:
+                for _ in range(session.HOUSEKEEPING_TAKES):
+                    session.housekeep()
+                # The first take after startup walks the audio; the next walk waits for a full interval of takes.
+                self.assertEqual((len(retired), len(pruned)), (1, session.HOUSEKEEPING_TAKES))
+                session.housekeep()
+                self.assertEqual((len(retired), len(pruned)), (2, session.HOUSEKEEPING_TAKES + 1))
+                session.housekeep(force=True)
+                self.assertEqual(len(retired), 3)
+            finally:
+                session.close()
+
+    def test_first_start_waits_for_startup_pruning_instead_of_answering_recovery_full(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'recovery'
+            root.mkdir(mode=0o700)
+            for index in range(4):
+                take = root / ('%032x' % index)
+                take.mkdir(mode=0o700)
+                (take / 'take.json').write_text(json.dumps({'created': 1000 + index}))
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=4, history_keep=2)
+            real = session.prune_history
+            def slow_prune():
+                time.sleep(.4)
+                return real()
+            session.prune_history = slow_prune
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={
+                'lifetime_seconds': 5, 'startup': lambda: session.housekeep(force=True)})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'start')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                self.assertNotEqual(reply.get('error'), 'recovery_full', reply)
+                self.assertEqual(reply['state'], 'recording')
+            finally:
+                stopped.set()
+                thread.join(4)
+                session.close()
+
+    def test_stop_and_toggle_to_stop_never_wait_for_startup_pruning(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / 'recovery'
+            root.mkdir(mode=0o700)
+            for index in range(2):
+                take = root / ('%032x' % index)
+                take.mkdir(mode=0o700)
+                (take / 'take.json').write_text(json.dumps({'created': 1000 + index}))
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), root, maximum_takes=3, history_keep=2)
+            real = session.prune_history
+            def slow_prune():
+                time.sleep(1.2)
+                return real()
+            session.prune_history = slow_prune
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={
+                'lifetime_seconds': 6, 'startup': lambda: session.housekeep(force=True)})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'start')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                self.assertEqual(reply['state'], 'recording')
+                # The new take fills the store while the prune is still running.
+                self.assertEqual(session.take_count(), 3)
+                begun = time.monotonic()
+                self.assertEqual(request(path, 'toggle')['state'], 'transcribing')
+                self.assertLess(time.monotonic() - begun, .6)
+            finally:
+                stopped.set()
+                thread.join(5)
+                session.close()
+
+    def test_serve_binds_the_socket_before_startup_maintenance_runs(self):
+        from desktop import serve, request
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
+            seen, release = [], threading.Event()
+            def startup():
+                seen.append(path.exists())
+                release.wait(3)
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 3, 'startup': startup})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 2
+                reply = None
+                while time.monotonic() < deadline and reply is None:
+                    try:
+                        reply = request(path, 'status')
+                    except (FileNotFoundError, ConnectionRefusedError):
+                        time.sleep(.005)
+                # Maintenance is still blocked, yet the daemon already answers.
+                self.assertEqual(reply['state'], 'idle')
+                self.assertEqual(seen, [True])
+            finally:
+                release.set()
+                stopped.set()
+                thread.join(4)
+                session.close()
+
     def test_cap_is_configurable_and_reported(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -1142,16 +1588,15 @@ class RetentionTests(unittest.TestCase):
                 except ValueError:
                     results.append('rejected')
             thread = threading.Thread(target=retry)
-            real = Path.iterdir
-            def iterdir(path):
-                found = list(real(path))
-                if path == root and not thread.ident:
-                    # The retry arrives after the take list is built but before anything is deleted.
+            real = Session.known_take_time
+            def known_take_time(owner, path):
+                if not thread.ident:
+                    # The retry arrives after the walk started but before anything is deleted.
                     thread.start()
                     thread.join(.2)
-                return iter(found)
+                return real(owner, path)
             try:
-                with unittest.mock.patch.object(Path, 'iterdir', iterdir):
+                with unittest.mock.patch.object(Session, 'known_take_time', known_take_time):
                     session.prune_history()
                 thread.join(2)
                 if results == ['accepted']:
@@ -1201,3 +1646,481 @@ class RetentionTests(unittest.TestCase):
                        {'audio_retention_megabytes': -1}):
             with self.subTest(change=change), self.assertRaises(ValueError):
                 validate_config({**base, **change})
+
+
+class ClipboardGuardTests(unittest.TestCase):
+    """Paste must not destroy a clipboard it cannot put back."""
+
+    make = PasteDeliveryTests.make
+
+    def copies(self, calls):
+        return [a for a, _ in calls if a[0] in ('wl-copy', 'wtype') or a[:2] == ['hyprctl', 'dispatch']]
+
+    def test_image_clipboard_is_left_untouched_and_the_transcript_stays_recoverable(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        delivery.clipboard_types = lambda: ['image/png']
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
+        self.assertFalse(self.copies(calls))
+        self.assertEqual(restored, [])
+
+    def test_file_list_and_images_with_a_text_flavour_are_also_left_alone(self):
+        for types in (['text/uri-list', 'text/plain', 'x-special/gnome-copied-files'],
+                      ['text/plain;charset=utf-8', 'image/png'], ['application/pdf']):
+            with self.subTest(types=types):
+                delivery, target, calls, restored = self.make({'any_window': True})
+                delivery.clipboard_types = lambda types=types: types
+                self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
+                self.assertFalse(self.copies(calls))
+
+    def test_oversized_text_clipboard_is_left_untouched(self):
+        from desktop import ClipboardTooLarge
+        delivery, target, calls, restored = self.make({'any_window': True}, clipboard=ClipboardTooLarge('big'))
+        delivery.clipboard_types = lambda: ['text/plain;charset=utf-8']
+        self.assertEqual(delivery.submit('text', target), 'clipboard_kept')
+        self.assertFalse(self.copies(calls))
+
+    def test_rich_text_is_restored_as_plain_text_and_disabled_restore_skips_the_check(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        delivery.clipboard_types = lambda: ['text/html', 'text/plain;charset=utf-8', 'UTF8_STRING']
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual(restored, [('earlier text', 'text')])
+        delivery, target, calls, restored = self.make({'any_window': True, 'restore_clipboard': False})
+        delivery.clipboard_types = lambda: self.fail('restore is off, so the clipboard is never inspected')
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+
+    def test_password_manager_hint_is_overwritten_but_never_restored(self):
+        delivery, target, calls, restored = self.make({'any_window': True}, clipboard='hunter2')
+        delivery.clipboard_types = lambda: ['text/plain;charset=utf-8', 'x-kde-passwordManagerHint']
+        self.assertEqual(delivery.submit('text', target), 'unknown')
+        self.assertEqual([k['input'] for a, k in calls if a[0] == 'wl-copy'], [b'text'])
+        self.assertEqual(restored, [])
+
+    def test_empty_or_unlistable_clipboard_still_pastes(self):
+        for types in ([], None):
+            delivery, target, calls, restored = self.make({'any_window': True}, clipboard=OSError('nothing'))
+            delivery.clipboard_types = lambda types=types: types
+            self.assertEqual(delivery.submit('text', target), 'unknown')
+            self.assertEqual(restored, [])
+
+    def test_clipboard_types_reads_wl_paste_list_types(self):
+        from desktop import HyprlandDelivery
+        def runner(result=None, error=None):
+            def run(argv, **kwargs):
+                self.assertEqual(argv, ['wl-paste', '--list-types'])
+                if error:
+                    raise error
+                return result
+            return run
+        Result = lambda code, out='': type('Result', (), {'returncode': code, 'stdout': out})()
+        config = {'mode': 'paste'}
+        self.assertEqual(HyprlandDelivery(config, run=runner(Result(0, 'text/plain\nimage/png\n'))).clipboard_types(),
+                         ['text/plain', 'image/png'])
+        self.assertEqual(HyprlandDelivery(config, run=runner(Result(1))).clipboard_types(), [])
+        self.assertIsNone(HyprlandDelivery(config, run=runner(error=OSError())).clipboard_types())
+        self.assertIsNone(HyprlandDelivery(config, run=runner(error=subprocess.TimeoutExpired('wl-paste', 1))).clipboard_types())
+
+    def test_read_phrase_clipboard_over_the_cap_raises_the_too_large_error(self):
+        from desktop import ClipboardTooLarge, read_phrase_clipboard
+        with self.assertRaises(ClipboardTooLarge):
+            read_phrase_clipboard([sys.executable, '-c', 'print("x" * 100)'], maximum=10)
+
+    def test_restore_delay_comes_from_configuration_with_a_longer_default(self):
+        from desktop import HyprlandDelivery
+        for config, expected in (({'mode': 'paste'}, 1.5), ({'mode': 'paste', 'restore_delay_seconds': 3}, 3)):
+            delays = []
+            delivery = HyprlandDelivery(config, run=lambda *a, **k: None)
+            delivery.clipboard = lambda: 'other'
+            with unittest.mock.patch('desktop.time.sleep', side_effect=delays.append):
+                delivery.schedule_restore('before', 'ours')
+                delivery.restore_thread.join(2)
+            self.assertEqual(delays, [expected])
+
+    def test_restore_delay_is_validated(self):
+        from desktop import validate_config
+        base = {'engine_config': '/local/engines.json'}
+        validate_config({**base, 'delivery': {'mode': 'recover', 'restore_delay_seconds': 2.5}})
+        for bad in (0, .05, 31, 'soon', None, True, float('inf')):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                validate_config({**base, 'delivery': {'mode': 'recover', 'restore_delay_seconds': bad}})
+
+    def test_truncated_process_name_matches_gnome_terminal_server(self):
+        delivery, target, calls, restored = self.make({'any_window': True})
+        probe = {'class': 'custom', 'pid': 7}
+        delivery.process_name = lambda pid: 'gnome-terminal-'
+        self.assertTrue(delivery.is_terminal(probe))
+        delivery.process_name = lambda pid: 'firefox'
+        self.assertFalse(delivery.is_terminal(probe))
+        delivery.process_name = lambda pid: None
+        self.assertFalse(delivery.is_terminal(probe))
+
+
+class BlockingDelivery(Delivery):
+    def __init__(self):
+        super().__init__()
+        self.inside, self.release = threading.Event(), threading.Event()
+
+    def submit(self, text, target):
+        self.calls.append((text, target))
+        self.inside.set()
+        self.release.wait(5)
+        return 'unknown'
+
+
+class DeliveryOutsideLockTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.delivery = BlockingDelivery()
+        self.session = Session(Capture(), Engine(), self.delivery, Path(self.temp.name))
+        self.addCleanup(self.session.close)
+        self.addCleanup(self.delivery.release.set)
+
+    def start_delivery(self):
+        self.session.command('start')
+        self.session.command('stop')
+        self.assertTrue(self.delivery.inside.wait(3))
+
+    def from_another_thread(self, call):
+        box = []
+        thread = threading.Thread(target=lambda: box.append(call()))
+        thread.start()
+        thread.join(1)
+        self.assertFalse(thread.is_alive(), 'the session lock is held during delivery')
+        return box[0]
+
+    def test_status_tick_and_level_do_not_wait_for_a_slow_paste(self):
+        self.start_delivery()
+        self.assertEqual(self.from_another_thread(self.session.status)['state'], 'transcribing')
+        self.from_another_thread(self.session.tick)
+        self.assertIsNone(self.from_another_thread(self.session.level))
+        self.assertIsNone(self.from_another_thread(self.session.elapsed))
+        self.delivery.release.set()
+        self.session.wait()
+        self.assertEqual((self.session.state, self.session.outcome), ('idle', 'unknown'))
+
+    def test_a_new_take_cannot_start_underneath_a_delivery(self):
+        self.start_delivery()
+        self.assertEqual(self.from_another_thread(lambda: self.session.command('start'))['state'], 'transcribing')
+        self.assertEqual(len(self.delivery.calls), 1)
+        self.delivery.release.set()
+        self.session.wait()
+
+    def test_cancel_during_delivery_settles_idle_and_keeps_the_transcript(self):
+        self.start_delivery()
+        self.from_another_thread(lambda: self.session.command('cancel'))
+        take = self.session.take
+        self.delivery.release.set()
+        self.session.wait()
+        self.assertEqual(self.session.state, 'idle')
+        self.assertEqual((take / 'transcript.txt').read_text(), Engine().text)
+        # The text did go out, so the outcome says so instead of claiming it was never attempted.
+        self.assertEqual(self.session.outcome, 'unknown')
+        self.assertEqual(self.session.command('start')['state'], 'recording')
+
+    def test_close_during_delivery_neither_hangs_nor_raises(self):
+        self.start_delivery()
+        closer = threading.Thread(target=self.session.close)
+        closer.start()
+        time.sleep(.1)
+        self.delivery.release.set()
+        closer.join(5)
+        self.assertFalse(closer.is_alive())
+        self.assertEqual(self.session.state, 'idle')
+
+
+class CancelDuringDeliveryTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+
+    def test_cancel_before_the_clipboard_is_touched_stops_the_paste(self):
+        delivery, target, calls, restored = PasteDeliveryTests().make({'any_window': True}, hyprland=True)
+        inspecting, release = threading.Event(), threading.Event()
+        def clipboard_types():
+            inspecting.set()
+            release.wait(5)
+            return ['text/plain']
+        delivery.clipboard_types = clipboard_types
+        session = Session(Capture(), Engine(), delivery, Path(self.temp.name))
+        self.addCleanup(session.close)
+        self.addCleanup(release.set)
+        session.command('start')
+        session.command('stop')
+        self.assertTrue(inspecting.wait(3))
+        session.command('cancel')
+        release.set()
+        session.wait()
+        self.assertFalse([a for a, _ in calls if a[0] in ('wl-copy', 'wtype') or a[:2] == ['hyprctl', 'dispatch']])
+        self.assertEqual((session.state, session.outcome), ('idle', 'not_attempted'))
+
+    def test_cancel_after_the_clipboard_is_set_skips_the_chord_and_restores(self):
+        delivery, target, calls, restored = PasteDeliveryTests().make({'any_window': True}, hyprland=True)
+        cancelled = threading.Event()
+        inner = delivery.run
+        def run(argv, **kwargs):
+            result = inner(argv, **kwargs)
+            if argv[0] == 'wl-copy':
+                cancelled.set()
+            return result
+        delivery.run = run
+        self.assertEqual(delivery.submit('text', target, cancelled=cancelled), 'not_attempted')
+        self.assertFalse([a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch'] or a[0] == 'wtype'])
+        self.assertEqual(restored, [('earlier text', 'text')])
+
+    def test_cancel_while_the_first_dispatch_runs_skips_the_fallbacks(self):
+        delivery, target, calls, restored = PasteDeliveryTests().make({'any_window': True}, hyprland=False)
+        cancelled = threading.Event()
+        inner = delivery.run
+        def run(argv, **kwargs):
+            result = inner(argv, **kwargs)
+            if argv[:2] == ['hyprctl', 'dispatch']:
+                cancelled.set()
+            return result
+        delivery.run = run
+        self.assertEqual(delivery.submit('text', target, cancelled=cancelled), 'not_attempted')
+        self.assertEqual(len([a for a, _ in calls if a[:2] == ['hyprctl', 'dispatch']]), 1)
+        self.assertFalse([a for a, _ in calls if a[0] == 'wtype'])
+
+    def test_type_mode_honours_a_cancel_before_wtype(self):
+        from desktop import HyprlandDelivery
+        calls = []
+        target = {'address': '0x1', 'class': 'editor', 'pid': 4}
+        def run(argv, **kwargs):
+            calls.append(argv)
+            out = json.dumps({'locked': False}) if argv[-1] == 'locked' else json.dumps(target)
+            return type('Result', (), {'stdout': out, 'returncode': 0})()
+        delivery = HyprlandDelivery({'mode': 'type', 'any_window': True, 'allow_unknown_secure_field': True}, run=run)
+        cancelled = threading.Event()
+        cancelled.set()
+        self.assertEqual(delivery.submit('text', target, cancelled=cancelled), 'not_attempted')
+        self.assertFalse([a for a in calls if a[0] == 'wtype'])
+
+    def test_close_still_closes_the_engine_when_delivery_outlasts_the_wait(self):
+        class Closing(Engine):
+            closed = False
+            def close(self):
+                self.closed = True
+        engine = Closing()
+        session = Session(Capture(), engine, Delivery(), Path(self.temp.name))
+        with unittest.mock.patch.object(Session, 'wait', side_effect=TimeoutError('Inference did not stop')):
+            with self.assertRaises(TimeoutError):
+                session.close()
+        self.assertTrue(engine.closed)
+
+
+class WatcherRaceTests(unittest.TestCase):
+    class StubSession:
+        def __init__(self):
+            self.state = 'transcribing'
+        def tick(self):
+            pass
+        def live_status(self):
+            return {'state': self.state, 'error': None, 'delivery': 'x', 'recovery': None}
+        def elapsed(self):
+            return None
+        def level(self):
+            return None
+
+    def read_events(self, connection, wanted, seconds=3):
+        connection.settimeout(.2)
+        buffer, events = b'', []
+        end = time.monotonic() + seconds
+        while time.monotonic() < end and wanted not in [e.get('state') for e in events]:
+            try:
+                chunk = connection.recv(65536)
+            except socket.timeout:
+                continue
+            if not chunk:
+                break
+            buffer += chunk
+            while b'\n' in buffer:
+                line, buffer = buffer.split(b'\n', 1)
+                events.append(json.loads(line))
+        return [e.get('state') for e in events]
+
+    def test_idle_reaches_existing_watchers_when_a_new_one_connects_just_after_it(self):
+        from desktop import serve
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = self.StubSession()
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 10})
+            thread.start()
+            connections = []
+            try:
+                deadline = time.monotonic() + 3
+                while not path.exists() and time.monotonic() < deadline:
+                    time.sleep(.005)
+                def watch():
+                    connection = socket.socket(socket.AF_UNIX)
+                    connection.connect(str(path))
+                    connection.sendall(json.dumps({'action': 'watch'}).encode() + b'\n')
+                    connections.append(connection)
+                    return connection
+                first = watch()
+                self.assertEqual(self.read_events(first, 'transcribing'), ['transcribing'])
+                time.sleep(.3)
+                # The state flips and a second watcher connects before the loop's next broadcast.
+                session.state = 'idle'
+                second = watch()
+                self.assertIn('idle', self.read_events(second, 'idle'))
+                self.assertIn('idle', self.read_events(first, 'idle'))
+            finally:
+                stopped.set()
+                thread.join(3)
+                for connection in connections:
+                    connection.close()
+
+
+class CliModuleTests(unittest.TestCase):
+    EXAMPLE = '''import json
+
+def register(subparsers):
+    command = subparsers.add_parser('example')
+    command.add_argument('word')
+
+def run(args, context):
+    print(json.dumps({'word': args.word, 'config': str(context.config), 'recovery': str(context.recovery),
+                      'imports': str(context.imports), 'runtime': str(context.runtime),
+                      'socket': str(context.socket), 'callable': callable(context.request)}))
+    return 3
+'''
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.directory = Path(self.temp.name) / 'modules'
+        self.directory.mkdir()
+
+    def invoke(self, *arguments):
+        import contextlib
+        import io
+        from desktop import main
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(['--config', '/c/linux.json', '--runtime', '/r', '--recovery', '/rec', '--imports', '/imp',
+                         *arguments], cli_directory=self.directory)
+        return code, out.getvalue(), err.getvalue()
+
+    def test_a_cli_module_is_loaded_registered_and_run_with_the_context(self):
+        (self.directory / 'cli_example.py').write_text(self.EXAMPLE)
+        code, out, _ = self.invoke('example', 'hello')
+        self.assertEqual(code, 3)
+        self.assertEqual(json.loads(out), {'word': 'hello', 'config': '/c/linux.json', 'recovery': '/rec',
+                                           'imports': '/imp', 'runtime': '/r', 'socket': '/r/session.sock',
+                                           'callable': True})
+
+    def test_the_request_helper_talks_to_the_service_socket(self):
+        from desktop import CliContext, serve
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'session.sock'
+            session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
+            stopped = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 5})
+            thread.start()
+            try:
+                deadline = time.monotonic() + 3
+                while not path.exists() and time.monotonic() < deadline:
+                    time.sleep(.005)
+                import desktop
+                context = CliContext(Path('c'), Path('r'), Path('i'), Path(temp), path,
+                                     lambda action, identity=None, **fields: desktop.request(path, action, identity, **fields))
+                self.assertEqual(context.request('status')['state'], 'idle')
+            finally:
+                stopped.set()
+                thread.join(3)
+                session.close()
+
+    def test_a_broken_module_is_skipped_and_core_commands_still_work(self):
+        (self.directory / 'cli_broken.py').write_text('def register(:\n')
+        (self.directory / 'cli_incomplete.py').write_text('def register(subparsers):\n    pass\n')
+        (self.directory / 'cli_explodes.py').write_text(
+            'def register(subparsers):\n    subparsers.add_parser("half")\n    raise RuntimeError("no")\n'
+            'def run(args, context):\n    return 0\n')
+        (self.directory / 'cli_example.py').write_text(self.EXAMPLE)
+        code, out, err = self.invoke('example', 'ok')
+        self.assertEqual(code, 3)
+        self.assertEqual(len(err.strip().splitlines()), 3)
+        self.assertEqual({json.loads(line)['module'] for line in err.splitlines()},
+                         {'cli_broken', 'cli_incomplete', 'cli_explodes'})
+        with self.assertRaises(SystemExit):
+            self.invoke('half')
+
+    def test_a_module_cannot_replace_a_core_command(self):
+        (self.directory / 'cli_hijack.py').write_text(
+            'import json\ndef register(subparsers):\n    subparsers.add_parser("capabilities")\n'
+            'def run(args, context):\n    print("hijacked")\n    return 9\n')
+        code, out, err = self.invoke('capabilities')
+        self.assertEqual(code, 0)
+        self.assertNotIn('hijacked', out)
+        self.assertIn('"interface"', out)
+
+    def test_without_modules_the_cli_is_unchanged(self):
+        code, out, _ = self.invoke('capabilities')
+        self.assertEqual(code, 0)
+
+    def test_the_default_directory_is_the_one_beside_desktop_py(self):
+        from desktop import load_cli_modules
+        self.assertEqual([m for m in load_cli_modules() if m.__file__ and Path(m.__file__).parent != Path(__file__).resolve().parent], [])
+
+
+class WorkerParentWatchTests(unittest.TestCase):
+    def test_workers_and_their_children_die_when_the_service_is_killed(self):
+        import signal
+        here = str(Path(__file__).resolve().parent)
+        child = ('import subprocess, sys, time\n'
+                 'grandchild = subprocess.Popen(["sleep", "60"])\n'
+                 'print(grandchild.pid, flush=True)\n'
+                 'time.sleep(60)\n')
+        parent = ('import subprocess, sys, time\n'
+                  'sys.path.insert(0, %r)\n'
+                  'from desktop import guarded_command\n'
+                  'worker = subprocess.Popen(guarded_command([sys.executable, "-c", sys.argv[1]]), stdout=subprocess.PIPE, text=True, start_new_session=True)\n'
+                  'print(worker.pid, flush=True)\n'
+                  'print(worker.stdout.readline().strip(), flush=True)\n'
+                  'time.sleep(60)\n') % here
+        script = Path(tempfile.mkdtemp()) / 'child.py'
+        script.write_text(child)
+        self.addCleanup(script.unlink)
+        # guarded_command runs a script path, so hand it the child file rather than inline code.
+        parent = parent.replace('[sys.executable, "-c", sys.argv[1]]', '[sys.executable, sys.argv[1]]')
+        service = subprocess.Popen([sys.executable, '-c', parent, str(script)], stdout=subprocess.PIPE, text=True)
+        pids = []
+        try:
+            pids = [int(service.stdout.readline()), int(service.stdout.readline())]
+            for pid in pids:
+                os.kill(pid, 0)
+            service.kill()
+            service.wait(5)
+            deadline = time.monotonic() + 8
+            alive = list(pids)
+            while alive and time.monotonic() < deadline:
+                time.sleep(.1)
+                alive = [pid for pid in alive if self.alive(pid)]
+            self.assertEqual(alive, [])
+        finally:
+            service.kill()
+            service.wait(5)
+            service.stdout.close()
+            for pid in pids:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+
+    @staticmethod
+    def alive(pid):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        return True
+
+    def test_a_guarded_worker_still_runs_its_script_with_its_arguments(self):
+        from desktop import guarded_command
+        with tempfile.TemporaryDirectory() as temp:
+            script = Path(temp) / 'echo.py'
+            script.write_text('import json, sys\nprint(json.dumps([sys.argv, __name__, __file__ == %r]))\n' % str(script))
+            out = subprocess.run(guarded_command([sys.executable, str(script), 'speech']), capture_output=True,
+                                 text=True, timeout=10, check=True).stdout
+        self.assertEqual(json.loads(out), [[str(script), 'speech'], '__main__', True])

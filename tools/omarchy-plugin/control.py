@@ -2,6 +2,7 @@
 """Small JSON bridge between the Omarchy panel and Mouthtype's local CLI."""
 
 import fcntl
+import importlib.util
 import json
 import os
 import re
@@ -14,20 +15,32 @@ import time
 
 
 HOME = Path.home()
-LAUNCHER = HOME / ".local/bin/mouthtype-linux"
+def _first_existing(*paths):
+    """A user-local install shadows the packaged one, as it does on PATH; with neither, name the user-local path."""
+    return next((path for path in paths if path.exists()), paths[0])
+
+
+LAUNCHER = _first_existing(HOME / ".local/bin/mouthtype-linux", Path("/usr/bin/mouthtype-linux"))
 CONFIG = HOME / ".local/share/mouthtype/speech-candidate/linux.json"
 RECOVERY = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/recovery"
 LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/omarchy-control.log"
 PREFS = HOME / ".config/mouthtype/omarchy-plugin.json"
 UNIT = HOME / ".config/systemd/user/mouthtype-linux.service"
+# The Arch package ships this unit; with it present the plugin enables it instead of writing its own copy.
+VENDOR_UNIT = Path("/usr/lib/systemd/user/mouthtype-linux.service")
 BINDINGS = HOME / ".config/hypr/bindings.lua"
 BIND_BEGIN = "-- Mouthtype Omarchy plugin shortcut: begin"
 BIND_END = "-- Mouthtype Omarchy plugin shortcut: end"
-DESKTOP = HOME / ".local/lib/mouthtype-linux/tools/linux-desktop"
+TRANSFORM_BEGIN = "-- Mouthtype Omarchy plugin transform shortcut: begin"
+TRANSFORM_END = "-- Mouthtype Omarchy plugin transform shortcut: end"
+DESKTOP = _first_existing(HOME / ".local/lib/mouthtype-linux/tools/linux-desktop",
+                          Path("/usr/lib/mouthtype-linux/tools/linux-desktop"))
 ASSETS = Path(__file__).resolve().parent / "assets"
 SAVE_DIALOG = Path(__file__).resolve().parent / "save_dialog.py"
 CLEANUP_DIR = HOME / ".local/share/mouthtype/cleanup-candidate"
 CLEANUP_LOG = Path(os.environ.get("XDG_STATE_HOME", HOME / ".local/state")) / "mouthtype/cleanup-setup.log"
+SETUP_PID = LOG.parent / "cleanup-setup.pid"
+PLUGIN_DIR = Path(__file__).resolve().parent
 CLEANUP_SIZES = {"fast": "about 480 MB", "thorough": "about 2.5 GB"}
 
 IMPORT_ACTIVE = ("preparing", "transcribing", "cancelling")
@@ -73,6 +86,43 @@ def cli(*args, timeout=35):
     )
 
 
+SOCKET_ACTIONS = ("start", "stop", "toggle", "cancel", "status")
+_session_client = False
+
+
+def session_client():
+    """The service-socket client module, or None when this install doesn't ship it (then the CLI is used)."""
+    global _session_client
+    if _session_client is False:
+        _session_client = None
+        for directory in (DESKTOP, PLUGIN_DIR.parent / "linux-desktop"):
+            if (directory / "session_client.py").is_file():
+                sys.path.insert(0, str(directory))
+                try:
+                    import session_client as module
+                    _session_client = module
+                except ImportError:
+                    pass
+                break
+    return _session_client
+
+
+def session_call(action, identity=None, timeout=35):
+    """Run a daemon command. The hotkey path sends it to the service socket directly, the same JSON line the CLI
+    sends, so no second interpreter starts. A missing socket (service down) falls back to the CLI, which reports
+    that failure the way every caller already expects. Returns a CompletedProcess, like cli()."""
+    client = session_client() if action in SOCKET_ACTIONS and identity is None else None
+    if client is not None:
+        path = client.default_socket()
+        if path.exists():
+            try:
+                reply = client.request(path, action)
+                return subprocess.CompletedProcess([action], 0, json.dumps(reply), "")
+            except (OSError, ValueError):
+                return subprocess.CompletedProcess([action], 2, "", json.dumps({"error": "unavailable"}))
+    return cli(action, *([identity] if identity else []), timeout=timeout)
+
+
 def cli_error(result):
     try:
         return json.loads(result.stderr).get("error")
@@ -80,15 +130,65 @@ def cli_error(result):
         return None
 
 
+CAPABILITIES_TTL = 60
+
+
+def capabilities_cache_path():
+    runtime = os.environ.get("XDG_RUNTIME_DIR")
+    base = Path(runtime) if runtime else Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache"))
+    return base / "mouthtype" / "capabilities.json"
+
+
+def read_capabilities_cache(stamp):
+    try:
+        entry = json.loads(capabilities_cache_path().read_text(encoding="utf-8"))
+        age = time.time() - entry["at"]
+        if (entry["launcher"] == str(LAUNCHER) and entry["mtime_ns"] == stamp
+                and 0 <= age < CAPABILITIES_TTL and isinstance(entry["report"], dict) and entry["report"]):
+            return entry["report"]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def write_capabilities_cache(stamp, report):
+    path = capabilities_cache_path()
+    try:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(path.parent, 0o700)
+        fd, temporary = tempfile.mkstemp(prefix=".capabilities-", dir=path.parent)
+        try:
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as output:
+                json.dump({"launcher": str(LAUNCHER), "mtime_ns": stamp, "at": time.time(), "report": report}, output)
+            os.replace(temporary, path)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
+    except OSError:
+        pass
+
+
 def capabilities():
-    if not LAUNCHER.is_file():
+    """The widget runs a fresh helper process per poll, so the cache lives in a file: launcher path + mtime, 60 s TTL.
+    Only a non-empty answer is stored, and any cache read error falls back to asking the launcher."""
+    try:
+        stamp = LAUNCHER.stat().st_mtime_ns
+    except OSError:
         return {}
+    cached = read_capabilities_cache(stamp)
+    if cached is not None:
+        return cached
     try:
         result = cli("capabilities", timeout=10)
         report = json.loads(result.stdout) if result.returncode == 0 else {}
     except (OSError, json.JSONDecodeError, subprocess.SubprocessError):
         report = {}
-    return report if isinstance(report, dict) else {}
+    if not isinstance(report, dict):
+        return {}
+    if report:
+        write_capabilities_cache(stamp, report)
+    return report
 
 
 def atomic_json(path, value):
@@ -123,6 +223,7 @@ def preferences():
     overrides = font.get("overrides") if isinstance(font.get("overrides"), dict) else {}
     return {
         "sounds": value.get("sounds") is True,
+        "welcomed": value.get("welcomed") is True,
         "pill": {"enabled": pill.get("enabled") is not False,
                  "skin": "hifi" if pill.get("skin") == "hifi" else "classic",
                  "size": 2 if pill.get("size") == 2 else 1},
@@ -138,6 +239,15 @@ def valid_family(value):
     if len(value) > 80 or any(ord(c) < 32 for c in value):
         raise RuntimeError("Enter a font family name")
     return value
+
+
+def set_plugin(field, value):
+    if field != "welcomed" or value not in {"on", "off"}:
+        raise RuntimeError("Unsupported plugin setting")
+    prefs = preferences()
+    prefs["welcomed"] = value == "on"
+    atomic_json(PREFS, prefs)
+    return state()
 
 
 def set_pill(field, value):
@@ -201,12 +311,34 @@ def cleanup_models():
     return {"models": models, "setup": progress, "path": str(path)}
 
 
-def setup_running():
+def process_start(pid):
+    """Start time of a process in clock ticks since boot, or None when it is gone or /proc is unreadable."""
     try:
-        result = subprocess.run(["pgrep", "-f", "setup_cleanup.py --destination"], capture_output=True, text=True, timeout=5)
-        return result.returncode == 0
-    except (OSError, subprocess.SubprocessError):
+        stat = Path(f"/proc/{int(pid)}/stat").read_text(encoding="utf-8")
+        return int(stat[stat.rindex(")") + 2:].split()[19])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def process_command(pid):
+    try:
+        return Path(f"/proc/{int(pid)}/cmdline").read_bytes().replace(b"\0", b" ").decode("utf-8", "replace")
+    except (OSError, ValueError):
+        return ""
+
+
+def setup_running():
+    """Whether the cleanup setup this plugin started is still alive, judged from the pidfile it wrote.
+
+    The pid alone can be reused by an unrelated process, so the start time and command line must match too."""
+    try:
+        recorded = json.loads(SETUP_PID.read_text(encoding="utf-8"))
+        pid, started = recorded["pid"], recorded["start"]
+    except (OSError, ValueError, KeyError, TypeError):
         return False
+    if not (isinstance(pid, int) and isinstance(started, int)) or isinstance(pid, bool):
+        return False
+    return process_start(pid) == started and "setup_cleanup.py" in process_command(pid)
 
 
 def config_summary():
@@ -218,6 +350,8 @@ def config_summary():
         "audio_retention_days": config.get("audio_retention_days", 90),
         "history_keep": config.get("history_keep"),
         "notifications": config.get("notifications", True),
+        "slash_commands": config.get("slash_commands", True),
+        "microphone": config.get("capture_target") or "default",
         "maximum_recording_seconds": config.get("maximum_recording_seconds", 60),
         "delivery_mode": delivery.get("mode", "recover"),
         "allowed_classes": delivery.get("allowed_classes", []),
@@ -237,6 +371,7 @@ MODIFIER_KEYSYMS = {"Control_L": "CTRL", "Control_R": "CTRL", "Shift_L": "SHIFT"
                     "Alt_L": "ALT", "Alt_R": "ALT", "Super_L": "SUPER", "Super_R": "SUPER"}
 MODIFIER_KEYSYM_LOOKUP = {name.lower(): name for name in MODIFIER_KEYSYMS}
 DEFAULT_SHORTCUTS = {"toggle": "SUPER + ALT + M", "hold": "F10"}
+DEFAULT_TRANSFORM_SHORTCUT = "SUPER + SHIFT + T"
 
 
 def parse_shortcut(spec):
@@ -294,11 +429,110 @@ def shortcut_mode():
     return shortcut_info()["mode"]
 
 
+def created_cache_path():
+    return capabilities_cache_path().with_name("take-created.json")
+
+
+def read_created(name):
+    """(created, identity) from take.json, or None when it is missing or unusable. The identity is the file's inode,
+    mtime and size, which tells a reused take name from the take the cache entry was made for."""
+    try:
+        path = RECOVERY / name / "take.json"
+        info = path.stat()
+        created = json.loads(path.read_text(encoding="utf-8"))["created"]
+        if type(created) in (int, float) and created == created and abs(created) != float("inf"):
+            return float(created), [info.st_ino, info.st_mtime_ns, info.st_size]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass
+    return None
+
+
+def take_identity(name):
+    try:
+        info = (RECOVERY / name / "take.json").stat()
+        return [info.st_ino, info.st_mtime_ns, info.st_size]
+    except OSError:
+        return None
+
+
+def take_rows():
+    """(id, mtime) of every take directory, newest first by creation time, from one scandir pass.
+
+    A take's creation time never changes, so take.json is read once per take and remembered in a small cache file
+    (each poll is a fresh process). An entry also carries take.json's inode, mtime and size, and is re-read when
+    they differ, so a reused take name never inherits a stale time. The directory mtime is only the fallback for a
+    take without take.json, because retiring a WAV rewrites it."""
+    rows = []
+    try:
+        with os.scandir(RECOVERY) as entries:
+            for entry in entries:
+                name = entry.name
+                if len(name) != 32 or not all(c in "0123456789abcdef" for c in name):
+                    continue
+                try:
+                    if entry.is_dir(follow_symlinks=False):
+                        rows.append((name, entry.stat(follow_symlinks=False).st_mtime))
+                except OSError:
+                    continue
+    except OSError:
+        return []
+    path = created_cache_path()
+    try:
+        cache = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(cache, dict):
+            cache = {}
+    except (OSError, ValueError):
+        cache = {}
+    changed = False
+    keyed = []
+    live = set()
+    for name, mtime in rows:
+        live.add(name)
+        entry = cache.get(name)
+        identity = take_identity(name)
+        created = None
+        if identity is not None:
+            if (isinstance(entry, list) and len(entry) == 2 and type(entry[0]) in (int, float)
+                    and entry[1] == identity):
+                created = entry[0]
+            else:
+                found = read_created(name)
+                if found is not None:
+                    created = found[0]
+                    cache[name] = [found[0], found[1]]
+                    changed = True
+        if created is None and name in cache:
+            del cache[name]
+            changed = True
+        keyed.append((created if created is not None else mtime, name, mtime))
+    for name in [name for name in cache if name not in live]:
+        del cache[name]
+        changed = True
+    if changed:
+        try:
+            path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            atomic_json(path, cache)
+        except OSError:
+            pass
+    keyed.sort(reverse=True)
+    return [(name, mtime) for _, name, mtime in keyed]
+
+
+def take_entry(name, mtime, preview=True):
+    transcript = RECOVERY / name / "transcript.txt"
+    has_transcript = transcript.is_file()
+    text = ""
+    if preview and has_transcript:
+        text = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
+    return {"id": name, "transcript": has_transcript, "audio": (RECOVERY / name / "recording.wav").is_file(),
+            "preview": text, "mtime": mtime}
+
+
 def words_today(entries=None):
     today = time.localtime().tm_yday
     year = time.localtime().tm_year
     total = 0
-    for entry in entries if entries is not None else recent_dictations(limit=None):
+    for entry in entries if entries is not None else recent_dictations(limit=None, previews=False):
         if not entry["transcript"]:
             continue
         stamp = time.localtime(entry["mtime"])
@@ -308,35 +542,47 @@ def words_today(entries=None):
     return total
 
 
-def recent_dictations(limit=5):
-    if not RECOVERY.is_dir():
-        return []
-    takes = [p for p in RECOVERY.iterdir()
-             if p.is_dir() and not p.is_symlink() and len(p.name) == 32
-             and all(c in "0123456789abcdef" for c in p.name)]
-    recent = []
-    for path in sorted(takes, key=lambda p: p.stat().st_mtime, reverse=True)[:limit]:
-        transcript = path / "transcript.txt"
-        preview = ""
-        if transcript.is_file():
-            preview = " ".join(transcript.read_text(encoding="utf-8").split())[:36]
-        recent.append({"id": path.name, "transcript": transcript.is_file(),
-                       "audio": (path / "recording.wav").is_file(),
-                       "preview": preview, "mtime": path.stat().st_mtime})
-    return recent
+def recent_dictations(limit=5, previews=True):
+    """Newest takes first. Only the rows returned are opened: file flags for each, transcript text for the preview."""
+    return [take_entry(name, mtime, previews) for name, mtime in (take_rows() if limit is None else take_rows()[:limit])]
+
+
+def versions():
+    """Plugin and app versions. install.py writes version.json beside the plugin; a source checkout falls back to manifest.json."""
+    found = {"plugin": None, "app": None}
+    for name in ("version.json", "manifest.json"):
+        try:
+            data = json.loads((PLUGIN_DIR / name).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        for key, field in (("plugin", "plugin" if name == "version.json" else "version"), ("app", "app")):
+            if found[key] is None and isinstance(data.get(field), str):
+                found[key] = data[field]
+    return found
+
+
+def client_missing():
+    """True when the packaged or user-local client is gone, e.g. after `pacman -R` without the setup uninstall."""
+    return not LAUNCHER.exists()
 
 
 def state():
+    if client_missing():
+        return {"running": False, "state": "unavailable", "client": "missing"}
     if not LAUNCHER.is_file() or not CONFIG.is_file():
         return {"running": False, "state": "unavailable", "error": "Mouthtype installation is missing"}
-    result = cli("status", timeout=5)
+    result = session_call("status", timeout=5)
     try:
         status = json.loads(result.stdout)
     except json.JSONDecodeError:
         status = {}
     running = result.returncode == 0 and status.get("error") != "unavailable"
-    entries = recent_dictations(limit=None)
+    entries = recent_dictations(limit=None, previews=False)
     transcripts = [entry for entry in entries if entry["transcript"]]
+    for entry in transcripts[:5]:
+        entry["preview"] = " ".join((RECOVERY / entry["id"] / "transcript.txt").read_text(encoding="utf-8").split())[:36]
     report = capabilities()
     file_import = status.get("file_import") if running else None
     if not isinstance(file_import, dict):
@@ -352,12 +598,13 @@ def state():
             "saved": [entry for entry in entries if entry["audio"] and not entry["transcript"]],
             "words_today": words_today(entries),
             "config": config_summary(), "sounds": preferences()["sounds"],
+            "welcomed": preferences().get("welcomed") is True,
             "pill": preferences()["pill"], "font": preferences()["font"],
             "cleanup": {**cleanup_models(), "service": status.get("cleanup") if running else None},
             "autostart": unit_enabled(),
             "shortcut": shortcut_mode(), "shortcut_keys": shortcut_info()["keys"],
             "interface": report.get("interface"), "capabilities": report.get("features", {}),
-            "file_import": file_import}
+            "file_import": file_import, "versions": versions()}
 
 
 def unit_enabled():
@@ -499,19 +746,21 @@ def hold_press(t):
     return hold_update(change)
 
 
+def release_change(data, t):
+    last = data["last_release_t"]
+    data["last_release_t"] = t if last is None else max(last, t)
+    press = data["press"]
+    if press is None:
+        return True
+    if press["t"] > t:
+        return False  # a late release for an older press; the current press is still held
+    press["released"] = True
+    return True
+
+
 def hold_release(t):
     """Register a release launched at t. Returns False when it belongs to a press that is already over."""
-    def change(data):
-        last = data["last_release_t"]
-        data["last_release_t"] = t if last is None else max(last, t)
-        press = data["press"]
-        if press is None:
-            return True
-        if press["t"] > t:
-            return False  # a late release for an older press; the current press is still held
-        press["released"] = True
-        return True
-    return hold_update(change)
+    return hold_update(lambda data: release_change(data, t))
 
 
 def hold_alive(mine):
@@ -521,8 +770,26 @@ def hold_alive(mine):
     return hold_update(change)
 
 
+# A stop sent while the hold lock is held must not wedge the next key event behind a hung daemon.
+HOLD_STOP_TIMEOUT = 10
+DAEMON_ERRORS = (RuntimeError, OSError, subprocess.SubprocessError)
+
+
+def stop_under_lock(failures):
+    """Send stop while the hold lock is held, so a newer press cannot start in between and get stopped.
+
+    Failures are collected rather than raised: the caller is inside hold_update, which must still save the state."""
+    try:
+        return deliver("stop", timeout=HOLD_STOP_TIMEOUT)
+    except DAEMON_ERRORS as error:
+        failures.append(error if isinstance(error, RuntimeError) else RuntimeError("Mouthtype did not respond to the stop request"))
+        return None
+
+
 def hold_settle(mine):
-    """After the start request returned: True when the key already came up and the recording must stop."""
+    """After the start request returned: True when the key already came up and the recording was stopped."""
+    failures = []
+
     def change(data):
         press = data["press"]
         if press is None:
@@ -531,21 +798,40 @@ def hold_settle(mine):
             if press["released"] and press.get("skipped"):
                 # The newest press came and went without starting; this start would otherwise leak.
                 press["skipped"] = False
-                try:
-                    deliver("stop")
-                except RuntimeError:
-                    pass
+                stop_under_lock([])
                 cue("stop")
             return False
         if press["released"]:
+            # The key came up before the recording began, so its stop was a no-op. Stop now.
+            stop_under_lock(failures)
             return True
         press["started"] = True
         return False
-    return hold_update(change)
+    settled = hold_update(change)
+    if failures:
+        raise failures[0]
+    return settled
 
 
-def deliver(command, identity=None):
-    result = cli(command, *([identity] if identity else []))
+def hold_stop(t):
+    """Handle a release launched at t. Returns the daemon's reply, or None when the release was stale.
+
+    The stop goes out under the hold lock. Sent after the lock was freed, it could land on a press that
+    began in between and end that recording."""
+    failures = []
+
+    def change(data):
+        if not release_change(data, t):
+            return None
+        return stop_under_lock(failures) or {}
+    response = hold_update(change)
+    if failures:
+        raise failures[0]
+    return response
+
+
+def deliver(command, identity=None, timeout=35):
+    result = session_call(command, identity, timeout=timeout)
     if result.returncode:
         raise RuntimeError("Mouthtype command failed")
     try:
@@ -573,8 +859,6 @@ def hold_start(t):
             return state()
         response = deliver("start")
     if hold_settle(mine):
-        # The key came up before the recording began, so its stop was a no-op. Stop now.
-        deliver("stop")
         cue("stop")
         return state()
     if response.get("state") == "recording":
@@ -588,7 +872,12 @@ def act(command, identity=None):
         raise RuntimeError("Invalid recording ID")
     if command == "start":
         return hold_start(t)
-    if command == "stop" and not hold_release(t):
+    if command == "stop":
+        response = hold_stop(t)
+        if response is None:
+            return state()
+        if response.get("state") != "recording":
+            cue("stop")
         return state()
     if command in {"toggle", "transcribe"} and not state()["running"]:
         start_service()
@@ -618,8 +907,16 @@ def set_config(field, value, extra=None):
             raise RuntimeError("Prepare the " + ("Fast" if value == "fast" else "Thorough") + " cleanup model first")
         config["cleanup"] = value
         config["cleanup_engine"] = str(CLEANUP_DIR / "cleanup.json")
-    elif field == "notifications" and value in {"on", "off"}:
-        config["notifications"] = value == "on"
+    elif field == "notifications" and value in {"all", "on", "errors", "off"}:
+        config["notifications"] = {"all": True, "on": True, "errors": "errors", "off": False}[value]
+    elif field == "microphone" and value == "default":
+        config.pop("capture_target", None)
+    elif field == "microphone" and value:
+        if value not in [item["name"] for item in module_commands()["microphones"]()["sources"]]:
+            raise RuntimeError("That microphone is not connected")
+        config["capture_target"] = value
+    elif field == "slash_commands" and value in {"on", "off"}:
+        config["slash_commands"] = value == "on"
     elif field == "maximum_recording_seconds" and value in {"30", "60", "120"}:
         config["maximum_recording_seconds"] = int(value)
     elif field == "maximum_recovery_takes" and value in {"100", "200", "500", "1000"}:
@@ -684,11 +981,26 @@ def cleanup_setup(level):
         except (OSError, json.JSONDecodeError):
             pass
     with os.fdopen(fd, "w") as log:
-        subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+        child = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=log, start_new_session=True, close_fds=True)
+    started = process_start(child.pid)
+    if started is not None:
+        atomic_json(SETUP_PID, {"pid": child.pid, "start": started})
     time.sleep(0.5)
     output = state()
     output["page"] = "cleanup"
     output["message"] = "Preparing " + ("Fast" if level == "fast" else "Thorough") + " cleanup (" + CLEANUP_SIZES[level] + " download)"
+    return output
+
+
+def cleanup_cancel():
+    if not setup_running():
+        raise RuntimeError("Cleanup preparation is not running")
+    CLEANUP_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
+    (CLEANUP_DIR / "cleanup-cancel").write_text("", encoding="utf-8")
+    time.sleep(0.5)
+    output = state()
+    output["page"] = "cleanup"
+    output["message"] = "Cancelling cleanup preparation"
     return output
 
 
@@ -711,6 +1023,17 @@ def unit_quote(value):
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%") + '"'
 
 
+def systemctl_user(*arguments, timeout=10, quiet=False):
+    """Run systemctl --user, turning a failure into a message that says why (usually: no systemd user session)."""
+    result = subprocess.run(["systemctl", "--user", *arguments], capture_output=True, text=True, timeout=timeout)
+    if result.returncode and not quiet:
+        detail = (result.stderr or result.stdout).strip().splitlines()
+        reason = detail[-1] if detail else f"exit status {result.returncode}"
+        raise RuntimeError(f"systemctl --user {arguments[0]} failed: {reason}. "
+                           "It needs a logged-in systemd user session (a graphical Omarchy login).")
+    return result
+
+
 def set_autostart(value):
     if value not in {"on", "off"}:
         raise RuntimeError("Unsupported login setting")
@@ -719,10 +1042,13 @@ def set_autostart(value):
     if value == "on":
         if shutil.which("systemctl") is None:
             raise RuntimeError("systemd user services are unavailable")
+        if not UNIT.exists() and VENDOR_UNIT.is_file():
+            systemctl_user("enable", UNIT.name)
+            return state()
         if legacy_unit_enabled():
             # Older installs linked into default.target; unlink it while the old unit still names that target.
-            subprocess.run(["systemctl", "--user", "disable", UNIT.name], check=True, timeout=10,
-                           stdout=subprocess.DEVNULL)
+            systemctl_user("disable", UNIT.name)
+        existed = UNIT.exists()
         UNIT.parent.mkdir(parents=True, exist_ok=True)
         unit = ("[Unit]\nDescription=Mouthtype Linux dictation service\n"
                 "PartOf=graphical-session.target\n"
@@ -732,14 +1058,28 @@ def set_autostart(value):
                 "Restart=always\nRestartSec=2\n\n"
                 "[Install]\nWantedBy=graphical-session.target\n")
         UNIT.write_text(unit, encoding="utf-8")
-        subprocess.run(["systemctl", "--user", "daemon-reload"], check=True, timeout=10)
-        subprocess.run(["systemctl", "--user", "enable", UNIT.name], check=True, timeout=10,
-                       stdout=subprocess.DEVNULL)
+        try:
+            systemctl_user("daemon-reload")
+            systemctl_user("enable", UNIT.name)
+        except (RuntimeError, subprocess.SubprocessError):
+            if not existed:
+                UNIT.unlink(missing_ok=True)  # Leave nothing half-installed when systemd was not reachable.
+            raise
     else:
-        if UNIT.exists():
-            subprocess.run(["systemctl", "--user", "disable", UNIT.name], check=True, timeout=10,
-                           stdout=subprocess.DEVNULL)
+        if UNIT.exists() or unit_enabled():
+            systemctl_user("disable", UNIT.name)
     return state()
+
+
+def assert_key_free(spec, mask, key, ours):
+    """Refuse a key Hyprland already binds, unless the existing binding is the Mouthtype block being rewritten."""
+    result = subprocess.run(["hyprctl", "-j", "binds"], text=True, capture_output=True,
+                            check=True, timeout=5)
+    for binding in json.loads(result.stdout):
+        bound = str(binding.get("key", ""))
+        same_key = bound.upper() == key.upper() or (key.startswith("code:") and str(binding.get("keycode")) == key[5:])
+        if same_key and binding.get("modmask") == mask and not ours:
+            raise RuntimeError(spec + " is already bound in Hyprland; choose another key")
 
 
 def set_shortcut(value, keys=None):
@@ -760,16 +1100,15 @@ def set_shortcut(value, keys=None):
         base = original.rstrip() + "\n"
     if value != "off":
         ours = current["mode"] != "off" and parse_shortcut(current["keys"])[0] == spec if current["keys"] else False
-        result = subprocess.run(["hyprctl", "-j", "binds"], text=True, capture_output=True,
-                                check=True, timeout=5)
-        for binding in json.loads(result.stdout):
-            bound = str(binding.get("key", ""))
-            same_key = bound.upper() == key.upper() or (key.startswith("code:") and str(binding.get("keycode")) == key[5:])
-            if same_key and binding.get("modmask") == mask and not ours:
-                raise RuntimeError(spec + " is already bound in Hyprland; choose another key")
+        assert_key_free(spec, mask, key, ours)
         command = Path(__file__).resolve()
         if value == "toggle":
-            block = f'o.bind("{spec}", "Toggle Mouthtype dictation", "{command} toggle")'
+            # Omarchy's `o` helper is not guaranteed to exist in every bindings.lua; fall back to a plain Hyprland bind.
+            block = (f'if type(o) == "table" and type(o.bind) == "function" then\n'
+                     f'  o.bind("{spec}", "Toggle Mouthtype dictation", "{command} toggle")\n'
+                     f'else\n'
+                     f'  hl.bind("{spec}", hl.dsp.exec_cmd("{command} toggle"))\n'
+                     f'end')
         else:
             block = (f'hl.bind("{spec}", hl.dsp.exec_cmd("{command} start"))\n'
                      f'hl.bind("{spec}", hl.dsp.exec_cmd("{command} stop"), {{ release = true }})')
@@ -796,6 +1135,64 @@ def set_shortcut(value, keys=None):
     return output
 
 
+def transform_shortcut_keys():
+    if not BINDINGS.is_file():
+        return ""
+    contents = BINDINGS.read_text(encoding="utf-8")
+    if TRANSFORM_BEGIN not in contents or TRANSFORM_END not in contents:
+        return ""
+    match = re.search(r'bind\("([^"]+)"', contents.split(TRANSFORM_BEGIN, 1)[1].split(TRANSFORM_END, 1)[0])
+    return match.group(1) if match else ""
+
+
+def set_transform_shortcut(value, keys=None):
+    """Bind (on) or unbind (off) the key that opens the Transform Selection panel, in its own marked block."""
+    if value not in {"off", "on"}:
+        raise RuntimeError("Unsupported transform shortcut")
+    if not BINDINGS.is_file():
+        raise RuntimeError("Hyprland bindings file is missing")
+    spec, mask, key = parse_shortcut(keys or DEFAULT_TRANSFORM_SHORTCUT) if value == "on" else ("", 0, "")
+    original = BINDINGS.read_text(encoding="utf-8")
+    before, separator, after = original.partition(TRANSFORM_BEGIN)
+    if separator:
+        if TRANSFORM_END not in after:
+            raise RuntimeError("Existing Mouthtype transform shortcut block is incomplete")
+        base = before.rstrip() + after.split(TRANSFORM_END, 1)[1]
+    else:
+        base = original.rstrip() + "\n"
+    if value == "on":
+        current = transform_shortcut_keys()
+        assert_key_free(spec, mask, key, bool(current) and parse_shortcut(current)[0] == spec)
+        dictation = shortcut_info()["keys"]
+        if dictation and parse_shortcut(dictation)[0] == spec:
+            raise RuntimeError(spec + " is already the dictation shortcut; choose another key")
+        command = Path(__file__).resolve()
+        block = (f'if type(o) == "table" and type(o.bind) == "function" then\n'
+                 f'  o.bind("{spec}", "Mouthtype transform selection", "{command} transform-open")\n'
+                 f'else\n'
+                 f'  hl.bind("{spec}", hl.dsp.exec_cmd("{command} transform-open"))\n'
+                 f'end')
+        updated = base.rstrip() + "\n\n" + TRANSFORM_BEGIN + "\n" + block + "\n" + TRANSFORM_END + "\n"
+    else:
+        updated = base.rstrip() + "\n"
+    if updated == original:
+        return state()
+    backup = BINDINGS.with_name(f"bindings.lua.bak.mouthtype.{int(time.time())}")
+    shutil.copy2(BINDINGS, backup)
+    BINDINGS.write_text(updated, encoding="utf-8")
+    try:
+        subprocess.run(["hyprctl", "reload"], check=True, timeout=10, capture_output=True)
+        errors = subprocess.run(["hyprctl", "configerrors"], check=True, timeout=10,
+                                text=True, capture_output=True).stdout.strip()
+        if errors and errors.lower() not in {"no errors", "ok"}:
+            raise RuntimeError("Hyprland reported configuration errors")
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        shutil.copy2(backup, BINDINGS)
+        subprocess.run(["hyprctl", "reload"], timeout=10, capture_output=True)
+        raise RuntimeError("Transform shortcut change was reverted because Hyprland rejected it")
+    return state()
+
+
 def forget(identity):
     if len(identity) != 32 or any(c not in "0123456789abcdef" for c in identity):
         raise RuntimeError("Invalid recording ID")
@@ -809,8 +1206,7 @@ def forget(identity):
 
 def prune(rule, value):
     """Forget saved dictations by rule: keep-N newest, older-N days, or all. The active take is never touched."""
-    entries = recent_dictations(limit=None)
-    entries.sort(key=lambda e: e["mtime"])
+    entries = [{"id": name, "mtime": mtime} for name, mtime in reversed(take_rows())]
     try:
         number = int(value)
     except (TypeError, ValueError):
@@ -843,10 +1239,18 @@ def recover(identity):
     return {"id": identity, "text": result.stdout}
 
 
+def concealed_copy_command():
+    """wl-copy argv that keeps the text out of clipboard history; plain when wl-copy predates --sensitive."""
+    if str(DESKTOP) not in sys.path:
+        sys.path.insert(0, str(DESKTOP))
+    import concealed
+    return concealed.copy_command()
+
+
 def latest_transcript(identity=None):
     if identity is None:
-        identity = next((entry["id"] for entry in recent_dictations(limit=None)
-                         if entry["transcript"]), None)
+        # Newest by creation time, so retiring an old take's WAV cannot promote it.
+        identity = next((name for name, _ in take_rows() if (RECOVERY / name / "transcript.txt").is_file()), None)
     if identity is None:
         raise RuntimeError("No saved dictation is available")
     return recover(identity)["text"]
@@ -856,7 +1260,7 @@ def copy_transcript(identity=None):
     if shutil.which("wl-copy") is None:
         raise RuntimeError("wl-copy is not installed")
     text = latest_transcript(identity)
-    subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"),
+    subprocess.run(concealed_copy_command(), input=text.encode("utf-8"),
                    check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     result = state()
     result["message"] = "Copied to clipboard"
@@ -878,6 +1282,10 @@ def paste_last():
     outcome = target.submit(text, snapshot)
     if outcome == "recover_only":
         raise RuntimeError("That app is not allowed for typing")
+    if outcome == "clipboard_kept":
+        raise RuntimeError("Your clipboard holds an image or files, so nothing was pasted")
+    if outcome == "clipboard_failed":
+        raise RuntimeError("Couldn't put the text on the clipboard; nothing was pasted")
     if outcome == "unsupported_text":
         raise RuntimeError("This transcript contains line breaks or control characters")
     if outcome == "target_changed":
@@ -955,7 +1363,7 @@ def import_copy():
     if shutil.which("wl-copy") is None:
         raise RuntimeError("wl-copy is not installed")
     text = import_result()["text"]
-    subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"),
+    subprocess.run(concealed_copy_command(), input=text.encode("utf-8"),
                    check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     output = state()
     output["message"] = "Copied to clipboard"
@@ -986,32 +1394,242 @@ def import_save():
 VALID_ACTIONS = {
     "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
     "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
-    "set-autostart", "set-shortcut", "import-pick", "import-start", "import-cancel",
-    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup"
+    "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
+    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup", "cleanup-cancel", "set-plugin"
 ,
-    "forget", "prune"
+    "forget", "prune", "remove-leftovers", "doctor", "copy-diagnostics"
 }
+
+# The verbs the shortcut and the bar widget send; with the client gone they notify instead of failing silently.
+SHORTCUT_VERBS = {"start", "stop", "toggle", "cancel", "paste-last"}
+REMOVED_NOTICE = LOG.parent / "removed-notice"
+REMOVED_TEXT = "Mouthtype was removed. Open its bar menu to clean up."
+
+
+def notify_removed(now=None):
+    """One notify-send saying the client is gone, at most once a minute. Returns True when it sent one."""
+    now = time.time() if now is None else now
+    try:
+        if now - REMOVED_NOTICE.stat().st_mtime < 60:
+            return False
+    except OSError:
+        pass
+    command = shutil.which("notify-send")
+    if command is None:
+        return False
+    try:
+        REMOVED_NOTICE.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        REMOVED_NOTICE.touch()
+        os.utime(REMOVED_NOTICE, (now, now))
+        subprocess.run([command, "-a", "Mouthtype", "Mouthtype", REMOVED_TEXT], check=False, timeout=5,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return True
+
+
+def remove_leftovers():
+    """Run this plugin copy's own installer --uninstall, detached: it deletes this directory and restarts the shell."""
+    installer = PLUGIN_DIR / "install.py"
+    if not installer.is_file():
+        raise RuntimeError("The plugin installer is missing")
+    subprocess.Popen([sys.executable, str(installer), "--uninstall"], stdin=subprocess.DEVNULL,
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+    return {"message": "Removing the widget and shortcuts"}
+
+OS_RELEASE = Path("/etc/os-release")
+DOCTOR_TIMEOUT = 10
+# A developer note about untested hardware, not something a user can fix.
+DOCTOR_HIDDEN = {"physical_acceptance"}
+
+
+def doctor_checks():
+    """Every check from `mouthtype-linux doctor --json`, or one error row when the report can't be had.
+
+    Doctor exits 2 when a check fails but still prints the report, so the exit code is not the signal."""
+    try:
+        result = cli("doctor", "--json", timeout=DOCTOR_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return [{"name": "doctor", "status": "error", "detail": "The health check took longer than 10 seconds.",
+                 "action": "Run mouthtype-linux doctor in a terminal to see where it stops."}]
+    except OSError:
+        return [{"name": "doctor", "status": "error", "detail": "The Mouthtype client could not be started.",
+                 "action": "Reinstall Mouthtype, or run mouthtype-linux-setup."}]
+    try:
+        report = json.loads(result.stdout)
+        checks = report["checks"]
+        if not isinstance(checks, list):
+            raise ValueError("checks")
+    except (ValueError, KeyError, TypeError):
+        return [{"name": "doctor", "status": "error", "detail": "The health check gave an unreadable report.",
+                 "action": "Run mouthtype-linux doctor in a terminal to see the raw output."}]
+    rows = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        rows.append({"name": str(check.get("name", "")), "status": str(check.get("status", "")),
+                     "detail": str(check.get("detail", "")), "action": str(check.get("action", ""))})
+    return rows
+
+
+def doctor():
+    """The panel's Checks list: only what needs attention, plus whether everything passes."""
+    shown = [row for row in doctor_checks() if row["status"] != "ok" and row["name"] not in DOCTOR_HIDDEN]
+    return {"doctor": {"checks": shown, "pass": not shown}}
+
+
+def distro_name():
+    try:
+        for line in OS_RELEASE.read_text(encoding="utf-8").splitlines():
+            if line.startswith("PRETTY_NAME="):
+                return line.split("=", 1)[1].strip().strip('"') or "unknown"
+    except OSError:
+        pass
+    return "unknown"
+
+
+def hyprland_version():
+    try:
+        result = subprocess.run(["hyprctl", "version", "-j"], text=True, capture_output=True, timeout=3, check=False)
+        found = json.loads(result.stdout).get("version")
+        return found if isinstance(found, str) and found else "unknown"
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def diagnostics_text():
+    """A plain-text report for a bug report: versions, system and every check. No transcripts, and the home directory is written as ~."""
+    found = versions()
+    lines = ["Mouthtype diagnostics",
+             "App version: " + (found["app"] or "unknown"),
+             "Plugin version: " + (found["plugin"] or "unknown"),
+             "Distro: " + distro_name(),
+             "Hyprland: " + hyprland_version(),
+             "", "Checks:"]
+    for row in doctor_checks():
+        lines.append("  " + row["status"].upper() + " " + row["name"] + ": " + row["detail"])
+        if row["action"]:
+            lines.append("    " + row["action"])
+    home = str(HOME)
+    return "\n".join(lines).replace(home, "~") + "\n"
+
+
+def copy_diagnostics():
+    if shutil.which("wl-copy") is None:
+        raise RuntimeError("wl-copy is not installed")
+    subprocess.run(concealed_copy_command(), input=diagnostics_text().encode("utf-8"),
+                   check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"message": "Diagnostics copied to clipboard"}
+
+
+MODULE_PATTERN = re.compile(r"control_[a-z0-9_]+\.py")
+_module_commands = None
+
+
+def log_note(message):
+    """Best-effort line in the local control log; never lets logging break a command."""
+    try:
+        LOG.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        fd = os.open(LOG, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as log:
+            log.write(time.strftime("%Y-%m-%d %H:%M:%S ") + message + "\n")
+    except OSError:
+        pass
+
+
+def module_commands():
+    """Verbs contributed by sibling control_<name>.py modules, as {verb: function}.
+
+    A module exposes COMMANDS = {"verb": function}. The function takes the remaining command-line
+    arguments as strings and returns a JSON-serialisable dict, or raises RuntimeError, OSError or
+    ValueError with a message the panel can show. A verb cannot shadow a built-in action or a verb
+    from an earlier module (alphabetical). A module that fails to import is logged and skipped."""
+    global _module_commands
+    if _module_commands is not None:
+        return _module_commands
+    commands = {}
+    for path in sorted(PLUGIN_DIR.glob("control_*.py")):
+        if not MODULE_PATTERN.fullmatch(path.name) or path.is_symlink() or not path.is_file():
+            continue
+        try:
+            name = "mouthtype_" + path.stem
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            # dataclasses and typing look the module up by name while it executes.
+            sys.modules[name] = module
+            try:
+                spec.loader.exec_module(module)
+                table = module.COMMANDS
+                if not isinstance(table, dict):
+                    raise TypeError("COMMANDS must be a dict")
+            except BaseException:
+                sys.modules.pop(name, None)
+                raise
+        except Exception as error:
+            log_note(f"{path.name} was not loaded: {type(error).__name__}: {error}")
+            continue
+        for verb, function in table.items():
+            if not isinstance(verb, str) or not re.fullmatch(r"[a-z][a-z0-9-]*", verb) or not callable(function):
+                log_note(f"{path.name}: ignored invalid command {verb!r}")
+            elif verb in VALID_ACTIONS or verb in commands:
+                log_note(f"{path.name}: ignored command {verb!r}, already defined")
+            else:
+                commands[verb] = function
+    _module_commands = commands
+    return commands
+
+
+def available_actions():
+    return VALID_ACTIONS | set(module_commands())
+
+
+def run_module_command(verb, args):
+    function = module_commands()[verb]
+    import inspect
+    try:
+        inspect.signature(function).bind(*args)
+    except TypeError:
+        raise RuntimeError("Invalid control arguments")
+    return function(*args)
 
 
 def main():
+    if len(sys.argv) >= 2 and sys.argv[1] not in VALID_ACTIONS and sys.argv[1] in module_commands():
+        try:
+            print(json.dumps(run_module_command(sys.argv[1], sys.argv[2:])))
+            return 0
+        except (OSError, RuntimeError, ValueError, KeyError, subprocess.SubprocessError) as error:
+            print(json.dumps({"error": str(error)}))
+            return 1
     if len(sys.argv) < 2 or sys.argv[1] not in VALID_ACTIONS or (
         sys.argv[1] in {"recover", "transcribe", "set-sounds", "set-autostart", "import-start", "cleanup-setup", "forget"}
         and len(sys.argv) != 3
     ) or (sys.argv[1] == "prune" and len(sys.argv) != 4
-    ) or (sys.argv[1] == "set-shortcut" and len(sys.argv) not in {3, 4}
+    ) or (sys.argv[1] in {"set-shortcut", "set-transform-shortcut"} and len(sys.argv) not in {3, 4}
     ) or (sys.argv[1] == "copy" and len(sys.argv) not in {2, 3}) or (
         sys.argv[1] in {"set-config", "set-font"} and len(sys.argv) not in {4, 5}
     ) or (
-        sys.argv[1] == "set-pill" and len(sys.argv) != 4
+        sys.argv[1] in {"set-pill", "set-plugin"} and len(sys.argv) != 4
     ) or (sys.argv[1] in {"state", "start-service", "shutdown", "start", "stop", "cancel", "toggle", "paste-last",
-                          "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save"}
+                          "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save",
+                          "remove-leftovers", "doctor", "copy-diagnostics"}
           and len(sys.argv) != 2):
         print(json.dumps({"error": "Unknown control action"}))
         return 2
     try:
         action = sys.argv[1]
+        if action in SHORTCUT_VERBS and client_missing():
+            notify_removed()
+            print(json.dumps({"client": "missing", "error": "Mouthtype was removed"}))
+            return 1
         if action == "state":
             output = state()
+        elif action == "doctor":
+            output = doctor()
+        elif action == "copy-diagnostics":
+            output = copy_diagnostics()
+        elif action == "remove-leftovers":
+            output = remove_leftovers()
         elif action == "import-pick":
             output = import_pick()
         elif action == "import-start":
@@ -1042,6 +1660,10 @@ def main():
             output = prune(sys.argv[2], sys.argv[3])
         elif action == "cleanup-setup":
             output = cleanup_setup(sys.argv[2])
+        elif action == "cleanup-cancel" and len(sys.argv) == 2:
+            output = cleanup_cancel()
+        elif action == "set-plugin":
+            output = set_plugin(sys.argv[2], sys.argv[3])
         elif action == "set-pill":
             output = set_pill(sys.argv[2], sys.argv[3])
         elif action == "set-font":
@@ -1050,6 +1672,8 @@ def main():
             output = set_sounds(sys.argv[2])
         elif action == "set-autostart" and len(sys.argv) == 3:
             output = set_autostart(sys.argv[2])
+        elif action == "set-transform-shortcut":
+            output = set_transform_shortcut(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
         elif action == "set-shortcut":
             output = set_shortcut(sys.argv[2], sys.argv[3] if len(sys.argv) == 4 else None)
         elif len(sys.argv) == 2:

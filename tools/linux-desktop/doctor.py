@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -21,14 +22,35 @@ def runtime_available(python):
         return False
 
 
+def probe_llama_server(server, run=subprocess.run):
+    """Ask a llama-server for its version and accelerator devices. Loads no model. Returns (version, devices, problem)."""
+    try:
+        version = run([str(server), '--version'], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10, check=False)
+        devices = run([str(server), '--list-devices'], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=10, check=False)
+    except (OSError, subprocess.SubprocessError) as error:
+        return '', [], 'it did not run (' + type(error).__name__ + ')'
+    text = version.stdout + version.stderr
+    listing = devices.stdout + devices.stderr
+    if version.returncode or not text.strip():
+        return '', [], 'it exited with status ' + str(version.returncode) + ' on --version (missing shared libraries?)'
+    if devices.returncode or 'no backends are loaded' in listing.lower():
+        return text.strip().splitlines()[0], [], 'no compute backend loaded (the build has no CPU backend or cannot find its backend libraries)'
+    names = [line.strip() for line in listing.splitlines() if ':' in line and not line.lower().startswith('available')]
+    return text.strip().splitlines()[0], names, ''
+
+
 def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
-             runtime_check=None, service_check=None):
+             runtime_check=None, service_check=None, llama_probe=None, source_lookup=None, mute_check=None):
     from desktop import validate_config, request
     from proof import verify_artifacts
     from spellings import load_spellings
     from phrases import load_phrases
     which = which or shutil.which
     runtime_check = runtime_check or runtime_available
+    llama_probe = llama_probe or probe_llama_server
+    from microphones import list_sources, default_muted
+    source_lookup = source_lookup or list_sources
+    mute_check = mute_check or default_muted
     service_check = service_check or (lambda path: request(path, 'status'))
     checks = []
 
@@ -54,6 +76,25 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
     capture = which('pw-record') is not None
     add('capture', 'ok' if capture else 'error', 'PipeWire capture helper is available.' if capture else 'pw-record is missing.',
         '' if capture else 'Install PipeWire audio tools using the normal distro package manager.')
+    if capture:
+        try:
+            sources = source_lookup()
+        except OSError:
+            sources = None
+        target = (config or {}).get('capture_target')
+        if sources is None:
+            add('microphone', 'warning', 'PipeWire could not list microphones, so none was checked.',
+                'Check that pipewire and wireplumber are running (systemctl --user status pipewire wireplumber).')
+        elif not sources:
+            add('microphone', 'error', 'No microphone is available to PipeWire.',
+                'Plug in or enable a microphone, then check it with: wpctl status')
+        elif target and target not in [item['name'] for item in sources]:
+            add('microphone', 'warning', 'The configured microphone ' + target + ' is not connected, so recording uses the default one.',
+                'Plug it back in, or choose a microphone in Settings, General.')
+        elif not target and mute_check() is True:
+            add('microphone', 'warning', 'The default microphone is muted.', 'Unmute it with: wpctl set-mute @DEFAULT_AUDIO_SOURCE@ 0')
+        else:
+            add('microphone', 'ok', 'Microphone found: ' + (target or next((item['description'] for item in sources if item['default']), sources[0]['description'])) + '. Nothing was recorded.')
     if config is not None:
         valid_python = runtime_check(config.get('python', sys.executable))
         add('runtime', 'ok' if valid_python else 'error',
@@ -82,6 +123,10 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
             clipboard = which('wl-paste') is not None
             add('phrase_clipboard', 'ok' if clipboard else 'error', 'Clipboard helper availability checked; clipboard was not read.',
                 '' if clipboard else 'Install wl-clipboard using normal package policy, or disable phrase_clipboard.')
+        hyprland = which('hyprctl') is not None
+        add('hyprland', 'ok' if hyprland else 'warning',
+            'hyprctl is available for window-aware delivery.' if hyprland else 'hyprctl is missing, so the active window cannot be identified.',
+            '' if hyprland else 'Recovery-only delivery still works. For paste or type delivery run this on Hyprland (Omarchy ships it).')
         delivery = config['delivery']['mode']
         helpers = ('hyprctl', 'wtype') if delivery == 'type' else ('hyprctl', 'wtype', 'wl-copy', 'wl-paste')
         available = delivery == 'recover' or (config['delivery'].get('allow_unknown_secure_field') is True
@@ -102,6 +147,35 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
             except (OSError, ValueError, TypeError, KeyError):
                 add('cleanup_model', 'error', 'The ' + config['cleanup'] + ' cleanup model is not prepared or its files changed.',
                     'Run tools/linux-desktop/setup_cleanup.py --destination PATH --level ' + config['cleanup'] + ', or choose off or basic cleanup.')
+        configured = None
+        if config['cleanup'] in ('fast', 'thorough'):
+            try:
+                configured = json.loads(relative(config['cleanup_engine']).read_text())['engines'][config['cleanup']]['server']
+            except (OSError, ValueError, TypeError, KeyError):
+                configured = None
+        server = configured or which('llama-server') or next(
+            (str(path) for path in (Path(config_path).resolve().parent.parent / 'cleanup-candidate/build/llama.cpp/build-cpu/bin/llama-server',)
+             if path.is_file()), None)
+        if server is None:
+            add('llama_server', 'warning', 'llama-server is not installed, so AI cleanup (Fast and Thorough) is off. Basic cleanup works without it.',
+                'Optional: python3 tools/linux-desktop/setup_cleanup.py --destination "$HOME/.local/share/mouthtype/cleanup-candidate" '
+                '(clones and builds the pinned llama.cpp for the CPU; about 1 GB of disk and 10 to 30 minutes). '
+                'Arch and Debian packages exist but are not the pinned revision, which the client requires.')
+        else:
+            version, devices, problem = llama_probe(server)
+            from setup_cleanup import PINS as cleanup_pins
+            pinned = cleanup_pins['llama']['revision']
+            found = re.findall(r'\b[0-9a-f]{7,40}\b', version)
+            if problem:
+                add('llama_server', 'error' if configured else 'warning', 'llama-server at ' + str(server) + ' is not usable: ' + problem + '.',
+                    'Rebuild it with tools/linux-desktop/setup_cleanup.py, or remove the cleanup setting from linux.json.')
+            elif not any(pinned.startswith(item) for item in found):
+                add('llama_server', 'warning', 'llama-server at ' + str(server) + ' runs (' + version + ') but is not the pinned revision ' +
+                    pinned[:9] + ', which the client requires; backend: ' + (', '.join(devices) or 'CPU') + '.',
+                    'Build the pinned revision with tools/linux-desktop/setup_cleanup.py; a distro llama.cpp is rejected at load time.')
+            else:
+                add('llama_server', 'ok', 'llama-server at ' + str(server) + ' runs (' + version + '), pinned revision; backend: ' +
+                    (', '.join(devices) or 'CPU') + '. No model was loaded.')
         decoder = all(which(name) is not None for name in ('ffprobe', 'ffmpeg'))
         add('file_transcription', 'ok' if decoder else 'warning',
             'Audio file decoder helpers checked; no file was decoded.',
@@ -110,6 +184,9 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
             notifications = which('notify-send') is not None
             add('notifications', 'ok' if notifications else 'warning', 'Notification helper checked; display is unverified.',
                 '' if notifications else 'Optional: install libnotify or disable notifications in linux.json.')
+    add('python', 'ok' if sys.version_info >= (3, 10) else 'error',
+        'Python ' + '.'.join(map(str, sys.version_info[:3])) + ' runs this client.',
+        '' if sys.version_info >= (3, 10) else 'Install Python 3.10 or newer.')
     try:
         status = service_check(Path(runtime) / 'session.sock')
         if not isinstance(status, dict) or 'state' not in status:
@@ -117,7 +194,8 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
         add('service', 'ok', 'Existing session service answered status. No recording was started.')
     except (OSError, ValueError):
         add('service', 'warning', 'Session service is not answering.',
-            'Start mouthtype-linux with the same --config PATH and serve command when ready.')
+            'Start it with: systemctl --user start mouthtype-linux (after the Omarchy plugin install enables it), '
+            'or run mouthtype-linux serve in a terminal.')
     add('physical_acceptance', 'warning', 'Microphone, model inference and actual compositor delivery were not tested.',
         'Run the coordinated Arch/Omarchy acceptance checks separately.')
     return dict(ready=not any(item['status'] == 'error' for item in checks), physical_tested=False, checks=checks)

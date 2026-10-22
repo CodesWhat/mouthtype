@@ -340,17 +340,146 @@ def whitespace(text, protected=None):
     return ''.join(output)
 
 
+_SLASH_JOINERS = {'dash': '-', 'hyphen': '-', 'underscore': '_'}
+_SLASH_FUNCTION_WORDS = frozenset((
+    'a', 'an', 'and', 'or', 'the', 'of', 'to', 'in', 'is', 'it', 'as', 'at', 'on', 'for', 'but', 'if', 'so',
+    'we', 'you', 'i', 'that', 'this', 'then', 'not', 'with', 'by', 'be'))
+_SLASH_MODIFIERS = frozenset((
+    'this', 'that', 'these', 'those', 'my', 'your', 'our', 'its', 'their', 'his', 'her',
+    'each', 'every', 'any', 'no', 'back', 'double', 'trailing', 'leading', 'forward'))
+_SLASH_DETERMINERS = frozenset(('the', 'a', 'an'))
+_SLASH_NOUN_FOLLOWERS = frozenset((
+    'key', 'keys', 'character', 'characters', 'symbol', 'symbols', 'sign', 'signs', 'mark', 'marks',
+    'separator', 'separators', 'delimiter', 'delimiters', 'button'))
+
+
+def _slash_shields(chars, protected):
+    shielded = [False] * len(chars)
+    offsets = [0]
+    for char in chars:
+        offsets.append(offsets[-1] + len(char))
+    text = ''.join(chars)
+    for phrase in protected or ():
+        parts = phrase.split() if isinstance(phrase, str) else []
+        if not parts:
+            continue
+        pattern = r'(?<!\w)' + r'\s+'.join(re.escape(part) for part in parts) + r'(?!\w)'
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            for index in range(bisect_right(offsets, match.start()) - 1, bisect_left(offsets, match.end())):
+                shielded[index] = True
+    quoted = False
+    for index, char in enumerate(chars):
+        if char == '`':
+            quoted = not quoted
+            shielded[index] = True
+        if quoted:
+            shielded[index] = True
+    return shielded
+
+
+def slash_commands(text, protected=None):
+    """Turns a spoken slash command into a typed one: "slash research" becomes "/research". Port of Core's
+    SlashCommands. `protected` is a list of phrases to leave as spoken. The caller runs it only for a coding target."""
+    chars = list(graphemes(text))
+    if not chars:
+        return text
+    words = _words(chars)
+    if not any(word[2] == 'slash' for word in words):
+        return text
+    shielded = _slash_shields(chars, protected)
+
+    def joined(a, b):
+        return b[0] > a[1] and _only_spaces(chars, a[1], b[0])
+
+    def plain(word):
+        return all(_word(char) for char in chars[word[0]:word[1]])
+
+    spans, i = [], 0
+    while i < len(words):
+        if words[i][2] != 'slash':
+            i += 1
+            continue
+        start = words[i][0]
+        if i > 0 and words[i - 1][2] == 'forward' and joined(words[i - 1], words[i]):
+            start = words[i - 1][0]
+        nxt = i + 1
+        if not (nxt < len(words) and joined(words[i], words[nxt]) and plain(words[nxt]) and
+                chars[words[nxt][0]][0].isalpha() and words[nxt][2] not in _SLASH_FUNCTION_WORDS and
+                words[nxt][2] not in _SLASH_NOUN_FOLLOWERS):
+            i += 1
+            continue
+        forward = start != words[i][0]
+        head = i - 1 if forward else i
+        blockers = _SLASH_MODIFIERS | _SLASH_DETERMINERS if forward else _SLASH_MODIFIERS
+        if head > 0 and joined(words[head - 1], words[head]) and words[head - 1][2] in blockers:
+            i += 1
+            continue
+        command, last = '/' + words[nxt][2], nxt
+        while (last + 2 < len(words) and words[last + 1][2] in _SLASH_JOINERS and
+               joined(words[last], words[last + 1]) and joined(words[last + 1], words[last + 2]) and
+               plain(words[last + 2]) and (chars[words[last + 2][0]][0].isalpha() or
+                                           chars[words[last + 2][0]][0].isnumeric())):
+            command += _SLASH_JOINERS[words[last + 1][2]] + words[last + 2][2]
+            last += 2
+        end = words[last][1]
+        i = last + 1
+        # A path being dictated ("slash src/app") is not a command name.
+        if end < len(chars) and chars[end] == '/':
+            continue
+        if start > 0 and chars[start - 1] == '/':
+            continue
+        if any(shielded[start:end]):
+            continue
+        span_end = end
+        if all(char[0].isspace() for char in chars[:start]):
+            tail = end
+            while tail < len(chars) and chars[tail] in '.!?,':
+                tail += 1
+            if all(char[0].isspace() for char in chars[tail:]):
+                span_end = tail
+        spans.append((start, span_end, command))
+    if not spans:
+        return text
+    output, cursor = [], 0
+    for start, end, replacement in spans:
+        output.extend(chars[cursor:start])
+        output.append(replacement)
+        cursor = end
+    output.extend(chars[cursor:])
+    return ''.join(output)
+
+
 class BasicCleanup:
-    def __init__(self, mode='off'):
+    def __init__(self, mode='off', styles=None, slash_commands=True):
         if not isinstance(mode, str) or mode not in ('off', 'basic'):
             raise ValueError('cleanup must be off or basic')
         self.mode = mode
+        self.slash_commands = slash_commands is not False
+        if styles is not None:
+            import styles as style_contexts
+            styles = style_contexts.validate(styles)
+            if style_contexts.to_config(styles) is None:
+                styles = None
+        self.styles = styles
 
-    def apply(self, text):
-        if self.mode == 'off':
+    def apply(self, text, target=None):
+        """Basic cleanup. `target` is the window snapshot captured at record start; with a `styles` block it picks the
+        context whose cleanup level and tone apply (see styles.py). Without one, behavior is unchanged."""
+        mode, tone_name = self.mode, None
+        if self.styles is not None:
+            import styles as style_contexts
+            choice = style_contexts.resolve(self.styles, target.get('class') if isinstance(target, dict) else None)
+            tone_name = choice['tone']
+            if choice['cleanup'] is not None:
+                mode = 'off' if choice['cleanup'] == 'off' else 'basic'
+        if mode == 'off':
             return text
         if len(text.encode('utf-8')) > MAX_TEXT_BYTES:
             raise ValueError('Cleanup text exceeds its input limit')
+        if self.slash_commands and isinstance(target, dict):
+            import styles as style_contexts
+            if style_contexts.is_coding_class(target.get('class')):
+                text = slash_commands(text)
         chars = list(graphemes(text))
         text = spoken_commands(text, _literal_mask(chars))
         chars = list(graphemes(text))
@@ -364,6 +493,9 @@ class BasicCleanup:
                     text = _rewrite(chars, [(word[0], word[1], word[0], word[1], capital)])
         chars = list(graphemes(text))
         result = whitespace(text, _literal_mask(chars))
+        if tone_name:
+            import tone
+            result = tone.apply(result, tone_name)
         if len(result.encode('utf-8')) > MAX_TEXT_BYTES:
             raise ValueError('Cleanup text exceeds its output limit')
         return result

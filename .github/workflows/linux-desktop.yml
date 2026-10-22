@@ -5,16 +5,22 @@ on:
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"
+      - "tools/omarchy-plugin/**"
+      - "tools/qml-render/**"
       - "scripts/prepare-linux-arch.py"
       - "packaging/arch/**"
+      - "packaging/debian/**"
       - ".github/workflows/linux-desktop.yml"
   push:
-    branches: [main, 'dev/**']
+    branches: [main, 'dev/**', feat/linux-parity]
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"
+      - "tools/omarchy-plugin/**"
+      - "tools/qml-render/**"
       - "scripts/prepare-linux-arch.py"
       - "packaging/arch/**"
+      - "packaging/debian/**"
       - ".github/workflows/linux-desktop.yml"
   workflow_dispatch:
 
@@ -115,6 +121,8 @@ jobs:
             cp "/home/mouthtype-ci/arch-bundle/$name" linux-desktop-evidence/arch-package/
           done
           timeout --kill-after=5s 180s runuser -u mouthtype-ci -- bash -c 'cd /home/mouthtype-ci/arch-bundle && makepkg --cleanbuild --check' > linux-desktop-evidence/arch-package/build.log 2>&1
+      - name: Check AUR .SRCINFO is current as ordinary user
+        run: timeout --kill-after=5s 60s runuser -u mouthtype-ci -- bash /home/mouthtype-ci/package-source/packaging/arch/aur/check-srcinfo.sh
       - name: Install and check the actual test package without policy changes
         run: |
           set -- /home/mouthtype-ci/arch-bundle/mouthtype-linux-*.pkg.tar.zst
@@ -188,5 +196,85 @@ jobs:
         with:
           name: linux-desktop-arch-components
           path: linux-desktop-evidence/
+          retention-days: 14
+          if-no-files-found: warn
+
+  debian-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      # Official Ubuntu 24.04 index, resolved 2026-10-21.
+      image: ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+      options: --init
+    steps:
+      - name: Install build and lint prerequisites
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates python3 dpkg-dev lintian
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the .deb
+        run: bash packaging/debian/build-deb.sh --output "$RUNNER_TEMP/debs" --version 0.0.0~ci-1
+      - name: Lint the .deb
+        run: lintian --pedantic --fail-on error,warning "$RUNNER_TEMP"/debs/mouthtype-linux_*.deb
+      - name: Install, check, remove and purge on Ubuntu 24.04
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: bash packaging/debian/test-install.sh "$RUNNER_TEMP"/debs/mouthtype-linux_0.0.0~ci-1_amd64.deb
+      - name: Signed apt repository flow with a throwaway key
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: bash packaging/debian/test-apt-repo.sh "$GITHUB_WORKSPACE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-debian-package
+          path: ${{ runner.temp }}/debs/*.deb
+          retention-days: 14
+          if-no-files-found: error
+
+  qml-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: archlinux:base-20261011.0.609700@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+      options: --init
+    steps:
+      - name: Install signed Arch render prerequisites
+        run: |
+          pacman -Syu --noconfirm --needed git qt6-declarative qt6-svg ttf-dejavu perl
+          useradd --create-home --shell /bin/bash mouthtype-ci
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record actual Arch package and host versions
+        run: |
+          mkdir qml-render-evidence
+          chown mouthtype-ci:mouthtype-ci qml-render-evidence
+          {
+            cat /etc/os-release
+            uname -srm
+            pacman -Q qt6-base qt6-declarative qt6-svg ttf-dejavu perl
+          } > qml-render-evidence/environment.txt
+      - name: Render QML cases offscreen in light and dark
+        run: timeout --kill-after=5s 600s runuser -u mouthtype-ci -- bash tools/qml-render/run.sh "$GITHUB_WORKSPACE/qml-render-evidence"
+      - name: Verify and clean remaining owned test processes
+        if: always()
+        run: |
+          if id mouthtype-ci >/dev/null 2>&1; then
+            if pgrep -a -u mouthtype-ci; then
+              pkill -TERM -u mouthtype-ci || true
+              sleep 1
+              pkill -KILL -u mouthtype-ci || true
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: linux-qml-renders
+          path: qml-render-evidence/
           retention-days: 14
           if-no-files-found: warn

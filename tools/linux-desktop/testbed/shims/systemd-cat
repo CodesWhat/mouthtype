@@ -1,0 +1,12 @@
+#!/bin/bash
+# Testbed shim: there is no journald here. Omarchy's launcher runs `systemd-cat -t TAG -- command`.
+while (( $# )); do
+  case "$1" in
+    -t|--identifier|-p|--priority) shift 2 ;;
+    --identifier=*|--priority=*|--level-prefix=*) shift ;;
+    --) shift; break ;;
+    -*) shift ;;
+    *) break ;;
+  esac
+done
+exec "$@"

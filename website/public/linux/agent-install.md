@@ -32,9 +32,17 @@ Check: `tools/linux-desktop/install.py`, `tools/linux-desktop/setup_speech.py` a
 python3 tools/linux-desktop/install.py --prefix "$HOME/.local"
 ```
 
-Installs `~/.local/bin/mouthtype-linux` and its payload under `~/.local/lib/mouthtype-linux`. It refuses to overwrite an existing installation; to upgrade, move the old `~/.local/lib/mouthtype-linux` and `~/.local/bin/mouthtype-linux` aside first. Nothing else on the system changes.
+Installs `~/.local/bin/mouthtype-linux` and its payload under `~/.local/lib/mouthtype-linux`. It refuses to overwrite an existing installation and says so; to upgrade, re-run with `--update`. `--uninstall` removes both again. Nothing else on the system changes.
 
 Check: `mouthtype-linux capabilities` prints JSON with `"interface": 1` and a `file_transcription` entry.
+
+## Shortcut: steps 4 and 5 in one command
+
+```bash
+python3 tools/linux-desktop/setup.py
+```
+
+Checks the required helpers and that the Omarchy shell config exists (before any download), prepares the speech model if it is not prepared yet, runs `doctor`, then installs or updates the Omarchy plugin with the login service. Add `--shortcut toggle` (Super+Alt+M) or `--shortcut hold` (F10) to bind a dictation key too, `--no-autostart` to skip the login service, `--skip-plugin` to prepare speech only. `--no-transform-shortcut` skips the Super+Shift+T Transform Selection key that install otherwise binds (a key Hyprland already uses is refused, not overwritten). On a terminal it also offers AI cleanup with size and time estimates; `--cleanup fast|thorough|skip` answers that up front. If it succeeds, jump to the checks at the end of step 5, then step 6. With the Arch package installed none of this is needed by hand: the first graphical login runs the same steps and reports with notifications. Steps 4 and 5 below are the same work done one piece at a time.
 
 ## 4. Speech model
 
@@ -44,7 +52,7 @@ python3 tools/linux-desktop/setup_speech.py --destination "$HOME/.local/share/mo
 
 Downloads the pinned Parakeet model (about 465 MiB), verifies its SHA-256, creates a dedicated Python environment and writes `linux.json` and `engines.json` in that directory. The destination must be new. Allow up to an hour on a slow connection.
 
-Check: the command prints the foreground launch command and exits 0, and
+The command prints four numbered stages and, on a terminal, a download progress bar. Unpacking the model takes a few minutes on a slow CPU. Check: the command prints the foreground launch command and exits 0, and
 
 ```bash
 mouthtype-linux --config "$HOME/.local/share/mouthtype/speech-candidate/linux.json" doctor
@@ -58,7 +66,7 @@ reports `checks passed` (a stopped service is a warning, not an error).
 python3 tools/omarchy-plugin/install.py
 ```
 
-Copies the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype`, adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with the graphical session (after the Wayland session is up, not at bare login) and is restarted if it stops, starts it now, and restarts the Omarchy shell. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
+Installs the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype` through Omarchy's `omarchy plugin add` when it exists (otherwise by copying the files; `--copy` forces that), adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with the graphical session (after the Wayland session is up, not at bare login) and is restarted if it stops, starts it now, and restarts the Omarchy shell. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
 
 If a `mouthtype-linux.service` user unit already exists that the installer didn't create, it stops with "An existing Mouthtype user service was not changed"; remove or rename that unit and run it again.
 
@@ -107,13 +115,11 @@ Check: `mouthtype-linux --config "$HOME/.local/share/mouthtype/speech-candidate/
 ## Removing
 
 ```bash
-systemctl --user disable --now mouthtype-linux.service
-rm -rf ~/.config/omarchy/plugins/dstahl.mouthtype ~/.local/lib/mouthtype-linux ~/.local/bin/mouthtype-linux
-rm -f ~/.config/systemd/user/mouthtype-linux.service ~/.config/mouthtype/omarchy-plugin.json
-systemctl --user daemon-reload
+python3 tools/linux-desktop/setup.py --uninstall      # add --purge to delete models and recordings too
+python3 tools/linux-desktop/install.py --prefix "$HOME/.local" --uninstall
 ```
 
-Then remove the `dstahl.mouthtype` entry from `~/.config/omarchy/shell.json` and the marked Mouthtype block from `~/.config/hypr/bindings.lua`, and restart the shell with `omarchy-restart-shell`. Models and recordings live under `~/.local/share/mouthtype` and `~/.local/state/mouthtype`; delete them only if you no longer want them.
+The first command stops and disables the login service, removes the plugin, its bar entry in `~/.config/omarchy/shell.json`, the marked Mouthtype block in `~/.config/hypr/bindings.lua` and the plugin settings file (each edited file is backed up first), and restarts the shell. The second removes the client. Models and recordings live under `~/.local/share/mouthtype` and `~/.local/state/mouthtype` and are kept unless you pass `--purge`.
 
 ## Limits worth knowing
 

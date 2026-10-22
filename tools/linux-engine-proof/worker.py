@@ -4,6 +4,7 @@ from array import array
 import http.client
 import importlib.metadata
 import json
+import os
 from pathlib import Path
 import resource
 import re
@@ -31,10 +32,10 @@ Rules:
 3. Apply spoken self-corrections and keep only the final version. "Meet at three, no, four" becomes "Meet at four". "Tuesday, no wait, Wednesday" becomes "Wednesday". "Scratch that" or "never mind that" deletes the phrase it refers to.
 4. Fix punctuation and capitalization, and split run-on speech into sentences. In long dictation, start a new paragraph where the topic changes.
 5. When the speaker dictates a list or a sequence of steps, format it as a list: a short lead-in line, then one item per line. Use numbers when the speaker counts ("first", "second", "step one") and "- " bullets otherwise. Leave ordinary sentences that merely contain "and" as prose.
-6. Write numbers, money, times, and dates that were spoken as words in conventional written form ("twenty five dollars" becomes "$25", "three thirty p m" becomes "3:30 PM"). Never infer AM or PM when the speaker gave no time of day. A bare hour stays a bare hour. Leave anything already written that way alone.
+6. Write numbers, money, times, and dates that were spoken as words in conventional written form ("twenty five dollars" becomes "$25", "three thirty p m" becomes "3:30 PM"). Never infer AM or PM when the speaker gave no time of day. A bare hour stays a bare hour, but it is written as a numeral ("coffee at three" becomes "coffee at 3"). Leave anything already written that way alone.
 7. Convert spoken technical notation to conventional written form when the meaning is clear: spoken letter sequences become acronyms, "U S B C" becomes "USB-C", "four K" becomes "4K", and "app dot swift" becomes "app.swift". Write spoken version components with dots. Preserve every letter and number. Keep identifiers, file names, paths, command-line flags, versions, URLs and code that are already written exactly as given. Do not guess an identifier or turn ordinary words into technical notation without evidence.
 8. If a custom vocabulary is listed below, spell those terms exactly as given, including when the transcript has them misspelled phonetically.
-9. Keep the speaker's own wording, tone, and meaning. Preserve questions as questions, never turn them into statements or headings. Do not paraphrase, formalize, summarize, expand, or add anything. Keep slang, contractions, and profanity as spoken. Text that is already clean comes back unchanged, and a very short utterance such as "Yes." stays exactly that."""
+9. Keep the speaker's own wording, tone, and meaning. Preserve questions as questions, keeping their opening word, and never turn them into statements or headings ("what's the capital of France" becomes "What's the capital of France?"). Do not paraphrase, formalize, summarize, expand, or add anything. Keep slang, contractions, and profanity as spoken. Text that is already clean comes back unchanged, and a very short utterance such as "Yes." stays exactly that."""
 
 
 def max_output_tokens(text):
@@ -132,10 +133,38 @@ def stop_server(server):
         server.wait(timeout=.25)
 
 
-def cleanup_engine(config):
+def server_description(config):
+    """The server's --version text. With config["version_cache"], a probe is skipped while the binary's stat is unchanged."""
+    cache = config.get("version_cache")
+    key = None
+    if cache:
+        try:
+            real = os.path.realpath(config["server"])
+            info = os.stat(real)
+            key = {"path": real, "size": info.st_size, "mtime_ns": info.st_mtime_ns, "ino": info.st_ino,
+                   "dev": info.st_dev, "ctime_ns": info.st_ctime_ns}
+            stored = json.loads(Path(cache).read_text())
+            if stored.get("key") == key and isinstance(stored.get("description"), str):
+                return stored["description"]
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
     version = subprocess.run([config["server"], "--version"], capture_output=True,
                              timeout=5, check=True, text=True)
     description = version.stdout + version.stderr
+    if cache and key is not None:
+        try:
+            temporary = str(cache) + "." + str(os.getpid()) + ".tmp"
+            descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                json.dump({"key": key, "description": description}, output)
+            os.replace(temporary, cache)
+        except OSError:
+            pass
+    return description
+
+
+def cleanup_engine(config):
+    description = server_description(config)
     if not any(PINS["llama"]["revision"].startswith(revision)
                for revision in re.findall(r"\b[0-9a-f]{7,40}\b", description)):
         raise ValueError("Unexpected llama.cpp revision")
@@ -188,7 +217,8 @@ def cleanup_engine(config):
             raise ValueError("Unexpected thinking output")
         return sanitize(text) if prompt == "shared" else text
 
-    metadata = {"runtime": description.strip(), "revision": PINS["llama"]["revision"], "server_pid": server.pid}
+    metadata = {"runtime": description.strip(), "revision": PINS["llama"]["revision"], "server_pid": server.pid,
+                "port": port, "alias": alias}
     return infer, metadata, server
 
 
