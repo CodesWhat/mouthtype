@@ -1199,6 +1199,14 @@ def recover(identity):
     return {"id": identity, "text": result.stdout}
 
 
+def concealed_copy_command():
+    """wl-copy argv that keeps the text out of clipboard history; plain when wl-copy predates --sensitive."""
+    if str(DESKTOP) not in sys.path:
+        sys.path.insert(0, str(DESKTOP))
+    import concealed
+    return concealed.copy_command()
+
+
 def latest_transcript(identity=None):
     if identity is None:
         # Newest by creation time, so retiring an old take's WAV cannot promote it.
@@ -1212,7 +1220,7 @@ def copy_transcript(identity=None):
     if shutil.which("wl-copy") is None:
         raise RuntimeError("wl-copy is not installed")
     text = latest_transcript(identity)
-    subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"),
+    subprocess.run(concealed_copy_command(), input=text.encode("utf-8"),
                    check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     result = state()
     result["message"] = "Copied to clipboard"
@@ -1311,7 +1319,7 @@ def import_copy():
     if shutil.which("wl-copy") is None:
         raise RuntimeError("wl-copy is not installed")
     text = import_result()["text"]
-    subprocess.run(["wl-copy", "--type", "text/plain;charset=utf-8"], input=text.encode("utf-8"),
+    subprocess.run(concealed_copy_command(), input=text.encode("utf-8"),
                    check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     output = state()
     output["message"] = "Copied to clipboard"
