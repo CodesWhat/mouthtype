@@ -1,3 +1,4 @@
+import ast
 import importlib.util
 from pathlib import Path
 import shutil
@@ -229,6 +230,40 @@ class InstallTests(unittest.TestCase):
             self.assertIn('mouthtype-linux/tools/linux-desktop/transform_worker.py', names)
             self.assertIn('mouthtype-linux/tools/linux-desktop/test_transform.py', names)
             self.assertNotIn('mouthtype-linux/tools/linux-desktop/test_arch_bundle.py', names)
+
+    def test_every_module_the_payload_imports_is_shipped(self):
+        """A runtime import of a file install.py doesn't ship fails only on an installed machine, so walk the imports."""
+        desktop = ROOT / 'tools/linux-desktop'
+        shipped = set(installer.payload_files(ROOT))
+        for name in ('portal.py', 'delivery_portal.py', 'atspi_target.py', 'shortcuts_portal.py', 'concealed.py',
+                     'backends/__init__.py', 'testing/__init__.py', 'testing/fake_portal.py'):
+            self.assertIn('tools/linux-desktop/' + name, shipped, name)
+        missing = set()
+        for name in sorted(shipped):
+            if not name.startswith('tools/linux-desktop/') or not name.endswith('.py'):
+                continue
+            tree = ast.parse((ROOT / name).read_text(), name)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    modules = [alias.name for alias in node.names]
+                elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module:
+                    modules = [node.module] + [node.module + '.' + alias.name for alias in node.names]
+                else:
+                    continue
+                for module in modules:
+                    relative = module.replace('.', '/')
+                    for candidate in (relative + '.py', relative + '/__init__.py'):
+                        if (desktop / candidate).is_file() and not candidate.startswith('vendor/'):
+                            if 'tools/linux-desktop/' + candidate not in shipped:
+                                missing.add((name, candidate))
+        self.assertEqual(sorted(missing), [])
+
+    def test_packaging_installs_through_install_py(self):
+        if not (ROOT / 'packaging').is_dir():
+            self.skipTest('the shipped payload has no packaging directory')
+        for script in ('packaging/debian/build-deb.sh', 'packaging/rpm/mouthtype-linux.spec.in',
+                       'packaging/arch/aur/PKGBUILD', 'packaging/arch/PKGBUILD.in'):
+            self.assertIn('tools/linux-desktop/install.py', (ROOT / script).read_text(), script)
 
     def test_package_has_runtime_license_and_no_private_or_model_files(self):
         with tempfile.TemporaryDirectory() as temp:

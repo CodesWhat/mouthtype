@@ -39,14 +39,20 @@ FILES = (['LICENSE', 'THIRD_PARTY_NOTICES.md'] +
 # Modules the daemon loads at runtime (cli_*.py, library.py, stats.py, transform_worker.py, ...) and their
 # test_*.py files are found by scanning, so a new slice ships without editing the lists above. Tests ship on
 # purpose: the Arch package runs them in check() and the install tests run them from the payload. Dev
-# scripts and tests that need the repository root (test_arch_bundle.py) stay out.
+# scripts and tests that need the repository root (test_arch_bundle.py) stay out. Python packages beside them
+# (backends/, testing/) are scanned the same way, so a new backend or test helper ships without a list edit.
 SCAN_EXCLUDED = ('check_*.py', 'verify_*.py', 'conftest.py', 'test_arch_bundle.py')
+SCAN_PACKAGES_SKIPPED = ('vendor',)
 
 
 def payload_files(source):
     source = Path(source)
-    found = [name for name in sorted(path.name for path in (source / 'tools/linux-desktop').glob('*.py'))
+    root = source / 'tools/linux-desktop'
+    found = [name for name in sorted(path.name for path in root.glob('*.py'))
              if not any(fnmatch.fnmatchcase(name, pattern) for pattern in SCAN_EXCLUDED)]
+    for package in sorted(path.parent for path in root.glob('*/__init__.py') if path.parent.name not in SCAN_PACKAGES_SKIPPED):
+        found += [package.name + '/' + path.name for path in sorted(package.glob('*.py'))
+                  if not any(fnmatch.fnmatchcase(path.name, pattern) for pattern in SCAN_EXCLUDED)]
     return FILES + ['tools/linux-desktop/' + name for name in found
                     if 'tools/linux-desktop/' + name not in FILES]
 
