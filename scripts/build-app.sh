@@ -25,6 +25,12 @@
 #   MOUTHTYPE_SIGN_IDENTITY   signing identity (default: the keychain's Developer ID)
 #   MOUTHTYPE_TIMESTAMP=none  skip the secure timestamp (local builds, offline)
 #   MOUTHTYPE_BUILD_DIR       output directory (default: build)
+#   MOUTHTYPE_UNSIGNED=1      assemble the app but skip every codesign step (used by
+#                             scripts/verify-repeatable-build.sh; never ship this output)
+#
+# The build maps the checkout path to /src in compiler output and pins the root package's
+# resource-bundle identifier, so the unsigned contents do not depend on the checkout's
+# directory name. See docs/REPEATABLE-BUILD.md.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -43,9 +49,12 @@ APP="$OUT/Mouthtype.app"
 IDENTITY="${MOUTHTYPE_SIGN_IDENTITY:-$(security find-identity -v -p codesigning \
     | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"
 
+# Keep the checkout path out of the binaries (C++ __FILE__ in Cmlx, Swift debug paths).
+PATH_MAP_FLAGS=(-Xcc "-ffile-prefix-map=$PWD=/src" -Xswiftc -file-prefix-map -Xswiftc "$PWD=/src")
+
 echo "→ building Mouthtype $VERSION (release, arm64)"
-swift build -c release --arch arm64 --jobs 4 --product Mouthtype
-swift build -c release --arch arm64 --jobs 4 --product mouthtype-fn-guard
+swift build -c release --arch arm64 --jobs 4 "${PATH_MAP_FLAGS[@]}" --product Mouthtype
+swift build -c release --arch arm64 --jobs 4 "${PATH_MAP_FLAGS[@]}" --product mouthtype-fn-guard
 BIN_DIR="$(swift build -c release --arch arm64 --show-bin-path)"
 
 echo "→ assembling $APP"
@@ -88,11 +97,30 @@ BUNDLES=()
 for bundle in "$BIN_DIR"/*.bundle; do
     case "$(basename "$bundle")" in *mouthtype-bench*) continue ;; esac
     ditto "$bundle" "$APP/Contents/Resources/$(basename "$bundle")"
+    # SwiftPM names the root package's bundle id after the checkout directory. Pin it to what a
+    # checkout named "mouthtype" produces so the shipped id never depends on where the build ran.
+    case "$(basename "$bundle")" in
+        Mouthtype_*.bundle)
+            target="$(basename "$bundle" .bundle)"
+            plutil -replace CFBundleIdentifier -string "mouthtype.${target#Mouthtype_}.resources" \
+                "$APP/Contents/Resources/$(basename "$bundle")/Contents/Info.plist"
+            ;;
+    esac
     BUNDLES+=("$APP/Contents/Resources/$(basename "$bundle")")
 done
 
 TIMESTAMP="--timestamp"
 [ "${MOUTHTYPE_TIMESTAMP:-}" = "none" ] && TIMESTAMP="--timestamp=none"
+
+if [ "${MOUTHTYPE_UNSIGNED:-}" = "1" ]; then
+    echo "! MOUTHTYPE_UNSIGNED=1: assembling without code signatures."
+    SPARKLE=".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+    test -d "$SPARKLE"
+    mkdir -p "$APP/Contents/Frameworks"
+    ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+    echo "$APP"
+    exit 0
+fi
 
 if [ -n "$IDENTITY" ]; then
     echo "→ signing as $IDENTITY"
