@@ -100,9 +100,9 @@ class BackendTests(unittest.TestCase):
         os.environ.update(QT_QPA_PLATFORM="offscreen")
         sys.path.insert(0, str(HERE))
         import mouthtype_desktop
-        from PySide6.QtCore import QCoreApplication
+        from PySide6.QtWidgets import QApplication  # one QApplication per process; test_tray needs widgets
         cls.module = mouthtype_desktop
-        cls.app = QCoreApplication.instance() or QCoreApplication([])
+        cls.app = QApplication.instance() or QApplication([])
         cls.backend = cls.module.PlatformBackend()
 
     def collect(self, call_id, argv):

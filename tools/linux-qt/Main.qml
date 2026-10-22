@@ -5,7 +5,7 @@ import "../omarchy-plugin"
 import "../omarchy-plugin/design"
 
 // The GNOME and KDE settings window: the shared AppState and MouthtypeShell in a plain top-level window. The Python host
-// (mouthtype_desktop.py) sets the context properties `Host` (helper, startPage, dark, screenshotPath) and `PlatformBackend`.
+// (mouthtype_desktop.py) sets the context properties `Host` (helper, startPage, dark, screenshotPath), `PlatformBackend` and `Tray`.
 Window {
   id: win
 
@@ -27,6 +27,20 @@ Window {
     fallbackFont: Qt.application.font.family
     onOpenRequested: { win.visible = true; win.raise(); win.requestActivate() }
     onCloseRequested: win.visible = false
+  }
+
+  Binding { target: app; property: "trayAvailable"; value: Tray.available }
+  Connections {
+    target: app
+    function onGlyphStateChanged() { Tray.setGlyph(app.glyphState) }
+  }
+  Connections {
+    target: Tray
+    function onActionRequested(action) {
+      if (action === "toggle") app.run(["toggle"])
+      else if (action === "open") { app.openPage("home"); app.open() }
+      else if (action === "settings") { app.openPage("general"); app.open() }
+    }
   }
 
   MouthtypeShell {
@@ -65,6 +79,7 @@ Window {
   Timer { interval: 8000; running: Host.watchdog; onTriggered: Host.failed("timed out waiting for the first state reply") }
 
   Component.onCompleted: {
+    Tray.setGlyph(app.glyphState)
     app.refresh()
     app.openPage(Host.startPage)
     app.open()

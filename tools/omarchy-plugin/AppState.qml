@@ -26,6 +26,8 @@ Item {
   readonly property string glyphState: !serviceRunning ? "unavailable"
     : sessionState === "recording" ? "recording" + lipsFrame
     : sessionState === "idle" ? "idle" : "processing"
+  // Qt host only: whether a StatusNotifier tray host exists. null on Omarchy, where the bar button is the indicator.
+  property var trayAvailable: null
   property bool hasTranscript: false
   readonly property int savedCount: saved.length
 

@@ -18,11 +18,15 @@ try:
     from PySide6.QtCore import (
         QCoreApplication, QFileSystemWatcher, QObject, QProcess, QTimer, QUrl, Property, Signal, Slot, Qt,
     )
-    from PySide6.QtGui import QDesktopServices, QGuiApplication
+    from PySide6.QtGui import QDesktopServices
+    from PySide6.QtWidgets import QApplication
     from PySide6.QtNetwork import QLocalServer, QLocalSocket
     from PySide6.QtQml import QQmlApplicationEngine
 except ImportError as error:  # pragma: no cover - exercised only on machines without PySide6
-    sys.exit("mouthtype-desktop needs PySide6 (Ubuntu: python3-pyside6.qtquick, Fedora: python3-pyside6): %s" % error)
+    sys.exit("mouthtype-desktop needs PySide6 (Ubuntu: python3-pyside6.qtquick and python3-pyside6.qtwidgets, Fedora: python3-pyside6): %s" % error)
+
+sys.path.insert(0, str(HERE))
+from tray import Tray  # noqa: E402
 
 
 # The system style on KDE and GNOME refuses the property customisation the shared QML relies on.
@@ -222,7 +226,7 @@ def color_scheme_is_dark(app):
 
 def main(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else argv)
-    app = QGuiApplication([sys.argv[0]])
+    app = QApplication([sys.argv[0]])
     app.setApplicationName("Mouthtype")
     app.setDesktopFileName("app.mouthtype.Mouthtype")
 
@@ -241,6 +245,9 @@ def main(argv=None):
     app.styleHints().colorSchemeChanged.connect(lambda scheme: host.set_dark(scheme == Qt.ColorScheme.Dark))
     engine.rootContext().setContextProperty("PlatformBackend", backend)
     engine.rootContext().setContextProperty("Host", host)
+    tray = Tray()
+    engine.rootContext().setContextProperty("Tray", tray)
+    tray.actionRequested.connect(lambda action: app.quit() if action == "quit" else None)
 
     if server is not None:
         def accept():
@@ -254,6 +261,12 @@ def main(argv=None):
     if not engine.rootObjects():
         print("mouthtype-desktop: Main.qml failed to load", file=sys.stderr)
         return 1
+
+    if not (args.selftest or args.screenshot):
+        tray.start()
+        # With a tray icon the host keeps running after the window closes; without one, closing the window ends it.
+        tray.availableChanged.connect(lambda: app.setQuitOnLastWindowClosed(not tray.available))
+        app.setQuitOnLastWindowClosed(not tray.available)
 
     code = app.exec()
     return host.exit_code if host.exit_code is not None else code

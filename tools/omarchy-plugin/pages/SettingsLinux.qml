@@ -28,6 +28,11 @@ Column {
         }
       }
       DesignRow {
+        visible: !!root.host && root.host.trayAvailable === false
+        title: "No tray icon"
+        detail: "Your desktop has no system tray host, so Mouthtype shows no icon. It works without one. On GNOME, enable the AppIndicator and KStatusNotifierItem extension to get the icon."
+      }
+      DesignRow {
         title: "Updates"
         detail: "Mouthtype does not update itself on Linux. Update it with your package manager or by reinstalling the plugin."
       }
