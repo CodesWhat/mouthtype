@@ -36,10 +36,15 @@ def read_versions(source=SOURCE):
     except (OSError, ValueError, AttributeError):
         pass
     try:
-        with open(source.parent.parent / "packaging/Version.plist", "rb") as handle:
-            value = plistlib.load(handle).get("MouthtypeDisplayVersion")
-        app = value if isinstance(value, str) else None
-    except (OSError, ValueError, plistlib.InvalidFileException):
+        for path in (source.parent / "Version.plist", source.parent.parent / "packaging/Version.plist"):
+            try:
+                with open(path, "rb") as handle:
+                    value = plistlib.load(handle).get("MouthtypeDisplayVersion")
+            except OSError:
+                continue
+            app = value if isinstance(value, str) else None
+            break
+    except (ValueError, plistlib.InvalidFileException):
         pass
     return {"plugin": plugin, "app": app}
 

@@ -41,6 +41,7 @@ package() {
         ! -name 'test_*' ! -name 'tst_*' ! -name 'gen_*' ! -name '*.pyc' \
         ! -path './*-render/*' ! -path './design/gallery/*' ! -path './design/render/*' \
         ! -path '*/fixtures/*' -print0)
+    install -Dm644 packaging/Version.plist "$pkgdir/usr/share/mouthtype-linux/Version.plist"
     chmod 755 "$plugin/control.py" "$plugin/save_dialog.py" "$plugin/install.py"
 
     install -Dm755 packaging/arch/aur/mouthtype-linux-setup "$pkgdir/usr/bin/mouthtype-linux-setup"

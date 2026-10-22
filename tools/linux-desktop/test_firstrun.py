@@ -120,6 +120,61 @@ class FirstRunTests(unittest.TestCase):
             self.assertEqual(firstrun.run_first(setup_main=setup, notifier=self.notifier), 0)
         setup.assert_not_called()
 
+    def upgrade_setup(self, packaged='1.4.0', installed='1.3.0', state='done'):
+        plugin = self.home / 'pkg/omarchy-plugin'
+        plugin.mkdir(parents=True)
+        (plugin / 'install.py').write_text('')
+        (plugin / 'manifest.json').write_text(json.dumps({'version': packaged}))
+        target = self.home / '.config/omarchy/plugins/dstahl.mouthtype'
+        target.mkdir(parents=True)
+        (target / 'version.json').write_text(json.dumps({'plugin': installed, 'app': None}))
+        firstrun.record(state)
+        self.runs = []
+
+        def run(command, **kwargs):
+            self.runs.append(command)
+            return mock.Mock(returncode=self.update_status, stdout='', stderr='boom')
+        self.update_status = 0
+        return plugin, run
+
+    def test_upgrade_same_version_is_a_noop(self):
+        plugin, run = self.upgrade_setup(packaged='1.3.0', installed='1.3.0')
+        self.assertEqual(firstrun.run_first(plugin_dir=plugin, notifier=self.notifier, run=run), 0)
+        self.assertEqual(self.runs, [])
+        self.assertEqual(self.messages, [])
+
+    def test_upgrade_mismatch_updates_restarts_and_notifies(self):
+        plugin, run = self.upgrade_setup()
+        self.assertEqual(firstrun.run_first(plugin_dir=plugin, notifier=self.notifier, run=run), 0)
+        self.assertEqual(self.runs[0][1:], [str(plugin / 'install.py'), '--update', '--no-restart-shell'])
+        self.assertEqual(self.runs[1], ['systemctl', '--user', 'try-restart', 'mouthtype-linux'])
+        self.assertEqual(self.messages[-1][0], 'Mouthtype updated to 1.4.0')
+        self.assertEqual(self.state()['updated_to'], '1.4.0')
+        self.assertEqual(self.state()['state'], 'done')
+
+    def test_app_version_mismatch_alone_triggers_the_update(self):
+        plugin, run = self.upgrade_setup(packaged='1.3.0', installed='1.3.0')
+        (plugin.parent / 'Version.plist').write_bytes(
+            b'<?xml version="1.0"?><plist version="1.0"><dict><key>MouthtypeDisplayVersion</key><string>0.6.0</string></dict></plist>')
+        firstrun.run_first(plugin_dir=plugin, notifier=self.notifier, run=run)
+        self.assertEqual(self.messages[-1][0], 'Mouthtype updated to 0.6.0')
+
+    def test_uninstalled_never_updates(self):
+        plugin, run = self.upgrade_setup(state='uninstalled')
+        self.assertEqual(firstrun.run_first(plugin_dir=plugin, notifier=self.notifier, run=run), 0)
+        self.assertEqual(self.runs, [])
+
+    def test_a_failing_update_counts_attempts_and_stops_at_the_cap(self):
+        plugin, run = self.upgrade_setup()
+        self.update_status = 2
+        for _ in range(firstrun.MAX_ATTEMPTS + 2):
+            firstrun.run_first(plugin_dir=plugin, notifier=self.notifier, run=run)
+        self.assertEqual(len(self.runs), firstrun.MAX_ATTEMPTS)
+        self.assertEqual(self.state()['update_attempts'], firstrun.MAX_ATTEMPTS)
+        self.assertEqual(self.state()['update_error'], 'boom')
+        self.assertEqual(self.state()['state'], 'done')
+        self.assertEqual([m[0] for m in self.messages], ['Mouthtype update failed'])
+
     def progress_run(self, readings):
         """Run first-run with a fake setup that finishes once the fake clock has fed it every reading."""
         import threading
