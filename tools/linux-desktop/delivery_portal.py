@@ -671,9 +671,7 @@ def make_delivery(config, *, portal_factory=None, store_factory=None, session_fa
     A missing jeepney, an unreachable bus or a missing grant leaves a PortalDelivery that answers recover_only."""
     if targets is None:
         import atspi_target
-        targets = atspi_target.AtspiTargets()
-        if not targets.available():
-            log.warning('AT-SPI is unavailable (python3-gi and gir1.2-atspi-2.0), so the focused window is unknown')
+        targets = atspi_target.AtspiTargets()  # loads AT-SPI on the first snapshot, not here
     store = (store_factory or (lambda: GrantStore(grant_store_path())))()
     portal = None
     try:

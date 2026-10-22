@@ -57,7 +57,7 @@ class SelectionTests(unittest.TestCase):
         chosen = backends.delivery_name(desktop_name)
         with mock.patch.object(portal_module, 'Portal', FakePortal), \
                 mock.patch.object(delivery_portal, 'RemoteDesktopSession', FakeRemote), \
-                mock.patch.object(atspi_target, 'load_atspi', lambda: None):
+                mock.patch.object(atspi_target.AtspiTargets, '_module', lambda self: None):
             return chosen, backends.make_delivery(chosen, {'mode': 'paste'}, store_factory=lambda: mock.Mock()) \
                 if chosen == 'portal' else backends.make_delivery(chosen, {}, run=lambda *a, **k: None)
 
