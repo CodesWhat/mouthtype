@@ -49,7 +49,9 @@ struct StyleInstructionsEditor: View {
                 Text("\(draft.count) / \(CleanupInstructions.maxLength)").font(DesignFont.mono(DesignFont.eyebrow))
                     .foregroundStyle(DesignPalette.ink3).fixedSize().accessibilityIdentifier(identifier + "-count")
                 if saved != nil {
-                    Button("Clear") { draft = ""; save(nil) }.buttonStyle(.designSecondary).fixedSize()
+                    Button("Clear") {
+                        draft = ""; save(nil)
+                    }.buttonStyle(.designSecondary).fixedSize()
                         .accessibilityIdentifier(identifier + "-clear")
                 }
                 Button("Save") { save(CleanupInstructions.normalize(draft)) }.buttonStyle(.designPrimary).fixedSize()

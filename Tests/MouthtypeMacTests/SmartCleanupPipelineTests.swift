@@ -100,7 +100,10 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
 
     @Test func ruleInstructionsReachThoroughAndGlobalOnesStandInWhenTheRuleHasNone() async {
         let seen = InstructionLog()
-        let (pipeline, _) = pipeline(ScriptedCleaner { text, context in seen.add(context.instructions); return text }, level: .medium)
+        let (pipeline, _) = pipeline(
+            ScriptedCleaner { text, context in
+                seen.add(context.instructions); return text
+            }, level: .medium)
         func run(_ instructions: String?, global: String = "") async {
             var base = CleanupSettings()
             base.level = .medium

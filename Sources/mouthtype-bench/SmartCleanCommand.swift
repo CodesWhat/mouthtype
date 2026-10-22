@@ -127,7 +127,8 @@ enum SmartRunner {
                 text: raw, dictionary: rules.filter { !level.needsModel || !$0.isJoinedSpelling }, context: context, options: TextPipelineOptions(selfCorrection: selfCorrection, style: style),
                 language: language))
         let deterministicTime = (clock.now - start).seconds * 1000
-        let result = await smart.run(SmartCleanupRequest(text: det.text, level: level, style: style, dictionary: rules, context: context, appName: appName, language: language, instructions: instructions))
+        let result = await smart.run(
+            SmartCleanupRequest(text: det.text, level: level, style: style, dictionary: rules, context: context, appName: appName, language: language, instructions: instructions))
         return SmartRun(
             raw: raw, deterministic: det.text, result: result, edits: det.edits,
             deterministicMilliseconds: deterministicTime, totalCleanupMilliseconds: (clock.now - start).seconds * 1000)
