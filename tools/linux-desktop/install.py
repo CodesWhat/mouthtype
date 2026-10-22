@@ -21,7 +21,7 @@ DESKTOP = ('doctor.py', 'test_doctor.py', 'imports.py', 'test_imports.py', 'smar
            'hyprland.lua', 'hyprland-legacy.conf', 'test_desktop.py',
            'setup_speech.py', 'test_setup_speech.py',
            'test_install.py', 'test_acceptance.py', 'acceptance.py', 'wayland_target.py', 'run-ci.sh',
-           'build_sway.py', 'sway-build.json', 'test_build_sway.py')
+           'build_sway.py', 'sway-build.json', 'test_build_sway.py', 'backends/__init__.py', 'test_backends.py')
 ENGINE = ('proof.py', 'worker.py', 'prepare.py', 'pins.json', 'requirements.txt', 'README.md')
 GRAPHEME = ('__init__.py', 'api.py', 'finder.py', 'grapheme_property_group.py', 'incb_property_group.py',
             'data/derived_core_property.json', 'data/grapheme_break_property.json',

@@ -23,6 +23,7 @@ PROOF = Path(__file__).resolve().parents[1] / 'linux-engine-proof'
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(PROOF))
 from session_client import read_message, request
+import backends
 
 # Importing these costs tens of milliseconds, and a hotkey or panel client never needs them. They are bound into this
 # module on first use (the service, doctor and tests reach them through the constructors below or by attribute).
@@ -993,6 +994,9 @@ class HyprlandDelivery:
         self.restore_thread.start()
 
 
+backends.register_delivery('hyprland', HyprlandDelivery)
+
+
 def stop_process(process, first=signal.SIGTERM):
     if process is None:
         return
@@ -1887,7 +1891,7 @@ def main(argv=None, *, cli_directory=None):
                 path = args.config.resolve().parent / path
             return CleanupEngine(json.loads(path.read_text())['engines'][level], hash_cache=verified)
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
-                          HyprlandDelivery(config['delivery']), args.recovery,
+                          backends.make_delivery(backends.delivery_name(backends.detect(os.environ)), config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
                           feedback=Notifications(config['notifications']), dictionary=dictionary, phrases=phrases,
                           phrase_clipboard=config.get('phrase_clipboard', False), cleanup=config['cleanup'],
