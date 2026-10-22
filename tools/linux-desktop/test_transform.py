@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import stat
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -96,7 +97,8 @@ class Harness(unittest.TestCase):
             script = self.bin / name
             script.write_text('#!/bin/sh\n' + textwrap.dedent(body))
             script.chmod(0o755)
-        patcher = mock.patch.dict(os.environ, {'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
+        self.warm_up_fakes()
+        patcher =mock.patch.dict(os.environ, {'PATH': str(self.bin) + os.pathsep + os.environ['PATH'],
                                                'FAKE_DIR': str(self.fake)})
         patcher.start()
         self.addCleanup(patcher.stop)
@@ -109,6 +111,15 @@ class Harness(unittest.TestCase):
         self.config = self.root / 'linux.json'
         self.write_config()
         self.set_active(WINDOW)
+
+    def warm_up_fakes(self):
+        """Exec each fake once against a scratch dir. A freshly written script's first exec is slow on a loaded
+        machine (scanning, page cache), and the service's hyprctl and wl-paste calls have sub-second timeouts."""
+        scratch = self.root / 'warm'
+        scratch.mkdir()
+        for name in FAKES:
+            subprocess.run([str(self.bin / name)], env={**os.environ, 'FAKE_DIR': str(scratch)}, input=b'',
+                           capture_output=True, timeout=60, check=False)
 
     def write_config(self, *, delivery=None, engine='cleanup.json', settings='default', prompt='shared', fake='upper'):
         if settings == 'default':
