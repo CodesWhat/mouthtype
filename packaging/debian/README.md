@@ -1,6 +1,6 @@
 # Debian and Ubuntu package
 
-Builds `mouthtype-linux_<version>_amd64.deb` and a signed static apt repository. Mirrors the Arch package in
+Builds two packages, `mouthtype-linux_<version>_amd64.deb` and `mouthtype-linux-desktop_<version>_all.deb`, and a signed static apt repository. Mirrors the Arch package in
 `packaging/arch/aur`: same `/usr` layout, same systemd user unit, same `mouthtype-linux-setup` helper (this copy calls
 `python3`, since Debian has no `python` command).
 
@@ -21,9 +21,21 @@ reproducible for a given commit (`SOURCE_DATE_EPOCH`, sorted file lists, normali
 - `/usr/share/mouthtype-linux/omarchy-plugin/...`
 - docs, copyright, man pages, lintian overrides
 
-Depends: `python3 (>= 3.10)` (the minimum `doctor` enforces), `python3-venv` (setup builds the speech venv),
-`curl`, `pipewire-audio`, `wl-clipboard`, `wtype`, `libnotify-bin`, `ffmpeg`. Recommends `hyprland`, suggests
-`quickshell`. Those package names exist on Ubuntu 24.04, Ubuntu 26.04 and Debian 13. Hyprland exists only on 26.04
+`mouthtype-linux` Depends: `python3 (>= 3.10)` (the minimum `doctor` enforces), `python3-venv` (setup builds the speech
+venv), `python3-jeepney` (the portal client; universe on Ubuntu), `curl`, `pipewire-audio`, `libnotify-bin`, `ffmpeg`.
+Recommends `wl-clipboard`, `wtype` and `hyprland | sway`, suggests `quickshell` and `mouthtype-linux-desktop`. Omarchy and
+Hyprland installs need only this package and pull no PySide6. Debian cannot make a Recommends conditional on the
+session, so `wtype` stays a plain Recommends; GNOME and KDE never use it.
+
+`mouthtype-linux-desktop` (Architecture all) is the GNOME and KDE Plasma add-on: `/usr/bin/mouthtype-desktop`, the
+PySide6 host under `/usr/lib/mouthtype-linux/tools/linux-qt`, a symlink from `tools/omarchy-plugin` to the core package's
+plugin copy (so the shared QML exists once), and `app.mouthtype.Mouthtype.Settings.desktop` (the visible launcher; the
+hidden `app.mouthtype.Mouthtype.desktop` that the portals match on stays in the core package). Depends on
+`mouthtype-linux (= same version)`, `python3-gi`, `gir1.2-atspi-2.0`, the `python3-pyside6.*` and `qml6-module-*` packages the pages
+import, `qt6-svg-plugins` and `xdg-desktop-portal (>= 1.19)`, so it installs on Debian 13 and Ubuntu 26.04 but not on
+Ubuntu 24.04 (portal 1.18). Recommends a portal backend, `qml6-module-org-kde-layershell` (KDE pill) and
+`gnome-shell-extension-appindicator` (GNOME tray). It ships no system autostart: `mouthtype-linux-setup` writes the per-user
+autostart entry on GNOME and KDE. Those package names exist on Ubuntu 24.04, Ubuntu 26.04 and Debian 13. Hyprland exists only on 26.04
 (0.53.3); Quickshell is in none of them. `postinst`, `prerm` and `postrm` point at `mouthtype-linux-setup`.
 
 ## Build and test
@@ -31,10 +43,11 @@ Depends: `python3 (>= 3.10)` (the minimum `doctor` enforces), `python3-venv` (se
 Run on Debian or Ubuntu, or in a container:
 
 ```bash
-bash packaging/debian/build-deb.sh --output /tmp/debs                 # snapshot version
+bash packaging/debian/build-deb.sh --output /tmp/debs                 # snapshot version, builds both .debs
 bash packaging/debian/build-deb.sh --output /tmp/debs --version 0.4.0-1  # release version
-lintian --pedantic /tmp/debs/mouthtype-linux_*.deb
-bash packaging/debian/test-install.sh /tmp/debs/mouthtype-linux_*.deb   # root, disposable container only
+lintian --pedantic /tmp/debs/*.deb
+bash packaging/debian/test-install.sh /tmp/debs/mouthtype-linux_*.deb   # core only (Ubuntu 24.04 ok), root, disposable container only
+bash packaging/debian/test-install.sh /tmp/debs/mouthtype-linux_*.deb /tmp/debs/mouthtype-linux-desktop_*.deb   # Debian 13, Ubuntu 26.04
 bash packaging/debian/test-apt-repo.sh /path/to/repo                    # signed repo flow, throwaway key
 ```
 
@@ -69,7 +82,7 @@ Pick an expiry you will remember (3 years above) and extend it before it lapses:
    pool so old versions stay installable:
 
    ```bash
-   bash packaging/debian/build-apt-repo.sh --output ./apt --key <FPR> --deb /tmp/debs/mouthtype-linux_*.deb
+   bash packaging/debian/build-apt-repo.sh --output ./apt --key <FPR> --deb /tmp/debs/mouthtype-linux_*.deb --deb /tmp/debs/mouthtype-linux-desktop_*.deb
    ```
 
 3. Check it yourself: `find apt -type f`, and run `packaging/debian/test-apt-repo.sh` again on the same commit.
@@ -83,7 +96,7 @@ Layout:
 ```
 apt/dists/stable/{Release,InRelease,Release.gpg}
 apt/dists/stable/main/binary-amd64/Packages{,.gz,.xz}
-apt/pool/main/m/mouthtype-linux/*.deb
+apt/pool/main/m/mouthtype-linux/*.deb           (both packages)
 apt/mouthtype-archive-keyring.gpg   apt/mouthtype-archive-keyring.asc   apt/mouthtype.sources
 ```
 
