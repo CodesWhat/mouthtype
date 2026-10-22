@@ -1397,6 +1397,13 @@ def validate_config(value):
         style_contexts.validate(result['styles'])
     if type(result.get('phrase_clipboard', False)) is not bool:
         raise ValueError('phrase_clipboard must be true or false')
+    section = result.get('desktop', {})
+    if not isinstance(section, dict) or set(section) - {'delivery', 'shortcuts'}:
+        raise ValueError('desktop must be an object with delivery and shortcuts only')
+    for key, allowed in (('delivery', backends.DELIVERY_NAMES), ('shortcuts', backends.SHORTCUT_NAMES)):
+        if section.get(key, 'auto') not in ('auto',) + tuple(allowed):
+            raise ValueError('desktop.' + key + ' must be auto or one of ' + ', '.join(allowed))
+    result['desktop'] = {'delivery': 'auto', 'shortcuts': 'auto', **section}
     return result
 
 
@@ -1891,7 +1898,7 @@ def main(argv=None, *, cli_directory=None):
                 path = args.config.resolve().parent / path
             return CleanupEngine(json.loads(path.read_text())['engines'][level], hash_cache=verified)
         session = Session(PipeWireCapture(config.get('capture_target')), engine,
-                          backends.make_delivery(backends.delivery_name(backends.detect(os.environ)), config['delivery']), args.recovery,
+                          backends.make_delivery(backends.delivery_name(backends.detect(os.environ), config['desktop']['delivery']), config['delivery']), args.recovery,
                           maximum_seconds=config['maximum_recording_seconds'],
                           feedback=Notifications(config['notifications']), dictionary=dictionary, phrases=phrases,
                           phrase_clipboard=config.get('phrase_clipboard', False), cleanup=config['cleanup'],

@@ -1,6 +1,7 @@
 """Read-only Linux setup checks. Never opens capture, loads weights or changes setup."""
 
 import json
+import os
 from pathlib import Path
 import platform
 import re
@@ -40,7 +41,7 @@ def probe_llama_server(server, run=subprocess.run):
 
 
 def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
-             runtime_check=None, service_check=None, llama_probe=None):
+             runtime_check=None, service_check=None, llama_probe=None, env=None):
     from desktop import validate_config, request
     from proof import verify_artifacts
     from spellings import load_spellings
@@ -70,6 +71,19 @@ def diagnose(config_path, runtime, *, system=None, machine=None, which=None,
         add('configuration', 'error', 'Configuration is missing or invalid.',
             'Prepare a new directory with tools/linux-desktop/setup_speech.py --destination PATH, or repair the existing linux.json.')
         config = None
+    if config is not None:
+        import backends
+        desktop = backends.detect(os.environ if env is None else env)
+        override = config['desktop']
+        delivery = backends.delivery_name(desktop, override['delivery'])
+        shortcuts = backends.shortcuts_name(desktop, override['shortcuts'])
+        def why(chosen, setting):
+            return 'set by desktop.' + setting if chosen != 'auto' else 'auto for ' + desktop
+        add('desktop', 'ok', 'Desktop: ' + desktop + '. Delivery backend: ' + delivery + ' (' + why(override['delivery'], 'delivery') +
+            '). Shortcut backend: ' + shortcuts + ' (' + why(override['shortcuts'], 'shortcuts') + ').',
+            'Initial support is Hyprland; GNOME and KDE backends are still being built, so delivery falls back to the Hyprland path.'
+            if desktop in ('gnome', 'kde') else
+            'X11 sessions are not supported; use a Wayland session.' if desktop == 'unknown' and (env or os.environ).get('XDG_SESSION_TYPE', '').lower() == 'x11' else '')
     capture = which('pw-record') is not None
     add('capture', 'ok' if capture else 'error', 'PipeWire capture helper is available.' if capture else 'pw-record is missing.',
         '' if capture else 'Install PipeWire audio tools using the normal distro package manager.')
