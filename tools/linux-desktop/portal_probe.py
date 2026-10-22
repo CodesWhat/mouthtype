@@ -5,8 +5,10 @@ Records the portal interface versions (GlobalShortcuts, RemoteDesktop, Clipboard
 chord, presses and releases it through an input driver, and logs when Activated and Deactivated arrive. The
 Deactivated latency decides the hold-versus-toggle default for the desktop shortcut backend.
 
-Drivers (--driver): mutter (the direct org.gnome.Mutter.RemoteDesktop API, GNOME), portal (the RemoteDesktop
+Drivers (--driver): mutter (the direct org.gnome.Mutter.RemoteDesktop API, GNOME; mutter-keycode sends evdev
+keycodes instead of keysyms), portal (the RemoteDesktop
 portal, keyboard only, KDE once the app is authorized), none (versions only), auto (by XDG_CURRENT_DESKTOP).
+--consent atspi answers the GlobalShortcuts bind dialog through AT-SPI while the bind waits.
 Every stage records its own error and the probe still prints JSON, so a missing consent dialog shows up as
 evidence rather than a crash. Exit 0 when JSON was printed, 2 when the session bus or portal is unreachable.
 """
@@ -28,6 +30,8 @@ REMOTE_IFACE = INTERFACES['RemoteDesktop']
 SHORTCUT_ID = 'probe-chord'
 # CTRL+ALT+m as X11 keysyms: Control_L, Alt_L, m.
 CHORD_KEYSYMS = (0xFFE3, 0xFFE9, 0x6D)
+# The same chord as evdev keycodes (KEY_LEFTCTRL, KEY_LEFTALT, KEY_M) for the drivers that send raw keys.
+KEYCODES = {0xFFE3: 29, 0xFFE9: 56, 0x6D: 50, 0xFFE1: 42}
 CHORD_TRIGGER = 'CTRL+ALT+m'
 MUTTER_BUS = 'org.gnome.Mutter.RemoteDesktop'
 MUTTER_PATH = '/org/gnome/Mutter/RemoteDesktop'
@@ -100,6 +104,20 @@ class MutterDriver:
         body = self.portal.call(MUTTER_BUS, 'CreateSession', '', (), path=MUTTER_PATH, bus_name=MUTTER_BUS)
         self.session = body[0]
         self.portal.call(MUTTER_SESSION_IFACE, 'Start', '', (), path=self.session, bus_name=MUTTER_BUS)
+        self.wake_stage()
+
+    def wake_stage(self):
+        """Headless mutter gives the stage no key focus until it sees input, so click once and tap Shift_L first."""
+        call = lambda method, sig, args: self.portal.call(MUTTER_SESSION_IFACE, method, sig, args,
+                                                          path=self.session, bus_name=MUTTER_BUS)
+        for dx, dy in ((-4000.0, -4000.0), (640.0, 400.0)):
+            call('NotifyPointerMotionRelative', 'dd', (dx, dy))
+        for down in (True, False):
+            call('NotifyPointerButton', 'ib', (0x110, down))
+            time.sleep(.1)
+        for down in (True, False):
+            self.key(0xFFE1, down)
+        time.sleep(.5)
 
     def key(self, keysym, down):
         self.portal.call(MUTTER_SESSION_IFACE, 'NotifyKeyboardKeysym', 'ub', (keysym, down),
@@ -113,6 +131,15 @@ class MutterDriver:
             except portal_mod.PortalError:
                 pass
             self.session = None
+
+
+class MutterKeycodeDriver(MutterDriver):
+    """The mutter API again, but with evdev keycodes, which go through the seat keymap like a physical keyboard."""
+    name = 'mutter-keycode'
+
+    def key(self, keysym, down):
+        self.portal.call(MUTTER_SESSION_IFACE, 'NotifyKeyboardKeycode', 'ub', (KEYCODES[keysym], down),
+                         path=self.session, bus_name=MUTTER_BUS)
 
 
 class PortalKeyboardDriver:
@@ -142,7 +169,7 @@ class PortalKeyboardDriver:
 
 
 def make_driver(name, portal):
-    return {'mutter': MutterDriver, 'portal': PortalKeyboardDriver}[name](portal)
+    return {'mutter': MutterDriver, 'mutter-keycode': MutterKeycodeDriver, 'portal': PortalKeyboardDriver}[name](portal)
 
 
 def bind_chord(portal, session, bind_timeout):
@@ -192,10 +219,31 @@ def run_round(portal, driver, session_signals, hold, wait):
     return row
 
 
-def probe_shortcuts(portal, driver_name, rounds, hold, bind_timeout, wait):
+def start_consent(mode, timeout):
+    """A running ConsentAnswerer when mode is 'atspi' and AT-SPI loads, else None."""
+    if mode != 'atspi':
+        return None
+    from atspi_target import load_atspi
+    atspi = load_atspi()
+    if atspi is None:
+        return None
+    atspi.init()
+    import consent_atspi
+    answerer = consent_atspi.ConsentAnswerer(atspi, timeout=timeout)
+    answerer.start()
+    return answerer
+
+
+def probe_shortcuts(portal, driver_name, rounds, hold, bind_timeout, wait, consent='none'):
     session = portal.create_session(SHORTCUTS_IFACE)
     out = {'chord': CHORD_TRIGGER, 'driver': driver_name}
-    out['granted'] = guarded('bind', lambda: {'shortcuts': bind_chord(portal, session, bind_timeout)})
+    answerer = start_consent(consent, bind_timeout + 5)
+    try:
+        out['granted'] = guarded('bind', lambda: {'shortcuts': bind_chord(portal, session, bind_timeout)})
+    finally:
+        if answerer is not None:
+            answerer.stop()
+            out['consent'] = answerer.evidence()
     if not out['granted']['ok']:
         return out
     if driver_name == 'none':
@@ -238,7 +286,7 @@ def run_probe(portal, args, environ=None):
     versions = result['interfaces'].get('versions', {})
     if versions.get('GlobalShortcuts', 0) >= 1:
         result['shortcuts'] = guarded('shortcuts', probe_shortcuts, portal, driver_name, args.rounds, args.hold,
-                                      args.bind_timeout, args.wait)
+                                      args.bind_timeout, args.wait, args.consent)
     else:
         result['shortcuts'] = {'ok': False, 'error': 'portal has no GlobalShortcuts interface'}
     return result
@@ -247,7 +295,9 @@ def run_probe(portal, args, environ=None):
 def parse_args(argv):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--app-id', default=portal_mod.APP_ID)
-    parser.add_argument('--driver', choices=('auto', 'mutter', 'portal', 'none'), default='auto')
+    parser.add_argument('--driver', choices=('auto', 'mutter', 'mutter-keycode', 'portal', 'none'), default='auto')
+    parser.add_argument('--consent', choices=('none', 'atspi'), default='none',
+                        help='answer the GlobalShortcuts consent dialog through AT-SPI (headless GNOME)')
     parser.add_argument('--rounds', type=int, default=3)
     parser.add_argument('--hold', type=float, default=0.5, help='seconds to hold the chord')
     parser.add_argument('--bind-timeout', type=float, default=20.0, help='seconds to wait for the bind dialog')

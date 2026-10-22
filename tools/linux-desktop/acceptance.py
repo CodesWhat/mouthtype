@@ -20,6 +20,7 @@ import wave
 from desktop import PipeWireCapture, stop_process, read_phrase_clipboard, HyprlandDelivery
 from phrases import load_phrases
 from cleanup import BasicCleanup
+import consent_atspi
 
 
 def tone_metrics(path):
@@ -286,65 +287,12 @@ def sway_component(root, env, processes):
             'hyprland_adapter_tested': False, 'hyprland_acceptance': False, 'omarchy_acceptance': False}
 
 
-def atspi_walk(node, visit, budget, depth=0):
-    """Depth-first over an AT-SPI tree; visit(node) returning a value stops the walk with that value."""
-    budget[0] -= 1
-    if budget[0] < 0 or depth > 30:
-        return None
-    found = visit(node)
-    if found:
-        return found
-    for index in range(node.get_child_count()):
-        child = node.get_child_at_index(index)
-        if child is None:
-            continue
-        found = atspi_walk(child, visit, budget, depth + 1)
-        if found:
-            return found
-    return None
+PORTAL_APPS = ('xdg-desktop-portal-gnome',)
 
 
 def consent_dialog(atspi):
-    """The portal's Remote Desktop frame, or None while it has not appeared."""
-    desktop = atspi.get_desktop(0)
-    for index in range(desktop.get_child_count()):
-        app = desktop.get_child_at_index(index)
-        if app is not None and app.get_name() == 'xdg-desktop-portal-gnome':
-            for frame in range(app.get_child_count()):
-                window = app.get_child_at_index(frame)
-                if window is not None and window.get_name() == 'Remote Desktop':
-                    return window
-    return None
-
-
-def answer_consent(window, atspi):
-    """Allow the keyboard and clipboard switches, tick Remember This Selection, press Share. Returns what was
-    switched so the evidence shows the dialog really was answered."""
-    found = {}
-    def collect(node):
-        role, name = node.get_role_name(), node.get_name()
-        if role == 'switch' and node.get_action_iface() and name in ('Allow Remote Interaction', 'Allow Clipboard Access'):
-            found[name] = node
-        elif role == 'check box' and 'Remember' in name:
-            found['remember'] = node
-        elif role == 'button' and name == 'Share':
-            found['share'] = node
-        return None
-    atspi_walk(window, collect, [4000])
-    if 'share' not in found:
-        raise ValueError('Consent dialog has no Share button')
-    def checked(node):
-        return node.get_state_set().contains(atspi.StateType.CHECKED)
-    switched = []
-    for name, node in found.items():
-        if name != 'share' and not checked(node):
-            node.get_action_iface().do_action(0)
-            switched.append(name)
-            time.sleep(.2)
-            if not checked(node):
-                raise ValueError('Consent control did not switch on: ' + name)
-    found['share'].get_action_iface().do_action(0)
-    return {'controls': sorted(key for key in found if key != 'share'), 'switched_on': sorted(switched)}
+    """The portal's Remote Desktop dialog (the window offering Share), or None while it has not appeared."""
+    return consent_atspi.find_dialog(atspi, PORTAL_APPS)
 
 
 FOCUS_SCRIPT = (
@@ -444,7 +392,7 @@ def gnome_portal_component(root, env, processes):
         starter = threading.Thread(target=lambda: outcome.setdefault('status', remote.start(interactive=True)))
         starter.start()
         dialog = wait_for(lambda: consent_dialog(atspi), 20)
-        answered = answer_consent(dialog, atspi)
+        answered = consent_atspi.answer(dialog, atspi)
         starter.join(30)
         if outcome.get('status') != 'active':
             raise ValueError('Grant did not become active: ' + json.dumps(remote.snapshot()))

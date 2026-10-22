@@ -228,6 +228,14 @@ class PortalShortcutsTests(unittest.TestCase):
         self.assertEqual(opened, [['gnome-control-center', 'keyboard']])
         self.assertFalse(any(c[1] == 'ConfigureShortcuts' for c in self.fake.calls))
 
+    def test_v1_portal_on_gnome_without_settings_reports_why(self):
+        self.fake.versions[SHORTCUTS] = 1
+        self.started()
+        result = shortcuts_portal.configure(self.shortcuts, GNOME_ENV, opener=Opener([], FileNotFoundError('nope')))
+        self.assertEqual(result['error'], 'configure_unavailable')
+        self.assertIn('gnome-control-center did not start', result['reason'])
+        self.assertEqual(result['triggers']['dictate-hold'], 'CTRL+ALT+M')
+
     def test_v1_portal_on_kde_reports_unavailable(self):
         self.fake.versions[SHORTCUTS] = 1
         self.started()
