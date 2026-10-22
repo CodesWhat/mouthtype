@@ -18,7 +18,7 @@ struct SpellingImportView: View {
                 Text("Import spellings.").font(DesignFont.serif(24)).foregroundStyle(DesignPalette.ink)
                     .accessibilityAddTraits(.isHeader)
                 Text(editor.importSource.summaryLine)
-                .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.ink2).fixedSize(horizontal: false, vertical: true)
+                    .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.ink2).fixedSize(horizontal: false, vertical: true)
             }
             if let preview = editor.importPreview, !preview.rows.isEmpty {
                 summary(preview)

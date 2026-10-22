@@ -53,11 +53,12 @@ import MouthtypeCore
         let preview = try store.previewImport(try fixture("wispr-flow-dictionary.csv"), source: .wispr)
         #expect(preview.canImport)
         #expect(preview.rows.map(\.status) == [.add, .existing, .add, .add])
-        #expect(preview.additions == [
-            DictionaryRule(heard: "Whisper Flow", written: "Wispr Flow"),
-            DictionaryRule(heard: "Acme, Inc.", written: "Acme"),
-            DictionaryRule(heard: "Kubernetes", written: "Kubernetes"),
-        ])
+        #expect(
+            preview.additions == [
+                DictionaryRule(heard: "Whisper Flow", written: "Wispr Flow"),
+                DictionaryRule(heard: "Acme, Inc.", written: "Acme"),
+                DictionaryRule(heard: "Kubernetes", written: "Kubernetes"),
+            ])
         try store.importSpellings(preview)
         #expect(try store.allRules().first == DictionaryRule(heard: "shawn", written: "Sean"))
         #expect(try store.allRules().count == 4)
@@ -77,12 +78,13 @@ import MouthtypeCore
         let preview = try store.previewImport(try fixture("voiceink-dictionary.json"), source: .voiceInk)
         #expect(preview.canImport)
         #expect(preview.rows.map(\.status) == [.add, .add, .add, .add, .existing])
-        #expect(preview.additions == [
-            DictionaryRule(heard: "Drydock", written: "Drydock"),
-            DictionaryRule(heard: "Sockguard", written: "Sockguard"),
-            DictionaryRule(heard: "dry doc", written: "Drydock"),
-            DictionaryRule(heard: "dry dock", written: "Drydock"),
-        ])
+        #expect(
+            preview.additions == [
+                DictionaryRule(heard: "Drydock", written: "Drydock"),
+                DictionaryRule(heard: "Sockguard", written: "Sockguard"),
+                DictionaryRule(heard: "dry doc", written: "Drydock"),
+                DictionaryRule(heard: "dry dock", written: "Drydock"),
+            ])
         try store.importSpellings(preview)
         #expect(try store.allRules().count == 5)
     }
