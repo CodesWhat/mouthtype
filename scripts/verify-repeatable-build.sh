@@ -17,16 +17,21 @@ KEEP=0
 REPO="$PWD"
 HEAD_SHA="$(git rev-parse HEAD)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/mouthtype-repeatable.XXXXXX")"
-cleanup() { [ "$KEEP" = 1 ] && echo "kept: $WORK" || rm -rf "$WORK"; }
+cleanup() { rm -rf "$SCRATCH"; [ "$KEEP" = 1 ] && echo "kept: $WORK" || rm -rf "$WORK"; }
 trap cleanup EXIT
+
+# Same scratch path for both: dependency source paths end up in the binary, so it must not vary.
+# Cleared first so each run starts from a clean build.
+SCRATCH="/private/tmp/mouthtype-repeatable-scratch"
 
 # Different directory names on purpose: the build must not depend on either.
 DIRS=("$WORK/mouthtype" "$WORK/another-name.checkout")
 for i in 0 1; do
     git clone -q --no-hardlinks "$REPO" "${DIRS[$i]}"
     git -C "${DIRS[$i]}" checkout -q "$HEAD_SHA"
+    rm -rf "$SCRATCH"
     echo "→ build $((i + 1)) in ${DIRS[$i]}"
-    (cd "${DIRS[$i]}" && MOUTHTYPE_UNSIGNED=1 MOUTHTYPE_BUILD_DIR="$WORK/out-$i" scripts/build-app.sh >"$WORK/build-$i.log" 2>&1) \
+    (cd "${DIRS[$i]}" && MOUTHTYPE_UNSIGNED=1 MOUTHTYPE_SCRATCH_PATH="$SCRATCH" MOUTHTYPE_BUILD_DIR="$WORK/out-$i" scripts/build-app.sh >"$WORK/build-$i.log" 2>&1) \
         || { tail -30 "$WORK/build-$i.log" >&2; echo "build $((i + 1)) failed" >&2; KEEP=1; exit 2; }
 done
 
