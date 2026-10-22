@@ -139,11 +139,11 @@ Choose **Transcribe Audio File…** from the menu, which opens the **Transcribe 
 
 ## Experimental Linux source
 
-The source includes a daemon/CLI targeting Linux x86_64, Arch/Omarchy, Hyprland and PipeWire. Its explicit speech-preparation helper verifies pinned model files and creates a dedicated runtime environment. It defaults to recovery-only delivery, with no clipboard or key changes. There is no supported desktop release; physical Arch/Omarchy acceptance remains open.
+The source includes a daemon/CLI targeting Linux x86_64, Arch/Omarchy, Hyprland and PipeWire. Its explicit speech-preparation helper verifies pinned model files and creates a dedicated runtime environment. It defaults to recovery-only delivery, with no clipboard or key changes, until the Omarchy plugin's first-open card lets you choose to paste. There is no supported desktop release. The full flow has run on one Arch/Omarchy desk; HiDPI, multi-monitor and other distros are untried.
 
 - Follow [the Linux setup and testing guide](../tools/linux-desktop/README.md).
 - The [Omarchy plugin](../tools/omarchy-plugin/README.md) adds a bar menu, a floating pill and dictation shortcut choice (toggle or hold), and its installer enables a login service unless you pass `--no-autostart`.
-- The client supports optional saved spellings, phrase replacements and cleanup. Cleanup defaults off and preserves raw results for recovery.
+- The client supports optional saved spellings, phrase replacements and cleanup. Basic cleanup is on by default, and raw results are preserved for recovery.
 - Basic is deterministic. Fast (S1-mini) and Thorough (Qwen3 4B) run local llama.cpp models on the CPU after an explicit prepare step, and the Basic text is kept when a model is too slow or changes the meaning.
 - The `paste` delivery mode puts the text on the clipboard, sends Ctrl+V (Ctrl+Shift+V in terminals) and restores the earlier text clipboard; multiline text is refused for terminals.
 - Automatic typing refuses multiline/control-bearing results rather than sending Return or Tab.
