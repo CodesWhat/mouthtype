@@ -116,6 +116,9 @@ class FakeNode:
     def get_action_iface(self):
         return self if self.clickable else None
 
+    def get_n_actions(self):
+        return 1
+
     def do_action(self, index):
         self.actions += 1
         if self.role in ('switch', 'check box'):
