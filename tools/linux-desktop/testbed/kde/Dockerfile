@@ -1,6 +1,6 @@
 # Headless KDE Plasma Wayland session on Fedora 44 for the Mouthtype portal work.
 # Runs kwin_wayland --virtual plus xdg-desktop-portal-kde, no GPU, no systemd.
-FROM fedora:44
+FROM fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
 
 ARG UID=1000
 
