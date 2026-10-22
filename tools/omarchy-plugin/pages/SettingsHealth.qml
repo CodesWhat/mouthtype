@@ -58,6 +58,48 @@ Column {
     return "Last take: " + text + ms
   }
 
+  Component.onCompleted: { if (host) host.loadDoctor() }
+
+  readonly property var doctor: host ? host.doctorInfo : null
+
+  function checkTitle(name) {
+    var words = String(name || "").replace(/_/g, " ")
+    return words.charAt(0).toUpperCase() + words.slice(1)
+  }
+
+  Column {
+    width: parent.width
+    spacing: 6
+    DesignEyebrow { text: "Checks" }
+    DesignCard {
+      width: parent.width
+      DesignRow {
+        objectName: "checksLoading"
+        visible: !root.doctor
+        title: "Checking…"
+      }
+      DesignRow {
+        objectName: "checksPass"
+        visible: !!root.doctor && root.doctor.pass === true
+        title: "All checks pass"
+      }
+      Repeater {
+        model: root.doctor && root.doctor.checks ? root.doctor.checks : []
+        DesignRow {
+          required property var modelData
+          objectName: "checkRow"
+          title: root.checkTitle(modelData.name) + (modelData.status === "error" ? " · needs fixing" : " · warning")
+          detail: modelData.detail + (modelData.action ? "\n" + modelData.action : "")
+        }
+      }
+      DesignRow {
+        title: "Copy diagnostics"
+        detail: "Versions, system and check results for a bug report. No transcripts."
+        DesignSecondaryButton { objectName: "copyDiagnostics"; text: "Copy"; onActivated: root.host.run(["copy-diagnostics"]) }
+      }
+    }
+  }
+
   Column {
     width: parent.width
     spacing: 6

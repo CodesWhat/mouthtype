@@ -1397,7 +1397,7 @@ VALID_ACTIONS = {
     "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
     "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup", "cleanup-cancel", "set-plugin"
 ,
-    "forget", "prune", "remove-leftovers"
+    "forget", "prune", "remove-leftovers", "doctor", "copy-diagnostics"
 }
 
 # The verbs the shortcut and the bar widget send; with the client gone they notify instead of failing silently.
@@ -1436,6 +1436,91 @@ def remove_leftovers():
     subprocess.Popen([sys.executable, str(installer), "--uninstall"], stdin=subprocess.DEVNULL,
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
     return {"message": "Removing the widget and shortcuts"}
+
+OS_RELEASE = Path("/etc/os-release")
+DOCTOR_TIMEOUT = 10
+# A developer note about untested hardware, not something a user can fix.
+DOCTOR_HIDDEN = {"physical_acceptance"}
+
+
+def doctor_checks():
+    """Every check from `mouthtype-linux doctor --json`, or one error row when the report can't be had.
+
+    Doctor exits 2 when a check fails but still prints the report, so the exit code is not the signal."""
+    try:
+        result = cli("doctor", "--json", timeout=DOCTOR_TIMEOUT)
+    except subprocess.TimeoutExpired:
+        return [{"name": "doctor", "status": "error", "detail": "The health check took longer than 10 seconds.",
+                 "action": "Run mouthtype-linux doctor in a terminal to see where it stops."}]
+    except OSError:
+        return [{"name": "doctor", "status": "error", "detail": "The Mouthtype client could not be started.",
+                 "action": "Reinstall Mouthtype, or run mouthtype-linux-setup."}]
+    try:
+        report = json.loads(result.stdout)
+        checks = report["checks"]
+        if not isinstance(checks, list):
+            raise ValueError("checks")
+    except (ValueError, KeyError, TypeError):
+        return [{"name": "doctor", "status": "error", "detail": "The health check gave an unreadable report.",
+                 "action": "Run mouthtype-linux doctor in a terminal to see the raw output."}]
+    rows = []
+    for check in checks:
+        if not isinstance(check, dict):
+            continue
+        rows.append({"name": str(check.get("name", "")), "status": str(check.get("status", "")),
+                     "detail": str(check.get("detail", "")), "action": str(check.get("action", ""))})
+    return rows
+
+
+def doctor():
+    """The panel's Checks list: only what needs attention, plus whether everything passes."""
+    shown = [row for row in doctor_checks() if row["status"] != "ok" and row["name"] not in DOCTOR_HIDDEN]
+    return {"doctor": {"checks": shown, "pass": not shown}}
+
+
+def distro_name():
+    try:
+        for line in OS_RELEASE.read_text(encoding="utf-8").splitlines():
+            if line.startswith("PRETTY_NAME="):
+                return line.split("=", 1)[1].strip().strip('"') or "unknown"
+    except OSError:
+        pass
+    return "unknown"
+
+
+def hyprland_version():
+    try:
+        result = subprocess.run(["hyprctl", "version", "-j"], text=True, capture_output=True, timeout=3, check=False)
+        found = json.loads(result.stdout).get("version")
+        return found if isinstance(found, str) and found else "unknown"
+    except (OSError, ValueError, AttributeError, subprocess.SubprocessError):
+        return "unknown"
+
+
+def diagnostics_text():
+    """A plain-text report for a bug report: versions, system and every check. No transcripts, and the home directory is written as ~."""
+    found = versions()
+    lines = ["Mouthtype diagnostics",
+             "App version: " + (found["app"] or "unknown"),
+             "Plugin version: " + (found["plugin"] or "unknown"),
+             "Distro: " + distro_name(),
+             "Hyprland: " + hyprland_version(),
+             "", "Checks:"]
+    for row in doctor_checks():
+        lines.append("  " + row["status"].upper() + " " + row["name"] + ": " + row["detail"])
+        if row["action"]:
+            lines.append("    " + row["action"])
+    home = str(HOME)
+    return "\n".join(lines).replace(home, "~") + "\n"
+
+
+def copy_diagnostics():
+    if shutil.which("wl-copy") is None:
+        raise RuntimeError("wl-copy is not installed")
+    subprocess.run(concealed_copy_command(), input=diagnostics_text().encode("utf-8"),
+                   check=True, timeout=5, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return {"message": "Diagnostics copied to clipboard"}
+
 
 MODULE_PATTERN = re.compile(r"control_[a-z0-9_]+\.py")
 _module_commands = None
@@ -1527,7 +1612,7 @@ def main():
         sys.argv[1] in {"set-pill", "set-plugin"} and len(sys.argv) != 4
     ) or (sys.argv[1] in {"state", "start-service", "shutdown", "start", "stop", "cancel", "toggle", "paste-last",
                           "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save",
-                          "remove-leftovers"}
+                          "remove-leftovers", "doctor", "copy-diagnostics"}
           and len(sys.argv) != 2):
         print(json.dumps({"error": "Unknown control action"}))
         return 2
@@ -1539,6 +1624,10 @@ def main():
             return 1
         if action == "state":
             output = state()
+        elif action == "doctor":
+            output = doctor()
+        elif action == "copy-diagnostics":
+            output = copy_diagnostics()
         elif action == "remove-leftovers":
             output = remove_leftovers()
         elif action == "import-pick":

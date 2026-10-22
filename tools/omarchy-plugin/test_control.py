@@ -1231,5 +1231,108 @@ class TakeScanTests(unittest.TestCase):
         self.assertEqual(forgotten, oldest)
 
 
+class DoctorTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        self.output = ""
+        self.raised = None
+        self.calls = []
+        self.os_release = self.root / "os-release"
+        self.os_release.write_text('NAME="Arch Linux"\nPRETTY_NAME="Arch Linux"\n', encoding="utf-8")
+        for patch in (mock.patch.object(control, "cli", self.fake_cli),
+                      mock.patch.object(control, "HOME", self.root / "home"),
+                      mock.patch.object(control, "OS_RELEASE", self.os_release),
+                      mock.patch.object(control, "versions", lambda: {"plugin": "1.3.0", "app": "0.4.0"}),
+                      mock.patch.object(control, "hyprland_version", lambda: "0.50.1")):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def fake_cli(self, *args, timeout=35):
+        self.calls.append((args, timeout))
+        if self.raised:
+            raise self.raised
+        return subprocess.CompletedProcess(args, 2, self.output, "")
+
+    def report(self, *checks):
+        self.output = json.dumps({"ready": True, "physical_tested": False, "checks": [
+            {"name": name, "status": status, "detail": detail, "action": action} for name, status, detail, action in checks]})
+
+    def test_all_ok_gives_one_pass_state(self):
+        self.report(("platform", "ok", "Initial target: Linux x86_64.", ""),
+                    ("physical_acceptance", "warning", "Microphone was not tested.", "Run acceptance."))
+        result = control.doctor()["doctor"]
+        self.assertTrue(result["pass"])
+        self.assertEqual(result["checks"], [])
+        self.assertEqual(self.calls, [(("doctor", "--json"), 10)])
+
+    def test_one_error_is_listed_with_its_fix(self):
+        self.report(("platform", "ok", "fine", ""),
+                    ("llama_server", "error", "llama-server did not run.", "Rebuild it."),
+                    ("physical_acceptance", "warning", "untested", "later"))
+        result = control.doctor()["doctor"]
+        self.assertFalse(result["pass"])
+        self.assertEqual([row["name"] for row in result["checks"]], ["llama_server"])
+        self.assertEqual(result["checks"][0]["action"], "Rebuild it.")
+
+    def test_malformed_output_is_an_error_row(self):
+        for output in ("not json", "{}", '{"checks": 3}', ""):
+            self.output = output
+            result = control.doctor()["doctor"]
+            self.assertFalse(result["pass"], output)
+            self.assertEqual(result["checks"][0]["status"], "error", output)
+
+    def test_timeout_is_an_error_row(self):
+        self.raised = subprocess.TimeoutExpired(["doctor"], 10)
+        result = control.doctor()["doctor"]
+        self.assertFalse(result["pass"])
+        self.assertIn("10 seconds", result["checks"][0]["detail"])
+
+    def test_missing_client_is_an_error_row(self):
+        self.raised = FileNotFoundError("mouthtype-linux")
+        self.assertFalse(control.doctor()["doctor"]["pass"])
+
+    def test_diagnostics_report_has_versions_system_and_every_check(self):
+        self.report(("platform", "ok", "Initial target: Linux x86_64.", ""),
+                    ("physical_acceptance", "warning", "untested", "Run acceptance."))
+        text = control.diagnostics_text()
+        for expected in ("App version: 0.4.0", "Plugin version: 1.3.0", "Distro: Arch Linux", "Hyprland: 0.50.1",
+                         "OK platform: Initial target", "WARNING physical_acceptance: untested"):
+            self.assertIn(expected, text)
+
+    def test_diagnostics_replace_the_home_directory(self):
+        home = str(self.root / "home")
+        self.report(("engine", "error", "Missing " + home + "/.local/share/mouthtype/engine.json", "Open " + home + "/x"))
+        text = control.diagnostics_text()
+        self.assertNotIn(home, text)
+        self.assertIn("Missing ~/.local/share/mouthtype/engine.json", text)
+        self.assertIn("Open ~/x", text)
+
+    def test_copy_diagnostics_sends_the_report_to_wl_copy(self):
+        self.report(("platform", "ok", "fine", ""))
+        sent = {}
+
+        def fake_run(command, **kwargs):
+            sent["command"], sent["input"] = command, kwargs["input"]
+            return mock.Mock(returncode=0)
+
+        with mock.patch.object(control.shutil, "which", lambda name: "/usr/bin/" + name), \
+                mock.patch.object(control, "concealed_copy_command", lambda: ["wl-copy"]), \
+                mock.patch.object(control.subprocess, "run", fake_run):
+            result = control.copy_diagnostics()
+        self.assertEqual(sent["command"], ["wl-copy"])
+        self.assertIn(b"App version: 0.4.0", sent["input"])
+        self.assertEqual(result["message"], "Diagnostics copied to clipboard")
+
+    def test_copy_diagnostics_needs_wl_copy(self):
+        with mock.patch.object(control.shutil, "which", lambda name: None):
+            with self.assertRaises(RuntimeError):
+                control.copy_diagnostics()
+
+    def test_verbs_are_valid_control_actions(self):
+        self.assertLessEqual({"doctor", "copy-diagnostics"}, control.VALID_ACTIONS)
+
+
 if __name__ == "__main__":
     unittest.main()

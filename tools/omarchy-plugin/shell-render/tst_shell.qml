@@ -63,6 +63,7 @@ TestCase {
     host.fileImport = { state: "off" }
     host.importText = ""
     host.populated()
+    host.doctorInfo = null
     shell.advancedOptions = false
     shell.settingsOpen = false
     shell.shortcutOpen = false
@@ -104,6 +105,10 @@ TestCase {
       case "settings-general-off": host.empty(); shell.navigate("general"); break
       case "settings-linux": shell.navigate("linux"); break
       case "settings-health": shell.navigate("health"); break
+      case "settings-health-error":
+        host.doctorInfo = { pass: false, checks: [{ name: "llama_server", status: "error", detail: "llama-server at ~/.local/share/mouthtype/cleanup-candidate/llama-server did not run.", action: "Rebuild it with tools/linux-desktop/setup_cleanup.py." }] }
+        shell.navigate("health"); break
+      case "settings-health-pass": host.doctorInfo = { pass: true, checks: [] }; shell.navigate("health"); break
       case "settings-health-empty": host.empty(); shell.navigate("health"); break
       case "settings-advanced": shell.navigate("advanced"); break
       case "shortcut": shell.navigate("shortcut"); break
@@ -138,7 +143,7 @@ TestCase {
   readonly property var scenes: ["home", "home-empty", "home-welcome", "home-welcomed", "home-removed", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
     "style-email", "style-other", "style-cleanup", "style-fresh", "style-fresh-cleanup", "style-error", "appearance", "appearance-hifi",
     "transcript", "import-active", "import-done", "import-failed", "settings-general", "settings-general-off", "settings-linux",
-    "settings-health", "settings-health-empty", "settings-advanced", "shortcut", "error"]
+    "settings-health", "settings-health-error", "settings-health-pass", "settings-health-empty", "settings-advanced", "shortcut", "error"]
 
   function test_render_data() {
     var rows = []
@@ -572,6 +577,29 @@ TestCase {
     var cancel = findByName(shell, "setupCancel")
     verify(cancel !== null && cancel.visible, "Cancel shows while a model downloads")
     verify(allTexts().indexOf("Cancel") >= 0)
+  }
+
+  function test_health_lists_only_failing_checks() {
+    tc.dark = false
+    setScene("settings-health-error")
+    var texts = allTexts()
+    verify(texts.indexOf("Llama server · needs fixing") >= 0, "the failing check is titled")
+    verify(texts.indexOf("All checks pass") < 0)
+    verify(findByName(shell, "checkRow") !== null)
+  }
+
+  function test_health_says_all_checks_pass() {
+    tc.dark = false
+    setScene("settings-health-pass")
+    verify(allTexts().indexOf("All checks pass") >= 0)
+    compare(findByName(shell, "checkRow"), null)
+  }
+
+  function test_health_copy_diagnostics_runs_the_verb() {
+    tc.dark = false
+    setScene("settings-health-pass")
+    mouseClick(findByName(shell, "copyDiagnostics"))
+    compare(JSON.stringify(host.ran[host.ran.length - 1]), JSON.stringify(["copy-diagnostics"]))
   }
 
   function test_health_points_to_style() {

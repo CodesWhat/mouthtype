@@ -37,6 +37,7 @@ QtObject {
     { name: "alsa_input.pci-builtin", description: "Built-in Audio Analog Stereo", default: true } ],
     selected: "default", missing: false, muted: false })
   property var micLevel: null
+  property var doctorInfo: null
   property bool micTesting: false
   property var pendingDraft: null
   property string transcriptFont: "sans-serif"
@@ -53,6 +54,7 @@ QtObject {
 
   function run(args) { ran = ran.concat([args]) }
   function loadMicrophones() { run(["microphones"]) }
+  function loadDoctor() { run(["doctor"]) }
   function testMicrophone() { run(["mic-test"]) }
   function close() { run(["close"]) }
   function showRecording(id) { run(["recover", id]) }
