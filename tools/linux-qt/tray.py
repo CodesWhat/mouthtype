@@ -20,6 +20,16 @@ def glyph_path(glyph):
     return ASSETS / ("glyph-%s@2x.png" % glyph_name(glyph))
 
 
+def variant_for(red, green, blue):
+    """Which glyph tint reads on a panel of this colour: "light" glyph on a dark panel, "dark" on a light one.
+    The shipped glyphs are black on transparent, so they vanish on a dark panel unless recoloured."""
+    luma = 0.299 * red + 0.587 * green + 0.114 * blue
+    return "light" if luma < 140 else "dark"
+
+
+VARIANT_RGB = {"light": (255, 255, 255), "dark": (0, 0, 0)}
+
+
 def tooltip(glyph):
     name = glyph_name(glyph)
     if name.startswith("recording"):
@@ -41,7 +51,7 @@ def menu_entries(glyph):
 
 try:
     from PySide6.QtCore import QObject, QTimer, Property, Signal, Slot
-    from PySide6.QtGui import QAction, QIcon
+    from PySide6.QtGui import QAction, QGuiApplication, QIcon, QImage, QPainter, QPalette, QPixmap, QColor
     from PySide6.QtWidgets import QMenu, QSystemTrayIcon
     HAVE_QT = True
 except ImportError:  # pragma: no cover - exercised only on machines without PySide6
@@ -49,6 +59,23 @@ except ImportError:  # pragma: no cover - exercised only on machines without PyS
 
 
 if HAVE_QT:
+    def palette_variant():
+        """Pick the tint from the application palette's window colour (which follows the KDE colour scheme)."""
+        color = QGuiApplication.palette().color(QPalette.ColorRole.Window)
+        return variant_for(color.red(), color.green(), color.blue())
+
+    def glyph_icon(glyph, variant):
+        """The shipped glyph recoloured to the variant, keeping its alpha. Falls back to the raw file if it won't load."""
+        image = QImage(str(glyph_path(glyph)))
+        if image.isNull():
+            return QIcon(str(glyph_path(glyph)))
+        image = image.convertToFormat(QImage.Format.Format_ARGB32_Premultiplied)
+        painter = QPainter(image)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceIn)
+        painter.fillRect(image.rect(), QColor(*VARIANT_RGB[variant]))
+        painter.end()
+        return QIcon(QPixmap.fromImage(image))
+
     class Tray(QObject):
         """The `Tray` context property of Main.qml. QML pushes the glyph in and handles actionRequested."""
 
@@ -59,6 +86,7 @@ if HAVE_QT:
             super().__init__(parent)
             self._probe = availability or QSystemTrayIcon.isSystemTrayAvailable
             self._glyph = "unavailable"
+            self._variant = palette_variant()
             self._available = False
             self._icon = None
             self._menu = None
@@ -94,7 +122,7 @@ if HAVE_QT:
         def setGlyph(self, glyph):
             self._glyph = glyph_name(glyph)
             if self._icon is not None:
-                self._icon.setIcon(QIcon(str(glyph_path(self._glyph))))
+                self._icon.setIcon(glyph_icon(self._glyph, self._variant))
                 self._icon.setToolTip(tooltip(self._glyph))
                 for action, label, enabled in menu_entries(self._glyph):
                     self._actions[action].setText(label)
@@ -112,5 +140,13 @@ if HAVE_QT:
             self._icon.setContextMenu(self._menu)
             self._icon.activated.connect(
                 lambda reason: self.actionRequested.emit("open") if reason == QSystemTrayIcon.ActivationReason.Trigger else None)
-            self._icon.setIcon(QIcon(str(glyph_path(self._glyph))))
+            self._icon.setIcon(glyph_icon(self._glyph, self._variant))
             self._icon.setToolTip(tooltip(self._glyph))
+            QGuiApplication.instance().paletteChanged.connect(self._palette_changed)
+
+        def _palette_changed(self, *_):
+            variant = palette_variant()
+            if variant != self._variant:
+                self._variant = variant
+                if self._icon is not None:
+                    self._icon.setIcon(glyph_icon(self._glyph, variant))
