@@ -64,6 +64,11 @@ SWAY = os.environ.get('MOUTHTYPE_SWAY_BINARY', 'sway')
 def sway_ready():
     if not (shutil.which(SWAY) and shutil.which('wl-copy') and shutil.which('wl-paste')):
         return False
+    try:
+        # Packaged sway can carry file capabilities that an unprivileged build or CI user may not exec.
+        subprocess.run([SWAY, '--version'], capture_output=True, check=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return False
     return concealed.sensitive_supported()
 
 
