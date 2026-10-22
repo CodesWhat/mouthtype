@@ -15,4 +15,4 @@ for _ in $(seq 1 20); do
 done
 mkdir -p /home/tester/evidence
 chown tester:tester /home/tester/evidence
-exec runuser -u tester -- env HOME=/home/tester /opt/testbed/run.sh "$@"
+exec runuser -u tester -- env HOME=/home/tester "/opt/testbed/${MOUTHTYPE_TESTBED_SCRIPT:-run.sh}" "$@"

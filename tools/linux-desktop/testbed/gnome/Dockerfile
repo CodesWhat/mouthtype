@@ -14,6 +14,6 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --shell /bin/bash tester
-COPY run.sh entrypoint.sh /opt/testbed/
-RUN chmod 0755 /opt/testbed/run.sh /opt/testbed/entrypoint.sh
+COPY run.sh probe.sh entrypoint.sh /opt/testbed/
+RUN chmod 0755 /opt/testbed/run.sh /opt/testbed/probe.sh /opt/testbed/entrypoint.sh
 ENTRYPOINT ["/opt/testbed/entrypoint.sh"]

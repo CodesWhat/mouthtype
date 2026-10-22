@@ -13,7 +13,9 @@ APP_ID = 'app.mouthtype.Mouthtype'
 PORTAL_BUS_NAME = 'org.freedesktop.portal.Desktop'
 PORTAL_PATH = '/org/freedesktop/portal/desktop'
 REGISTRY_BUS_NAME = PORTAL_BUS_NAME
-REGISTRY_PATH = '/org/freedesktop/host/portal/Registry'
+# The Registry interface lives on the main portal object, verified on GNOME 50's xdg-desktop-portal 1.21.1.
+# The 'host/portal' object path in the upstream docs does not exist there.
+REGISTRY_PATH = PORTAL_PATH
 REGISTRY_IFACE = 'org.freedesktop.host.portal.Registry'
 REQUEST_IFACE = 'org.freedesktop.portal.Request'
 SESSION_IFACE = 'org.freedesktop.portal.Session'
