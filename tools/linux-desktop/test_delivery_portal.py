@@ -180,6 +180,110 @@ class RemoteDesktopSessionTests(unittest.TestCase):
         self.assertIsNone(self.store.load())
         self.assertIsNone(self.remote.session)
 
+    # clipboard ----------------------------------------------------------
+
+    def clipboard(self, **kwargs):
+        self.remote.start(interactive=True)
+        clip = delivery_portal.PortalClipboard(self.remote, owner_timeout=2.0, **kwargs)
+        self.addCleanup(clip.close)
+        clip.start()
+        return clip
+
+    def wait_for(self, condition, what):
+        deadline = time.monotonic() + 2
+        while time.monotonic() < deadline:
+            if condition():
+                return
+            time.sleep(0.02)
+        self.fail(f'timed out waiting for {what}')
+
+    def paste(self, mime):
+        serial = self.fake.request_paste(self.remote.session, mime)
+        self.wait_for(lambda: serial in self.fake.transfers, f'transfer {serial}')
+        return self.fake.transfers[serial]
+
+    def external_copy(self, clip, offers):
+        self.fake.external_copy(self.remote.session, offers)
+        self.wait_for(lambda: clip._owner_mimes == list(offers), 'owner change')
+
+    def test_clipboard_needs_an_active_session(self):
+        clip = delivery_portal.PortalClipboard(self.remote)
+        with self.assertRaises(portal.PortalError):
+            clip.start()
+
+    def test_copy_offers_every_text_type_and_serves_them(self):
+        clip = self.clipboard()
+        clip.copy('héllo')
+        self.assertEqual(self.fake.owned, list(delivery_portal.TEXT_MIMES))
+        self.assertEqual(self.paste('text/plain;charset=utf-8'), (True, 'héllo'.encode()))
+        self.assertEqual(self.paste('text/plain'), (True, 'héllo'.encode()))
+
+    def test_unoffered_type_is_refused(self):
+        clip = self.clipboard()
+        clip.copy('x')
+        self.assertEqual(self.paste('image/png'), (False, b''))
+
+    def test_concealed_copy_adds_the_password_manager_hint(self):
+        clip = self.clipboard()
+        clip.copy('secret words', concealed=True)
+        self.assertIn('x-kde-passwordManagerHint', self.fake.owned)
+        self.assertEqual(self.paste('x-kde-passwordManagerHint'), (True, b'secret'))
+        clip.copy('plain')
+        self.assertNotIn('x-kde-passwordManagerHint', self.fake.owned)
+
+    def test_restore_puts_the_previous_selection_back(self):
+        clip = self.clipboard()
+        self.external_copy(clip, {'text/plain;charset=utf-8': b'before', 'text/html': b'<b>before</b>'})
+        copy = clip.copy('dictated')
+        self.assertEqual(copy.previous, {'text/plain;charset=utf-8': b'before', 'text/html': b'<b>before</b>'})
+        self.fake.clipboard = copy.previous
+        self.assertTrue(clip.restore(copy))
+        self.assertEqual(self.fake.owned, ['text/plain;charset=utf-8', 'text/html'])
+        self.assertEqual(self.paste('text/html'), (True, b'<b>before</b>'))
+
+    def test_restore_is_cancelled_when_someone_else_copied(self):
+        clip = self.clipboard()
+        self.external_copy(clip, {'text/plain': b'before'})
+        copy = clip.copy('dictated')
+        self.fake.external_copy(self.remote.session, {'text/plain': b'user copy'})
+        self.wait_for(lambda: not clip.owns(copy.generation), 'ownership loss')
+        offers_before = len([c for c in self.fake.calls if c[1] == 'SetSelection'])
+        self.assertFalse(clip.restore(copy))
+        self.assertEqual(len([c for c in self.fake.calls if c[1] == 'SetSelection']), offers_before)
+
+    def test_restore_skipped_when_nothing_was_readable(self):
+        clip = self.clipboard()
+        copy = clip.copy('dictated')
+        self.assertEqual(copy.previous, {})
+        self.assertFalse(clip.restore(copy))
+
+    def test_oversized_previous_type_is_dropped_not_truncated(self):
+        clip = self.clipboard(read_cap=8)
+        self.external_copy(clip, {'text/plain': b'short', 'text/html': b'x' * 100})
+        self.assertEqual(clip.read_current(), {'text/plain': b'short'})
+
+    def test_unreadable_previous_type_is_skipped(self):
+        clip = self.clipboard()
+        self.fake.read_errors.add('text/html')
+        self.external_copy(clip, {'text/plain': b'a', 'text/html': b'b'})
+        self.assertEqual(clip.read_current(), {'text/plain': b'a'})
+
+    def test_second_copy_supersedes_the_first_restore(self):
+        clip = self.clipboard()
+        self.external_copy(clip, {'text/plain': b'before'})
+        first = clip.copy('one')
+        second = clip.copy('two')
+        self.assertFalse(clip.owns(first.generation))
+        self.assertTrue(clip.owns(second.generation))
+        self.assertFalse(clip.restore(first))
+
+    def test_close_stops_the_serving_thread(self):
+        clip = self.clipboard()
+        clip.copy('x')
+        clip.close()
+        clip.close()
+        self.assertFalse([t for t in threading.enumerate() if t.name == 'mouthtype-portal-clipboard'])
+
 
 if __name__ == '__main__':
     unittest.main()
