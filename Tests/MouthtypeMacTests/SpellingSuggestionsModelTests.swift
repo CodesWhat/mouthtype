@@ -445,7 +445,7 @@ import Testing
             probe.started()
             // Runs on a GCD thread, so holding it never touches the cooperative pool.
             _ = release.wait(timeout: .now() + 60)
-            probe.finished(cancelled: false)
+            probe.finished(cancelled: OffPool.isCancelled)
             return []
         }
         model.activate()
@@ -454,6 +454,7 @@ import Testing
         model.deactivate()
         release.signal()
         for _ in 0..<3000 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(probe.cancelled == true)
         try await Task.sleep(for: .milliseconds(100))
         #expect(model.suggestions.isEmpty)
     }
@@ -471,7 +472,7 @@ import Testing
                 probe.started()
                 // Runs on a GCD thread, so holding it never touches the cooperative pool.
                 _ = release.wait(timeout: .now() + 60)
-                probe.finished(cancelled: false)
+                probe.finished(cancelled: OffPool.isCancelled)
                 return []
             }
             return try store.recentTakes(limit: limit)
@@ -481,6 +482,7 @@ import Testing
         await model.reload()
         release.signal()
         for _ in 0..<3000 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
+        #expect(probe.cancelled == true)
         try await Task.sleep(for: .milliseconds(100))
         #expect(!model.suggestions.isEmpty)
     }

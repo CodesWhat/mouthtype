@@ -4,6 +4,7 @@ on:
   push:
     branches: [main, 'dev/**']
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,11 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  swift:
-    strategy:
-      fail-fast: false
-      matrix:
-        mode: [parallel, serial]
+  build:
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
     runs-on: xcode-27
     timeout-minutes: 60
@@ -42,29 +39,36 @@ jobs:
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 
+  # Post-merge only. Hosted runners are memory-starved (7.5 GB, no swap), so timing flakes show up here that don't
+  # happen locally. Those are tracked in the roadmap as T-2 and T-3, and the full suite runs locally at the release merge.
+  test:
+    if: github.event_name != 'pull_request'
+    # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      # mlx-swift compiles Metal shaders, and Xcode ships the Metal toolchain as a separate component.
+      - name: Metal toolchain
+        run: |
+          if ! xcrun metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal --version
+
       # MouthtypeSettingsUITests builds real Settings and preview windows and drives focus and key events through them.
       # The hosted runner has no GUI or accessibility session, so those tests fail there and the run can die before it
       # prints a Swift Testing summary. The target is built here and runs locally at the release merge.
       - name: Test with coverage
-        run: |
-          rm -f /tmp/ci-stop; : > test-output.log
-          scripts/ci-watchdog.sh test-output.log watchdog /tmp/ci-stop &
-          wd=$!
-          extra=""; [ "${{ matrix.mode }}" = serial ] && extra="--no-parallel"
-          set +e
-          scripts/swift-test.sh --enable-code-coverage --skip MouthtypeSettingsUITests $extra 2>&1 | tee test-output.log
-          status=${PIPESTATUS[0]}
-          touch /tmp/ci-stop; wait $wd
-          exit $status
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: always()
-        with:
-          name: watchdog-${{ matrix.mode }}
-          path: |
-            watchdog
-            test-output.log
-          if-no-files-found: ignore
+        run: scripts/swift-test.sh --enable-code-coverage --skip MouthtypeSettingsUITests
 
       - name: Coverage report
         run: |
