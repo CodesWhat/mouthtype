@@ -33,6 +33,7 @@ SHARE = (('app.mouthtype.Mouthtype.desktop', 'share/applications/' + APP_ID + '.
          ('app.mouthtype.Mouthtype.png', 'share/icons/hicolor/128x128/apps/' + APP_ID + '.png'))
 FILES = (['LICENSE', 'THIRD_PARTY_NOTICES.md'] +
          ['tools/linux-desktop/' + name for name in DESKTOP] +
+         ['tools/linux-desktop/share/' + name for name, _ in SHARE] +
          ['tools/linux-desktop/vendor/grapheme/' + name for name in GRAPHEME] +
          ['tools/linux-engine-proof/' + name for name in ENGINE])
 # Modules the daemon loads at runtime (cli_*.py, library.py, stats.py, transform_worker.py, ...) and their
