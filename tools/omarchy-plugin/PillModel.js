@@ -121,6 +121,12 @@ function message(snapshot, deliveryMode) {
   if (error === "capture_unavailable") return { headline: "No microphone", detail: "Check PipeWire", isError: true }
   if (error === "transcription_failed") return { headline: "Couldn't transcribe", detail: "Audio saved for retry", isError: true }
   if (error === "recovery_full") return { headline: "Recovery is full", detail: "Forget old takes first", isError: true }
+  if (error === "command_expired") return { headline: "Timed out", detail: "Try the shortcut again", isError: true }
+  if (error === "dictionary_unavailable") return { headline: "Dictionary unavailable", detail: "Run doctor", isError: true }
+  if (error === "phrases_unavailable") return { headline: "Phrases unavailable", detail: "Run doctor", isError: true }
+  if (error === "phrase_context_unavailable") return { headline: "Phrase context unavailable", detail: "Run doctor", isError: true }
+  if (error === "cleanup_unavailable") return { headline: "Cleanup unavailable", detail: "Run doctor", isError: true }
+  // Only codes added after the table above land here.
   if (error && /unavailable/.test(error)) return { headline: "Needs attention", detail: String(error).replace(/_/g, " "), isError: true }
   if (delivery === "unknown") return { headline: deliveryMode === "type" ? "Typed" : "Pasted", detail: "Check the field", isError: false }
   if (delivery === "recover_only") return { headline: "Saved", detail: deliveryMode === "recover" ? null : "App not allowed", isError: false }
