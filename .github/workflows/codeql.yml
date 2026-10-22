@@ -60,6 +60,12 @@ jobs:
           fi
           xcrun metal --version
 
+      # CodeQL's tracer is x86_64 and breaks the arm64 Metal compiler, so build the dependencies
+      # (including mlx-swift's shaders) untraced first. Only our own targets get rebuilt under tracing.
+      - name: Prebuild dependencies
+        if: matrix.language == 'swift'
+        run: swift build --disable-sandbox
+
       - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
           languages: ${{ matrix.language }}
@@ -67,7 +73,11 @@ jobs:
 
       - name: Build Swift package
         if: matrix.language == 'swift'
-        run: swift build --disable-sandbox
+        run: |
+          set -euo pipefail
+          find .build/out/Intermediates.noindex -maxdepth 4 -type d \
+            \( -name 'Mouthtype*' -o -name 'FnRemapKit*' -o -name 'mouthtype-*' \) -prune -exec rm -rf {} +
+          swift build --disable-sandbox
 
       - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
         with:
