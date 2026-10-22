@@ -50,7 +50,12 @@ IDENTITY="${MOUTHTYPE_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 
     | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"
 
 # Keep the checkout path out of the binaries (C++ __FILE__ in Cmlx, Swift debug paths).
-PATH_MAP_FLAGS=(-Xcc "-ffile-prefix-map=$PWD=/src" -Xswiftc -file-prefix-map -Xswiftc "$PWD=/src")
+# The compilers see the resolved path (/private/var/... for a /var/... checkout), so map both spellings.
+PATH_MAP_FLAGS=()
+for root in "$PWD" "$(pwd -P)"; do
+    PATH_MAP_FLAGS+=(-Xcc "-ffile-prefix-map=$root=/src" -Xswiftc -file-prefix-map -Xswiftc "$root=/src")
+    [ "$PWD" = "$(pwd -P)" ] && break
+done
 
 echo "→ building Mouthtype $VERSION (release, arm64)"
 swift build -c release --arch arm64 --jobs 4 "${PATH_MAP_FLAGS[@]}" --product Mouthtype
@@ -64,6 +69,10 @@ cp "$BIN_DIR/Mouthtype" "$APP/Contents/MacOS/Mouthtype"
 strip -x "$APP/Contents/MacOS/Mouthtype"
 cp "$BIN_DIR/mouthtype-fn-guard" "$APP/Contents/MacOS/mouthtype-fn-guard"
 strip -x "$APP/Contents/MacOS/mouthtype-fn-guard"
+# ld derives LC_UUID from its inputs' paths, so identical code gets a different UUID per checkout.
+# Replace it with a hash of the binary's own contents; codesign below (or here, unsigned) re-signs.
+python3 -I scripts/normalize-macho-uuid.py "$APP/Contents/MacOS/Mouthtype" "$APP/Contents/MacOS/mouthtype-fn-guard"
+codesign --force --sign - "$APP/Contents/MacOS/Mouthtype" "$APP/Contents/MacOS/mouthtype-fn-guard"
 cp packaging/Info.plist "$APP/Contents/Info.plist"
 cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # macOS 26 icon: the Icon Composer bundle compiled to Assets.car (CFBundleIconName), so the system masks it and
