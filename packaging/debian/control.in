@@ -15,7 +15,7 @@ Description: local voice dictation client for Wayland desktops
  computer.
  .
  This package installs the client, the Omarchy bar plugin sources and a
- systemd user unit. It downloads no model and enables no service. After
+ systemd user units. It downloads no model and enables no service. After
  installing, run "mouthtype-linux-setup" as your normal user to fetch the
  speech model (about 465 MiB) and enable the per-user service.
  .

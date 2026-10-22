@@ -23,8 +23,13 @@ echo "key $key"
 
 step "build v1 and v2"
 mkdir -p /tmp/debs /tmp/site
-bash "$root/packaging/debian/build-deb.sh" --output /tmp/debs --version 0.3.0-1 >/dev/null
-bash "$root/packaging/debian/build-deb.sh" --output /tmp/debs --version 0.3.1-1 >/dev/null
+# PREBUILT_DEBS=DIR (holding 0.3.0-1 and 0.3.1-1) skips building, for images whose tar cannot run on the host kernel.
+if [ -n "${PREBUILT_DEBS:-}" ]; then
+    cp "$PREBUILT_DEBS"/mouthtype-linux_0.3.[01]-1_amd64.deb /tmp/debs/
+else
+    bash "$root/packaging/debian/build-deb.sh" --output /tmp/debs --version 0.3.0-1 >/dev/null
+    bash "$root/packaging/debian/build-deb.sh" --output /tmp/debs --version 0.3.1-1 >/dev/null
+fi
 ls /tmp/debs
 
 step "publish v1"
@@ -40,7 +45,9 @@ install -d -m 755 /etc/apt/keyrings
 install -m 644 /tmp/site/mouthtype-archive-keyring.gpg /etc/apt/keyrings/mouthtype-archive-keyring.gpg
 install -m 644 /tmp/site/mouthtype.sources /etc/apt/sources.list.d/mouthtype.sources
 cat /etc/apt/sources.list.d/mouthtype.sources
-apt-get update 2>&1 | grep -i mouthtype || fail "apt update did not fetch the mouthtype repo"
+apt-get update 2>&1 | tee /tmp/update.log
+grep -q "127.0.0.1:8000 stable InRelease" /tmp/update.log || fail "apt update did not fetch the signed repo"
+grep -qE "^(W|E):" /tmp/update.log && fail "apt update warned" || true
 apt-cache policy mouthtype-linux | sed -n 1,5p
 apt-get install -y mouthtype-linux >/dev/null
 [ "$(dpkg-query -W -f='${Version}' mouthtype-linux)" = 0.3.0-1 ] || fail "wrong installed version"
@@ -59,7 +66,8 @@ cp /tmp/site/dists/stable/InRelease /tmp/InRelease.good
 cp /tmp/site/dists/stable/Release /tmp/Release.good
 cp /tmp/site/dists/stable/Release.gpg /tmp/Release.gpg.good
 sed -i 's/^Label: Mouthtype/Label: Tampered/' /tmp/site/dists/stable/Release /tmp/site/dists/stable/InRelease
-if apt-get update 2>&1 | tee /tmp/tamper.log | grep -qiE "not signed|BADSIG|signature|failed"; then echo "rejected: ok"; else cat /tmp/tamper.log; fail "tampered index was accepted"; fi
+apt-get update >/tmp/tamper.log 2>&1 || true
+if grep -qiE "not signed|BADSIG|signature|failed" /tmp/tamper.log; then echo "rejected: ok"; else cat /tmp/tamper.log; fail "tampered index was accepted"; fi
 cp /tmp/InRelease.good /tmp/site/dists/stable/InRelease
 cp /tmp/Release.good /tmp/site/dists/stable/Release
 cp /tmp/Release.gpg.good /tmp/site/dists/stable/Release.gpg
@@ -70,7 +78,8 @@ mkdir -m 700 "$GNUPGHOME"
 gpg --batch --pinentry-mode loopback --passphrase '' --quick-generate-key 'Other <other@invalid>' ed25519 sign never 2>/dev/null
 other=$(gpg --batch --list-secret-keys --with-colons | awk -F: '$1 == "fpr" {print $10; exit}')
 bash "$root/packaging/debian/build-apt-repo.sh" --output /tmp/site --key "$other" --url http://127.0.0.1:8000 --deb /tmp/debs/mouthtype-linux_0.3.1-1_amd64.deb >/dev/null
-if apt-get update 2>&1 | tee /tmp/other.log | grep -qiE "NO_PUBKEY|not signed|signature"; then echo "rejected: ok"; else cat /tmp/other.log; fail "untrusted key was accepted"; fi
+apt-get update >/tmp/other.log 2>&1 || true
+if grep -qiE "NO_PUBKEY|not signed|signature" /tmp/other.log; then echo "rejected: ok"; else cat /tmp/other.log; fail "untrusted key was accepted"; fi
 
 apt-get purge -y mouthtype-linux >/dev/null
 echo; echo "PASS apt flow on $PRETTY_NAME"

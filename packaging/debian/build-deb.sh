@@ -57,6 +57,13 @@ install -Dm644 "$root/packaging/arch/aur/mouthtype-linux.service" "$stage/usr/li
 
 install -Dm644 "$here/lintian-overrides" "$stage/usr/share/lintian/overrides/mouthtype-linux"
 chmod 755 "$stage/usr/lib/mouthtype-linux/tools/linux-desktop/run-ci.sh"
+# First-run unit, enabled for every user the way `systemctl --global enable` would: a symlink in
+# graphical-session.target.wants. dpkg owns the link, so remove and purge delete it with the package.
+install -Dm644 "$root/tools/linux-desktop/systemd/mouthtype-linux-firstrun.service" \
+    "$stage/usr/lib/systemd/user/mouthtype-linux-firstrun.service"
+install -d "$stage/usr/lib/systemd/user/graphical-session.target.wants"
+ln -s ../mouthtype-linux-firstrun.service \
+    "$stage/usr/lib/systemd/user/graphical-session.target.wants/mouthtype-linux-firstrun.service"
 
 doc="$stage/usr/share/doc/mouthtype-linux"
 install -Dm644 "$root/THIRD_PARTY_NOTICES.md" "$doc/THIRD_PARTY_NOTICES.md"

@@ -31,6 +31,9 @@ step "files"
 for path in /usr/bin/mouthtype-linux /usr/bin/mouthtype-linux-setup \
             /usr/lib/mouthtype-linux/tools/linux-desktop/desktop.py \
             /usr/lib/systemd/user/mouthtype-linux.service \
+            /usr/lib/systemd/user/graphical-session.target.wants/mouthtype-linux-firstrun.service \
+            /usr/lib/mouthtype-linux/tools/linux-desktop/firstrun.py \
+            /usr/lib/mouthtype-linux/tools/linux-desktop/cli_firstrun.py \
             /usr/share/mouthtype-linux/omarchy-plugin/manifest.json \
             /usr/share/doc/mouthtype-linux/copyright; do
     [ -e "$path" ] || fail "missing $path"
@@ -49,21 +52,18 @@ python3 -W error::ResourceWarning -m unittest discover -s /usr/lib/mouthtype-lin
 
 step "doctor (ordinary user, no config)"
 id mt-test >/dev/null 2>&1 || useradd --create-home --shell /bin/bash mt-test
-doctor=$(runuser -u mt-test -- mouthtype-linux doctor || true)
-echo "$doctor" | python3 -c '
-import json, sys
-data = json.load(sys.stdin)
-checks = {c["name"]: c["status"] for c in data["checks"]}
-print(checks)
-for name in ("platform", "capture", "python"):
-    assert checks.get(name) == "ok", (name, checks)
-'
+doctor=$(runuser -u mt-test -- mouthtype-linux doctor 2>&1 || true)
+echo "$doctor" | head -40
+for name in platform capture python; do
+    echo "$doctor" | grep -q "^OK $name:" || fail "doctor check $name is not OK"
+done
 systemd-analyze --user verify /usr/lib/systemd/user/mouthtype-linux.service 2>/dev/null || true
 
 step "apt remove"
 apt-get remove -y mouthtype-linux >/dev/null
 test ! -e /usr/bin/mouthtype-linux || fail "launcher left after remove"
 test ! -e /usr/lib/mouthtype-linux || fail "payload left after remove"
+test ! -L /usr/lib/systemd/user/graphical-session.target.wants/mouthtype-linux-firstrun.service || fail "first-run link left after remove"
 test ! -e /usr/share/mouthtype-linux || fail "plugin left after remove"
 test ! -e /usr/lib/systemd/user/mouthtype-linux.service || fail "unit left after remove"
 
