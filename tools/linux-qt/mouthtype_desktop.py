@@ -6,6 +6,7 @@ daemon only through control.py, the same way the Omarchy panel does.
 """
 import argparse
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -16,9 +17,9 @@ HANDOFF_TIMEOUT_MS = 1500
 
 try:
     from PySide6.QtCore import (
-        QCoreApplication, QFileSystemWatcher, QObject, QProcess, QTimer, QUrl, Property, Signal, Slot, Qt,
+        QCoreApplication, QFileSystemWatcher, QLibraryInfo, QObject, QProcess, QRect, QTimer, QUrl, Property, Signal, Slot, Qt,
     )
-    from PySide6.QtGui import QDesktopServices
+    from PySide6.QtGui import QDesktopServices, QRegion, QWindow
     from PySide6.QtWidgets import QApplication
     from PySide6.QtNetwork import QLocalServer, QLocalSocket
     from PySide6.QtQml import QQmlApplicationEngine
@@ -37,19 +38,31 @@ def server_name():
     return "mouthtype-desktop-%d" % os.getuid()
 
 
+def layer_shell_available(platform_name, import_paths):
+    """True on a Wayland session where the LayerShellQt QML module (org.kde.layershell) is installed."""
+    if platform_name != "wayland":
+        return False
+    return any((Path(path) / "org" / "kde" / "layershell" / "qmldir").is_file() for path in import_paths)
+
+
 class PlatformBackend(QObject):
     """What MouthtypePlatform/Platform.qml calls: env, finite QProcess runs, file watching, URLs."""
 
     finished = Signal(int, str, int)
     changed = Signal(str, str)
 
-    def __init__(self, parent=None):
+    def __init__(self, layer_shell=False, parent=None):
         super().__init__(parent)
+        self._layer_shell = layer_shell
         self._processes = {}
         self._watcher = QFileSystemWatcher(self)
         self._watcher.fileChanged.connect(self._file_changed)
         self._watcher.directoryChanged.connect(self._directory_changed)
         self._watched = set()
+
+    @Property(bool, constant=True)
+    def layerShell(self):
+        return self._layer_shell
 
     @Slot(str, result=str)
     def env(self, name):
@@ -130,6 +143,57 @@ class PlatformBackend(QObject):
                 self.changed.emit(path, self.readFile(path))
 
 
+class PillFeed(QObject):
+    """The `PillFeed` context property: lines of the daemon's `watch --retry` stream, which PillWindow.qml turns into pill states."""
+
+    line = Signal(str)
+
+    def __init__(self, launcher, config, parent=None):
+        super().__init__(parent)
+        self._argv = [launcher, "--config", config, "watch", "--retry"]
+        self._process = None
+        self._buffer = b""
+        self._stopped = False
+
+    def start(self):
+        self._stopped = False
+        process = QProcess(self)
+        program, arguments = self._argv[0], self._argv[1:]
+        if shutil.which("setpriv"):  # the stream dies with this process
+            program, arguments = "setpriv", ["--pdeathsig", "TERM", self._argv[0]] + arguments
+        process.setProgram(program)
+        process.setArguments(arguments)
+        process.setStandardInputFile(QProcess.nullDevice())
+        process.readyReadStandardOutput.connect(self._read)
+        process.finished.connect(lambda *_: self._exited())
+        process.errorOccurred.connect(lambda error: self._exited() if error == QProcess.ProcessError.FailedToStart else None)
+        self._process = process
+        process.start()
+
+    def stop(self):
+        self._stopped = True
+        if self._process is not None:
+            self._process.finished.disconnect()
+            self._process.kill()
+            self._process.waitForFinished(1000)
+            self._process = None
+
+    def _read(self):
+        self._buffer += bytes(self._process.readAllStandardOutput())
+        *lines, self._buffer = self._buffer.split(b"\n")
+        for raw in lines:
+            if raw.strip():
+                self.line.emit(raw.decode("utf-8", "replace"))
+
+    def _exited(self):
+        if self._process is not None:
+            self._process.deleteLater()
+            self._process = None
+        self._buffer = b""
+        if not self._stopped:
+            QTimer.singleShot(3000, lambda: None if self._stopped or self._process is not None else self.start())
+
+
 class Host(QObject):
     """The `Host` context property of Main.qml."""
 
@@ -158,9 +222,23 @@ class Host(QObject):
     def screenshotPath(self):
         return self._args.screenshot or ""
 
+    @Property(str, constant=True)
+    def pillScreenshotPath(self):
+        return self._args.pill_screenshot or ""
+
+    @Property(str, constant=True)
+    def pillConfig(self):
+        return self._args.config or ""
+
     @Property(bool, constant=True)
     def watchdog(self):
-        return self._args.selftest or bool(self._args.screenshot)
+        return self._args.selftest or bool(self._args.screenshot) or bool(self._args.pill_screenshot)
+
+    @Slot(QObject, int, int, int, int)
+    def setInputRegion(self, window, x, y, width, height):
+        """Limit the pill surface's input to one rectangle so clicks elsewhere reach the app below (Wayland input region)."""
+        if isinstance(window, QWindow):
+            window.setMask(QRegion(QRect(x, y, max(width, 1), max(height, 1))))
 
     @Property(bool, notify=darkChanged)
     def dark(self):
@@ -173,7 +251,7 @@ class Host(QObject):
 
     @Slot()
     def loaded(self):
-        if self._args.selftest or self._args.screenshot:
+        if self._args.selftest or self._args.screenshot or self._args.pill_screenshot:
             self.finish(0)
 
     @Slot(str)
@@ -192,6 +270,11 @@ def parse_args(argv):
     parser.add_argument("--helper", default=str(PLUGIN / "control.py"), help="control.py to run (default: the one next to the QML)")
     parser.add_argument("--selftest", action="store_true", help="load the page, wait for the first state reply, exit 0 (1 on failure)")
     parser.add_argument("--screenshot", metavar="PNG", help="save the window to PNG once the page has settled, then exit")
+    parser.add_argument("--pill-screenshot", metavar="PNG", help="show the pill (needs --force-pill and a --launcher that reports a recording take), save it to PNG, exit")
+    parser.add_argument("--launcher", default=str(Path.home() / ".local" / "bin" / "mouthtype-linux"), help="mouthtype-linux launcher whose `watch` stream feeds the pill")
+    parser.add_argument("--config", default="", help="linux.json passed to the launcher (default: the speech-candidate one)")
+    parser.add_argument("--no-pill", action="store_true", help="never show the floating pill")
+    parser.add_argument("--force-pill", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--settle-ms", type=int, default=300, help=argparse.SUPPRESS)
     parser.add_argument("--server-name", default=None, help=argparse.SUPPRESS)
     return parser.parse_args(argv)
@@ -232,14 +315,16 @@ def main(argv=None):
 
     name = args.server_name or server_name()
     server = None
-    if not (args.selftest or args.screenshot):
+    if not (args.selftest or args.screenshot or args.pill_screenshot):
         if hand_off(name, args.page):
             return 0
         server = listen(name)
 
     engine = QQmlApplicationEngine()
     engine.addImportPath(str(HERE / "platform" / "qt"))
-    backend = PlatformBackend()
+    layer_shell = not args.no_pill and (args.force_pill or layer_shell_available(
+        app.platformName(), [QLibraryInfo.path(QLibraryInfo.LibraryPath.QmlImportsPath)] + engine.importPathList()))
+    backend = PlatformBackend(layer_shell)
     host = Host(args)
     host.set_dark(color_scheme_is_dark(app))
     app.styleHints().colorSchemeChanged.connect(lambda scheme: host.set_dark(scheme == Qt.ColorScheme.Dark))
@@ -247,6 +332,9 @@ def main(argv=None):
     engine.rootContext().setContextProperty("Host", host)
     tray = Tray()
     engine.rootContext().setContextProperty("Tray", tray)
+    config = args.config or str(Path.home() / ".local" / "share" / "mouthtype" / "speech-candidate" / "linux.json")
+    feed = PillFeed(args.launcher, config)
+    engine.rootContext().setContextProperty("PillFeed", feed)
     tray.actionRequested.connect(lambda action: app.quit() if action == "quit" else None)
 
     if server is not None:
@@ -262,7 +350,11 @@ def main(argv=None):
         print("mouthtype-desktop: Main.qml failed to load", file=sys.stderr)
         return 1
 
-    if not (args.selftest or args.screenshot):
+    if layer_shell and not args.screenshot:
+        feed.start()
+        app.aboutToQuit.connect(feed.stop)
+
+    if not (args.selftest or args.screenshot or args.pill_screenshot):
         tray.start()
         # With a tray icon the host keeps running after the window closes; without one, closing the window ends it.
         tray.availableChanged.connect(lambda: app.setQuitOnLastWindowClosed(not tray.available))

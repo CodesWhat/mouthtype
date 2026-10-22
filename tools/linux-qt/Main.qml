@@ -43,6 +43,15 @@ Window {
     }
   }
 
+  // The KDE pill. PillWindow.qml imports org.kde.layershell, so it is only loaded where the host found that module.
+  Loader {
+    id: pillLoader
+    active: Platform.isLayerShell
+    source: "PillWindow.qml"
+    onLoaded: item.app = app
+    onStatusChanged: if (status === Loader.Error) Host.failed("the pill could not load (is qml6-module-org-kde-layershell installed?)")
+  }
+
   MouthtypeShell {
     id: shellView
     anchors.fill: parent
@@ -69,6 +78,7 @@ Window {
     interval: Host.settleMs
     running: win.stateSeen
     onTriggered: {
+      if (Host.pillScreenshotPath !== "") return
       if (Host.screenshotPath === "") { Host.loaded(); return }
       shellView.grabToImage(function(result) {
         if (result && result.saveToFile(Host.screenshotPath)) Host.loaded()
