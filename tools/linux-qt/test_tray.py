@@ -26,6 +26,20 @@ class GlyphTests(unittest.TestCase):
         self.assertEqual(tray.tooltip("unavailable"), "Mouthtype: service not running")
 
 
+class VariantTests(unittest.TestCase):
+    def test_dark_panel_gets_the_light_glyph(self):
+        self.assertEqual(tray.variant_for(0, 0, 0), "light")
+        self.assertEqual(tray.variant_for(36, 36, 36), "light")  # GNOME top bar, Breeze Dark
+
+    def test_light_panel_gets_the_dark_glyph(self):
+        self.assertEqual(tray.variant_for(255, 255, 255), "dark")
+        self.assertEqual(tray.variant_for(239, 240, 241), "dark")  # Breeze Light window colour
+
+    def test_every_variant_has_a_tint(self):
+        for variant in ("light", "dark"):
+            self.assertIn(variant, tray.VARIANT_RGB)
+
+
 class MenuTests(unittest.TestCase):
     def test_entries_are_start_open_settings_quit(self):
         self.assertEqual([a for a, _, _ in tray.menu_entries("idle")], ["toggle", "open", "settings", "quit"])
@@ -87,6 +101,15 @@ class TrayTests(unittest.TestCase):
         self.assertTrue(item.available)
         self.assertFalse(item._timer.isActive())
         self.assertEqual(changes, [True])
+
+    def test_glyph_is_tinted_for_the_variant_and_keeps_alpha(self):
+        for variant, rgb in tray.VARIANT_RGB.items():
+            image = tray.glyph_icon("idle", variant).pixmap(32, 30).toImage()
+            seen = [image.pixelColor(x, y) for x in range(image.width()) for y in range(image.height())]
+            opaque = [c for c in seen if c.alpha() > 200]
+            self.assertTrue(opaque)
+            self.assertTrue(all((c.red(), c.green(), c.blue()) == rgb for c in opaque))
+            self.assertTrue(any(c.alpha() == 0 for c in seen))
 
     def test_menu_actions_are_emitted(self):
         item, _, _ = self.make(True)
