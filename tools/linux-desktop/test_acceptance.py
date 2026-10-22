@@ -7,7 +7,8 @@ import wave
 
 import types
 
-from acceptance import answer_consent, atspi_walk, consent_dialog, tone_metrics
+import consent_atspi
+from acceptance import consent_dialog, tone_metrics
 
 
 class ToneTests(unittest.TestCase):
@@ -145,31 +146,24 @@ class GnomeConsentTests(unittest.TestCase):
             FakeNode('check box', 'Remember This Selection', clickable=True),
             FakeNode('button', 'Share', clickable=True)])
 
-    def test_walk_stops_at_the_first_match_and_respects_the_budget(self):
-        tree = FakeNode(children=[FakeNode(name='a', children=[FakeNode(name='b')]), FakeNode(name='c')])
-        self.assertEqual(atspi_walk(tree, lambda node: node.name if node.name == 'b' else None, [10]), 'b')
-        self.assertIsNone(atspi_walk(tree, lambda node: node.name if node.name == 'c' else None, [2]))
-
     def test_consent_dialog_is_found_only_under_the_portal_application(self):
         window = self.dialog()
-        other = FakeNode('application', 'other', [FakeNode('frame', 'Remote Desktop')])
+        other = FakeNode('application', 'other', [self.dialog()])
         portal = FakeNode('application', 'xdg-desktop-portal-gnome', [FakeNode('frame', 'Settings'), window])
         self.assertIs(consent_dialog(FakeAtspi([other, portal])), window)
         self.assertIsNone(consent_dialog(FakeAtspi([other])))
 
     def test_answer_switches_on_the_controls_and_presses_share(self):
         window = self.dialog(keyboard=True)
-        atspi = FakeAtspi([])
-        result = answer_consent(window, atspi)
-        self.assertEqual(result['controls'], ['Allow Clipboard Access', 'Allow Remote Interaction', 'remember'])
-        self.assertEqual(result['switched_on'], ['Allow Clipboard Access', 'remember'])
-        self.assertNotIn('Allow Remote Interaction', result['switched_on'])
+        result = consent_atspi.answer(window, FakeAtspi([]))
+        self.assertEqual(result['switched_on'], ['Allow Clipboard Access', 'Remember This Selection'])
+        self.assertEqual(result['pressed'], 'Share')
         self.assertEqual(window.children[3].actions, 1)
 
-    def test_answer_without_a_share_button_fails_loudly(self):
+    def test_answer_without_an_affirmative_button_fails_loudly(self):
         window = FakeNode('frame', 'Remote Desktop', [FakeNode('switch', 'Allow Remote Interaction', clickable=True)])
         with self.assertRaises(ValueError):
-            answer_consent(window, FakeAtspi([]))
+            consent_atspi.answer(window, FakeAtspi([]))
 
 
 if __name__ == '__main__':
