@@ -78,7 +78,7 @@ import MouthtypeCore
         let word = try #require(f.editor.words.first { $0.written == "Nguyen" })
         #expect(word.warning != nil)
         f.editor.select(word)
-        #expect(f.editor.everydayWarning?.contains("everyday word") == true)
+        #expect(f.editor.everydayWarning?.contains("everyday English word") == true)
         let bitmap = try SettingsRender.render(SpellingWordSheet(editor: f.editor), dark: false, size: NSSize(width: 500, height: 520))
         try SettingsRender.save(bitmap, name: "dictionary-edit-word-warning")
     }

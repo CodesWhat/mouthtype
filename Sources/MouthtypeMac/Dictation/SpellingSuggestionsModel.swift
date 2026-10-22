@@ -167,7 +167,8 @@ struct DismissedSuggestions: Codable, Equatable {
                 .flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
             return SuggestionTake(
                 id: record.id, rawText: raw, finalText: final, boostTermsApplied: boosted,
-                app: record.appName, date: Date(timeIntervalSince1970: record.startedAt))
+                app: record.appName, date: Date(timeIntervalSince1970: record.startedAt),
+                language: record.language.flatMap { DictationLanguage(code: $0) })
         }
     }
 

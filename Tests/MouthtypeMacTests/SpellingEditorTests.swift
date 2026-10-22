@@ -154,7 +154,7 @@ import MouthtypeCore
         let editor = SpellingEditor(store: store)
         editor.heardInput = "win"
         editor.written = "Nguyen"
-        #expect(editor.everydayWarning?.contains("everyday word") == true)
+        #expect(editor.everydayWarning?.contains("everyday English word") == true)
         #expect(editor.canSave)
         editor.heardInput = "shivon"
         #expect(editor.everydayWarning == nil)

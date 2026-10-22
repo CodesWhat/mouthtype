@@ -8,15 +8,24 @@ public struct SuggestionTake: Sendable, Equatable {
     public var boostTermsApplied: [String]
     public var app: String?
     public var date: Date
+    /// The language the take was dictated in. Nil reads as English, so takes saved before 0.6.0 stay in.
+    public var language: DictationLanguage?
 
-    public init(id: String, rawText: String, finalText: String, boostTermsApplied: [String] = [], app: String? = nil, date: Date = Date(timeIntervalSince1970: 0)) {
+    public init(
+        id: String, rawText: String, finalText: String, boostTermsApplied: [String] = [], app: String? = nil,
+        date: Date = Date(timeIntervalSince1970: 0), language: DictationLanguage? = nil
+    ) {
         self.id = id
         self.rawText = rawText
         self.finalText = finalText
         self.boostTermsApplied = boostTermsApplied
         self.app = app
         self.date = date
+        self.language = language
     }
+
+    /// Suggestions are English only in 0.6.0: the phonetic key, the consonant rules and the known-word check all assume English.
+    var isEnglish: Bool { language?.isEnglish ?? true }
 }
 
 public struct SuggestionEvidence: Sendable, Equatable, Hashable {
@@ -72,6 +81,7 @@ public enum SpellingSuggester {
         limit: Int = defaultLimit,
         isKnownWord: @escaping @Sendable (String) -> Bool = { OrdinaryWords.isOrdinary($0) }
     ) -> [SpellingSuggestion] {
+        let takes = takes.filter(\.isEnglish)
         var run = Run(takes: takes, rules: rules, corrections: corrections, isKnownWord: isKnownWord)
         return run.execute(limit: limit)
     }
