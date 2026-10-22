@@ -59,12 +59,16 @@ if [ -n "${MOUTHTYPE_SCRATCH_PATH:-}" ]; then
     mkdir -p "$MOUTHTYPE_SCRATCH_PATH"
     SRC="$(cd "$MOUTHTYPE_SCRATCH_PATH" && pwd -P)/mouthtype"
     SCRATCH="$(dirname "$SRC")/build"
+    # ld's default (fast) objc stubs come out in one of two layouts at random from identical inputs;
+    # the small stubs layout is deterministic.
+    LINK_FLAGS=(-Xlinker -objc_stubs_small)
     echo "→ copying sources to $SRC"
     mkdir -p "$SRC"
     rsync -a --delete --exclude /.build --exclude /.git --exclude /build --exclude /.claude --exclude /.planning ./ "$SRC/"
 else
     SRC="$PWD"
     SCRATCH="$PWD/.build"
+    LINK_FLAGS=()
 fi
 SWIFT_ARGS=(-c release --arch arm64 --package-path "$SRC" --scratch-path "$SCRATCH")
 # Keep the source path out of the binaries (C++ __FILE__ in Cmlx, Swift debug paths). The compilers
@@ -77,8 +81,8 @@ done
 
 echo "→ building Mouthtype $VERSION (release, arm64)"
 # Run from $SRC: the tools' working directory still reaches the output (objc stub layout) otherwise.
-(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" --product Mouthtype)
-(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" --product mouthtype-fn-guard)
+(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" ${LINK_FLAGS[@]+"${LINK_FLAGS[@]}"} --product Mouthtype)
+(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" ${LINK_FLAGS[@]+"${LINK_FLAGS[@]}"} --product mouthtype-fn-guard)
 BIN_DIR="$(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --show-bin-path)"
 
 echo "→ assembling $APP"
