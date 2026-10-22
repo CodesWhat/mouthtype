@@ -76,22 +76,33 @@ public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
         return tokens.isEmpty ? nil : Array(tokens.prefix(maxPromptTokens))
     }
 
-    static func decodingOptions(promptTokens: [Int]?) -> DecodingOptions {
+    /// `language` is the code to decode in, or nil to let Whisper detect it. Forcing "en" on other speech translates it or
+    /// returns nothing.
+    static func decodingOptions(promptTokens: [Int]?, language: String? = "en") -> DecodingOptions {
         DecodingOptions(
-            verbose: false, task: .transcribe, language: "en", detectLanguage: false,
+            verbose: false, task: .transcribe, language: language, detectLanguage: language == nil,
             wordTimestamps: true, promptTokens: promptTokens
         )
     }
 
     public func transcribe(samples: [Float]) async throws -> Transcription {
+        try await transcribe(samples: samples, language: .english)
+    }
+
+    /// The English-only variant always decodes in English. The multilingual one uses the resolved language, or detects it.
+    static func decodingLanguage(variant: String, request: DictationLanguageRequest) -> String? {
+        variant.hasSuffix(".en") ? "en" : request.whisperLanguage
+    }
+
+    public func transcribe(samples: [Float], language request: DictationLanguageRequest) async throws -> Transcription {
         guard let kit else { throw EngineError.notPrepared(id: id) }
         var tokens: [Int]?
-        if let tokenizer = kit.tokenizer {
+        if request.allowsVocabularyBoost, let tokenizer = kit.tokenizer {
             tokens = Self.promptTokens(
                 for: bias, encode: { tokenizer.encode(text: $0) }, firstSpecialToken: tokenizer.specialTokens.specialTokenBegin
             )
         }
-        let options = Self.decodingOptions(promptTokens: tokens)
+        let options = Self.decodingOptions(promptTokens: tokens, language: Self.decodingLanguage(variant: variant, request: request))
         let clock = ContinuousClock()
         let start = clock.now
         let results = try await kit.transcribe(audioArray: samples, decodeOptions: options)

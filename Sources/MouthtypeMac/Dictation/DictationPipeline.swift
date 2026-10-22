@@ -111,6 +111,8 @@ struct DictationPipeline: Sendable {
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
     var boostSavedWords: @Sendable () -> Bool = { VocabularyBoostSetting.isEnabled() }
     var editorHints: @Sendable () -> Bool = { EditorHintsSetting.isEnabled() }
+    /// What the engine is told about the take's language. English until the setting feeds it.
+    var languageRequest: @Sendable () -> DictationLanguageRequest = { .english }
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
     var appStyles: @Sendable () -> AppCleanupStyles = { (try? AppCleanupStyles.load()) ?? AppCleanupStyles() }
     var textPipeline = TextPipeline()
@@ -203,7 +205,7 @@ struct DictationPipeline: Sendable {
         guard let hints else { return nil }
         return Task {
             let editorTerms = await hints.value
-            guard !editorTerms.isEmpty, !Task.isCancelled else { return }
+            guard !editorTerms.isEmpty, !Task.isCancelled, languageRequest().allowsVocabularyBoost else { return }
             let bias = VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary(), editorTerms: editorTerms)
             // An earlier take still in recognition or boosting would be rescored with these names (or lose its own
             // while this build starts), so this take falls back to the release-time path.
@@ -255,11 +257,15 @@ struct DictationPipeline: Sendable {
         let rules = vocabulary.dictionary()
         let editorTerms = await session.editorHints?.value ?? []
         // Only a take with editor names waits for the model rebuild they cause. Saved words alone build in the background.
+        let language = languageRequest()
+        // The boost model is English, so a take that can't be English gets no bias.
         await engine.setVocabularyBias(
-            VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: rules, editorTerms: editorTerms),
+            language.allowsVocabularyBoost
+                ? VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: rules, editorTerms: editorTerms) : nil,
             settleWithin: editorTerms.isEmpty ? nil : VocabularyBias.editorSettle
         )
-        var transcription = try await engine.transcribe(samples: trimmed.samples)
+        var transcription = try await engine.transcribe(samples: trimmed.samples, language: language)
+        transcription.language = transcription.language ?? language.resolved
         // Editor names help this take and nothing else: they never reach the stored record.
         transcription.boostTermsApplied = VocabularyBoostSetting.withoutEditorTerms(
             transcription.boostTermsApplied, editorTerms: editorTerms, rules: rules
@@ -281,7 +287,7 @@ struct DictationPipeline: Sendable {
                 session.id,
                 TranscriptionRecord(
                     transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset,
-                    boostTerms: transcription.boostTermsApplied
+                    language: shifted.language?.code, boostTerms: transcription.boostTermsApplied
                 ))
         }
         let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)

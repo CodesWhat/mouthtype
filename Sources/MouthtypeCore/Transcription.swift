@@ -22,6 +22,7 @@ public struct Transcription: Sendable, Codable, Equatable {
     public var engineID: String
     public var modelRevision: String?  // model repo/variant identifier; nil when the engine exposes none
     public var boostTermsApplied: [String]?  // saved spellings vocabulary boosting wrote into the text; nil when none
+    public var language: DictationLanguage?  // the take's language once known; nil reads as English
 
     public init(
         text: String,
@@ -30,7 +31,8 @@ public struct Transcription: Sendable, Codable, Equatable {
         processingSeconds: Double,
         engineID: String,
         modelRevision: String? = nil,
-        boostTermsApplied: [String]? = nil
+        boostTermsApplied: [String]? = nil,
+        language: DictationLanguage? = nil
     ) {
         self.text = text
         self.words = words
@@ -39,5 +41,6 @@ public struct Transcription: Sendable, Codable, Equatable {
         self.engineID = engineID
         self.modelRevision = modelRevision
         self.boostTermsApplied = boostTermsApplied
+        self.language = language
     }
 }
