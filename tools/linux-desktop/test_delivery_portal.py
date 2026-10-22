@@ -341,6 +341,17 @@ class RemoteDesktopSessionTests(unittest.TestCase):
         self.assertEqual(self.fake.keysyms, [])
         self.assertEqual(delivery.paste('x', {'class': 'unknown'}, verified=True), 'target_changed')
 
+    def test_secure_target_is_refused_everywhere(self):
+        secure = {'class': 'gtk', 'secure': True}
+        self.targets = self.Targets(secure)
+        for mode in ('type', 'paste'):
+            delivery = self.delivery(mode=mode)
+            self.assertFalse(delivery.allowed(secure))
+            self.assertEqual(delivery.submit('hi', secure), 'recover_only')
+        self.assertEqual(delivery.paste('hi', secure), 'recover_only')
+        self.assertEqual(delivery.type_text('hi', secure), 'recover_only')
+        self.assertEqual(self.fake.keysyms, [])
+
     def test_cancel_and_control_characters_send_nothing(self):
         delivery = self.delivery()
         event = threading.Event()

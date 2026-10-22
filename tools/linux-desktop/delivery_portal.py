@@ -500,8 +500,9 @@ class PortalKeyboard:
 class PortalDelivery:
     """Delivery on portal desktops. Same submit/paste signatures and outcome strings as HyprlandDelivery.
 
-    targets supplies snapshot(), is_terminal(target) (the AT-SPI target, P4). Without one the target is
-    {'class': 'unknown'} and nothing is a terminal, which only passes allowed() under any_window.
+    targets supplies snapshot(), is_terminal(target) (the AT-SPI target, atspi_target.AtspiTargets). Without one
+    the target is {'class': 'unknown'} and nothing is a terminal, which only passes allowed() under any_window.
+    A target the AT-SPI query marked secure (a password field) is refused for type, paste and submit alike.
     """
 
     def __init__(self, config, remote, clipboard, keyboard=None, targets=None):
@@ -522,7 +523,7 @@ class PortalDelivery:
 
     def allowed(self, target):
         if (self.config.get('mode') not in ('type', 'paste') or
-                self.config.get('allow_unknown_secure_field') is not True or not target):
+                self.config.get('allow_unknown_secure_field') is not True or not target or target.get('secure')):
             return False
         if self.config.get('any_window') is True:
             return True
@@ -545,6 +546,8 @@ class PortalDelivery:
 
     def type_text(self, text, target, cancelled=None):
         """Type short single-line text as keysyms. Returns 'fallback' when paste should be used instead."""
+        if target.get('secure'):
+            return 'recover_only'
         keysyms = []
         for char in text:
             if char in '\r\n':
@@ -573,7 +576,7 @@ class PortalDelivery:
 
     def paste(self, text, target, cancelled=None, verified=False):
         """Clipboard plus a paste chord. Line breaks and tabs travel as text; other controls are refused."""
-        if not self._ready():
+        if target.get('secure') or not self._ready():
             return 'recover_only'
         terminal = self.is_terminal(target)
         if terminal:
