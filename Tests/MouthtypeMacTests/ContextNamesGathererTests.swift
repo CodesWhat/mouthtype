@@ -138,7 +138,7 @@ private final class Calls: @unchecked Sendable {
 @Suite struct ElectronAccessibilityTests {
     @Test func flagIsSetOncePerElectronApp() {
         let counter = Counter()
-        let enabler = ElectronAccessibility(isElectron: { $0 != 99 }, setFlag: { _ in counter.bump(); return true })
+        let enabler = ElectronAccessibility(isElectron: { $0 != 99 }, setFlag: { _ in counter.bumped() })
         #expect(enabler.enableIfNeeded(pid: 10))
         #expect(!enabler.enableIfNeeded(pid: 10))
         #expect(enabler.enableIfNeeded(pid: 11))
@@ -147,7 +147,7 @@ private final class Calls: @unchecked Sendable {
 
     @Test func nonElectronAppsAreNeverTouched() {
         let counter = Counter()
-        let enabler = ElectronAccessibility(isElectron: { _ in false }, setFlag: { _ in counter.bump(); return true })
+        let enabler = ElectronAccessibility(isElectron: { _ in false }, setFlag: { _ in counter.bumped() })
         #expect(!enabler.enableIfNeeded(pid: 5))
         #expect(!enabler.enableIfNeeded(pid: nil))
         #expect(counter.value == 0)
@@ -155,7 +155,7 @@ private final class Calls: @unchecked Sendable {
 
     @Test func aTimedOutAppIsRetriedNextTime() {
         let counter = Counter()
-        let enabler = ElectronAccessibility(isElectron: { _ in true }, setFlag: { _ in counter.bump(); return counter.value > 1 })
+        let enabler = ElectronAccessibility(isElectron: { _ in true }, setFlag: { _ in counter.bumped(succeedingAfter: 1) })
         #expect(!enabler.enableIfNeeded(pid: 3))
         #expect(enabler.enableIfNeeded(pid: 3))
         #expect(!enabler.enableIfNeeded(pid: 3))
@@ -167,5 +167,11 @@ private final class Counter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
     var value: Int { lock.withLock { count } }
-    func bump() { lock.withLock { count += 1 } }
+    /// Counts one call and answers whether more than `succeedingAfter` have happened.
+    func bumped(succeedingAfter: Int = 0) -> Bool {
+        lock.withLock {
+            count += 1
+            return count > succeedingAfter
+        }
+    }
 }
