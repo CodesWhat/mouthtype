@@ -49,6 +49,7 @@ class SetupTests(unittest.TestCase):
         config = self.setup()
         value = json.loads(config.read_text())
         self.assertEqual(value['delivery'], {'mode': 'recover'})
+        self.assertEqual(value['cleanup'], 'basic')
         self.assertEqual(Path(value['python']), self.destination.resolve() / 'venv/bin/python')
         engines = json.loads(Path(value['engine_config']).read_text())
         self.assertEqual(set(engines['engines']), {'speech'})
