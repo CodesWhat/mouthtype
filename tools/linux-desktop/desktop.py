@@ -1032,6 +1032,15 @@ class HyprlandDelivery:
 backends.register_delivery('hyprland', HyprlandDelivery)
 
 
+def _portal_delivery(*args, **kwargs):
+    # Imported on first use: the light clients (status, hotkeys) and Hyprland installs never load the portal stack.
+    import delivery_portal
+    return delivery_portal.make_delivery(*args, **kwargs)
+
+
+backends.register_delivery('portal', _portal_delivery)
+
+
 def stop_process(process, first=signal.SIGTERM):
     if process is None:
         return
@@ -2044,6 +2053,9 @@ def main(argv=None, *, cli_directory=None):
             finally:
                 try:
                     session.close()
+                    closer = getattr(session.delivery, 'close', None)
+                    if closer is not None:
+                        closer()
                 finally:
                     try:
                         engine.stop()

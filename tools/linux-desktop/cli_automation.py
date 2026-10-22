@@ -6,6 +6,7 @@ overwritten, a password-manager hint is never restored) and the cancel event all
 
 from pathlib import Path
 import json
+import os
 import shutil
 import signal
 import subprocess
@@ -73,7 +74,11 @@ def paste_last(identity, text, context):
     # The daemon owns the clipboard and the paste chord while it records or delivers; a second paste would collide.
     if isinstance(status, dict) and status.get('state') not in (None, 'idle'):
         return fail('busy', state=status.get('state'))
-    target = desktop.HyprlandDelivery(delivery)
+    import backends
+    if backends.delivery_name(backends.detect(os.environ), config['desktop']['delivery']) == 'portal':
+        target = backends.make_delivery('portal', delivery)
+    else:
+        target = desktop.HyprlandDelivery(delivery)
     snapshot = target.snapshot()
     if snapshot is None:
         return fail('no_target')
@@ -91,6 +96,9 @@ def paste_last(identity, text, context):
     finally:
         for event, handler in previous:
             signal.signal(event, handler)
+        closer = getattr(target, 'close', None)
+        if closer is not None:
+            closer()
     if outcome == 'unknown':
         # The chord or keystrokes were sent; delivery is never verified, so this means requested, not confirmed.
         print(json.dumps({'ok': True, 'id': identity, 'outcome': outcome,

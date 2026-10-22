@@ -29,6 +29,10 @@ _REGISTRY_UNSUPPORTED = frozenset({
     'org.freedesktop.DBus.Error.ServiceUnknown',
 })
 
+APP_INFO_HELP = ('App info not found for {app_id}: the portal found no usable desktop file. Install {app_id}.desktop '
+                 'under an XDG applications directory and make sure its Exec program is on PATH for the portal, then '
+                 'run: update-desktop-database')
+
 log = logging.getLogger('mouthtype.portal')
 
 
@@ -42,6 +46,12 @@ class PortalUnavailable(PortalError):
 
 class PortalTimeout(PortalError, TimeoutError):
     pass
+
+
+class AppInfoNotFound(PortalError):
+    """Registry.Register failed because the portal found no desktop file for the app id. The portal matches the
+    caller to share/applications/<app id>.desktop and launches its Exec, so that file must exist and its Exec
+    program must be on PATH."""
 
 
 class PortalResponseError(PortalError):
@@ -200,6 +210,8 @@ class Portal:
                 log.warning('portal has no Registry interface; continuing without an app id')
                 self.registered = False
                 return False
+            if 'App info not found' in str(exc.data):
+                raise AppInfoNotFound(APP_INFO_HELP.format(app_id=self.app_id)) from exc
             raise PortalError(f'{exc.name}: {exc.data}') from exc
         self.registered = True
         return True
