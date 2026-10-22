@@ -306,7 +306,7 @@ for line in sys.stdin:
         from desktop import validate_config
         for change in ({'maximum_recording_seconds': float('nan')},
                        {'maximum_recording_seconds': 121},
-                       {'request_seconds': 0}, {'notifications': 'yes'}, {'delivery': {'mode': 'clipboard'}},
+                       {'request_seconds': 0}, {'notifications': 'yes'}, {'notifications': 'all'}, {'notifications': None}, {'delivery': {'mode': 'clipboard'}},
                        {'delivery': {'mode': 'type', 'allowed_classes': ['*']}},
                        {'delivery': {'mode': 'type', 'allowed_classes': []}}):
             with self.subTest(change=change), self.assertRaises(ValueError):
@@ -746,6 +746,23 @@ class FeedbackTests(unittest.TestCase):
             self.assertIn('--replace-id=17', lines[1])
             self.assertIn('Mouthtype is recording', lines[0])
             self.assertEqual(helper.status, 'submitted_unknown')
+    def test_errors_only_notifications_send_just_errors_and_ready(self):
+        from desktop import Notifications, validate_config
+        for value in (True, False, 'errors'):
+            validate_config({'engine_config': '/local/engines.json', 'notifications': value})
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            script = root / 'notify.py'
+            record = root / 'arguments.jsonl'
+            script.write_text('import json,sys\nfrom pathlib import Path\nwith Path(sys.argv[1]).open("a") as f:f.write(json.dumps(sys.argv[2:])+"\\n")\nprint(17)\n')
+            helper = Notifications('errors', command=[sys.executable, str(script), str(record)])
+            for state in ('recording', 'transcribing', 'saved', 'delivered', 'empty', 'cancelled'):
+                self.assertFalse(helper.notify(state), state)
+            self.assertFalse(record.exists())
+            self.assertTrue(helper.notify('ready'))
+            self.assertTrue(helper.notify('error', 'capture_unavailable'))
+            self.assertEqual(len(record.read_text().splitlines()), 2)
+
     def test_error_notification_names_the_code_and_unknown_codes_stay_generic(self):
         from desktop import Notifications
         with tempfile.TemporaryDirectory() as temp:

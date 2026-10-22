@@ -104,6 +104,40 @@ class InstallFlowTests(unittest.TestCase):
             install.main(["--no-autostart", "--no-restart-shell", "--no-transform-shortcut"])
         self.assertFalse(any("set-transform-shortcut" in c for c in commands))
 
+    def linux_json(self, value):
+        path = self.home / ".local/share/mouthtype/speech-candidate/linux.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"engine_config": "/x", **value}))
+        return path
+
+    def test_install_moves_default_notifications_to_errors_only(self):
+        self.shell.write_text(json.dumps(LAYOUT))
+        path = self.linux_json({"notifications": True})
+        self.run_main("--no-autostart", "--no-restart-shell")
+        self.assertEqual(json.loads(path.read_text())["notifications"], "errors")
+        self.assertEqual(json.loads(path.read_text())["engine_config"], "/x")
+
+    def test_install_leaves_an_explicit_notifications_choice_alone(self):
+        for value in (False, "errors"):
+            with self.subTest(value=value):
+                if self.target.exists():
+                    install.shutil.rmtree(self.target)
+                self.shell.write_text(json.dumps(LAYOUT))
+                path = self.linux_json({"notifications": value})
+                self.run_main("--no-autostart", "--no-restart-shell")
+                self.assertEqual(json.loads(path.read_text())["notifications"], value)
+
+    def test_install_without_a_notifications_key_or_config_changes_nothing(self):
+        self.shell.write_text(json.dumps(LAYOUT))
+        path = self.linux_json({})
+        self.run_main("--no-autostart", "--no-restart-shell")
+        self.assertNotIn("notifications", json.loads(path.read_text()))
+        install.shutil.rmtree(self.target)
+        path.unlink()
+        self.shell.write_text(json.dumps(LAYOUT))
+        self.run_main("--no-autostart", "--no-restart-shell")
+        self.assertFalse(path.exists())
+
     def test_uninstall_removes_the_transform_block_too(self):
         self.shell.write_text(json.dumps(LAYOUT))
         bindings = self.names["BINDINGS"]

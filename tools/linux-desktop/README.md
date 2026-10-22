@@ -153,7 +153,7 @@ These keys live in `linux.json`. Relative paths resolve beside that file.
 | `dictionary` | Path to the saved-spellings JSON | Not set |
 | `phrases` | Path to the saved-phrases JSON | Not set |
 | `phrase_clipboard` | `true` enables the `{clipboard}` variable | `false` |
-| `notifications` | `true` or `false` | `true` |
+| `notifications` | `true`, `false` or `"errors"` (only errors and the ready cue) | `true` |
 | `slash_commands` | `true` or `false`. "slash research" becomes "/research" in terminals, code editors and coding agents | `true` |
 | `cleanup` | `off`, `basic`, `fast`, `thorough` | `off` |
 | `cleanup_idle_seconds` | seconds of no use before the cleanup server is stopped (0 disables); the next recording or take reloads it and status shows `loading` | `600` |
@@ -293,7 +293,7 @@ Coarse desktop notifications are enabled by default through the existing `notify
 
 Spoken slash commands run as part of Basic cleanup, before spoken commands, and only when the window class at record start is a coding target: kitty, Alacritty, foot, ghostty, org.wezfurlong.wezterm, code, cursor, zed, claude, codex, orca, or a class starting with `jetbrains-` (case-insensitive). "slash code dash review" becomes "/code-review"; "press the slash key" and a bare "slash" are left alone. Mac also converts on claude.ai and chatgpt.com by page host; Wayland exposes no page host, so browser sites are not covered on Linux. Set `slash_commands` to `false` to turn it off.
 
-Set `notifications` to `false` to disable this helper. If it is missing, hung or rejected by the desktop, dictation and recovery continue; `status` reports feedback as unavailable. `submitted_unknown` means the helper accepted a cue, not that the desktop displayed it. Each helper has a short deadline and its owned process group is stopped/reaped. This client does not install the helper, notification service, bindings or login integration. Arch's `libnotify` and Ubuntu's `libnotify-bin` provide `notify-send` through their normal signed package management.
+Set `notifications` to `"errors"` to send only the error and ready cues (the Omarchy plugin does this when it is installed, because the bar pill already shows recording and transcribing), or to `false` to disable this helper. If it is missing, hung or rejected by the desktop, dictation and recovery continue; `status` reports feedback as unavailable. `submitted_unknown` means the helper accepted a cue, not that the desktop displayed it. Each helper has a short deadline and its owned process group is stopped/reaped. This client does not install the helper, notification service, bindings or login integration. Arch's `libnotify` and Ubuntu's `libnotify-bin` provide `notify-send` through their normal signed package management.
 
 ## For maintainers
 

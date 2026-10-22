@@ -1423,8 +1423,8 @@ def validate_config(value):
     result = {'maximum_recording_seconds': 60, 'request_seconds': 30, 'maximum_recovery_takes': 200,
               'audio_retention_days': 90, 'audio_retention_megabytes': 2048, 'history_keep': None,
               'delivery': {'mode': 'recover'}, 'notifications': True, 'cleanup': 'off', **value}
-    if type(result['notifications']) is not bool:
-        raise ValueError('notifications must be true or false')
+    if type(result['notifications']) is not bool and result['notifications'] != 'errors':
+        raise ValueError('notifications must be true, false or "errors"')
     for field, minimum, maximum in (('maximum_recording_seconds', 1, 120), ('request_seconds', 1, 120),
                                     ('maximum_recovery_takes', 1, 5000)):
         number = result[field]
@@ -2061,6 +2061,9 @@ class Notifications:
 
     def notify(self, state, error=None):
         if not self.enabled or state not in self.MESSAGES:
+            return False
+        # "errors" leaves progress to the bar pill and keeps only the cues the pill can't show.
+        if self.enabled == 'errors' and state not in ('error', 'ready'):
             return False
         title, body = self.MESSAGES[state]
         if state == 'error' and error in self.ERRORS:

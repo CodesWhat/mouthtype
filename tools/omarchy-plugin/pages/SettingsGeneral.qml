@@ -153,12 +153,13 @@ Column {
         }
       }
       DesignRow {
-        title: "Desktop recording cues"
-        detail: "A desktop notification when recording starts and stops."
-        StateSwitch {
-          value: root.config.notifications !== false
-          text: "Desktop recording cues"
-          onToggled: root.host.run(["set-config", "notifications", checked ? "on" : "off"])
+        title: "Desktop notifications"
+        detail: "The bar pill already shows recording and transcribing. Errors only keeps just the problems."
+        StateSegmented {
+          model: ["All", "Errors only", "Off"]
+          value: root.config.notifications === false ? 2 : root.config.notifications === "errors" ? 1 : 0
+          text: "Desktop notifications"
+          onActivated: function(index) { root.host.run(["set-config", "notifications", ["all", "errors", "off"][index]]) }
         }
       }
     }

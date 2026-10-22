@@ -150,6 +150,15 @@ class SettingsDuringImportTests(unittest.TestCase):
         self.assertEqual(self.shutdowns, ["shutdown"])
         self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["notifications"])
 
+    def test_notifications_accept_all_errors_and_off(self):
+        self.file_import["state"] = "finished"
+        for value, stored in (("errors", "errors"), ("off", False), ("all", True), ("errors", "errors"), ("on", True)):
+            with self.subTest(value=value):
+                control.set_config("notifications", value)
+                self.assertEqual(json.loads(self.config.read_text(encoding="utf-8"))["notifications"], stored)
+        with self.assertRaisesRegex(RuntimeError, "Unsupported"):
+            control.set_config("notifications", "sometimes")
+
     def test_slash_commands_toggle_is_written_and_summarised(self):
         self.file_import["state"] = "finished"
         control.set_config("slash_commands", "off")

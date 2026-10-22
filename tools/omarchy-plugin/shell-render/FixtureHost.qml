@@ -93,7 +93,7 @@ QtObject {
       { id: "e", transcript: true, audio: true, preview: "running ten late, order me whatever", mtime: seconds(29) }
     ]
     saved = [{ id: "f", transcript: false, audio: true, preview: "", mtime: seconds(3.5) }]
-    config = { delivery_mode: "paste", cleanup: "fast", maximum_recording_seconds: 60, notifications: true,
+    config = { delivery_mode: "paste", cleanup: "fast", maximum_recording_seconds: 60, notifications: "errors",
                history_keep: null, maximum_recovery_takes: 200, audio_retention_days: 30, allowed_classes: [] }
     wordsToday = 412
     history = { takes: 6, maximum: 200 }
