@@ -22,6 +22,7 @@ import time
 import uuid
 from pathlib import Path
 
+import concealed
 from cleanup import BasicCleanup
 from vendor.grapheme import graphemes
 
@@ -683,7 +684,7 @@ class TransformService:
         if text is None:
             return failure('nothing_to_copy', 'There is no result to copy. Run a transform first.')
         try:
-            self.run(['wl-copy', '--type', 'text/plain;charset=utf-8'], input=text.encode('utf-8'),
+            self.run(concealed.copy_command(), input=text.encode('utf-8'),
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
         except FileNotFoundError:
             return failure('wl_clipboard_missing', 'Install wl-clipboard (wl-copy) to copy.')

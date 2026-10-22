@@ -57,6 +57,7 @@ def __getattr__(name):
     if name == 'CAPABILITIES':
         return capabilities_report()
     raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+import concealed
 from hyprland_ipc import HyprlandIPC, IPCError, IPCTimeout
 
 
@@ -885,7 +886,7 @@ class HyprlandDelivery:
         if cancelled is not None and cancelled.is_set():
             return 'not_attempted'
         try:
-            self.run(['wl-copy', '--type', 'text/plain;charset=utf-8'], input=text.encode('utf-8'),
+            self.run(concealed.copy_command(), input=text.encode('utf-8'),
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
             # The clipboard owner forks; the target only sees the new offer once it is live.
             if not self.wait_for_clipboard(text):
