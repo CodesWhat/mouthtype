@@ -503,4 +503,56 @@ TestCase {
     compare(shell.page, "style")
     verify(!shell.settingsOpen)
   }
+
+  function findSidebar(item) {
+    if (item.focusedIndex !== undefined && item.arrowNav !== undefined) return item
+    for (var i = 0; i < item.children.length; i++) {
+      var found = findSidebar(item.children[i])
+      if (found) return found
+    }
+    return null
+  }
+
+  function ringOwner(bar) { return bar.ringKey() }
+
+  function test_sidebar_click_selects_without_a_ring() {
+    tc.dark = false
+    setScene("home")
+    var bar = findSidebar(shell)
+    verify(bar, "sidebar found")
+    mouseClick(findText("Dictionary"))
+    compare(shell.page, "dictionary")
+    compare(bar.focusedIndex(), 2, "the clicked row holds focus")
+    compare(ringOwner(bar), "", "no ring after a click")
+  }
+
+  function test_sidebar_arrows_move_selection_and_ring() {
+    tc.dark = false
+    setScene("home")
+    var bar = findSidebar(shell)
+    mouseClick(findText("Stats"))
+    compare(shell.page, "stats")
+    keyClick(Qt.Key_Down)
+    compare(shell.page, "dictionary")
+    compare(ringOwner(bar), "dictionary")
+    keyClick(Qt.Key_Down)
+    compare(shell.page, "transforms")
+    compare(ringOwner(bar), "transforms")
+    keyClick(Qt.Key_Up)
+    compare(shell.page, "dictionary")
+    compare(ringOwner(bar), "dictionary")
+  }
+
+  function test_sidebar_steps_from_the_focused_row() {
+    tc.dark = false
+    setScene("home")
+    var bar = findSidebar(shell)
+    mouseClick(findText("Style"))
+    // The page moves on from outside while focus stays on the Style row: the next arrow steps from the focused row.
+    shell.navigate("home")
+    compare(ringOwner(bar), "", "an outside page change drops the ring")
+    keyClick(Qt.Key_Up)
+    compare(shell.page, "transforms")
+    compare(ringOwner(bar), "transforms")
+  }
 }
