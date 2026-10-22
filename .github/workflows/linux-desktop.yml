@@ -219,7 +219,7 @@ jobs:
       - name: Build the .deb
         run: bash packaging/debian/build-deb.sh --output "$RUNNER_TEMP/debs" --version 0.0.0~ci-1
       - name: Lint the .deb
-        run: lintian --pedantic --fail-on error,warning "$RUNNER_TEMP"/debs/mouthtype-linux_*.deb
+        run: lintian --pedantic --fail-on error,warning "$RUNNER_TEMP"/debs/mouthtype-linux_*.deb "$RUNNER_TEMP"/debs/mouthtype-linux-desktop_*.deb
       - name: Install, check, remove and purge on Ubuntu 24.04
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -234,6 +234,40 @@ jobs:
           path: ${{ runner.temp }}/debs/*.deb
           retention-days: 14
           if-no-files-found: error
+
+  debian-desktop-package:
+    # The desktop package needs xdg-desktop-portal 1.19 or newer, which Ubuntu 24.04 does not have.
+    needs: debian-package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          # Official index digests, resolved 2026-10-22.
+          - debian:13@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308
+          - ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    container:
+      image: ${{ matrix.image }}
+      options: --init
+    steps:
+      - name: Install prerequisites
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates util-linux
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-debian-package
+          path: ${{ runner.temp }}/debs
+      - name: Install both packages, render the settings window offscreen, remove and purge
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: bash packaging/debian/test-install.sh "$RUNNER_TEMP"/debs/mouthtype-linux_0.0.0~ci-1_amd64.deb "$RUNNER_TEMP"/debs/mouthtype-linux-desktop_0.0.0~ci-1_all.deb
 
   qml-render:
     runs-on: ubuntu-24.04

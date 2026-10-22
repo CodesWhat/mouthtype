@@ -1,0 +1,17 @@
+Package: mouthtype-linux-desktop
+Version: @VERSION@
+Architecture: all
+Maintainer: CodesWhat <80784472+scttbnsn@users.noreply.github.com>
+Installed-Size: @SIZE@
+Depends: mouthtype-linux (= @VERSION@), python3 (>= 3.10), python3-gi, gir1.2-atspi-2.0, python3-pyside6.qtcore, python3-pyside6.qtgui, python3-pyside6.qtqml, python3-pyside6.qtquick, python3-pyside6.qtnetwork, python3-pyside6.qtwidgets, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-templates, qml6-module-qtquick-window, qml6-module-qtquick-effects, qml6-module-qtquick-layouts, qml6-module-qtqml-workerscript, qt6-svg-plugins, xdg-desktop-portal (>= 1.19)
+Recommends: xdg-desktop-portal-gnome | xdg-desktop-portal-kde, qml6-module-org-kde-layershell, gnome-shell-extension-appindicator
+Section: sound
+Priority: optional
+Homepage: https://mouthtype.app/linux/
+Description: Mouthtype settings window and tray icon for GNOME and KDE Plasma
+ The Qt settings window, tray icon and (on KDE Plasma) the floating recording
+ pill for Mouthtype, built on PySide6. It talks to the mouthtype-linux daemon
+ and reuses the same pages as the Omarchy bar plugin.
+ .
+ Install this on GNOME or KDE Plasma Wayland sessions. Omarchy and Hyprland
+ installs only need mouthtype-linux and do not need this package or PySide6.

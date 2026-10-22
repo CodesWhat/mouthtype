@@ -3,9 +3,9 @@ Version: @VERSION@
 Architecture: amd64
 Maintainer: CodesWhat <80784472+scttbnsn@users.noreply.github.com>
 Installed-Size: @SIZE@
-Depends: python3 (>= 3.10), python3-venv, curl, pipewire-audio, wl-clipboard, wtype, libnotify-bin, ffmpeg
-Recommends: hyprland
-Suggests: quickshell
+Depends: python3 (>= 3.10), python3-venv, python3-jeepney, curl, pipewire-audio, libnotify-bin, ffmpeg
+Recommends: wl-clipboard, wtype, hyprland | sway
+Suggests: quickshell, mouthtype-linux-desktop
 Section: sound
 Priority: optional
 Homepage: https://mouthtype.app/linux/
@@ -19,6 +19,8 @@ Description: local voice dictation client for Wayland desktops
  installing, run "mouthtype-linux-setup" as your normal user to fetch the
  speech model (about 465 MiB) and enable the per-user service.
  .
- Development client for Linux x86_64. Paste and type delivery use Hyprland
- (recommended). The bar plugin needs Quickshell, which Debian and Ubuntu do
- not package, so it is only listed as a suggestion.
+ Development client for Linux x86_64. On Hyprland, paste and type delivery use
+ wl-clipboard and wtype. The bar plugin needs Quickshell, which Debian and
+ Ubuntu do not package, so it is only listed as a suggestion. GNOME and KDE
+ Plasma sessions also need the mouthtype-linux-desktop package, which adds the
+ settings window and tray icon and does not pull PySide6 onto other desktops.

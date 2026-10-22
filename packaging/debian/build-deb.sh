@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build mouthtype-linux_<version>_amd64.deb with plain dpkg-deb. No network, no third-party tools.
+# Build mouthtype-linux_<version>_amd64.deb and mouthtype-linux-desktop_<version>_all.deb with plain dpkg-deb. No network, no third-party tools.
 #
 #   bash packaging/debian/build-deb.sh --output DIR [--version 0.3.0-1]
 #
@@ -65,31 +65,57 @@ install -d "$stage/usr/lib/systemd/user/graphical-session.target.wants"
 ln -s ../mouthtype-linux-firstrun.service \
     "$stage/usr/lib/systemd/user/graphical-session.target.wants/mouthtype-linux-firstrun.service"
 
+# Seal one package: copyright and changelog, normalised modes and times, DEBIAN/ and dpkg-deb.
+#   seal NAME STAGE ARCH CONTROL_TEMPLATE SCRIPT_PREFIX SCRIPT...
+seal() {
+    local pkg=$1 stage=$2 arch=$3 control=$4 prefix=$5 script size doc
+    shift 5
+    doc="$stage/usr/share/doc/$pkg"
+    install -Dm644 "$here/copyright.in" "$doc/copyright"
+    {
+        printf '%s (%s) unstable; urgency=low\n\n  * Development build of the Mouthtype Linux client.\n\n -- CodesWhat <80784472+scttbnsn@users.noreply.github.com>  %s\n' \
+            "$pkg" "$version" "$(LC_ALL=C date -u -d "@$epoch" '+%a, %d %b %Y %H:%M:%S +0000')"
+    } | gzip -9n > "$doc/changelog.Debian.gz"
+    chmod 644 "$doc/changelog.Debian.gz"
+
+    # Normalise modes and timestamps so identical sources give identical bytes.
+    find "$stage" -type d -exec chmod 755 {} +
+    find "$stage" -exec touch -h -d "@$epoch" {} +
+
+    mkdir "$stage/DEBIAN"
+    size=$(du -sk --apparent-size "$stage" | cut -f1)
+    sed -e "s/@VERSION@/$version/g" -e "s/@SIZE@/$size/" "$here/$control" > "$stage/DEBIAN/control"
+    for script in "$@"; do install -m755 "$here/$prefix$script" "$stage/DEBIAN/$script"; done
+    (cd "$stage" && find usr -type f -print0 | sort -z | xargs -0 md5sum > DEBIAN/md5sums)
+    chmod 644 "$stage/DEBIAN/md5sums"
+
+    dpkg-deb --root-owner-group -Zxz --build "$stage" "$output/${pkg}_${version}_${arch}.deb" >/dev/null
+    echo "$output/${pkg}_${version}_${arch}.deb"
+}
+
 doc="$stage/usr/share/doc/mouthtype-linux"
 install -Dm644 "$root/THIRD_PARTY_NOTICES.md" "$doc/THIRD_PARTY_NOTICES.md"
-install -Dm644 "$here/copyright.in" "$doc/copyright"
-{
-    printf 'mouthtype-linux (%s) unstable; urgency=low\n\n  * Development build of the Mouthtype Linux client.\n\n -- CodesWhat <80784472+scttbnsn@users.noreply.github.com>  %s\n' \
-        "$version" "$(LC_ALL=C date -u -d "@$epoch" '+%a, %d %b %Y %H:%M:%S +0000')"
-} | gzip -9n > "$doc/changelog.Debian.gz"
-chmod 644 "$doc/changelog.Debian.gz"
 for page in mouthtype-linux mouthtype-linux-setup; do
     install -d "$stage/usr/share/man/man1"
     gzip -9n -c "$here/$page.1" > "$stage/usr/share/man/man1/$page.1.gz"
     chmod 644 "$stage/usr/share/man/man1/$page.1.gz"
 done
+seal mouthtype-linux "$stage" amd64 control.in "" postinst prerm postrm
 
-# Normalise modes and timestamps so identical sources give identical bytes.
-find "$stage" -type d -exec chmod 755 {} +
-find "$stage" -exec touch -h -d "@$epoch" {} +
-
-mkdir "$stage/DEBIAN"
-size=$(du -sk --apparent-size "$stage" | cut -f1)
-sed -e "s/@VERSION@/$version/" -e "s/@SIZE@/$size/" "$here/control.in" > "$stage/DEBIAN/control"
-for script in postinst prerm postrm; do install -m755 "$here/$script" "$stage/DEBIAN/$script"; done
-(cd "$stage" && find usr -type f -print0 | sort -z | xargs -0 md5sum > DEBIAN/md5sums)
-chmod 644 "$stage/DEBIAN/md5sums"
-
-deb="$output/mouthtype-linux_${version}_amd64.deb"
-dpkg-deb --root-owner-group -Zxz --build "$stage" "$deb" >/dev/null
-echo "$deb"
+# mouthtype-linux-desktop: the PySide6 settings window, tray and KDE pill. Architecture all. It reads the
+# shared QML from the core package's plugin copy through a symlink, so the pages exist once on disk.
+desktop="$work/desktop"
+qt="$desktop/usr/lib/mouthtype-linux/tools/linux-qt"
+while IFS= read -r -d '' file; do
+    install -Dm644 "$root/tools/linux-qt/$file" "$qt/$file"
+done < <(cd "$root/tools/linux-qt" && find . -type f \( -name '*.py' -o -name '*.qml' -o -name qmldir \) \
+    ! -name 'test_*' ! -path './fixtures/*' -print0 | sort -z)
+chmod 755 "$qt/mouthtype_desktop.py"
+ln -s ../../../share/mouthtype-linux/omarchy-plugin "$desktop/usr/lib/mouthtype-linux/tools/omarchy-plugin"
+install -Dm755 "$here/mouthtype-desktop" "$desktop/usr/bin/mouthtype-desktop"
+install -Dm644 "$here/app.mouthtype.Mouthtype.Settings.desktop" "$desktop/usr/share/applications/app.mouthtype.Mouthtype.Settings.desktop"
+install -Dm644 "$here/desktop-lintian-overrides" "$desktop/usr/share/lintian/overrides/mouthtype-linux-desktop"
+install -d "$desktop/usr/share/man/man1"
+gzip -9n -c "$here/mouthtype-desktop.1" > "$desktop/usr/share/man/man1/mouthtype-desktop.1.gz"
+chmod 644 "$desktop/usr/share/man/man1/mouthtype-desktop.1.gz"
+seal mouthtype-linux-desktop "$desktop" all control-desktop.in desktop- postinst prerm

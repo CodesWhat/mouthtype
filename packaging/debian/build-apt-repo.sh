@@ -7,7 +7,7 @@
 # DIR becomes the web root for https://mouthtype.app/apt/ :
 #   dists/stable/{Release,InRelease,Release.gpg}   signed index
 #   dists/stable/main/binary-amd64/Packages(.gz,.xz)
-#   pool/main/m/mouthtype-linux/*.deb
+#   pool/main/m/mouthtype-linux/*.deb              mouthtype-linux (amd64) and mouthtype-linux-desktop (all)
 #   mouthtype-archive-keyring.gpg                  public key, binary (what Signed-By points at)
 #   mouthtype-archive-keyring.asc                  public key, armored
 #   mouthtype.sources                              deb822 source snippet users install
@@ -43,7 +43,7 @@ pool="$output/pool/$component/m/mouthtype-linux"
 mkdir -p "$pool"
 for deb in "${debs[@]}"; do
     dpkg-deb --field "$deb" Package >/dev/null || { echo "not a .deb: $deb" >&2; exit 2; }
-    [ "$(dpkg-deb --field "$deb" Package)" = mouthtype-linux ] || { echo "unexpected package in $deb" >&2; exit 2; }
+    case "$(dpkg-deb --field "$deb" Package)" in mouthtype-linux|mouthtype-linux-desktop) ;; *) echo "unexpected package in $deb" >&2; exit 2 ;; esac
     cp "$deb" "$pool/"
 done
 

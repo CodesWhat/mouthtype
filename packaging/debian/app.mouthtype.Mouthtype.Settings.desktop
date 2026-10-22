@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Mouthtype
+GenericName=Voice Dictation
+Comment=Dictation settings and status
+Exec=mouthtype-desktop --page home
+Icon=app.mouthtype.Mouthtype
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=dictation;voice;speech;transcribe;
+StartupNotify=false
