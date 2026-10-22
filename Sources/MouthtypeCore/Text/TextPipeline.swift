@@ -60,6 +60,23 @@ public struct TextPipelineOptions: Sendable, Equatable {
     )
 
     var anyEnabled: Bool { self != .none }
+
+    /// The options a take in `language` can use. The English-only stages (fillers, slash commands, spoken commands,
+    /// self-correction, counted lists, number formatting, profanity) are switched off for any other language, where
+    /// their English vocabulary would rewrite real words ("er" and "um" in German, "ten" in Polish). A nil or English
+    /// language returns the options unchanged.
+    public func restricted(to language: DictationLanguage?) -> TextPipelineOptions {
+        guard !DictationLanguage.isEnglish(language) else { return self }
+        var out = self
+        out.fillers = false
+        out.slashCommands = false
+        out.spokenCommands = false
+        out.selfCorrection = false
+        out.countedLists = false
+        out.numbers = false
+        out.profanity = false
+        return out
+    }
 }
 
 public struct TextPipelineInput: Sendable {
@@ -78,6 +95,9 @@ public struct TextPipelineInput: Sendable {
     public var protectedWords: [String]
     /// True when the text is going into a terminal, code editor or agent app. Gates the slash command stage.
     public var codingTarget: Bool
+    /// The language of the take. Nil means English. Applied first: `TextPipeline.run` runs the stages in
+    /// `options.restricted(to: language)`.
+    public var language: DictationLanguage?
 
     public init(
         text: String,
@@ -89,7 +109,8 @@ public struct TextPipelineInput: Sendable {
         options: TextPipelineOptions = .all,
         protectedPhrases: [String] = [],
         protectedWords: [String] = [],
-        codingTarget: Bool = false
+        codingTarget: Bool = false,
+        language: DictationLanguage? = nil
     ) {
         self.text = text
         self.dictionary = dictionary
@@ -101,6 +122,7 @@ public struct TextPipelineInput: Sendable {
         self.protectedPhrases = protectedPhrases
         self.protectedWords = protectedWords
         self.codingTarget = codingTarget
+        self.language = language
     }
 }
 
@@ -156,7 +178,7 @@ public struct TextPipeline: Sendable {
     }
 
     func runTraced(_ input: TextPipelineInput) -> (result: TextPipelineResult, trace: [StageTrace]) {
-        let options = input.options
+        let options = input.options.restricted(to: input.language)
         guard options.anyEnabled else { return (TextPipelineResult(text: input.text), []) }
         guard !input.text.allSatisfy(\.isWhitespace) else { return (TextPipelineResult(text: ""), []) }
 
@@ -236,7 +258,7 @@ public struct TextPipeline: Sendable {
             var protected = Set<String>()
             if options.dictionary { protected.formUnion(BlendStage.firstWords(of: input.dictionary.map(\.written))) }
             if options.snippets { protected.formUnion(BlendStage.firstWords(of: input.snippets.map(\.expansion))) }
-            let stage = BlendStage(context: input.context, protectedWords: protected)
+            let stage = BlendStage(context: input.context, protectedWords: protected, language: input.language)
             run(BlendStage.stageName) { stage.apply($0) }
         }
         if options.style != .formal {
