@@ -16,6 +16,11 @@ Window {
 
   property var app: null
 
+  // A Window declared inside another Window becomes its transient child, and Qt Quick holds a child's show until the
+  // parent is visible. Under --background the settings window stays hidden, so the pill never mapped. It is its own
+  // top-level layer-shell surface and has no parent window.
+  transientParent: null
+
   readonly property var pillPrefs: app ? app.pillPrefs : ({})
   readonly property bool enabled: pillPrefs.enabled !== false
   readonly property string skin: pillPrefs.skin === "hifi" ? "hifi" : "classic"
