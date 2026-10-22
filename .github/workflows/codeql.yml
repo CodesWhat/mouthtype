@@ -1,0 +1,75 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main, 'dev/**']
+  pull_request:
+    branches: [main, 'dev/**']
+  schedule:
+    - cron: '41 5 * * 2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.timeout }}
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - language: actions
+            runner: ubuntu-latest
+            build-mode: none
+            timeout: 30
+          - language: javascript-typescript
+            runner: ubuntu-latest
+            build-mode: none
+            timeout: 30
+          - language: python
+            runner: ubuntu-latest
+            build-mode: none
+            timeout: 30
+          # The package needs the Xcode 27 SDK, which macos-latest doesn't ship yet.
+          - language: swift
+            runner: xcode-27
+            build-mode: manual
+            timeout: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+          queries: default
+
+      # mlx-swift compiles Metal shaders, and Xcode ships the Metal toolchain as a separate component.
+      - name: Metal toolchain
+        if: matrix.language == 'swift'
+        run: |
+          if ! xcrun metal --version >/dev/null 2>&1; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun metal --version
+
+      - name: Build Swift package
+        if: matrix.language == 'swift'
+        run: swift build
+
+      - uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          category: /language:${{ matrix.language }}
