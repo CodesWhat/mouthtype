@@ -8,6 +8,9 @@ class Action:
     def __init__(self, node):
         self.node = node
 
+    def get_n_actions(self):
+        return 1
+
     def do_action(self, index):
         self.node.pressed += 1
         if self.node.role in consent_atspi.SWITCH_ROLES:

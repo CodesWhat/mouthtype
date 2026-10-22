@@ -38,7 +38,7 @@ run_component() { # name, base dockerfile, base context, acceptance dockerfile, 
 
 for component in "${components[@]}"; do
   case $component in
-    gnome) run_component gnome "$here/gnome/Dockerfile" "$here/gnome" "$here/gnome/acceptance.Dockerfile" "$desktop" /home/tester/evidence ;;
+    gnome) run_component gnome "$here/gnome/Dockerfile" "$here/gnome" "$here/gnome/acceptance.Dockerfile" "$tools" /home/tester/evidence ;;
     kde) run_component kde "$here/kde/Dockerfile" "$here/kde" "$here/kde/acceptance.Dockerfile" "$tools" /var/lib/testbed ;;
     *) echo "unknown component $component" >&2; status=1 ;;
   esac

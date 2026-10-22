@@ -14,3 +14,15 @@ bash ~/scripts/nas-docker.sh run --rm --name ld-t2-gnome ld-t2-probe:test
 Headless mutter gives the stage no key focus until it sees input, so the mutter drivers click once and tap Shift_L before the chord. Without that, the accelerator is grabbed but never fires.
 
 Results (GNOME 50, GlobalShortcuts v1) are in `evidence/`. Release latency from the key-up call to the portal's Deactivated signal, 3 rounds, 500 ms hold: keysyms mean 4.7 ms (max 6.6), keycodes mean 10.7 ms (max 23.8). Activated arrives in 2 to 6 ms. The portal timestamps differ by the hold time, so Deactivated is the real release, not a timeout.
+
+## Acceptance image (A1)
+
+`acceptance.Dockerfile` layers the daemon sources on the T1 image and builds with `tools/` as the context, because `desktop.py` imports the sibling `linux-engine-proof`:
+
+```bash
+cd tools
+bash ~/scripts/nas-docker.sh build -f linux-desktop/testbed/gnome/acceptance.Dockerfile -t ld-a1-gnome:test .
+bash ~/scripts/nas-docker.sh run --rm ld-a1-gnome:test
+```
+
+`testbed/ci-acceptance.sh <evidence-dir> gnome` does both builds and the run. The held-chord take (a mutter-driven GlobalShortcuts press after the paste and secure-field steps) is opt-in: pass `-e MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE=1` to the run, or `--shortcut-take` to `acceptance.py gnome-portal`. It doesn't pass yet, so by default `shortcut_press` reports `{"checked": false, "reason": "opt-in"}`.

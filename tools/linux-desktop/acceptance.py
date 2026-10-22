@@ -470,11 +470,20 @@ def gnome_portal_component(root, env, processes):
             return offers.get('text/plain;charset=utf-8')
         if wait_for(restored_clipboard, 5) != sentinel.encode():
             raise ValueError('Clipboard was not restored')
+        first_target = processes.items[-1][0]
+        secure_target = secure_refusal(processes, first_target, env, root, delivery, clipboard, targets, focused_snapshot)
+        secure = secure_target.pop('result')
+        # The chord goes last, with no client window open: a focused GTK window kept the grab from firing here.
+        stop_process(secure_target.pop('process'))
+        wait_for(lambda: not mapped_windows(portal), 10)
+        shortcut_take = os.environ.get('MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE') == '1'
+        shortcut = shortcut_hold_take(root, portal, delivery, atspi) if shortcut_take else None
         return {'component': 'gnome-portal', 'compositor': 'GNOME Shell headless',
                 'native_target': 'GTK3 Wayland', 'target_class': target['class'],
                 'consent': answered, 'grant_persisted': True, 'silent_restart': True,
                 'restart_seconds': restart_seconds, 'unicode_exact': True, 'delivered_once': True,
-                'clipboard_restored': True, 'shortcut_press': False, 'fake_engine_take': False,
+                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': shortcut if shortcut_take else {'checked': False, 'reason': 'opt-in'},
+                'fake_engine_take': shortcut_take,
                 'hyprland_acceptance': False, 'omarchy_acceptance': False}
     finally:
         for closer in (getattr(clipboard, 'close', None), getattr(remote, 'close', None), getattr(portal, 'close', None)):
@@ -485,6 +494,114 @@ def gnome_portal_component(root, env, processes):
                     pass
         os.environ.clear()
         os.environ.update(previous_env)
+
+
+def hold_take_result(calls, state, granted):
+    """Check the commands a held chord sent the session: one start on Activated, then one stop on Deactivated, and
+    the take back at idle. Returns the evidence dict, raises ValueError otherwise."""
+    if calls != ['start', 'stop']:
+        raise ValueError('Held chord did not start then stop one take: ' + json.dumps(calls))
+    if state != 'idle':
+        raise ValueError('Take did not finish after release: ' + str(state))
+    return {'commands': list(calls), 'final_state': state, 'triggers': dict(granted)}
+
+
+def mapped_windows(portal):
+    """True while the shell still lists a client window."""
+    return json.loads(json.loads(shell_windows(portal) or '[null, []]'))[1]
+
+
+def shortcut_hold_take(root, portal, delivery, atspi):
+    """Bind the dictate-hold chord through GlobalShortcuts (consent answered through AT-SPI), press and hold it with
+    the mutter RemoteDesktop driver, and check a fake-engine take starts on Activated and stops on Deactivated."""
+    import desktop
+    import portal_probe
+    import shortcuts_portal
+    session = desktop.Session(FixedCapture(), FixedEngine(), delivery, root / 'state/recovery-shortcut', maximum_seconds=10)
+    calls = []
+    real_command = session.command
+    def recording(action, **kwargs):
+        if action != 'status':
+            calls.append(action)
+        return real_command(action, **kwargs)
+    session.command = recording
+    shortcuts = shortcuts_portal.PortalShortcuts(session)
+    driver = portal_probe.MutterDriver(portal)
+    outcome = {}
+    def bind():
+        try:
+            shortcuts.start()
+            outcome['bound'] = True
+        except BaseException as exc:
+            outcome['error'] = exc
+    starter = threading.Thread(target=bind, name='acceptance-bind')
+    starter.start()
+    try:
+        answered = None
+        end = time.monotonic() + 40
+        while starter.is_alive() and time.monotonic() < end:
+            dialog = consent_atspi.find_dialog(atspi)
+            if dialog is not None:
+                answered = consent_atspi.answer(dialog, atspi)
+                break
+            time.sleep(.5)
+        starter.join(40)
+        if outcome.get('error') is not None or not outcome.get('bound'):
+            raise ValueError('GlobalShortcuts bind failed: ' + repr(outcome.get('error'))
+                             + ' outline: ' + json.dumps(atspi_outline(atspi)))
+        status = shortcuts.status()
+        if shortcuts_portal.HOLD not in status['triggers']:
+            raise ValueError('dictate-hold was not granted: ' + json.dumps(status))
+        driver.open()  # one click and a Shift_L tap wake the stage, as T2b found
+        for keysym in portal_probe.CHORD_KEYSYMS:
+            driver.key(keysym, True)
+        try:
+            wait_for(lambda: session.state == 'recording', 10)
+        except TimeoutError:
+            raise ValueError('Held chord never started a take: ' + json.dumps({'shortcuts': shortcuts.status(), 'calls': calls}))
+        time.sleep(.5)
+        for keysym in reversed(portal_probe.CHORD_KEYSYMS):
+            driver.key(keysym, False)
+        wait_for(lambda: session.state == 'idle' and 'stop' in calls, 15)
+        time.sleep(1)
+        result = hold_take_result(calls, session.state, status['triggers'])
+        result['consent'] = answered
+        return result
+    finally:
+        driver.close()
+        shortcuts.stop()
+        session.close()
+
+
+def secure_refusal(processes, previous, env, root, delivery, clipboard, targets, focus):
+    """Swap the target for a password GtkEntry. AT-SPI must mark it secure, paste must answer recover_only, the
+    entry must stay empty and the clipboard must be untouched. Returns the evidence and the target's process."""
+    stop_process(previous)
+    secure_path = root / 'secure.json'
+    env['MOUTHTYPE_TARGET_SECURE'] = '1'
+    env.pop('MOUTHTYPE_TARGET_CLIPBOARD', None)
+    started = processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(secure_path)])
+    wait_for(lambda: secure_path.exists())
+    def secure_snapshot():
+        snap = focus()
+        return snap if snap and snap.get('secure') else None
+    try:
+        snapshot = wait_for(secure_snapshot, 20)
+    except TimeoutError:
+        raise ValueError('AT-SPI never marked the password entry secure: ' + json.dumps(targets.snapshot()))
+    delivery.config['allowed_classes'] = [snapshot['class']]
+    with clipboard._lock:
+        before = dict(clipboard._offers)
+    outcome = delivery.paste('Mouthtype secret', snapshot)
+    time.sleep(1)
+    with clipboard._lock:
+        after = dict(clipboard._offers)
+    text = json.loads(secure_path.read_text()).get('text') or ''
+    result = secure_field_result(snapshot, outcome, text)
+    if after != before:
+        raise ValueError('Secure refusal touched the clipboard')
+    result['clipboard_untouched'] = True
+    return {'result': result, 'process': started}
 
 
 KDE_TAKE_TEXT = 'Hello, 世界. Émilie 👋 from the portal.'
@@ -720,7 +837,11 @@ def kde_portal_component(root, env, processes):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('component', choices=('capabilities', 'pipewire', 'sway', 'gnome-portal', 'kde-portal'))
+    parser.add_argument('--shortcut-take', action='store_true',
+                        help='gnome-portal only: also hold the dictate chord through mutter (opt-in, still unreliable headless)')
     args = parser.parse_args()
+    if args.shortcut_take:
+        os.environ['MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE'] = '1'
     if sys.platform != 'linux':
         parser.error('Explicit Linux component acceptance only')
     if args.component == 'capabilities':
@@ -730,7 +851,7 @@ def main():
         raise TimeoutError('Acceptance lifetime limit')
     for event in (signal.SIGALRM, signal.SIGTERM, signal.SIGINT):
         signal.signal(event, deadline)
-    signal.alarm(120 if args.component in ('gnome-portal', 'kde-portal') else 45)
+    signal.alarm(180 if args.component == 'gnome-portal' else 120 if args.component == 'kde-portal' else 45)
     try:
         with tempfile.TemporaryDirectory(prefix='mouthtype-acceptance-') as temp:
             root = Path(temp)

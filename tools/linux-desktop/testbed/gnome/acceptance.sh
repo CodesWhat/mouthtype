@@ -37,6 +37,6 @@ dbus-update-activation-environment --systemd WAYLAND_DISPLAY=wayland-0 XDG_CURRE
 sleep 3
 
 status=0
-MOUTHTYPE_ACCEPTANCE_EVIDENCE="$out" python3 "$acceptance" gnome-portal > "$out/gnome-portal.json" || status=$?
+MOUTHTYPE_ACCEPTANCE_EVIDENCE="$out" python3 "$acceptance" gnome-portal ${MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE:+--shortcut-take} > "$out/gnome-portal.json" || status=$?
 cat "$out/gnome-portal.json"
 exit "$status"

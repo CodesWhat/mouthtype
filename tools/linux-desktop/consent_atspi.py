@@ -118,8 +118,10 @@ def answer(window, atspi):
         if role not in SWITCH_ROLES:
             continue
         checked = node.get_state_set().contains(atspi.StateType.CHECKED)
-        if not checked and node.get_action_iface():
-            node.get_action_iface().do_action(0)
+        action = node.get_action_iface()
+        # A toggle can export an action interface with no actions yet, which do_action(0) rejects.
+        if not checked and action and action.get_n_actions() > 0:
+            action.do_action(0)
             switched.append(name)
             time.sleep(.2)
     pressed[1].get_action_iface().do_action(0)

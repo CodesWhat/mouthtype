@@ -362,21 +362,24 @@ jobs:
           retention-days: 14
           if-no-files-found: warn
 
-  kde-acceptance:
-    # Runs the T3 Fedora 44 KDE image (kwin_wayland --virtual, xdg-desktop-portal-kde) and acceptance.py kde-portal.
-    # gnome-portal is not included: it fails on the NAS testbed (AT-SPI consent dialog has no action), so it isn't a gate yet.
+  desktop-acceptance:
+    # gnome: T1 headless GNOME 50 image and acceptance.py gnome-portal. kde: T3 Fedora 44 image (kwin_wayland --virtual, xdg-desktop-portal-kde) and acceptance.py kde-portal.
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        desktop: [gnome, kde]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build the KDE acceptance image and run kde-portal
-        run: bash tools/linux-desktop/testbed/ci-acceptance.sh "$RUNNER_TEMP/kde-acceptance-evidence" kde
+      - name: Build the ${{ matrix.desktop }} acceptance image and run ${{ matrix.desktop }}-portal
+        run: bash tools/linux-desktop/testbed/ci-acceptance.sh "$RUNNER_TEMP/${{ matrix.desktop }}-acceptance-evidence" ${{ matrix.desktop }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: linux-desktop-kde-acceptance
-          path: ${{ runner.temp }}/kde-acceptance-evidence/
+          name: linux-desktop-${{ matrix.desktop }}-acceptance
+          path: ${{ runner.temp }}/${{ matrix.desktop }}-acceptance-evidence/
           retention-days: 14
           if-no-files-found: warn
