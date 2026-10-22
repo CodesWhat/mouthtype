@@ -1,5 +1,6 @@
 import threading
 import time
+import types
 import unittest
 
 import backends
@@ -208,6 +209,73 @@ class PortalShortcutsTests(unittest.TestCase):
         handle = self.started()
         self.fake.emit_activated(handle, 'transform-open')
         self.assertTrue(opened.wait(3))
+
+    def test_configure_calls_the_portal_on_a_v2_session(self):
+        handle = self.started()
+        result = shortcuts_portal.configure(self.shortcuts, {'XDG_CURRENT_DESKTOP': 'KDE', 'XDG_SESSION_TYPE': 'wayland'},
+                                            opener=self.fail)
+        self.assertEqual(result['method'], 'portal')
+        self.assertEqual(result['triggers']['dictate-hold'], 'CTRL+ALT+M')
+        call = next(c for c in self.fake.calls if c[1] == 'ConfigureShortcuts')
+        self.assertEqual(call[3][0], handle)
+
+    def test_v1_portal_on_gnome_opens_keyboard_settings(self):
+        self.fake.versions[SHORTCUTS] = 1
+        self.started()
+        opened = []
+        result = shortcuts_portal.configure(self.shortcuts, GNOME_ENV, opener=Opener(opened))
+        self.assertEqual(result['method'], 'gnome-control-center')
+        self.assertEqual(opened, [['gnome-control-center', 'keyboard']])
+        self.assertFalse(any(c[1] == 'ConfigureShortcuts' for c in self.fake.calls))
+
+    def test_v1_portal_on_kde_reports_unavailable(self):
+        self.fake.versions[SHORTCUTS] = 1
+        self.started()
+        result = shortcuts_portal.configure(self.shortcuts, {'XDG_CURRENT_DESKTOP': 'KDE', 'XDG_SESSION_TYPE': 'wayland'},
+                                            opener=self.fail)
+        self.assertEqual(result['error'], 'configure_unavailable')
+        self.assertIn('version 2', result['reason'])
+
+    def test_configure_before_binding_is_refused(self):
+        with self.assertRaises(ShortcutsUnavailable):
+            self.shortcuts.configure()
+
+
+GNOME_ENV = {'XDG_CURRENT_DESKTOP': 'ubuntu:GNOME', 'XDG_SESSION_TYPE': 'wayland'}
+
+
+class Opener:
+    def __init__(self, record, error=None):
+        self.record, self.error = record, error
+
+    def __call__(self, argv, **kwargs):
+        if self.error:
+            raise self.error
+        self.record.append(argv)
+        return types.SimpleNamespace(wait=lambda: 0)
+
+
+class NoPortalConfigureTests(unittest.TestCase):
+    def test_gnome_without_a_portal_still_opens_settings(self):
+        opened = []
+        result = shortcuts_portal.configure(None, GNOME_ENV, opener=Opener(opened))
+        self.assertEqual(result['method'], 'gnome-control-center')
+        self.assertEqual(result['backend'], 'none')
+        self.assertEqual(opened, [['gnome-control-center', 'keyboard']])
+
+    def test_missing_settings_app_is_reported(self):
+        result = shortcuts_portal.configure(None, GNOME_ENV, opener=Opener([], FileNotFoundError('nope')))
+        self.assertEqual(result['error'], 'configure_unavailable')
+        self.assertIn('did not start', result['reason'])
+
+    def test_hyprland_has_nothing_to_open(self):
+        result = shortcuts_portal.configure(None, {'HYPRLAND_INSTANCE_SIGNATURE': 'x'}, opener=lambda *a, **k: self.fail())
+        self.assertEqual(result['error'], 'configure_unavailable')
+
+    def test_status_without_a_backend(self):
+        status = shortcuts_portal.status_of(None)
+        self.assertEqual((status['backend'], status['state'], status['triggers']), ('none', 'unavailable', {}))
+
 
 if __name__ == '__main__':
     unittest.main()

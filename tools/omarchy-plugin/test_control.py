@@ -25,6 +25,48 @@ install = importlib.util.module_from_spec(install_spec)
 install_spec.loader.exec_module(install)
 
 
+class ShortcutDaemonTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.socket = Path(self.directory.name) / "session.sock"
+        self.requests = []
+        client = mock.Mock()
+        client.default_socket.return_value = self.socket
+        client.request.side_effect = self.request
+        self.reply = {"backend": "portal", "state": "bound", "triggers": {"dictate-hold": "Ctrl+Alt+M"}}
+        patch = mock.patch.object(control, "session_client", lambda: client)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def request(self, path, action):
+        self.requests.append(action)
+        return self.reply
+
+    def test_actions_are_registered(self):
+        self.assertLessEqual({"shortcut-status", "shortcut-configure"}, control.VALID_ACTIONS)
+
+    def test_status_returns_the_daemon_reply(self):
+        self.socket.touch()
+        self.assertEqual(control.shortcut_status(), self.reply)
+        self.assertEqual(self.requests, ["shortcut-status"])
+
+    def test_status_without_a_service_says_so(self):
+        with self.assertRaisesRegex(RuntimeError, "not running"):
+            control.shortcut_status()
+
+    def test_configure_surfaces_an_unavailable_desktop(self):
+        self.socket.touch()
+        self.reply = {"error": "configure_unavailable", "reason": None}
+        with self.assertRaisesRegex(RuntimeError, "no shortcut settings"):
+            control.shortcut_configure()
+
+    def test_configure_returns_the_granted_triggers(self):
+        self.socket.touch()
+        self.reply = {**self.reply, "method": "portal"}
+        self.assertEqual(control.shortcut_configure()["triggers"], {"dictate-hold": "Ctrl+Alt+M"})
+
+
 class AutostartTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

@@ -7,6 +7,7 @@ Signal timestamps are relative milliseconds, so nothing here compares them to a 
 """
 import logging
 import queue
+import subprocess
 import threading
 import time
 
@@ -133,6 +134,19 @@ class PortalShortcuts:
         with self._lock:
             return {'backend': 'portal', 'state': self.state, 'error': self.error, 'version': self.version,
                     'triggers': dict(self.granted), 'hold': self._hold_deadline is not None}
+
+    def configure(self, timeout=5.0):
+        """Open the desktop's own shortcut editor for this app. Needs a bound v2 portal session."""
+        with self._lock:
+            handle, portal, version = self._handle, self._portal, self.version
+        if portal is None or handle is None or self.state != 'bound':
+            raise ShortcutsUnavailable('no bound shortcut session')
+        if version < 2:
+            raise ShortcutsUnavailable('the desktop portal cannot open its shortcut settings (needs version 2)')
+        try:
+            portal.call(SHORTCUTS_IFACE, 'ConfigureShortcuts', 'osa{sv}', (handle, '', {}), timeout=timeout)
+        except portal_module.PortalError as exc:
+            raise ShortcutsUnavailable(str(exc)) from exc
 
     def _publish(self):
         if hasattr(self.session, 'shortcuts_status'):
@@ -268,3 +282,39 @@ def attach(session, env, override='auto'):
     except ShortcutsUnavailable as exc:
         log.warning('portal shortcuts unavailable: %s', exc)
         return None
+
+
+NO_SHORTCUTS = {'backend': 'none', 'state': 'unavailable', 'error': None, 'version': 0, 'triggers': {}, 'hold': False}
+
+
+def status_of(shortcuts):
+    """The shortcut status the daemon reports, with the same keys whether or not a portal backend is running."""
+    return shortcuts.status() if shortcuts is not None else dict(NO_SHORTCUTS)
+
+
+def _open_settings(opener, argv):
+    process = opener(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+    threading.Thread(target=process.wait, name='mouthtype-settings-reaper', daemon=True).start()
+
+
+def configure(shortcuts, env, *, opener=subprocess.Popen):
+    """Send the user to the desktop's shortcut editor and return the status plus how it was opened.
+
+    A v2 portal opens its own editor for our bound session. Otherwise GNOME gets Settings > Keyboard, which is where
+    its custom shortcuts live. Anything else reports configure_unavailable rather than guessing at a settings app."""
+    status = status_of(shortcuts)
+    reason = None
+    if shortcuts is not None:
+        try:
+            shortcuts.configure()
+            return {**status_of(shortcuts), 'method': 'portal'}
+        except ShortcutsUnavailable as exc:
+            reason = str(exc)
+    if backends.detect(env) == 'gnome':
+        try:
+            _open_settings(opener, ['gnome-control-center', 'keyboard'])
+            return {**status, 'method': 'gnome-control-center'}
+        except OSError as exc:
+            reason = 'gnome-control-center did not start: ' + str(exc)
+    return {**status, 'method': None, 'error': 'configure_unavailable', 'reason': reason}
