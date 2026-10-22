@@ -72,7 +72,7 @@
               <div>
                 <h2>Start with the right setup.</h2>
                 <p>The target is Linux <strong>x86_64</strong>, <strong>Arch/Omarchy</strong>, <strong>Hyprland</strong> and <strong>PipeWire</strong>. The client is a terminal-driven service; the Omarchy plugin gives it a bar menu, a floating pill and settings. Other compositors and architectures are not supported by this client.</p>
-                <p>Use your distro’s signed package management for <code>python</code>, <code>python-pip</code>, <code>curl</code>, <code>pipewire-audio</code>, <code>ffmpeg</code>, <code>wl-clipboard</code>, <code>wtype</code> and <code>libnotify</code>. Optional AI cleanup additionally needs <code>git</code>, <code>cmake</code> and <code>base-devel</code>. Keep <code>~/.local/bin</code> on your PATH.</p>
+                <p>Use your distro’s signed package management for <code>python</code>, <code>python-pip</code>, <code>curl</code>, <code>pipewire-audio</code>, <code>ffmpeg</code>, <code>wl-clipboard</code>, <code>wtype</code> and <code>libnotify</code>. Optional Fast and Thorough cleanup download a checked upstream <code>llama-server</code>, so nothing is compiled and no toolchain is needed (only the opt-in <code>--build-server</code> path wants <code>git</code>, <code>cmake</code> and <code>base-devel</code>). Keep <code>~/.local/bin</code> on your PATH.</p>
               </div>
             </li>
             <li id="install">
@@ -87,30 +87,35 @@
             <li id="speech">
               <span class="step-sign" aria-hidden="true">↳</span>
               <div>
-                <h2>Prepare speech explicitly.</h2>
-                <p>From the same source directory, run <code>python3 tools/linux-desktop/setup_speech.py --destination "$HOME/.local/share/mouthtype/speech-candidate"</code>. The destination must be new.</p>
-                <p>This downloads and verifies the pinned speech model, creates a dedicated Python environment and writes a local configuration. It does not record or start anything. Confirm the setup with <code>mouthtype-linux --config "$HOME/.local/share/mouthtype/speech-candidate/linux.json" doctor</code>.</p>
+                <h2>Run setup.</h2>
+                <p>From the same source directory, run <code>python3 tools/linux-desktop/setup.py</code>. It checks the helpers first, then downloads and verifies the pinned speech model (about 465 MiB), creates a dedicated Python environment, writes a local configuration, installs the Omarchy plugin with its login service and binds Super+Alt+M (dictate) and Super+Shift+T (Transform Selection). It shows progress as it goes. <code>setup_speech.py</code> does the speech step alone if you want it by itself.</p>
+                <p>Confirm it with <code>mouthtype-linux doctor</code>, which reports what is missing and how to fix it.</p>
               </div>
             </li>
             <li id="plugin">
               <span class="step-sign" aria-hidden="true">↳</span>
               <div>
-                <h2>Install the Omarchy plugin.</h2>
-                <p>Run <code>python3 tools/omarchy-plugin/install.py</code>. It adds the Mouthtype widget to the right side of the bar, enables a <code>systemd</code> user service so dictation starts with every login and is restarted if it stops, starts it now, and restarts the Omarchy shell. Pass <code>--no-autostart</code> to keep the service manual; <strong>Launch at Login</strong> in the menu toggles it later.</p>
-                <p>From the menu: start, stop and cancel dictation, read and copy recent takes, retry saved audio, transcribe one audio file, choose the Classic or Hi-Fi floating pill and the text font, and pick Basic, Fast or Thorough cleanup. Fast and Thorough download verified local models and build the pinned llama.cpp server on your explicit request.</p>
+                <h2>The Omarchy plugin.</h2>
+                <p>Setup installs the plugin for you. It adds the Mouthtype widget to the right side of the bar, enables a <code>systemd</code> user service so dictation starts with every login and is restarted if it stops, and restarts the Omarchy shell. To install it by hand, run <code>python3 tools/omarchy-plugin/install.py</code>; pass <code>--no-autostart</code> to keep the service manual. <strong>Launch at Login</strong> in the menu toggles it later.</p>
+                <p>From the menu: start, stop and cancel dictation, read and copy recent takes, retry saved audio, transcribe one audio file, choose a microphone and test its level, choose the Classic or Hi-Fi floating pill and the text font, and pick Basic, Fast or Thorough cleanup. Desktop notifications are errors-only by default, because the pill already shows recording and transcribing.</p>
+                <p>Fast and Thorough download verified local models on your explicit request, and you can cancel a download while it runs. Fast and Thorough also download a pinned, checksum-verified upstream <code>llama-server</code> (about 17 MB). Nothing is compiled unless you pass <code>--build-server</code>.</p>
               </div>
             </li>
             <li id="first-test">
               <span class="step-sign" aria-hidden="true">↳</span>
               <div>
-                <h2>Choose delivery and a key, then speak.</h2>
-                <p>The default delivery is <strong>recovery-only</strong>: a take is saved locally and nothing is typed. In <strong>Paste Options</strong>, choose <strong>Paste into the active window</strong> to paste each take into the window that was active when you started, with your previous text clipboard restored. Terminals get Ctrl+Shift+V and no multi-line pastes.</p>
-                <p>Under <strong>Change Dictation Shortcut…</strong>, pick press-to-toggle or hold-to-talk on any key, including a lone modifier such as Right Ctrl. Keys Hyprland already binds are refused. Then press the key, speak, and watch the pill at the bottom of the display. Every take also stays readable with <code>list</code> and <code>recover ID</code>.</p>
+                <h2>Log in again, then speak.</h2>
+                <p>Log in again so the first-run step finishes anything left over and the widget and keys are live. Press Super+Alt+M, speak, and press it again. <strong>Basic cleanup is on by default</strong>, so the text comes back tidied.</p>
+                <p>The default delivery is <strong>recovery-only</strong>: a take is saved locally and nothing is typed, and the take lands under Recent takes on Home. The first time you open the bar menu, a card asks where your words should go: paste where you are typing (recommended) or just save them. You can change it later in <strong>Paste Options</strong>, where you choose <strong>Paste into the active window</strong> to paste each take into the window that was active when you started, with your previous text clipboard restored. Terminals get Ctrl+Shift+V and no multi-line pastes.</p>
+                <p>Under <strong>Change Dictation Shortcut…</strong>, pick press-to-toggle or hold-to-talk on any key, including a lone modifier such as Right Ctrl. Keys Hyprland already binds are refused. Watch the pill at the bottom of the display. Every take also stays readable with <code>list</code> and <code>recover ID</code>.</p>
+                <p>Before you remove a package, run <code>mouthtype-linux-setup --uninstall</code> to take out the bar widget, the shortcuts and the login service link.</p>
                 <p>Linux cannot detect password fields, so pasting goes wherever the cursor is, and insertion is not verified. Audio and text never leave the machine.</p>
               </div>
             </li>
           </ol>
           <aside class="start-aside" aria-label="Linux testing status">
+            <h2>Packages are coming.</h2>
+            <p>An Arch (AUR) recipe and a signed apt repository for Debian 13 and Ubuntu 24.04 or newer are built and tested, but neither is published yet. <code>yay -S</code> and <code>apt install</code> do not work today, so install from source. Package installs will set themselves up at your next login.</p>
             <h2>Built. Tested on one desk.</h2>
             <p>Automated Ubuntu/Arch, synthetic audio and headless Wayland checks pass, and the full flow (microphone takes, pill, paste delivery, file import and local cleanup) was exercised on one Arch/Omarchy desktop with Hyprland 0.56 and PipeWire.</p>
             <p><strong>Wider hardware, HiDPI and multi-monitor acceptance remains open.</strong> The Arch test-package builder in the source requires a clean committed Git checkout; the downloadable archive has no Git history, so use the installers above.</p>
