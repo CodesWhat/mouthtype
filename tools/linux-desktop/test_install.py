@@ -259,6 +259,8 @@ class InstallTests(unittest.TestCase):
         self.assertEqual(sorted(missing), [])
 
     def test_packaging_installs_through_install_py(self):
+        if not (ROOT / 'packaging').is_dir():
+            self.skipTest('the shipped payload has no packaging directory')
         for script in ('packaging/debian/build-deb.sh', 'packaging/rpm/mouthtype-linux.spec.in',
                        'packaging/arch/aur/PKGBUILD', 'packaging/arch/PKGBUILD.in'):
             self.assertIn('tools/linux-desktop/install.py', (ROOT / script).read_text(), script)
