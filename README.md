@@ -17,6 +17,7 @@ Natural speech in, clean text out.
   <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
   <a href="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml"><img src="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml/badge.svg" alt="Security CI"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/mouthtype"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/mouthtype?label=openssf+scorecard&amp;style=flat" alt="OpenSSF Scorecard"></a>
+  <a href="https://www.bestpractices.dev/projects/15781"><img src="https://www.bestpractices.dev/projects/15781/badge" alt="OpenSSF Best Practices"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
 </p>
 
