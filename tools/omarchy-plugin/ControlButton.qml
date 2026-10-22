@@ -1,23 +1,23 @@
 import QtQuick
-import qs.Commons
 
 Rectangle {
   id: root
+  property var style: MenuStyle {}
   property string label: ""
   signal clicked()
-  implicitWidth: caption.implicitWidth + Style.space(20)
-  implicitHeight: caption.implicitHeight + Style.space(12)
-  radius: Style.space(6)
-  color: enabled ? Color.accent : Color.popups.background
+  implicitWidth: caption.implicitWidth + root.style.space(20)
+  implicitHeight: caption.implicitHeight + root.style.space(12)
+  radius: root.style.space(6)
+  color: enabled ? root.style.accent : root.style.mutedBackground
   opacity: enabled ? 1 : 0.45
 
   Text {
     id: caption
     anchors.centerIn: parent
     text: root.label
-    color: Color.foreground
-    font.family: Style.font.family
-    font.pixelSize: Style.font.body
+    color: root.style.foreground
+    font.family: root.style.font.family
+    font.pixelSize: root.style.font.body
   }
 
   MouseArea {
