@@ -107,10 +107,13 @@ class MutterDriver:
         self.wake_stage()
 
     def wake_stage(self):
-        """Headless mutter gives the stage no key focus until it sees input, so click once and tap Shift_L first."""
+        """Headless mutter gives the stage no key focus until it sees input, so click once and tap Shift_L first.
+
+        The click lands in the lower-center of the stage. Parking the pointer at the top-left corner and clicking
+        near the top bar opened the date menu or the overview."""
         call = lambda method, sig, args: self.portal.call(MUTTER_SESSION_IFACE, method, sig, args,
                                                           path=self.session, bus_name=MUTTER_BUS)
-        for dx, dy in ((-4000.0, -4000.0), (640.0, 400.0)):
+        for dx, dy in ((-4000.0, -4000.0), (640.0, 700.0)):
             call('NotifyPointerMotionRelative', 'dd', (dx, dy))
         for down in (True, False):
             call('NotifyPointerButton', 'ib', (0x110, down))
