@@ -58,6 +58,7 @@ Fast and Thorough clean up more than Basic. They need a one-time prepare step th
 
 <!-- docs:cards -->
 
+- [Ubuntu GNOME and Fedora KDE](linux-gnome-kde.md): experimental setup for Ubuntu 26.04 and Fedora 44 on Wayland, not yet verified on real hardware.
 - [Linux desktop setup and testing](../../tools/linux-desktop/README.md): `tools/linux-desktop/README.md`.
 - [Omarchy plugin](../../tools/omarchy-plugin/README.md): `tools/omarchy-plugin/README.md`. It adds a bar menu, a floating pill and a choice of toggle or hold shortcut. Its installer enables a login service unless you pass `--no-autostart`.
 - [Agent install checklist](https://mouthtype.app/linux/agent-install.md): an ordered install checklist for people and coding agents.
