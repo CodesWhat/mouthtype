@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fn remap: repairs are bounded and re-verified against the live HID mapping, and the crash guard restores your own Fn mapping.
-- SIGTERM and SIGINT go through the normal quit path, drafts are kept on a signal quit and aren't restored at launch, and open-URL events wait for launch to finish.
+- SIGTERM and SIGINT go through the normal quit path, drafts saved on a signal quit are offered back on the recovery card at the next launch, and open-URL events wait for launch to finish.
 - Paste is refused when the focused element belongs to another process, and the paste owner is judged by AX application instead of raw pid.
 - An undone take is archived before waiting on the earlier job.
 - Completed-audio listing ignores a stale stamped expiry.
