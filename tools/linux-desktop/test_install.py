@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -119,10 +120,50 @@ class InstallTests(unittest.TestCase):
             (prefix / 'bin/other').write_text('keep')
             installer.install(ROOT, prefix, update=True)
             self.assertFalse((prefix / 'lib/mouthtype-linux/stale.txt').exists())
-            self.assertEqual(len(installer.uninstall(prefix)), 2)
+            self.assertEqual(len(installer.uninstall(prefix)), 2 + len(installer.SHARE))
             self.assertFalse((prefix / 'lib/mouthtype-linux').exists())
             self.assertEqual((prefix / 'bin/other').read_text(), 'keep')
             self.assertEqual(installer.uninstall(prefix), [])
+
+    def test_app_identity_files_install_under_the_prefix_and_uninstall_cleanly(self):
+        app_id = installer.APP_ID
+        self.assertEqual(app_id, 'app.mouthtype.Mouthtype')
+        with tempfile.TemporaryDirectory() as temp:
+            prefix = Path(temp) / 'prefix'
+            installer.install(ROOT, prefix)
+            desktop = prefix / 'share/applications' / (app_id + '.desktop')
+            icon = prefix / 'share/icons/hicolor/128x128/apps' / (app_id + '.png')
+            self.assertTrue(desktop.is_file())
+            self.assertEqual(icon.read_bytes()[:8], b'\x89PNG\r\n\x1a\n')
+            entry = dict(line.split('=', 1) for line in desktop.read_text().splitlines()
+                         if '=' in line and not line.startswith('#'))
+            self.assertEqual(entry['Icon'], app_id)
+            self.assertEqual(entry['Type'], 'Application')
+            self.assertTrue(entry['Name'] and entry['Exec'])
+            installer.uninstall(prefix)
+            self.assertFalse(desktop.exists())
+            self.assertFalse(icon.exists())
+
+    def test_app_identity_files_are_staged_with_package_permissions(self):
+        with tempfile.TemporaryDirectory() as temp:
+            staging = Path(temp) / 'package'
+            installer.install(ROOT, '/usr', destdir=staging)
+            for relative in ('usr/share/applications/app.mouthtype.Mouthtype.desktop',
+                             'usr/share/icons/hicolor/128x128/apps/app.mouthtype.Mouthtype.png'):
+                path = staging / relative
+                self.assertEqual(path.stat().st_mode & 0o777, 0o644, relative)
+                for parent in path.parents:
+                    if parent == staging:
+                        break
+                    self.assertEqual(parent.stat().st_mode & 0o777, 0o755, str(parent))
+
+    def test_desktop_file_validates_when_the_validator_is_present(self):
+        validator = shutil.which('desktop-file-validate')
+        if validator is None:
+            self.skipTest('desktop-file-validate is not installed')
+        result = subprocess.run([validator, str(ROOT / 'tools/linux-desktop/share/app.mouthtype.Mouthtype.desktop')],
+                                capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def test_uninstall_refuses_a_foreign_launcher(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -153,6 +194,10 @@ class InstallTests(unittest.TestCase):
     def fake_source(self, root):
         for name in installer.FILES:
             path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('x')
+        for name, _ in installer.SHARE:
+            path = root / 'tools/linux-desktop/share' / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('x')
         desktop = root / 'tools/linux-desktop'

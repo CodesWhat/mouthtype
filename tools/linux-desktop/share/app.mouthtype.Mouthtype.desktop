@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Mouthtype
+GenericName=Voice Dictation
+Comment=Dictate into any app with local speech recognition
+Exec=mouthtype-desktop --page settings
+Icon=app.mouthtype.Mouthtype
+Terminal=false
+Categories=Utility;Accessibility;
+Keywords=dictation;voice;speech;transcribe;
+StartupNotify=false
+# The desktop portals match a caller to this file by basename, so it has to exist even before the
+# Qt settings host does. Hidden from menus until that host ships.
+NoDisplay=true
