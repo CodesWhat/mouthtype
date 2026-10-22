@@ -198,6 +198,20 @@ class JsHelpers(unittest.TestCase):
         self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "empty"}, "paste").headline'), "Nothing heard")
         self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "unknown"}, "type").headline'), "Typed")
 
+    def test_each_error_code_has_its_own_pill_copy(self):
+        for code, headline in (("capture_unavailable", "No microphone"), ("capture_interrupted", "Microphone lost"),
+                               ("transcription_failed", "Couldn't transcribe"), ("recovery_full", "Recovery is full"),
+                               ("recording_limit", "Too long"), ("command_expired", "Timed out"),
+                               ("dictionary_unavailable", "Dictionary unavailable"), ("phrases_unavailable", "Phrases unavailable"),
+                               ("phrase_context_unavailable", "Phrase context unavailable"), ("cleanup_unavailable", "Cleanup unavailable")):
+            result = self.run_js("PillModel.js", 'message({error: "%s"}, "paste")' % code)
+            self.assertEqual(result["headline"], headline, code)
+            self.assertTrue(result["isError"], code)
+
+    def test_unknown_unavailable_codes_still_fall_to_the_generic_pill_copy(self):
+        self.assertEqual(self.run_js("PillModel.js", 'message({error: "mic_unavailable"}, "paste")'),
+                         {"headline": "Needs attention", "detail": "mic unavailable", "isError": True})
+
     def test_lips_frame_follows_the_mac_thresholds(self):
         cases = {"0": 0, "0.2499": 0, "0.25": 1, "0.5999": 1, "0.6": 2, "1": 2, "NaN": 0}
         for level, frame in cases.items():

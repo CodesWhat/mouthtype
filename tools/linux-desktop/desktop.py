@@ -404,7 +404,10 @@ class Session:
     def _notify(self, state):
         if self.feedback:
             try:
-                self.feedback.notify(state)
+                if state == 'error':
+                    self.feedback.notify(state, self.error)
+                else:
+                    self.feedback.notify(state)
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError):
                 pass
 
@@ -1953,6 +1956,19 @@ class Notifications:
         'cancelled': ('Mouthtype cancelled', 'The active take will not be delivered.'),
         'error': ('Mouthtype needs attention', 'Check status and saved recordings.'),
     }
+    # One plain title and action line per error code the daemon assigns. Never transcript text, window titles or paths.
+    ERRORS = {
+        'capture_unavailable': ('No microphone found', 'Plug one in or pick it in Mouthtype Settings.'),
+        'capture_interrupted': ('Microphone disconnected', 'Your audio was saved. Check the connection and try again.'),
+        'transcription_failed': ("Couldn't transcribe that", 'Your audio was saved. Retry it from Recent takes.'),
+        'recovery_full': ('Recovery is full', 'Forget some old takes, then try again.'),
+        'recording_limit': ('Recording hit the time limit', 'Your audio was saved. Retry it from Recent takes.'),
+        'dictionary_unavailable': ("Couldn't load your dictionary", 'Run mouthtype-linux doctor to see what is wrong.'),
+        'phrases_unavailable': ("Couldn't load your phrases", 'Run mouthtype-linux doctor to see what is wrong.'),
+        'phrase_context_unavailable': ("Couldn't read phrase context", 'Run mouthtype-linux doctor to see what is wrong.'),
+        'cleanup_unavailable': ('Cleanup is unavailable', 'Run mouthtype-linux doctor to see what is wrong.'),
+        'command_expired': ('That command timed out', 'Press your shortcut again.'),
+    }
 
     def __init__(self, enabled=True, *, command=None):
         self.enabled = enabled
@@ -1960,10 +1976,12 @@ class Notifications:
         self.status = 'unavailable' if enabled else 'disabled'
         self.identity = None
 
-    def notify(self, state):
+    def notify(self, state, error=None):
         if not self.enabled or state not in self.MESSAGES:
             return False
         title, body = self.MESSAGES[state]
+        if state == 'error' and error in self.ERRORS:
+            title, body = self.ERRORS[error]
         # Recording cues expire even if a later notification cannot be submitted.
         expiry = 125000 if state in ('recording', 'transcribing') else 5000
         arguments = [*self.command, '--print-id', '--app-name=Mouthtype', '--expire-time=' + str(expiry)]
