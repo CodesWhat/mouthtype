@@ -48,7 +48,7 @@ Press Super+Alt+M, speak, and press it again. Basic cleanup is already on, so th
 
 ## Better cleanup (optional)
 
-Fast and Thorough clean up more than Basic. They need a one-time prepare step that downloads the model and builds the pinned `llama-server`, which needs git, cmake and a C++ toolchain and takes several minutes of CPU. See the cleanup section of the [setup guide](../../tools/linux-desktop/README.md). If a model isn't ready or times out, you get the Basic text.
+Fast and Thorough clean up more than Basic. They need a one-time prepare step that downloads the model and the pinned upstream `llama-server` release (about 17 MB, checksum verified). Nothing is compiled. `mouthtype-linux-setup --cleanup fast --build-server` builds it locally instead, which needs git, cmake and a C++ toolchain. See the cleanup section of the [setup guide](../../tools/linux-desktop/README.md). If a model isn't ready or times out, you get the Basic text.
 
 ## Check and remove
 

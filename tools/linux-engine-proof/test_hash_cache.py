@@ -140,7 +140,7 @@ class VersionProbeTests(unittest.TestCase):
         self.root = Path(self.directory.name)
         self.log = self.root / 'probes'
         self.server = self.root / 'llama-server'
-        self.write_server('version: 1 (6420cf5)')
+        self.write_server('version: 1 (27c7a76)')
         self.config = {'server': str(self.server), 'version_cache': str(self.root / 'version.json')}
 
     def write_server(self, text):
@@ -151,8 +151,8 @@ class VersionProbeTests(unittest.TestCase):
         return len(self.log.read_text().split()) if self.log.exists() else 0
 
     def test_probe_runs_once_while_the_binary_is_unchanged(self):
-        self.assertIn('6420cf5', worker.server_description(self.config))
-        self.assertIn('6420cf5', worker.server_description(self.config))
+        self.assertIn('27c7a76', worker.server_description(self.config))
+        self.assertIn('27c7a76', worker.server_description(self.config))
         self.assertEqual(self.probes(), 1)
         self.assertEqual(stat.S_IMODE(Path(self.config['version_cache']).stat().st_mode), 0o600)
 
@@ -171,7 +171,7 @@ class VersionProbeTests(unittest.TestCase):
 
     def test_corrupt_cache_falls_back_to_the_probe(self):
         Path(self.config['version_cache']).write_text('nope')
-        self.assertIn('6420cf5', worker.server_description(self.config))
+        self.assertIn('27c7a76', worker.server_description(self.config))
         self.assertEqual(self.probes(), 1)
 
 

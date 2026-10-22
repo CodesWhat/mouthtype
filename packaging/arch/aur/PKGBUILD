@@ -13,9 +13,9 @@ license=('GPL-3.0-only' 'MIT' 'Unicode-3.0')
 depends=('python' 'curl' 'pipewire-audio' 'wl-clipboard' 'wtype' 'libnotify' 'ffmpeg')
 makedepends=('git')
 optdepends=('hyprland: identify the active window for paste and type delivery (Omarchy ships it)'
-            'git: build the optional AI cleanup server'
-            'cmake: build the optional AI cleanup server'
-            'base-devel: build the optional AI cleanup server')
+            'git: only for mouthtype-linux-setup --build-server (compiles the AI cleanup server locally)'
+            'cmake: only for mouthtype-linux-setup --build-server (compiles the AI cleanup server locally)'
+            'base-devel: only for mouthtype-linux-setup --build-server (compiles the AI cleanup server locally)')
 provides=("${pkgname%-git}")
 conflicts=("${pkgname%-git}")
 install=mouthtype-linux.install

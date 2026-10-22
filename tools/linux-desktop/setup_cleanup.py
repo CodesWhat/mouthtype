@@ -1,4 +1,4 @@
-"""Prepare pinned AI cleanup models for the Linux client: verified weights and a pinned llama-server build.
+"""Prepare pinned AI cleanup models for the Linux client: verified weights and a pinned llama-server.
 
 Explicit opt-in only. Nothing here starts the dictation service, loads a model into memory, or edits linux.json;
 it prints the configuration lines to add. Every child process has a finite deadline.
@@ -14,6 +14,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import time
 
 PROOF = Path(__file__).resolve().parents[1] / 'linux-engine-proof'
@@ -71,13 +72,13 @@ def bounded_run(command, seconds, *, poll=None, **kwargs):
         raise TimeoutError('Deadline reached: ' + command[0])
 
 
-def download(url, destination, *, seconds=3600, run=None, progress=None):
+def download(url, destination, *, seconds=3600, run=None, progress=None, proto='=https'):
     """Fetch with curl into destination.part. `progress(bytes_so_far)` is called while the transfer runs."""
     run = run or bounded_run
     partial = destination.with_suffix(destination.suffix + '.part')
     if partial.exists():
         partial.unlink()
-    command = ['curl', '-sSL', '--fail', '--connect-timeout', '20', '--speed-limit', '1024', '--speed-time', '60',
+    command = ['curl', '-sSL', '--fail', '--proto', proto, '--proto-redir', proto, '--connect-timeout', '20', '--speed-limit', '1024', '--speed-time', '60',
                '--max-time', str(seconds), '-o', str(partial), url]
     if progress:
         def poll():
@@ -105,6 +106,75 @@ def verify_and_place(partial, destination, sha256):
     os.rename(partial, destination)
     destination.chmod(0o644)
     return actual
+
+
+def extract_server(archive, destination):
+    """Extract only llama-server and the shared libraries beside it from the release tarball into destination.
+
+    The tarball has one top directory. Every member is checked before anything is written, and any entry outside
+    that shape (absolute path, `..`, nesting, a link that leaves the directory, a device node) rejects the archive.
+    """
+    wanted = []
+    with tarfile.open(archive, 'r:gz') as tar:
+        for member in tar.getmembers():
+            parts = member.name.split('/')
+            if member.name.startswith('/') or '..' in parts or '\\' in member.name:
+                raise ValueError('Unsafe path in llama.cpp archive')
+            if member.isdir():
+                continue
+            if not (member.isfile() or member.issym()):
+                raise ValueError('Unsupported entry in llama.cpp archive')
+            if len(parts) != 2:
+                if len(parts) > 2:
+                    raise ValueError('Unexpected nesting in llama.cpp archive')
+                continue
+            name = parts[1]
+            if member.issym() and (os.path.basename(member.linkname) != member.linkname or member.linkname in ('', '.')):
+                raise ValueError('Unsafe link in llama.cpp archive')
+            if name == 'llama-server' or (name.startswith('lib') and '.so' in name):
+                wanted.append(member)
+        if not any(member.name.endswith('/llama-server') and member.isfile() for member in wanted):
+            raise ValueError('llama-server missing from the llama.cpp archive')
+        staging = destination.with_name(destination.name + '.new')
+        shutil.rmtree(staging, ignore_errors=True)
+        staging.mkdir(mode=0o700, parents=True)
+        try:
+            for member in wanted:
+                target = staging / member.name.split('/')[1]
+                if member.issym():
+                    os.symlink(member.linkname, target)
+                    continue
+                source = tar.extractfile(member)
+                with source, target.open('wb') as output:
+                    shutil.copyfileobj(source, output)
+                target.chmod(0o755 if member.mode & 0o111 else 0o644)
+            shutil.rmtree(destination, ignore_errors=True)
+            os.rename(staging, destination)
+        finally:
+            shutil.rmtree(staging, ignore_errors=True)
+    return destination / 'llama-server'
+
+
+def fetch_server(root, *, pins=None, download_fn=None):
+    """Download the pinned upstream llama-server release, verify its SHA-256 and unpack the server and its libraries."""
+    block = (pins or PINS)['llama_binary']
+    root = Path(root)
+    destination = root / 'server'
+    stamp = destination / '.asset-sha256'
+    if stamp.is_file() and stamp.read_text().strip() == block['sha256'] and (destination / 'llama-server').is_file():
+        return destination / 'llama-server'
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    archive = root / block['asset']
+    partial = (download_fn or download)(block['source'], archive)
+    if digest(partial) != block['sha256']:
+        partial.unlink(missing_ok=True)
+        raise ValueError('SHA-256 mismatch for downloaded llama-server')
+    try:
+        server = extract_server(partial, destination)
+    finally:
+        partial.unlink(missing_ok=True)
+    stamp.write_text(block['sha256'] + '\n')
+    return server
 
 
 def build_server(root, *, revision=None, seconds=1800, run=None, jobs=None):
@@ -149,7 +219,8 @@ def write_progress(destination, **fields):
     write_atomic(destination / 'cleanup-setup.json', **fields)
 
 
-def setup(destination, levels, *, server=None, pins=None, download_fn=None, build_fn=None, check_fn=None, threads=None):
+def setup(destination, levels, *, server=None, pins=None, download_fn=None, build_fn=None, fetch_fn=None, check_fn=None,
+          threads=None, build=False):
     pins = pins or PINS
     destination = Path(destination)
     destination.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -157,6 +228,7 @@ def setup(destination, levels, *, server=None, pins=None, download_fn=None, buil
     existing = json.loads(engines_path.read_text()) if engines_path.exists() else {'schema': 1, 'engines': {}}
     download_fn = download_fn or download
     build_fn = build_fn or build_server
+    fetch_fn = fetch_fn or (lambda root: fetch_server(root, pins=pins, download_fn=download_fn))
     check_fn = check_fn or check_server
     cancel_flag = destination / CANCEL_FLAG
     cancel_flag.unlink(missing_ok=True)
@@ -168,8 +240,11 @@ def setup(destination, levels, *, server=None, pins=None, download_fn=None, buil
     write_progress(destination, state='preparing', levels=list(levels))
     try:
         if server is None:
-            write_progress(destination, state='building', levels=list(levels))
-            server = build_fn(destination / 'build')
+            if build:
+                write_progress(destination, state='building', levels=list(levels))
+                server = build_fn(destination / 'build')
+            else:
+                server = fetch_fn(destination)
         server = Path(server).resolve()
         runtime = check_fn(server)
         for level in levels:
@@ -230,19 +305,21 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--destination', type=Path, required=True, help='Directory for models, build and cleanup.json')
     parser.add_argument('--level', action='append', choices=sorted(LEVELS), help='fast and/or thorough; default fast')
-    parser.add_argument('--server', type=Path, help='Existing pinned llama-server instead of building one')
+    parser.add_argument('--server', type=Path, help='Existing pinned llama-server instead of downloading one')
+    parser.add_argument('--build-server', action='store_true',
+                        help='Compile the pinned llama.cpp locally instead of downloading the upstream release (needs git, cmake, a C++ toolchain)')
     parser.add_argument('--threads', type=int)
     args = parser.parse_args(argv)
     if platform.system() != 'Linux' or platform.machine() != 'x86_64':
         print('Cleanup preparation targets Linux x86_64. Nothing was downloaded.', file=sys.stderr)
         return 2
-    for tool in ('curl',) + (() if args.server else ('git', 'cmake', 'c++')):
+    for tool in ('curl',) + (('git', 'cmake', 'c++') if args.build_server and not args.server else ()):
         if shutil.which(tool) is None:
             print('Missing required helper: ' + tool, file=sys.stderr)
             return 2
     levels = args.level or ['fast']
     try:
-        path = setup(args.destination, levels, server=args.server, threads=args.threads)
+        path = setup(args.destination, levels, server=args.server, threads=args.threads, build=args.build_server)
     except (OSError, ValueError, TimeoutError, subprocess.SubprocessError, KeyError) as error:
         print('Cleanup preparation failed: ' + type(error).__name__ + ': ' + str(error), file=sys.stderr)
         return 2

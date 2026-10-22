@@ -195,15 +195,16 @@ Wherever the app names the model it writes exactly `S1-mini by Superwhisper`. Th
 
 ## llama.cpp
 
-https://github.com/ggml-org/llama.cpp, commit 6420cf5dd588c68e48657a0bbd82bb3bd5ac7209
+https://github.com/ggml-org/llama.cpp, commit 27c7a769da1671c97b2e3f6cb88704a6e1e0d0cd
 
 Used by the Linux client's Fast and Thorough cleanup levels as the local `llama-server`. It is not bundled and not
-modified. `tools/linux-desktop/setup_cleanup.py` clones this exact commit, checks it out and builds `llama-server` for
-the CPU on the user's machine when they ask for cleanup models, then refuses a server that doesn't report the pinned
-revision. The pin is in `tools/linux-engine-proof/pins.json`.
+modified. `tools/linux-desktop/setup_cleanup.py` downloads the upstream `llama-b11703-bin-ubuntu-x64.tar.gz` release asset
+(built from this exact commit, SHA-256 checked) when the user asks for cleanup models, unpacks only `llama-server` and
+its shared libraries, then refuses a server that doesn't report the pinned revision. `--build-server` clones and
+builds the same commit locally instead. The pin is in `tools/linux-engine-proof/pins.json`.
 
 - Licence: MIT, Copyright (c) 2023-2026 The ggml authors. The full text is the `LICENSE` file at that commit
-  (https://github.com/ggml-org/llama.cpp/blob/6420cf5dd588c68e48657a0bbd82bb3bd5ac7209/LICENSE).
+  (https://github.com/ggml-org/llama.cpp/blob/27c7a769da1671c97b2e3f6cb88704a6e1e0d0cd/LICENSE).
 - Used for: running the cleanup GGUF models on Linux. The Mac app doesn't use it.
 
 ## Qwen3-4B-Instruct-2507

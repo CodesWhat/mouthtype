@@ -19,7 +19,7 @@ import proof
 SERVER = r'''#!/usr/bin/env python3
 import http.server,json,os,pathlib,sys,time
 if "--version" in sys.argv:
- print("fake llama 6420cf5");sys.exit(0)
+ print("fake llama 27c7a76");sys.exit(0)
 port=int(sys.argv[sys.argv.index("--port")+1])
 alias=sys.argv[sys.argv.index("--alias")+1] if "--alias" in sys.argv else "unidentified"
 pathlib.Path(__file__).with_suffix(".pid.json").write_text(json.dumps({"server":os.getpid(),"worker":os.getppid()}))
@@ -156,7 +156,7 @@ class WorkerTests(unittest.TestCase):
     def test_unrelated_healthy_loopback_server_is_never_used_for_cleanup(self):
         process = Mock(pid=1)
         process.poll.return_value = None
-        version = types.SimpleNamespace(stdout="fake llama 6420cf5", stderr="")
+        version = types.SimpleNamespace(stdout="fake llama 27c7a76", stderr="")
         config = {"server": "server", "artifacts": {"model": {"path": "model"}}}
         def foreign(port, path, payload=None, timeout=1):
             return {"status": "ok"} if path == "/health" else {"data": [{"id": "foreign-server"}]}
@@ -170,7 +170,7 @@ class WorkerTests(unittest.TestCase):
     def test_cleanup_can_become_ready_after_120_seconds_with_larger_configured_budget(self):
         process = Mock(pid=1)
         process.poll.return_value = None
-        version = types.SimpleNamespace(stdout="fake llama 6420cf5", stderr="")
+        version = types.SimpleNamespace(stdout="fake llama 27c7a76", stderr="")
         config = {"server": "server", "startup_seconds": 180, "artifacts": {"model": {"path": "model"}}}
         attempts = []
         def health(port, path, payload=None, timeout=1):
@@ -195,7 +195,7 @@ class WorkerTests(unittest.TestCase):
     def test_cleanup_uses_smaller_configured_startup_budget_and_reaps_server(self):
         process = Mock(pid=1)
         process.poll.return_value = None
-        version = types.SimpleNamespace(stdout="fake llama 6420cf5", stderr="")
+        version = types.SimpleNamespace(stdout="fake llama 27c7a76", stderr="")
         config = {"server": "server", "startup_seconds": .5, "artifacts": {"model": {"path": "model"}}}
         outcome = None
         with patch("worker.subprocess.run", return_value=version), patch("worker.subprocess.Popen", return_value=process), patch("worker.http_json", side_effect=[{"status": "loading"}, RuntimeError("continued past configured deadline")]), patch("worker.time.monotonic", side_effect=[0, .6]), patch("worker.time.sleep"):
