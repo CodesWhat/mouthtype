@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import MouthtypeCore
 
 /// The Transforms page body: a "When you say" card with one row per saved phrase and a New transform row, then an "On selected text"
@@ -98,12 +99,31 @@ struct PhraseEditorView: View {
                 }
                 .buttonStyle(.plain).disabled(editor.isDirty || editor.loadFailed)
                 .accessibilityLabel("New transform").accessibilityIdentifier("phrase-new")
+                Button("Export CSV…") { exportCSV() }.buttonStyle(.designSecondary)
+                    .disabled(editor.items.isEmpty || editor.loadFailed)
+                    .accessibilityLabel("Export phrases as CSV").accessibilityIdentifier("phrase-export-csv")
                 Spacer(minLength: 8)
                 Text("Whole phrases, any capitalization. Works at every cleanup level except Off.")
                     .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                     .fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.trailing).padding(.trailing, 6)
             }
             .padding(.leading, 8).padding(.trailing, 10).padding(.vertical, 5)
+        }
+    }
+
+    private func exportCSV() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "mouthtype-phrases.csv"
+        panel.message = "Saves every phrase as trigger,expansion."
+        let handle: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { return }
+            editor.exportCSV(to: url)
+        }
+        if let window = SettingsNSWindow.existing {
+            panel.beginSheetModal(for: window, completionHandler: handle)
+        } else {
+            panel.begin(completionHandler: handle)
         }
     }
 

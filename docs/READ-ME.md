@@ -177,7 +177,7 @@ Live words finishes through full transcription and inserts once. Preview work is
 
 - Website domains include subdomains; the most specific domain wins before the app rule and the default when the browser exposes its document URL. Missing URL support falls back, and URLs are not retained.
 - Your own rules start empty. Built-in app and website lists carry their own tones, and everything else uses the default tone.
-- Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import.
+- Saved spellings supports Import CSV with name or heard,written headers. Review the preview and confirm before applying; malformed or conflicting rows block the import. More… also imports Wispr Flow CSV and VoiceInk JSON dictionaries and exports the Dictionary as CSV.
 - Formal removes swear words used as exclamations or emphasis at Basic, Fast and Thorough (Off bypasses cleanup). Thorough also swaps a swear noun for a plain word, while Basic and Fast only remove exclamations and emphasis; tone does not otherwise authorize paraphrasing.
 - Default appearance stays simple; Override individual fonts reveals independent Heading, Body and Readout choices.
 

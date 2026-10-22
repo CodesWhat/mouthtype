@@ -77,12 +77,22 @@ struct SpellingEditorView: View {
             .background(RoundedRectangle(cornerRadius: 8).fill(DesignPalette.surface))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(DesignPalette.hair, lineWidth: 1))
             Button {
-                chooseCSV()
+                chooseFile(.mouthtype)
             } label: {
                 Text("Import CSV…").frame(minHeight: 32)
             }
             .buttonStyle(.designSecondary).disabled(editor.isDirty || editor.loadFailed)
             .accessibilityLabel("Import CSV").accessibilityIdentifier("spelling-import-csv")
+            Menu {
+                Button("Import from Wispr Flow (CSV)…") { chooseFile(.wispr) }
+                Button("Import from VoiceInk (JSON)…") { chooseFile(.voiceInk) }
+                Divider()
+                Button("Export Dictionary as CSV…") { exportCSV() }.disabled(editor.items.isEmpty)
+            } label: {
+                Text("More…").frame(minHeight: 32)
+            }
+            .menuStyle(.borderlessButton).fixedSize().disabled(editor.isDirty || editor.loadFailed)
+            .accessibilityLabel("Import from another app or export").accessibilityIdentifier("spelling-transfer-menu")
             Button {
                 editor.newSpelling()
             } label: {
@@ -144,18 +154,34 @@ struct SpellingEditorView: View {
         .padding(.horizontal, 16).frame(minHeight: 40)
     }
 
-    private func chooseCSV() {
+    private func chooseFile(_ source: SpellingImportSource) {
         let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.allowedContentTypes = source == .voiceInk ? [.json] : [.commaSeparatedText]
         panel.allowsMultipleSelection = false
         panel.canChooseDirectories = false
-        panel.message = "Choose a UTF-8 CSV to preview. Nothing is imported until you confirm."
+        panel.message = source.choosePrompt
         panel.prompt = "Preview"
         let handle: (NSApplication.ModalResponse) -> Void = { response in
             guard response == .OK, let url = panel.url else { return }
-            editor.previewImport(fileURL: url)
+            editor.previewImport(fileURL: url, source: source)
         }
         // A sheet blocks the window, so the page can't change while the picker is open.
+        if let window = SettingsNSWindow.existing {
+            panel.beginSheetModal(for: window, completionHandler: handle)
+        } else {
+            panel.begin(completionHandler: handle)
+        }
+    }
+
+    private func exportCSV() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "mouthtype-dictionary.csv"
+        panel.message = "Saves every spelling as heard,written. Import CSV reads the file back."
+        let handle: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { return }
+            editor.exportCSV(to: url)
+        }
         if let window = SettingsNSWindow.existing {
             panel.beginSheetModal(for: window, completionHandler: handle)
         } else {

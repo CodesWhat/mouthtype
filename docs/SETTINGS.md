@@ -351,6 +351,22 @@ Switching to another page, or closing the window, with an unsaved spelling or ph
 
 The preview shows new rows, already-saved aliases, repeated rows and errors. Identical aliases are skipped. **Import** adds only the previewed new spellings and preserves existing entries, their order and metadata. **Cancel** changes nothing. Save or cancel a dirty spelling draft first. If another writer changes the library after preview, cancel and choose the CSV again to review the current state.
 
+### Import from another app
+
+The **More…** menu next to Import CSV reads other dictation apps' dictionary exports into the same preview, so nothing is overwritten and nothing changes until you confirm.
+
+- **Wispr Flow (CSV).** One word per row, or `misspelling,correction` with no header row, as Wispr Flow writes it. Empty fields are dropped. A row with more than two filled columns is an error.
+- **VoiceInk (JSON).** A VoiceInk dictionary export. Each vocabulary term saves as a name, and each source phrase of a replacement saves as a heard form for that replacement.
+- Superwhisper and MacWhisper are not supported. Neither publishes a documented dictionary file format.
+
+The preview, duplicate handling and limits are the same as Import CSV. Rows already saved are skipped, and a heard phrase that is saved with a different spelling blocks the import until the file is fixed.
+
+### Export
+
+**More… > Export Dictionary as CSV…** saves every spelling as `heard,written`, one row per heard form, the same headers Import CSV reads. Importing that file into an empty Dictionary restores the same spellings. Starred state is not part of the CSV.
+
+Phrases has **Export CSV…**, which saves `trigger,expansion` with multiline expansions quoted. Phrases can be exported but not imported.
+
 ### Suggestions
 
 **Suggestions** sits at the top of Saved spellings. Mouthtype looks at your last 1,000 takes (secure-field takes are never read) and your saved spellings, and offers:
