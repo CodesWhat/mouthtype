@@ -514,6 +514,31 @@ class SetupRunningTests(unittest.TestCase):
                 self.assertFalse(control.setup_running())
 
 
+class CleanupCancelTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+
+    def test_cancel_writes_the_flag_next_to_the_setup_status_when_running(self):
+        with mock.patch.object(control, "CLEANUP_DIR", self.root), mock.patch.object(control, "setup_running", lambda: True), \
+                mock.patch.object(control, "state", lambda: {}), mock.patch.object(control.time, "sleep"):
+            output = control.cleanup_cancel()
+        self.assertTrue((self.root / "cleanup-cancel").exists())
+        self.assertEqual(output["page"], "cleanup")
+
+    def test_cancel_when_nothing_is_running_is_an_error_and_writes_no_flag(self):
+        with mock.patch.object(control, "CLEANUP_DIR", self.root), mock.patch.object(control, "setup_running", lambda: False):
+            with self.assertRaisesRegex(RuntimeError, "not running"):
+                control.cleanup_cancel()
+        self.assertFalse((self.root / "cleanup-cancel").exists())
+
+    def test_cancelled_state_passes_through_the_setup_status(self):
+        (self.root / "cleanup-setup.json").write_text(json.dumps({"state": "cancelled", "levels": ["fast"]}), encoding="utf-8")
+        with mock.patch.object(control, "CLEANUP_DIR", self.root):
+            self.assertEqual(control.cleanup_models()["setup"]["state"], "cancelled")
+
+
 class ShortcutBlockTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

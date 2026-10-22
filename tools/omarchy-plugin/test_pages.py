@@ -92,6 +92,12 @@ class TextRuleTests(unittest.TestCase):
         self.assertIn("setup.bytes_total", health)
         self.assertIn("DesignProgress 1.0 DesignProgress.qml", (HERE / "design" / "qmldir").read_text())
 
+    def test_health_offers_cancel_and_retry_for_cleanup_setup(self):
+        health = (HERE / "pages" / "SettingsHealth.qml").read_text()
+        self.assertIn('root.host.run(["cleanup-cancel"])', health)
+        self.assertIn('setup.state === "cancelled"', health)
+        self.assertIn("Retry", health)
+
     def test_no_elide_and_no_small_text(self):
         for path in sources():
             text = path.read_text()

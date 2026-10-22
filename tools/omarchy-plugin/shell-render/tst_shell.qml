@@ -510,6 +510,14 @@ TestCase {
     fuzzyCompare(bar.value, 1000000000 / 2497281120, 0.001)
   }
 
+  function test_health_offers_cancel_while_downloading() {
+    tc.dark = false
+    setScene("settings-health-empty")
+    var cancel = findByName(shell, "setupCancel")
+    verify(cancel !== null && cancel.visible, "Cancel shows while a model downloads")
+    verify(allTexts().indexOf("Cancel") >= 0)
+  }
+
   function test_health_points_to_style() {
     tc.dark = false
     setScene("settings-health")
