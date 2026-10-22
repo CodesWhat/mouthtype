@@ -25,10 +25,12 @@
 #   MOUTHTYPE_SIGN_IDENTITY   signing identity (default: the keychain's Developer ID)
 #   MOUTHTYPE_TIMESTAMP=none  skip the secure timestamp (local builds, offline)
 #   MOUTHTYPE_BUILD_DIR       output directory (default: build)
-#   MOUTHTYPE_SCRATCH_PATH    SwiftPM scratch directory (default: .build). Dependency sources are
-#                             compiled from here and their absolute paths leak into the binary,
-#                             so a repeatable build needs the same value everywhere, e.g.
-#                             /private/tmp/mouthtype-release-scratch.
+#   MOUTHTYPE_SCRATCH_PATH    repeatable-build mode. Copies the sources into <path>/mouthtype and builds
+#                             them there with SwiftPM state in <path>/build, so every absolute path the
+#                             compilers see is the same on any machine and in any checkout directory.
+#                             Swift bakes source-path lengths into the binary, which no prefix-map flag
+#                             fixes. Unset (the default) builds in place with .build, which is faster
+#                             and keeps .build/artifacts populated but is not path-independent.
 #   MOUTHTYPE_UNSIGNED=1      assemble the app but skip every codesign step (used by
 #                             scripts/verify-repeatable-build.sh; never ship this output)
 #
@@ -53,19 +55,30 @@ APP="$OUT/Mouthtype.app"
 IDENTITY="${MOUTHTYPE_SIGN_IDENTITY:-$(security find-identity -v -p codesigning \
     | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"
 
-SCRATCH="${MOUTHTYPE_SCRATCH_PATH:-.build}"
-# Keep the checkout path out of the binaries (C++ __FILE__ in Cmlx, Swift debug paths).
-# The compilers see the resolved path (/private/var/... for a /var/... checkout), so map both spellings.
+if [ -n "${MOUTHTYPE_SCRATCH_PATH:-}" ]; then
+    mkdir -p "$MOUTHTYPE_SCRATCH_PATH"
+    SRC="$(cd "$MOUTHTYPE_SCRATCH_PATH" && pwd -P)/mouthtype"
+    SCRATCH="$(dirname "$SRC")/build"
+    echo "→ copying sources to $SRC"
+    mkdir -p "$SRC"
+    rsync -a --delete --exclude /.build --exclude /.git --exclude /build --exclude /.claude --exclude /.planning ./ "$SRC/"
+else
+    SRC="$PWD"
+    SCRATCH="$PWD/.build"
+fi
+SWIFT_ARGS=(-c release --arch arm64 --package-path "$SRC" --scratch-path "$SCRATCH")
+# Keep the source path out of the binaries (C++ __FILE__ in Cmlx, Swift debug paths). The compilers
+# see the resolved path (/private/var/... for a /var/... checkout), so map both spellings.
 PATH_MAP_FLAGS=()
-for root in "$PWD" "$(pwd -P)"; do
+for root in "$SRC" "$(cd "$SRC" && pwd -P)"; do
     PATH_MAP_FLAGS+=(-Xcc "-ffile-prefix-map=$root=/src" -Xswiftc -file-prefix-map -Xswiftc "$root=/src")
-    [ "$PWD" = "$(pwd -P)" ] && break
+    [ "$SRC" = "$(cd "$SRC" && pwd -P)" ] && break
 done
 
 echo "→ building Mouthtype $VERSION (release, arm64)"
-swift build -c release --arch arm64 --jobs 4 --scratch-path "$SCRATCH" "${PATH_MAP_FLAGS[@]}" --product Mouthtype
-swift build -c release --arch arm64 --jobs 4 --scratch-path "$SCRATCH" "${PATH_MAP_FLAGS[@]}" --product mouthtype-fn-guard
-BIN_DIR="$(swift build -c release --arch arm64 --scratch-path "$SCRATCH" --show-bin-path)"
+swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" --product Mouthtype
+swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" --product mouthtype-fn-guard
+BIN_DIR="$(swift build "${SWIFT_ARGS[@]}" --show-bin-path)"
 
 echo "→ assembling $APP"
 rm -rf "$APP"
