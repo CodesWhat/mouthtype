@@ -774,13 +774,21 @@ def kde_shortcut_pill_take(root, env, processes, session, atspi, driver, call):
             sys.executable, Path(__file__).with_name('desktop.py'), root))
         launcher.chmod(0o755)
         host = Path(__file__).resolve().parent.parent / 'linux-qt' / 'mouthtype_desktop.py'
+        # Login autostart runs the host with --background (tray only, no settings window), so that is what the run
+        # exercises. MOUTHTYPE_ACCEPTANCE_FOREGROUND=1 opens the settings window as a normal launch does.
+        foreground = os.environ.get('MOUTHTYPE_ACCEPTANCE_FOREGROUND') == '1'
         processes.start([sys.executable, str(host), '--launcher', str(launcher), '--config', str(root / 'linux.json'),
-                         '--server-name', 'mouthtype-acceptance'])
-        try:
-            wait_for(lambda: any(e['kind'] == 'added' and e.get('resourceClass') == 'app.mouthtype.Mouthtype'
-                                 for e in watcher.snapshot()), 30)
-        except TimeoutError:
-            raise ValueError('The Qt host never mapped its window: ' + json.dumps(watcher.snapshot()))
+                                        '--server-name', 'mouthtype-acceptance'] + ([] if foreground else ['--background']))
+        if foreground:
+            try:
+                wait_for(lambda: any(e['kind'] == 'added' and e.get('resourceClass') == 'app.mouthtype.Mouthtype'
+                                     for e in watcher.snapshot()), 30)
+            except TimeoutError:
+                raise ValueError('The Qt host never mapped its window: ' + json.dumps(watcher.snapshot()))
+        else:
+            time.sleep(3)  # no window to wait for in the tray-only mode
+            if any(e['kind'] == 'added' and e.get('resourceClass') == 'app.mouthtype.Mouthtype' for e in watcher.snapshot()):
+                raise ValueError('--background mapped a settings window: ' + json.dumps(watcher.snapshot()))
         time.sleep(2)  # the watch stream connects a moment after the window
         calls.clear()
         pressed_at = time.monotonic()
@@ -964,9 +972,13 @@ def kde_portal_component(root, env, processes):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('component', choices=('capabilities', 'pipewire', 'sway', 'gnome-portal', 'kde-portal'))
+    parser.add_argument('--foreground', action='store_true',
+                        help='kde-portal only: launch the Qt host as a normal launch, not --background')
     parser.add_argument('--skip-shortcut-take', action='store_true',
                         help='gnome-portal only: skip the held-chord take (same as MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE=0)')
     args = parser.parse_args()
+    if args.foreground:
+        os.environ['MOUTHTYPE_ACCEPTANCE_FOREGROUND'] = '1'
     if args.skip_shortcut_take:
         os.environ['MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE'] = '0'
     if sys.platform != 'linux':
