@@ -28,6 +28,8 @@ struct TranscribedDictation: Sendable {
     var words: [WordTiming]
     /// Words and tags the guard dropped.
     var guardEdits: [EditOp] = []
+    /// The language the take was settled as. Nil reads as English.
+    var language: DictationLanguage?
 }
 
 /// What a dictation's cleanup needs, read once so one dictation sees one set of switches.
@@ -113,6 +115,8 @@ struct DictationPipeline: Sendable {
     var editorHints: @Sendable () -> Bool = { EditorHintsSetting.isEnabled() }
     /// What the engine is told about the take's language. English until the setting feeds it.
     var languageRequest: @Sendable () -> DictationLanguageRequest = { .english }
+    /// Settles an Auto take's language from its transcript. Without a detector Auto falls back to its first candidate.
+    var languageResolver = LanguageResolver(detector: nil)
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
     var appStyles: @Sendable () -> AppCleanupStyles = { (try? AppCleanupStyles.load()) ?? AppCleanupStyles() }
     var textPipeline = TextPipeline()
@@ -265,7 +269,9 @@ struct DictationPipeline: Sendable {
             settleWithin: editorTerms.isEmpty ? nil : VocabularyBias.editorSettle
         )
         var transcription = try await engine.transcribe(samples: trimmed.samples, language: language)
-        transcription.language = transcription.language ?? language.resolved
+        // Auto with several candidates is settled from the transcript, once per take. Live preview never detects.
+        let resolvedLanguage = transcription.language ?? languageResolver.resolve(language, text: transcription.text)
+        transcription.language = resolvedLanguage
         // Editor names help this take and nothing else: they never reach the stored record.
         transcription.boostTermsApplied = VocabularyBoostSetting.withoutEditorTerms(
             transcription.boostTermsApplied, editorTerms: editorTerms, rules: rules
@@ -290,7 +296,7 @@ struct DictationPipeline: Sendable {
                     language: shifted.language?.code, boostTerms: transcription.boostTermsApplied
                 ))
         }
-        let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)
+        let guarded = TranscriptGuard(language: resolvedLanguage).apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)
         guard !guarded.isEmpty else {
             if !guarded.edits.isEmpty { await write(session, "appendEdits") { try await $0.appendEdits(session.id, guarded.edits) } }
             await finish(session, .empty)
@@ -298,7 +304,7 @@ struct DictationPipeline: Sendable {
         }
         return TranscribedDictation(
             text: guarded.text, rawText: transcription.text, asrDoneMs: asrDoneMs, words: shifted.words,
-            guardEdits: guarded.edits
+            guardEdits: guarded.edits, language: resolvedLanguage
         )
     }
 
@@ -352,7 +358,10 @@ struct DictationPipeline: Sendable {
             var only = TextPipelineOptions.none
             only.profanity = true
             only.style = options.style
-            return textPipeline.run(TextPipelineInput(text: text, options: only, protectedPhrases: protectedPhrases, protectedWords: protectedWords))
+            return textPipeline.run(
+                TextPipelineInput(
+                    text: text, options: only, protectedPhrases: protectedPhrases, protectedWords: protectedWords,
+                    language: transcribed.language))
         }
 
         func deterministic(_ dictionary: [DictionaryRule], startedAt start: ContinuousClock.Instant)
@@ -362,7 +371,7 @@ struct DictationPipeline: Sendable {
                 TextPipelineInput(
                     text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
                     now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases,
-                    protectedWords: protectedWords, codingTarget: codingTarget
+                    protectedWords: protectedWords, codingTarget: codingTarget, language: transcribed.language
                 ))
             // Cleanup may remove a filler or format a number that is part of a saved trigger.
             // Keep the spoken trigger intact rather than silently losing its replacement.

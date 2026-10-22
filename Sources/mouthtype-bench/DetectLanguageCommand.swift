@@ -1,13 +1,14 @@
 import ArgumentParser
 import Foundation
+import MouthtypeCore
 import NaturalLanguage
 
 /// Language detection on transcript text, the way chunk D will do it: `NLLanguageRecognizer` constrained to a candidate set,
 /// with a fallback to the first candidate under a minimum word count or a confidence threshold.
 enum LanguageDetectionBench {
     static let buckets = [3, 6, 12, 25]
-    static let defaultConfidence = 0.5
-    static let defaultMinimumWords = 3
+    static let defaultConfidence = LanguageResolver.defaultConfidence
+    static let defaultMinimumWords = LanguageResolver.defaultMinimumWords
     /// The shipping gate from the design: at least this share correct at 6 words and up, for the tier-1 languages.
     static let gateAccuracy = 0.95
     static let gateFromWords = 6
