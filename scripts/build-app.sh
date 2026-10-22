@@ -76,9 +76,10 @@ for root in "$SRC" "$(cd "$SRC" && pwd -P)"; do
 done
 
 echo "→ building Mouthtype $VERSION (release, arm64)"
-swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" --product Mouthtype
-swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" --product mouthtype-fn-guard
-BIN_DIR="$(swift build "${SWIFT_ARGS[@]}" --show-bin-path)"
+# Run from $SRC: the tools' working directory still reaches the output (objc stub layout) otherwise.
+(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" --product Mouthtype)
+(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" --product mouthtype-fn-guard)
+BIN_DIR="$(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --show-bin-path)"
 
 echo "→ assembling $APP"
 rm -rf "$APP"
