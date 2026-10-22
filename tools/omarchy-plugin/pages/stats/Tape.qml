@@ -91,7 +91,7 @@ StatsCard {
           readonly property real tall: F.needleHeight(modelData.words, card.maxWords)
           readonly property real wide: allHollow ? 4 : 2.5
           readonly property real pad: hot ? 3 : 0
-          readonly property color mark: hot ? Theme.accent : Theme.neutralMark
+          readonly property color mark: hot ? Theme.accentMark : Theme.neutralMark
 
           x: modelData.x - wide / 2 - pad
           y: field.height - 11 - tall - pad
@@ -125,7 +125,7 @@ StatsCard {
             radius: 3
             color: "transparent"
             border.width: 1
-            border.color: Theme.accent
+            border.color: Theme.accentMark
           }
         }
       }

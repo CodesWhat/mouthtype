@@ -44,6 +44,7 @@ QtObject {
   readonly property color hair2: c("hair2")
   readonly property color accent: c("accent")
   readonly property color accentSoft: c("accentSoft")
+  readonly property color accentMark: c("accentMark")
   readonly property color onAccent: c("onAccent")
   readonly property color accentText: c("accentText")
   readonly property color focus: c("focus")

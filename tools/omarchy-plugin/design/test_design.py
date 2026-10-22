@@ -56,10 +56,10 @@ TEXT_PAIRS = [
 TEXT_ON_FILL = [
     ("ink", "sel", "surface"), ("ink", "sel", "bg"), ("ink2", "sel", "surface"),
 ]
-# UI fills and rings that need 3:1 against what they sit on. The accent is only claimed against surface (cards, where
-# switches and primary buttons sit); light accent on the page ground is 2.75:1, same as the Mac palette.
+# UI fills and rings that need 3:1 against what they sit on. The lime accent is a fill that holds dark ink, but it is only
+# ~1.4:1 on a light surface, so thin marks and edges use accentMark, which carries the 3:1.
 UI_PAIRS = [
-    ("accent", "surface"),
+    ("accentMark", "surface"), ("accentMark", "bg"),
     ("focus", "surface"), ("focus", "bg"),
 ]
 
@@ -105,8 +105,17 @@ class PaletteContrast(unittest.TestCase):
                     self.assertGreaterEqual(got, 3.0, f"{mode} {fill} against {ground} is {got:.2f}:1")
 
     def test_accent_matches_the_mac_lime_pass(self):
-        self.assertEqual(self.palette["light"]["accent"][0], (0x76, 0xA1, 0x1A))
-        self.assertEqual(self.palette["dark"]["accent"][0], (0xA6, 0xCD, 0x52))
+        self.assertEqual(self.palette["light"]["accent"][0], (0xD3, 0xE5, 0x8B))
+        self.assertEqual(self.palette["dark"]["accent"][0], (0xD3, 0xE5, 0x8B))
+
+    def test_accent_mark_matches_the_mac_palette(self):
+        self.assertEqual(self.palette["light"]["accentMark"][0], (0x4A, 0x6A, 0x12))
+        self.assertEqual(self.palette["dark"]["accentMark"][0], (0xD3, 0xE5, 0x8B))
+
+    def test_accent_soft_and_c1_follow_the_lime(self):
+        self.assertEqual(self.palette["light"]["accentSoft"], ((0xD3, 0xE5, 0x8B), 0.45))
+        self.assertEqual(self.palette["dark"]["accentSoft"], ((0xD3, 0xE5, 0x8B), 0.16))
+        self.assertEqual(self.palette["light"]["c1"][0], (0xD3, 0xE5, 0x8B))
 
 
 class Manifests(unittest.TestCase):

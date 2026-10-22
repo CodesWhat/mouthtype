@@ -27,6 +27,8 @@ Item {
     color: !root.palette ? "transparent"
       : root.primary ? Cards.primaryFill(root.palette, root.hovered, root.down)
       : Cards.tintFill(root.palette, root.hovered, root.down)
+    border.width: root.primary && root.palette && root.palette.primaryEdge ? 1 : 0
+    border.color: root.palette && root.palette.primaryEdge ? root.palette.primaryEdge : "transparent"
   }
   Text {
     id: label

@@ -75,6 +75,8 @@ StatsCard {
               height: 18
               radius: 2
               color: card.fill(index)
+              border.width: index === card.averageSegment && index !== card.peakSegment ? 1 : 0
+              border.color: Theme.accentMark
 
               Rectangle {
                 visible: parent.index === card.typistSegment
@@ -114,8 +116,8 @@ StatsCard {
             height: 10
             radius: 2
             color: modelData.kind === "average" ? Theme.accent : (modelData.kind === "peak" ? Theme.ink : Theme.track)
-            border.width: modelData.kind === "typist" ? 1.5 : 0
-            border.color: Theme.ink
+            border.width: modelData.kind === "typist" ? 1.5 : (modelData.kind === "average" ? 1 : 0)
+            border.color: modelData.kind === "average" ? Theme.accentMark : Theme.ink
           }
           MonoLine { text: "<font color='" + Theme.ink2 + "'>" + modelData.label + "</font> <font color='" + Theme.ink + "'>" + modelData.value + "</font>" }
         }
