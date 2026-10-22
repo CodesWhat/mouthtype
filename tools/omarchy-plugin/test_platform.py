@@ -5,6 +5,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 IMPLEMENTATIONS = {
     "quickshell": HERE / "platform" / "quickshell" / "MouthtypePlatform",
+    "qt": HERE.parent / "linux-qt" / "platform" / "qt" / "MouthtypePlatform",
     "fake": HERE / "design" / "render" / "fake" / "MouthtypePlatform",
 }
 FUNCTIONS = ("env", "run", "watch", "readFile", "openUrl")
