@@ -533,6 +533,18 @@ class PortalDelivery:
         self.remote.check()
         return self.remote.active
 
+    def copy_text(self, text, concealed=True):
+        """Put text on the clipboard for the user (a card or Recent Takes copy). Offers the password-manager hint
+        when concealed so clipboard managers skip it. The selection is left in place, not restored. False when the
+        portal session isn't granted or the call failed, so the caller can fall back."""
+        if not self._ready():
+            return False
+        try:
+            self.clipboard.copy(text, concealed=concealed)
+        except (portal_mod.PortalError, OSError, ValueError):
+            return False
+        return True
+
     def submit(self, text, target, cancelled=None, verified=False):
         if not self.allowed(target) or not self._ready():
             return 'recover_only'

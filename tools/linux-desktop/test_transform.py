@@ -664,6 +664,15 @@ class CopyAndCancelTests(Harness):
         service.copy(identity, edited='edited')
         self.assertEqual(self.read('clipboard'), 'edited')
 
+    def test_copy_goes_through_the_portal_clipboard_when_it_takes_it(self):
+        service, identity = self.captured('um hello')
+        service.transform(identity, 'clean-up')
+        before = self.read('clipboard')
+        with mock.patch('clipboard_copy.copy_via_portal', return_value=True) as portal:
+            self.assertEqual(service.copy(identity)['state'], 'copied')
+        self.assertEqual(portal.call_args.args[0], 'Um hello')
+        self.assertEqual(self.read('clipboard'), before)
+
     def test_copy_failure(self):
         service, identity = self.captured('um hello')
         service.transform(identity, 'clean-up')

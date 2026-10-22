@@ -1461,10 +1461,12 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                     try:
                         connection.settimeout(.2)
                         try:
-                            message = read_message(connection)
+                            message = read_message(connection, maximum=COPY_MESSAGE_LIMIT)
                             if not isinstance(message, dict):
                                 raise ValueError('Invalid command')
                             action = message.get('action')
+                            if action != 'copy' and len(json.dumps(message, separators=(',', ':'))) > 4096:
+                                raise ValueError('Command exceeds limit')
                             if action == 'shutdown':
                                 stopped.set()
                                 result = {'state': 'stopping'}
@@ -1475,6 +1477,8 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                                 keep = True
                             elif action == 'engine':
                                 result = engine_info(session)
+                            elif action == 'copy':
+                                result = copy_through_delivery(session, message.get('text'), message.get('concealed', True))
                             elif action in ('shortcut-status', 'shortcut-configure'):
                                 import shortcuts_portal
                                 result = (shortcuts_portal.status_of(session.shortcuts) if action == 'shortcut-status'
@@ -1543,6 +1547,18 @@ def serve(path, session, stopped, *, lifetime_seconds=43200, files=None, startup
                         pass
                     watcher.close()
                 path.unlink(missing_ok=True)
+
+
+COPY_MESSAGE_LIMIT = 1024 * 1024 + 4096
+
+
+def copy_through_delivery(session, text, concealed):
+    """The clipboard copy a card or Recent Takes row asks for. Only a delivery that owns the clipboard session (the
+    portal backend) can do it; otherwise the caller copies with wl-copy as before."""
+    copier = getattr(session.delivery, 'copy_text', None)
+    if copier is None or type(text) is not str or type(concealed) is not bool:
+        return {'ok': False, 'error': 'copy_unsupported'}
+    return {'ok': bool(copier(text, concealed=concealed))}
 
 
 def engine_info(session):

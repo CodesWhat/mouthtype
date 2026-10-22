@@ -682,6 +682,8 @@ class TransformService:
         text = record['text'] if original else self._result_text(record, edited)
         if text is None:
             return failure('nothing_to_copy', 'There is no result to copy. Run a transform first.')
+        if self._copy_via_portal(text):
+            return {'state': 'copied', 'id': identity, 'what': 'original' if original else 'result'}
         try:
             self.run(['wl-copy', '--type', 'text/plain;charset=utf-8'], input=text.encode('utf-8'),
                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True, timeout=5)
@@ -690,6 +692,14 @@ class TransformService:
         except (OSError, subprocess.SubprocessError):
             return failure('copy_failed', "Mouthtype couldn't copy to the clipboard.")
         return {'state': 'copied', 'id': identity, 'what': 'original' if original else 'result'}
+
+    def _copy_via_portal(self, text):
+        """Hand the copy to the daemon's portal clipboard on GNOME and KDE. False elsewhere, so wl-copy runs."""
+        import clipboard_copy
+        desktop = _desktop()
+        socket_path = self.runtime / 'session.sock'
+        return clipboard_copy.copy_via_portal(
+            text, lambda action, **fields: desktop.request(socket_path, action, **fields), self.config)
 
     def cancel(self, identity=None):
         if identity is None:

@@ -1262,7 +1262,27 @@ def latest_transcript(identity=None):
     return recover(identity)["text"]
 
 
+def portal_copy(read):
+    """Copy read() through the daemon's portal clipboard (with the password-manager hint) on GNOME and KDE. False
+    on Hyprland, where read() isn't even called, and anywhere the daemon can't do it: the wl-copy path runs then."""
+    sys.path.insert(0, str(DESKTOP))
+    try:
+        import clipboard_copy
+    except ImportError:
+        return False
+    client = session_client()
+    if client is None or not clipboard_copy.portal_active(CONFIG):
+        return False
+    path = client.default_socket()
+    return path.exists() and clipboard_copy.copy_via_portal(
+        read(), lambda action, **fields: client.request(path, action, **fields), CONFIG)
+
+
 def copy_transcript(identity=None):
+    if portal_copy(lambda: latest_transcript(identity)):
+        result = state()
+        result["message"] = "Copied to clipboard"
+        return result
     if shutil.which("wl-copy") is None:
         raise RuntimeError("wl-copy is not installed")
     text = latest_transcript(identity)
@@ -1362,6 +1382,11 @@ def import_result():
 
 
 def import_copy():
+    if portal_copy(lambda: import_result()["text"]):
+        output = state()
+        output["message"] = "Copied to clipboard"
+        output["page"] = "import"
+        return output
     if shutil.which("wl-copy") is None:
         raise RuntimeError("wl-copy is not installed")
     text = import_result()["text"]
