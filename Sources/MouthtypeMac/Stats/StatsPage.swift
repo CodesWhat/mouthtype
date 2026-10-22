@@ -130,7 +130,7 @@ struct StatsCard<Content: View>: View {
 
 /// "VALUE LABEL" in the mono readout style: ink value, secondary label.
 @MainActor private func readout(_ value: String, _ label: String) -> some View {
-    (Text(value).foregroundStyle(DesignPalette.ink) + Text(" \(label)").foregroundStyle(DesignPalette.ink2))
+    (Text("\(Text(value).foregroundStyle(DesignPalette.ink))\(Text(" \(label)").foregroundStyle(DesignPalette.ink2))"))
         .font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8).textCase(.uppercase)
         .fixedSize(horizontal: false, vertical: true)
 }
@@ -490,7 +490,7 @@ struct StatsTapeCard: View {
             if let take = slot.take {
                 let parts = [StatsFormat.clock(seconds: take.secondsIntoDay), take.appName].compactMap { $0 }.joined(separator: " · ")
                 let tail = StatsFormat.speaking(ms: take.durationMs).map { " · \($0)" } ?? ""
-                Text("\(parts) · ") + Text("\(StatsFormat.number(take.words))").fontWeight(.semibold) + Text(" words\(tail)")
+                Text("\(parts) · \(Text("\(StatsFormat.number(take.words))").fontWeight(.semibold)) words\(tail)")
             } else {
                 Text(slot.summary)
             }
@@ -578,7 +578,7 @@ struct StatsSpeedCard: View {
             RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 8, height: 10)
                 .overlay(outlined ? RoundedRectangle(cornerRadius: 2).strokeBorder(DesignPalette.ink, lineWidth: 1.5) : nil)
                 .overlay(edged ? RoundedRectangle(cornerRadius: 2).strokeBorder(DesignPalette.accentMark, lineWidth: 1) : nil)
-            (Text(label).foregroundStyle(DesignPalette.ink2) + Text(" \(value)").foregroundStyle(DesignPalette.ink))
+            (Text("\(Text(label).foregroundStyle(DesignPalette.ink2))\(Text(" \(value)").foregroundStyle(DesignPalette.ink))"))
                 .font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8).textCase(.uppercase)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -610,7 +610,7 @@ struct StatsStreakCard: View {
                         monoLine("\(current == 1 ? "DAY" : "DAYS")").padding(.leading, 2)
                     }
                     Spacer(minLength: 0)
-                    (Text("LONGEST ").foregroundStyle(DesignPalette.ink3) + Text("\(longest)").foregroundStyle(DesignPalette.ink))
+                    (Text("\(Text("LONGEST ").foregroundStyle(DesignPalette.ink3))\(Text("\(longest)").foregroundStyle(DesignPalette.ink))"))
                         .font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8)
                 }
                 VStack(spacing: 5) {

@@ -438,7 +438,7 @@ private func pixelCount(_ image: CGImage?, hex: String) -> Int {
         #expect(assets.pill.sprites["led_on"] != nil)
     }
 
-    @Test func exportingTwiceChangesNoBytes() throws {
+    @Test func exportingTwiceChangesNoBytes() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let script = root.appendingPathComponent("design/pill/export.py")
         let output = root.appendingPathComponent("Sources/MouthtypeMac/Resources/Pill/hifi")
@@ -449,19 +449,18 @@ private func pixelCount(_ image: CGImage?, hex: String) -> Int {
             for case let url as URL in files where !url.hasDirectoryPath { result[url.path] = try Data(contentsOf: url) }
             return result
         }
-        func export() throws {
+        func export() async throws {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
             process.arguments = ["-I", script.path]
             process.standardOutput = FileHandle.nullDevice
-            try process.run()
-            process.waitUntilExit()
+            _ = try await runProcess(process)
             #expect(process.terminationStatus == 0)
         }
         let before = try snapshot()
-        try export()
+        try await export()
         let first = try snapshot()
-        try export()
+        try await export()
         let second = try snapshot()
         #expect(first == before && first == second && first.keys.contains { $0.hasSuffix("card/frame.png") })
     }

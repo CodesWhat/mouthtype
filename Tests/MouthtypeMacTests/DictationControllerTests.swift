@@ -2791,6 +2791,7 @@ private final class SlowCapture: DictationCapturing {
 
     @Test func terminationDuringCaptureStartupWaitsForRegistrationAndKeepsTheTail() async throws {
         let rig = Rig()
+        rig.controller.terminationWait = .seconds(600)
         var completion: Task<Bool, Never>?
         rig.capture.duringStart = {
             completion = Task { await rig.controller.prepareForTermination() }

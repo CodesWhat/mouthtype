@@ -112,7 +112,7 @@ enum CorrectionSelfTest {
 
         // Pass one: a fix.
         let pasted = "Hove said the new build is ready for review today"
-        try? store.begin(DictationStart(id: "selftest-fix"))
+        _ = try? store.begin(DictationStart(id: "selftest-fix"))
         textView.string = pasted
         let target = AccessibilityFocusReader().snapshot()
         check("the focused element is a text area or field", target.role == "AXTextArea" || target.role == "AXTextField")
@@ -154,7 +154,7 @@ enum CorrectionSelfTest {
         // Pass two: a rewrite.
         let before = trace.count
         let second = "Please send Priya the updated agenda before the end of the day"
-        try? store.begin(DictationStart(id: "selftest-rewrite"))
+        _ = try? store.begin(DictationStart(id: "selftest-rewrite"))
         textView.string = second
         let target2 = AccessibilityFocusReader().snapshot()
         watcher.pasted(second, dictationID: "selftest-rewrite", target: target2)

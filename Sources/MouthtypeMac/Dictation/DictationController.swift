@@ -25,6 +25,9 @@ final class DictationController {
         static let standard = Limits()
     }
 
+    /// How long termination waits for a capture start or finalization already in flight. Tests widen it so a loaded
+    /// machine can't expire it.
+    var terminationWait: Duration = .seconds(8)
     private(set) var phase: Phase = .idle
     private(set) var isHandsFree = false
 
@@ -192,7 +195,7 @@ final class DictationController {
         inserter.cancelVerification()
         let work = Task { [self] in
             let clock = ContinuousClock()
-            let deadline = clock.now.advanced(by: .seconds(8))
+            let deadline = clock.now.advanced(by: terminationWait)
             while captureStarting {
                 guard clock.now < deadline else { return false }
                 try? await Task.sleep(for: .milliseconds(20))

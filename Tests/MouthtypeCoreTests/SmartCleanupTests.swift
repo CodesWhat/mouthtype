@@ -585,19 +585,25 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
     }
 
     @Test func theQualityModelHasTimeToFinishWithoutChangingTheNativeBudget() async {
-        let quality = FakeCleaner { text, _ in
-            try await Task.sleep(for: .milliseconds(600))
-            return text
-        }
+        // Compare the budgets themselves: a generation that takes 600 ms fits the quality budget and overruns the native
+        // one. Racing a real 600 ms sleep against the clock would make the outcome depend on how loaded the machine is.
+        let words = sentence.split(separator: " ").count
+        #expect(SmartCleanup.defaultBudget(words: words) < .milliseconds(600))
+        #expect(SmartCleanup.qualityAllowance(words: words, passes: 1) > .milliseconds(600))
+        let quality = FakeCleaner { text, _ in text }
         quality.usesNativeControls = false
-        let result = await smart(quality).run(request(sentence))
-        #expect(result.outcome == .ok)
+        #expect(await smart(quality).run(request(sentence)).outcome == .ok)
+
+        let gate = Gate()
         let native = FakeCleaner { text, _ in
-            try await Task.sleep(for: .milliseconds(600))
+            await gate.wait()
             return text
         }
-        let fallback = await smart(native).run(request(sentence))
+        let service = smart(native)
+        let fallback = await service.run(request(sentence))
         #expect(fallback.outcome == .timeout && fallback.text == sentence)
+        await gate.release()
+        await service.waitForPendingWork()
     }
 
     @Test func anAcceptedOutputIsDeliveredAndLoggedAsOneEdit() async {
@@ -758,14 +764,17 @@ private func smart(_ cleaner: FakeCleaner, budgetMs: Int? = nil) -> SmartCleanup
     }
 
     @Test func aSlowModelTimesOutAndTheInputIsDelivered() async {
+        // The gate stays shut until after the run, so a run that waited on the model would never return.
+        let gate = Gate()
         let cleaner = FakeCleaner { _, _ in
-            try await Task.sleep(for: .seconds(5))
+            await gate.wait()
             return "never"
         }
-        let started = ContinuousClock.now
-        let result = await smart(cleaner, budgetMs: 60).run(request(sentence))
+        let service = smart(cleaner, budgetMs: 60)
+        let result = await service.run(request(sentence))
         #expect(result.outcome == .timeout && result.text == sentence && result.modelText == nil)
-        #expect(ContinuousClock.now - started < .seconds(2))
+        await gate.release()
+        await service.waitForPendingWork()
     }
 
     @Test func aNewRequestWaitsForTheRunningOneAndNeverRunsTwo() async {

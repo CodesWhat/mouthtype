@@ -80,6 +80,7 @@ public struct ReferenceProfanityRemover: Sendable {
             let probe = "Warm up."
             let tagger = NLTagger(tagSchemes: [.lexicalClass])
             tagger.string = probe
+            tagger.setLanguage(.english, range: probe.startIndex..<probe.endIndex)
             _ = tagger.tag(at: probe.startIndex, unit: .word, scheme: .lexicalClass)
         }
     }
@@ -210,6 +211,7 @@ public struct ReferenceProfanityRemover: Sendable {
         private lazy var tagger: NLTagger = {
             let tagger = NLTagger(tagSchemes: [.lexicalClass])
             tagger.string = text
+            tagger.setLanguage(.english, range: text.startIndex..<text.endIndex)
             return tagger
         }()
 

@@ -393,7 +393,6 @@ public final class PillController {
     /// bottom edge and middle where they were.
     private func growPanel(forFace face: CGSize) {
         let k = pillScale.factor
-        let margin = CardLayout.shadowMargin * k
         let old = panel.frame
         let visible = PillPlacement.screen(
             pointer: CGPoint(x: old.midX, y: old.minY + Self.pillPadding), screens: screensSource()

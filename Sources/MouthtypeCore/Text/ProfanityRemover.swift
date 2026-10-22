@@ -77,6 +77,7 @@ public struct ProfanityRemover: Sendable {
             let probe = "Warm up."
             let tagger = NLTagger(tagSchemes: [.lexicalClass])
             tagger.string = probe
+            tagger.setLanguage(.english, range: probe.startIndex..<probe.endIndex)
             _ = tagger.tag(at: probe.startIndex, unit: .word, scheme: .lexicalClass)
         }
     }
@@ -223,6 +224,9 @@ public struct ProfanityRemover: Sendable {
         private lazy var tagger: NLTagger = {
             let tagger = NLTagger(tagSchemes: [.lexicalClass])
             tagger.string = text
+            // The cleanup is English. Left to detect the language itself, the tagger reads short sentences like "I drove a
+            // goddamn car." as another language on some OS releases, and tags "a" as a preposition.
+            tagger.setLanguage(.english, range: text.startIndex..<text.endIndex)
             return tagger
         }()
 
