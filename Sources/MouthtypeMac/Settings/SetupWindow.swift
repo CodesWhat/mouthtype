@@ -284,6 +284,7 @@ struct SetupView: View {
         case .ready:
             VStack(spacing: 12) {
                 if let testTake = model.testTake { SetupTestTakeView(take: testTake) }
+                if model.offersNames { SetupNamesOffer(model: model) }
                 SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel, cancel: model.cancelCleanupDownload)
             }
         }
@@ -357,6 +358,49 @@ struct SetupCleanupModels: View {
             }
             .multilineTextAlignment(.leading)
             .accessibilityIdentifier("setup-cleanup-models")
+        }
+    }
+}
+
+/// "Get names right" on the ready card: one button for Boost saved words and Names on screen, or Not now.
+struct SetupNamesOffer: View {
+    var model: SetupModel
+
+    var body: some View {
+        DesignSection(eyebrow: "Get names right") {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(
+                    "Mouthtype can favour names from your dictionary and from the window you\u{2019}re dictating into. "
+                        + "That needs a one-time download of about 100 MB."
+                )
+                .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.sideInk)
+                .fixedSize(horizontal: false, vertical: true)
+                if model.namesChoice == .turnedOn {
+                    progress
+                } else {
+                    HStack(spacing: 10) {
+                        Button("Turn on name accuracy", action: model.turnOnNames).buttonStyle(.designSecondary)
+                            .accessibilityIdentifier("setup-names-turn-on")
+                        Button("Not now", action: model.skipNames).buttonStyle(.plain)
+                            .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.sideInk)
+                            .accessibilityIdentifier("setup-names-not-now")
+                    }
+                }
+            }
+            .padding(.horizontal, 14).padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .multilineTextAlignment(.leading)
+        .accessibilityIdentifier("setup-names")
+    }
+
+    @ViewBuilder private var progress: some View {
+        let status = model.boostStatus
+        if case let .downloading(fraction) = status {
+            SetupDownloadMeter(fraction: fraction ?? 0, caption: status.text, label: "Name accuracy model download")
+        } else if !status.text.isEmpty {
+            Text(status.text + ".").font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }
