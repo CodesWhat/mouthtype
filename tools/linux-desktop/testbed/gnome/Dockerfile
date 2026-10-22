@@ -1,5 +1,5 @@
 # GNOME 50 headless testbed for the Ubuntu 26.04 desktop work (item T1).
-FROM ubuntu:26.04
+FROM ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
 
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \
