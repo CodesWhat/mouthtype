@@ -46,6 +46,7 @@ Item {
   property bool connected: false
   property var meter: new Model.Meter()
   property var lipsGate: new Model.LipsGate()
+  property var cleanupNoteGate: new Model.CleanupNoteGate()
   // The bar widget is a separate entry point with no handle on this object, so the lips frame (0..2) goes to it through a
   // runtime file, the way the Transform card talks to the panel. The bar reads it only while recording.
   readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") === "" ? "" : Quickshell.env("XDG_RUNTIME_DIR") + "/mouthtype"
@@ -120,7 +121,7 @@ Item {
     } else if (next === "idle") {
       var wasActive = sessionState === "recording" || sessionState === "transcribing" || sessionState === "cancelling"
       if (wasActive) {
-        var text = Model.message(data, deliveryMode)
+        var text = Model.withCleanupNote(Model.message(data, deliveryMode), cleanupNoteGate.next(data.cleanup_take))
         if (text === null && (sessionState === "recording" || sessionState === "cancelling")) text = { headline: "Cancelled", detail: null, isError: false }
         if (text) showMessageFor(text, 2.5)
         else hide()

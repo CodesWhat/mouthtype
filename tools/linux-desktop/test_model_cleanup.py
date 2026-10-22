@@ -85,6 +85,35 @@ class ModelCleanupSessionTests(unittest.TestCase):
                 self.assertEqual(json.loads((take / 'cleanup.json').read_text())['outcome'], outcome)
                 self.assertEqual(session.command('status')['cleanup']['last_outcome'], outcome)
 
+    def test_take_reports_cleanup_outcome_and_engine_state_without_text(self):
+        def cold():
+            engine = FakeCleanup(timeout=True)
+            engine.state = 'idle'
+            return engine
+        def failing():
+            engine = FakeCleanup(fail=True)
+            return engine
+        for name, cleanup, expected in (('ok', FakeCleanup('So we should ship it, right?'), {'outcome': 'ok', 'engine': 'ready'}),
+                                        ('cold', cold(), {'outcome': 'timeout', 'engine': 'idle'}),
+                                        ('failed', failing(), {'outcome': 'failed', 'engine': 'failed'}),
+                                        ('guard', FakeCleanup('Certainly, I will do that for you today.'),
+                                         {'outcome': 'guard-rejected', 'engine': 'ready'})):
+            with self.subTest(name):
+                session, take = self.run_take(cleanup)
+                self.assertEqual(session.command('status')['cleanup']['take'], expected)
+                self.assertEqual(desktop.state_snapshot(session)['cleanup_take'], expected)
+                self.assertNotIn('ship', json.dumps(desktop.state_snapshot(session)))
+
+    def test_a_take_that_skips_the_model_clears_the_take_note(self):
+        session, take = self.run_take(FakeCleanup(fail=True))
+        self.assertEqual(session.cleanup_take['outcome'], 'failed')
+        session.cleanup, session.cleanup_engine = 'basic', None
+        session.command('start')
+        session.command('stop')
+        session.wait()
+        self.assertIsNone(session.command('status')['cleanup']['take'])
+        self.assertEqual(session.command('status')['cleanup']['last_outcome'], 'failed')
+
     def test_short_takes_skip_the_model_and_off_basic_never_call_it(self):
         cleanup = FakeCleanup('Yes.')
         session, take = self.run_take(cleanup, raw='yes')

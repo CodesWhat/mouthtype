@@ -138,6 +138,35 @@ function message(snapshot, deliveryMode) {
   return null
 }
 
+// The note for a take whose Fast or Thorough cleanup fell back to Basic text. `take` is the snapshot's cleanup_take
+// ({outcome, engine}); the guard doing its job and a ready engine that merely ran long are not news.
+function cleanupNote(take) {
+  if (!take) return null
+  if (take.outcome === "failed" || take.engine === "failed") return { key: "restarting", text: "Basic cleanup \u00b7 model restarting" }
+  if (take.outcome === "timeout" && (take.engine === "loading" || take.engine === "idle" || take.engine === "unloaded"))
+    return { key: "loading", text: "Basic cleanup \u00b7 model loading" }
+  return null
+}
+
+// Shows the note once per engine state change, so a cold start doesn't nag every take. A clean take re-arms it.
+function CleanupNoteGate() { this.shown = null }
+CleanupNoteGate.prototype.next = function(take) {
+  var note = cleanupNote(take)
+  if (!note) {
+    if (take && take.outcome === "ok") this.shown = null
+    return null
+  }
+  if (note.key === this.shown) return null
+  this.shown = note.key
+  return note.text
+}
+
+// Adds the cleanup note to a settled message without hiding what the message already says.
+function withCleanupNote(text, note) {
+  if (!text || !note || text.isError) return text
+  return { headline: text.headline, detail: text.detail ? text.detail + " \u00b7 " + note : note, isError: text.isError }
+}
+
 // The bar widget's lips, ported from the Mac's StatusIcon and StatusGlyphGate. The level is the tallest bar of the pill
 // meter; below LIPS_LOW the mouth is barely open, from LIPS_HIGH up it is wide open, and Reduce Motion pins the middle frame.
 var LIPS_LOW = 0.25
