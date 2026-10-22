@@ -129,3 +129,33 @@ function message(snapshot, deliveryMode) {
   if (delivery === "empty") return { headline: "Nothing heard", detail: null, isError: false }
   return null
 }
+
+// The bar widget's lips, ported from the Mac's StatusIcon and StatusGlyphGate. The level is the tallest bar of the pill
+// meter; below LIPS_LOW the mouth is barely open, from LIPS_HIGH up it is wide open, and Reduce Motion pins the middle frame.
+var LIPS_LOW = 0.25
+var LIPS_HIGH = 0.6
+var LIPS_MAX_FPS = 15
+
+function lipsLevel(fractions) {
+  var level = 0
+  for (var i = 0; i < (fractions || []).length; i++) if (isFinite(fractions[i]) && fractions[i] > level) level = fractions[i]
+  return level
+}
+
+function lipsFrame(level, reduceMotion) {
+  if (reduceMotion) return 1
+  if (!isFinite(level)) level = 0
+  if (level >= LIPS_HIGH) return 2
+  return level >= LIPS_LOW ? 1 : 0
+}
+
+// Swaps the frame at most LIPS_MAX_FPS times a second, and only when it differs. `reset` commits at once, as a state change does.
+function LipsGate() { this.frame = 0; this.lastSwap = -Infinity }
+LipsGate.prototype.reset = function(frame, now) { this.frame = frame; this.lastSwap = now }
+LipsGate.prototype.next = function(level, reduceMotion, now) {
+  var wanted = lipsFrame(level, reduceMotion)
+  if (wanted === this.frame || now - this.lastSwap < 1 / LIPS_MAX_FPS) return null
+  this.frame = wanted
+  this.lastSwap = now
+  return wanted
+}

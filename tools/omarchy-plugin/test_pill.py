@@ -194,6 +194,23 @@ class JsHelpers(unittest.TestCase):
         self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "empty"}, "paste").headline'), "Nothing heard")
         self.assertEqual(self.run_js("PillModel.js", 'message({delivery: "unknown"}, "type").headline'), "Typed")
 
+    def test_lips_frame_follows_the_mac_thresholds(self):
+        cases = {"0": 0, "0.2499": 0, "0.25": 1, "0.5999": 1, "0.6": 2, "1": 2, "NaN": 0}
+        for level, frame in cases.items():
+            self.assertEqual(self.run_js("PillModel.js", "lipsFrame(%s, false)" % level), frame, level)
+
+    def test_reduce_motion_pins_the_middle_lips_frame(self):
+        for level in ("0", "0.4", "0.9"):
+            self.assertEqual(self.run_js("PillModel.js", "lipsFrame(%s, true)" % level), 1)
+
+    def test_lips_level_is_the_tallest_bar(self):
+        self.assertEqual(self.run_js("PillModel.js", "lipsLevel([0.1, 0.7, 0.3])"), 0.7)
+        self.assertEqual(self.run_js("PillModel.js", "lipsLevel([])"), 0)
+
+    def test_lips_gate_caps_swaps_at_15_fps(self):
+        script = "(function() { var g = new LipsGate(); g.reset(0, 10); return [g.next(0.9, false, 10.01), g.next(0.9, false, 10.07), g.next(0.9, false, 10.2), g.next(0.1, false, 10.3)] })()"
+        self.assertEqual(self.run_js("PillModel.js", script), [None, 2, None, 0])
+
 
 if __name__ == "__main__":
     unittest.main()

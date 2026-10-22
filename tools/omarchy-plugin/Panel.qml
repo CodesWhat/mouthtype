@@ -17,10 +17,12 @@ Panel {
   manageIpc: false
 
   readonly property string helper: Quickshell.env("HOME") + "/.config/omarchy/plugins/dstahl.mouthtype/control.py"
-  // The Mac opens the mouth through recording0/1/2 with the pill's meter level. The bar widget only gets state from the
-  // 1.5 s poll, not the live level the pill service reads, so recording shows the middle frame (the Mac's reduce-motion frame).
+  // The Mac opens the mouth through recording0/1/2 with the pill's meter level. Service.qml owns the meter and writes the
+  // frame (0..2, already capped at 15 fps) to $XDG_RUNTIME_DIR/mouthtype/bar-lips. Without it, recording shows the middle frame.
+  property int lipsFrame: 1
+  readonly property string runtime: Quickshell.env("XDG_RUNTIME_DIR")
   readonly property string glyphState: !serviceRunning ? "unavailable"
-    : sessionState === "recording" ? "recording1"
+    : sessionState === "recording" ? "recording" + lipsFrame
     : sessionState === "idle" ? "idle" : "processing"
   property bool hasTranscript: false
   readonly property int savedCount: saved.length
@@ -173,6 +175,19 @@ Panel {
     running: root.opened || root.serviceRunning
     repeat: true
     onTriggered: root.refresh()
+  }
+
+  onSessionStateChanged: if (sessionState !== "recording") lipsFrame = 1
+
+  FileView {
+    path: root.runtime === "" ? "" : root.runtime + "/mouthtype/bar-lips"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var frame = parseInt(String(text() || "").trim(), 10)
+      if (root.sessionState === "recording" && frame >= 0 && frame <= 2) root.lipsFrame = frame
+    }
   }
 
   Process {

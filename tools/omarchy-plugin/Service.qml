@@ -45,6 +45,10 @@ Item {
   property var activeScreen: null
   property bool connected: false
   property var meter: new Model.Meter()
+  property var lipsGate: new Model.LipsGate()
+  // The bar widget is a separate entry point with no handle on this object, so the lips frame (0..2) goes to it through a
+  // runtime file, the way the Transform card talks to the panel. The bar reads it only while recording.
+  readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") === "" ? "" : Quickshell.env("XDG_RUNTIME_DIR") + "/mouthtype"
 
   readonly property bool showing: mode !== "hidden"
   readonly property bool showControls: mode === "recording"
@@ -104,6 +108,8 @@ Item {
       if (mode !== "recording") {
         meter.reset()
         fractions = meter.step(-120, 0)
+        lipsGate.reset(0, Date.now() / 1000)
+        writeLips(0)
         present("recording")
       }
     } else if (next === "transcribing" || next === "cancelling") {
@@ -129,7 +135,20 @@ Item {
     controlProc.running = true
   }
 
-  Component.onCompleted: log("service loaded")
+  Component.onCompleted: {
+    log("service loaded")
+    if (runtimeDir !== "") { mkdirProc.command = ["mkdir", "-p", runtimeDir]; mkdirProc.running = true }
+  }
+
+  function writeLips(frame) {
+    if (runtimeDir !== "") lipsFile.setText(String(frame))
+  }
+  Process { id: mkdirProc }
+  FileView {
+    id: lipsFile
+    path: root.runtimeDir === "" ? "" : root.runtimeDir + "/bar-lips"
+    printErrors: false
+  }
 
   Timer {
     id: messageTimer
@@ -140,7 +159,11 @@ Item {
   FrameAnimation {
     running: root.mode === "recording" || root.mode === "processing"
     onTriggered: {
-      if (root.mode === "recording") root.fractions = root.meter.step(root.level, frameTime)
+      if (root.mode === "recording") {
+        root.fractions = root.meter.step(root.level, frameTime)
+        var frame = root.lipsGate.next(Model.lipsLevel(root.fractions), false, Date.now() / 1000)
+        if (frame !== null) root.writeLips(frame)
+      }
       else root.processingTime = Date.now() / 1000 - root.processingStart
     }
   }
