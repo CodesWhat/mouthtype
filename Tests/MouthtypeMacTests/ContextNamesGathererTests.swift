@@ -40,11 +40,19 @@ private final class Calls: @unchecked Sendable {
         FocusSnapshot(pid: 7, bundleID: bundleID, appName: "Slack", windowTitle: title, role: "AXTextArea", isSecure: secure)
     }
 
-    @Test func settingDefaultsOff() {
+    @Test func settingDefaultsOn() {
         let defaults = UserDefaults(suiteName: "context-names-\(UUID().uuidString)")!
+        #expect(ContextNamesSetting.isEnabled(defaults))
+        ContextNamesSetting.set(false, in: defaults)
         #expect(!ContextNamesSetting.isEnabled(defaults))
         ContextNamesSetting.set(true, in: defaults)
         #expect(ContextNamesSetting.isEnabled(defaults))
+    }
+
+    @Test func explicitOffSurvivesTheNewDefault() {
+        let defaults = UserDefaults(suiteName: "context-names-\(UUID().uuidString)")!
+        defaults.set(false, forKey: "useContextNames")
+        #expect(!ContextNamesSetting.isEnabled(defaults))
     }
 
     @Test func needsTheSwitchAndTheBoost() {

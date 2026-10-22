@@ -3,12 +3,12 @@ import ApplicationServices
 import Foundation
 import MouthtypeCore
 
-/// "Names on screen". Off unless the user turns it on.
+/// "Names on screen". On unless the user turned it off; an unset key reads as on, an explicit off stays off.
 enum ContextNamesSetting {
     static let key = "useContextNames"
 
     static func isEnabled(_ defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: key)
+        defaults.object(forKey: key) as? Bool ?? true
     }
 
     static func set(_ enabled: Bool, in defaults: UserDefaults = .standard) {

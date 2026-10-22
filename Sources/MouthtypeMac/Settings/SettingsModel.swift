@@ -60,7 +60,7 @@ import UniformTypeIdentifiers
     private(set) var learnCorrections = true
     private(set) var boostSavedWords = false
     private(set) var editorHints = false
-    private(set) var contextNames = false
+    private(set) var contextNames = true
     private(set) var boostStatus = VocabularyBoostStatusCenter.current
     private(set) var chunkedTerminals: Set<String> = []
     private(set) var appStyles = AppCleanupStyles()

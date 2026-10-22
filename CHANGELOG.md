@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Names on screen is now on by default. It still only acts when Boost saved words is on (off by default). If you turned it off before, it stays off.
+
 ## [0.5.0] - 2026-10-21
 
 ### Added
