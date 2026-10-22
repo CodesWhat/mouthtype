@@ -442,7 +442,7 @@ import Testing
         let probe = CancelProbe()
         model.fetchRecent = { _, _ in
             probe.started()
-            for _ in 0..<6000 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
+            for _ in 0..<500 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
             probe.finished(cancelled: Task.isCancelled)
             return []
         }
@@ -464,7 +464,7 @@ import Testing
         model.fetchRecent = { store, limit in
             if calls.next() {
                 probe.started()
-                for _ in 0..<6000 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
+                for _ in 0..<500 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
                 probe.finished(cancelled: Task.isCancelled)
                 return []
             }
