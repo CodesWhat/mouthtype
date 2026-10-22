@@ -29,9 +29,14 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run type-check
+      - run: npm run knip
       - run: npm run build
       # Needs out/ from the build: asserts every page has a meta CSP that covers its inline scripts
       # and that the static header in vercel.json has no 'unsafe-inline' in script-src.
       - run: npm run test:scripts
+        env:
+          REQUIRE_OUT: "1"
+      # Line-coverage floor on the docs scripts (baseline 94.32 without out/, floor = 94 - 2).
+      - run: npm run test:coverage
         env:
           REQUIRE_OUT: "1"
