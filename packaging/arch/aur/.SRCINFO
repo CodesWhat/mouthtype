@@ -10,6 +10,7 @@ pkgbase = mouthtype-linux-git
 	license = Unicode-3.0
 	makedepends = git
 	depends = python
+	depends = python-gobject
 	depends = curl
 	depends = pipewire-audio
 	depends = wl-clipboard

@@ -1555,6 +1555,10 @@ class RetentionTests(unittest.TestCase):
             try:
                 # Expiring the old WAV bumps the old directory's mtime to now.
                 self.assertEqual(session.retire_completed_audio(), 1)
+                # Pin the mtimes so coarse filesystem timestamps can't make them equal.
+                now = time.time()
+                os.utime(recent, (now - 100, now - 100))
+                os.utime(old, (now, now))
                 self.assertGreater(old.stat().st_mtime, recent.stat().st_mtime)
                 self.assertEqual(session.prune_history(), 1)
                 self.assertFalse(old.exists())
