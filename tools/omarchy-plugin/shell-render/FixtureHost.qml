@@ -103,7 +103,7 @@ QtObject {
     shortcutMode = "off"
     shortcutKeys = ""
     history = { takes: 0, maximum: 200 }
-    cleanupInfo = { models: {}, setup: { state: "downloading", level: "thorough" }, service: null }
+    cleanupInfo = { models: {}, setup: { state: "downloading", level: "thorough", bytes_done: 1000000000, bytes_total: 2497281120 }, service: null }
     versions = { plugin: "1.3.0", app: null }
     pillPrefs = { enabled: true, skin: "hifi", size: 2 }
   }

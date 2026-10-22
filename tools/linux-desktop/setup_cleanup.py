@@ -19,6 +19,7 @@ import time
 PROOF = Path(__file__).resolve().parents[1] / 'linux-engine-proof'
 sys.path.insert(0, str(PROOF))
 from proof import digest
+from setup_progress import DownloadProgress, write_atomic
 
 PINS = json.loads((PROOF / 'pins.json').read_text())
 LEVELS = {
@@ -28,10 +29,22 @@ LEVELS = {
 LLAMA_SOURCE = 'https://github.com/ggml-org/llama.cpp.git'
 
 
-def bounded_run(command, seconds, **kwargs):
+def bounded_run(command, seconds, *, poll=None, **kwargs):
+    """Run a child with a finite deadline. `poll`, when given, is called about every half second while it runs."""
     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, start_new_session=True, **kwargs)
+    deadline = time.monotonic() + seconds
     try:
-        return process.wait(timeout=seconds)
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, seconds)
+            try:
+                return process.wait(timeout=min(0.5, remaining) if poll else remaining)
+            except subprocess.TimeoutExpired:
+                if poll and time.monotonic() < deadline:
+                    poll()
+                    continue
+                raise
     except subprocess.TimeoutExpired:
         for action in (signal.SIGTERM, signal.SIGKILL):
             try:
@@ -46,13 +59,23 @@ def bounded_run(command, seconds, **kwargs):
         raise TimeoutError('Deadline reached: ' + command[0])
 
 
-def download(url, destination, *, seconds=3600, run=None):
+def download(url, destination, *, seconds=3600, run=None, progress=None):
+    """Fetch with curl into destination.part. `progress(bytes_so_far)` is called while the transfer runs."""
     run = run or bounded_run
     partial = destination.with_suffix(destination.suffix + '.part')
     if partial.exists():
         partial.unlink()
-    status = run(['curl', '-sSL', '--fail', '--connect-timeout', '20', '--speed-limit', '1024', '--speed-time', '60',
-                  '--max-time', str(seconds), '-o', str(partial), url], seconds + 30)
+    command = ['curl', '-sSL', '--fail', '--connect-timeout', '20', '--speed-limit', '1024', '--speed-time', '60',
+               '--max-time', str(seconds), '-o', str(partial), url]
+    if progress:
+        def poll():
+            try:
+                progress(partial.stat().st_size)
+            except OSError:
+                pass
+        status = run(command, seconds + 30, poll=poll)
+    else:
+        status = run(command, seconds + 30)
     if status != 0 or not partial.is_file():
         raise ValueError('Download failed')
     return partial
@@ -107,11 +130,7 @@ def check_server(server, revision=None):
 
 
 def write_progress(destination, **fields):
-    path = destination / 'cleanup-setup.json'
-    fields['updated'] = time.time()
-    tmp = path.with_suffix('.tmp')
-    tmp.write_text(json.dumps(fields))
-    os.replace(tmp, path)
+    write_atomic(destination / 'cleanup-setup.json', **fields)
 
 
 def setup(destination, levels, *, server=None, pins=None, download_fn=None, build_fn=None, check_fn=None, threads=None):
@@ -138,8 +157,18 @@ def setup(destination, levels, *, server=None, pins=None, download_fn=None, buil
                 if digest(model) != pin['sha256']:
                     raise ValueError('Existing model file does not match its pin')
             else:
-                write_progress(destination, state='downloading', level=level, bytes=pin.get('bytes'), levels=list(levels))
-                partial = download_fn(pin['source'], model)
+                total = pin.get('bytes')
+                if total:
+                    def report(done, total, level=level):
+                        write_progress(destination, state='downloading', level=level, bytes_done=done, bytes_total=total,
+                                       levels=list(levels))
+                    tracker = DownloadProgress(total, report)
+                    tracker(0)
+                    partial = download_fn(pin['source'], model, progress=tracker)
+                    tracker.finish()
+                else:
+                    write_progress(destination, state='downloading', level=level, levels=list(levels))
+                    partial = download_fn(pin['source'], model)
                 verify_and_place(partial, model, pin['sha256'])
             existing['engines'][level] = {
                 'threads': threads or max(2, min(8, (os.cpu_count() or 4) // 2)),

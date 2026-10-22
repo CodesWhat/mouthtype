@@ -40,6 +40,13 @@ Column {
     return ""
   }
 
+  readonly property bool sized: !!setup && setup.state === "downloading" && setup.bytes_total > 0
+  readonly property real fraction: sized ? Math.min(1, Math.max(0, setup.bytes_done / setup.bytes_total)) : 0
+
+  function megabytes(bytes) {
+    return Math.round(bytes / 1000000) + " MB"
+  }
+
   function lastTake() {
     if (!service || !service.last_outcome || (level !== "fast" && level !== "thorough")) return ""
     var outcome = service.last_outcome
@@ -110,6 +117,21 @@ Column {
       color: root.setup && root.setup.state === "failed" ? Theme.danger : Theme.ink2
       font: Type.sans(Type.caption)
       text: root.setupText()
+    }
+    DesignProgress {
+      objectName: "setupProgress"
+      visible: root.sized
+      width: parent.width
+      value: root.fraction
+    }
+    Text {
+      objectName: "setupBytes"
+      visible: root.sized
+      width: parent.width
+      leftPadding: 4
+      color: Theme.ink2
+      font: Type.sans(Type.caption)
+      text: root.sized ? root.megabytes(Math.min(root.setup.bytes_done || 0, root.setup.bytes_total)) + " of " + root.megabytes(root.setup.bytes_total) : ""
     }
     Text {
       visible: text !== ""

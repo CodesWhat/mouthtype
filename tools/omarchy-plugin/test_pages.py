@@ -85,6 +85,13 @@ class TextRuleTests(unittest.TestCase):
         self.assertIn("versions.app", health)
         self.assertIn("versions.plugin", health)
 
+    def test_health_renders_a_determinate_download_bar(self):
+        health = (HERE / "pages" / "SettingsHealth.qml").read_text()
+        self.assertIn("DesignProgress", health)
+        self.assertIn("setup.bytes_done", health)
+        self.assertIn("setup.bytes_total", health)
+        self.assertIn("DesignProgress 1.0 DesignProgress.qml", (HERE / "design" / "qmldir").read_text())
+
     def test_no_elide_and_no_small_text(self):
         for path in sources():
             text = path.read_text()

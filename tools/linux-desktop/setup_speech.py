@@ -11,17 +11,30 @@ import signal
 import subprocess
 import sys
 import tarfile
+import time
 
 from desktop import private_write, stop_process
 from prepare import PINS, SPEECH_ENTRIES, prepare_settings
 from proof import digest
+from setup_progress import DownloadProgress, write_atomic
 
 
-def bounded_run(command, seconds):
+def bounded_run(command, seconds, poll=None):
     process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                                stderr=None, start_new_session=True)
     try:
-        output, _ = process.communicate(timeout=seconds)
+        if poll:
+            deadline = time.monotonic() + seconds
+            while True:
+                try:
+                    output, _ = process.communicate(timeout=max(0.01, min(0.5, deadline - time.monotonic())))
+                    break
+                except subprocess.TimeoutExpired:
+                    if time.monotonic() >= deadline:
+                        raise
+                    poll()
+        else:
+            output, _ = process.communicate(timeout=seconds)
         if process.returncode:
             raise subprocess.CalledProcessError(process.returncode, command)
         return output.decode('utf-8', errors='replace')
@@ -31,13 +44,17 @@ def bounded_run(command, seconds):
             process.stdout.close()
 
 
-def download_archive(source, destination):
+def download_archive(source, destination, progress=None):
     # A terminal gets curl's progress bar for the ~465 MiB download; logs and agents get a quiet transfer.
     meter = ['--progress-bar'] if sys.stderr.isatty() else ['--silent', '--show-error']
-    bounded_run(['curl', '--fail', '--location', *meter,
-                 '--proto', '=https', '--proto-redir', '=https', '--connect-timeout', '20',
-                 '--speed-limit', '1024', '--speed-time', '60',
-                 '--max-time', '3600', '--output', str(destination), source], 3610)
+    command = ['curl', '--fail', '--location', *meter,
+               '--proto', '=https', '--proto-redir', '=https', '--connect-timeout', '20',
+               '--speed-limit', '1024', '--speed-time', '60',
+               '--max-time', '3600', '--output', str(destination), source]
+    if progress is None:
+        bounded_run(command, 3610)
+        return
+    bounded_run(command, 3610, poll=lambda: progress(Path(destination).stat().st_size if Path(destination).exists() else 0))
 
 
 def setup(destination, *, pins=None, download=None, run=None):
@@ -46,7 +63,18 @@ def setup(destination, *, pins=None, download=None, run=None):
     destination.mkdir(mode=0o700, parents=True)
     archive = destination / 'parakeet.tar.bz2'
     print('1/4 Downloading the Parakeet speech model (about 465 MiB, up to an hour on a slow link)...', flush=True)
-    download(pins['parakeet']['source'], archive)
+    status = destination / 'speech-setup.json'
+    total = pins['parakeet'].get('bytes')
+    if total:
+        def report(done, total):
+            write_atomic(status, state='downloading', bytes_done=done, bytes_total=total)
+        tracker = DownloadProgress(total, report)
+        tracker(0)
+        download(pins['parakeet']['source'], archive, progress=tracker)
+        tracker.finish()
+    else:
+        download(pins['parakeet']['source'], archive)
+    write_atomic(status, state='verifying')
     print('2/4 Verifying and extracting the model (a few minutes on a slow CPU)...', flush=True)
     if digest(archive) != pins['parakeet']['sha256']:
         raise ValueError('Parakeet archive SHA-256 mismatch')
@@ -86,6 +114,7 @@ def setup(destination, *, pins=None, download=None, run=None):
     private_write(config, json.dumps({'engine_config': str(engines), 'python': python,
                                     'maximum_recording_seconds': 60, 'request_seconds': 30,
                                     'delivery': {'mode': 'recover'}, 'notifications': True}, indent=2) + '\n')
+    write_atomic(status, state='ready')
     return config
 
 
