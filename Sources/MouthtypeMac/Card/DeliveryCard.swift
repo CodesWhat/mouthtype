@@ -1,7 +1,8 @@
 import Foundation
+import MouthtypeCore
 
 enum CardAction: Equatable, Sendable {
-    case copy, insert, undo, save, notNow, forget, keep, recover, discard
+    case copy, insert, undo, save, notNow, forget, keep, recover, discard, openSoundSettings
 
     var title: String {
         switch self {
@@ -14,6 +15,7 @@ enum CardAction: Equatable, Sendable {
         case .keep: "Keep"
         case .recover: "Recover"
         case .discard: "Discard"
+        case .openSoundSettings: "Sound settings"
         }
     }
 }
@@ -28,7 +30,7 @@ struct SpellingPair: Equatable, Sendable {
 struct DeliveryCard: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
         case secure, nowhere, pasteFailed, cancelled, recovered, rememberSpelling, forgetSpelling
-        case recoverOffer, micDisconnected, limitWarning
+        case recoverOffer, micDisconnected, limitWarning, silentMic
 
         /// A question about the dictionary rather than a report on a delivery.
         var isOffer: Bool { self == .rememberSpelling || self == .forgetSpelling }
@@ -123,6 +125,16 @@ struct DeliveryCard: Equatable, Sendable {
         DeliveryCard(
             kind: .limitWarning, header: "One minute left\nRecording stops at \(durationText(stopsAfter))", transcript: nil,
             actions: [], countdown: nil
+        )
+    }
+
+    /// A take that heard nothing. `micName` is the input that was recording, so the fix starts with the right device.
+    static func silentMic(_ kind: SilentTakeKind, micName: String?) -> DeliveryCard {
+        let mic = micName.flatMap { $0.isEmpty ? nil : $0 } ?? "your microphone"
+        let header = kind == .noSignal ? "Microphone heard nothing" : "No speech heard"
+        return DeliveryCard(
+            kind: .silentMic, header: "\(header)\nCheck \(mic)", transcript: nil,
+            actions: [.openSoundSettings], countdown: nil
         )
     }
 

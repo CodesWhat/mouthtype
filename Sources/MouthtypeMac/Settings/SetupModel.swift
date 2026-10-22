@@ -13,11 +13,14 @@ import Observation
     var captureError: String? { microphone.error }
     private let defaults: UserDefaults
     private(set) var instructions = ""
+    /// The optional test take on the ready step. Nil where setup has no capture to record with.
+    let testTake: SetupTestTake?
 
     init(
         diagnostics: SettingsDiagnostics, engine: EngineHost, microphone: MicrophonePreparation = MicrophonePreparation(),
-        cleanup: (any CleanupModelListing)? = nil, defaults: UserDefaults = .standard
+        cleanup: (any CleanupModelListing)? = nil, testTake: SetupTestTake? = nil, defaults: UserDefaults = .standard
     ) {
+        self.testTake = testTake
         self.cleanup = cleanup
         self.diagnostics = diagnostics
         self.engine = engine

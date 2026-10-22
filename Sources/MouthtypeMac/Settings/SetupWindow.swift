@@ -117,6 +117,7 @@ import SwiftUI
     func windowWillClose(_ notification: Notification) {
         stopPolling()
         stopObservingTransparency()
+        if let testTake = model.testTake { Task { await testTake.cancel() } }
     }
 
     private func startPolling() {
@@ -281,7 +282,10 @@ struct SetupView: View {
         case .shortcut:
             action("Change shortcut…", identifier: "setup-input-settings", perform: actions.inputSettings)
         case .ready:
-            SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel, cancel: model.cancelCleanupDownload)
+            VStack(spacing: 12) {
+                if let testTake = model.testTake { SetupTestTakeView(take: testTake) }
+                SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel, cancel: model.cancelCleanupDownload)
+            }
         }
     }
 

@@ -511,6 +511,7 @@ private struct Rig {
     let clock: FakeClock
     var finishedAttempts: Counter
     let handsFreeChanges = Counter()
+    let soundSettingsOpened = Counter()
 
     final class Counter {
         var count = 0
@@ -543,10 +544,12 @@ private struct Rig {
         pipeline.vocabulary = vocabulary
         pipeline.textPipeline = textPipeline
         pipeline.audioRetention = { audioRetention }
+        let opened = soundSettingsOpened
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
             cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil,
-            preview: LivePreviewSession(pause: { try await clock.sleep(forSeconds: 2) }), previewEnabled: { previewEnabled }
+            preview: LivePreviewSession(pause: { try await clock.sleep(forSeconds: 2) }), previewEnabled: { previewEnabled },
+            openSoundSettings: { opened.count += 1 }
         )
         let counter = Counter()
         finishedAttempts = counter
@@ -1804,7 +1807,56 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(!rig.log.contains("engine.transcribe"))
         #expect(rig.log.contains("archive.write"))
         #expect(rig.inserter.delivered.isEmpty)
-        #expect(rig.pill.messages.isEmpty)
+    }
+
+    private func silentAudio(level: Float = 0, deviceName: String? = "Studio Mic") -> CapturedAudio {
+        CapturedAudio(
+            samples: [Float](repeating: level, count: 16_000), sampleRate: 16_000, deviceUID: nil, deviceName: deviceName,
+            deviceTransport: "usb", firstSampleMs: 20, firstNonzeroMs: nil, captureStartMs: 10, audioMs: 1_000
+        )
+    }
+
+    @Test func aSilentTakeHeldLongEnoughNamesTheMicAndOffersSoundSettings() async {
+        let rig = Rig(audio: silentAudio())
+        await rig.dictate()
+        let card = rig.cards.presented.last
+        #expect(rig.cards.presented.count == 1)
+        #expect(card?.kind == .silentMic)
+        #expect(card?.header == "Microphone heard nothing\nCheck Studio Mic")
+        #expect(card?.actions == [.openSoundSettings])
+        rig.cards.click(.openSoundSettings)
+        #expect(rig.soundSettingsOpened.count == 1)
+    }
+
+    @Test func aTapTooShortToBeADictationRaisesNoCard() async {
+        let rig = Rig(audio: silentAudio())
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyDown + 500_000_000))
+        await rig.controller.waitForProcessing()
+        #expect(rig.store.finishes.map(\.0) == [.empty])
+        #expect(rig.cards.presented.isEmpty)
+    }
+
+    @Test func repeatedSilentTakesRaiseOneCard() async {
+        let rig = Rig(audio: silentAudio())
+        await rig.dictate()
+        await rig.dictate()
+        #expect(rig.cards.presented.count == 1)
+    }
+
+    @Test func audibleNoiseWithoutSpeechSaysNoSpeechWasHeard() async {
+        // Steady low hiss: above the no-signal floor, never voiced.
+        let rig = Rig(audio: silentAudio(level: 0.002, deviceName: nil))
+        await rig.dictate()
+        #expect(rig.cards.presented.last?.header == "No speech heard\nCheck your microphone")
+    }
+
+    @Test func anEmptyResultFromRealSpeechRaisesNoSilentMicCard() async {
+        let rig = Rig()
+        rig.engine.result.text = "[BLANK_AUDIO]"
+        await rig.dictate()
+        #expect(rig.store.finishes.map(\.0) == [.empty])
+        #expect(rig.cards.presented.isEmpty)
     }
 
     @Test func eachDeliveryOutcomeMapsToTheRightCard() async {

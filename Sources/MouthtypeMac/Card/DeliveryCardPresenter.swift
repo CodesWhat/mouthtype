@@ -133,7 +133,7 @@ final class DeliveryCardPresenter: DictationCards {
         case .undo:
             dismiss()
             onUndo?()
-        case .insert, .recover, .discard:
+        case .insert, .recover, .discard, .openSoundSettings:
             let handler = handlers[action]
             dismiss()
             if action == .insert { onInsert?() }
