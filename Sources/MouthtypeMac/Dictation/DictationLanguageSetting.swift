@@ -33,6 +33,48 @@ enum DictationLanguageSetting: Equatable, Sendable {
         return result
     }
 
+    /// The setting's value as the picker stores it: "auto" or a language code.
+    var pickerValue: String {
+        switch self {
+        case .auto: Self.autoValue
+        case let .explicit(language): language.code
+        }
+    }
+
+    /// The setting for a picker value. Nil for anything that isn't Auto-detect or a supported language.
+    init?(pickerValue: String) {
+        if pickerValue == Self.autoValue {
+            self = .auto
+        } else if let language = DictationLanguage(rawValue: pickerValue) {
+            self = .explicit(language)
+        } else {
+            return nil
+        }
+    }
+
+    /// True for an explicit language other than English, where English-only cleanup stages and Fast don't run.
+    var isExplicitNonEnglish: Bool {
+        if case let .explicit(language) = self { return !language.isEnglish }
+        return false
+    }
+
+    /// Languages Parakeet v3 transcribes noticeably worse than the rest (FLEURS word error of 25 percent or more).
+    static let betaLanguages: Set<DictationLanguage> = [.lithuanian, .maltese, .latvian, .slovenian, .greek]
+
+    /// Auto-detect, English, then the other 24 languages by English name, Beta marked on the weaker ones.
+    static var pickerChoices: [DesignChoice<String>] {
+        let others = DictationLanguage.allCases.filter { !$0.isEnglish }.sorted { $0.englishName < $1.englishName }
+        return [DesignChoice("Auto-detect", autoValue), DesignChoice(DictationLanguage.english.englishName, DictationLanguage.english.code)]
+            + others.map { DesignChoice(betaLanguages.contains($0) ? "\($0.englishName) (Beta)" : $0.englishName, $0.code) }
+    }
+
+    static let fastEnglishOnlyNote = "Fast cleanup is English only. Using Basic for this language."
+
+    static let autoDetail = "Picks the language from what you said, among English and your Mac\u{2019}s preferred languages."
+    static let detail =
+        "English runs every cleanup rule. Other languages get punctuation, capitalization, your dictionary and snippets, and Thorough cleanup. "
+        + "Fast, spoken commands, number formatting and filler removal are English only for now."
+
     /// What the engine and pipeline are told for a take.
     func request(preferredLanguages: [String] = Locale.preferredLanguages) -> DictationLanguageRequest {
         switch self {

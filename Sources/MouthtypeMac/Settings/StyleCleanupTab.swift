@@ -24,6 +24,12 @@ struct StyleCleanupTab: View {
                 }
             }
             differences
+            if model.showsFastLanguageNote {
+                Text(DictationLanguageSetting.fastEnglishOnlyNote)
+                    .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
+                    .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
+                    .accessibilityIdentifier("style-fast-language-note")
+            }
             Text("Fast and Thorough run on this Mac and never change what you meant. Until a model is downloaded and ready, takes use Basic.\(modelNote)")
                 .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
