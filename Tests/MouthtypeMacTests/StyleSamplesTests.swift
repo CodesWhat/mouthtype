@@ -33,6 +33,19 @@ import MouthtypeCore
         #expect(added(veryCasual[0]).contains("I"))
     }
 
+    @Test func excitedCardHighlightsTheExclamationMarkItAdded() {
+        let line = StyleSamples.personal
+        let formal = StyleSamples.render(line, tone: .formal)
+        let excited = StyleSamples.render(line, tone: .excited)
+        #expect(StyleSamples.plainText(excited) == "Hey, are we still on for dinner tonight? I can be there by seven!")
+        #expect(added(excited[0]).hasSuffix("!") && !added(excited[0]).hasSuffix(".!"))
+        #expect(added(formal[0]).hasSuffix("."))
+        for id in StyleContextID.allCases {
+            let lines = StyleSamples.lines(for: id)
+            #expect(StyleSamples.plainText(StyleSamples.render(lines, tone: .excited)) != StyleSamples.plainText(StyleSamples.render(lines, tone: .formal)))
+        }
+    }
+
     @Test func everyContextHasASampleThatChangesWithTone() {
         for id in StyleContextID.allCases {
             let lines = StyleSamples.lines(for: id)

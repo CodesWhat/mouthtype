@@ -17,7 +17,10 @@ extension SettingsModel {
     /// A rule that also sets a cleanup level stays: it is still your override.
     func addContextApp(_ context: StyleContextID, bundleID: String, appName: String) {
         updateAppStyles { styles in
-            if let rule = styles.entries.first(where: { $0.bundleID == bundleID }), rule.level == nil { styles.remove(bundleID: bundleID) }
+            if let rule = styles.entries.first(where: { $0.bundleID == bundleID }), rule.level == nil {
+                // The list replaces a tone-only rule. Instructions you wrote stay on the app.
+                try styles.set(bundleID: bundleID, appName: rule.appName, style: nil, level: nil, instructions: rule.instructions)
+            }
             styles.contexts.addApp(context, bundleID: bundleID, appName: appName)
         }
     }
@@ -25,7 +28,9 @@ extension SettingsModel {
     func addContextSite(_ context: StyleContextID, domain: String) {
         updateAppStyles { styles in
             guard let normal = AppCleanupStyles.normalizedDomain(domain) else { throw AppCleanupStyles.ValidationError.invalidDomain }
-            if let rule = styles.websiteRule(domain: normal), rule.level == nil { styles.removeWebsite(domain: normal) }
+            if let rule = styles.websiteRule(domain: normal), rule.level == nil {
+                try styles.setWebsite(domain: normal, style: nil, level: nil, instructions: rule.instructions)
+            }
             styles.contexts.addSite(context, domain: normal)
         }
     }

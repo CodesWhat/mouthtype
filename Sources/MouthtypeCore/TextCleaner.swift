@@ -17,11 +17,17 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     public var omitProfanity: Bool
     /// The language of the transcript. Nil means English, which keeps the English prompt.
     public var language: DictationLanguage?
+    /// The Excited tone: the shared prompt asks for exclamation marks where the speaker sounds enthusiastic.
+    public var excited: Bool
+    /// The user's own instructions for tone and formatting, already normalized. Only the shared prompt carries them, so Fast
+    /// (S1-mini, which takes fixed controls) ignores them.
+    public var instructions: String?
 
     public init(
         vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
         level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false,
-        transform: TextTransform? = nil, omitProfanity: Bool = false, language: DictationLanguage? = nil
+        transform: TextTransform? = nil, omitProfanity: Bool = false, language: DictationLanguage? = nil,
+        excited: Bool = false, instructions: String? = nil
     ) {
         self.vocabulary = vocabulary
         self.appName = appName
@@ -39,6 +45,8 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
         self.transform = transform
         self.omitProfanity = omitProfanity
         self.language = language
+        self.excited = excited
+        self.instructions = CleanupInstructions.normalize(instructions)
     }
 }
 

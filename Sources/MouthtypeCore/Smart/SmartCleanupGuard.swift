@@ -211,7 +211,8 @@ public enum SmartCleanupGuard {
     /// stop-word filter is off, and German nouns (always capitalized) are not treated as names.
     public static func rejection(
         input: String, output: String, level: CleanupLevel, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
-        nearbySpellings: [String] = [], resolvedInput: String? = nil, language: DictationLanguage? = nil
+        nearbySpellings: [String] = [], resolvedInput: String? = nil, language: DictationLanguage? = nil,
+        strictNames: Bool = false
     ) -> String? {
         let english = DictationLanguage.isEnglish(language)
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -249,6 +250,9 @@ public enum SmartCleanupGuard {
             return "\"\(missing)\" missing"
         }
         if language != .german, let missing = missingName(input: comparableInput, output: comparableOutput) {
+            return "name \"\(missing)\" missing"
+        }
+        if strictNames, english, let missing = missingLeadingName(input: comparableInput, output: comparableOutput) {
             return "name \"\(missing)\" missing"
         }
 
@@ -864,6 +868,27 @@ public enum SmartCleanupGuard {
             if let end = previous.last, ".!?:\n".contains(end) || previous.hasPrefix("-") { continue }
             let acronymKept = word == word.uppercased() && outputTokens.contains { $0.caseInsensitiveCompare(word) == .orderedSame }
             if outputTokens.contains(word) || acronymKept || laterCue(tokens: tokens, position: index) { continue }
+            return word
+        }
+        return nil
+    }
+
+    /// A capitalised word that opens a sentence and is not an everyday word is most likely a name ("Dana said the budget is not
+    /// approved"). `missingName` leaves those alone, because a model may lowercase or reword an ordinary opener. It runs when the
+    /// user's own instructions are in the prompt, where "never mention names" would otherwise drop a leading name unnoticed.
+    static func missingLeadingName(input: String, output: String) -> String? {
+        let tokens = input.split(whereSeparator: \.isWhitespace).map(String.init)
+        let outputTokens = Set(output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() })
+        for (index, token) in tokens.enumerated() {
+            let word = stripped(token)
+            guard let first = word.first, first.isUppercase, word.count > 1, !isIContraction(word) else { continue }
+            if index > 0 {
+                let previous = tokens[index - 1]
+                guard let end = previous.last, ".!?\n".contains(end) || previous.hasPrefix("-") else { continue }
+            }
+            let lower = word.lowercased()
+            if CommonWords.set.contains(lower) || stopWords.contains(lower) || outputTokens.contains(lower) { continue }
+            if laterCue(tokens: tokens, position: index) { continue }
             return word
         }
         return nil

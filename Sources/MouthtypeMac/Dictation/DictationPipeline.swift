@@ -10,6 +10,8 @@ struct DictationSession: Sendable {
     var cleanupStyle: StyleOptions?
     /// A rule's cleanup level; nil uses the global one.
     var cleanupLevel: CleanupLevel?
+    /// A rule's instructions for Thorough; nil uses the global ones.
+    var cleanupInstructions: String?
     /// True when the dictation goes into a terminal, code editor or agent app or site, so spoken slash commands are typed.
     var codingTarget = false
     /// False when the store is missing or `begin` failed; later writes are then skipped.
@@ -314,10 +316,11 @@ struct DictationPipeline: Sendable {
         return styles.resolve(bundleID: bundleID, websiteHost: websiteHost, fallback: settings().style)
     }
 
-    func cleanupInputs(style: StyleOptions? = nil, level: CleanupLevel? = nil) -> CleanupInputs {
+    func cleanupInputs(style: StyleOptions? = nil, level: CleanupLevel? = nil, instructions: String? = nil) -> CleanupInputs {
         var chosen = settings()
         if let style { chosen.style = style }
         if let level { chosen.level = level }
+        if let instructions { chosen.instructions = instructions }
         return CleanupInputs(settings: chosen, dictionary: vocabulary.dictionary(), snippets: vocabulary.snippets(), now: clock.now())
     }
 
@@ -429,7 +432,8 @@ struct DictationPipeline: Sendable {
                 SmartCleanupRequest(
                     text: result.text, level: level, style: settings.style, destination: destination,
                     dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
-                    protectedPhrases: protectedPhrases, language: transcribed.language, contextNames: hintNames
+                    protectedPhrases: protectedPhrases, language: transcribed.language, contextNames: hintNames,
+                    instructions: settings.instructions
                 ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text)))
         else {
             if let fallback = fullDictionaryFallback() { return fallback }

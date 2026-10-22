@@ -38,12 +38,15 @@ public struct SmartCleanupRequest: Sendable {
     public var language: DictationLanguage?
     /// Names read from the focused field and window for this take, offered to name joining beside the nearby spellings.
     public var contextNames: [String]
+    /// The user's instructions for Thorough's tone and formatting. Fast ignores them. The guard still checks the output against
+    /// the dictation, so they can't change what was said.
+    public var instructions: String?
 
     public init(
         text: String, level: CleanupLevel, style: StyleOptions = .formal,
         destination: S1MiniControls.Destination = .general, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
         context: InsertionContext? = nil, appName: String? = nil, protectedPhrases: [String] = [],
-        language: DictationLanguage? = nil, contextNames: [String] = []
+        language: DictationLanguage? = nil, contextNames: [String] = [], instructions: String? = nil
     ) {
         self.text = text
         self.level = level
@@ -56,6 +59,7 @@ public struct SmartCleanupRequest: Sendable {
         self.protectedPhrases = protectedPhrases
         self.language = language
         self.contextNames = contextNames
+        self.instructions = CleanupInstructions.normalize(instructions)
     }
 }
 
@@ -235,7 +239,8 @@ public actor SmartCleanup {
         let context = CleanupContext(
             vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
             level: request.level, before: request.context?.before, after: request.context?.after,
-            omitProfanity: request.style == .formal, language: language)
+            omitProfanity: request.style == .formal, language: language, excited: request.style.excited,
+            instructions: cleaner.usesNativeControls ? nil : request.instructions)
         // Name joining, correction commas and the correction pass read English cues, so outside English they are off.
         let joining =
             language == nil
@@ -342,7 +347,7 @@ public actor SmartCleanup {
             if let reason = SmartCleanupGuard.rejection(
                 input: draft.guardInput, output: post.text, level: request.level, dictionary: request.dictionary,
                 snippets: request.snippets, nearbySpellings: CleanupPrompt.nearbySpellings(context), resolvedInput: draft.resolvedInput,
-                language: language
+                language: language, strictNames: context.instructions != nil
             ) {
                 return finish(.guardRejected, rejection: reason, sha: sha)
             }

@@ -24,6 +24,7 @@ struct StyleCleanupTab: View {
                 }
             }
             differences
+            instructions
             if model.showsFastLanguageNote {
                 Text(DictationLanguageSetting.fastEnglishOnlyNote)
                     .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
@@ -133,6 +134,26 @@ struct StyleCleanupTab: View {
         case .unloaded: return " \(name) is downloaded and loads when needed."
         case .ready: return " \(name) is ready."
         case .failed(let message): return " \(name): \(message)"
+        }
+    }
+
+    // MARK: Instructions
+
+    private var instructions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            DesignEyebrow("Instructions · Thorough only")
+            DesignCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Tell Thorough how your text should read. It applies to every app and website unless one has its own instructions, which you can add from the list icon on its row.")
+                        .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    StyleInstructionsEditor(
+                        saved: CleanupInstructions.normalize(model.cleanup.instructions), placeholder: StyleContextID.other.instructionsExample,
+                        label: "Instructions for every app", identifier: "style-instructions-global"
+                    ) { model.setInstructions($0 ?? "") }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+            }
         }
     }
 
