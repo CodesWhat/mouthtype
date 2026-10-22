@@ -58,6 +58,8 @@ Panel {
   property var microphoneInfo: ({ sources: [], selected: "default", missing: false, muted: null })
   property var micLevel: null
   property bool micTesting: false
+  // Settings, Health: the non-ok rows from control.py `doctor`. Null until the first reply.
+  property var doctorInfo: null
   readonly property string transcriptFont: Fonts.family({ font: fontPrefs }, "transcript", Style.font.family)
   readonly property string pillFont: Fonts.family({ font: fontPrefs }, "pill", Style.font.family)
   property var fileImport: ({ state: "off" })
@@ -144,6 +146,10 @@ Panel {
 
   function loadMicrophones() {
     if (!micListProc.running) micListProc.running = true
+  }
+
+  function loadDoctor() {
+    if (!doctorProc.running) doctorProc.running = true
   }
 
   function testMicrophone() {
@@ -252,6 +258,21 @@ Panel {
           if (result.error) root.errorText = String(result.error)
           else root.microphoneInfo = result
         } catch (e) { root.errorText = "Could not list microphones" }
+      }
+    }
+  }
+
+  Process {
+    id: doctorProc
+    command: [root.helper, "doctor"]
+    stdout: StdioCollector {
+      waitForEnd: true
+      onStreamFinished: {
+        try {
+          var result = JSON.parse(String(text || "{}"))
+          if (result.error) root.errorText = String(result.error)
+          else root.doctorInfo = result.doctor || null
+        } catch (e) { root.errorText = "Could not run the health checks" }
       }
     }
   }
