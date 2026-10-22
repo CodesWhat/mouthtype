@@ -1344,7 +1344,7 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.controller.phase == .processing)
 
         let undo = Task { await rig.controller.undoCancel() }
-        await rig.settle()
+        await rig.until { rig.store.reopens == 1 }
         // Queued behind the first take: reopened and archived already, but nothing delivered yet.
         #expect(rig.inserter.delivered.isEmpty && rig.store.reopens == 1)
 
@@ -1365,7 +1365,7 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.controller.handle(.pressed(at: keyUp + 1))
         await rig.controller.handle(.cancelled(reason: .escape))
         let undo = Task { await rig.controller.undoCancel() }
-        await rig.settle()
+        await rig.until { rig.store.reopens == 1 }
 
         // The first take is still held. Quit must not wait on it to see the second take's audio saved.
         #expect(await rig.controller.prepareForTermination())
@@ -1608,10 +1608,10 @@ private final class FakeCorrections: CorrectionObserving {
         rig.engine.error = Boom()
         await rig.controller.handle(.pressed(at: keyDown))
         await rig.controller.handle(.released(at: keyUp))
-        await rig.settle()
+        await rig.engine.waitForHeld()
         await rig.controller.handle(.pressed(at: keyUp + 1))
         rig.engine.releaseHeld()
-        await rig.settle()
+        await rig.controller.waitForProcessing()
         #expect(rig.store.finishes.map(\.0) == [.failed])
         #expect(rig.controller.phase == .recording)
         #expect(!rig.log.contains("capture.cancel") && rig.pill.messages.isEmpty)
