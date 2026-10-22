@@ -185,6 +185,7 @@ class Session:
         self.takes_since_retire = self.HOUSEKEEPING_TAKES
         self.retired_at = time.monotonic()
         self.state, self.error, self.outcome = 'idle', None, 'not_attempted'
+        self.shortcuts_status = None
         self.thread = None
         self.cancelled = threading.Event()
         self.take = None
@@ -386,7 +387,8 @@ class Session:
             self.retire_completed_audio()
 
     def status(self):
-        return {'state': self.state, 'error': self.error, 'delivery': self.outcome,
+        extra = {'shortcuts': self.shortcuts_status} if self.shortcuts_status is not None else {}
+        return {**extra, 'state': self.state, 'error': self.error, 'delivery': self.outcome,
                 'takes': self.take_count(), 'maximum_takes': self.maximum_takes, 'history_keep': self.history_keep,
                 'recovery': self.take.name if self.take else None,
                 'context': 'unsupported', 'secure_field_detection': 'unsupported',
@@ -1911,6 +1913,8 @@ def main(argv=None, *, cli_directory=None):
             cleanup_engine.warm()
         session._notify('ready')
         stopped = threading.Event()
+        import shortcuts_portal
+        shortcuts = shortcuts_portal.attach(session, os.environ, config['desktop']['shortcuts'])
         for event in (signal.SIGINT, signal.SIGTERM):
             signal.signal(event, lambda *_: stopped.set())
         try:
@@ -1918,6 +1922,9 @@ def main(argv=None, *, cli_directory=None):
                   startup=lambda: session.housekeep(force=True),
                   bound=engine.warm)
         finally:
+            if shortcuts is not None:
+                # Stop first: a held take ends through Session.command while the session is still open.
+                shortcuts.stop()
             try:
                 files.close()
             finally:

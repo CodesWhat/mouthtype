@@ -59,7 +59,7 @@ class RegistryTests(unittest.TestCase):
         self.assertIsInstance(delivery, desktop.HyprlandDelivery)
 
     def test_shortcuts_without_implementation_is_none(self):
-        self.assertIsNone(backends.make_shortcuts('portal'))
+        self.assertIsNone(backends.make_shortcuts('command'))
 
     def test_registered_factory_is_used(self):
         backends.register_delivery('probe', lambda *a, **k: ('probe', a))
