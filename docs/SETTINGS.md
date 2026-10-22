@@ -409,6 +409,8 @@ On the first ordinary launch with missing Microphone or Accessibility access, **
 
 Setup presents one focused card at a time: microphone access and preparation, Accessibility, speech model, then shortcut readiness. It advances automatically only when the current prerequisite passes, skips components already ready and returns to an earlier prerequisite if it becomes unavailable. Denials and failures remain on their card with the appropriate settings or retry action. No permission is requested merely by advancing a card.
 
+The last card offers an optional **Try a test take**: it records about four seconds (or until you press Stop), shows the transcript and the input's peak level, and names the microphone. It never pastes, never touches the clipboard and saves no transcript or audio. If nothing came in, it says so and links to Sound settings. It won't start while a dictation is running.
+
 Setup shows real speech download/preparation/warm-up status and a retry after failure. The speech engine's existing download is reused.
 
 Ready to dictate requires:
@@ -420,7 +422,7 @@ Ready to dictate requires:
 - A warmed speech engine.
 
 > [!NOTE]
-> Secure Input keeps setup unready. The hint follows the saved shortcut and Hold/Toggle behavior. It does not record or paste a test take. Fast/Thorough cleanup can still be preparing; Basic is used until its model is available.
+> Secure Input keeps setup unready. The hint follows the saved shortcut and Hold/Toggle behavior. Fast/Thorough cleanup can still be preparing; Basic is used until its model is available.
 
 Refresh status or return from System Settings to recheck permissions. A denied permission links to its System Settings pane. An authorized microphone that could not prepare can be retried. Change shortcut opens Settings > Health for the existing shortcut, Fn remapping and keyboard controls. Diagnostic command-line probes retain their previous permission behavior and do not show or consume first-run setup.
 

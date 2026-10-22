@@ -610,6 +610,8 @@ final class DeliveryCardView: NSView {
             return [text("Recover", color: color)]
         case .discard:
             return [text("Discard", color: color)]
+        case .openSoundSettings:
+            return [text("Sound settings", color: color)]
         }
     }
 

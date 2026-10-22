@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import MouthtypeCore
 import Observation
@@ -50,6 +51,11 @@ final class DictationController {
     @ObservationIgnored private let audioQuiet: (any RecordingAudioQuieting)?
     @ObservationIgnored private let clock: any DictationClock
     @ObservationIgnored private let cards: any DictationCards
+    @ObservationIgnored private let openSoundSettings: @MainActor () -> Void
+    @ObservationIgnored private var silentWarning = SilentTakeWarning()
+
+    static let soundSettingsURL = URL(string: "x-apple.systempreferences:com.apple.Sound-Settings.extension")!
+    static let openSystemSoundSettings: @MainActor () -> Void = { NSWorkspace.shared.open(soundSettingsURL) }
     /// The card on screen, so the pill can go back to its line when a job ends under it.
     @ObservationIgnored private var shownCard: DeliveryCard?
     /// True while a job presents its own card, whose job still counts in `pendingJobs` until it wraps up.
@@ -128,8 +134,10 @@ final class DictationController {
         capture: any DictationCapturing, engine: any DictationEngine, pipeline: DictationPipeline,
         inserter: any DictationInserting, pill: any DictationPill, sounds: any SoundPlayer, clock: any DictationClock,
         cards: any DictationCards, limits: Limits = .standard, audioQuiet: (any RecordingAudioQuieting)? = nil,
-        preview: LivePreviewSession = LivePreviewSession(), previewEnabled: @escaping @MainActor () -> Bool = { false }
+        preview: LivePreviewSession = LivePreviewSession(), previewEnabled: @escaping @MainActor () -> Bool = { false },
+        openSoundSettings: @escaping @MainActor () -> Void = DictationController.openSystemSoundSettings
     ) {
+        self.openSoundSettings = openSoundSettings
         self.preview = preview
         self.previewEnabled = previewEnabled
         self.limits = limits
@@ -599,7 +607,7 @@ final class DictationController {
             let waits = pendingJobs > 1
             await previous?.value
             if waits { showProcessing() }
-            try await transcribeAndDeliver(audio, features: features, session: session)
+            try await transcribeAndDeliver(audio, features: features, session: session, holdMs: keyUpMs)
         } catch {
             await failJob(session, error)
         }
@@ -624,14 +632,21 @@ final class DictationController {
     }
 
     /// Everything after the audio is on disk, shared by a normal release, an Undo and a saved recording.
-    private func transcribeAndDeliver(_ audio: CapturedAudio, features: AudioFeatures, session: DictationSession) async throws {
+    /// `holdMs` is how long the key was held; only a take that has one can raise the silent-mic card.
+    private func transcribeAndDeliver(
+        _ audio: CapturedAudio, features: AudioFeatures, session: DictationSession, holdMs: Int? = nil
+    ) async throws {
         defer {
             releasePrewarm(session)
             if !shuttingDown { unsavedQueuedAudio[session.id] = nil }
         }
         guard await continueProcessing(session) else { return }
         guard let transcribed = try await pipeline.transcribe(audio, session: session, voicedMs: features.voicedMs) else {
-            hidePill()
+            if let holdMs, let kind = silentWarning.check(features, holdMs: holdMs, now: clock.now()) {
+                presentSilentMic(kind, micName: audio.deviceName)
+            } else {
+                hidePill()
+            }
             return
         }
 
@@ -670,6 +685,16 @@ final class DictationController {
             verifying?.wrappedUp = true
             if let arrived = verifying?.arrived { verificationEnded(arrived) }
         }
+    }
+
+    /// The take heard nothing: say which microphone was listening and offer the Sound pane. The card's detail line keeps
+    /// the pill up under it, like any card that carries one.
+    private func presentSilentMic(_ kind: SilentTakeKind, micName: String?) {
+        deliveringOwnCard = true
+        cards.present(
+            .silentMic(kind, micName: micName),
+            actions: [.openSoundSettings: { [weak self] in self?.openSoundSettings() }])
+        deliveringOwnCard = false
     }
 
     /// The take is done with the cleanup model, however it ended. Dropping the hold never reloads anything.
