@@ -154,6 +154,7 @@ These keys live in `linux.json`. Relative paths resolve beside that file.
 | `notifications` | `true` or `false` | `true` |
 | `slash_commands` | `true` or `false`. "slash research" becomes "/research" in terminals, code editors and coding agents | `true` |
 | `cleanup` | `off`, `basic`, `fast`, `thorough` | `off` |
+| `cleanup_idle_seconds` | seconds of no use before the cleanup server is stopped (0 disables); the next recording or take reloads it and status shows `loading` | `600` |
 | `cleanup_engine` | Path to `cleanup.json` | Not set |
 
 ## Statistics and last-take verbs
