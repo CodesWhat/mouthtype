@@ -578,6 +578,36 @@ class ShortcutBlockTests(unittest.TestCase):
         self.assertNotIn("Mouthtype", self.bindings.read_text(encoding="utf-8"))
 
 
+class WelcomedTests(unittest.TestCase):
+    def setUp(self):
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.prefs = Path(self.directory.name) / "omarchy-plugin.json"
+        patches = [mock.patch.object(control, "PREFS", self.prefs), mock.patch.object(control, "state", lambda: {})]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_defaults_to_not_welcomed(self):
+        self.assertFalse(control.preferences()["welcomed"])
+
+    def test_setter_writes_and_clears_without_touching_other_prefs(self):
+        control.set_pill("size", "2")
+        control.set_plugin("welcomed", "on")
+        self.assertTrue(control.preferences()["welcomed"])
+        self.assertEqual(control.preferences()["pill"]["size"], 2)
+        control.set_pill("skin", "hifi")
+        self.assertTrue(control.preferences()["welcomed"])
+        control.set_plugin("welcomed", "off")
+        self.assertFalse(control.preferences()["welcomed"])
+
+    def test_setter_rejects_other_fields_and_values(self):
+        with self.assertRaises(RuntimeError):
+            control.set_plugin("sounds", "on")
+        with self.assertRaises(RuntimeError):
+            control.set_plugin("welcomed", "maybe")
+
+
 class TransformShortcutTests(ShortcutBlockTests):
     def test_on_writes_its_own_block_and_leaves_the_dictation_block_alone(self):
         control.set_shortcut("toggle", "super+alt+m")

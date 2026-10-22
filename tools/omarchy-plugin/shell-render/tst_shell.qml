@@ -70,6 +70,8 @@ TestCase {
     shell.navigate("home")
     switch (scene) {
       case "home-empty": host.empty(); shell.navigate("home"); break
+      case "home-welcome": host.config = Object.assign({}, host.config, { delivery_mode: "recover" }); shell.navigate("home"); break
+      case "home-welcomed": host.config = Object.assign({}, host.config, { delivery_mode: "recover" }); host.welcomed = true; shell.navigate("home"); break
       case "stats": shell.navigate("stats"); break
       case "dictionary": shell.navigate("dictionary"); break
       case "transforms": shell.navigate("transforms"); break
@@ -132,7 +134,7 @@ TestCase {
   }
 
   property var saved: ({})
-  readonly property var scenes: ["home", "home-empty", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
+  readonly property var scenes: ["home", "home-empty", "home-welcome", "home-welcomed", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
     "style-email", "style-other", "style-cleanup", "style-fresh", "style-fresh-cleanup", "style-error", "appearance", "appearance-hifi",
     "transcript", "import-active", "import-done", "import-failed", "settings-general", "settings-general-off", "settings-linux",
     "settings-health", "settings-health-empty", "settings-advanced", "shortcut", "error"]
@@ -261,6 +263,23 @@ TestCase {
     host.ran = []
     mouseClick(findText("Copy Last"))
     compare(host.ran[0][0], "copy")
+  }
+
+  function test_welcome_card() {
+    tc.dark = false
+    setScene("home-welcome")
+    verify(findText("Where should your words go?") !== null, "card missing while recover and not welcomed")
+    verify(findText("Dictate from anywhere") !== null, "shortcut row missing")
+    setScene("home-welcomed")
+    compare(findText("Where should your words go?"), null)
+    setScene("home")
+    compare(findText("Where should your words go?"), null)
+    setScene("home-welcome")
+    mouseClick(findText("Just save them"))
+    compare(host.ran[0], ["set-plugin", "welcomed", "on"])
+    host.ran = []
+    mouseClick(findText("Paste where I'm typing (Recommended)"))
+    compare(host.ran[0], ["set-config", "delivery", "paste"])
   }
 
   function findSwitch(label, item) {

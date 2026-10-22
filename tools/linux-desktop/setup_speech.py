@@ -113,7 +113,7 @@ def setup(destination, *, pins=None, download=None, run=None):
     config = destination / 'linux.json'
     private_write(config, json.dumps({'engine_config': str(engines), 'python': python,
                                     'maximum_recording_seconds': 60, 'request_seconds': 30,
-                                    'delivery': {'mode': 'recover'}, 'notifications': True}, indent=2) + '\n')
+                                    'cleanup': 'basic', 'delivery': {'mode': 'recover'}, 'notifications': True}, indent=2) + '\n')
     write_atomic(status, state='ready')
     return config
 

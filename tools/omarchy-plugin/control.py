@@ -223,6 +223,7 @@ def preferences():
     overrides = font.get("overrides") if isinstance(font.get("overrides"), dict) else {}
     return {
         "sounds": value.get("sounds") is True,
+        "welcomed": value.get("welcomed") is True,
         "pill": {"enabled": pill.get("enabled") is not False,
                  "skin": "hifi" if pill.get("skin") == "hifi" else "classic",
                  "size": 2 if pill.get("size") == 2 else 1},
@@ -238,6 +239,15 @@ def valid_family(value):
     if len(value) > 80 or any(ord(c) < 32 for c in value):
         raise RuntimeError("Enter a font family name")
     return value
+
+
+def set_plugin(field, value):
+    if field != "welcomed" or value not in {"on", "off"}:
+        raise RuntimeError("Unsupported plugin setting")
+    prefs = preferences()
+    prefs["welcomed"] = value == "on"
+    atomic_json(PREFS, prefs)
+    return state()
 
 
 def set_pill(field, value):
@@ -580,6 +590,7 @@ def state():
             "saved": [entry for entry in entries if entry["audio"] and not entry["transcript"]],
             "words_today": words_today(entries),
             "config": config_summary(), "sounds": preferences()["sounds"],
+            "welcomed": preferences().get("welcomed") is True,
             "pill": preferences()["pill"], "font": preferences()["font"],
             "cleanup": {**cleanup_models(), "service": status.get("cleanup") if running else None},
             "autostart": unit_enabled(),
@@ -1366,7 +1377,7 @@ VALID_ACTIONS = {
     "state", "start-service", "shutdown", "start", "stop", "cancel", "toggle",
     "recover", "transcribe", "copy", "paste-last", "set-config", "set-sounds",
     "set-autostart", "set-shortcut", "set-transform-shortcut", "import-pick", "import-start", "import-cancel",
-    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup", "cleanup-cancel"
+    "import-forget", "import-result", "import-copy", "import-save", "set-pill", "set-font", "cleanup-setup", "cleanup-cancel", "set-plugin"
 ,
     "forget", "prune"
 }
@@ -1458,7 +1469,7 @@ def main():
     ) or (sys.argv[1] == "copy" and len(sys.argv) not in {2, 3}) or (
         sys.argv[1] in {"set-config", "set-font"} and len(sys.argv) not in {4, 5}
     ) or (
-        sys.argv[1] == "set-pill" and len(sys.argv) != 4
+        sys.argv[1] in {"set-pill", "set-plugin"} and len(sys.argv) != 4
     ) or (sys.argv[1] in {"state", "start-service", "shutdown", "start", "stop", "cancel", "toggle", "paste-last",
                           "import-pick", "import-cancel", "import-forget", "import-result", "import-copy", "import-save"}
           and len(sys.argv) != 2):
@@ -1500,6 +1511,8 @@ def main():
             output = cleanup_setup(sys.argv[2])
         elif action == "cleanup-cancel" and len(sys.argv) == 2:
             output = cleanup_cancel()
+        elif action == "set-plugin":
+            output = set_plugin(sys.argv[2], sys.argv[3])
         elif action == "set-pill":
             output = set_pill(sys.argv[2], sys.argv[3])
         elif action == "set-font":
