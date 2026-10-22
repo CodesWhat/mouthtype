@@ -186,7 +186,7 @@ struct SpellingSuggestionRow: View {
     static func reason(_ suggestion: SpellingSuggestion) -> String {
         let times = suggestion.count == 1 ? "1 time" : "\(suggestion.count) times"
         if suggestion.kind == .removeHazard {
-            return suggestion.count == 0 ? "Matched nothing in your recent takes." : "Rewrites an everyday word. Heard \(times)."
+            return suggestion.count == 0 ? "Matched nothing in your recent takes." : "Rewrites an everyday English word. Heard \(times)."
         }
         return "Heard \(times)"
     }

@@ -23,7 +23,7 @@ public enum OrdinaryWords {
         guard !heard.isEmpty, !written.isEmpty, isOrdinary(heard) else { return nil }
         let rule = DictionaryRule(heard: heard, written: written)
         guard !rule.allowsSpellingHints else { return nil }
-        let noun = heard.contains(" ") ? "an everyday phrase" : "an everyday word"
+        let noun = heard.contains(" ") ? "an everyday English phrase" : "an everyday English word"
         return "\u{2018}\(heard)\u{2019} is \(noun), so every \u{2018}\(heard)\u{2019} you say becomes \(written)."
     }
 

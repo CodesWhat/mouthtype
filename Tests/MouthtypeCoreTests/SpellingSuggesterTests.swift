@@ -20,6 +20,24 @@ private struct SplitMix64: RandomNumberGenerator {
         SuggestionTake(id: id, rawText: raw, finalText: final ?? raw, boostTermsApplied: boost, app: "Orca")
     }
 
+    @Test func suggestsFromEnglishTakesOnly() throws {
+        func lang(_ id: String, _ raw: String, _ language: DictationLanguage?) -> SuggestionTake {
+            SuggestionTake(id: id, rawText: raw, finalText: raw, boostTermsApplied: ["Siobhan"], app: "Orca", language: language)
+        }
+        let german = [lang("g1", "ask Chavon about it", .german), lang("g2", "Chavon agreed", .german)]
+        #expect(SpellingSuggester.suggest(takes: german, rules: rules).allSatisfy { $0.kind == .removeHazard })
+        let russian = [lang("r1", "ask Chavon about it", .russian), lang("r2", "Chavon agreed", .russian)]
+        #expect(SpellingSuggester.suggest(takes: russian, rules: rules).allSatisfy { $0.kind == .removeHazard })
+        for language in [nil, DictationLanguage.english] {
+            let english = [lang("e1", "ask Chavon about it", language), lang("e2", "Chavon agreed", language)]
+            #expect(SpellingSuggester.suggest(takes: english, rules: rules).contains { $0.written == "Siobhan" })
+        }
+        let mixed = german + [lang("e1", "ask Chavon about it", nil), lang("e2", "Chavon agreed", .english)]
+        let out = SpellingSuggester.suggest(takes: mixed, rules: rules)
+        let s = try #require(out.first { $0.written == "Siobhan" })
+        #expect(s.evidence.allSatisfy { $0.takeID.hasPrefix("e") })
+    }
+
     private let rules = [
         DictionaryRule(heard: "shivon", written: "Siobhan"),
         DictionaryRule(heard: "praya", written: "Priya"),

@@ -16,7 +16,7 @@ import Testing
 
     @Test func warningNamesTheWordAndTheWrittenForm() {
         let text = OrdinaryWords.warning(for: DictionaryRule(heard: "win", written: "Nguyen"))
-        #expect(text == "\u{2018}win\u{2019} is an everyday word, so every \u{2018}win\u{2019} you say becomes Nguyen.")
+        #expect(text == "\u{2018}win\u{2019} is an everyday English word, so every \u{2018}win\u{2019} you say becomes Nguyen.")
         #expect(OrdinaryWords.warning(for: DictionaryRule(heard: "shivon", written: "Siobhan")) == nil)
     }
 
@@ -49,6 +49,6 @@ import Testing
 
     @Test func multiWordCopyCallsItAPhrase() {
         let text = OrdinaryWords.warning(for: DictionaryRule(heard: "win win", written: "Nguyen"))
-        #expect(text == "\u{2018}win win\u{2019} is an everyday phrase, so every \u{2018}win win\u{2019} you say becomes Nguyen.")
+        #expect(text == "\u{2018}win win\u{2019} is an everyday English phrase, so every \u{2018}win win\u{2019} you say becomes Nguyen.")
     }
 }

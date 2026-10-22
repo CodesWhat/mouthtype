@@ -312,7 +312,7 @@ public struct DictationRecord: Codable, FetchableRecord, Sendable, Equatable {
 /// `word_timings_json`. `TranscriptStore.dictation(id:)` still returns the full `DictationRecord`.
 public struct TakeRecord: Codable, FetchableRecord, Sendable, Equatable {
     public static let databaseColumnDecodingStrategy = DatabaseColumnDecodingStrategy.convertFromSnakeCase
-    static let columns = "id, started_at, audio_path, boost_terms_applied_json, raw_text, final_text, app_name, is_secure"
+    static let columns = "id, started_at, audio_path, boost_terms_applied_json, raw_text, final_text, app_name, is_secure, language"
 
     public var id: String
     public var startedAt: Double
@@ -322,6 +322,8 @@ public struct TakeRecord: Codable, FetchableRecord, Sendable, Equatable {
     public var finalText: String?
     public var appName: String?
     public var isSecure: Bool?
+    /// BCP 47 code the take was transcribed in. Nil for rows saved before it was stored, which read as English.
+    public var language: String?
 }
 
 public struct StatsSummary: Equatable, Sendable {

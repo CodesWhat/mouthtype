@@ -407,6 +407,20 @@ import Testing
         #expect(try store.dictation(id: id)?.finalText == "hello there")
     }
 
+    @Test func recentTakesCarryTheTakeLanguage() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let de = try store.begin(DictationStart(startedAt: Self.noon))
+        try store.recordTranscription(
+            de, TranscriptionRecord(transcription: Transcription(text: "hallo", processingSeconds: 0.1, engineID: "e"), rawText: "hallo", language: "de"))
+        try store.recordInsertion(de, InsertionRecord(finalText: "Hallo"))
+        let old = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(1)))
+        try store.recordInsertion(old, InsertionRecord(finalText: "hello"))
+        let takes = try store.recentTakes(limit: 2)
+        #expect(takes.first { $0.id == de }?.language == "de")
+        #expect(takes.first { $0.id == old }?.language == nil)
+    }
+
     @Test func transcriptionRecordsSpeechOnsetAndInsertionRecordsTheDeliveryTarget() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
