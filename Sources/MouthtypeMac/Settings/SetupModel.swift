@@ -20,7 +20,6 @@ import Observation
     private(set) var namesChoice = NamesChoice.offered
     private(set) var boostStatus = VocabularyBoostStatusCenter.current
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
-    private nonisolated(unsafe) var boostObserver: NSObjectProtocol?
 
     init(
         diagnostics: SettingsDiagnostics, engine: EngineHost, microphone: MicrophonePreparation = MicrophonePreparation(),
@@ -35,13 +34,9 @@ import Observation
         self.microphone = microphone
         self.defaults = defaults
         refreshInstructions()
-        boostObserver = NotificationCenter.default.addObserver(forName: .vocabularyBoostStatusChanged, object: nil, queue: .main) { [weak self] _ in
+        NotificationCenter.default.addObserver(forName: .vocabularyBoostStatusChanged, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.boostStatus = VocabularyBoostStatusCenter.current }
         }
-    }
-
-    deinit {
-        if let boostObserver { NotificationCenter.default.removeObserver(boostObserver) }
     }
 
     /// The offer shows until declined, and never when Boost saved words is already on (an existing user's choice stands).
