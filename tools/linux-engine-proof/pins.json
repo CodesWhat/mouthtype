@@ -16,6 +16,7 @@
     "source": "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2",
     "asset_id": 283097583,
     "sha256": "5793d0fd397c5778d2cf2126994d58e9d56b1be7c04d13c7a15bb1b4eafb16bf",
+    "bytes": 487170055,
     "license": "CC-BY-4.0",
     "model_card": "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3"
   },
@@ -24,6 +25,7 @@
     "revision": "34add00a48a2e5d24e5a4ee5405a99620a3a240c",
     "source": "https://huggingface.co/superwhisper/s1-mini-GGUF/resolve/34add00a48a2e5d24e5a4ee5405a99620a3a240c/s1-mini-q4_k_m.gguf",
     "sha256": "3b41ebe2502cbd03e811d5d16b022f5ab551eda58d62597d152f89535003c634",
+    "bytes": 484219808,
     "quantization": "Q4_K_M",
     "license": "Apache-2.0 plus required S1-mini by Superwhisper attribution",
     "license_source": "https://huggingface.co/superwhisper/s1-mini-GGUF/blob/34add00a48a2e5d24e5a4ee5405a99620a3a240c/LICENSE"

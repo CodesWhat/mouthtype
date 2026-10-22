@@ -3,11 +3,16 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import sys
 import tempfile
+import threading
+import time
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import setup_cleanup
+from setup_progress import DownloadProgress
 
 
 @unittest.skipUnless(sys.platform == 'linux' and platform.machine() in ('x86_64', 'AMD64'),
@@ -28,7 +33,7 @@ class SetupCleanupTests(unittest.TestCase):
         }
         self.downloads = []
 
-    def download(self, url, destination):
+    def download(self, url, destination, progress=None):
         self.downloads.append(url)
         partial = destination.with_suffix(destination.suffix + '.part')
         partial.write_bytes(self.weights['fast'] if 's1' in url else self.weights['thorough'])
@@ -93,3 +98,83 @@ class SetupCleanupTests(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class SlowHandler(BaseHTTPRequestHandler):
+    body = b'x' * 60000
+
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-Length', str(len(self.body)))
+        self.end_headers()
+        for start in range(0, len(self.body), 20000):
+            self.wfile.write(self.body[start:start + 20000])
+            self.wfile.flush()
+            time.sleep(0.8)
+
+    def log_message(self, *args):
+        pass
+
+
+class ProgressTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+
+    def test_tracker_is_throttled_monotonic_and_capped(self):
+        now = [0.0]
+        seen = []
+        tracker = DownloadProgress(100, lambda done, total: seen.append((done, total)), clock=lambda: now[0])
+        for tick, done in [(0, 0), (0.1, 10), (0.3, 20), (0.6, 30), (0.7, 25), (1.2, 500)]:
+            now[0] = tick
+            tracker(done)
+        tracker.finish()
+        self.assertEqual(seen, [(0, 100), (30, 100), (100, 100)])
+        self.assertTrue(all(a[0] <= b[0] and b[0] <= b[1] for a, b in zip(seen, seen[1:])))
+
+    def test_setup_writes_bytes_done_and_total_from_download_progress(self):
+        weights = b'w' * 1000
+        pins = {'llama': {'revision': '6420cf5dd588c68e48657a0bbd82bb3bd5ac7209'},
+                's1': {'source': 'https://example.invalid/s1', 'sha256': hashlib.sha256(weights).hexdigest(), 'bytes': 1000}}
+        server = self.root / 'llama-server'
+        server.write_text('#!/bin/sh\n')
+        server.chmod(0o755)
+        destination = self.root / 'cleanup'
+        status = destination / 'cleanup-setup.json'
+        states = []
+
+        def download(url, target, progress=None):
+            partial = target.with_suffix(target.suffix + '.part')
+            partial.write_bytes(weights)
+            for done in (100, 400, 400, 900):
+                progress(done)
+                states.append(json.loads(status.read_text()))
+            return partial
+
+        original = setup_cleanup.DownloadProgress
+        setup_cleanup.DownloadProgress = lambda total, emit: original(total, emit, interval=0)
+        self.addCleanup(setattr, setup_cleanup, 'DownloadProgress', original)
+        setup_cleanup.setup(destination, ['fast'], server=server, pins=pins, download_fn=download,
+                            check_fn=lambda found: 'fake runtime')
+        done = [state['bytes_done'] for state in states]
+        self.assertEqual(done, sorted(done))
+        self.assertEqual(done, [100, 400, 400, 900])
+        self.assertTrue(all(s['state'] == 'downloading' and s['bytes_total'] == 1000 and s['bytes_done'] <= 1000 for s in states))
+        self.assertEqual(json.loads(status.read_text())['state'], 'ready')
+
+    @unittest.skipUnless(shutil.which('curl'), 'curl is needed for the local download fixture')
+    def test_real_download_reports_growing_bytes_from_a_local_server(self):
+        server = ThreadingHTTPServer(('127.0.0.1', 0), SlowHandler)
+        thread = threading.Thread(target=server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(thread.join, 5)
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        seen = []
+        partial = setup_cleanup.download('http://127.0.0.1:%d/m' % server.server_port, self.root / 'm.gguf',
+                                         seconds=30, progress=seen.append)
+        self.assertEqual(partial.stat().st_size, 60000)
+        self.assertGreaterEqual(len(seen), 2)
+        self.assertEqual(seen, sorted(seen))
+        self.assertTrue(all(0 <= size <= 60000 for size in seen))

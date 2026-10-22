@@ -226,6 +226,15 @@ TestCase {
     compare(page.backend.error, "nope")
   }
 
+  function findByName(item, name) {
+    if (item.objectName === name) return item
+    for (var i = 0; i < item.children.length; i++) {
+      var found = findByName(item.children[i], name)
+      if (found) return found
+    }
+    return null
+  }
+
   function findText(label) {
     var texts = walk(shell, [])
     for (var i = 0; i < texts.length; i++) if (texts[i].text === label && texts[i].width > 0) return texts[i]
@@ -490,6 +499,15 @@ TestCase {
     tryVerify(function() { return requests.length > 0 }, 2000)
     compare(requests[0][0], "style-state")
     verify(allTexts().join("\n").indexOf("Reading your Style settings") >= 0)
+  }
+
+  function test_health_shows_download_bytes_and_bar() {
+    tc.dark = false
+    setScene("settings-health-empty")
+    verify(allTexts().indexOf("1000 MB of 2497 MB") >= 0, "bytes done of total while downloading")
+    var bar = findByName(shell, "setupProgress")
+    verify(bar !== null && bar.visible, "determinate bar is shown")
+    fuzzyCompare(bar.value, 1000000000 / 2497281120, 0.001)
   }
 
   function test_health_points_to_style() {
