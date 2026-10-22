@@ -2,7 +2,8 @@
 #
 # Development build of the Mouthtype Linux client and Omarchy bar plugin, built from git. Experimental:
 # nothing here has been accepted on a wide range of hardware yet (see https://mouthtype.app/linux/).
-_branch=feat/linux-parity
+# The branch is a build input: MOUTHTYPE_BRANCH=<branch> makepkg builds that branch, the default is main.
+_branch=${MOUTHTYPE_BRANCH:-main}
 pkgname=mouthtype-linux-git
 pkgver=0.0.0
 pkgrel=1
