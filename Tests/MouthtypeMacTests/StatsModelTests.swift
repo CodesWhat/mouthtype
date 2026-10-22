@@ -106,6 +106,39 @@ import Testing
         #expect(model.snapshot?.report.wordsAllTime == 2)
     }
 
+    private final class Deliveries: @unchecked Sendable {
+        private let lock = NSLock()
+        private var callbacks: [@Sendable (StatsSnapshot) -> Void] = []
+        func add(_ callback: @escaping @Sendable (StatsSnapshot) -> Void) { lock.withLock { callbacks.append(callback) } }
+        var all: [@Sendable (StatsSnapshot) -> Void] { lock.withLock { callbacks } }
+    }
+
+    @Test func aReplacedObservationsLateCallbackIsDropped() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let first = try store.statsSnapshot(now: base)
+        try dictate(store, minutes: 1, text: "one two")
+        let second = try store.statsSnapshot(now: base)
+        let deliveries = Deliveries()
+        let model = StatsModel(store: store, observing: false)
+        model.startObservation = { _, _, _, _, onChange in
+            deliveries.add(onChange)
+            return nil
+        }
+        model.activate()
+        #expect(deliveries.all.count == 1)
+        // A day change restarts the observation, replacing the first one while its callback is still held.
+        NotificationCenter.default.post(name: .NSCalendarDayChanged, object: nil)
+        await waitUntil { deliveries.all.count == 2 }
+        let replaced = deliveries.all
+        try #require(replaced.count == 2)
+        replaced[1](second)
+        #expect(model.snapshot?.report.wordsAllTime == 2)
+        replaced[0](first)
+        #expect(model.snapshot?.report.wordsAllTime == 2)
+        model.deactivate()
+    }
+
     private final class Clock: @unchecked Sendable {
         private let lock = NSLock()
         private var date: Date
