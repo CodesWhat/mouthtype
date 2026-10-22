@@ -63,6 +63,10 @@ TestCase {
     host.fileImport = { state: "off" }
     host.importText = ""
     host.populated()
+    host.desktop = "hyprland"
+    host.shortcutTriggers = ({})
+    host.deliveryNeedsGrant = false
+    host.trayAvailable = null
     shell.advancedOptions = false
     shell.settingsOpen = false
     shell.shortcutOpen = false
@@ -100,6 +104,12 @@ TestCase {
       case "settings-general": shell.navigate("general"); break
       case "settings-general-off": host.empty(); shell.navigate("general"); break
       case "settings-linux": shell.navigate("linux"); break
+      case "settings-general-gnome":
+        host.desktop = "gnome"; host.shortcutTriggers = { "dictate-toggle": "Ctrl+Alt+M" }; shell.navigate("general"); break
+      case "settings-general-kde-grant":
+        host.desktop = "kde"; host.deliveryNeedsGrant = true; shell.navigate("general"); break
+      case "settings-linux-gnome": host.desktop = "gnome"; host.trayAvailable = false; shell.navigate("linux"); break
+      case "settings-linux-kde": host.desktop = "kde"; host.trayAvailable = true; shell.navigate("linux"); break
       case "settings-health": shell.navigate("health"); break
       case "settings-health-empty": host.empty(); shell.navigate("health"); break
       case "settings-advanced": shell.navigate("advanced"); break
@@ -135,7 +145,7 @@ TestCase {
   readonly property var scenes: ["home", "home-empty", "stats", "dictionary", "transforms", "style", "style-personal", "style-work",
     "style-email", "style-other", "style-cleanup", "style-fresh", "style-fresh-cleanup", "style-error", "appearance", "appearance-hifi",
     "transcript", "import-active", "import-done", "import-failed", "settings-general", "settings-general-off", "settings-linux",
-    "settings-health", "settings-health-empty", "settings-advanced", "shortcut", "error"]
+    "settings-general-gnome", "settings-general-kde-grant", "settings-linux-gnome", "settings-linux-kde", "settings-health", "settings-health-empty", "settings-advanced", "shortcut", "error"]
 
   function test_render_data() {
     var rows = []
@@ -273,6 +283,46 @@ TestCase {
     compare(host.ran.length, 1)
     compare(host.ran[0][0], "set-autostart")
     compare(host.ran[0][1], "off")
+  }
+
+  function test_desktop_copy() {
+    tc.dark = false
+    setScene("settings-linux")
+    var text = allTexts().join("\n")
+    verify(text.indexOf("Shortcuts are Hyprland bindings") >= 0)
+    verify(text.indexOf("GNOME") < 0)
+    setScene("settings-linux-gnome")
+    text = allTexts().join("\n")
+    verify(text.indexOf("Hyprland") < 0)
+    verify(text.indexOf("Shortcuts come from GNOME") >= 0)
+    verify(text.indexOf("enable the AppIndicator") >= 0)
+    setScene("settings-linux-kde")
+    text = allTexts().join("\n")
+    verify(text.indexOf("Shortcuts come from KDE") >= 0)
+    verify(text.indexOf("AppIndicator") < 0)
+    setScene("settings-general")
+    text = allTexts().join("\n")
+    verify(text.indexOf("Hold it, speak, let go.") >= 0)
+    verify(text.indexOf("Typing is not allowed") < 0)
+  }
+
+  function test_portal_shortcut_row() {
+    tc.dark = false
+    setScene("settings-general-gnome")
+    var text = allTexts().join("\n")
+    verify(text.indexOf("Ctrl+Alt+M") >= 0)
+    verify(text.indexOf("Change it in GNOME settings") >= 0)
+    verify(text.indexOf("Hyprland") < 0)
+    host.ran = []
+    var buttons = collect(shell, "activated", [])
+    var change = null
+    for (var i = 0; i < buttons.length; i++) if (buttons[i].text === "Change…") change = buttons[i]
+    verify(change !== null, "Change button not found")
+    mouseClick(change)
+    compare(host.ran.length, 1)
+    compare(host.ran[0][0], "shortcut-configure")
+    setScene("settings-general-kde-grant")
+    verify(allTexts().join("\n").indexOf("Typing is not allowed") >= 0)
   }
 
   // ---- Style page (slice V6) ----------------------------------------------------------------------------------------------

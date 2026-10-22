@@ -13,6 +13,14 @@ Column {
   readonly property bool editing: classField.activeFocus
   readonly property var config: host ? host.config : ({})
   readonly property string mode: host ? host.shortcutMode : "off"
+  readonly property string desktop: host && host.desktop ? host.desktop : "hyprland"
+  readonly property bool portalDesktop: desktop === "gnome" || desktop === "kde"
+  readonly property string desktopName: desktop === "gnome" ? "GNOME" : desktop === "kde" ? "KDE" : "Hyprland"
+  readonly property var triggers: host && host.shortcutTriggers ? host.shortcutTriggers : ({})
+  readonly property string grantedKeys: {
+    var names = Object.keys(triggers)
+    return names.length ? String(triggers[names[0]]) : ""
+  }
   readonly property var lengths: [30, 60, 120]
 
   width: parent ? parent.width : 520
@@ -37,10 +45,24 @@ Column {
     DesignCard {
       width: parent.width
       DesignRow {
+        visible: !root.portalDesktop
         title: "Shortcut"
         detail: root.mode === "off" ? "No shortcut is set." : root.mode === "hold" ? "Hold it, speak, let go." : "Press once to start, again to stop."
         DesignKbd { visible: root.mode !== "off"; text: root.host ? root.host.shortcutKeys : "" }
         DesignSecondaryButton { text: "Change…"; onActivated: root.host.openPage("shortcut") }
+      }
+      DesignRow {
+        visible: root.portalDesktop
+        title: "Shortcut"
+        detail: root.grantedKeys !== "" ? "The key " + root.desktopName + " gave Mouthtype. Change it in " + root.desktopName + " settings."
+          : "No key is set yet. " + root.desktopName + " asks you to pick one the first time Mouthtype starts."
+        DesignKbd { visible: root.grantedKeys !== ""; text: root.grantedKeys }
+        DesignSecondaryButton { text: "Change…"; onActivated: root.host.run(["shortcut-configure"]) }
+      }
+      DesignRow {
+        visible: root.portalDesktop && !!root.host && root.host.deliveryNeedsGrant === true
+        title: "Typing is not allowed"
+        detail: root.desktopName + " has not allowed Mouthtype to press keys, so takes are saved to recovery only. Allow keyboard access for Mouthtype when " + root.desktopName + " asks."
       }
       DesignRow {
         title: "Recording behavior"
@@ -85,7 +107,7 @@ Column {
       }
       DesignRow {
         title: "Type into one allowed app"
-        detail: root.config.delivery_mode === "type" ? "On. Typing goes only to this exact Hyprland window class." : "Enter the exact Hyprland window class."
+        detail: root.config.delivery_mode === "type" ? "On. Typing goes only to this exact " + (root.portalDesktop ? "app name." : "Hyprland window class.") : (root.portalDesktop ? "Enter the exact app name." : "Enter the exact Hyprland window class.")
         FieldBox {
           id: classField
           width: 190

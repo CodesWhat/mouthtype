@@ -28,6 +28,11 @@ Item {
     : sessionState === "idle" ? "idle" : "processing"
   // Qt host only: whether a StatusNotifier tray host exists. null on Omarchy, where the bar button is the indicator.
   property var trayAvailable: null
+  // hyprland (Omarchy), gnome, kde or other. The settings pages pick their wording from it.
+  property string desktop: "hyprland"
+  // Portal-granted shortcut triggers (GNOME and KDE), action name to the trigger text the desktop reports.
+  property var shortcutTriggers: ({})
+  property bool deliveryNeedsGrant: false
   property bool hasTranscript: false
   readonly property int savedCount: saved.length
 
@@ -110,6 +115,9 @@ Item {
     if (result.words_today !== undefined) wordsToday = Number(result.words_today) || 0
     if (result.sounds !== undefined) soundsEnabled = result.sounds === true
     if (result.autostart !== undefined) autostartEnabled = result.autostart === true
+    if (result.desktop !== undefined) desktop = String(result.desktop || "hyprland")
+    if (result.shortcut_triggers !== undefined) shortcutTriggers = result.shortcut_triggers || ({})
+    if (result.delivery_needs_grant !== undefined) deliveryNeedsGrant = result.delivery_needs_grant === true
     if (result.shortcut !== undefined) shortcutMode = String(result.shortcut || "off")
     if (result.shortcut_keys !== undefined) shortcutKeys = String(result.shortcut_keys || "")
     if (result.capabilities !== undefined) capabilities = result.capabilities || ({})

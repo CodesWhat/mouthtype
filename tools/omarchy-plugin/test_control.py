@@ -1001,6 +1001,21 @@ class SessionSocketTests(unittest.TestCase):
         self.assertEqual(report["history"]["maximum"], 7)
         self.assertEqual(self.cli_calls, [])
 
+    def test_desktop_name_picks_the_settings_copy(self):
+        self.assertEqual(control.desktop_name({"HYPRLAND_INSTANCE_SIGNATURE": "x", "XDG_CURRENT_DESKTOP": "GNOME"}), "hyprland")
+        self.assertEqual(control.desktop_name({"XDG_CURRENT_DESKTOP": "ubuntu:GNOME"}), "gnome")
+        self.assertEqual(control.desktop_name({"XDG_CURRENT_DESKTOP": "KDE"}), "kde")
+        self.assertEqual(control.desktop_name({"XDG_CURRENT_DESKTOP": "sway"}), "other")
+        self.assertEqual(control.desktop_name({}), "hyprland")
+
+    def test_portal_triggers_are_only_asked_on_gnome_and_kde(self):
+        with mock.patch.object(control, "shortcut_status", side_effect=AssertionError("asked")):
+            self.assertEqual(control.portal_shortcut_triggers("hyprland"), {})
+        with mock.patch.object(control, "shortcut_status", return_value={"triggers": {"dictate-toggle": "Ctrl+Alt+M"}}):
+            self.assertEqual(control.portal_shortcut_triggers("kde"), {"dictate-toggle": "Ctrl+Alt+M"})
+        with mock.patch.object(control, "shortcut_status", side_effect=RuntimeError("down")):
+            self.assertEqual(control.portal_shortcut_triggers("gnome"), {})
+
     def test_loading_control_does_not_import_inspect(self):
         script = "import sys, runpy; runpy.run_path(%r, run_name='control_probe'); print('inspect' in sys.modules)" \
                  % str(HERE / "control.py")

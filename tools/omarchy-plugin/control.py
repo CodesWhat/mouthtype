@@ -605,6 +605,30 @@ def versions():
     return found
 
 
+def desktop_name(env=None):
+    """hyprland (the Omarchy default), gnome, kde or other. Picks the settings copy; the daemon's own detection does the work."""
+    env = os.environ if env is None else env
+    if env.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return "hyprland"
+    names = {part.strip().upper() for part in (env.get("XDG_CURRENT_DESKTOP") or "").split(":")}
+    if "GNOME" in names:
+        return "gnome"
+    if "KDE" in names:
+        return "kde"
+    return "hyprland" if not names - {""} else "other"
+
+
+def portal_shortcut_triggers(desktop):
+    """The triggers the desktop granted, for the Keyboard row on GNOME and KDE. Empty when not asked or not answering."""
+    if desktop not in ("gnome", "kde"):
+        return {}
+    try:
+        triggers = shortcut_status().get("triggers")
+    except RuntimeError:
+        return {}
+    return triggers if isinstance(triggers, dict) else {}
+
+
 def state():
     if not LAUNCHER.is_file() or not CONFIG.is_file():
         return {"running": False, "state": "unavailable", "error": "Mouthtype installation is missing"}
@@ -626,7 +650,10 @@ def state():
     # A failed replacement keeps the previous result readable through import-result.
     file_import["retained"] = bool(file_import.get("retained_id"))
     code = status.get("error") if running else None
-    return {"running": running, "state": status.get("state", "off") if running else "off",
+    desktop = desktop_name()
+    return {"running": running, "desktop": desktop,
+            "shortcut_triggers": portal_shortcut_triggers(desktop) if running else {},
+            "delivery_needs_grant": status.get("delivery_grant") == "needs_grant", "state": status.get("state", "off") if running else "off",
             "error": SESSION_MESSAGES.get(code, code) if code else None, "error_code": code,
             "history": {"takes": len(entries), "maximum": status.get("maximum_takes") if running else config_summary().get("maximum_recovery_takes")},
             "recent": transcripts[:5], "has_transcript": bool(transcripts),
