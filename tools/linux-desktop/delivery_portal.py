@@ -29,6 +29,10 @@ DEVICE_KEYBOARD = 1
 PERSIST_UNTIL_REVOKED = 2
 # Start can sit behind a consent dialog, so it gets longer than an ordinary call.
 START_TIMEOUT = 120.0
+# A rebind runs inside a take or on the restart watcher, so it never waits on a dialog: a silent restore answers
+# at once, and one that would prompt is left for setup --grant. After a failed attempt the next take skips the portal.
+REBIND_TIMEOUT = 8.0
+REBIND_BACKOFF = 10.0
 
 TEXT_MIMES = ('text/plain;charset=utf-8', 'text/plain')
 CONCEALED_MIME = 'x-kde-passwordManagerHint'
@@ -112,9 +116,10 @@ class RemoteDesktopSession:
     def active(self):
         return self.session is not None and not self._session_lost() and self.status == 'active'
 
-    def start(self, interactive=False):
+    def start(self, interactive=False, timeout=None):
         """Open the session. Without a stored grant and interactive=False this makes no portal call at all,
-        so a take can never trigger a prompt. Returns the status."""
+        so a take can never trigger a prompt. timeout bounds the Start wait (default start_timeout).
+        Returns the status."""
         with self._lock:
             if self.session is not None:
                 self._drop()
@@ -124,7 +129,7 @@ class RemoteDesktopSession:
             if self.portal.interface_version(REMOTE_IFACE) < 1:
                 return self._set('unavailable', 'portal has no RemoteDesktop interface')
             try:
-                return self._open(stored)
+                return self._open(stored, timeout)
             except portal_mod.PortalResponseError as exc:
                 self._drop()
                 if stored is not None:
@@ -135,7 +140,7 @@ class RemoteDesktopSession:
                 self._drop()
                 return self._set('unavailable', str(exc))
 
-    def _open(self, stored):
+    def _open(self, stored, timeout=None):
         portal = self.portal
         session = portal.create_session(REMOTE_IFACE)
         self.session = session
@@ -146,7 +151,7 @@ class RemoteDesktopSession:
         portal.request(REMOTE_IFACE, 'SelectDevices', 'o', (session,), options=options)
         if self.clipboard:
             portal.call(CLIPBOARD_IFACE, 'RequestClipboard', 'oa{sv}', (session, {}))
-        results = portal.request(REMOTE_IFACE, 'Start', 'os', (session, ''), timeout=self.start_timeout)
+        results = portal.request(REMOTE_IFACE, 'Start', 'os', (session, ''), timeout=timeout or self.start_timeout)
         if not int(results.get('devices', 0)) & DEVICE_KEYBOARD:
             self._drop()
             if stored is not None:
@@ -196,11 +201,11 @@ class RemoteDesktopSession:
             self._drop()
             return self._set('needs_grant', 'keyboard grant was revoked')
 
-    def on_portal_restart(self):
+    def on_portal_restart(self, timeout=None):
         """Sessions die with the portal. Drop ours and reconnect from the stored grant, never interactively."""
         with self._lock:
             self._drop(close=False)
-            return self.start(interactive=False)
+            return self.start(interactive=False, timeout=timeout)
 
     def _drop(self, close=True):
         self._unwatch_closed()
@@ -512,6 +517,8 @@ class PortalDelivery:
         self.keyboard = keyboard or PortalKeyboard(remote)
         self.targets = targets
         self.restore_thread = None
+        self._rebind_lock = threading.Lock()
+        self._rebind_after = 0.0
 
     def close(self):
         """Release the clipboard thread, the RemoteDesktop session and the portal connection."""
@@ -540,7 +547,46 @@ class PortalDelivery:
 
     def _ready(self):
         self.remote.check()
+        if not self.remote.active:
+            self._rebind()
         return self.remote.active
+
+    def _rebind(self):
+        """Recover-only state: pick up a grant made after the daemon started (setup --grant) or a session the desktop
+        closed. Costs nothing without a stored grant (no portal call), waits at most REBIND_TIMEOUT, and after a
+        failure stays quiet for REBIND_BACKOFF so a broken portal can't stall every take."""
+        remote = self.remote
+        if not isinstance(remote, RemoteDesktopSession):
+            return
+        with self._rebind_lock:
+            if remote.active or remote.store.load() is None or time.monotonic() < self._rebind_after:
+                return
+            if remote.start(interactive=False, timeout=REBIND_TIMEOUT) == 'active':
+                self._restart_clipboard()
+            else:
+                self._rebind_after = time.monotonic() + REBIND_BACKOFF
+
+    def _restart_clipboard(self):
+        """Point the clipboard at the session that is active now (it was bound to the old one, or never started)."""
+        try:
+            if self.clipboard is None:
+                self.clipboard = PortalClipboard(self.remote)
+            self.clipboard.close()
+            self.clipboard.start()
+        except portal_mod.PortalError as exc:
+            log.warning('portal clipboard did not restart: %s', exc)
+
+    def portal_restarted(self):
+        """Watcher callback: the portal service restarted and sessions died with it. Reconnect from the stored grant."""
+        remote = self.remote
+        if not isinstance(remote, RemoteDesktopSession):
+            return
+        with self._rebind_lock:
+            self._rebind_after = 0.0
+            if remote.on_portal_restart(timeout=REBIND_TIMEOUT) == 'active':
+                self._restart_clipboard()
+            elif self.clipboard is not None:
+                self.clipboard.close()
 
     def copy_text(self, text, concealed=True):
         """Put text on the clipboard for the user (a card or Recent Takes copy). Offers the password-manager hint
@@ -692,5 +738,10 @@ def make_delivery(config, *, portal_factory=None, store_factory=None, session_fa
         clipboard = None
     delivery = PortalDelivery(config, remote, clipboard, targets=targets)
     delivery.portal = portal
+    if portal is not None and isinstance(remote, RemoteDesktopSession):
+        try:
+            portal.watch_restarts(delivery.portal_restarted)
+        except portal_mod.PortalError as exc:
+            log.warning('portal restarts are not watched, a restart needs a daemon restart: %s', exc)
     return delivery
 

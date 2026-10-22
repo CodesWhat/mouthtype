@@ -362,7 +362,7 @@ class RemoteDesktopSessionTests(unittest.TestCase):
 
     def test_inactive_session_is_recover_only(self):
         delivery = self.delivery()
-        self.remote.close()
+        self.remote.revoked()
         self.assertEqual(delivery.submit('x', {'class': 'unknown'}), 'recover_only')
         self.assertEqual(delivery.paste('x', {'class': 'unknown'}), 'recover_only')
 
@@ -394,6 +394,71 @@ class RemoteDesktopSessionTests(unittest.TestCase):
         self.assertEqual(delivery.submit('x', {'class': 'unknown'}), 'recover_only')
         delivery.config['allow_unknown_secure_field'] = False
         self.assertFalse(delivery.allowed({'class': 'firefox'}))
+
+
+    # lazy rebind --------------------------------------------------------
+
+    def recover_only_delivery(self):
+        self.assertEqual(self.remote.start(), 'needs_grant')
+        clip = delivery_portal.PortalClipboard(self.remote, owner_timeout=2.0)
+        self.addCleanup(clip.close)
+        base = {'mode': 'paste', 'allow_unknown_secure_field': True, 'any_window': True, 'restore_delay_seconds': 0}
+        delivery = delivery_portal.PortalDelivery(base, self.remote, clip, targets=self.targets)
+        self.addCleanup(lambda: delivery.restore_thread and delivery.restore_thread.join(2))
+        return delivery
+
+    def test_no_grant_makes_no_portal_call_on_a_take(self):
+        delivery = self.recover_only_delivery()
+        self.assertEqual(delivery.paste('x', {'class': 'unknown'}), 'recover_only')
+        self.assertEqual(self.members(), [])
+
+    def test_a_grant_made_after_start_is_picked_up_on_the_next_take(self):
+        delivery = self.recover_only_delivery()
+        self.assertEqual(delivery.paste('x', {'class': 'unknown'}), 'recover_only')
+        self.store.save('grant-1')
+        self.fake.valid_grants.add('grant-1')
+        self.fake.deny_new_grants = True
+        self.assertEqual(delivery.paste('later', {'class': 'unknown'}), 'unknown')
+        self.assertEqual(self.remote.status, 'active')
+        self.assertEqual(self.paste('text/plain;charset=utf-8'), (True, b'later'))
+
+    def test_a_failed_rebind_backs_off_instead_of_stalling_every_take(self):
+        delivery = self.recover_only_delivery()
+        self.store.save('stale')
+        self.fake.deny_new_grants = True
+        self.assertEqual(delivery.paste('x', {'class': 'unknown'}), 'recover_only')
+        calls = len(self.fake.calls)
+        self.assertEqual(delivery.paste('x', {'class': 'unknown'}), 'recover_only')
+        self.assertEqual(len(self.fake.calls), calls)
+        delivery._rebind_after = 0.0
+        self.store.save('grant-1')
+        self.fake.valid_grants.add('grant-1')
+        self.assertEqual(delivery.paste('ok', {'class': 'unknown'}), 'unknown')
+
+    def test_portal_restart_rebinds_session_and_clipboard(self):
+        delivery = self.delivery()
+        self.assertEqual(delivery.paste('one', {'class': 'unknown'}), 'unknown')
+        self.fake.restart()
+        self.client.register()
+        self.fake.deny_new_grants = True
+        self.fake.valid_grants.add('grant-1')
+        delivery.portal_restarted()
+        self.assertEqual(self.remote.status, 'active')
+        self.fake.keysyms.clear()
+        self.assertEqual(delivery.paste('two', {'class': 'unknown'}), 'unknown')
+        self.assertEqual(self.paste('text/plain;charset=utf-8'), (True, b'two'))
+        self.assertEqual(len(self.fake.keysyms), 4)
+
+    def test_watcher_callback_rebinds_after_a_real_restart(self):
+        delivery = self.delivery()
+        done = threading.Event()
+        self.client.watch_restarts(lambda: (delivery.portal_restarted(), done.set()))
+        self.fake.deny_new_grants = True
+        self.fake.valid_grants.add('grant-1')
+        self.fake.restart()
+        self.assertTrue(done.wait(10))
+        self.assertEqual(self.remote.status, 'active')
+        self.assertEqual(delivery.paste('after', {'class': 'unknown'}), 'unknown')
 
 
 class KeysymTests(unittest.TestCase):

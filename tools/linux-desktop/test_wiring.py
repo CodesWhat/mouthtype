@@ -30,6 +30,9 @@ class FakePortal:
         self.registered = True
         return True
 
+    def watch_restarts(self, callback):
+        self.restart_callback = callback
+
     def close(self):
         pass
 
@@ -39,7 +42,7 @@ class FakeRemote:
         self.portal, self.store, self.session, self.detail = portal, store, None, 'no stored keyboard grant'
         self.active = False
 
-    def start(self, interactive=False):
+    def start(self, interactive=False, timeout=None):
         assert interactive is False
         return 'needs_grant'
 
