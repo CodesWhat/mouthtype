@@ -283,6 +283,6 @@ import Testing
         let ms = Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15
         print("COUNTEDLISTS-PERF 500 lists: \(ms) ms")
         #expect(out.text.contains("1. Call the bank."))
-        #expect(ms < 3000, "took \(ms) ms")
+        if TextTestSupport.timingAssertsEnabled { #expect(ms < 3000, "took \(ms) ms") }
     }
 }

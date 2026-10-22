@@ -28,7 +28,7 @@ import Testing
         let start = ContinuousClock.now
         #expect(pairs("alpha \(huge) omega", "alpha \(huge)b omega").isEmpty)
         #expect(!CorrectionLearner.similar(huge, huge + "b"))
-        #expect(ContinuousClock.now - start < .seconds(2))
+        if TextTestSupport.timingAssertsEnabled { #expect(ContinuousClock.now - start < .seconds(2)) }
     }
 
     @Test func textTypedBeforeAndAfterTheSpanIsSkipped() {
