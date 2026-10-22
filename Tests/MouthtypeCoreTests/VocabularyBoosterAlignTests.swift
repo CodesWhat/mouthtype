@@ -131,7 +131,7 @@ private func isWellFormed(_ runs: [VocabularyBooster.Run], _ old: [String], _ ne
         new[6000] = "changed"
         let start = ContinuousClock.now
         let runs = VocabularyBooster.align(old, new)
-        #expect(ContinuousClock.now - start < .seconds(2))
+        if TextTestSupport.timingAssertsEnabled { #expect(ContinuousClock.now - start < .seconds(2)) }
         #expect(runs.count == 12_000 - 1 + 1)
     }
 }

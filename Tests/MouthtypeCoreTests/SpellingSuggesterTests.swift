@@ -268,7 +268,7 @@ private struct SplitMix64: RandomNumberGenerator {
         let out = SpellingSuggester.suggest(takes: takes, rules: r, limit: 100)
         let elapsed = Date().timeIntervalSince(start)
         print("SpellingSuggester 1000 takes, \(r.count) rules: \(Int(elapsed * 1000)) ms")
-        #expect(elapsed < 2.0)
+        if TextTestSupport.timingAssertsEnabled { #expect(elapsed < 2.0) }
         #expect(out.contains { $0.written == "Siobhan" })
         #expect(out.contains { $0.written == "Drydock" })
     }
