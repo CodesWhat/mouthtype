@@ -15,11 +15,13 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     public var transform: TextTransform?
     /// The Formal tone: the shared prompt asks the model to leave swearing out.
     public var omitProfanity: Bool
+    /// The language of the transcript. Nil means English, which keeps the English prompt.
+    public var language: DictationLanguage?
 
     public init(
         vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
         level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false,
-        transform: TextTransform? = nil, omitProfanity: Bool = false
+        transform: TextTransform? = nil, omitProfanity: Bool = false, language: DictationLanguage? = nil
     ) {
         self.vocabulary = vocabulary
         self.appName = appName
@@ -36,6 +38,7 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
         self.correctionsOnly = correctionsOnly
         self.transform = transform
         self.omitProfanity = omitProfanity
+        self.language = language
     }
 }
 

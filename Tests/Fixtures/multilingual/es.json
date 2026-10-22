@@ -46,5 +46,23 @@
     "language": "es",
     "raw": "Necesito que A B revisen el informe.",
     "notes": "Technical notation: Spanish 'A B' (the letters, two people) must stay as written."
+  },
+  {
+    "id": "es-messy-1",
+    "language": "es",
+    "raw": "Entonces, eh, nos vemos mañana a las, este, a las diez en la oficina y, y hablamos del plan para la próxima semana.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "es-messy-2",
+    "language": "es",
+    "raw": "Mándame el archivo para el martes, no espera, para el miércoles, y avísale también al equipo.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "es-messy-3",
+    "language": "es",
+    "raw": "Necesitamos primero más tiempo para las pruebas segundo un desarrollador más y tercero un presupuesto claro si no esto no funciona",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
   }
 ]

@@ -40,5 +40,23 @@
     "language": "ru",
     "raw": "Мы летим в Москву в пятницу.",
     "notes": "Dictionary and snippet boundaries on Москва (case form Москву)."
+  },
+  {
+    "id": "ru-messy-1",
+    "language": "ru",
+    "raw": "Ну, э, мы встречаемся завтра в, эм, в десять часов в офисе и, и обсуждаем план на следующую неделю.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "ru-messy-2",
+    "language": "ru",
+    "raw": "Пришли мне файл до вторника, нет подожди, до среды, и сообщи также команде.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "ru-messy-3",
+    "language": "ru",
+    "raw": "Нам нужно во-первых больше времени на тесты во-вторых ещё один разработчик и в-третьих понятный бюджет иначе ничего не выйдет",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
   }
 ]

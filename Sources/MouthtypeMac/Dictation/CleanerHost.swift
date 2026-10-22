@@ -127,7 +127,7 @@ final class CleanerHost: CleanupModelManaging {
 
     init(
         model: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-        budget: (@Sendable (Int) -> Duration)? = nil,
+        budget: (@Sendable (Int) -> Duration)? = nil, languageDetector: (any LanguageDetector)? = NLLanguageDetector(),
         idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay,
         uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
@@ -135,7 +135,7 @@ final class CleanerHost: CleanupModelManaging {
         self.idleUnloadDelay = idleUnloadDelay
         self.model = model
         self.level = level
-        smart = SmartCleanup(cleaner: model, budget: budget)
+        smart = SmartCleanup(cleaner: model, budget: budget, languageDetector: languageDetector)
         state = model.isDownloaded ? .unloaded : .absent
     }
 

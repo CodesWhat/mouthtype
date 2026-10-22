@@ -52,5 +52,23 @@
     "language": "de",
     "raw": "Vielen Dank für den überarbeiteten Vorschlag. Ich habe den Zeitplan und das Budget heute Morgen mit dem Team durchgesprochen, und wir sind uns bei der Planung für das nächste Quartal weitgehend einig.",
     "notes": "Long, 32 words."
+  },
+  {
+    "id": "de-messy-1",
+    "language": "de",
+    "raw": "Also, äh, wir treffen uns morgen um, ähm, um zehn Uhr im Büro und, und besprechen dann den Plan für die nächste Woche.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "de-messy-2",
+    "language": "de",
+    "raw": "Schick mir die Datei bis Dienstag, nein warte, bis Mittwoch, und gib auch dem Team Bescheid.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "de-messy-3",
+    "language": "de",
+    "raw": "Wir brauchen erstens mehr Zeit für den Test zweitens einen zweiten Entwickler und drittens ein klares Budget sonst wird das nichts",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
   }
 ]

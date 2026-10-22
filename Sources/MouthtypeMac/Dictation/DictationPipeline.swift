@@ -427,7 +427,7 @@ struct DictationPipeline: Sendable {
                 SmartCleanupRequest(
                     text: result.text, level: level, style: settings.style, destination: destination,
                     dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
-                    protectedPhrases: protectedPhrases
+                    protectedPhrases: protectedPhrases, language: transcribed.language
                 ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text)))
         else {
             if let fallback = fullDictionaryFallback() { return fallback }

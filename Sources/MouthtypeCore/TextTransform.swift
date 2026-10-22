@@ -40,7 +40,8 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
         1. Output only the edited text. No preamble, no explanation, no quotation marks around it, no code fences and no <text> tags.
         2. Keep names, numbers, dates, URLs, file names, identifiers and code exactly as written.
         3. Keep paragraph breaks and list structure. Do not add information that is not in the text.
-        4. If nothing needs to change, return the text unchanged.
+        4. Reply in the same language as the text. Never translate it.
+        5. If nothing needs to change, return the text unchanged.
         """
     }
 

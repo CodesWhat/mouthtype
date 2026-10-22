@@ -40,5 +40,23 @@
     "language": "it",
     "raw": "Grazie per aver inviato la proposta rivista. Ho esaminato il calendario e il budget con la squadra questa mattina, e siamo per lo più d'accordo sul piano per il prossimo trimestre.",
     "notes": "Long, 31 words."
+  },
+  {
+    "id": "it-messy-1",
+    "language": "it",
+    "raw": "Allora, ehm, ci vediamo domani alle, ehm, alle dieci in ufficio e, e parliamo del piano per la prossima settimana.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "it-messy-2",
+    "language": "it",
+    "raw": "Mandami il file entro martedì, no aspetta, entro mercoledì, e avvisa anche la squadra.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "it-messy-3",
+    "language": "it",
+    "raw": "Ci servono prima di tutto più tempo per i test poi uno sviluppatore in più e infine un budget chiaro altrimenti non funziona",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
   }
 ]
