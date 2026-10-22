@@ -10,17 +10,15 @@ struct SpellingImportView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
-                DesignEyebrow(editor.importFileName.isEmpty ? "Import CSV" : "Import CSV · \(editor.importFileName)").padding(.leading, 0)
+                DesignEyebrow(editor.importFileName.isEmpty ? editor.importSource.sheetEyebrow : "\(editor.importSource.sheetEyebrow) · \(editor.importFileName)").padding(.leading, 0)
                 Spacer(minLength: 12)
                 DesignCloseButton(label: "Close without importing") { editor.cancelImport() }
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Import spellings.").font(DesignFont.serif(24)).foregroundStyle(DesignPalette.ink)
                     .accessibilityAddTraits(.isHeader)
-                Text(
-                    "A \(Text("heard,written").font(DesignFont.mono(11.5))) pair per row, or a single \(Text("name").font(DesignFont.mono(11.5))) column. Include a header row. Existing spellings stay as they are."
-                )
-                .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.ink2).fixedSize(horizontal: false, vertical: true)
+                Text(editor.importSource.summaryLine)
+                    .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.ink2).fixedSize(horizontal: false, vertical: true)
             }
             if let preview = editor.importPreview, !preview.rows.isEmpty {
                 summary(preview)
