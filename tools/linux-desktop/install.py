@@ -29,8 +29,13 @@ GRAPHEME = ('__init__.py', 'api.py', 'finder.py', 'grapheme_property_group.py', 
 APP_ID = 'app.mouthtype.Mouthtype'
 # Source under tools/linux-desktop/share, destination relative to the install prefix. The desktop portals
 # match an unsandboxed caller to the .desktop basename, so this id is the one portal.py registers.
+SYMBOLIC_DIR = 'icons/hicolor/symbolic/apps/'
+# One per tray state (tray.py names them by icon-theme name so GNOME and Plasma can recolour them to the panel).
+SYMBOLIC = tuple(APP_ID + suffix + '-symbolic.svg'
+                 for suffix in ('', '-recording0', '-recording1', '-recording2', '-processing', '-unavailable'))
 SHARE = (('app.mouthtype.Mouthtype.desktop', 'share/applications/' + APP_ID + '.desktop'),
-         ('app.mouthtype.Mouthtype.png', 'share/icons/hicolor/128x128/apps/' + APP_ID + '.png'))
+         ('app.mouthtype.Mouthtype.png', 'share/icons/hicolor/128x128/apps/' + APP_ID + '.png')) + tuple(
+    (SYMBOLIC_DIR + name, 'share/' + SYMBOLIC_DIR + name) for name in SYMBOLIC)
 FILES = (['LICENSE', 'THIRD_PARTY_NOTICES.md'] +
          ['tools/linux-desktop/' + name for name in DESKTOP] +
          ['tools/linux-desktop/share/' + name for name, _ in SHARE] +

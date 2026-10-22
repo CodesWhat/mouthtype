@@ -115,6 +115,11 @@ chmod 755 "$qt/mouthtype_desktop.py"
 ln -s ../../../share/mouthtype-linux/omarchy-plugin "$desktop/usr/lib/mouthtype-linux/tools/omarchy-plugin"
 install -Dm755 "$here/mouthtype-desktop" "$desktop/usr/bin/mouthtype-desktop"
 install -Dm644 "$here/app.mouthtype.Mouthtype.Settings.desktop" "$desktop/usr/share/applications/app.mouthtype.Mouthtype.Settings.desktop"
+# The tray's symbolic icons come from install.py in the core stage; they belong to this package.
+symbolic=usr/share/icons/hicolor/symbolic/apps
+install -d "$desktop/$symbolic"
+mv "$stage/$symbolic"/*.svg "$desktop/$symbolic/"
+rmdir -p --ignore-fail-on-non-empty "$stage/$symbolic"
 install -Dm644 "$here/desktop-lintian-overrides" "$desktop/usr/share/lintian/overrides/mouthtype-linux-desktop"
 install -d "$desktop/usr/share/man/man1"
 gzip -9n -c "$here/mouthtype-desktop.1" > "$desktop/usr/share/man/man1/mouthtype-desktop.1.gz"

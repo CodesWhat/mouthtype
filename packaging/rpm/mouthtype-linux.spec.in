@@ -147,6 +147,7 @@ python3 -I -W error::ResourceWarning -m unittest discover -s %{buildroot}%{paylo
 %{payload}/tools/linux-qt
 %{payload}/tools/omarchy-plugin
 %{_datadir}/applications/app.mouthtype.Mouthtype.Settings.desktop
+%{_datadir}/icons/hicolor/symbolic/apps/app.mouthtype.Mouthtype*-symbolic.svg
 %{_mandir}/man1/mouthtype-desktop.1*
 
 %changelog

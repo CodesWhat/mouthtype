@@ -60,7 +60,8 @@ if [ -n "$rpm_desktop" ]; then
                 /usr/lib/mouthtype-linux/tools/linux-qt/tray.py \
                 /usr/lib/mouthtype-linux/tools/linux-qt/platform/qt/MouthtypePlatform/qmldir \
                 /usr/lib/mouthtype-linux/tools/omarchy-plugin/MouthtypeShell.qml \
-                /usr/share/applications/app.mouthtype.Mouthtype.Settings.desktop; do
+                /usr/share/applications/app.mouthtype.Mouthtype.Settings.desktop \
+                /usr/share/icons/hicolor/symbolic/apps/app.mouthtype.Mouthtype-symbolic.svg; do
         [ -e "$path" ] || fail "missing $path"
     done
     outside=$(rpm -ql mouthtype-linux-desktop | grep -vE '^/usr(/|$)' || true)

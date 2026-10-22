@@ -9,6 +9,7 @@ from pathlib import Path
 ASSETS = Path(__file__).resolve().parent.parent / "omarchy-plugin" / "assets"
 GLYPHS = ("idle", "recording0", "recording1", "recording2", "processing", "unavailable")
 RECHECK_MS = 5000
+APP_ID = "app.mouthtype.Mouthtype"
 
 
 def glyph_name(glyph):
@@ -18,6 +19,12 @@ def glyph_name(glyph):
 
 def glyph_path(glyph):
     return ASSETS / ("glyph-%s@2x.png" % glyph_name(glyph))
+
+
+def theme_icon_name(glyph):
+    """The freedesktop symbolic icon name for a state, matching the SVGs install.py puts in hicolor/symbolic/apps."""
+    name = glyph_name(glyph)
+    return APP_ID + "-symbolic" if name == "idle" else "%s-%s-symbolic" % (APP_ID, name)
 
 
 def variant_for(red, green, blue):
@@ -65,7 +72,12 @@ if HAVE_QT:
         return variant_for(color.red(), color.green(), color.blue())
 
     def glyph_icon(glyph, variant):
-        """The shipped glyph recoloured to the variant, keeping its alpha. Falls back to the raw file if it won't load."""
+        """The symbolic theme icon when the theme has it, so the desktop recolours it to the panel (the GNOME AppIndicator
+        extension only does that for icons sent by name). Otherwise the shipped glyph recoloured to the variant, keeping
+        its alpha, and the raw file if that won't load."""
+        name = theme_icon_name(glyph)
+        if QIcon.hasThemeIcon(name):
+            return QIcon.fromTheme(name)
         image = QImage(str(glyph_path(glyph)))
         if image.isNull():
             return QIcon(str(glyph_path(glyph)))

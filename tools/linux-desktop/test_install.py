@@ -158,6 +158,26 @@ class InstallTests(unittest.TestCase):
                         break
                     self.assertEqual(parent.stat().st_mode & 0o777, 0o755, str(parent))
 
+    def test_symbolic_tray_icons_ship_and_are_valid_single_fill_svgs(self):
+        import xml.etree.ElementTree as ET
+        self.assertEqual(len(installer.SYMBOLIC), 6)
+        self.assertIn('app.mouthtype.Mouthtype-symbolic.svg', installer.SYMBOLIC)
+        with tempfile.TemporaryDirectory() as temp:
+            staging = Path(temp) / 'package'
+            installer.install(ROOT, '/usr', destdir=staging)
+            directory = staging / 'usr/share/icons/hicolor/symbolic/apps'
+            for name in installer.SYMBOLIC:
+                with self.subTest(icon=name):
+                    path = directory / name
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o644)
+                    root = ET.parse(path).getroot()
+                    self.assertEqual(root.attrib['viewBox'], '0 0 16 16')
+                    text = path.read_text()
+                    self.assertNotIn('Gradient', text)
+                    self.assertEqual(set(__import__('re').findall(r'#[0-9a-fA-F]{3,6}\b', text)), {'#bebebe'})
+                    paths = [e for e in root.iter() if e.tag.endswith('path')]
+                    self.assertTrue(paths and all(e.attrib.get('d') for e in paths))
+
     def test_desktop_file_validates_when_the_validator_is_present(self):
         validator = shutil.which('desktop-file-validate')
         if validator is None:
