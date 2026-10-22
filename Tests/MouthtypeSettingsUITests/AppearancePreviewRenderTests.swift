@@ -4,8 +4,10 @@ import Testing
 @testable import MouthtypeMac
 
 @MainActor @Suite(.serialized) struct AppearancePreviewRenderTests {
-    private func model(skin: PillSkinKind, readout: PillReadoutColour = .amber, size: PillSize = .standard,
-                       wallpaper: PreviewWallpaper = .dark) -> (SettingsModel, UserDefaults, String) {
+    private func model(
+        skin: PillSkinKind, readout: PillReadoutColour = .amber, size: PillSize = .standard,
+        wallpaper: PreviewWallpaper = .dark
+    ) -> (SettingsModel, UserDefaults, String) {
         let name = "AppearancePreviewRender-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         PillSkinPreference.set(skin, in: defaults)
@@ -46,8 +48,10 @@ import Testing
             let view = try #require(try PillSkinFactory.make(.hifi, frame: NSRect(x: 0, y: 0, width: canvas.width, height: height), scale: .standard, readout: readout))
             view.appear(reduceMotion: true)
             view.showMessage(PillMessage("Mic unavailable", isError: true), overRecording: false)
-            let context = try #require(CGContext(data: nil, width: Int(canvas.width * 2), height: Int(height * 2), bitsPerComponent: 8, bytesPerRow: 0,
-                                                 space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+            let context = try #require(
+                CGContext(
+                    data: nil, width: Int(canvas.width * 2), height: Int(height * 2), bitsPerComponent: 8, bytesPerRow: 0,
+                    space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
             context.setFillColor(NSColor(hex: 0x1D2436).cgColor)
             context.fill(CGRect(x: 0, y: 0, width: canvas.width * 2, height: height * 2))
             context.scaleBy(x: 2, y: 2)

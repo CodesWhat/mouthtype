@@ -156,9 +156,11 @@ enum RecoverySelfTest {
             return
         }
         let entry = try archive.write(samples: samples, id: id)
-        try store.recordCapture(id, CaptureRecord(
-            audioMs: samples.count / 16, audioPath: entry.url.path, audioExpiresAt: Date().addingTimeInterval(86_400)
-        ))
+        try store.recordCapture(
+            id,
+            CaptureRecord(
+                audioMs: samples.count / 16, audioPath: entry.url.path, audioExpiresAt: Date().addingTimeInterval(86_400)
+            ))
     }
 
     // MARK: Run
@@ -231,15 +233,18 @@ enum RecoverySelfTest {
         let offer = presenter.state?.card
         check("the Recover card is up", offer?.kind == .recoverOffer && offer?.actions == [.recover, .discard])
         report("card header: \(offer?.header.replacingOccurrences(of: "\n", with: " | ") ?? "none")")
-        check("the headline and detail lines read right",
-              offer?.header.hasPrefix("Recover your last dictation?\n2 seconds, 2 minutes ago") == true
+        check(
+            "the headline and detail lines read right",
+            offer?.header.hasPrefix("Recover your last dictation?\n2 seconds, 2 minutes ago") == true
                 || offer?.header.hasPrefix("Recover your last dictation?\n") == true)
         check("the older one is noted", offer?.header.hasSuffix("and 1 older one in Saved Recordings") == true)
-        check("the newest row is ended as failed/interrupted so it isn't offered twice",
-              (try? store.dictation(id: newest))?.status == .failed && (try? store.dictation(id: newest))?.errorMessage == "interrupted")
+        check(
+            "the newest row is ended as failed/interrupted so it isn't offered twice",
+            (try? store.dictation(id: newest))?.status == .failed && (try? store.dictation(id: newest))?.errorMessage == "interrupted")
         check("the row with no audio is failed/interrupted", (try? store.dictation(id: lost))?.errorMessage == "interrupted")
-        check("the older row is failed/interrupted with its audio kept",
-              (try? store.dictation(id: older))?.status == .failed && FileManager.default.fileExists(atPath: archive.url(for: older).path))
+        check(
+            "the older row is failed/interrupted with its audio kept",
+            (try? store.dictation(id: older))?.status == .failed && FileManager.default.fileExists(atPath: archive.url(for: older).path))
         check("a row from days ago is left alone", (try? store.dictation(id: ancient))?.status == .recorded)
         try? await Task.sleep(for: .milliseconds(700))
         await saveShot(window: cards.panel.windowNumber, name: "card-recover.png")
@@ -276,8 +281,9 @@ enum RecoverySelfTest {
         let partialRecovered = await wait(timeout: 60) { presenter.state?.card.kind == .recovered }
         check("the in-progress copy recovered to text", partialRecovered && !(presenter.state?.card.transcript ?? "").isEmpty)
         report("recovered from the in-progress copy: \(presenter.state?.card.transcript ?? "")")
-        check("the archived WAV replaced the in-progress copy",
-              FileManager.default.fileExists(atPath: archive.url(for: halfway).path)
+        check(
+            "the archived WAV replaced the in-progress copy",
+            FileManager.default.fileExists(atPath: archive.url(for: halfway).path)
                 && !FileManager.default.fileExists(atPath: archive.partialURL(for: halfway).path))
         presenter.dismiss()
 
@@ -291,8 +297,9 @@ enum RecoverySelfTest {
         await fourth.offerIfNeeded()
         presenter.perform(.discard)
         let discarded = await wait(timeout: 5) { (try? store.dictation(id: toDiscard))?.status == .cancelled }
-        check("Discard ended the row cancelled with its audio kept",
-              discarded && FileManager.default.fileExists(atPath: archive.url(for: toDiscard).path))
+        check(
+            "Discard ended the row cancelled with its audio kept",
+            discarded && FileManager.default.fileExists(atPath: archive.url(for: toDiscard).path))
 
         // MARK: Window for the delivery parts
 
@@ -351,12 +358,15 @@ enum RecoverySelfTest {
             )
         }
         func latestAudioID() -> String? {
-            let files = (try? FileManager.default.contentsOfDirectory(
-                at: archive.directory, includingPropertiesForKeys: [.contentModificationDateKey]
-            )) ?? []
+            let files =
+                (try? FileManager.default.contentsOfDirectory(
+                    at: archive.directory, includingPropertiesForKeys: [.contentModificationDateKey]
+                )) ?? []
             return files.filter { $0.pathExtension == "wav" && !$0.lastPathComponent.hasSuffix(".partial.wav") }
-                .max { (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-                    < (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast }?
+                .max {
+                    (try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                        < (try? $1.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+                }?
                 .deletingPathExtension().lastPathComponent
         }
         func index(of word: String) -> String.Index? { textView.string.lowercased().range(of: word)?.lowerBound }
@@ -373,8 +383,9 @@ enum RecoverySelfTest {
         await queueController.handle(.released(at: clock.nowNanos()))
         check("the first dictation is processing", queueController.phase == .processing)
         await queueController.handle(.pressed(at: clock.nowNanos()))
-        check("the second press started recording while the first was processing",
-              queueController.phase == .recording && capture2.starts == 2)
+        check(
+            "the second press started recording while the first was processing",
+            queueController.phase == .recording && capture2.starts == 2)
         check("the first had not been pasted yet when the second started", index(of: "plants") == nil)
         try? await Task.sleep(for: .milliseconds(300))
         await queueController.handle(.released(at: clock.nowNanos()))
@@ -400,7 +411,8 @@ enum RecoverySelfTest {
         let pressedAt = Date()
         await limited.handle(.pressed(at: clock.nowNanos()))
         try? await Task.sleep(for: .milliseconds(900))
-        let partials = (try? FileManager.default.contentsOfDirectory(at: archive.directory, includingPropertiesForKeys: nil))?
+        let partials =
+            (try? FileManager.default.contentsOfDirectory(at: archive.directory, includingPropertiesForKeys: nil))?
             .filter { $0.lastPathComponent.hasSuffix(".partial.wav") } ?? []
         check("a recording in progress is saved as it goes", partials.count == 1 && ((try? partials[0].resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0) > 44)
         let warned = await wait(timeout: 3) { presenter.state?.card.kind == .limitWarning }
@@ -418,7 +430,8 @@ enum RecoverySelfTest {
         _ = await wait(timeout: 5) { index(of: "quick reply") != nil || index(of: "thanks") != nil }
         check("it was processed and pasted like a release", index(of: "quick reply") != nil || index(of: "thanks") != nil)
         check("the warning card is gone", presenter.state?.card.kind != .limitWarning)
-        let leftover = (try? FileManager.default.contentsOfDirectory(at: archive.directory, includingPropertiesForKeys: nil))?
+        let leftover =
+            (try? FileManager.default.contentsOfDirectory(at: archive.directory, includingPropertiesForKeys: nil))?
             .filter { $0.lastPathComponent.hasSuffix(".partial.wav") } ?? []
         check("the in-progress copy was replaced by the archived WAV", leftover.isEmpty)
         _ = await wait(timeout: 5) { !inserter.isRestorePending }
@@ -438,13 +451,15 @@ enum RecoverySelfTest {
         check("the disconnect from a background thread raised the card", disconnected)
         let micCard = presenter.state?.card
         report("card header: \(micCard?.header.replacingOccurrences(of: "\n", with: " | ") ?? "none")")
-        check("it reads Microphone disconnected, then the seconds on its own line",
-              micCard?.header.hasPrefix("Microphone disconnected\n") == true && micCard?.header.hasSuffix(" seconds recorded") == true)
+        check(
+            "it reads Microphone disconnected, then the seconds on its own line",
+            micCard?.header.hasPrefix("Microphone disconnected\n") == true && micCard?.header.hasSuffix(" seconds recorded") == true)
         check("it offers Insert and Discard", micCard?.actions == [.insert, .discard])
         check("nothing was pasted yet and the controller is idle", textView.string == before && lossController.phase == .idle)
         let lostID = latestAudioID()
-        check("the audio was archived before the card showed",
-              lostID != nil && (try? store.dictation(id: lostID ?? ""))?.status == .recorded)
+        check(
+            "the audio was archived before the card showed",
+            lostID != nil && (try? store.dictation(id: lostID ?? ""))?.status == .recorded)
         try? await Task.sleep(for: .milliseconds(700))
         await saveShot(window: cards.panel.windowNumber, name: "card-mic-disconnected.png")
         presenter.perform(.insert)

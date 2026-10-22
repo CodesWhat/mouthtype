@@ -129,11 +129,14 @@ import Testing
     }
 
     @Test func refusalClearsOnFullReleaseSoTheNextPressWorks() {
-        let events = run([
-            flags(63, Self.fn, at: 0), flags(63, 0, at: 1000),
-        ], otherKeysHeld: true) + run([
-            flags(63, Self.fn, at: 2000), flags(63, 0, at: 3000),
-        ])
+        let events =
+            run(
+                [
+                    flags(63, Self.fn, at: 0), flags(63, 0, at: 1000),
+                ], otherKeysHeld: true)
+            + run([
+                flags(63, Self.fn, at: 2000), flags(63, 0, at: 3000),
+            ])
         #expect(events == [.pressed, .released])
     }
 
@@ -180,12 +183,13 @@ import Testing
     }
 
     @Test func remappedKeyRepeatsAreIgnored() {
-        let events = run([
-            key(.keyDown, f19, at: 0),
-            key(.keyDown, f19, at: 400, autorepeat: true),
-            key(.keyDown, f19, at: 500),
-            key(.keyUp, f19, at: 1000),
-        ], source: .remapped(keyCode: f19))
+        let events = run(
+            [
+                key(.keyDown, f19, at: 0),
+                key(.keyDown, f19, at: 400, autorepeat: true),
+                key(.keyDown, f19, at: 500),
+                key(.keyUp, f19, at: 1000),
+            ], source: .remapped(keyCode: f19))
         #expect(events == [.pressed, .released])
     }
 
@@ -195,11 +199,12 @@ import Testing
     }
 
     @Test func remappedModeChordsStillDiscard() {
-        let events = run([
-            key(.keyDown, f19, at: 0),
-            key(.keyDown, 0, at: 100),
-            key(.keyUp, f19, at: 900),
-        ], source: .remapped(keyCode: f19))
+        let events = run(
+            [
+                key(.keyDown, f19, at: 0),
+                key(.keyDown, 0, at: 100),
+                key(.keyUp, f19, at: 900),
+            ], source: .remapped(keyCode: f19))
         #expect(events == [.pressed, .discarded(.otherInput)])
     }
 
@@ -216,11 +221,12 @@ import Testing
 
     @Test func doubleTapLocksInRemapModeToo() {
         let source = HotkeySource.remapped(keyCode: 80)
-        let events = run([
-            key(.keyDown, 80, at: 0), key(.keyUp, 80, at: 100),
-            key(.keyDown, 80, at: 200), key(.keyUp, 80, at: 300),
-            key(.keyDown, 80, at: 5000), key(.keyUp, 80, at: 5100),
-        ], source: source)
+        let events = run(
+            [
+                key(.keyDown, 80, at: 0), key(.keyUp, 80, at: 100),
+                key(.keyDown, 80, at: 200), key(.keyUp, 80, at: 300),
+                key(.keyDown, 80, at: 5000), key(.keyUp, 80, at: 5100),
+            ], source: source)
         #expect(events == [.pressed, .discarded(.tooShort), .pressed, .locked(.doubleTap), .released])
     }
 

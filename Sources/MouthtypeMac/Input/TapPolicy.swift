@@ -25,12 +25,12 @@ enum FnCombos {
     static let spaceKeyCode: UInt16 = 49
 
     static let table: [UInt16: FnCombo] = [
-        126: FnCombo(keyCode: 116), // Up -> Page Up
-        125: FnCombo(keyCode: 121), // Down -> Page Down
-        123: FnCombo(keyCode: 115), // Left -> Home
-        124: FnCombo(keyCode: 119), // Right -> End
-        51: FnCombo(keyCode: 117), // Delete -> Forward Delete
-        36: FnCombo(keyCode: 76, keypad: true), // Return -> keypad Enter
+        126: FnCombo(keyCode: 116),  // Up -> Page Up
+        125: FnCombo(keyCode: 121),  // Down -> Page Down
+        123: FnCombo(keyCode: 115),  // Left -> Home
+        124: FnCombo(keyCode: 119),  // Right -> End
+        51: FnCombo(keyCode: 117),  // Delete -> Forward Delete
+        36: FnCombo(keyCode: 76, keypad: true),  // Return -> keypad Enter
     ]
 
     static func replacement(forKeyCode keyCode: UInt16, fnHeld: Bool) -> FnCombo? {

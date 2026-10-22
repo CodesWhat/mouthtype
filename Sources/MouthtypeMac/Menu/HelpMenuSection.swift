@@ -31,7 +31,8 @@ final class HelpMenuSection: NSObject, MenuSection {
         if mode == .toggle || shortcut?.isCapsLock == true {
             text = text.replacingOccurrences(of: "hold \(key) and speak, then release to paste", with: "press \(key) to start, speak, then press it again to stop and paste")
             if let paragraph = text.components(separatedBy: "\n\n").first(where: { $0.hasPrefix("For hands-free") }) {
-                let detail = shortcut?.isCapsLock == true
+                let detail =
+                    shortcut?.isCapsLock == true
                     ? "Caps Lock uses a toggle, not a hold. Its system Caps Lock state may also change."
                     : "Recording stays on after you release the shortcut."
                 text = text.replacingOccurrences(of: paragraph, with: "\(detail) Press Esc to cancel; Undo stays available for 5 seconds.")

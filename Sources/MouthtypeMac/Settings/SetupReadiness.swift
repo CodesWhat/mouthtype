@@ -9,9 +9,7 @@ enum SetupStep: Int {
     /// One dot per setup step. The ready step has nothing left to do, so every dot is done.
     var dots: [SetupDot] {
         (1...4).map { index in
-            if self == .ready || index < rawValue { .done }
-            else if index == rawValue { .active }
-            else { .pending }
+            if self == .ready || index < rawValue { .done } else if index == rawValue { .active } else { .pending }
         }
     }
 }

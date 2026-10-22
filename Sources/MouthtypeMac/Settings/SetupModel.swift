@@ -14,8 +14,10 @@ import Observation
     private let defaults: UserDefaults
     private(set) var instructions = ""
 
-    init(diagnostics: SettingsDiagnostics, engine: EngineHost, microphone: MicrophonePreparation = MicrophonePreparation(),
-         cleanup: (any CleanupModelListing)? = nil, defaults: UserDefaults = .standard) {
+    init(
+        diagnostics: SettingsDiagnostics, engine: EngineHost, microphone: MicrophonePreparation = MicrophonePreparation(),
+        cleanup: (any CleanupModelListing)? = nil, defaults: UserDefaults = .standard
+    ) {
         self.cleanup = cleanup
         self.diagnostics = diagnostics
         self.engine = engine
@@ -31,7 +33,8 @@ import Observation
     func cancelCleanupDownload(_ level: CleanupLevel) { cleanup?.cancelCleanupDownload(level) }
 
     var readiness: SetupReadiness {
-        SetupReadiness(microphone: diagnostics.microphoneStatus, accessibility: diagnostics.accessibilityGranted,
+        SetupReadiness(
+            microphone: diagnostics.microphoneStatus, accessibility: diagnostics.accessibilityGranted,
             input: diagnostics.hotkeyHealth, speech: engine.state, captureReady: captureReady,
             globeConflict: diagnostics.canRemapFn && !diagnostics.remapChecked && diagnostics.globe?.hasConflict == true)
     }
@@ -43,7 +46,8 @@ import Observation
     }
 
     func refreshInstructions() {
-        instructions = HelpMenuSection.instructions(for: ShortcutSettings.load(defaults), mode: RecordingModePreference.current(defaults))
+        instructions =
+            HelpMenuSection.instructions(for: ShortcutSettings.load(defaults), mode: RecordingModePreference.current(defaults))
             .components(separatedBy: "\n\n").dropFirst().first
             ?? "Click a text field in another app, then use your dictation shortcut."
     }

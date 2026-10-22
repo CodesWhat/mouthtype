@@ -62,7 +62,8 @@ enum Machine {
             for _ in 0..<6 {
                 let candidate = directory.appendingPathComponent("Package.resolved")
                 if let data = try? Data(contentsOf: candidate),
-                   let resolved = try? JSONDecoder().decode(Resolved.self, from: data) {
+                    let resolved = try? JSONDecoder().decode(Resolved.self, from: data)
+                {
                     var versions: [String: String] = [:]
                     for pin in resolved.pins {
                         if let version = pin.state.version { versions[pin.identity] = version }

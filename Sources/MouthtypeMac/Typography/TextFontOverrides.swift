@@ -35,8 +35,7 @@ struct TextFontOverrides: Equatable, Sendable {
     static func setFamily(_ family: String?, for group: FontGroup, in defaults: UserDefaults = .standard) {
         var saved = defaults.dictionary(forKey: familiesKey) ?? [:]
         let family = family?.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let family, !family.isEmpty { saved[group.rawValue] = family }
-        else { saved.removeValue(forKey: group.rawValue) }
+        if let family, !family.isEmpty { saved[group.rawValue] = family } else { saved.removeValue(forKey: group.rawValue) }
         defaults.set(saved, forKey: familiesKey)
         NotificationCenter.default.post(name: Typography.didChange, object: nil)
     }

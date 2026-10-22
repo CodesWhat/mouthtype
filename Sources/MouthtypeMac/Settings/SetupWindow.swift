@@ -28,9 +28,11 @@ import SwiftUI
     var isPolling: Bool { pollTimer != nil }
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
-    init(model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
-         reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
-         notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+    init(
+        model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
+        reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+        notifications: NotificationCenter = NSWorkspace.shared.notificationCenter
+    ) {
         self.model = model
         self.pollInterval = pollInterval
         self.reduceTransparency = reduceTransparency
@@ -38,7 +40,8 @@ import SwiftUI
         refresh = actions.refresh
         poll = actions.poll
         self.actions = actions
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Set Up Mouthtype"
         window.titlebarAppearsTransparent = true
@@ -202,12 +205,13 @@ struct SetupView: View {
             let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? DesignPalette.ink : DesignPalette.sideInk)
             return entry.offset == 0 ? name : Text("\(text)\(Text(" · ").foregroundColor(DesignPalette.hair))\(name)")
         }
-        return line
-        .font(DesignFont.mono(DesignFont.eyebrow)).tracking(1)
-        .multilineTextAlignment(.trailing)
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
+        return
+            line
+            .font(DesignFont.mono(DesignFont.eyebrow)).tracking(1)
+            .multilineTextAlignment(.trailing)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
     }
 
     private var title: String {
@@ -227,8 +231,7 @@ struct SetupView: View {
             case .notDetermined: "Allow microphone access so Mouthtype can hear you while you dictate. Audio stays on this Mac."
             case .denied, .restricted: "Microphone access is not allowed. Enable Mouthtype in System Settings, then return here."
             case .authorized:
-                if model.capturePreparing { "Preparing your microphone…" }
-                else { model.captureError ?? "Access allowed. Prepare your microphone to continue." }
+                if model.capturePreparing { "Preparing your microphone…" } else { model.captureError ?? "Access allowed. Prepare your microphone to continue." }
             @unknown default: "Check Microphone access in System Settings."
             }
         case .accessibility:
@@ -448,7 +451,8 @@ struct SetupLips: View {
 
     var body: some View {
         if let url = Bundle.module.url(forResource: "lips-36x22", withExtension: "png", subdirectory: "Settings"),
-           let sprite = NSImage(contentsOf: url) {
+            let sprite = NSImage(contentsOf: url)
+        {
             Image(nsImage: sprite).resizable().interpolation(.none).antialiased(false)
                 .frame(width: Self.size.width * Self.scale, height: Self.size.height * Self.scale)
                 .accessibilityHidden(true)

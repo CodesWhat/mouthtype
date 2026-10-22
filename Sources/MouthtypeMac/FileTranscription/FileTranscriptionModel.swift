@@ -31,10 +31,12 @@ final class FileTranscriptionModel {
         let text: String, filename: String, source: URL?, fileSize: Int64?, duration: Double?
     }
 
-    init(makeJob: @escaping @MainActor () throws -> AudioFileTranscription,
-         canBegin: @escaping @MainActor () -> Bool = { true },
-         activityChanged: @escaping @MainActor () -> Void = {},
-         copy: @escaping @MainActor (String) -> Void) {
+    init(
+        makeJob: @escaping @MainActor () throws -> AudioFileTranscription,
+        canBegin: @escaping @MainActor () -> Bool = { true },
+        activityChanged: @escaping @MainActor () -> Void = {},
+        copy: @escaping @MainActor (String) -> Void
+    ) {
         self.makeJob = makeJob
         self.canBegin = canBegin
         self.activityChanged = activityChanged

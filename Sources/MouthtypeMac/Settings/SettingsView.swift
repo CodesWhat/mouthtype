@@ -101,8 +101,8 @@ struct SettingsView: View {
                 if let window = SettingsView.settingsWindow { SettingsView.clearSidebarRing(in: window) }
             }
         }
-            .accessibilityIdentifier("settings-page-" + page.rawValue)
-            .focused($sidebarFocus, equals: page)
+        .accessibilityIdentifier("settings-page-" + page.rawValue)
+        .focused($sidebarFocus, equals: page)
     }
 
     private func moveSidebar(by offset: Int) -> KeyPress.Result {
@@ -151,7 +151,8 @@ struct SettingsView: View {
     /// The page whose sidebar row holds first responder, if one does.
     @MainActor static func sidebarRingPage(in window: NSWindow) -> SettingsPage? {
         guard let responder = window.firstResponder as? NSView,
-              let index = sidebarRowProxies(in: window).firstIndex(where: { $0 === responder }), index < SettingsPage.allCases.count else { return nil }
+            let index = sidebarRowProxies(in: window).firstIndex(where: { $0 === responder }), index < SettingsPage.allCases.count
+        else { return nil }
         return SettingsPage.allCases[index]
     }
 
@@ -165,7 +166,8 @@ struct SettingsView: View {
     @discardableResult @MainActor static func clearStaleSidebarRing(in window: NSWindow, selected: SettingsPage) -> Bool {
         let rows = sidebarRowProxies(in: window)
         guard let responder = window.firstResponder as? NSView, let held = rows.firstIndex(where: { $0 === responder }),
-              SettingsPage.allCases.firstIndex(of: selected) != held else { return false }
+            SettingsPage.allCases.firstIndex(of: selected) != held
+        else { return false }
         return window.makeFirstResponder(nil)
     }
 
@@ -202,11 +204,13 @@ enum SidebarMark {
 
     static var image: NSImage? {
         if Bundle.main.object(forInfoDictionaryKey: "CFBundleIconName") != nil
-            || Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") != nil {
+            || Bundle.main.object(forInfoDictionaryKey: "CFBundleIconFile") != nil
+        {
             return NSApp.applicationIconImage
         }
         guard let url = Bundle.module.url(forResource: "mouthtype", withExtension: "png", subdirectory: "Settings"),
-              let art = NSImage(contentsOf: url) else { return nil }
+            let art = NSImage(contentsOf: url)
+        else { return nil }
         return clipped(art)
     }
 

@@ -188,8 +188,9 @@ import MouthtypeCore
             let (view, _) = SettingsRender.hostModal(model: model, actions: actions(), dark: dark)
             let scroll = try #require(descendants(of: view).compactMap { $0 as? NSScrollView }.first)
             let document = try #require(scroll.documentView)
-            #expect(document.frame.height <= scroll.contentView.bounds.height + 1,
-                    "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
+            #expect(
+                document.frame.height <= scroll.contentView.bounds.height + 1,
+                "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
         }
     }
 
@@ -198,8 +199,10 @@ import MouthtypeCore
     private static let longMic = "Scott’s AirPods Pro 2 – Hands-Free Microphone (Bluetooth)"
 
     private func longMicModel(_ defaults: UserDefaults) -> SettingsModel {
-        let devices = [MicrophoneDevice(uid: "long", name: Self.longMic, input: .init(sampleRate: 16_000, channels: 1, id: 7)),
-                       MicrophoneDevice(uid: "mac", name: "MacBook Pro Microphone", input: .init(sampleRate: 48_000, channels: 1, id: 8))]
+        let devices = [
+            MicrophoneDevice(uid: "long", name: Self.longMic, input: .init(sampleRate: 16_000, channels: 1, id: 7)),
+            MicrophoneDevice(uid: "mac", name: "MacBook Pro Microphone", input: .init(sampleRate: 48_000, channels: 1, id: 8)),
+        ]
         try? PreferredMicrophone.save(.init(uid: "long", name: Self.longMic), in: defaults)
         let mic = MicrophoneSettingsModel(defaults: defaults, devices: { devices }, defaultInput: { 8 })
         return SettingsModel(defaults: defaults, microphone: mic)
@@ -232,9 +235,12 @@ import MouthtypeCore
         let (view, window) = SettingsRender.hostModal(model: model, actions: actions(), dark: false)
         let scroll = try #require(descendants(of: view).compactMap { $0 as? NSScrollView }.first)
         let document = try #require(scroll.documentView)
-        print("MEASURED General \(Int(size.width))x\(Int(size.height)) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height) docWidth=\(document.frame.width) viewport=\(scroll.contentView.bounds.width)")
-        #expect(document.frame.height <= scroll.contentView.bounds.height + 1,
-                "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
+        print(
+            "MEASURED General \(Int(size.width))x\(Int(size.height)) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height) docWidth=\(document.frame.width) viewport=\(scroll.contentView.bounds.width)"
+        )
+        #expect(
+            document.frame.height <= scroll.contentView.bounds.height + 1,
+            "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
         #expect(document.frame.width <= scroll.contentView.bounds.width + 1)
         #expect(textsAreUntruncated(in: view).isEmpty, "\(textsAreUntruncated(in: view))")
         // The design popup is drawn rather than an NSPopUpButton, so check the model and let the width and untruncated checks above cover layout.
@@ -292,16 +298,20 @@ import MouthtypeCore
         let directory = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
         let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasSuffix(".swift") }
         let source = try files.map { try String(contentsOf: directory.appendingPathComponent($0), encoding: .utf8) }.joined()
-        let identifiers = ["settings-setup", "settings-shortcut", "settings-recording-mode",
-                           "settings-quiet-audio", "settings-live-preview", "settings-microphone", "settings-microphone-refresh",
-                           "settings-audio-age", "settings-audio-size", "settings-font-overrides", "settings-font-reset",
-                           "style-website-domain"]
+        let identifiers = [
+            "settings-setup", "settings-shortcut", "settings-recording-mode",
+            "settings-quiet-audio", "settings-live-preview", "settings-microphone", "settings-microphone-refresh",
+            "settings-audio-age", "settings-audio-size", "settings-font-overrides", "settings-font-reset",
+            "style-website-domain",
+        ]
         for id in identifiers { #expect(source.contains("\"\(id)\""), "missing \(id)") }
-        let titles = ["Microphone", "Shortcut", "Recording behavior", "Cleanup", "Quiet other audio", "Live words",
-                      "Recording sounds", "Launch at login", "Updates", "Remove fillers", "Spoken commands and lists", "Format numbers", "Learn from my corrections",
-                      "Lowercase sentence starts", "Drop the final full stop", "Edit dictionary file…", "Pill style", "Pill size",
-                      "Text font", "Choose Font…", "Override individual fonts", "Keep completed recordings",
-                      "Completed audio size limit", "Download…", "Check for Updates…", "Set Up Mouthtype…", "Transcribe a file…"]
+        let titles = [
+            "Microphone", "Shortcut", "Recording behavior", "Cleanup", "Quiet other audio", "Live words",
+            "Recording sounds", "Launch at login", "Updates", "Remove fillers", "Spoken commands and lists", "Format numbers", "Learn from my corrections",
+            "Lowercase sentence starts", "Drop the final full stop", "Edit dictionary file…", "Pill style", "Pill size",
+            "Text font", "Choose Font…", "Override individual fonts", "Keep completed recordings",
+            "Completed audio size limit", "Download…", "Check for Updates…", "Set Up Mouthtype…", "Transcribe a file…",
+        ]
         for title in titles { #expect(source.contains("\"\(title)\""), "missing \(title)") }
     }
 }

@@ -30,3 +30,7 @@ updates:
     groups:
       react:
         patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+    ignore:
+      # Track the engines Node major (24.x). @types/node must match the runtime, not the latest.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]

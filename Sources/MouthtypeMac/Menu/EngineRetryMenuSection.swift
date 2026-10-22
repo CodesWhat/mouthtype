@@ -16,12 +16,13 @@ final class EngineRetryMenuSection: NSObject, MenuSection {
     }
 
     func refresh() {
-        if case .failed = host.state { item.isHidden = false }
-        else { item.isHidden = true }
+        if case .failed = host.state { item.isHidden = false } else { item.isHidden = true }
     }
 
     private func observe() {
-        withObservationTracking { refresh() } onChange: { [weak self] in
+        withObservationTracking {
+            refresh()
+        } onChange: { [weak self] in
             Task { @MainActor in self?.observe() }
         }
     }

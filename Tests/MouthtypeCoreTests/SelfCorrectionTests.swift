@@ -35,7 +35,7 @@ import Testing
         TextCase("Meet at two thirty, no one thirty.", "Meet at one thirty."),
         TextCase("It costs two dollars, no one dollar.", "It costs one dollar."),
         TextCase("Meet at three, wait, four.", "Meet at four."),
-                TextCase("Meet at three, Actually four.", "Meet at four."),
+        TextCase("Meet at three, Actually four.", "Meet at four."),
         // Numbers: words, digits, tens, hundreds.
         TextCase("We need twenty one, actually twenty two chairs.", "We need twenty two chairs."),
         TextCase("We need twenty-one, actually twenty-five chairs.", "We need twenty-five chairs."),
@@ -182,8 +182,9 @@ import Testing
     @Test func runsInThePipelineBeforeNumbersAndCountedLists() {
         #expect(full("Let's do coffee at two actually three.") == "Let's do coffee at three.")
         #expect(full("we have twenty one actually twenty two chairs") == "We have 22 chairs")
-        let off = TextPipeline().run(TextPipelineInput(
-            text: "Let's do coffee at two actually three.", options: TextPipelineOptions(selfCorrection: false)))
+        let off = TextPipeline().run(
+            TextPipelineInput(
+                text: "Let's do coffee at two actually three.", options: TextPipelineOptions(selfCorrection: false)))
         #expect(off.text == "Let's do coffee at two actually three.")
         #expect(off.edits.allSatisfy { $0.stage != SelfCorrection.stageName })
     }

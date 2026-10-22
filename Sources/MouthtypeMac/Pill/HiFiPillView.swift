@@ -247,9 +247,10 @@ final class HiFiPillView: NSView, PillSkinView {
             guard let seconds = timerSeconds else { timer.isHidden = true; return }
             let slot = isLocked ? layout.text.timerLocked : layout.text.timer
             guard let font = assets.fonts[slot.font],
-                  let image = font.image(
-                      for: PillTimeline.timerText(seconds: seconds), color: PillLayout.color(hex: readout.palette(base: layout.colors).text)
-                  ) else { return }
+                let image = font.image(
+                    for: PillTimeline.timerText(seconds: seconds), color: PillLayout.color(hex: readout.palette(base: layout.colors).text)
+                )
+            else { return }
             timer.contents = image
             timer.frame = layerFrame(of: PillLayout.Rect(x: slot.x, y: slot.y, w: image.width, h: image.height))
             timer.isHidden = mode != .meter

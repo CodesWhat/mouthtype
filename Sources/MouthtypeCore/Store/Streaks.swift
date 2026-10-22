@@ -24,7 +24,8 @@ enum Streaks {
     static func dayNumber(_ day: String) -> Int? {
         let parts = day.split(separator: "-")
         guard parts.count == 3, let y = Int(parts[0]), let m = Int(parts[1]), let d = Int(parts[2]),
-              (1...12).contains(m), (1...31).contains(d) else { return nil }
+            (1...12).contains(m), (1...31).contains(d)
+        else { return nil }
         let year = m <= 2 ? y - 1 : y
         let era = (year >= 0 ? year : year - 399) / 400
         let yoe = year - era * 400

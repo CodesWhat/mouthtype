@@ -12,8 +12,10 @@ struct SettingsDiagnosticsView: View {
         Group {
             DesignSection(eyebrow: "SET UP") {
                 DesignRow(title: "Set Up Mouthtype", detail: "Walk through the microphone, Accessibility and shortcut steps again.") {
-                    Button("Set Up Mouthtype…") { model.closeSettings(); actions.openSetup() }
-                        .buttonStyle(.designSecondary).fixedSize().accessibilityIdentifier("settings-setup")
+                    Button("Set Up Mouthtype…") {
+                        model.closeSettings(); actions.openSetup()
+                    }
+                    .buttonStyle(.designSecondary).fixedSize().accessibilityIdentifier("settings-setup")
                 }
             }
             DesignSection(eyebrow: "LOCAL MODELS") {
@@ -21,8 +23,11 @@ struct SettingsDiagnosticsView: View {
                     if state.engineFailed { Button("Retry model", action: actions.retrySpeech).buttonStyle(.designSecondary).fixedSize() }
                 }
                 if let cleaner = actions.cleaner {
-                    row("Cleanup", cleanupStatus(cleaner)
-                        + (model.cleanup.level.needsModel && !ready(cleaner) ? " Dictations use Basic until the selected cleanup model is ready." : "")) {
+                    row(
+                        "Cleanup",
+                        cleanupStatus(cleaner)
+                            + (model.cleanup.level.needsModel && !ready(cleaner) ? " Dictations use Basic until the selected cleanup model is ready." : "")
+                    ) {
                         switch cleaner.state {
                         case .absent, .failed:
                             Button("Download…") {

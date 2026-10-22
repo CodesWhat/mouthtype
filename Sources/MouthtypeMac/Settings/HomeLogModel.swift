@@ -55,14 +55,16 @@ struct HomeTake: Identifiable, Equatable {
     /// covers the state that is not observable.
     private(set) var recoverEnabled = false
 
-    init(store: TranscriptStore? = nil,
-         saved: @escaping @MainActor () async throws -> [RecoverableDictation] = { [] },
-         canRecover: @escaping @MainActor () -> Bool = { true },
-         recover: @escaping @MainActor (RecoverableDictation) -> Void = { _ in },
-         copy: @escaping @MainActor (String) -> Void = { text in
-             HomeLogModel.guardedCopy(text, to: SystemPasteboard(.general))
-         },
-         observing: Bool = true) {
+    init(
+        store: TranscriptStore? = nil,
+        saved: @escaping @MainActor () async throws -> [RecoverableDictation] = { [] },
+        canRecover: @escaping @MainActor () -> Bool = { true },
+        recover: @escaping @MainActor (RecoverableDictation) -> Void = { _ in },
+        copy: @escaping @MainActor (String) -> Void = { text in
+            HomeLogModel.guardedCopy(text, to: SystemPasteboard(.general))
+        },
+        observing: Bool = true
+    ) {
         self.isActive = observing
         self.store = store
         self.saved = saved
@@ -116,7 +118,9 @@ struct HomeTake: Identifiable, Equatable {
     func refreshRecoverability() {
         trackingGeneration += 1
         let generation = trackingGeneration
-        let enabled = withObservationTracking { canRecover() } onChange: { [weak self] in
+        let enabled = withObservationTracking {
+            canRecover()
+        } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, self.trackingGeneration == generation else { return }
                 self.refreshRecoverability()
@@ -153,15 +157,18 @@ struct HomeTake: Identifiable, Equatable {
         observation?.cancel()
         observation = nil
         guard let store else { return }
-        observation = store.observeRecentTakes(limit: Self.limit, onError: { error in
-            Log.app.error("home log observation failed: \(error.localizedDescription, privacy: .public)")
-        }, onChange: { [weak self] records in
-            MainActor.assumeIsolated {
-                self?.apply(records, failure: nil)
-                self?.savedTask?.cancel()
-                self?.savedTask = Task { @MainActor [weak self] in await self?.refreshSaved() }
-            }
-        })
+        observation = store.observeRecentTakes(
+            limit: Self.limit,
+            onError: { error in
+                Log.app.error("home log observation failed: \(error.localizedDescription, privacy: .public)")
+            },
+            onChange: { [weak self] records in
+                MainActor.assumeIsolated {
+                    self?.apply(records, failure: nil)
+                    self?.savedTask?.cancel()
+                    self?.savedTask = Task { @MainActor [weak self] in await self?.refreshSaved() }
+                }
+            })
     }
 
     private func apply(_ records: [TakeRecord]?, failure: String?) {

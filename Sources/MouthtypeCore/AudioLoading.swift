@@ -20,7 +20,7 @@ public enum AudioLoading {
         let file = try AVAudioFile(forReading: url)
         let frameCount = AVAudioFrameCount(file.length)
         guard frameCount > 0,
-              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frameCount)
+            let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frameCount)
         else {
             return []
         }
@@ -30,20 +30,23 @@ public enum AudioLoading {
 
     /// Converts any PCM buffer (any rate, channel count or sample format) to 16 kHz mono Float32 samples.
     public static func samples16kMono(from buffer: AVAudioPCMBuffer) throws -> [Float] {
-        guard let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: targetSampleRate,
-            channels: 1,
-            interleaved: false
-        ) else {
+        guard
+            let targetFormat = AVAudioFormat(
+                commonFormat: .pcmFormatFloat32,
+                sampleRate: targetSampleRate,
+                channels: 1,
+                interleaved: false
+            )
+        else {
             throw AudioLoadingError.conversionFailed("could not build target format")
         }
 
         let inputFormat = buffer.format
         if inputFormat.commonFormat == .pcmFormatFloat32,
-           inputFormat.sampleRate == targetSampleRate,
-           inputFormat.channelCount == 1,
-           let channel = buffer.floatChannelData?[0] {
+            inputFormat.sampleRate == targetSampleRate,
+            inputFormat.channelCount == 1,
+            let channel = buffer.floatChannelData?[0]
+        {
             return Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
         }
 

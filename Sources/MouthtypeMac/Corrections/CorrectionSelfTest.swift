@@ -104,7 +104,9 @@ enum CorrectionSelfTest {
             return probe.pid == ProcessInfo.processInfo.processIdentifier && probe.element != nil
         }
         let seen = reader.probe()
-        report("accessibility trusted \(AXIsProcessTrusted()), own pid \(ProcessInfo.processInfo.processIdentifier), frontmost pid \(seen.pid.map(String.init) ?? "none"), focused element \(seen.element != nil), app active \(NSApp.isActive), window key \(window.isKeyWindow)")
+        report(
+            "accessibility trusted \(AXIsProcessTrusted()), own pid \(ProcessInfo.processInfo.processIdentifier), frontmost pid \(seen.pid.map(String.init) ?? "none"), focused element \(seen.element != nil), app active \(NSApp.isActive), window key \(window.isKeyWindow)"
+        )
         check("the test window's text view has Accessibility focus", focused)
         guard focused else { return finish(window, directory) }
 

@@ -35,8 +35,10 @@ import MouthtypeCore
     }
 
     @Test func codingTargetsComeFromTheBundleIDOrTheSite() {
-        for id in ["com.apple.Terminal", "com.googlecode.iterm2", "com.microsoft.VSCode", "com.jetbrains.intellij", "com.jetbrains.pycharm",
-                   "dev.zed.Zed", "com.anthropic.claudefordesktop", "com.openai.codex", "com.stablyai.orca"] {
+        for id in [
+            "com.apple.Terminal", "com.googlecode.iterm2", "com.microsoft.VSCode", "com.jetbrains.intellij", "com.jetbrains.pycharm",
+            "dev.zed.Zed", "com.anthropic.claudefordesktop", "com.openai.codex", "com.stablyai.orca",
+        ] {
             #expect(CodingTargets.isCodingTarget(bundleID: id), Comment(rawValue: id))
         }
         for id in ["com.apple.Notes", "com.apple.mail", "com.tinyspeck.slackmacgap", "com.jetbrainsfake.app", nil] {

@@ -318,7 +318,8 @@ final class CorrectionWatcher: CorrectionObserving {
     /// only if the field still holds the text it was found in.
     private func presentPending() {
         guard var w = watch, let offer = w.pending, !w.evaluating, w.lastValue == w.evaluatedValue,
-              cards.isFree, canOffer() else { return }
+            cards.isFree, canOffer()
+        else { return }
         w.pending = nil
         w.offered.insert(offer.key)
         watch = w
@@ -359,11 +360,12 @@ final class CorrectionWatcher: CorrectionObserving {
     private func resolve(_ card: DeliveryCard, _ resolution: OfferResolution) {
         guard let current = active else { return }
         active = nil
-        let accepted: Bool? = switch resolution {
-        case .accepted: true
-        case .declined: false
-        case .timedOut, .replaced: nil
-        }
+        let accepted: Bool? =
+            switch resolution {
+            case .accepted: true
+            case .declined: false
+            case .timedOut, .replaced: nil
+            }
         if resolution == .declined || resolution == .timedOut {
             ledger.recordDecline(current.offer.kind, heard: current.offer.pair.heard, corrected: current.offer.pair.corrected)
         }

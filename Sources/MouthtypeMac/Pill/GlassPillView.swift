@@ -15,18 +15,20 @@ struct GlassPillEnvironment {
     static let system = system(cache: .shared)
 
     /// The production wiring over `cache`; `.system` uses the shared one.
-    static func system(cache: GlassBackdropCache) -> GlassPillEnvironment { GlassPillEnvironment(
-        materialAvailable: { NSClassFromString("NSGlassEffectView") != nil },
-        reduceTransparency: { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
-        backdrop: { view in
-            guard let window = view.window, let screen = window.screen else { return nil }
-            let local = (view as? GlassPillView)?.sampleRegion ?? view.bounds
-            let region = window.convertToScreen(view.convert(local, to: nil))
-            guard case .ready(let backdrop) = cache.lookup(screen: screen, region: region) else { return nil }
-            return backdrop
-        },
-        prewarm: { cache.prewarmAll() }
-    ) }
+    static func system(cache: GlassBackdropCache) -> GlassPillEnvironment {
+        GlassPillEnvironment(
+            materialAvailable: { NSClassFromString("NSGlassEffectView") != nil },
+            reduceTransparency: { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+            backdrop: { view in
+                guard let window = view.window, let screen = window.screen else { return nil }
+                let local = (view as? GlassPillView)?.sampleRegion ?? view.bounds
+                let region = window.convertToScreen(view.convert(local, to: nil))
+                guard case .ready(let backdrop) = cache.lookup(screen: screen, region: region) else { return nil }
+                return backdrop
+            },
+            prewarm: { cache.prewarmAll() }
+        )
+    }
 }
 
 /// The glass pill: the Classic pill's geometry, bars and controls over the system glass material (clear over light
@@ -191,7 +193,8 @@ final class GlassPillView: NSView, PillSkinView {
         if let layer = glass.layer {
             let identity = NSValue(caTransform3D: CATransform3DIdentity)
             PillMotion.withoutActions {
-                layer.transform = reduceMotion ? identity.caTransform3DValue : glassTransform(scale: ClassicPillView.appearScale, drop: ClassicPillView.travel * classic.pillScale.factor).caTransform3DValue
+                layer.transform =
+                    reduceMotion ? identity.caTransform3DValue : glassTransform(scale: ClassicPillView.appearScale, drop: ClassicPillView.travel * classic.pillScale.factor).caTransform3DValue
             }
             PillMotion.set(layer, "transform", identity, reduceMotion ? .none : .ease(0.26))
         }

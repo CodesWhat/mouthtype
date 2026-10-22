@@ -121,7 +121,8 @@ import MouthtypeCore
         contexts.addApp(.email, bundleID: "com.tinyspeck.slackmacgap", appName: "Slack")
         #expect(contexts.context(bundleID: "com.tinyspeck.slackmacgap") == .email)
         #expect(!contexts.members(.work).contains { $0.keys.contains("com.tinyspeck.slackmacgap") })
-        #expect(contexts.members(.email).last?.name == "Slack" && contexts.members(.email).last?.isBuiltIn == true || contexts.members(.email).contains { $0.keys.contains("com.tinyspeck.slackmacgap") })
+        #expect(
+            contexts.members(.email).last?.name == "Slack" && contexts.members(.email).last?.isBuiltIn == true || contexts.members(.email).contains { $0.keys.contains("com.tinyspeck.slackmacgap") })
         // Moving it home restores the built-in entry without a duplicate.
         contexts.addApp(.work, bundleID: "com.tinyspeck.slackmacgap", appName: "Slack")
         #expect(contexts.context(bundleID: "com.tinyspeck.slackmacgap") == .work)
@@ -192,12 +193,12 @@ import MouthtypeCore
 
     /// The format shipped before contexts: app and website rules, some with cleanup levels, some without.
     private let legacy = """
-    {"version":1,"entries":[
-      {"bundleID":"com.tinyspeck.slackmacgap","appName":"Slack","capitalisation":"sentence","endingPunctuation":"keep"},
-      {"bundleID":"com.apple.Terminal","appName":"Terminal","cleanupLevel":"basic"},
-      {"bundleID":"org.example.Notes","appName":"Notes","capitalisation":"lowercase","endingPunctuation":"dropFinalFullStop","cleanupLevel":"off"}],
-     "websites":[{"domain":"linkedin.com","cleanupLevel":"light"},{"domain":"example.org","capitalisation":"sentence","endingPunctuation":"dropFinalFullStop"}]}
-    """
+        {"version":1,"entries":[
+          {"bundleID":"com.tinyspeck.slackmacgap","appName":"Slack","capitalisation":"sentence","endingPunctuation":"keep"},
+          {"bundleID":"com.apple.Terminal","appName":"Terminal","cleanupLevel":"basic"},
+          {"bundleID":"org.example.Notes","appName":"Notes","capitalisation":"lowercase","endingPunctuation":"dropFinalFullStop","cleanupLevel":"off"}],
+         "websites":[{"domain":"linkedin.com","cleanupLevel":"light"},{"domain":"example.org","capitalisation":"sentence","endingPunctuation":"dropFinalFullStop"}]}
+        """
 
     @Test func storedRulesMigrateLosslesslyAndKeepWorking() throws {
         let d = defaults()

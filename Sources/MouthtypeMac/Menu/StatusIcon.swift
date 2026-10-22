@@ -46,7 +46,8 @@ enum StatusIcon: CaseIterable {
         let image = NSImage(size: pointSize)
         for suffix in ["", "@2x"] {
             guard let url = bundle.url(forResource: "glyph-\(name)\(suffix)", withExtension: "png", subdirectory: glyphDirectory),
-                  let rep = NSBitmapImageRep(data: (try? Data(contentsOf: url)) ?? Data()) else { return nil }
+                let rep = NSBitmapImageRep(data: (try? Data(contentsOf: url)) ?? Data())
+            else { return nil }
             rep.size = pointSize
             image.addRepresentation(rep)
         }

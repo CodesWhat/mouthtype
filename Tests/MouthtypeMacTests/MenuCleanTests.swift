@@ -23,12 +23,14 @@ import MouthtypeCore
         daily.add(section: ActionsMenuSection(onPasteLast: {}, onCopyLast: {}))
         daily.add(section: HistoryMenuSection(store: nil), startsGroup: false)
         daily.add(section: HelpMenuSection(onShow: {}), isFooter: true)
-        #expect(daily.menu.items.filter { !$0.isSeparatorItem }.map(\.title) == [
-            "Open Mouthtype", "Settings…", "Paste Last Take", "Copy Last Take", "How to Use Mouthtype…", "About Mouthtype", "Quit",
-        ])
-        #expect(daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
-            "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
-        ])
+        #expect(
+            daily.menu.items.filter { !$0.isSeparatorItem }.map(\.title) == [
+                "Open Mouthtype", "Settings…", "Paste Last Take", "Copy Last Take", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+            ])
+        #expect(
+            daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
+                "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+            ])
         #expect(daily.menu.items.first?.isSeparatorItem == false)
         #expect(daily.menu.items.last?.isSeparatorItem == false)
         #expect(!zip(daily.menu.items, daily.menu.items.dropFirst()).contains { $0.isSeparatorItem && $1.isSeparatorItem })
@@ -111,9 +113,10 @@ import MouthtypeCore
         let daily = DailyMenu()
         daily.add(section: SettingsMenuSection {})
         daily.add(section: HistoryMenuSection(store: nil), startsGroup: false)
-        #expect(daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
-            "Open Mouthtype", "Settings…", "|", "About Mouthtype", "Quit",
-        ])
+        #expect(
+            daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
+                "Open Mouthtype", "Settings…", "|", "About Mouthtype", "Quit",
+            ])
     }
 
     @Test func absentCleanupAttentionClearsWhenLevelNoLongerNeedsModel() {
@@ -160,10 +163,11 @@ import MouthtypeCore
         daily.add(section: FileTranscriptionMenuSection {}, startsGroup: false)
         daily.add(section: HelpMenuSection(onShow: {}), isFooter: true)
         let layout = daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title }
-        #expect(layout == [
-            "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|",
-            "Transform Selection", "Transcribe Audio File…", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
-        ])
+        #expect(
+            layout == [
+                "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|",
+                "Transform Selection", "Transcribe Audio File…", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+            ])
         #expect(daily.menu.items.filter { $0.image != nil }.map(\.title) == [])
         state.microphoneStatus = .denied
         daily.refresh()
@@ -178,9 +182,10 @@ import MouthtypeCore
             open: { opened.append($0) }, editTransforms: { edited += 1 }, aiUnavailableReason: { reason }, capture: { state })
         let menu = try #require(section.items.first?.submenu)
         #expect(section.items.first?.title == "Transform Selection")
-        #expect(menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
-            "Clean up", "Fix grammar", "Make shorter", "More formal", "More casual", "|", "Edit Transforms…",
-        ])
+        #expect(
+            menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
+                "Clean up", "Fix grammar", "Make shorter", "More formal", "More casual", "|", "Edit Transforms…",
+            ])
         #expect(menu.items.allSatisfy { $0.image == nil })
         for item in menu.items where !item.isSeparatorItem { _ = item.target?.perform(item.action, with: item) }
         #expect(edited == 1 && opened == [nil, .fixGrammar, .shorter, .moreFormal, .moreCasual])
@@ -199,7 +204,10 @@ import MouthtypeCore
     @Test func selectionIsReadOncePerMenuOpenBeforeTrackingNotOnRefreshOrSubmenuOpen() async throws {
         var captures = 0
         let section = TransformSelectionMenuSection(
-            open: { _ in }, editTransforms: {}, capture: { captures += 1; return .ready })
+            open: { _ in }, editTransforms: {},
+            capture: {
+                captures += 1; return .ready
+            })
         let daily = DailyMenu()
         daily.add(section: SettingsMenuSection {})
         daily.add(section: section)
@@ -241,21 +249,29 @@ import MouthtypeCore
     @Test func menuOpensImmediatelyDisabledAndEnablesWhenTheReadLands() async throws {
         let gate = AsyncGate()
         let section = TransformSelectionMenuSection(
-            open: { _ in }, editTransforms: {}, capture: { await gate.wait(); return .ready })
+            open: { _ in }, editTransforms: {},
+            capture: {
+                await gate.wait(); return .ready
+            })
         let submenu = try #require(section.items.first?.submenu)
         section.prepareForMenuOpen()
         #expect(submenu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title) == ["Edit Transforms…"])
         gate.open()
         await section.pendingCapture?.value
-        #expect(submenu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title) == [
-            "Clean up", "Fix grammar", "Make shorter", "More formal", "More casual", "Edit Transforms…"])
+        #expect(
+            submenu.items.filter { !$0.isSeparatorItem && $0.isEnabled }.map(\.title) == [
+                "Clean up", "Fix grammar", "Make shorter", "More formal", "More casual", "Edit Transforms…",
+            ])
     }
 
     @Test func aReadThatLandsAfterTheMenuClosedOrReopenedIsDropped() async throws {
         let gate = AsyncGate()
         var results: [MenuCapture] = [.ready, .unavailable]
         let section = TransformSelectionMenuSection(
-            open: { _ in }, editTransforms: {}, capture: { await gate.wait(); return results.removeFirst() })
+            open: { _ in }, editTransforms: {},
+            capture: {
+                await gate.wait(); return results.removeFirst()
+            })
         let submenu = try #require(section.items.first?.submenu)
         section.prepareForMenuOpen()
         let first = section.pendingCapture

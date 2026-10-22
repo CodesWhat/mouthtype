@@ -10,11 +10,13 @@ import AppKit
     private nonisolated(unsafe) var observers: [NSObjectProtocol] = []
     private(set) var policy: NSApplication.ActivationPolicy
 
-    init(mode: @escaping @MainActor () -> DockIconMode = { DockIconMode.current() },
-         windows: @escaping @MainActor (NSWindow?) -> [DockWindowFacts] = { closing in NSApp.windows.map { DockWindowFacts($0, closing: closing) } },
-         initial: NSApplication.ActivationPolicy = .accessory,
-         apply: @escaping @MainActor (NSApplication.ActivationPolicy, NSWindow?) -> Void = { DockPresence.applyToApp($0, closing: $1) },
-         notifications: NotificationCenter = .default) {
+    init(
+        mode: @escaping @MainActor () -> DockIconMode = { DockIconMode.current() },
+        windows: @escaping @MainActor (NSWindow?) -> [DockWindowFacts] = { closing in NSApp.windows.map { DockWindowFacts($0, closing: closing) } },
+        initial: NSApplication.ActivationPolicy = .accessory,
+        apply: @escaping @MainActor (NSApplication.ActivationPolicy, NSWindow?) -> Void = { DockPresence.applyToApp($0, closing: $1) },
+        notifications: NotificationCenter = .default
+    ) {
         self.mode = mode
         self.windows = windows
         self.policy = initial
@@ -29,13 +31,16 @@ import AppKit
     /// Applies the saved mode now and follows window changes from here on.
     func start() {
         guard observers.isEmpty else { return }
-        let names: [Notification.Name] = [NSWindow.didBecomeKeyNotification, NSWindow.didBecomeMainNotification,
-            NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification, NSWindow.willCloseNotification]
+        let names: [Notification.Name] = [
+            NSWindow.didBecomeKeyNotification, NSWindow.didBecomeMainNotification,
+            NSWindow.didMiniaturizeNotification, NSWindow.didDeminiaturizeNotification, NSWindow.willCloseNotification,
+        ]
         for name in names {
-            observers.append(notifications.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
-                let closing = name == NSWindow.willCloseNotification ? note.object as? NSWindow : nil
-                MainActor.assumeIsolated { self?.refresh(closing: closing) }
-            })
+            observers.append(
+                notifications.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                    let closing = name == NSWindow.willCloseNotification ? note.object as? NSWindow : nil
+                    MainActor.assumeIsolated { self?.refresh(closing: closing) }
+                })
         }
         refresh()
     }
@@ -95,7 +100,8 @@ struct DockRestorePlan<ID: Hashable>: Equatable {
 
     static func make(visible: [DockSurvivor<ID>], wasActive: Bool, key: ID?) -> DockRestorePlan {
         let focusable = visible.filter(\.canTakeKey).map(\.id)
-        return DockRestorePlan(restore: visible.map(\.id), activate: wasActive && !focusable.isEmpty,
-                               key: wasActive ? key.flatMap { focusable.contains($0) ? $0 : nil } : nil)
+        return DockRestorePlan(
+            restore: visible.map(\.id), activate: wasActive && !focusable.isEmpty,
+            key: wasActive ? key.flatMap { focusable.contains($0) ? $0 : nil } : nil)
     }
 }

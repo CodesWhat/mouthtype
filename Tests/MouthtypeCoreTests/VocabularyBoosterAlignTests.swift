@@ -70,8 +70,10 @@ private func isWellFormed(_ runs: [VocabularyBooster.Run], _ old: [String], _ ne
         for _ in 0..<Int.random(in: 0...4, using: &rng) {
             switch Int.random(in: 0...2, using: &rng) {
             case 0 where !new.isEmpty: new.remove(at: Int.random(in: 0..<new.count, using: &rng))
-            case 1: new.insert(fresh ? "ins\(Int.random(in: 0..<1000, using: &rng))" : "w\(Int.random(in: 0...5, using: &rng))",
-                               at: Int.random(in: 0...new.count, using: &rng))
+            case 1:
+                new.insert(
+                    fresh ? "ins\(Int.random(in: 0..<1000, using: &rng))" : "w\(Int.random(in: 0...5, using: &rng))",
+                    at: Int.random(in: 0...new.count, using: &rng))
             case 2 where !new.isEmpty: new[Int.random(in: 0..<new.count, using: &rng)] = "x\(Int.random(in: 0..<3, using: &rng))"
             default: break
             }
@@ -96,7 +98,8 @@ private func isWellFormed(_ runs: [VocabularyBooster.Run], _ old: [String], _ ne
         for _ in 0..<3000 {
             let alphabet = Int.random(in: 1...4, using: &rng)
             let old = (0..<Int.random(in: 0...14, using: &rng)).map { _ in "w\(Int.random(in: 0..<alphabet, using: &rng))" }
-            let new = Bool.random(using: &rng)
+            let new =
+                Bool.random(using: &rng)
                 ? mutate(old, &rng, fresh: false)
                 : (0..<Int.random(in: 0...14, using: &rng)).map { _ in "w\(Int.random(in: 0..<alphabet, using: &rng))" }
             let runs = VocabularyBooster.align(old, new)
@@ -132,4 +135,3 @@ private func isWellFormed(_ runs: [VocabularyBooster.Run], _ old: [String], _ ne
         #expect(runs.count == 12_000 - 1 + 1)
     }
 }
-

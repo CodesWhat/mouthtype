@@ -101,19 +101,21 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
 
         var directory = modelDirectory
         let downloadTime = try await clock.measure {
-            directory = try await AsrModels.download(version: version, progressHandler: { progress in
-                guard let report else { return }
-                let event: StagedDownloadTracker.Event
-                switch progress.phase {
-                case .listing: event = .listing
-                case .downloading: event = .downloading
-                case let .compiling(modelName): event = modelName.isEmpty ? .finished : .compiling
-                }
-                let (update, complete) = tracker.withLock { ($0.update(fraction: progress.fractionCompleted, event: event), $0.isComplete) }
-                // Compiling one model while the next still downloads is not the compile stage the user waits on.
-                let stage: EnginePreparation = complete ? .compiling : .progress(update)
-                Task { await report(stage) }
-            })
+            directory = try await AsrModels.download(
+                version: version,
+                progressHandler: { progress in
+                    guard let report else { return }
+                    let event: StagedDownloadTracker.Event
+                    switch progress.phase {
+                    case .listing: event = .listing
+                    case .downloading: event = .downloading
+                    case let .compiling(modelName): event = modelName.isEmpty ? .finished : .compiling
+                    }
+                    let (update, complete) = tracker.withLock { ($0.update(fraction: progress.fractionCompleted, event: event), $0.isComplete) }
+                    // Compiling one model while the next still downloads is not the compile stage the user waits on.
+                    let stage: EnginePreparation = complete ? .compiling : .progress(update)
+                    Task { await report(stage) }
+                })
         }
         await report?(.loadingModel)
         let newManager = AsrManager(config: .default)
@@ -122,16 +124,18 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
             let models = try await AsrModels.load(from: directory, version: version)
             try await newManager.loadModels(models)
             loadedModels = models
-            newDetector = try await VadManager(config: VadConfig(defaultThreshold: 0.5), progressHandler: { progress in
-                guard let report else { return }
-                let stage: EnginePreparation
-                switch progress.phase {
-                case .listing: stage = .downloading(fraction: 0)
-                case .downloading: stage = .downloading(fraction: progress.fractionCompleted)
-                case .compiling: stage = .compiling
-                }
-                Task { await report(stage) }
-            })
+            newDetector = try await VadManager(
+                config: VadConfig(defaultThreshold: 0.5),
+                progressHandler: { progress in
+                    guard let report else { return }
+                    let stage: EnginePreparation
+                    switch progress.phase {
+                    case .listing: stage = .downloading(fraction: 0)
+                    case .downloading: stage = .downloading(fraction: progress.fractionCompleted)
+                    case .compiling: stage = .compiling
+                    }
+                    Task { await report(stage) }
+                })
             var state = TdtDecoderState.make(decoderLayers: await newManager.decoderLayerCount)
             _ = try await newManager.transcribe([Float](repeating: 0, count: 16_000), decoderState: &state, language: version == .v3 ? language : nil)
         }
@@ -147,11 +151,13 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     public func preview(samples: [Float]) async throws -> String? {
         guard samples.count >= 32_000 else { return nil }
         guard let loadedModels, let speechDetector else { throw EngineError.notPrepared(id: id) }
-        return try await inference.withPreview(prepare: {
-            try await self.preparePreview(samples: samples, models: loadedModels, detector: speechDetector)
-        }, predict: { input in
-            try await self.predictPreview(input)
-        })
+        return try await inference.withPreview(
+            prepare: {
+                try await self.preparePreview(samples: samples, models: loadedModels, detector: speechDetector)
+            },
+            predict: { input in
+                try await self.predictPreview(input)
+            })
     }
 
     private struct PreparedPreview: Sendable {
@@ -192,8 +198,10 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
         }
     }
 
-    private func transcribeWithAccess(samples: [Float], manager: AsrManager, detector: VadManager,
-                                     startedAt: ContinuousClock.Instant) async throws -> Transcription {
+    private func transcribeWithAccess(
+        samples: [Float], manager: AsrManager, detector: VadManager,
+        startedAt: ContinuousClock.Instant
+    ) async throws -> Transcription {
         let clock = ContinuousClock()
         let start = startedAt
         // VAD and ASR run together. VAD stays the filter for noise the recogniser would turn into words: with no speech
@@ -224,7 +232,8 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
         var words = WordAssembly.assemble(units)
         var applied: [String]?
         if let timings = result.tokenTimings,
-           let boosted = await booster.boost(text: result.text, tokenTimings: timings, samples: samples) {
+            let boosted = await booster.boost(text: result.text, tokenTimings: timings, samples: samples)
+        {
             // Replaced spans take the times of the words they replaced; untouched words keep theirs.
             text = boosted.text
             words = VocabularyBooster.realign(words, to: boosted.text)

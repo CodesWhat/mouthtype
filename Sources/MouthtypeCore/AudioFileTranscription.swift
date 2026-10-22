@@ -13,7 +13,7 @@ public enum AudioFileError: Error, Equatable {
 }
 
 public struct DecodedAudioFile: Sendable {
-    public let samples: [Float] // 16 kHz mono, matching Transcriber input.
+    public let samples: [Float]  // 16 kHz mono, matching Transcriber input.
     public let durationSeconds: Double
     public init(samples: [Float], durationSeconds: Double) {
         self.samples = samples
@@ -76,7 +76,6 @@ public actor AudioFileTranscription {
     }
     public func cancel() { current?.cancel() }
 }
-
 
 extension AudioFileError: LocalizedError {
     public var errorDescription: String? {

@@ -109,9 +109,11 @@ import Testing
             switch status {
             case .started, .recorded: break
             case .transcribed:
-                try store.recordTranscription(id, TranscriptionRecord(
-                    transcription: Transcription(text: "hi", words: [], processingSeconds: 0.1, engineID: "t"), rawText: "hi"
-                ))
+                try store.recordTranscription(
+                    id,
+                    TranscriptionRecord(
+                        transcription: Transcription(text: "hi", words: [], processingSeconds: 0.1, engineID: "t"), rawText: "hi"
+                    ))
             case .inserted: try store.recordInsertion(id, InsertionRecord(finalText: "done"))
             case .cancelled, .tooShort, .empty, .failed: try store.finish(id, status: status)
             }
@@ -137,7 +139,7 @@ import Testing
         defer { rig.cleanUp() }
         let inside = try rig.row(.recorded, ago: 86_400 - 5, now: now, audioSeconds: 2)
         try rig.row(.recorded, ago: 86_400 + 5, now: now, audioSeconds: 2)
-        try rig.row(.recorded, ago: -10, now: now, audioSeconds: 2)   // started after the launch
+        try rig.row(.recorded, ago: -10, now: now, audioSeconds: 2)  // started after the launch
         let scan = try DictationRecovery.scan(store: rig.store, archive: rig.archive, now: now, launchedAt: now)
         #expect(scan.newest?.id == inside && scan.olderCount == 0 && scan.lostCount == 0)
     }

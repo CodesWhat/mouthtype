@@ -126,31 +126,39 @@ import Testing
     // MARK: Title parsing
 
     @Test func parsesVSCodeTitles() {
-        #expect(EditorHints.parseTitle("DictationPipeline.swift - mouthtype - Visual Studio Code", style: .vscode)
-            == .init(file: "DictationPipeline.swift", project: "mouthtype"))
-        #expect(EditorHints.parseTitle("\u{25CF} index.ts \u{2014} my-app \u{2014} Visual Studio Code", style: .vscode)
-            == .init(file: "index.ts", project: "my-app"))
-        #expect(EditorHints.parseTitle("main.py - api (Workspace) - Visual Studio Code", style: .vscode)
-            == .init(file: "main.py", project: "api"))
-        #expect(EditorHints.parseTitle("[Extension Development Host] ext.ts - plugin - Visual Studio Code", style: .vscode)
-            == .init(file: "ext.ts", project: "plugin"))
+        #expect(
+            EditorHints.parseTitle("DictationPipeline.swift - mouthtype - Visual Studio Code", style: .vscode)
+                == .init(file: "DictationPipeline.swift", project: "mouthtype"))
+        #expect(
+            EditorHints.parseTitle("\u{25CF} index.ts \u{2014} my-app \u{2014} Visual Studio Code", style: .vscode)
+                == .init(file: "index.ts", project: "my-app"))
+        #expect(
+            EditorHints.parseTitle("main.py - api (Workspace) - Visual Studio Code", style: .vscode)
+                == .init(file: "main.py", project: "api"))
+        #expect(
+            EditorHints.parseTitle("[Extension Development Host] ext.ts - plugin - Visual Studio Code", style: .vscode)
+                == .init(file: "ext.ts", project: "plugin"))
         #expect(EditorHints.parseTitle("README.md - Visual Studio Code", style: .vscode) == .init(file: "README.md"))
         #expect(EditorHints.parseTitle("mouthtype - Visual Studio Code", style: .vscode) == .init(project: "mouthtype"))
         #expect(EditorHints.parseTitle("Visual Studio Code", style: .vscode) == .init())
     }
 
     @Test func parsesCursorTitles() {
-        #expect(EditorHints.parseTitle("route.tsx - storefront - Cursor", style: .vscode)
-            == .init(file: "route.tsx", project: "storefront"))
-        #expect(EditorHints.parseTitle("route.tsx \u{2014} storefront \u{2014} Cursor", style: .vscode)
-            == .init(file: "route.tsx", project: "storefront"))
+        #expect(
+            EditorHints.parseTitle("route.tsx - storefront - Cursor", style: .vscode)
+                == .init(file: "route.tsx", project: "storefront"))
+        #expect(
+            EditorHints.parseTitle("route.tsx \u{2014} storefront \u{2014} Cursor", style: .vscode)
+                == .init(file: "route.tsx", project: "storefront"))
     }
 
     @Test func parsesXcodeTitles() {
-        #expect(EditorHints.parseTitle("Mouthtype \u{2014} AppDelegate.swift", style: .xcode)
-            == .init(file: "AppDelegate.swift", project: "Mouthtype"))
-        #expect(EditorHints.parseTitle("Mouthtype \u{2014} AppDelegate.swift \u{2014} Edited", style: .xcode)
-            == .init(file: "AppDelegate.swift", project: "Mouthtype"))
+        #expect(
+            EditorHints.parseTitle("Mouthtype \u{2014} AppDelegate.swift", style: .xcode)
+                == .init(file: "AppDelegate.swift", project: "Mouthtype"))
+        #expect(
+            EditorHints.parseTitle("Mouthtype \u{2014} AppDelegate.swift \u{2014} Edited", style: .xcode)
+                == .init(file: "AppDelegate.swift", project: "Mouthtype"))
         #expect(EditorHints.parseTitle("Mouthtype \u{2014} Build Succeeded", style: .xcode) == .init(project: "Mouthtype"))
         #expect(EditorHints.parseTitle("Mouthtype", style: .xcode) == .init(project: "Mouthtype"))
         #expect(EditorHints.parseTitle("", style: .xcode) == .init())
@@ -174,7 +182,9 @@ import Testing
         defer { gate.signal() }
         let input = EditorHints.Input(
             windowTitle: "AppDelegate.swift - mouthtype - Visual Studio Code", titleStyle: .vscode,
-            readCursor: { _ in gate.wait(); return InsertionContext(before: "applyTheme(", after: nil) }
+            readCursor: { _ in
+                gate.wait(); return InsertionContext(before: "applyTheme(", after: nil)
+            }
         )
         let clock = ContinuousClock()
         let start = clock.now
@@ -186,7 +196,11 @@ import Testing
     @Test func aStuckCursorReadKeepsOneWorkerInFlightAndFreesWhenItExits() async {
         final class Calls: Sendable {
             private let n = Mutex(0)
-            func next() -> Int { n.withLock { $0 += 1; return $0 } }
+            func next() -> Int {
+                n.withLock {
+                    $0 += 1; return $0
+                }
+            }
             var count: Int { n.withLock { $0 } }
         }
         let hold = DispatchSemaphore(value: 0)

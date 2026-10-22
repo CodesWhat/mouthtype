@@ -31,8 +31,7 @@ import Observation
         importMessage = nil
         importFileName = fileName
         showingImport = true
-        do { importPreview = try store.previewImport(data) }
-        catch { importError = error.localizedDescription }
+        do { importPreview = try store.previewImport(data) } catch { importError = error.localizedDescription }
     }
 
     func previewImport(fileURL: URL) {

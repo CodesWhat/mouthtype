@@ -74,7 +74,9 @@ struct Typography: Sendable {
     let choice: TextFontChoice
     var overrides: TextFontOverrides
     /// Whether a family is present, injectable so a missing family is testable.
-    var isInstalled: @Sendable (String) -> Bool = { FontRegistry.ensureRegistered(); return NSFontManager.shared.availableFontFamilies.contains($0) }
+    var isInstalled: @Sendable (String) -> Bool = {
+        FontRegistry.ensureRegistered(); return NSFontManager.shared.availableFontFamilies.contains($0)
+    }
 
     init(choice: TextFontChoice, overrides: TextFontOverrides = TextFontOverrides(), isInstalled: (@Sendable (String) -> Bool)? = nil) {
         self.choice = choice
@@ -98,7 +100,7 @@ struct Typography: Sendable {
 
     static var systemaAvailable: Bool {
         FontRegistry.ensureRegistered()
-        return         NSFont(name: FontRegistry.serifName, size: 12) != nil && NSFont(name: FontRegistry.monoName, size: 12) != nil
+        return NSFont(name: FontRegistry.serifName, size: 12) != nil && NSFont(name: FontRegistry.monoName, size: 12) != nil
             && FontRegistry.sansNames.allSatisfy { NSFont(name: $0, size: 12) != nil }
     }
 
@@ -124,7 +126,9 @@ struct Typography: Sendable {
         let effective: TextFontChoice
         if overrides.enabled, let family = overrides.families[FontGroup(role: role)], isInstalled(family) {
             effective = .custom(family)
-        } else { effective = baseChoice }
+        } else {
+            effective = baseChoice
+        }
         var spec = Self.spec(role, systema: baseChoice == .systema)
         // The large pill's message face is the Systema design scaled, 28 pt, whatever face is in use; scaling a fallback's
         // smaller standard size would leave it at 24 pt in a pill drawn for 28.
@@ -165,20 +169,23 @@ struct Typography: Sendable {
     private static func family(_ family: String, _ spec: Spec) -> NSFont {
         FontRegistry.ensureRegistered()
         let manager = NSFontManager.shared
-        let weight: Int = switch spec.weight {
-        case .semibold: 8
-        case .medium: 6
-        default: 5
-        }
+        let weight: Int =
+            switch spec.weight {
+            case .semibold: 8
+            case .medium: 6
+            default: 5
+            }
         return manager.font(withFamily: family, traits: [], weight: weight, size: spec.size)
             ?? .systemFont(ofSize: spec.size, weight: spec.weight)
     }
 
     /// The same font with proportional digits turned off.
     static func tabular(_ font: NSFont) -> NSFont {
-        let features: [[NSFontDescriptor.FeatureKey: Int]] = [[
-            .typeIdentifier: kNumberSpacingType, .selectorIdentifier: kMonospacedNumbersSelector,
-        ]]
+        let features: [[NSFontDescriptor.FeatureKey: Int]] = [
+            [
+                .typeIdentifier: kNumberSpacingType, .selectorIdentifier: kMonospacedNumbersSelector,
+            ]
+        ]
         let descriptor = font.fontDescriptor.addingAttributes([.featureSettings: features])
         return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
     }

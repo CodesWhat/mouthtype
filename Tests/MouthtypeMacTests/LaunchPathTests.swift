@@ -86,7 +86,9 @@ import Testing
         delegate.application(NSApplication.shared, open: url())
         #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
         await withCheckedContinuation { done in
-            delegate.replyToTermination = { _, ready in replies.append(ready); done.resume() }
+            delegate.replyToTermination = { _, ready in
+                replies.append(ready); done.resume()
+            }
             #expect(replies.isEmpty)
             delegate.finishLaunch()
         }
@@ -106,7 +108,9 @@ import Testing
         delegate.quitDeadline = .zero
         delegate.application(NSApplication.shared, open: url())
         await withCheckedContinuation { done in
-            delegate.replyToTermination = { _, ready in replies.append(ready); done.resume() }
+            delegate.replyToTermination = { _, ready in
+                replies.append(ready); done.resume()
+            }
             #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
         }
         await Task.yield()
@@ -124,7 +128,9 @@ import Testing
         delegate.application(NSApplication.shared, open: url())
         #expect(delegate.deferQuitForQueuedURLs(sender: NSApplication.shared))
         await withCheckedContinuation { done in
-            delegate.replyToTermination = { _, ready in replies.append(ready); done.resume() }
+            delegate.replyToTermination = { _, ready in
+                replies.append(ready); done.resume()
+            }
             delegate.abandonLaunch(reason: "test")
         }
         #expect(delegate.pendingOpenCount == 0)

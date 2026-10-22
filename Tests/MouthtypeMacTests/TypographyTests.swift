@@ -103,9 +103,10 @@ import Testing
         defer { defaults.removePersistentDomain(forName: suite) }
         let section = TextFontMenuSection(defaults: defaults)
         let submenu = try #require(section.items.first?.submenu)
-        #expect(submenu.items.filter { !$0.isSeparatorItem }.map(\.title) == [
-            "Default", "System", "System Rounded", "System Serif", "System Mono", "Choose Font\u{2026}",
-        ])
+        #expect(
+            submenu.items.filter { !$0.isSeparatorItem }.map(\.title) == [
+                "Default", "System", "System Rounded", "System Serif", "System Mono", "Choose Font\u{2026}",
+            ])
         #expect(submenu.items.map(\.state).prefix(5) == [.on, .off, .off, .off, .off])
         let serif = try #require(submenu.items.first { $0.title == "System Serif" })
         _ = serif.target?.perform(serif.action, with: serif)

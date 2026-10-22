@@ -86,13 +86,15 @@ public enum ProjectFiles {
     /// A repo's own `.git/config` can name an fsmonitor command, which `core.fsmonitor=false` switches off.
     static func lsFilesArguments(root: URL, versionOutput: String?) -> [String]? {
         guard let versionOutput, let version = parseGitVersion(versionOutput),
-              (version.major, version.minor) >= (minimumGitVersion.major, minimumGitVersion.minor) else { return nil }
+            (version.major, version.minor) >= (minimumGitVersion.major, minimumGitVersion.minor)
+        else { return nil }
         return ["--no-lazy-fetch", "-c", "core.fsmonitor=false", "-C", root.path, "ls-files", "-z"]
     }
 
     private static func run(root: URL) async -> [String]? {
         guard let git = gitExecutable(),
-              let arguments = lsFilesArguments(root: root, versionOutput: installedGitVersionOutput) else { return nil }
+            let arguments = lsFilesArguments(root: root, versionOutput: installedGitVersionOutput)
+        else { return nil }
         let process = Process()
         process.executableURL = URL(fileURLWithPath: git)
         process.arguments = arguments
@@ -151,7 +153,9 @@ public enum ProjectFiles {
         }
 
         func cancel() {
-            let started = lock.withLock { flagged = true; return launched }
+            let started = lock.withLock {
+                flagged = true; return launched
+            }
             guard started else { return }
             DispatchQueue.global(qos: .userInitiated).async { self.terminateBounded() }
         }
@@ -189,6 +193,10 @@ public enum ProjectFiles {
             }
         }
 
-        func reset() { lock.withLock { entries = [:]; order = [] } }
+        func reset() {
+            lock.withLock {
+                entries = [:]; order = []
+            }
+        }
     }
 }

@@ -8,9 +8,10 @@ import Testing
     ) -> TextPipelineResult {
         var o = options ?? TextPipelineOptions()
         if options == nil { o.style = preset.options }
-        return TextPipeline(dateFormatter: { _ in "October 12, 2026" }).run(TextPipelineInput(
-            text: text, dictionary: dictionary, snippets: snippets, context: context, options: o
-        ))
+        return TextPipeline(dateFormatter: { _ in "October 12, 2026" }).run(
+            TextPipelineInput(
+                text: text, dictionary: dictionary, snippets: snippets, context: context, options: o
+            ))
     }
 
     private func style(_ text: String, _ options: StyleOptions, protected: Set<String> = []) -> StageResult {
@@ -67,9 +68,12 @@ import Testing
     @Test func casualDropLogsAReplaceEditUnderBlend() {
         let out = style("See you Friday.", StylePreset.casual.options)
         #expect(out.text == "See you Friday")
-        #expect(out.edits == [EditOp(
-            stage: "blend", kind: .replace, fromText: "Friday.", toText: "Friday", wordDelta: 0, position: 8
-        )])
+        #expect(
+            out.edits == [
+                EditOp(
+                    stage: "blend", kind: .replace, fromText: "Friday.", toText: "Friday", wordDelta: 0, position: 8
+                )
+            ])
     }
 
     // MARK: Very casual

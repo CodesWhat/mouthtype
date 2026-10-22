@@ -8,9 +8,10 @@ struct MicrophonePriority: Codable, Equatable, Sendable {
 
     private func validate() throws {
         guard devices.count <= 32,
-              Set(devices.map(\.uid)).count == devices.count,
-              devices.allSatisfy({ !$0.uid.isEmpty && !$0.name.isEmpty }),
-              !enabled || !devices.isEmpty || fallbackToDefault else {
+            Set(devices.map(\.uid)).count == devices.count,
+            devices.allSatisfy({ !$0.uid.isEmpty && !$0.name.isEmpty }),
+            !enabled || !devices.isEmpty || fallbackToDefault
+        else {
             throw CaptureError.microphonePreferenceUnreadable
         }
     }

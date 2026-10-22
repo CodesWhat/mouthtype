@@ -178,7 +178,11 @@ public actor SmartCleanup {
             do { return .success(try await cleaner.clean(text, context: CleanupContext(transform: kind))) } catch { return .failure(error) }
         }
         transforming = work
-        let outcome = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+        let outcome = await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
         if transforming == work { transforming = nil }
         return try outcome.get()
     }
@@ -206,16 +210,22 @@ public actor SmartCleanup {
         }
         guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
 
-        let context = CleanupContext(vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
+        let context = CleanupContext(
+            vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
             level: request.level, before: request.context?.before, after: request.context?.after,
             omitProfanity: request.style == .formal)
-        let joining = NameJoining.candidates(in: request.text,
+        let joining = NameJoining.candidates(
+            in: request.text,
             spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
         let text = CorrectionCommas.apply(request.text)
-        let settleCorrections = !cleaner.usesNativeControls && text.range(
-            of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
-            options: [.regularExpression, .caseInsensitive]) != nil
-        let allowance = customBudget || cleaner.usesNativeControls ? budget(words)
+        let settleCorrections =
+            !cleaner.usesNativeControls
+            && text.range(
+                of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
+                options: [.regularExpression, .caseInsensitive]) != nil
+        let allowance =
+            customBudget || cleaner.usesNativeControls
+            ? budget(words)
             : Self.qualityAllowance(words: words, passes: settleCorrections ? 2 : 1)
         let deadline = start + allowance
         // A generation that outlived its own timeout still holds the model; wait for it, within this budget.
@@ -232,7 +242,8 @@ public actor SmartCleanup {
         }
 
         guard !modelPaused else { return finish(.skipped) }
-        let passes = cleaner.usesNativeControls
+        let passes =
+            cleaner.usesNativeControls
             ? Self.passes(level: request.level, style: request.style, destination: request.destination)
             : [S1MiniControls.benchmark]
         let cleaner = cleaner
@@ -263,7 +274,8 @@ public actor SmartCleanup {
             }
         }
         current = work
-        var description = cleaner.usesNativeControls
+        var description =
+            cleaner.usesNativeControls
             ? ([S1MiniPrompt.system] + passes.map(\.line)).joined(separator: "\n")
             : CleanupPrompt.system(for: context) + CleanupPrompt.reference(context)
         if settleCorrections { description = CleanupPrompt.system(for: correctionContext) + "\n" + description }
@@ -279,15 +291,20 @@ public actor SmartCleanup {
         case let .failure(error):
             return finish(.failed, rejection: String(describing: error), sha: sha)
         case let .success(draft):
-            let model = SmartCleanupGuard.restoringMeridiem(input: request.text, output: SmartCleanupGuard.restoringTerminal(
-                input: request.text, output: CleanupPrompt.sanitize(draft.text, input: request.text)))
-            if SmartCleanupGuard.copiesSurroundingText(input: request.text, output: model,
-                references: [context.before, context.after].compactMap { $0 }) {
+            let model = SmartCleanupGuard.restoringMeridiem(
+                input: request.text,
+                output: SmartCleanupGuard.restoringTerminal(
+                    input: request.text, output: CleanupPrompt.sanitize(draft.text, input: request.text)))
+            if SmartCleanupGuard.copiesSurroundingText(
+                input: request.text, output: model,
+                references: [context.before, context.after].compactMap { $0 })
+            {
                 return finish(.guardRejected, rejection: "surrounding text copied into output", sha: sha)
             }
             let restoredNames = NameJoining.candidates(in: model, spellings: approved.map(\.written))
                 .filter { NameJoining.isProjectReference($0, in: model) }
-            let post = Self.reapply(NameJoining.applying(restoredNames, to: model), request: request,
+            let post = Self.reapply(
+                NameJoining.applying(restoredNames, to: model), request: request,
                 deferredNames: Set(joining.map(\.written)))
             guard NameJoining.preservesOrdinary(draft.ordinary, in: post.text) else {
                 return finish(.guardRejected, rejection: "ordinary words changed into a name", sha: sha)
@@ -309,9 +326,10 @@ public actor SmartCleanup {
             whitespace: true, style: request.style
         )
         let rules = request.dictionary.filter { !$0.isJoinedSpelling || !deferredNames.contains($0.written) }
-        return TextPipeline().run(TextPipelineInput(
-            text: text, dictionary: rules, context: request.context, options: options,
-            protectedPhrases: request.protectedPhrases + request.dictionary.map(\.heard)))
+        return TextPipeline().run(
+            TextPipelineInput(
+                text: text, dictionary: rules, context: request.context, options: options,
+                protectedPhrases: request.protectedPhrases + request.dictionary.map(\.heard)))
     }
 
     /// Whether `task` finished before `deadline`. The watcher on the task is not a child of this call, so a task

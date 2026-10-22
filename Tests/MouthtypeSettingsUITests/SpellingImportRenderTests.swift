@@ -16,7 +16,9 @@ import Testing
         #expect(editor.canImport)
         #expect(try store.allRules().count == 1)
         editor.cancelImport()
-        editor.previewImport(data: Data("heard,written\nmouth type,Other\n,Missing\nnew,New".utf8), fileName: "Team names and exact aliases for the forthcoming customer support and product documentation rollout with conflicts to resolve before importing.csv")
+        editor.previewImport(
+            data: Data("heard,written\nmouth type,Other\n,Missing\nnew,New".utf8),
+            fileName: "Team names and exact aliases for the forthcoming customer support and product documentation rollout with conflicts to resolve before importing.csv")
         try render(editor, name: "spelling-import-errors", size: NSSize(width: 620, height: 520))
         #expect(!editor.canImport)
         editor.cancelImport()

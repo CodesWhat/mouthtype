@@ -117,7 +117,6 @@ public final class PillController {
         }
     }
 
-
     /// The live preview readout sits centred over the pill, one pill height higher at the large size.
     private static func previewFrame(panelSize: CGSize, scale: PillScale) -> NSRect {
         let width = ClassicPillLayout.messageCap * scale.factor
@@ -338,9 +337,11 @@ public final class PillController {
 
     private func place() {
         let screens = screensSource()
-        guard let origin = PillPlacement.origin(
-            pointer: pointerSource(), screens: screens, panelSize: panelSize, pillPadding: Self.pillPadding
-        ) else { return }
+        guard
+            let origin = PillPlacement.origin(
+                pointer: pointerSource(), screens: screens, panelSize: panelSize, pillPadding: Self.pillPadding
+            )
+        else { return }
         panel.setFrame(
             NSRect(origin: CGPoint(x: origin.x.rounded(.down), y: origin.y.rounded(.down)), size: panelSize), display: false
         )
@@ -355,17 +356,21 @@ public final class PillController {
         guard let screen = PillPlacement.screen(pointer: pointer, screens: placements) else { return nil }
         // A pill that is down shows at the size this screen resolves to, which is what the card has to clear. One that
         // is up, or holds a card, keeps the scale its skin was built at.
-        let scale = !isShown
+        let scale =
+            !isShown
             ? PillSizePreference.current(defaults).resolved(visibleWidth: screen.visibleFrame.width) : pillScale
         let size = PillGeometry.panelSize(for: scale)
-        guard let origin = PillPlacement.origin(
-            pointer: pointer, screens: placements, panelSize: size, pillPadding: Self.pillPadding
-        ) else { return nil }
+        guard
+            let origin = PillPlacement.origin(
+                pointer: pointer, screens: placements, panelSize: size, pillPadding: Self.pillPadding
+            )
+        else { return nil }
         // A message with a detail line (or wrapped onto more) makes the capsule taller than its resting height, and the
         // card has to clear that.
         var pillHeight = skinKind.pillHeight * scale.factor
         if isShown, !isGrown, case .message = state { pillHeight = max(pillHeight, skin.messageSize.height) }
-        let maxFace = screen.visibleFrame.maxY - origin.y.rounded(.down) - Self.pillPadding - Self.cardRowHeight * scale.factor
+        let maxFace =
+            screen.visibleFrame.maxY - origin.y.rounded(.down) - Self.pillPadding - Self.cardRowHeight * scale.factor
             - CardLayout.shadowMargin * scale.factor
         return .init(
             midX: origin.x.rounded(.down) + size.width / 2,
@@ -392,9 +397,10 @@ public final class PillController {
         let visible = PillPlacement.screen(
             pointer: CGPoint(x: old.midX, y: old.minY + Self.pillPadding), screens: screensSource()
         )?.visibleFrame
-        panel.setFrame(Self.grownFrame(
-            old: old, face: face, plainSize: panelSize, scale: k, visible: visible
-        ), display: false)
+        panel.setFrame(
+            Self.grownFrame(
+                old: old, face: face, plainSize: panelSize, scale: k, visible: visible
+            ), display: false)
     }
 
     /// The panel's frame once it holds a card of `face`: wider and taller, with its bottom edge and middle where they
@@ -494,15 +500,17 @@ public final class PillController {
         cardReadout = nil
         host.cardView = nil
         let reduce = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        NSAnimationContext.runAnimationGroup({ context in
-            context.duration = reduce ? 0.12 : 0.08
-            view.animator().alphaValue = 0
-        }, completionHandler: { [weak self] in
-            MainActor.assumeIsolated {
-                guard let self, self.growEpoch == epoch, view.superview === self.host else { return }
-                view.removeFromSuperview()
-            }
-        })
+        NSAnimationContext.runAnimationGroup(
+            { context in
+                context.duration = reduce ? 0.12 : 0.08
+                view.animator().alphaValue = 0
+            },
+            completionHandler: { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, self.growEpoch == epoch, view.superview === self.host else { return }
+                    view.removeFromSuperview()
+                }
+            })
         skin.shrinkCard()
         endInteraction()
         if state == .hidden {

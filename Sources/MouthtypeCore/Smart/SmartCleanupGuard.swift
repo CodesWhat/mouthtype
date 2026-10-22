@@ -33,7 +33,8 @@ public enum SmartCleanupGuard {
     /// would otherwise throw out a correct output over the casing of its AM or PM.
     public static func restoringMeridiem(input: String, output: String) -> String {
         guard input.range(of: #"(?<![\p{L}])[AP]M(?![\p{L}])"#, options: .regularExpression) != nil,
-              let expression = try? NSRegularExpression(pattern: #"(?<=\d)[ \t]?([apAP])[mM](?![\p{L}\p{N}])"#) else { return output }
+            let expression = try? NSRegularExpression(pattern: #"(?<=\d)[ \t]?([apAP])[mM](?![\p{L}\p{N}])"#)
+        else { return output }
         let source = output as NSString
         var result = output
         for match in expression.matches(in: output, range: NSRange(location: 0, length: source.length)).reversed() {
@@ -59,13 +60,16 @@ public enum SmartCleanupGuard {
         let retainedWords: [String]
         let hasRetainedTake: Bool
         if !inputWords.isEmpty, let take = outputPhrase.range(of: inputPhrase) {
-            additions = [TextMetrics.normalizedWords(String(outputPhrase[..<take.lowerBound])),
-                TextMetrics.normalizedWords(String(outputPhrase[take.upperBound...]))]
+            additions = [
+                TextMetrics.normalizedWords(String(outputPhrase[..<take.lowerBound])),
+                TextMetrics.normalizedWords(String(outputPhrase[take.upperBound...])),
+            ]
             retainedWords = inputWords
             hasRetainedTake = true
         } else if inputWords.count <= SmartCleanup.maxWords,
-                  outputWords.count <= CleanupLimits.maxOutputTokens(for: input),
-                  let take = retainedTake(in: outputWords, matching: inputWords) {
+            outputWords.count <= CleanupLimits.maxOutputTokens(for: input),
+            let take = retainedTake(in: outputWords, matching: inputWords)
+        {
             additions = [Array(outputWords[..<take.lowerBound]), Array(outputWords[take.upperBound...])]
             retainedWords = Array(outputWords[take])
             hasRetainedTake = true
@@ -125,7 +129,10 @@ public enum SmartCleanupGuard {
             // inside it keeps the existing full-line protection against unspoken replacements.
             let allowed = !line.isNameLabel && retainedPhrase == reference ? 1 : 0
             if !inputPhrase.contains(reference),
-               occurrences(of: reference, in: outputPhrase) > allowed { return true }
+                occurrences(of: reference, in: outputPhrase) > allowed
+            {
+                return true
+            }
         }
 
         guard hasRetainedTake else { return false }
@@ -172,7 +179,8 @@ public enum SmartCleanupGuard {
         for end in 1...output.count where previous[end].edits <= input.count / 2 && previous[end].start < end {
             let candidate = (edits: previous[end].edits, range: previous[end].start..<end)
             if let existing = best,
-               existing.edits < candidate.edits || (existing.edits == candidate.edits && existing.range.count >= candidate.range.count) {
+                existing.edits < candidate.edits || (existing.edits == candidate.edits && existing.range.count >= candidate.range.count)
+            {
                 continue
             }
             best = candidate
@@ -296,7 +304,8 @@ public enum SmartCleanupGuard {
         }
         let questions = ["what", "what's", "who", "who's", "where", "where's", "when", "why", "how", "which"]
         if let first = TextMetrics.normalizedWords(input).first, questions.contains(first),
-           let next = TextMetrics.normalizedWords(output).first, !questions.contains(next) {
+            let next = TextMetrics.normalizedWords(output).first, !questions.contains(next)
+        {
             return "question changed into a statement"
         }
         return nil
@@ -305,13 +314,16 @@ public enum SmartCleanupGuard {
     /// Each clock time that carries its own AM or PM, as "9:00a" or "5:30p", so a meridiem can't move to another time.
     /// A time spoken in words ("three p m") has no digits to pair with; it is listed by `spokenMeridiemPairs`.
     static func meridiemPairs(_ text: String) -> Set<String> {
-        guard let expression = try? NSRegularExpression(
-            pattern: #"(?i)(?<![\p{L}\p{N}:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b"#) else { return [] }
+        guard
+            let expression = try? NSRegularExpression(
+                pattern: #"(?i)(?<![\p{L}\p{N}:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b"#)
+        else { return [] }
         let source = text as NSString
-        return Set(expression.matches(in: text, range: NSRange(location: 0, length: source.length)).map { match in
-            let minutes = match.range(at: 2).location == NSNotFound ? "00" : source.substring(with: match.range(at: 2))
-            return "\(Int(source.substring(with: match.range(at: 1))) ?? 0):\(minutes)\(source.substring(with: match.range(at: 3)).lowercased())"
-        })
+        return Set(
+            expression.matches(in: text, range: NSRange(location: 0, length: source.length)).map { match in
+                let minutes = match.range(at: 2).location == NSNotFound ? "00" : source.substring(with: match.range(at: 2))
+                return "\(Int(source.substring(with: match.range(at: 1))) ?? 0):\(minutes)\(source.substring(with: match.range(at: 3)).lowercased())"
+            })
     }
 
     /// Times spoken in words ("nine a m", "three thirty p m", "three oh five p m"), as the same "H:MMl" pairs. The hour
@@ -371,7 +383,8 @@ public enum SmartCleanupGuard {
         let hours = "(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
         func clockTime(_ match: NSTextCheckingResult, _ source: NSString, hour: Int, digit: Int) -> String? {
             guard let hourDigits = numberWords[source.substring(with: match.range(at: hour)).lowercased()],
-                  let minuteDigit = digits[source.substring(with: match.range(at: digit)).lowercased()] else { return nil }
+                let minuteDigit = digits[source.substring(with: match.range(at: digit)).lowercased()]
+            else { return nil }
             return "\(hourDigits):0\(minuteDigit)"
         }
         let notBeforeDigit = "(?!\\s+\(digitPattern))"
@@ -435,8 +448,10 @@ public enum SmartCleanupGuard {
     }
 
     static let numberWords: [String: Int] = {
-        let ones = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
-                    "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"]
+        let ones = [
+            "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven",
+            "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+        ]
         var words = Dictionary(uniqueKeysWithValues: ones.enumerated().map { ($1, $0) })
         for (index, tens) in ["thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"].enumerated() {
             words[tens] = (index + 3) * 10
@@ -672,8 +687,10 @@ public enum SmartCleanupGuard {
 
     /// Each clock time that carries its own AM or PM, in reading order, as "9:00a".
     static func timeSequence(_ text: String) -> [String] {
-        guard let expression = try? NSRegularExpression(
-            pattern: #"(?i)(?<![\p{L}\p{N}:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b"#) else { return [] }
+        guard
+            let expression = try? NSRegularExpression(
+                pattern: #"(?i)(?<![\p{L}\p{N}:])(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b"#)
+        else { return [] }
         let source = text as NSString
         return expression.matches(in: text, range: NSRange(location: 0, length: source.length)).map { match in
             let minutes = match.range(at: 2).location == NSNotFound ? "00" : source.substring(with: match.range(at: 2))
@@ -697,7 +714,10 @@ public enum SmartCleanupGuard {
             for right in shared[(offset + 1)...] {
                 guard let a = before[left], let b = before[right], let c = after[left], let d = after[right] else { continue }
                 if (a.upperBound < b.lowerBound && d.upperBound < c.lowerBound)
-                    || (b.upperBound < a.lowerBound && c.upperBound < d.lowerBound) { return true }
+                    || (b.upperBound < a.lowerBound && c.upperBound < d.lowerBound)
+                {
+                    return true
+                }
             }
         }
         return false
@@ -714,15 +734,17 @@ public enum SmartCleanupGuard {
         }.map { $0.lowercased() }
         let after = output.split(whereSeparator: \.isWhitespace).map { stripped($0).lowercased() }.filter { !$0.isEmpty }
         guard before.count <= SmartCleanup.maxWords,
-              after.count <= CleanupLimits.maxOutputTokens(for: input),
-              after.contains(where: names.contains) else { return nil }
+            after.count <= CleanupLimits.maxOutputTokens(for: input),
+            after.contains(where: names.contains)
+        else { return nil }
         struct Step {
             var edits: Int
             var addedNames: Int
             var firstName: String?
 
             func inserting(_ word: String, isName: Bool) -> Step {
-                Step(edits: edits + 1, addedNames: addedNames + (isName ? 1 : 0),
+                Step(
+                    edits: edits + 1, addedNames: addedNames + (isName ? 1 : 0),
                     firstName: firstName ?? (isName ? word : nil))
             }
         }
@@ -749,9 +771,11 @@ public enum SmartCleanupGuard {
     }
 
     private static func missingLiteral(input: String, output: String) -> String? {
-        guard let expression = try? NSRegularExpression(
-            pattern: #"`[^`\r\n]+`|(?<![\p{L}\p{N}])"[^"\r\n]+"(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])“[^”\r\n]+”(?![\p{L}\p{N}])|[^\s`]*[@/\\][^\s`]*|(?<![\p{L}\p{N}_.])\.[\p{L}_][\p{L}\p{N}_.-]*"#
-        ) else { return nil }
+        guard
+            let expression = try? NSRegularExpression(
+                pattern: #"`[^`\r\n]+`|(?<![\p{L}\p{N}])"[^"\r\n]+"(?![\p{L}\p{N}])|(?<![\p{L}\p{N}])“[^”\r\n]+”(?![\p{L}\p{N}])|[^\s`]*[@/\\][^\s`]*|(?<![\p{L}\p{N}_.])\.[\p{L}_][\p{L}\p{N}_.-]*"#
+            )
+        else { return nil }
         let wrappers = Set(".,;:!?()[]{}\"'“”‘’")
         let leadingWrappers = wrappers.subtracting(["."])
         func matches(_ text: String) -> [(String, Range<String.Index>)] {

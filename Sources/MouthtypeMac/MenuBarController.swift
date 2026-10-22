@@ -70,8 +70,7 @@ extension MenuSection {
         for entry in sections where !entry.isFooter {
             let visible = entry.section.items.filter { !$0.isHidden && !$0.isSeparatorItem }
             guard !visible.isEmpty else { continue }
-            if entry.startsGroup || groups.isEmpty { groups.append(visible) }
-            else { groups[groups.count - 1].append(contentsOf: visible) }
+            if entry.startsGroup || groups.isEmpty { groups.append(visible) } else { groups[groups.count - 1].append(contentsOf: visible) }
         }
         let footer = sections.filter(\.isFooter).flatMap { $0.section.items.filter { !$0.isHidden && !$0.isSeparatorItem } } + [aboutItem, quitItem]
         groups.append(footer)
@@ -91,13 +90,16 @@ extension MenuSection {
     private let statusItem: NSStatusItem
     private let daily = DailyMenu()
     var onStopDictation: (@MainActor () -> Void)? {
-        get { daily.onStopDictation } set { daily.onStopDictation = newValue }
+        get { daily.onStopDictation }
+        set { daily.onStopDictation = newValue }
     }
     var onCancelDictation: (@MainActor () -> Void)? {
-        get { daily.onCancelDictation } set { daily.onCancelDictation = newValue }
+        get { daily.onCancelDictation }
+        set { daily.onCancelDictation = newValue }
     }
     var onRefresh: (@MainActor () -> Void)? {
-        get { daily.onRefresh } set { daily.onRefresh = newValue }
+        get { daily.onRefresh }
+        set { daily.onRefresh = newValue }
     }
     var dictationControlItems: [NSMenuItem] { daily.dictationControlItems }
 
@@ -150,10 +152,12 @@ extension MenuSection {
     }
 
     private func applyGlyph() {
-        guard let file = gate.next(
-            icon: icon, level: level, reduceMotion: reduceMotion || isPinned,
-            now: ProcessInfo.processInfo.systemUptime, canShow: { images[$0] != nil }),
-              let image = images[file] else { return }
+        guard
+            let file = gate.next(
+                icon: icon, level: level, reduceMotion: reduceMotion || isPinned,
+                now: ProcessInfo.processInfo.systemUptime, canShow: { images[$0] != nil }),
+            let image = images[file]
+        else { return }
         statusItem.button?.image = image
     }
     func setHandsFree(_ active: Bool) { daily.setHandsFree(active) }

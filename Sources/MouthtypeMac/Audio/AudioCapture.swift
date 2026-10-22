@@ -46,8 +46,10 @@ public actor AudioCapture {
         requestPermission = { Task { await MicrophoneAccess.requestIfUndetermined() } }
     }
 
-    init(input: any CaptureInputDriving, resolveInput: @escaping @Sendable () throws -> CaptureInputSelection,
-         authorization: @escaping @Sendable () -> AVAuthorizationStatus = { .authorized }) {
+    init(
+        input: any CaptureInputDriving, resolveInput: @escaping @Sendable () throws -> CaptureInputSelection,
+        authorization: @escaping @Sendable () -> AVAuthorizationStatus = { .authorized }
+    ) {
         self.input = input
         self.resolveInput = resolveInput
         self.authorization = authorization
@@ -67,7 +69,9 @@ public actor AudioCapture {
         let selected = try resolveInput()
         let device = selected.device
         try input.prepare(device: device, followsDefault: selected.followsDefault)
-        Log.capture.info("prepared \(InputDevice.name(of: device.id) ?? "unknown input", privacy: .public) \(device.sampleRate, format: .fixed(precision: 0), privacy: .public) Hz x \(device.channels, privacy: .public), not started")
+        Log.capture.info(
+            "prepared \(InputDevice.name(of: device.id) ?? "unknown input", privacy: .public) \(device.sampleRate, format: .fixed(precision: 0), privacy: .public) Hz x \(device.channels, privacy: .public), not started"
+        )
         return true
     }
 

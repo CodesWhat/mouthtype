@@ -212,7 +212,8 @@ final class CleanerHost: CleanupModelManaging {
                 let loadSeconds = (clock.now - start).seconds
                 let warmStart = clock.now
                 _ = try? await model.clean(Self.warmUpTranscript, context: CleanupContext())
-                Log.cleaner.info("model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
+                Log.cleaner.info(
+                    "model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
                 await smart.resumeAfterModelLoad()
                 finishLoad(.ready(loadSeconds: loadSeconds))
             } catch {
