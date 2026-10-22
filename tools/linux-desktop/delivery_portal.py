@@ -7,6 +7,9 @@ leaves the backend in 'needs_grant', which callers treat as recover-only.
 
 PortalClipboard sits on top of an active session: multi-MIME SetSelection (with the concealed-copy hint when
 asked), a bounded read of the previous selection, and a restore that only runs while we still own the selection.
+
+PortalDelivery is the Delivery for GNOME and KDE: paste = portal clipboard plus a keysym paste chord, type = short
+single-line text as keysyms with a paste fallback. Keysyms rather than keycodes keep it correct on any layout.
 """
 import json
 import logging
@@ -435,3 +438,186 @@ class PortalClipboard:
             log.debug('restoring the clipboard: %s', exc)
             return False
         return True
+
+
+# Keysyms. Latin-1 keysyms equal their code point; everything else is 0x01000000 + code point.
+KEYSYM_RETURN = 0xFF0D
+KEYSYM_TAB = 0xFF09
+KEYSYM_CONTROL_L = 0xFFE3
+KEYSYM_SHIFT_L = 0xFFE1
+KEYSYM_V = 0x76
+TYPE_MAX_CHARS = 200
+RESTORE_DELAY = 1.5
+SENSITIVE_TYPES = (CONCEALED_MIME,)
+
+
+def keysym_for(char):
+    """The X11 keysym for one character, or None when it is a control character with no keysym."""
+    code = ord(char)
+    if char == '\n':
+        return KEYSYM_RETURN
+    if char == '\t':
+        return KEYSYM_TAB
+    if code < 0x20 or 0x7F <= code <= 0x9F:
+        return None
+    if code <= 0xFF:
+        return code
+    return 0x01000000 + code
+
+
+class PortalKeyboard:
+    """NotifyKeyboardKeysym on an active RemoteDesktop session. Raises PortalError on any failed send."""
+
+    def __init__(self, remote):
+        self.remote = remote
+
+    def key(self, keysym, down):
+        if not self.remote.active:
+            raise portal_mod.PortalError('keyboard session is not active')
+        self.remote.portal.call(REMOTE_IFACE, 'NotifyKeyboardKeysym', 'oa{sv}iu',
+                                (self.remote.session, {}, keysym, 1 if down else 0), timeout=2.0)
+
+    def tap(self, keysym):
+        self.key(keysym, True)
+        self.key(keysym, False)
+
+    def chord(self, modifiers, keysym):
+        """Hold modifiers, tap keysym, release in reverse. Modifiers are released even when the tap fails."""
+        pressed = []
+        try:
+            for modifier in modifiers:
+                self.key(modifier, True)
+                pressed.append(modifier)
+            self.tap(keysym)
+        finally:
+            for modifier in reversed(pressed):
+                try:
+                    self.key(modifier, False)
+                except portal_mod.PortalError:
+                    pass
+
+
+class PortalDelivery:
+    """Delivery on portal desktops. Same submit/paste signatures and outcome strings as HyprlandDelivery.
+
+    targets supplies snapshot(), is_terminal(target) (the AT-SPI target, P4). Without one the target is
+    {'class': 'unknown'} and nothing is a terminal, which only passes allowed() under any_window.
+    """
+
+    def __init__(self, config, remote, clipboard, keyboard=None, targets=None):
+        self.config = config
+        self.remote = remote
+        self.clipboard = clipboard
+        self.keyboard = keyboard or PortalKeyboard(remote)
+        self.targets = targets
+        self.restore_thread = None
+
+    def snapshot(self):
+        if self.targets is not None:
+            return self.targets.snapshot()
+        return {'class': 'unknown'}
+
+    def is_terminal(self, target):
+        return bool(self.targets.is_terminal(target)) if self.targets is not None else False
+
+    def allowed(self, target):
+        if (self.config.get('mode') not in ('type', 'paste') or
+                self.config.get('allow_unknown_secure_field') is not True or not target):
+            return False
+        if self.config.get('any_window') is True:
+            return True
+        return target.get('class') in self.config.get('allowed_classes', [])
+
+    def _ready(self):
+        self.remote.check()
+        return self.remote.active
+
+    def submit(self, text, target, cancelled=None, verified=False):
+        if not self.allowed(target) or not self._ready():
+            return 'recover_only'
+        if cancelled is not None and cancelled.is_set():
+            return 'not_attempted'
+        if self.config.get('mode') == 'type':
+            outcome = self.type_text(text, target, cancelled)
+            if outcome != 'fallback':
+                return outcome
+        return self.paste(text, target, cancelled, verified)
+
+    def type_text(self, text, target, cancelled=None):
+        """Type short single-line text as keysyms. Returns 'fallback' when paste should be used instead."""
+        keysyms = []
+        for char in text:
+            if char in '\r\n':
+                return 'fallback'
+            keysym = keysym_for(char)
+            if keysym is None:
+                return 'unsupported_text'
+            keysyms.append(keysym)
+        if not keysyms:
+            return 'unknown'
+        if len(keysyms) > self.config.get('type_max_chars', TYPE_MAX_CHARS):
+            return 'fallback'
+        if self.snapshot() != target:
+            return 'target_changed'
+        if cancelled is not None and cancelled.is_set():
+            return 'not_attempted'
+        sent = 0
+        try:
+            for keysym in keysyms:
+                self.keyboard.tap(keysym)
+                sent += 1
+        except portal_mod.PortalError:
+            # Nothing typed yet is safe to paste instead; a partial prefix must never be replayed.
+            return 'fallback' if sent == 0 else 'unknown'
+        return 'unknown'
+
+    def paste(self, text, target, cancelled=None, verified=False):
+        """Clipboard plus a paste chord. Line breaks and tabs travel as text; other controls are refused."""
+        if not self._ready():
+            return 'recover_only'
+        terminal = self.is_terminal(target)
+        if terminal:
+            text = text.rstrip('\r\n')
+        if any((ord(char) < 32 and char not in '\n\t') or 127 <= ord(char) <= 159 for char in text):
+            return 'unsupported_text'
+        if terminal and ('\n' in text or '\r' in text) and self.config.get('allow_terminal_multiline') is not True:
+            return 'unsupported_text'
+        if not verified and self.snapshot() != target:
+            return 'target_changed'
+        if cancelled is not None and cancelled.is_set():
+            return 'not_attempted'
+        copy = None
+        try:
+            copy = self.clipboard.copy(text)
+            if self.snapshot() != target:
+                return 'target_changed'
+            if cancelled is not None and cancelled.is_set():
+                return 'not_attempted'
+            modifiers = (KEYSYM_CONTROL_L, KEYSYM_SHIFT_L) if terminal else (KEYSYM_CONTROL_L,)
+            self.keyboard.chord(modifiers, KEYSYM_V)
+        except portal_mod.PortalError:
+            # The chord may have landed; a second one could paste twice.
+            return 'unknown'
+        finally:
+            if copy is not None and self.config.get('restore_clipboard', True):
+                self.schedule_restore(copy)
+        return 'unknown'
+
+    def schedule_restore(self, copy, *, delay=None):
+        """Put the earlier selection back once the target has read ours. PortalClipboard.restore skips it when
+        someone else copied since, and a password-manager selection is never put back (it would republish it)."""
+        if not copy.previous or any(mime in SENSITIVE_TYPES for mime in copy.previous):
+            return
+        if delay is None:
+            delay = self.config.get('restore_delay_seconds', RESTORE_DELAY)
+
+        def restore():
+            time.sleep(delay)
+            try:
+                self.clipboard.restore(copy)
+            except Exception:
+                log.exception('clipboard restore failed')
+
+        thread = threading.Thread(target=restore, name='mouthtype-portal-restore', daemon=True)
+        self.restore_thread = thread
+        thread.start()
