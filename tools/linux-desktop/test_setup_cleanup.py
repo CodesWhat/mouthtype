@@ -67,7 +67,7 @@ class SetupCleanupTests(unittest.TestCase):
 
     def test_hash_mismatch_removes_partial_and_records_failure(self):
         destination = self.root / 'cleanup'
-        def wrong(url, dest):
+        def wrong(url, dest, **_):
             partial = dest.with_suffix(dest.suffix + '.part')
             partial.write_bytes(b'tampered')
             return partial
