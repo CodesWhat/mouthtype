@@ -62,6 +62,7 @@ Surfaces a target can name: `panel-popup` (the `KeyboardPanel` content), `bar-bu
 - `qs.Commons` `Color` and `Style`: plausible values, not Omarchy's. Sizes are guesses at a 1x desktop. Components that hard-code colors look the same in light and dark; only code that reads `Color` changes.
 - `qs.Ui` `Panel`, `KeyboardPanel`, `WidgetButton`, `PanelKeyCatcher`: plain Items. The popup renders in place, sized to its content.
 - `Quickshell`, `Quickshell.Io`, `Quickshell.Hyprland`, `Quickshell.Wayland`: `PanelWindow` is an Item parked in the harness host, `Process` replays canned replies, `FileView` reads local files, `IpcHandler` does nothing.
+- `MouthtypePlatform`: the host shim AppState runs on. `run` replays `RenderRegistry.replies` keyed by argv[1] (the same keys the `Process` stub uses), `watch` is inert.
 
 ## Known limits
 

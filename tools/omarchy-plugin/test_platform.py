@@ -39,6 +39,10 @@ class PlatformShimTests(unittest.TestCase):
             with self.subTest(page=page.name):
                 self.assertNotIn("import Quickshell", page.read_text())
 
+    def test_app_state_imports_only_qtquick_and_the_shim(self):
+        imports = [l.strip() for l in (HERE / "AppState.qml").read_text().splitlines() if l.startswith("import ")]
+        self.assertEqual([i for i in imports if not i.startswith("import \"")], ["import QtQuick", "import MouthtypePlatform"])
+
 
 if __name__ == "__main__":
     unittest.main()
