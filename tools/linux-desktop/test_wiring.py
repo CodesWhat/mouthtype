@@ -162,7 +162,10 @@ class RegisterErrorTests(unittest.TestCase):
 class PackagingTests(unittest.TestCase):
     def test_desktop_deb_depends_on_qtwidgets(self):
         from pathlib import Path
-        control = (Path(__file__).resolve().parents[2] / 'packaging/debian/control-desktop.in').read_text()
+        path = Path(__file__).resolve().parents[2] / 'packaging/debian/control-desktop.in'
+        if not path.is_file():
+            self.skipTest('packaging/ is not part of the installed source tree')
+        control = path.read_text()
         self.assertIn('python3-pyside6.qtwidgets', control.split('Depends:')[1].split('\n')[0])
 
 
