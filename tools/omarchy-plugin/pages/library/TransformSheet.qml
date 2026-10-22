@@ -13,6 +13,9 @@ LibrarySheet {
   readonly property string expansionText: expansionField.text
   readonly property bool usesClipboard: Model.variables(expansionField.text).clipboard === true
   property bool removeArmed: false
+  // A recovered draft { trigger, expansion } to open a new transform with. Used once, by the next open.
+  property var prefill: null
+  readonly property bool dirty: triggerField.text !== (pair ? pair.trigger : "") || expansionField.text !== (pair ? pair.expansion : "")
   signal submitted(string trigger, string expansion)
   signal removeRequested()
 
@@ -28,8 +31,15 @@ LibrarySheet {
   onOpenChanged: {
     removeArmed = false
     if (!open) return
-    triggerField.text = pair ? pair.trigger : ""
-    expansionField.text = pair ? pair.expansion : ""
+    triggerField.text = pair ? pair.trigger : (prefill ? prefill.trigger || "" : "")
+    expansionField.text = pair ? pair.expansion : (prefill ? prefill.expansion || "" : "")
+    prefill = null
+  }
+
+  // The unsaved edits as a draft for control_library.py draft-save, or null when nothing was typed.
+  function draftSnapshot() {
+    if (!dirty || (triggerField.text === "" && expansionField.text === "")) return null
+    return { kind: "phrase", trigger: triggerField.text, expansion: expansionField.text }
   }
 
   footerLeft: [

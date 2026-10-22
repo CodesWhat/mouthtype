@@ -110,6 +110,26 @@ class PageContractTests(unittest.TestCase):
             self.assertIn("Restart Mouthtype", text, path.name)
 
 
+class DraftWiringTests(unittest.TestCase):
+    def test_pages_send_only_draft_verbs_control_library_has(self):
+        commands = control.module_commands()
+        for path in PAGES + [HERE / "pages" / "HomePage.qml"]:
+            for verb in re.findall(r'request\("(draft-[a-z]+)"', path.read_text(encoding="utf-8")):
+                self.assertIn(verb, commands, f"{path.name} sends {verb}")
+
+    def test_home_recovery_row_and_host_handoff(self):
+        home = (HERE / "pages" / "HomePage.qml").read_text(encoding="utf-8")
+        self.assertIn('request("draft-list", [])', home)
+        self.assertIn('buttonText: "Recover"', home)
+        self.assertIn("host.pendingDraft = d", home)
+        for name in ("DictionaryPage", "TransformsPage"):
+            text = (HERE / "pages" / f"{name}.qml").read_text(encoding="utf-8")
+            self.assertIn("host.pendingDraft", text, name)
+            self.assertIn('request("draft-clear", [draftId])', text, name)
+        for path in (HERE / "Panel.qml", HERE / "shell-render" / "FixtureHost.qml"):
+            self.assertIn("property var pendingDraft", path.read_text(encoding="utf-8"), path.name)
+
+
 class TextRuleTests(unittest.TestCase):
     def test_no_elide_no_small_text_no_restricted_word(self):
         for path in library_sources():

@@ -11,6 +11,7 @@ Item {
   id: root
 
   property var backend: ({})
+  property var host: null
   property bool active: false
   signal request(string command, var args)
 
@@ -35,6 +36,7 @@ Item {
   property int generation: 0
   property int sentGeneration: 0
   property string previewRequested: ""
+  property string draftId: ""
 
   implicitHeight: content.implicitHeight
 
@@ -59,6 +61,34 @@ Item {
     generation++
     sheetKind = ""
     sheetError = ""
+    if (draftId !== "") { request("draft-clear", [draftId]); draftId = "" }
+  }
+
+  // Cancel keeps what was typed as a draft the Home page offers back. These requests bypass the tracker on purpose: nothing
+  // here waits on a reply.
+  function cancelSheet() {
+    var draft = sheetKind === "word" ? wordSheet.draftSnapshot() : null
+    closeSheet()
+    if (draft) request("draft-save", [JSON.stringify(draft)])
+  }
+
+  // A draft picked on Home reopens as a new word with its text back. Its file goes when the sheet closes.
+  function takeDraft() {
+    var draft = host ? host.pendingDraft : null
+    if (!draft || draft.kind !== "spelling" || sheetKind !== "") return
+    host.pendingDraft = null
+    sheetError = ""
+    wordSheet.pair = null
+    wordSheet.prefill = draft
+    draftId = draft.id || ""
+    generation++
+    sheetKind = "word"
+  }
+
+  onHostChanged: takeDraft()
+  Component.onDestruction: if (sheetKind === "word") {
+    var draft = wordSheet.draftSnapshot()
+    if (draft) request("draft-save", [JSON.stringify(draft)])
   }
 
   function openWord(pair) {
@@ -87,7 +117,7 @@ Item {
   }
 
   Component.onCompleted: { syncRows(); Qt.callLater(refresh) }
-  onActiveChanged: if (active && !tracker.waiting) refresh()
+  onActiveChanged: { if (active && !tracker.waiting) refresh(); takeDraft() }
 
   RequestTracker {
     id: tracker
@@ -256,7 +286,7 @@ Item {
     open: root.sheetKind === "word"
     busy: tracker.waiting && root.sheetKind === "word"
     error: root.sheetKind === "word" ? root.sheetError : ""
-    onCancelRequested: root.closeSheet()
+    onCancelRequested: root.cancelSheet()
     onSubmitted: function(heard, written) {
       root.sheetError = ""
       if (wordSheet.pair) root.send("spellings-edit", [wordSheet.pair.heard, heard, written, wordSheet.pair.written])

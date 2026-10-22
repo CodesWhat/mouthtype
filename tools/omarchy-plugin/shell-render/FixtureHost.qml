@@ -30,6 +30,7 @@ QtObject {
   property var fontPrefs: ({ preset: "default", family: "", overrides: {} })
   property var versions: ({ plugin: "1.3.0", app: "0.4.0" })
   property var lastState: ({})
+  property var pendingDraft: null
   property string transcriptFont: "sans-serif"
   property string pillFont: "sans-serif"
   property var fileImport: ({ state: "off" })
