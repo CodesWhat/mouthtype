@@ -20,6 +20,8 @@ import Observation
     @ObservationIgnored private var observation: TakesObservation?
     /// Bumped on every deactivate. A reload that started under an older value is dropped when it finishes.
     @ObservationIgnored private var lifecycleGeneration = 0
+    /// Bumped on every `observe()`, so a callback from a replaced observation that was already queued is dropped.
+    @ObservationIgnored private var observationGeneration = 0
     @ObservationIgnored private var rolloverTask: Task<Void, Never>?
     @ObservationIgnored private var rolloverObservers: [(NotificationCenter, NSObjectProtocol)] = []
     /// Tickets for results: a result applies only if no newer one has been applied.
@@ -110,6 +112,8 @@ import Observation
             if isActive { apply(nil, failure: "Stats are unavailable.") }
             return
         }
+        observationGeneration += 1
+        let observationID = observationGeneration
         let generation = lifecycleGeneration
         let clock = now
         scheduleRollover()
@@ -119,13 +123,17 @@ import Observation
                 Log.app.error("stats observation failed: \(error.localizedDescription, privacy: .public)")
                 let message = error.localizedDescription
                 MainActor.assumeIsolated {
-                    guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
+                    guard let self, self.isActive, generation == self.lifecycleGeneration,
+                        observationID == self.observationGeneration
+                    else { return }
                     self.apply(nil, failure: message)
                 }
             },
             { [weak self] snapshot in
                 MainActor.assumeIsolated {
-                    guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
+                    guard let self, self.isActive, generation == self.lifecycleGeneration,
+                        observationID == self.observationGeneration
+                    else { return }
                     // Newer than any read already in flight, so a slower earlier one can't overwrite it.
                     self.issued += 1
                     self.applied = self.issued
