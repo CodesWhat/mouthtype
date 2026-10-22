@@ -511,6 +511,8 @@ def mapped_windows(portal):
     return json.loads(json.loads(shell_windows(portal) or '[null, []]'))[1]
 
 
+CLOSE_SCRIPT = ("Main.overview.hide(); Main.panel.statusArea.dateMenu.menu.close();"
+                " Main.panel.closeQuickSettings && Main.panel.closeQuickSettings(); 'closed'")
 MODE_SCRIPT = "JSON.stringify([Main.actionMode, Main.modalCount])"
 
 
@@ -571,7 +573,9 @@ def shortcut_hold_take(root, portal, delivery, atspi):
         if shortcuts_portal.HOLD not in status['triggers']:
             raise ValueError('dictate-hold was not granted: ' + json.dumps(status))
         driver.open()  # one click and a Shift_L tap wake the stage, as T2b found
-        # GlobalShortcuts accelerators only fire in normal mode (modalCount 0).
+        # The wake click can leave the shell in popup or overview mode (modalCount > 0), and GlobalShortcuts
+        # accelerators only fire in normal mode. Put it back before the chord.
+        shell_eval(portal, CLOSE_SCRIPT)
         wait_for(lambda: shell_mode(portal) == [1, 0], 10)
         for keysym in portal_probe.CHORD_KEYSYMS:
             driver.key(keysym, True)
