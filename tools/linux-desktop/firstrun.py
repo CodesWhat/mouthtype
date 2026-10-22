@@ -22,6 +22,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import threading
 import time
 
 HERE = Path(__file__).resolve().parent
@@ -73,14 +74,62 @@ def needs_setup():
     return None
 
 
-def notify(summary, body='', *, run=subprocess.run):
+def notify(summary, body='', *, percent=None, replace_id=None, run=subprocess.run):
+    """Send one notification and return its id (None when the notifier is missing or gave no id).
+
+    percent adds the int:value hint that notification daemons draw as a progress bar; replace_id updates that
+    notification in place instead of stacking a new one."""
     if shutil.which('notify-send') is None:
-        return
+        return None
+    command = ['notify-send', '--print-id', '--app-name=Mouthtype', '--expire-time=8000']
+    if replace_id:
+        command.append('--replace-id=' + str(replace_id))
+    if percent is not None:
+        command += ['-h', 'int:value:' + str(percent)]
     try:
-        run(['notify-send', '--app-name=Mouthtype', '--expire-time=8000', summary, body], timeout=10,
-            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-    except (OSError, subprocess.SubprocessError):
-        pass
+        result = run(command + [summary, body], timeout=10, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                     stderr=subprocess.DEVNULL, check=False, text=True)
+        raw = (result.stdout or '').strip()
+        return int(raw) if raw.isdigit() and 0 < int(raw) <= 4294967295 else None
+    except (OSError, subprocess.SubprocessError, AttributeError):
+        return None
+
+
+def speech_progress_path():
+    return home() / '.local/share/mouthtype/speech-candidate/speech-setup.json'
+
+
+def read_percent():
+    """Download percent from the progress file setup_speech writes, or None when there is no usable reading."""
+    try:
+        value = json.loads(speech_progress_path().read_text())
+        if value.get('state') != 'downloading':
+            return None
+        done, total = int(value['bytes_done']), int(value['bytes_total'])
+        return max(0, min(100, done * 100 // total)) if total > 0 else None
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
+
+
+def run_with_progress(work, notifier, title, body, *, interval=1.0, step=5, sleep=time.sleep):
+    """Run work() in a thread, polling the speech progress file and updating one notification as the download goes.
+
+    Returns (work's result, id of the notification, so the caller can replace it with the final message). The
+    shown percent only moves forward and updates at most every `step` percent. A notifier without id support
+    (or none at all) just means the progress message doesn't update; setup is never blocked on it."""
+    outcome = []
+    thread = threading.Thread(target=lambda: outcome.append(work()), daemon=True)
+    identity = notifier(title, body, percent=0)
+    shown = 0
+    thread.start()
+    while thread.is_alive():
+        sleep(interval)
+        percent = read_percent()
+        if percent is not None and percent >= shown + step and identity:
+            shown = percent
+            identity = notifier(title, body, percent=percent, replace_id=identity) or identity
+    thread.join()
+    return outcome[0], identity
 
 
 def load_setup():
@@ -91,7 +140,15 @@ def load_setup():
     return module
 
 
-def run_first(*, setup_main=None, notifier=notify, plugin_dir=None):
+def final(notifier, identity, summary, body):
+    """The closing message replaces the progress notification when there is one, so no stale bar is left behind."""
+    if identity:
+        notifier(summary, body, replace_id=identity)
+    else:
+        notifier(summary, body)
+
+
+def run_first(*, setup_main=None, notifier=notify, plugin_dir=None, sleep=time.sleep):
     """Returns the process exit status: 0 when nothing needed doing or setup finished, 1 when it failed."""
     if sys.platform != 'linux':
         return 0
@@ -122,19 +179,28 @@ def run_first(*, setup_main=None, notifier=notify, plugin_dir=None):
         argv = ['--shortcut', 'toggle'] + ([] if omarchy else ['--skip-plugin'])
         if plugin_dir:
             argv += ['--plugin-dir', str(plugin_dir)]
-        notifier('Setting up Mouthtype', ('First run: downloading the speech model (about 465 MiB). '
-                                          if reason == 'no speech setup' else 'First run: adding the Mouthtype bar widget. ')
-                 + 'You will get a message when it is ready.')
+        title = 'Setting up Mouthtype'
+        body = (('First run: downloading the speech model (about 465 MiB). '
+                 if reason == 'no speech setup' else 'First run: adding the Mouthtype bar widget. ')
+                + 'You will get a message when it is ready.')
         log = io.StringIO()
-        status = 1
-        with contextlib.redirect_stderr(log):
+
+        def work():
             try:
                 setup = setup_main or load_setup().main
-                status = setup(argv)
+                return setup(argv)
             except SystemExit as stop:
-                status = stop.code if isinstance(stop.code, int) else 1
+                return stop.code if isinstance(stop.code, int) else 1
             except Exception as error:
                 print(type(error).__name__ + ': ' + str(error), file=sys.stderr)
+                return 1
+
+        with contextlib.redirect_stderr(log):
+            if reason == 'no speech setup':
+                status, shown_id = run_with_progress(work, notifier, title, body, sleep=sleep)
+            else:
+                notifier(title, body)
+                status, shown_id = work(), None
         sys.stderr.write(log.getvalue())
         if status == 0:
             record('done', attempts=attempts, reason=reason)
@@ -145,7 +211,7 @@ def run_first(*, setup_main=None, notifier=notify, plugin_dir=None):
             keys = [text for marker, text in (('plugin shortcut: begin', 'Super+Alt+M to dictate'),
                                               ('plugin transform shortcut: begin', 'Super+Shift+T to transform a selection'))
                     if marker in bindings]
-            notifier('Mouthtype is ready', ('Press ' + ', '.join(keys) + '. ' if keys else
+            final(notifier, shown_id, 'Mouthtype is ready', ('Press ' + ', '.join(keys) + '. ' if keys else
                                             'Pick a dictation key from the Mouthtype menu in the bar. ')
                      + 'Check anytime with: mouthtype-linux doctor')
             return 0
@@ -153,7 +219,7 @@ def run_first(*, setup_main=None, notifier=notify, plugin_dir=None):
         error = lines[-1] if lines else 'setup exited with status ' + str(status)
         record('failed', attempts=attempts, reason=reason, error=error)
         retry = 'It will try again at your next login.' if attempts < MAX_ATTEMPTS else 'Run mouthtype-linux-setup to try again.'
-        notifier('Mouthtype setup failed', error[:200] + ' ' + retry)
+        final(notifier, shown_id, 'Mouthtype setup failed', error[:200] + ' ' + retry)
         return 1
     finally:
         lock.close()
