@@ -21,12 +21,12 @@ The maintainer reviews findings, dependency advisories, tool pins and shipped be
 
 ## OpenSSF Scorecard
 
-The [Scorecard workflow](../.github/workflows/security-scorecard.yml) runs the official Scorecard CLI against the remote default branch and retains JSON as an Actions artifact for seven days. It doesn't publish to OpenSSF, upload SARIF, request OIDC or add a public badge. It reports observations; no aggregate-score threshold substitutes for reviewing individual results and errors.
+The [Scorecard workflow](../.github/workflows/security-scorecard.yml) runs the official Scorecard action on the default branch, weekly and on branch-protection changes. It publishes results to OpenSSF (the README badge reads them), uploads SARIF to code scanning and requests an OIDC credential for publishing only. It reports observations; no aggregate-score threshold substitutes for reviewing individual results and errors.
 
 > [!NOTE]
-> The CLI report can still contain unavailable checks because of API permissions or platform support. A successful process exit or artifact upload doesn't make those checks pass.
+> The report can still contain unavailable checks because of API permissions or platform support. A successful process exit or artifact upload doesn't make those checks pass.
 
-Workflow credentials have read access to the repository's code, checks, actions, issues and pull requests, without administrative permission.
+Workflow credentials have read access to the repository's code, checks, actions, issues and pull requests, plus `security-events: write` and `id-token: write` on the Scorecard job only, without administrative permission.
 
 > [!NOTE]
 > `CODEOWNERS` requests review but doesn't enforce approval by itself. Required-review enforcement comes from the repository's branch protection or rulesets, which should be inspected directly rather than assumed.
