@@ -351,6 +351,7 @@ def config_summary():
         "history_keep": config.get("history_keep"),
         "notifications": config.get("notifications", True),
         "slash_commands": config.get("slash_commands", True),
+        "microphone": config.get("capture_target") or "default",
         "maximum_recording_seconds": config.get("maximum_recording_seconds", 60),
         "delivery_mode": delivery.get("mode", "recover"),
         "allowed_classes": delivery.get("allowed_classes", []),
@@ -908,6 +909,12 @@ def set_config(field, value, extra=None):
         config["cleanup_engine"] = str(CLEANUP_DIR / "cleanup.json")
     elif field == "notifications" and value in {"on", "off"}:
         config["notifications"] = value == "on"
+    elif field == "microphone" and value == "default":
+        config.pop("capture_target", None)
+    elif field == "microphone" and value:
+        if value not in [item["name"] for item in module_commands()["microphones"]()["sources"]]:
+            raise RuntimeError("That microphone is not connected")
+        config["capture_target"] = value
     elif field == "slash_commands" and value in {"on", "off"}:
         config["slash_commands"] = value == "on"
     elif field == "maximum_recording_seconds" and value in {"30", "60", "120"}:
