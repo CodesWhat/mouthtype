@@ -45,7 +45,13 @@ public struct TranscriptGuard: Sendable {
         "put", "use", "buy", "pay", "yet", "ago", "may", "wow", "ooh", "aha", "ugh", "hmm", "uh", "um",
     ]
 
-    public init() {}
+    private let language: DictationLanguage?
+
+    /// Outside English only the known cue sounds are dropped as the start cue. The "short word, low confidence"
+    /// rule relies on an English opener list, and would drop a hesitant "ich", "und" or "oui".
+    public init(language: DictationLanguage? = nil) {
+        self.language = language
+    }
 
     public func apply(_ transcription: Transcription, voicedMs: Double?, clean: Bool = true) -> GuardedTranscript {
         let original = transcription.text
@@ -88,6 +94,7 @@ public struct TranscriptGuard: Sendable {
         guard !letters.isEmpty, !first.word.contains(where: \.isWhitespace) else { return nil }
         let isCueSound = Self.cueSounds.contains(letters)
         if !isCueSound {
+            guard DictationLanguage.isEnglish(language) else { return nil }
             guard letters.count < 4, !Self.realOpeners.contains(letters) else { return nil }
         }
         if words.count > 1 {
