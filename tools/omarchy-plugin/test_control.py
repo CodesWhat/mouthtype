@@ -150,6 +150,14 @@ class SettingsDuringImportTests(unittest.TestCase):
         self.assertEqual(self.shutdowns, ["shutdown"])
         self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["notifications"])
 
+    def test_slash_commands_toggle_is_written_and_summarised(self):
+        self.file_import["state"] = "finished"
+        control.set_config("slash_commands", "off")
+        self.assertFalse(json.loads(self.config.read_text(encoding="utf-8"))["slash_commands"])
+        self.assertFalse(control.config_summary()["slash_commands"])
+        with self.assertRaisesRegex(RuntimeError, "Unsupported"):
+            control.set_config("slash_commands", "maybe")
+
 
 class RetainedImportResultTests(unittest.TestCase):
     def setUp(self):

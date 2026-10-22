@@ -153,7 +153,7 @@ class Session:
     def __init__(self, capture, engine, delivery, recovery, *, maximum_seconds=60, clock=None, feedback=None,
                  dictionary=None, phrases=None, phrase_clipboard=False, clipboard=None, cleanup='off',
                  cleanup_engine=None, maximum_takes=200, audio_days=90, audio_megabytes=2048, history_keep=None,
-                 styles=None, styles_path=None, engine_loader=None):
+                 styles=None, styles_path=None, engine_loader=None, slash_commands=True):
         load_runtime()
         self.capture, self.engine, self.delivery = capture, engine, delivery
         self.maximum_takes, self.audio_days, self.audio_megabytes = maximum_takes, audio_days, audio_megabytes
@@ -170,6 +170,7 @@ class Session:
         self.dictionary = dictionary
         self.phrases = phrases
         self.cleanup = cleanup
+        self.slash_commands = slash_commands
         self.phrase_clipboard = phrase_clipboard
         self.clipboard = clipboard or read_phrase_clipboard
         self.recovery = Path(recovery)
@@ -436,7 +437,8 @@ class Session:
                     return self.status()
                 self._refresh_styles()
                 try:
-                    cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles)
+                    cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles,
+                                            self.slash_commands)
                 except ValueError:
                     self.error = 'cleanup_unavailable'
                     self._notify('error')
@@ -650,7 +652,8 @@ class Session:
                 return self.status()
             self._refresh_styles()
             try:
-                cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles)
+                cleanup = BasicCleanup('basic' if self.cleanup in ('fast', 'thorough') else self.cleanup, self.styles,
+                                            self.slash_commands)
             except ValueError:
                 self.error = 'cleanup_unavailable'
                 self._notify('error')
@@ -1393,6 +1396,8 @@ def validate_config(value):
         style_contexts.validate(result['styles'])
     if type(result.get('phrase_clipboard', False)) is not bool:
         raise ValueError('phrase_clipboard must be true or false')
+    if type(result.get('slash_commands', True)) is not bool:
+        raise ValueError('slash_commands must be true or false')
     return result
 
 
@@ -1894,7 +1899,7 @@ def main(argv=None, *, cli_directory=None):
                           cleanup_engine=cleanup_engine, maximum_takes=int(config['maximum_recovery_takes']),
                           audio_days=config['audio_retention_days'], audio_megabytes=config['audio_retention_megabytes'],
                           history_keep=config['history_keep'], styles=config.get('styles'), styles_path=args.config,
-                          engine_loader=load_engine)
+                          engine_loader=load_engine, slash_commands=config.get('slash_commands', True))
         files = FileTranscription(engine, args.imports, request_seconds=config['request_seconds'])
         if cleanup_engine is not None and cleanup_engine.state == 'idle':
             cleanup_engine.warm()

@@ -150,6 +150,7 @@ These keys live in `linux.json`. Relative paths resolve beside that file.
 | `phrases` | Path to the saved-phrases JSON | Not set |
 | `phrase_clipboard` | `true` enables the `{clipboard}` variable | `false` |
 | `notifications` | `true` or `false` | `true` |
+| `slash_commands` | `true` or `false`. "slash research" becomes "/research" in terminals, code editors and coding agents | `true` |
 | `cleanup` | `off`, `basic`, `fast`, `thorough` | `off` |
 | `cleanup_engine` | Path to `cleanup.json` | Not set |
 
@@ -284,6 +285,8 @@ Window classes come from `hyprctl clients`. The built-in classes were checked ag
 ## Recording feedback
 
 Coarse desktop notifications are enabled by default through the existing `notify-send` helper. They identify ready, recording, transcribing, saved, cancelled and error states without transcript text, window titles or audio. Subsequent cues replace the previous notification when the desktop returns a notification ID. Active cues expire if a later replacement cannot be submitted; shutdown replaces an active recording cue with cancellation. Desktop notification presentation is best effort and never counts as delivery verification.
+
+Spoken slash commands run as part of Basic cleanup, before spoken commands, and only when the window class at record start is a coding target: kitty, Alacritty, foot, ghostty, org.wezfurlong.wezterm, code, cursor, zed, claude, codex, orca, or a class starting with `jetbrains-` (case-insensitive). "slash code dash review" becomes "/code-review"; "press the slash key" and a bare "slash" are left alone. Mac also converts on claude.ai and chatgpt.com by page host; Wayland exposes no page host, so browser sites are not covered on Linux. Set `slash_commands` to `false` to turn it off.
 
 Set `notifications` to `false` to disable this helper. If it is missing, hung or rejected by the desktop, dictation and recovery continue; `status` reports feedback as unavailable. `submitted_unknown` means the helper accepted a cue, not that the desktop displayed it. Each helper has a short deadline and its owned process group is stopped/reaped. This client does not install the helper, notification service, bindings or login integration. Arch's `libnotify` and Ubuntu's `libnotify-bin` provide `notify-send` through their normal signed package management.
 

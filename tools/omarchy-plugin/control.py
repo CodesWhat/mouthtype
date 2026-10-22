@@ -340,6 +340,7 @@ def config_summary():
         "audio_retention_days": config.get("audio_retention_days", 90),
         "history_keep": config.get("history_keep"),
         "notifications": config.get("notifications", True),
+        "slash_commands": config.get("slash_commands", True),
         "maximum_recording_seconds": config.get("maximum_recording_seconds", 60),
         "delivery_mode": delivery.get("mode", "recover"),
         "allowed_classes": delivery.get("allowed_classes", []),
@@ -889,6 +890,8 @@ def set_config(field, value, extra=None):
         config["cleanup_engine"] = str(CLEANUP_DIR / "cleanup.json")
     elif field == "notifications" and value in {"on", "off"}:
         config["notifications"] = value == "on"
+    elif field == "slash_commands" and value in {"on", "off"}:
+        config["slash_commands"] = value == "on"
     elif field == "maximum_recording_seconds" and value in {"30", "60", "120"}:
         config["maximum_recording_seconds"] = int(value)
     elif field == "maximum_recovery_takes" and value in {"100", "200", "500", "1000"}:
