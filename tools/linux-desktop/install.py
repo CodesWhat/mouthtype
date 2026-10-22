@@ -160,6 +160,16 @@ def package(source, output):
     return output
 
 
+def _remove_gnome_shortcut():
+    """Drop the GNOME fallback keybinding if this machine has one. Best effort: no gsettings means nothing to remove."""
+    import shortcuts_gnome
+    try:
+        if shortcuts_gnome.remove():
+            print('Removed the Mouthtype GNOME keyboard shortcut.')
+    except shortcuts_gnome.GnomeShortcutError:
+        pass
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--prefix', type=Path, default=Path.home() / '.local')
@@ -173,6 +183,7 @@ def main():
     try:
         if args.uninstall:
             removed = uninstall(args.prefix)
+            _remove_gnome_shortcut()
             print('\n'.join(map(str, removed)) if removed else 'Nothing to remove below ' + str(args.prefix))
             print('Models, configuration and recordings were left in place.')
             return 0

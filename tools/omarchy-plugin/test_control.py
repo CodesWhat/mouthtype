@@ -67,6 +67,28 @@ class ShortcutDaemonTests(unittest.TestCase):
         self.assertEqual(control.shortcut_configure()["triggers"], {"dictate-hold": "Ctrl+Alt+M"})
 
 
+class GnomeShortcutVerbTests(unittest.TestCase):
+    def test_actions_are_registered(self):
+        self.assertLessEqual({"shortcut-gnome-install", "shortcut-gnome-remove"}, control.VALID_ACTIONS)
+
+    def test_install_passes_the_binding_and_reports_errors(self):
+        module = mock.Mock()
+        module.GnomeShortcutError = ValueError
+        module.install.return_value = {"installed": True}
+        with mock.patch.object(control, "gnome_shortcuts", lambda: module):
+            self.assertEqual(control.shortcut_gnome_install("<Super>m"), {"installed": True})
+            module.install.assert_called_once_with("<Super>m")
+            module.install.side_effect = ValueError("in use")
+            with self.assertRaisesRegex(RuntimeError, "in use"):
+                control.shortcut_gnome_install()
+
+    def test_remove_reports_whether_it_removed(self):
+        module = mock.Mock()
+        module.remove.return_value = False
+        with mock.patch.object(control, "gnome_shortcuts", lambda: module):
+            self.assertEqual(control.shortcut_gnome_remove(), {"removed": False})
+
+
 class AutostartTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()
