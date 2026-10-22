@@ -110,6 +110,13 @@ export const pages = [
     description: "Experimental, source-only Linux support. There is no supported release.",
   },
   {
+    src: "docs/guides/linux-gnome-kde.md",
+    dest: "linux/linux-gnome-kde",
+    title: "Ubuntu GNOME and Fedora KDE",
+    description:
+      "Experimental setup for Ubuntu 26.04 GNOME and Fedora 44 KDE Plasma. Not yet verified on real hardware.",
+  },
+  {
     src: "tools/linux-desktop/README.md",
     dest: "linux/linux-desktop-setup",
     title: "Linux desktop setup and testing",
@@ -195,7 +202,10 @@ export const folders = {
   "cleanup-and-style": { title: "Cleanup and Style", pages: ["index", "writing-tools"] },
   automation: { title: "Automation", pages: ["index", "url-scheme-and-cli"] },
   "privacy-and-data": { title: "Privacy and data", pages: ["index", "saved-audio"] },
-  linux: { title: "Linux", pages: ["index", "linux-desktop-setup", "linux-omarchy-plugin"] },
+  linux: {
+    title: "Linux",
+    pages: ["index", "linux-gnome-kde", "linux-desktop-setup", "linux-omarchy-plugin"],
+  },
   reference: {
     title: "Reference",
     pages: [

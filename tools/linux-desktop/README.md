@@ -15,6 +15,10 @@ A functional command-line session service for **Arch/Omarchy with Hyprland and P
 
 The sections below explain each step. The Omarchy bar plugin in `../omarchy-plugin` is the desktop frontend.
 
+## GNOME and KDE Plasma
+
+Ubuntu 26.04 GNOME and Fedora 44 KDE Plasma (Wayland) use the desktop portals for typing access and global shortcuts, with the Qt settings window, tray icon and KDE pill from `mouthtype-linux-desktop`. This is experimental and not yet verified on real hardware. The user-facing guide, with install, first-run prompts, shortcuts, `doctor` failures and uninstall, is `docs/guides/linux-gnome-kde.md`.
+
 ## Check an existing setup
 
 Run `mouthtype-linux --config /absolute/path/linux.json doctor` for a read-only report, or add `--json` after `doctor` for structured output. Exit status is 0 when required setup checks pass and 2 when something needs attention. It checks the target platform, configuration, configured Python's pinned speech distribution metadata, four model-file hashes, configured spelling/phrase libraries, required helpers and an existing service's status. It does not import the speech runtime, load weights, open a microphone, read the clipboard, install packages, download files or change the desktop. Optional notification feedback and a stopped service are warnings, with next steps.
