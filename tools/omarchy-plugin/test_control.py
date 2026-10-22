@@ -578,6 +578,59 @@ class ShortcutBlockTests(unittest.TestCase):
         self.assertNotIn("Mouthtype", self.bindings.read_text(encoding="utf-8"))
 
 
+class MissingClientTests(unittest.TestCase):
+    def setUp(self):
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        self.root = Path(directory.name)
+        self.notice = self.root / "state" / "removed-notice"
+        patches = [
+            mock.patch.object(control, "LAUNCHER", self.root / "bin" / "mouthtype-linux"),
+            mock.patch.object(control, "REMOVED_NOTICE", self.notice),
+        ]
+        for patch in patches:
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_state_reports_the_client_missing(self):
+        reply = control.state()
+        self.assertEqual(reply["client"], "missing")
+        self.assertFalse(reply["running"])
+
+    def test_a_present_client_is_not_missing(self):
+        control.LAUNCHER.parent.mkdir()
+        control.LAUNCHER.write_text("#!/bin/sh\n")
+        self.assertFalse(control.client_missing())
+        self.assertNotEqual(control.state().get("client"), "missing")
+
+    def test_notifies_once_a_minute(self):
+        with mock.patch.object(control.shutil, "which", return_value="/usr/bin/notify-send"), \
+                mock.patch.object(control.subprocess, "run") as run:
+            self.assertTrue(control.notify_removed(now=1000.0))
+            self.assertFalse(control.notify_removed(now=1030.0))
+            self.assertTrue(control.notify_removed(now=1061.0))
+        self.assertEqual(run.call_count, 2)
+        self.assertIn(control.REMOVED_TEXT, run.call_args.args[0])
+
+    def test_no_notify_send_is_quiet(self):
+        with mock.patch.object(control.shutil, "which", return_value=None):
+            self.assertFalse(control.notify_removed())
+
+    def test_shortcut_verb_notifies_instead_of_failing(self):
+        out = io.StringIO()
+        with mock.patch.object(sys, "argv", ["control.py", "toggle"]), \
+                mock.patch.object(control, "notify_removed") as notify, contextlib.redirect_stdout(out):
+            code = control.main()
+        self.assertEqual(code, 1)
+        notify.assert_called_once()
+        self.assertEqual(json.loads(out.getvalue())["client"], "missing")
+
+    def test_remove_leftovers_runs_the_plugin_installer(self):
+        with mock.patch.object(control.subprocess, "Popen") as popen:
+            control.remove_leftovers()
+        self.assertEqual(popen.call_args.args[0][1:], [str(control.PLUGIN_DIR / "install.py"), "--uninstall"])
+
+
 class WelcomedTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory()

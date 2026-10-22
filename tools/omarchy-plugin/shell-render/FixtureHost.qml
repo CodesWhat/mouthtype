@@ -18,6 +18,7 @@ QtObject {
   property bool soundsEnabled: true
   property bool autostartEnabled: true
   property bool welcomed: false
+  property bool clientMissing: false
   property string shortcutMode: "hold"
   property string shortcutKeys: "F10"
   property string transcript: ""
@@ -69,6 +70,7 @@ QtObject {
     soundsEnabled = true
     autostartEnabled = true
     welcomed = false
+    clientMissing = false
     shortcutMode = "hold"
     shortcutKeys = "F10"
     pillPrefs = { enabled: true, skin: "classic", size: 1 }

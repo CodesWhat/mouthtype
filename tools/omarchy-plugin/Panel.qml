@@ -36,6 +36,8 @@ Panel {
   property bool soundsEnabled: false
   property bool autostartEnabled: false
   property bool welcomed: false
+  // True when control.py reports the client is gone (package removed without the setup uninstall).
+  property bool clientMissing: false
   property string shortcutMode: "off"
   property string shortcutKeys: ""
   property string transcript: ""
@@ -90,6 +92,7 @@ Panel {
   implicitHeight: button.implicitHeight
 
   function absorb(result) {
+    if (result.running !== undefined) clientMissing = result.client === "missing"
     if (result.running !== undefined) serviceRunning = result.running === true
     if (result.state !== undefined) sessionState = String(result.state || "off")
     if (result.recent !== undefined) recent = result.recent || []
