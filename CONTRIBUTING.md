@@ -25,6 +25,7 @@ Use plain Conventional Commits: `feat`, `fix`, `docs`, `style`, `refactor`, `per
 ## Checks
 
 - Mac code: Xcode with Swift 6.2 on Apple Silicon and macOS 26 or later, then `scripts/swift-test.sh` (`swift test` that also fails on any reported failure, so a piped or truncated run can't pass). Add meaningful regression coverage for changed behavior. Physical microphone and destination-app checks are separate from logic tests. You don't need a Developer ID or notarization to contribute.
+- Pre-push hook (optional): `git config core.hooksPath .githooks` runs `scripts/pre-push.sh` before each push. It runs `swift-format lint --strict` on the Swift files your push changes, and `swift build -Xswiftc -warnings-as-errors` only when Swift files changed. Run `scripts/pre-push.sh [base-ref]` directly to check without pushing. Fix what it reports rather than skipping it.
 - Release helpers: `python3 -m unittest discover -s Tests/ReleaseTests -p 'test_*.py'`. The real archive integration test requires macOS `ditto`; Linux explicitly skips that one test.
 - Website: `npm --prefix website ci`, `npm --prefix website run build`, then `npm --prefix website test`. Install the Playwright browser as described in [website/README.md](website/README.md).
 - Docs site: `npm --prefix apps/docs ci`, then `npm --prefix apps/docs run check`, `run type-check`, `run build` and `REQUIRE_OUT=1 npm --prefix apps/docs run test:scripts`. Commit the regenerated `apps/docs/vercel.json`.
