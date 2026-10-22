@@ -77,6 +77,103 @@ def sanitize(output):
     return text.strip()
 
 
+QUOTE_MARKS = {'\u201c': '"', '\u201d': '"', '\u2018': "'", '\u2019': "'"}
+
+PREAMBLE = re.compile(
+    r"^(?:(?:sure|certainly|of course|okay|ok)[,!.]?\s+)?(?:here(?:'s|\u2019s| is| are)[ \t]+(?:(?:the|a|an|your)[ \t]+)?"
+    r"(?:[a-z-]+[ \t]+){0,3}(?:text|version|rewrite|result|output|translation|transcript|transcription|dictation|summary|"
+    r"draft|revision|edit)(?:[ \t]+(?:(?:of|for)[ \t]+(?:your|the)[ \t]+(?:selected[ \t]+)?(?:text|selection)|"
+    r"(?:in|with)[ \t]+(?:an?[ \t]+)?[a-z-]+[ \t]+tone))?|(?:the )?(?:corrected|edited|revised|rewritten|updated) "
+    r"(?:text|version)):[ \t]*(?:\n\s*|\s+)", re.I)
+
+
+def quote_key(char):
+    return QUOTE_MARKS.get(char, char)
+
+
+def quote_like(char):
+    return char == '"' or char in QUOTE_MARKS
+
+
+def starts_with_quote(source, opening):
+    if not source or not opening:
+        return False
+    return source.startswith(opening) or (quote_like(opening[0]) and quote_key(source[0]) == quote_key(opening[0]))
+
+
+def ends_with_quote(source, closing):
+    if not source or not closing:
+        return False
+    return source.endswith(closing) or (quote_like(closing[-1]) and quote_key(source[-1]) == quote_key(closing[-1]))
+
+
+def enclosed(text, source, opening, closing):
+    """The text between opening and closing when they wrap all of it and the source didn't start or end with them."""
+    if len(text) < len(opening) + len(closing) or not text.startswith(opening) or not text.endswith(closing):
+        return None
+    if starts_with_quote(source, opening) or ends_with_quote(source, closing):
+        return None
+    inner = text[len(opening):len(text) - len(closing)]
+    return None if opening in inner or closing in inner else inner
+
+
+def unfenced(text, source):
+    if not (text.startswith('```') and text.endswith('```')) or source.startswith('```') or source.endswith('```'):
+        return None
+    lines = text.split('\n')
+    if len(lines) < 3 or lines[-1].strip(' \t') != '```' or not re.fullmatch(r'```[A-Za-z0-9_+.-]*', lines[0]):
+        return None
+    inner = '\n'.join(lines[1:-1])
+    return None if '```' in inner else inner
+
+
+def spoken_words(text):
+    return [word.replace('\u2019', "'") for word in re.split(r"[^0-9A-Za-z\u00c0-\uffff'\u2019]+", text.lower()) if word]
+
+
+def contains_run(haystack, needle):
+    return len(needle) <= len(haystack) and any(
+        haystack[index:index + len(needle)] == needle for index in range(len(haystack) - len(needle) + 1))
+
+
+def without_preamble(text, source):
+    """Only framing that names the output. A lead-in the source already said (even after a self-correction) stays."""
+    match = PREAMBLE.match(text)
+    if not match or match.end() >= len(text):
+        return text
+    lead = spoken_words(match.group(0).strip())
+    if not lead or contains_run(spoken_words(source), lead):
+        return text
+    return text[match.end():]
+
+
+def unwrap_once(text, source):
+    inner = unfenced(text, source)
+    if inner is not None:
+        return inner
+    for tag in ('text', 'transcript'):
+        inner = enclosed(text, source, '<%s>' % tag, '</%s>' % tag)
+        if inner is not None:
+            return inner
+    for opening, closing in (('"', '"'), ('\u201c', '\u201d')):
+        inner = enclosed(text, source, opening, closing)
+        if inner is not None:
+            return inner
+    return without_preamble(text, source)
+
+
+def unwrap(output, source):
+    """Peel framing the model added around the whole output: fence, tag, quotes, preamble (up to four layers)."""
+    source = source.strip()
+    text = output.strip()
+    for _ in range(4):
+        following = unwrap_once(text, source).strip()
+        if following == text:
+            break
+        text = following
+    return text
+
+
 def restoring_terminal(source, output):
     """A dictation that ended in . ? or ! keeps that mark; the model may not turn a statement into a question."""
     wanted = next((char for char in reversed(source) if not char.isspace()), None)
@@ -313,6 +410,6 @@ def eligible(text):
 
 def check(source, output):
     """The accepted text or None, with the rejection reason."""
-    cleaned = restoring_terminal(source, sanitize(output))
+    cleaned = restoring_terminal(source, unwrap(sanitize(output), source))
     reason = rejection(source, cleaned)
     return (None, reason) if reason else (cleaned, None)
