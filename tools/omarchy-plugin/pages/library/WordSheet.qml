@@ -12,6 +12,9 @@ LibrarySheet {
   readonly property string writtenText: writtenField.text.trim()
   readonly property string heardText: heardField.text.trim()
   property bool removeArmed: false
+  // A recovered draft { written, heardInput, heardForms } to open a new word with. Used once, by the next open.
+  property var prefill: null
+  readonly property bool dirty: writtenField.text !== (pair ? pair.written : "") || heardField.text !== (pair ? pair.heard : "")
   signal submitted(string heard, string written)
   signal removeRequested()
 
@@ -26,8 +29,15 @@ LibrarySheet {
   onOpenChanged: {
     removeArmed = false
     if (!open) return
-    writtenField.text = pair ? pair.written : ""
-    heardField.text = pair ? pair.heard : ""
+    writtenField.text = pair ? pair.written : (prefill ? prefill.written || "" : "")
+    heardField.text = pair ? pair.heard : (prefill ? [].concat(prefill.heardForms || [], [prefill.heardInput || ""]).filter(function(s) { return s !== "" }).join(" ") : "")
+    prefill = null
+  }
+
+  // The unsaved edits as a draft for control_library.py draft-save, or null when nothing was typed.
+  function draftSnapshot() {
+    if (!dirty || (writtenField.text === "" && heardField.text === "")) return null
+    return { kind: "spelling", heardForms: [], heardInput: heardField.text, written: writtenField.text, starred: false }
   }
 
   footerLeft: [

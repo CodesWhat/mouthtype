@@ -47,6 +47,8 @@ Panel {
   property var history: ({ takes: 0, maximum: 200 })
   property var fontPrefs: ({ preset: "default", family: "", overrides: {} })
   property var versions: ({ plugin: null, app: null })
+  // A recovered sheet draft picked on Home. The Dictionary or Transforms page takes it when it opens and sets this back to null.
+  property var pendingDraft: null
   // The last `control.py state` reply, merged. The shell hands it to data pages as backend.state.
   property var lastState: ({})
   readonly property string transcriptFont: Fonts.family({ font: fontPrefs }, "transcript", Style.font.family)
