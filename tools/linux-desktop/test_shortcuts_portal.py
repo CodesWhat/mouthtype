@@ -117,6 +117,11 @@ class PortalShortcutsTests(unittest.TestCase):
         self.assertEqual(self.session.shortcuts_status['triggers'], status['triggers'])
         self.assertEqual(status['version'], 2)
 
+    def test_hold_is_listed_first_whatever_order_the_desktop_answers_in(self):
+        self.fake.grants = {'cancel': 'Esc', 'dictate-toggle': 'Ctrl+Alt+Space', 'dictate-hold': 'Ctrl+Alt+H'}
+        self.started()
+        self.assertEqual(list(self.shortcuts.status()['triggers']), ['dictate-hold', 'dictate-toggle', 'cancel'])
+
     def test_hold_starts_on_activated_and_stops_on_deactivated(self):
         handle = self.started()
         self.fake.emit_activated(handle, 'dictate-hold')

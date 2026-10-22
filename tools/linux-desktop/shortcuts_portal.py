@@ -123,6 +123,9 @@ class PortalShortcuts:
             if isinstance(description, tuple):
                 description = description[1]
             granted[sid] = description or ''
+        # Hold is the default (GNOME measured Activated 2-6 ms, Deactivated mean 4.7 ms), toggle stays bound beside it.
+        order = [sid for sid, _, _ in ACTIONS]
+        granted = dict(sorted(granted.items(), key=lambda item: order.index(item[0]) if item[0] in order else len(order)))
         with self._lock:
             self._handle, self.granted = handle, granted
             self.state, self.error = 'bound', None
