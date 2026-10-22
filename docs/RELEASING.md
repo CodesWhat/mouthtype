@@ -68,6 +68,21 @@ Verify each of these:
 > [!NOTE]
 > A unit test, HTTP 200, signed feed or updater-state test does not prove installation over an older live app. Coordinate an actual update-install/relaunch test separately; never use Scott’s running app for an uncoordinated update. Existing alpha.1–3 users must manually install the first updater-enabled build once.
 
+## Verifying release signatures
+
+`.github/workflows/release-sign.yml` runs when a release is published (or by manual dispatch with a tag). It signs every release asset with keyless cosign, attaches a `<asset>.sigstore.json` bundle next to each one, and records a build provenance attestation. It never re-uploads the original assets, so Sparkle signatures and notarization are untouched. A release event runs the workflow file from the tagged commit, so the signing identity is the tag ref for published releases and `main` for a dispatched backfill.
+
+```sh
+cosign verify-blob \
+  --bundle Mouthtype-X.Y.Z-macos-arm64.dmg.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/CodesWhat/mouthtype/.github/workflows/release-sign.yml@refs/(heads/main|tags/v.+)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  Mouthtype-X.Y.Z-macos-arm64.dmg
+gh attestation verify Mouthtype-X.Y.Z-macos-arm64.dmg --repo CodesWhat/mouthtype
+```
+
+To backfill an older release, dispatch `release-sign.yml` from `main` with its tag. Dispatch only works once the file is on `main`.
+
 ## Signing and Sparkle
 
 Sparkle is pinned in `Package.swift` and `Package.resolved`. The app carries its framework, nested signed helpers and `@executable_path/../Frameworks` runpath. `scripts/build-app.sh` signs helpers inside out with the same Developer ID as the app. The feed URL and public key live in `packaging/Info.plist`. The dedicated Sparkle signing key stays in Keychain under account `com.codeswhat.mouthtype`. Back up that Keychain through the owner’s normal secure backup process.
