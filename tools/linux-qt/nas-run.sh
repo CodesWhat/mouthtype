@@ -17,7 +17,7 @@ $nas create --name "$name" -v "$source_path:/src:ro" "$image" bash -c '
   set -euo pipefail
   export DEBIAN_FRONTEND=noninteractive
   apt-get update
-  apt-get install --yes --no-install-recommends python3 python3-pyside6.qtquick python3-pyside6.qtqml python3-pyside6.qtnetwork python3-pyside6.qtwidgets \
+  apt-get install --yes --no-install-recommends python3 python3-coverage python3-pyside6.qtquick python3-pyside6.qtqml python3-pyside6.qtnetwork python3-pyside6.qtwidgets \
     qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-window \
     qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtqml-workerscript qml6-module-org-kde-layershell qt6-svg-plugins fonts-dejavu-core procps
   useradd --create-home --shell /bin/bash qthost

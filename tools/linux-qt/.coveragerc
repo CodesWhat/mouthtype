@@ -1,0 +1,12 @@
+# Python line and branch coverage for the Qt host tests run by run-tests.sh.
+# Paths are relative to the repository root, which is where run-tests.sh runs.
+[run]
+branch = True
+source = tools/linux-qt
+omit =
+    */test_*.py
+    */vendor/*
+
+[report]
+skip_empty = True
+fail_under = 60
