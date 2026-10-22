@@ -18,8 +18,9 @@ Item {
   readonly property bool editing: sheetKind !== ""
   readonly property var allGroups: library ? Model.groupSpellings(library.entries) : []
   readonly property var groups: Model.filterGroups(allGroups, query)
-  // Only the first `shown` matches get rows. The rest wait behind the Show more row.
-  readonly property var shownGroups: groups.length > shown ? groups.slice(0, shown) : groups
+  // Only the first `shown` matches get rows. The rest wait behind the Show more row. The Repeater takes this count, not a
+  // grow-only ListModel of row indexes, so Show more only creates the new rows instead of rebuilding every existing one.
+  readonly property int shownCount: Math.min(groups.length, shown)
   readonly property bool writable: library !== null && library.writable !== false
   readonly property bool restartNeeded: Model.adoptedConfig(results, ["spellings-add", "spellings-edit", "spellings-remove", "spellings-import"])
   property var library: null
@@ -38,6 +39,14 @@ Item {
   implicitHeight: content.implicitHeight
 
   onQueryChanged: shown = Model.PAGE_ROWS
+  onShownCountChanged: syncRows()
+
+  function syncRows() {
+    while (rowIndexes.count < shownCount) rowIndexes.append({ at: rowIndexes.count })
+    if (rowIndexes.count > shownCount) rowIndexes.remove(shownCount, rowIndexes.count - shownCount)
+  }
+
+  ListModel { id: rowIndexes }
 
   function refresh() { tracker.send("spellings-list", []) }
 
@@ -77,7 +86,7 @@ Item {
     return next !== null
   }
 
-  Component.onCompleted: Qt.callLater(refresh)
+  Component.onCompleted: { syncRows(); Qt.callLater(refresh) }
   onActiveChanged: if (active && !tracker.waiting) refresh()
 
   RequestTracker {
@@ -215,10 +224,10 @@ Item {
       }
 
       Repeater {
-        model: root.shownGroups
+        model: rowIndexes
         delegate: WordRow {
-          required property var modelData
-          group: modelData
+          required property int at
+          group: root.groups[at]
           onEditRequested: function(pair) { root.openWord(pair) }
         }
       }
