@@ -160,6 +160,14 @@ class DoctorTests(unittest.TestCase):
         self.assertFalse(report['ready'])
         self.assertIn('pipewire', self.check(report, 'capture')['action'].lower())
 
+    def test_errors_only_notifications_are_checked_like_true_and_off_is_skipped(self):
+        for value, present in (('errors', True), (True, True), (False, False)):
+            with self.subTest(value=value):
+                self.config.write_text(json.dumps({'engine_config': 'engines.json', 'python': sys.executable, 'notifications': value}))
+                report = self.diagnose(which=lambda command: None if command == 'notify-send' else '/bin/' + command)
+                names = [item['name'] for item in report['checks']]
+                self.assertEqual('notifications' in names, present)
+
     def test_unavailable_runtime_and_wrong_platform_block(self):
         self.assertFalse(self.diagnose(runtime_check=lambda _: False)['ready'])
         self.assertFalse(self.diagnose(system='Darwin', machine='arm64')['ready'])

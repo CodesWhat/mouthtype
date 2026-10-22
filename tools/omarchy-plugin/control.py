@@ -907,8 +907,8 @@ def set_config(field, value, extra=None):
             raise RuntimeError("Prepare the " + ("Fast" if value == "fast" else "Thorough") + " cleanup model first")
         config["cleanup"] = value
         config["cleanup_engine"] = str(CLEANUP_DIR / "cleanup.json")
-    elif field == "notifications" and value in {"on", "off"}:
-        config["notifications"] = value == "on"
+    elif field == "notifications" and value in {"all", "on", "errors", "off"}:
+        config["notifications"] = {"all": True, "on": True, "errors": "errors", "off": False}[value]
     elif field == "microphone" and value == "default":
         config.pop("capture_target", None)
     elif field == "microphone" and value:

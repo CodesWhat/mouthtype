@@ -315,6 +315,31 @@ TestCase {
     compare(host.ran[0][1], "off")
   }
 
+  function notificationsControl() {
+    var found = collect(shell, "model", []).filter(function(item) { return item.text === "Desktop notifications" })
+    verify(found.length === 1, "notifications control not found")
+    return found[0]
+  }
+
+  function test_notifications_segmented_follows_config_and_sends_verbs() {
+    tc.dark = false
+    setScene("settings-general")
+    var control = notificationsControl()
+    compare(control.model, ["All", "Errors only", "Off"])
+    compare(control.currentIndex, 1)
+    host.ran = []
+    control.select(2)
+    compare(host.ran[0], ["set-config", "notifications", "off"])
+    control.select(0)
+    compare(host.ran[1], ["set-config", "notifications", "all"])
+    control.select(1)
+    compare(host.ran[2], ["set-config", "notifications", "errors"])
+    setScene("settings-general-off")
+    compare(notificationsControl().currentIndex, 2)
+    host.config = Object.assign({}, host.config, { notifications: true })
+    tryCompare(notificationsControl(), "currentIndex", 0)
+  }
+
   // ---- Style page (slice V6) ----------------------------------------------------------------------------------------------
 
   function collect(item, key, found) {
