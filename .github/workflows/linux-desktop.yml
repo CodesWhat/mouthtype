@@ -89,7 +89,7 @@ jobs:
     steps:
       - name: Install signed Arch component prerequisites
         run: |
-          pacman -Syu --noconfirm --needed git python python-coverage python-pip curl pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols namcap
+          pacman -Syu --noconfirm --needed git python python-coverage python-pip python-jeepney curl pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols namcap
           useradd --create-home --shell /bin/bash mouthtype-ci
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -103,7 +103,7 @@ jobs:
             uname -srm
             python --version
             getconf GNU_LIBC_VERSION
-            pacman -Q python pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject glibc pacman archlinux-keyring gcc meson ninja wayland-protocols wlroots0.20
+            pacman -Q python python-jeepney pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject glibc pacman archlinux-keyring gcc meson ninja wayland-protocols wlroots0.20
             pacman-conf SigLevel
           } > linux-desktop-evidence/environment.txt
       - name: Build separately labeled upstream Sway component without privileges
