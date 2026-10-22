@@ -16,8 +16,9 @@ Item {
   readonly property var results: backend && backend.results ? backend.results : ({})
   readonly property bool editing: sheetOpen
   readonly property var entries: library ? library.entries : []
-  // Only the first `shown` entries get rows. The rest wait behind the Show more row.
-  readonly property var shownEntries: entries.length > shown ? entries.slice(0, shown) : entries
+  // Only the first `shown` entries get rows. The rest wait behind the Show more row. The Repeater takes this count, not a
+  // grow-only ListModel of row indexes, so Show more only creates the new rows instead of rebuilding every existing one.
+  readonly property int shownCount: Math.min(entries.length, shown)
   readonly property bool writable: library !== null && library.writable !== false
   readonly property bool restartNeeded: Model.adoptedConfig(results, ["phrases-add", "phrases-edit", "phrases-remove"])
   readonly property var kinds: Model.transformKinds(status)
@@ -53,7 +54,16 @@ Item {
     sheetError = ""
   }
 
-  Component.onCompleted: Qt.callLater(refresh)
+  onShownCountChanged: syncRows()
+
+  function syncRows() {
+    while (rowIndexes.count < shownCount) rowIndexes.append({ at: rowIndexes.count })
+    if (rowIndexes.count > shownCount) rowIndexes.remove(shownCount, rowIndexes.count - shownCount)
+  }
+
+  ListModel { id: rowIndexes }
+
+  Component.onCompleted: { syncRows(); Qt.callLater(refresh) }
   onActiveChanged: if (active && !tracker.waiting) refresh()
 
   RequestTracker {
@@ -129,13 +139,12 @@ Item {
         width: parent.width
 
         Repeater {
-          model: root.shownEntries
+          model: rowIndexes
           delegate: PhraseRow {
-            required property var modelData
-            required property int index
-            entry: modelData
-            first: index === 0
-            onActivated: root.openSheet(modelData)
+            required property int at
+            entry: root.entries[at]
+            first: at === 0
+            onActivated: root.openSheet(root.entries[at])
           }
         }
 

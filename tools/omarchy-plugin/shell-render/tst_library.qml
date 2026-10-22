@@ -703,6 +703,36 @@ TestCase {
     verify(phraseRows() <= 120, "transforms built " + phraseRows() + " rows for " + data.n + " entries")
   }
 
+  function test_show_more_keeps_existing_rows() {
+    var p = openDictionary(lists("spellings-empty", "phrases-list", "ready"), false)
+    p.library = bigSpellings(300)
+    wait(30)
+    var before = findAll(function(t) { return t.group !== undefined && t.editRequested !== undefined })
+    compare(before.length, 120)
+    for (var k = 0; k < before.length; k++) before[k].z = 777
+    p.shown += Model.PAGE_ROWS
+    wait(30)
+    var after = findAll(function(t) { return t.group !== undefined && t.editRequested !== undefined })
+    compare(after.length, 240)
+    var kept = after.filter(function(t) { return t.z === 777 }).length
+    compare(kept, before.length, "Show more rebuilt existing dictionary rows")
+  }
+
+  function test_show_more_keeps_existing_phrase_rows() {
+    var p = openTransforms(lists("spellings-list", "phrases-empty", "ready"), false)
+    p.library = bigPhrases(300)
+    wait(30)
+    var before = findAll(function(t) { return t.entry !== undefined && t.activated !== undefined && t.first !== undefined })
+    compare(before.length, 120)
+    for (var k = 0; k < before.length; k++) before[k].z = 777
+    p.shown += Model.PAGE_ROWS
+    wait(30)
+    var after = findAll(function(t) { return t.entry !== undefined && t.activated !== undefined && t.first !== undefined })
+    compare(after.length, 240)
+    var kept = after.filter(function(t) { return t.z === 777 }).length
+    compare(kept, before.length, "Show more rebuilt existing transform rows")
+  }
+
   function test_search_filters_and_show_more_adds_a_batch() {
     var p = openDictionary(lists("spellings-empty", "phrases-list", "ready"), false)
     p.library = bigSpellings(300)
