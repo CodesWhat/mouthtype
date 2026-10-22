@@ -16,6 +16,7 @@ Natural speech in, clean text out.
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-000000?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
   <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
   <a href="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml"><img src="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml/badge.svg" alt="Security CI"></a>
+  <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/mouthtype"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/mouthtype?label=openssf+scorecard&amp;style=flat" alt="OpenSSF Scorecard"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
 </p>
 
