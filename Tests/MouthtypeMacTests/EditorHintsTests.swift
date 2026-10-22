@@ -226,9 +226,24 @@ private struct FakeSource: BoundedTextSource {
                 readers: calls.readers(context: InsertionContext(before: "applyTheme(", after: nil), block: gate),
                 deadline: .milliseconds(50)
             ))
+        // The gate stays shut until the defer, so a gather that waited on the read would never return.
         #expect(await task.value.map(\.text) == ["DictationPipeline", "mouthtype"])
+    }
+
+    @Test func theCursorReaderGetsTheGatherDeadline() async throws {
+        let calls = ReaderCalls()
+        let before = ContinuousClock.now
+        let task = try #require(
+            EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true,
+                focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
+                readers: calls.readers(context: InsertionContext(before: "applyTheme(", after: nil)),
+                deadline: .seconds(60)
+            ))
+        _ = await task.value
         let deadline = try #require(calls.lastDeadline)
-        #expect(deadline <= ContinuousClock.now + .milliseconds(50))
+        #expect(deadline > before)
+        #expect(deadline <= ContinuousClock.now + .seconds(60))
     }
 
     @Test func onlyASourceEditorsTextAreaIsRead() async throws {

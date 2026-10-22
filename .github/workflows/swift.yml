@@ -38,8 +38,11 @@ jobs:
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 
+      # MouthtypeSettingsUITests builds real Settings and preview windows and drives focus and key events through them.
+      # The hosted runner has no GUI or accessibility session, so those tests fail there and the run can die before it
+      # prints a Swift Testing summary. The target is built here and runs locally at the release merge.
       - name: Test with coverage
-        run: scripts/swift-test.sh --enable-code-coverage
+        run: scripts/swift-test.sh --enable-code-coverage --skip MouthtypeSettingsUITests
 
       - name: Coverage report
         run: |

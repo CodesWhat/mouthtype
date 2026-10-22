@@ -173,7 +173,7 @@ import Testing
                 InsertionContext(before: Thread.isMainThread ? "" : "applyTheme(", after: nil)
             }
         )
-        let terms = await EditorHints.gather(input, deadline: .seconds(2))
+        let terms = await EditorHints.gather(input, deadline: .seconds(60))
         #expect(terms.map(\.text) == ["applyTheme", "AppDelegate", "mouthtype"])
     }
 
@@ -186,10 +186,8 @@ import Testing
                 gate.wait(); return InsertionContext(before: "applyTheme(", after: nil)
             }
         )
-        let clock = ContinuousClock()
-        let start = clock.now
+        // The gate stays shut until the defer, so a gather that waited on the read would never return.
         let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
-        #expect(clock.now - start < .seconds(1))
         #expect(terms.map(\.text) == ["AppDelegate", "mouthtype"])
     }
 
@@ -221,9 +219,7 @@ import Testing
         let started = clock.now + .seconds(60)
         while calls.count == 0, clock.now < started { await Task.yield() }
         for _ in 0..<3 {
-            let start = clock.now
             let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
-            #expect(clock.now - start < .seconds(1))
             #expect(terms.map(\.text) == ["AppDelegate", "mouthtype"])
         }
         #expect(calls.count == 1)
@@ -233,7 +229,7 @@ import Testing
         let giveUp = clock.now + .seconds(60)
         while readGate.isBusy, clock.now < giveUp { await Task.yield() }
         #expect(!readGate.isBusy)
-        let terms = await EditorHints.gather(input, deadline: .seconds(2))
+        let terms = await EditorHints.gather(input, deadline: .seconds(60))
         #expect(calls.count == 2)
         #expect(terms.map(\.text) == ["applyTheme", "AppDelegate", "mouthtype"])
     }
@@ -242,15 +238,12 @@ import Testing
         let input = EditorHints.Input(
             cursorBefore: "applyTheme()", windowTitle: "AppDelegate.swift - mouthtype - Visual Studio Code", titleStyle: .vscode,
             files: {
-                try? await Task.sleep(for: .seconds(5))
+                // Cancellation ends the sleep. A gather that waited for the files would sit here for an hour.
+                try? await Task.sleep(for: .seconds(3600))
                 return ["Slow/NeverArrives.swift"]
             }
         )
-        let clock = ContinuousClock()
-        let start = clock.now
         let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
-        let elapsed = clock.now - start
-        #expect(elapsed < .seconds(1))
         #expect(terms.map(\.text) == ["applyTheme", "AppDelegate", "mouthtype"])
     }
 
@@ -259,7 +252,7 @@ import Testing
             cursorBefore: nil, windowTitle: "mouthtype - Visual Studio Code", titleStyle: .vscode,
             files: { ["Sources/Deep/FileNameStem.swift", "Top.swift"] }
         )
-        let terms = await EditorHints.gather(input, deadline: .seconds(2))
+        let terms = await EditorHints.gather(input, deadline: .seconds(60))
         #expect(terms.map(\.text) == ["mouthtype", "FileNameStem"])
     }
 

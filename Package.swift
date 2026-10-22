@@ -53,7 +53,7 @@ let package = Package(
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
             exclude: ["Fixtures/normalization-cases.json"],
-            resources: [.copy("Fixtures/cleanup-cases.json"),.copy("Fixtures/smart-cases.json")]
+            resources: [.copy("Fixtures/cleanup-cases.json"), .copy("Fixtures/smart-cases.json")]
         ),
         .testTarget(
             name: "MouthtypeCoreTests",
