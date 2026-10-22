@@ -9,6 +9,9 @@ Item {
   property string iconName: ""
   property bool selected: false
   property real rowHeight: 40
+  // False after a mouse click or a page change from outside the keys: the row keeps focus but draws no ring. Losing focus
+  // re-arms it, so Tab and the arrow keys show the ring again.
+  property bool ringShown: true
   signal activated()
 
   implicitWidth: 200
@@ -30,7 +33,7 @@ Item {
     color: "transparent"
     border.width: 2
     border.color: Theme.focus
-    visible: root.activeFocus
+    visible: root.activeFocus && root.ringShown
   }
   Icon {
     x: 10
@@ -54,8 +57,10 @@ Item {
     anchors.fill: parent
     hoverEnabled: true
     cursorShape: Qt.PointingHandCursor
-    onClicked: { root.forceActiveFocus(); root.activated() }
+    onClicked: { root.ringShown = false; root.forceActiveFocus(); root.activated() }
   }
+
+  onActiveFocusChanged: if (!activeFocus) ringShown = true
 
   Keys.onSpacePressed: activated()
   Keys.onReturnPressed: activated()
