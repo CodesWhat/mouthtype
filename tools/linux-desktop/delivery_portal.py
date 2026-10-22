@@ -21,7 +21,6 @@ import time
 import threading
 from pathlib import Path
 
-import backends
 import portal as portal_mod
 
 REMOTE_IFACE = 'org.freedesktop.portal.RemoteDesktop'
@@ -697,5 +696,3 @@ def make_delivery(config, *, portal_factory=None, store_factory=None, session_fa
     delivery.portal = portal
     return delivery
 
-
-backends.register_delivery('portal', make_delivery)

@@ -110,7 +110,7 @@ class SelectionTests(unittest.TestCase):
                     self.assertEqual(attached is not None, name in ('gnome', 'kde'))
 
     def test_main_builds_delivery_through_the_registry(self):
-        self.assertIs(backends._delivery['portal'], delivery_portal.make_delivery)
+        self.assertIs(backends._delivery['portal'], desktop._portal_delivery)
         self.assertIs(backends._delivery['hyprland'], desktop.HyprlandDelivery)
 
 

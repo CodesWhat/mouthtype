@@ -1030,7 +1030,15 @@ class HyprlandDelivery:
 
 
 backends.register_delivery('hyprland', HyprlandDelivery)
-import delivery_portal  # noqa: E402,F401  registers the 'portal' backend; jeepney and gi load only when it is built
+
+
+def _portal_delivery(*args, **kwargs):
+    # Imported on first use: the light clients (status, hotkeys) and Hyprland installs never load the portal stack.
+    import delivery_portal
+    return delivery_portal.make_delivery(*args, **kwargs)
+
+
+backends.register_delivery('portal', _portal_delivery)
 
 
 def stop_process(process, first=signal.SIGTERM):
