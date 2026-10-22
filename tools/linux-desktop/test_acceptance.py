@@ -5,7 +5,9 @@ import tempfile
 import unittest
 import wave
 
-from acceptance import tone_metrics
+import types
+
+from acceptance import answer_consent, atspi_walk, consent_dialog, tone_metrics
 
 
 class ToneTests(unittest.TestCase):
@@ -85,12 +87,90 @@ class NativeTargetTests(unittest.TestCase):
         gi = types.ModuleType('gi')
         gi.require_version = lambda *args: None
         repository = types.ModuleType('gi.repository')
+        repository.Gdk = types.SimpleNamespace(KEY_Shift_L=0xffe1, SELECTION_CLIPBOARD=None)
         repository.Gtk = types.SimpleNamespace(Application=Application, ApplicationWindow=window)
         repository.GLib = types.SimpleNamespace(set_prgname=lambda value: name.__setitem__(0, value))
         with patch.dict(sys.modules, {'gi': gi, 'gi.repository': repository}):
             with self.assertRaises(SurfaceCreated):
                 runpy.run_path(str(Path(__file__).with_name('wayland_target.py')))
         self.assertEqual(observed, ['app.mouthtype.Acceptance'])
+
+class FakeNode:
+    def __init__(self, role='', name='', children=(), checked=False, clickable=False):
+        self.role, self.name, self.children, self.checked, self.clickable = role, name, list(children), checked, clickable
+        self.actions = 0
+
+    def get_role_name(self):
+        return self.role
+
+    def get_name(self):
+        return self.name
+
+    def get_child_count(self):
+        return len(self.children)
+
+    def get_child_at_index(self, index):
+        return self.children[index]
+
+    def get_action_iface(self):
+        return self if self.clickable else None
+
+    def do_action(self, index):
+        self.actions += 1
+        if self.role in ('switch', 'check box'):
+            self.checked = True
+
+    def get_state_set(self):
+        return self
+
+
+class FakeAtspi:
+    StateType = types.SimpleNamespace(CHECKED='checked')
+
+    def __init__(self, apps):
+        self.apps = FakeNode(children=apps)
+
+    def get_desktop(self, index):
+        return self.apps
+
+
+FakeNode.contains = lambda self, state: self.checked
+
+
+class GnomeConsentTests(unittest.TestCase):
+    def dialog(self, **switches):
+        return FakeNode('frame', 'Remote Desktop', [
+            FakeNode('switch', 'Allow Remote Interaction', clickable=True, checked=switches.get('keyboard', False)),
+            FakeNode('switch', 'Allow Clipboard Access', clickable=True),
+            FakeNode('check box', 'Remember This Selection', clickable=True),
+            FakeNode('button', 'Share', clickable=True)])
+
+    def test_walk_stops_at_the_first_match_and_respects_the_budget(self):
+        tree = FakeNode(children=[FakeNode(name='a', children=[FakeNode(name='b')]), FakeNode(name='c')])
+        self.assertEqual(atspi_walk(tree, lambda node: node.name if node.name == 'b' else None, [10]), 'b')
+        self.assertIsNone(atspi_walk(tree, lambda node: node.name if node.name == 'c' else None, [2]))
+
+    def test_consent_dialog_is_found_only_under_the_portal_application(self):
+        window = self.dialog()
+        other = FakeNode('application', 'other', [FakeNode('frame', 'Remote Desktop')])
+        portal = FakeNode('application', 'xdg-desktop-portal-gnome', [FakeNode('frame', 'Settings'), window])
+        self.assertIs(consent_dialog(FakeAtspi([other, portal])), window)
+        self.assertIsNone(consent_dialog(FakeAtspi([other])))
+
+    def test_answer_switches_on_the_controls_and_presses_share(self):
+        window = self.dialog(keyboard=True)
+        atspi = FakeAtspi([])
+        result = answer_consent(window, atspi)
+        self.assertEqual(result['controls'], ['Allow Clipboard Access', 'Allow Remote Interaction', 'remember'])
+        self.assertEqual(result['switched_on'], ['Allow Clipboard Access', 'remember'])
+        self.assertNotIn('Allow Remote Interaction', result['switched_on'])
+        self.assertEqual(window.children[3].actions, 1)
+
+    def test_answer_without_a_share_button_fails_loudly(self):
+        window = FakeNode('frame', 'Remote Desktop', [FakeNode('switch', 'Allow Remote Interaction', clickable=True)])
+        with self.assertRaises(ValueError):
+            answer_consent(window, FakeAtspi([]))
+
 
 if __name__ == '__main__':
     unittest.main()
