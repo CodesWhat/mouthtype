@@ -1,0 +1,153 @@
+# Fedora and RHEL-family package for the Mouthtype Linux client. Same payload layout as packaging/debian:
+# `mouthtype-linux` (daemon, CLI, Omarchy plugin sources, user units) and `mouthtype-linux-desktop`
+# (PySide6 settings window, tray and KDE pill for GNOME and KDE Plasma). build-rpm.sh fills the @...@ values.
+%global debug_package %{nil}
+%global payload %{_prefix}/lib/mouthtype-linux
+%global userunitdir %{_prefix}/lib/systemd/user
+
+Name:           mouthtype-linux
+Version:        @VERSION@
+Release:        @RELEASE@%{?dist}
+Summary:        Local voice dictation client for Wayland desktops
+License:        GPL-3.0-only AND MIT AND Unicode-3.0
+URL:            https://mouthtype.app/linux/
+Source0:        %{name}-%{version}.tar.gz
+ExclusiveArch:  x86_64
+BuildRequires:  python3
+BuildRequires:  python3-rpm-macros
+
+Requires:       python3 >= 3.10
+Requires:       python3-jeepney
+Requires:       hicolor-icon-theme
+Requires:       curl
+Requires:       /usr/bin/pw-record
+Requires:       /usr/bin/notify-send
+Requires:       /usr/bin/ffmpeg
+Recommends:     wl-clipboard
+Recommends:     wtype
+Suggests:       mouthtype-linux-desktop
+Suggests:       quickshell
+
+%description
+Mouthtype records on a hotkey, transcribes on this machine with a pinned speech
+model and delivers the text to the focused window. Nothing leaves the computer.
+
+This package installs the client, the Omarchy bar plugin sources and the systemd
+user units. It downloads no model and enables no service. After installing, run
+"mouthtype-linux-setup" as your normal user to fetch the speech model (about
+465 MiB) and enable the per-user service.
+
+GNOME and KDE Plasma sessions also need the mouthtype-linux-desktop package,
+which adds the settings window and tray icon and does not pull PySide6 onto
+other desktops.
+
+%package desktop
+Summary:        Mouthtype settings window and tray icon for GNOME and KDE Plasma
+BuildArch:      noarch
+Requires:       %{name} = %{version}-%{release}
+Requires:       python3 >= 3.10
+Requires:       python3-pyside6
+Requires:       python3-gobject
+Requires:       at-spi2-core
+Requires:       qt6-qtdeclarative
+Requires:       qt6-qtsvg
+Requires:       xdg-desktop-portal >= 1.19
+Recommends:     (xdg-desktop-portal-gnome if gnome-shell)
+Recommends:     (xdg-desktop-portal-kde if plasma-workspace)
+Recommends:     layer-shell-qt
+Recommends:     gnome-shell-extension-appindicator
+
+%description desktop
+The Qt settings window, tray icon and (on KDE Plasma) the floating recording
+pill for Mouthtype, built on PySide6. It talks to the mouthtype-linux daemon and
+reuses the same pages as the Omarchy bar plugin.
+
+Install this on GNOME or KDE Plasma Wayland sessions. Omarchy and Hyprland
+installs only need mouthtype-linux and do not need this package or PySide6.
+
+%prep
+%autosetup -n %{name}-%{version}
+
+%build
+# Nothing to build: the package is a Python tree and QML files.
+
+%install
+python3 -I tools/linux-desktop/install.py --prefix %{_prefix} --destdir %{buildroot} >/dev/null
+
+# Omarchy bar plugin sources, runtime files only. mouthtype-linux-setup copies them into the user's home.
+plugin=%{buildroot}%{_datadir}/mouthtype-linux/omarchy-plugin
+(cd tools/omarchy-plugin && find . -type f \
+    ! -name 'test_*' ! -name 'tst_*' ! -name 'gen_*' ! -name '*.pyc' \
+    ! -path './*-render/*' ! -path './design/gallery/*' ! -path './design/render/*' \
+    ! -path '*/fixtures/*' -print0 | sort -z) |
+while IFS= read -r -d '' file; do
+    install -Dpm644 "tools/omarchy-plugin/$file" "$plugin/$file"
+done
+chmod 755 "$plugin/control.py" "$plugin/save_dialog.py" "$plugin/install.py"
+chmod 755 %{buildroot}%{payload}/tools/linux-desktop/run-ci.sh %{buildroot}%{payload}/tools/linux-desktop/portal_probe.py
+
+install -Dpm755 packaging/debian/mouthtype-linux-setup %{buildroot}%{_bindir}/mouthtype-linux-setup
+install -Dpm644 packaging/arch/aur/mouthtype-linux.service %{buildroot}%{userunitdir}/mouthtype-linux.service
+# First-run unit, enabled for every user the way `systemctl --global enable` would.
+install -Dpm644 tools/linux-desktop/systemd/mouthtype-linux-firstrun.service \
+    %{buildroot}%{userunitdir}/mouthtype-linux-firstrun.service
+install -d %{buildroot}%{userunitdir}/graphical-session.target.wants
+ln -s ../mouthtype-linux-firstrun.service \
+    %{buildroot}%{userunitdir}/graphical-session.target.wants/mouthtype-linux-firstrun.service
+
+install -Dpm644 packaging/debian/mouthtype-linux.1 %{buildroot}%{_mandir}/man1/mouthtype-linux.1
+install -Dpm644 packaging/debian/mouthtype-linux-setup.1 %{buildroot}%{_mandir}/man1/mouthtype-linux-setup.1
+
+# mouthtype-linux-desktop: the PySide6 host. It reads the shared QML from the core package's plugin copy
+# through a symlink, so the pages exist once on disk.
+qt=%{buildroot}%{payload}/tools/linux-qt
+(cd tools/linux-qt && find . -type f \( -name '*.py' -o -name '*.qml' -o -name qmldir \) \
+    ! -name 'test_*' ! -path './fixtures/*' -print0 | sort -z) |
+while IFS= read -r -d '' file; do
+    install -Dpm644 "tools/linux-qt/$file" "$qt/$file"
+done
+chmod 755 "$qt/mouthtype_desktop.py"
+ln -s ../../../share/mouthtype-linux/omarchy-plugin %{buildroot}%{payload}/tools/omarchy-plugin
+install -Dpm755 packaging/debian/mouthtype-desktop %{buildroot}%{_bindir}/mouthtype-desktop
+install -Dpm644 packaging/debian/app.mouthtype.Mouthtype.Settings.desktop \
+    %{buildroot}%{_datadir}/applications/app.mouthtype.Mouthtype.Settings.desktop
+install -Dpm644 packaging/debian/mouthtype-desktop.1 %{buildroot}%{_mandir}/man1/mouthtype-desktop.1
+
+install -Dpm644 tools/linux-desktop/vendor/grapheme/LICENSE %{buildroot}%{_licensedir}/%{name}/grapheme-MIT
+install -Dpm644 tools/linux-desktop/vendor/grapheme/UNICODE-LICENSE %{buildroot}%{_licensedir}/%{name}/Unicode-LICENSE
+
+# Bytecode owned by the package so the hotkey path starts fast and removal leaves nothing behind.
+%py_byte_compile %{python3} %{buildroot}%{payload}
+
+%check
+python3 -I -W error::ResourceWarning -m unittest discover -s %{buildroot}%{payload}/tools/linux-desktop -p 'test_spellings.py'
+
+%files
+%license LICENSE THIRD_PARTY_NOTICES.md
+%{_licensedir}/%{name}/grapheme-MIT
+%{_licensedir}/%{name}/Unicode-LICENSE
+%{_bindir}/mouthtype-linux
+%{_bindir}/mouthtype-linux-setup
+%{payload}/
+%exclude %{payload}/tools/linux-qt
+%exclude %{payload}/tools/omarchy-plugin
+%{_datadir}/mouthtype-linux/
+%{_datadir}/applications/app.mouthtype.Mouthtype.desktop
+%{_datadir}/icons/hicolor/128x128/apps/app.mouthtype.Mouthtype.png
+%{userunitdir}/mouthtype-linux.service
+%{userunitdir}/mouthtype-linux-firstrun.service
+%{userunitdir}/graphical-session.target.wants/mouthtype-linux-firstrun.service
+%{_mandir}/man1/mouthtype-linux.1*
+%{_mandir}/man1/mouthtype-linux-setup.1*
+
+%files desktop
+%license LICENSE
+%{_bindir}/mouthtype-desktop
+%{payload}/tools/linux-qt
+%{payload}/tools/omarchy-plugin
+%{_datadir}/applications/app.mouthtype.Mouthtype.Settings.desktop
+%{_mandir}/man1/mouthtype-desktop.1*
+
+%changelog
+* @CHANGELOG_DATE@ CodesWhat <80784472+scttbnsn@users.noreply.github.com> - @VERSION@-@RELEASE@
+- Development build of the Mouthtype Linux client.
