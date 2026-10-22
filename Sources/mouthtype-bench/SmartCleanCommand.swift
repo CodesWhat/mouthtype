@@ -20,6 +20,8 @@ struct SmartCase: Codable, Sendable, Equatable {
     var after: String?
     var appName: String?
     var caseSensitive: Bool?
+    /// ISO 639-1 code of the language the case is written in. Nil means English.
+    var language: String?
 
     var rules: [DictionaryRule] { (dictionary ?? []).map { DictionaryRule(heard: $0.heard, written: $0.written) } }
 

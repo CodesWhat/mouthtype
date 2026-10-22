@@ -1,0 +1,44 @@
+[
+  {
+    "id": "nl-collision-number-ten",
+    "language": "nl",
+    "raw": "Ten eerste is het te duur.",
+    "notes": "Damage table: 'ten' is a teen word to number formatting, 0.5.0 writes '10 eerste is het te duur.'"
+  },
+  {
+    "id": "nl-short-1",
+    "language": "nl",
+    "raw": "Stuur me het bestand alsjeblieft voor de lunch.",
+    "notes": "Short, 8 words."
+  },
+  {
+    "id": "nl-short-2",
+    "language": "nl",
+    "raw": "De vergadering begint morgenochtend om negen uur.",
+    "notes": "Short, 7 words."
+  },
+  {
+    "id": "nl-medium-1",
+    "language": "nl",
+    "raw": "Kunnen we de vergadering naar donderdag verplaatsen, omdat de klant pas om elf uur in Eindhoven aankomt?",
+    "notes": "Medium, 17 words."
+  },
+  {
+    "id": "nl-medium-2",
+    "language": "nl",
+    "raw": "Ik heb vanmorgen de cijfers nog eens bekeken en het tweede kwartaal is beter dan we verwachtten.",
+    "notes": "Medium, 17 words."
+  },
+  {
+    "id": "nl-long-1",
+    "language": "nl",
+    "raw": "Hallo allemaal, een korte update over de stand van de migratie. De overstap van de database is gisteravond zonder enige downtime afgerond, en de leesreplica's lopen al gelijk met de primaire server.",
+    "notes": "Long, 32 words."
+  },
+  {
+    "id": "nl-long-2",
+    "language": "nl",
+    "raw": "Bedankt voor het toesturen van het herziene voorstel. Ik heb vanmorgen de planning en het budget met het team doorgenomen, en we zijn het grotendeels eens over het plan voor het volgende kwartaal.",
+    "notes": "Long, 33 words."
+  }
+]

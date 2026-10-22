@@ -1,0 +1,56 @@
+[
+  {
+    "id": "en-control-filler",
+    "language": "en",
+    "raw": "Um, I think we should, uh, move the meeting.",
+    "notes": "English control: filler removal must still change this."
+  },
+  {
+    "id": "en-control-number",
+    "language": "en",
+    "raw": "We shipped twenty three packages to Boston on Friday.",
+    "notes": "English control: number formatting must still change this."
+  },
+  {
+    "id": "en-control-command",
+    "language": "en",
+    "raw": "Send it to the team new line thanks.",
+    "notes": "English control: spoken commands must still change this."
+  },
+  {
+    "id": "en-short-1",
+    "language": "en",
+    "raw": "Please send me the file before lunch.",
+    "notes": "Short, 7 words."
+  },
+  {
+    "id": "en-short-2",
+    "language": "en",
+    "raw": "The meeting starts at nine tomorrow morning.",
+    "notes": "Short, 7 words."
+  },
+  {
+    "id": "en-medium-1",
+    "language": "en",
+    "raw": "Can we move the review to Thursday, because the client only arrives in Denver at eleven?",
+    "notes": "Medium, 16 words."
+  },
+  {
+    "id": "en-medium-2",
+    "language": "en",
+    "raw": "I looked at the numbers again this morning and the second quarter is better than we expected.",
+    "notes": "Medium, 17 words."
+  },
+  {
+    "id": "en-long-1",
+    "language": "en",
+    "raw": "Hi everyone, quick update on where the migration stands. The database cutover finished last night without any downtime, and the read replicas are already caught up with the primary.",
+    "notes": "Long, 29 words."
+  },
+  {
+    "id": "en-long-2",
+    "language": "en",
+    "raw": "Thanks for sending over the revised proposal. I went through the timeline and the budget with the team this morning, and we are mostly aligned on the plan for the next quarter.",
+    "notes": "Long, 32 words."
+  }
+]

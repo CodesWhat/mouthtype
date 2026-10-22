@@ -1,0 +1,50 @@
+[
+  {
+    "id": "es-short-1",
+    "language": "es",
+    "raw": "Por favor, envíame el archivo antes del almuerzo.",
+    "notes": "Short, 8 words."
+  },
+  {
+    "id": "es-short-2",
+    "language": "es",
+    "raw": "La reunión empieza mañana a las nueve de la mañana.",
+    "notes": "Short, 10 words."
+  },
+  {
+    "id": "es-inverted-marks",
+    "language": "es",
+    "raw": "¿Podemos mover la reunión al jueves? ¡Es urgente!",
+    "notes": "Inverted question and exclamation marks at sentence starts, for blend and HiFiCardText.canDraw."
+  },
+  {
+    "id": "es-medium-1",
+    "language": "es",
+    "raw": "¿Podemos mover la reunión al jueves, porque el cliente llega a Valencia a las once?",
+    "notes": "Medium, 15 words."
+  },
+  {
+    "id": "es-medium-2",
+    "language": "es",
+    "raw": "Revisé las cifras otra vez esta mañana y el segundo trimestre es mejor de lo que esperábamos.",
+    "notes": "Medium, 17 words."
+  },
+  {
+    "id": "es-long-1",
+    "language": "es",
+    "raw": "Hola a todos, una actualización rápida sobre el estado de la migración. El cambio de la base de datos terminó anoche sin ningún tiempo de inactividad, y las réplicas de lectura ya están al día con el servidor principal.",
+    "notes": "Long, 39 words."
+  },
+  {
+    "id": "es-long-2",
+    "language": "es",
+    "raw": "Gracias por enviar la propuesta revisada. Repasé el calendario y el presupuesto con el equipo esta mañana, y estamos bastante de acuerdo con el plan para el próximo trimestre del año.",
+    "notes": "Long, 31 words."
+  },
+  {
+    "id": "es-tech-ab",
+    "language": "es",
+    "raw": "Necesito que A B revisen el informe.",
+    "notes": "Technical notation: Spanish 'A B' (the letters, two people) must stay as written."
+  }
+]
