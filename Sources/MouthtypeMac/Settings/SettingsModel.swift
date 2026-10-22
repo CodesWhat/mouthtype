@@ -51,6 +51,7 @@ import UniformTypeIdentifiers
     private(set) var font: TextFontChoice
     private(set) var recordingMode: RecordingMode
     private(set) var recordingModeError: String?
+    private(set) var dictationLanguage: DictationLanguageSetting
     private(set) var loginState: NSControl.StateValue = .off
     private(set) var shortcut = "Fn"
     private(set) var learnCorrections = true
@@ -95,6 +96,7 @@ import UniformTypeIdentifiers
         self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
         self.onBoostSavedWordsChanged = onBoostSavedWordsChanged
         recordingMode = RecordingModePreference.current(defaults)
+        dictationLanguage = DictationLanguageSetting.load(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
@@ -255,6 +257,7 @@ import UniformTypeIdentifiers
         readoutColour = PillReadoutPreference.current(defaults)
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
+        dictationLanguage = DictationLanguageSetting.load(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
         FontRegistry.ensureRegistered()
         fontFamilies = FontFamilyCache.families()
@@ -402,6 +405,15 @@ import UniformTypeIdentifiers
         CorrectionSettings.set(enabled, in: defaults)
         learnCorrections = enabled
     }
+
+    /// The next take reads the setting from defaults, so nothing else needs telling.
+    func setDictationLanguage(_ value: DictationLanguageSetting) {
+        DictationLanguageSetting.set(value, in: defaults)
+        dictationLanguage = value
+    }
+
+    /// Fast is English only, so an explicit non-English language shows the note under the level choice.
+    var showsFastLanguageNote: Bool { cleanup.level == .light && dictationLanguage.isExplicitNonEnglish }
 
     func setBoostSavedWords(_ enabled: Bool) {
         VocabularyBoostSetting.set(enabled, in: defaults)

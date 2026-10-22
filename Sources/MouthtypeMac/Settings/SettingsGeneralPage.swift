@@ -18,6 +18,19 @@ extension SettingsView {
                 )
                 .accessibilityIdentifier("settings-recording-mode")
             }
+            DesignRow(
+                title: "Language",
+                detail: model.dictationLanguage == .auto ? DictationLanguageSetting.autoDetail + " " + DictationLanguageSetting.detail : DictationLanguageSetting.detail
+            ) {
+                DesignPopup(
+                    title: "Language",
+                    selection: Binding(
+                        get: { model.dictationLanguage.pickerValue },
+                        set: { if let setting = DictationLanguageSetting(pickerValue: $0) { model.setDictationLanguage(setting) } }),
+                    choices: DictationLanguageSetting.pickerChoices
+                )
+                .accessibilityIdentifier("settings-dictation-language")
+            }
             if let error = model.recordingModeError { ModalCardNote(text: error, tone: .red) }
             MicrophoneSettingsSection(model: model.microphone)
         }
