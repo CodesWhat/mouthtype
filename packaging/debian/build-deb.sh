@@ -101,6 +101,12 @@ for page in mouthtype-linux mouthtype-linux-setup; do
     gzip -9n -c "$here/$page.1" > "$stage/usr/share/man/man1/$page.1.gz"
     chmod 644 "$stage/usr/share/man/man1/$page.1.gz"
 done
+# The tray's symbolic icons come from install.py in the core stage but belong to mouthtype-linux-desktop. Take them
+# out before the core package is sealed so the two packages don't both own the files.
+symbolic=usr/share/icons/hicolor/symbolic/apps
+mkdir "$work/symbolic"
+mv "$stage/$symbolic"/*.svg "$work/symbolic/"
+rmdir -p --ignore-fail-on-non-empty "$stage/$symbolic"
 seal mouthtype-linux "$stage" amd64 control.in "" postinst prerm postrm
 
 # mouthtype-linux-desktop: the PySide6 settings window, tray and KDE pill. Architecture all. It reads the
@@ -115,6 +121,8 @@ chmod 755 "$qt/mouthtype_desktop.py"
 ln -s ../../../share/mouthtype-linux/omarchy-plugin "$desktop/usr/lib/mouthtype-linux/tools/omarchy-plugin"
 install -Dm755 "$here/mouthtype-desktop" "$desktop/usr/bin/mouthtype-desktop"
 install -Dm644 "$here/app.mouthtype.Mouthtype.Settings.desktop" "$desktop/usr/share/applications/app.mouthtype.Mouthtype.Settings.desktop"
+install -d "$desktop/$symbolic"
+mv "$work/symbolic"/*.svg "$desktop/$symbolic/"
 install -Dm644 "$here/desktop-lintian-overrides" "$desktop/usr/share/lintian/overrides/mouthtype-linux-desktop"
 install -d "$desktop/usr/share/man/man1"
 gzip -9n -c "$here/mouthtype-desktop.1" > "$desktop/usr/share/man/man1/mouthtype-desktop.1.gz"

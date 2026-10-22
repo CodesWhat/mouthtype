@@ -61,6 +61,7 @@ if [ -n "$desktop_deb" ]; then
                 /usr/lib/mouthtype-linux/tools/linux-qt/platform/qt/MouthtypePlatform/qmldir \
                 /usr/lib/mouthtype-linux/tools/omarchy-plugin/MouthtypeShell.qml \
                 /usr/share/applications/app.mouthtype.Mouthtype.Settings.desktop \
+                /usr/share/icons/hicolor/symbolic/apps/app.mouthtype.Mouthtype-symbolic.svg \
                 /usr/share/doc/mouthtype-linux-desktop/copyright; do
         [ -e "$path" ] || fail "missing $path"
     done

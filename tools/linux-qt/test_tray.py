@@ -26,6 +26,21 @@ class GlyphTests(unittest.TestCase):
         self.assertEqual(tray.tooltip("unavailable"), "Mouthtype: service not running")
 
 
+class ThemeIconNameTests(unittest.TestCase):
+    def test_idle_is_the_base_symbolic_name(self):
+        self.assertEqual(tray.theme_icon_name("idle"), "app.mouthtype.Mouthtype-symbolic")
+
+    def test_other_states_carry_their_name(self):
+        self.assertEqual(tray.theme_icon_name("recording1"), "app.mouthtype.Mouthtype-recording1-symbolic")
+        self.assertEqual(tray.theme_icon_name("bogus"), "app.mouthtype.Mouthtype-unavailable-symbolic")
+
+    def test_every_state_name_has_a_shipped_svg(self):
+        directory = HERE.parent / "linux-desktop/share/icons/hicolor/symbolic/apps"
+        for name in tray.GLYPHS:
+            with self.subTest(glyph=name):
+                self.assertTrue((directory / (tray.theme_icon_name(name) + ".svg")).is_file())
+
+
 class VariantTests(unittest.TestCase):
     def test_dark_panel_gets_the_light_glyph(self):
         self.assertEqual(tray.variant_for(0, 0, 0), "light")
@@ -52,6 +67,31 @@ class MenuTests(unittest.TestCase):
     def test_toggle_is_disabled_when_the_service_is_down(self):
         self.assertEqual(tray.menu_entries("unavailable")[0], ("toggle", "Start dictation", False))
         self.assertTrue(all(enabled for _, _, enabled in tray.menu_entries("unavailable")[1:]))
+
+
+@unittest.skipUnless(tray.HAVE_QT, "PySide6 is not installed")
+class IconSelectionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from PySide6.QtWidgets import QApplication
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_theme_icon_is_used_by_name_when_present(self):
+        from unittest import mock
+        with mock.patch.object(tray.QIcon, "hasThemeIcon", return_value=True) as has, \
+                mock.patch.object(tray.QIcon, "fromTheme", return_value=tray.QIcon()) as from_theme:
+            tray.glyph_icon("recording0", "light")
+        has.assert_called_once_with("app.mouthtype.Mouthtype-recording0-symbolic")
+        from_theme.assert_called_once_with("app.mouthtype.Mouthtype-recording0-symbolic")
+
+    def test_tinted_pixmap_is_used_when_the_theme_lacks_the_icon(self):
+        from unittest import mock
+        with mock.patch.object(tray.QIcon, "hasThemeIcon", return_value=False), \
+                mock.patch.object(tray.QIcon, "fromTheme") as from_theme:
+            icon = tray.glyph_icon("idle", "light")
+        from_theme.assert_not_called()
+        self.assertFalse(icon.isNull())
+        self.assertEqual(icon.name(), "")  # a pixmap icon has no theme name
 
 
 @unittest.skipUnless(tray.HAVE_QT, "PySide6 is not installed")
