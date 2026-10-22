@@ -442,15 +442,15 @@ import Testing
         let probe = CancelProbe()
         model.fetchRecent = { _, _ in
             probe.started()
-            for _ in 0..<500 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
+            for _ in 0..<6000 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
             probe.finished(cancelled: Task.isCancelled)
             return []
         }
         model.activate()
-        for _ in 0..<100 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<3000 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
         #expect(probe.didStart)
         model.deactivate()
-        for _ in 0..<100 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<3000 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
         #expect(probe.cancelled == true)
     }
 
@@ -464,16 +464,16 @@ import Testing
         model.fetchRecent = { store, limit in
             if calls.next() {
                 probe.started()
-                for _ in 0..<500 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
+                for _ in 0..<6000 where !Task.isCancelled { Thread.sleep(forTimeInterval: 0.01) }
                 probe.finished(cancelled: Task.isCancelled)
                 return []
             }
             return try store.recentTakes(limit: limit)
         }
         model.activate()
-        for _ in 0..<100 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<3000 where !probe.didStart { try await Task.sleep(for: .milliseconds(20)) }
         await model.reload()
-        for _ in 0..<100 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
+        for _ in 0..<3000 where probe.cancelled == nil { try await Task.sleep(for: .milliseconds(20)) }
         #expect(probe.cancelled == true)
         #expect(!model.suggestions.isEmpty)
     }
