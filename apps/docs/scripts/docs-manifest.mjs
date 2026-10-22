@@ -128,6 +128,12 @@ export const pages = [
     description: "Every page of the Mouthtype window and the Settings modal.",
   },
   {
+    src: "docs/LANGUAGES.md",
+    dest: "reference/languages",
+    title: "Languages",
+    description: "The 25 supported languages, Auto-detect, and what cleanup runs in each.",
+  },
+  {
     src: "docs/SPOKEN-COMMANDS.md",
     dest: "reference/spoken-commands",
     title: "Spoken commands",

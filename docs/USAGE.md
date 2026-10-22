@@ -46,7 +46,7 @@ Allow Microphone and Accessibility access when macOS asks. Settings > Health has
 
 The speech model and a small speech detector download on first launch. The detector keeps empty recordings from becoming invented words. Download and loading status are in Settings > Health; an attention item in the menu opens it when preparation fails.
 
-Transcription runs locally. Parakeet v3 decoding uses an English language hint to prevent accidental Cyrillic output; Whisper also requests English. Smart cleanup is a separate optional model download, with basic cleanup available without it.
+Transcription runs locally. Parakeet v3 covers 25 European languages, and Whisper engines decode in the language you picked or detect it. **Settings → General → Language** chooses between Auto-detect and a fixed language. English gets every cleanup rule and other languages get a smaller set, see [languages](LANGUAGES.md). Smart cleanup is a separate optional model download, with basic cleanup available without it.
 
 ## Cleanup models
 

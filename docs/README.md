@@ -6,6 +6,7 @@ Guides for using and maintaining Mouthtype. The website has a shorter getting-st
 | --- | --- |
 | [USAGE.md](USAGE.md) | Dictating, delivery and recovery |
 | [SETTINGS.md](SETTINGS.md) | Every setting and what it changes |
+| [LANGUAGES.md](LANGUAGES.md) | Supported languages and what runs in each |
 | [SPOKEN-COMMANDS.md](SPOKEN-COMMANDS.md) | Spoken commands reference |
 | [WRITING-TOOLS.md](WRITING-TOOLS.md) | Writing tools and microphone priorities |
 | [FILE-TRANSCRIPTION.md](FILE-TRANSCRIPTION.md) | Transcribing audio files |

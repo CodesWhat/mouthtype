@@ -245,7 +245,7 @@ The first time you turn it on, Mouthtype downloads an extra speech model of abou
 | Fallback | Until it is ready, and whenever it fails to download, load or answer within 1.5 seconds, dictation uses the ordinary transcript, so a take never fails because of it |
 | Limit | Up to 200 saved spellings, starred ones first, with the heard forms you saved as aliases |
 | How it works | Rescores the finished Parakeet transcript against the audio, so it is not live in the preview |
-| Language | The model is English, so it helps English names best |
+| Language | English only. The model is English, so it helps English names best, and it is skipped when a take can't be English |
 | Timing | Replaced words keep the times of the words they replaced |
 | History | The spellings applied to a take are saved with it in history |
 | Switching off | Unloads the extra model |
