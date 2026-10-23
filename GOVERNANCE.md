@@ -9,7 +9,7 @@ Mouthtype uses a lead-maintainer model. Work is proposed and reviewed in public 
 | Lead maintainer | [`@scttbnsn`](https://github.com/scttbnsn) | Product direction, issue triage, security response, review and merge, and final technical decisions |
 | Release owner | [`@scttbnsn`](https://github.com/scttbnsn) | Version bump, tagging, packaging, Developer ID signing, notarization, Sparkle signing and publishing, following [docs/RELEASING.md](docs/RELEASING.md) |
 | Continuity maintainer | [`@biggest-littlest`](https://github.com/biggest-littlest) | CodesWhat organization administration, access recovery and release continuity when the lead maintainer is unavailable |
-| Reviewers | Accounts in [`.github/CODEOWNERS`](.github/CODEOWNERS) (`@scttbnsn`, `@dstahl11`, `@biggest-littlest`) | Review changes in owned areas and flag risk, compatibility and test gaps. `@dstahl11` owns the experimental Linux client under `tools/` |
+| Reviewers | Accounts in [`.github/CODEOWNERS`](.github/CODEOWNERS) (`@scttbnsn`, `@dstahl11`, `@ALARGECOMPANY`, `@biggest-littlest`) | Review changes in owned areas and flag risk, compatibility and test gaps. `@dstahl11` owns the experimental Linux client under `tools/` |
 | Contributors | Anyone using issues, discussions or pull requests | Propose, implement, test, document and review changes |
 
 Roles come from sustained project work and trust. The lead maintainer adds or removes reviewers and maintainers through a public pull request that updates the relevant records. Organization-owner changes show up in GitHub's organization audit log.
