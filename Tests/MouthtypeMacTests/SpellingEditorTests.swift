@@ -51,10 +51,12 @@ import MouthtypeCore
         #expect(editor.isDirty && editor.canSave)
         editor.save()
         #expect(!editor.isEditing && !editor.isDirty)
-        #expect(try store.allRules() == [
-            DictionaryRule(heard: "mouth type", written: "Mouthtype"),
-            DictionaryRule(heard: "shaun", written: "Sean", starred: true),
-            DictionaryRule(heard: "shorn", written: "Sean", starred: true)])
+        #expect(
+            try store.allRules() == [
+                DictionaryRule(heard: "mouth type", written: "Mouthtype"),
+                DictionaryRule(heard: "shaun", written: "Sean", starred: true),
+                DictionaryRule(heard: "shorn", written: "Sean", starred: true),
+            ])
     }
 
     @Test func newWordWithoutAHeardFormFixesTheWrittenFormOnly() throws {
@@ -152,7 +154,7 @@ import MouthtypeCore
         let editor = SpellingEditor(store: store)
         editor.heardInput = "win"
         editor.written = "Nguyen"
-        #expect(editor.everydayWarning?.contains("everyday word") == true)
+        #expect(editor.everydayWarning?.contains("everyday English word") == true)
         #expect(editor.canSave)
         editor.heardInput = "shivon"
         #expect(editor.everydayWarning == nil)

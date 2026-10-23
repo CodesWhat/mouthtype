@@ -94,11 +94,13 @@ enum LipsSprite {
     /// Lips and teeth in full `color`, the mouth opening and outline fainter, drawn one point per pixel.
     static func image(color: NSColor) -> CGImage? {
         let ink = color.usingColorSpace(.sRGB) ?? color
-        guard let context = CGContext(
-            data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ) else { return nil }
+        guard
+            let context = CGContext(
+                data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            )
+        else { return nil }
         for (y, row) in rows.enumerated() {
             for (x, ch) in row.enumerated() {
                 let alpha: CGFloat

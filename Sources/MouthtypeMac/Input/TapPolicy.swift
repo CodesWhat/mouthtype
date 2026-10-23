@@ -6,10 +6,13 @@ enum TapRole: Hashable, Sendable {
     case flags
     /// Active: exists only while recording (or always, for the Fn remap and the probes).
     case keys
+    /// Active, and only when a mouse button is chosen: consumes that one button's presses and nothing else.
+    case mouse
 }
 
 enum TapMessage: Sendable {
     case sample(TapRole, TapSample)
+    case mouse(MouseSample)
     case disabled(TapRole)
 }
 
@@ -25,12 +28,12 @@ enum FnCombos {
     static let spaceKeyCode: UInt16 = 49
 
     static let table: [UInt16: FnCombo] = [
-        126: FnCombo(keyCode: 116), // Up -> Page Up
-        125: FnCombo(keyCode: 121), // Down -> Page Down
-        123: FnCombo(keyCode: 115), // Left -> Home
-        124: FnCombo(keyCode: 119), // Right -> End
-        51: FnCombo(keyCode: 117), // Delete -> Forward Delete
-        36: FnCombo(keyCode: 76, keypad: true), // Return -> keypad Enter
+        126: FnCombo(keyCode: 116),  // Up -> Page Up
+        125: FnCombo(keyCode: 121),  // Down -> Page Down
+        123: FnCombo(keyCode: 115),  // Left -> Home
+        124: FnCombo(keyCode: 119),  // Right -> End
+        51: FnCombo(keyCode: 117),  // Delete -> Forward Delete
+        36: FnCombo(keyCode: 76, keypad: true),  // Return -> keypad Enter
     ]
 
     static func replacement(forKeyCode keyCode: UInt16, fnHeld: Bool) -> FnCombo? {
@@ -200,6 +203,8 @@ final class TapContext: Sendable {
     /// The tap counts keystrokes itself (no other tap does), forwarding nothing. Flag tap only.
     let countsKeys: Bool
     let shortcut: DictationShortcut?
+    /// The `CGEvent` button number the mouse tap consumes. Mouse tap only.
+    let mouseButton: Int64?
 
     func countPassiveKey(_ sample: TapSample) {
         if TapPolicy.countsAsUserInput(sample, decision: .passThrough, swallowedKey: swallowedKey) {
@@ -210,7 +215,7 @@ final class TapContext: Sendable {
     init(
         role: TapRole, sink: AsyncStream<TapMessage>.Continuation, swallowedKey: UInt16?, shared: TapShared,
         emulator: KeyEmulator? = nil, tracksFnFlag: Bool = false, idleKeysReported: Bool = false, countsKeys: Bool = false,
-        shortcut: DictationShortcut? = nil
+        shortcut: DictationShortcut? = nil, mouseButton: Int64? = nil
     ) {
         self.role = role
         self.sink = sink
@@ -221,6 +226,7 @@ final class TapContext: Sendable {
         self.idleKeysReported = idleKeysReported
         self.countsKeys = countsKeys
         self.shortcut = shortcut
+        self.mouseButton = mouseButton
     }
 }
 

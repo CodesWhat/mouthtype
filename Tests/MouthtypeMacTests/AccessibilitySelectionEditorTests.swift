@@ -4,7 +4,8 @@ import Testing
 @testable import MouthtypeMac
 
 @MainActor private final class SelectionFocus: FocusReading {
-    var current = FocusSnapshot(pid: 100, role: "AXTextArea",
+    var current = FocusSnapshot(
+        pid: 100, role: "AXTextArea",
         element: FocusedElement(AXUIElementCreateApplication(100)), focusedOwnerPID: 100)
     var isSecureInputEnabled = false
     func snapshot() -> FocusSnapshot { current }
@@ -31,25 +32,31 @@ import Testing
     var events: [String] = []
 
     func editor() -> AccessibilitySelectionEditor {
-        AccessibilitySelectionEditor(focus: focus, readRange: { element in
-            self.rangeReads += 1
-            return self.range
-        }, readText: { element in
-            self.textReads += 1
-            return self.text
-        }, writeText: { element, text in
-            self.events.append("write")
-            self.writes.append((element, text))
-            return self.acceptsWrite
-        }, setTimeout: { _, seconds in
-            self.events.append("timeout=\(seconds)")
-        })
+        AccessibilitySelectionEditor(
+            focus: focus,
+            readRange: { element in
+                self.rangeReads += 1
+                return self.range
+            },
+            readText: { element in
+                self.textReads += 1
+                return self.text
+            },
+            writeText: { element, text in
+                self.events.append("write")
+                self.writes.append((element, text))
+                return self.acceptsWrite
+            },
+            setTimeout: { _, seconds in
+                self.events.append("timeout=\(seconds)")
+            })
     }
 }
 
 @MainActor @Suite struct AccessibilitySelectionEditorTests {
     @Test func captureReadsTheAppFocusWhenTheSystemWideElementIsEmpty() throws {
-        let editor = AccessibilitySelectionEditor(focus: MenuTrackingFocus(), readRange: { _ in NSRange(location: 0, length: 5) },
+        let editor = AccessibilitySelectionEditor(
+            focus: MenuTrackingFocus(), readRange: { _ in NSRange(location: 0, length: 5) },
             readText: { _ in "hello" }, writeText: { _, _ in true }, setTimeout: { _, _ in })
         let selected = try editor.capture()
         #expect(selected.text == "hello")

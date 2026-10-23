@@ -51,10 +51,11 @@ import Testing
         }
 
         let pixels = (width: Int(canvas.width * Self.backing), height: Int(canvas.height * Self.backing))
-        let context = try #require(CGContext(
-            data: nil, width: pixels.width, height: pixels.height, bitsPerComponent: 8, bytesPerRow: 0,
-            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil, width: pixels.width, height: pixels.height, bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
         context.scaleBy(x: Self.backing, y: Self.backing)
         context.setFillColor(NSColor(hex: 0x8E96A3).cgColor)
         context.fill(CGRect(origin: .zero, size: canvas))

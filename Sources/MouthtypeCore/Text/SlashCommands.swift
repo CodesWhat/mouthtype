@@ -67,8 +67,8 @@ public struct SlashCommands: Sendable {
             if i > 0, words[i - 1].lower == "forward", joined(words[i - 1], words[i]) { start = words[i - 1].start }
             let next = i + 1
             guard next < words.count, joined(words[i], words[next]), plain(words[next]),
-                  chars[words[next].start].isLetter, !Self.functionWords.contains(words[next].lower),
-                  !Self.nounFollowers.contains(words[next].lower)
+                chars[words[next].start].isLetter, !Self.functionWords.contains(words[next].lower),
+                !Self.nounFollowers.contains(words[next].lower)
             else { i += 1; continue }
             let forward = start != words[i].start
             let head = forward ? i - 1 : i
@@ -80,8 +80,9 @@ public struct SlashCommands: Sendable {
             var command = "/" + words[next].lower
             var last = next
             while last + 2 < words.count, let glue = Self.joiners[words[last + 1].lower],
-                  joined(words[last], words[last + 1]), joined(words[last + 1], words[last + 2]),
-                  plain(words[last + 2]), chars[words[last + 2].start].isLetter || chars[words[last + 2].start].isNumber {
+                joined(words[last], words[last + 1]), joined(words[last + 1], words[last + 2]),
+                plain(words[last + 2]), chars[words[last + 2].start].isLetter || chars[words[last + 2].start].isNumber
+            {
                 command += glue + words[last + 2].lower
                 last += 2
             }

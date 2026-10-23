@@ -67,12 +67,14 @@ enum MenuSelectionRead {
         let protected = value(element, NSAccessibility.Attribute.containsProtectedContent.rawValue) as? Bool ?? false
         if passed() { return .failure(.timedOut) }
         guard subrole != kAXSecureTextFieldSubrole as String, !protected,
-              ["AXTextField", "AXTextArea", "AXComboBox"].contains(role ?? "") else { return .failure(.unavailable) }
+            ["AXTextField", "AXTextArea", "AXComboBox"].contains(role ?? "")
+        else { return .failure(.unavailable) }
         let range = AccessibilityFocusReader.selectedRange(bounded(element))
         if passed() { return .failure(.timedOut) }
         guard let range, range.location >= 0, (1...16_000).contains(range.length),
-              let text = value(element, kAXSelectedTextAttribute) as? String, !text.isEmpty,
-              text.utf16.count == range.length else { return .failure(.unavailable) }
+            let text = value(element, kAXSelectedTextAttribute) as? String, !text.isEmpty,
+            text.utf16.count == range.length
+        else { return .failure(.unavailable) }
         return .success(SelectedText(pid: pid, element: FocusedElement(element), range: range, text: text))
     }
 }
@@ -100,14 +102,17 @@ private final class OnceResume: @unchecked Sendable {
     private let offMainRead: @Sendable (pid_t, Bool, TimeInterval) -> Result<SelectedText, SelectionCleanupError>
 
     convenience init() {
-        self.init(focus: AccessibilityFocusReader(), readRange: Self.selectedRange,
-                  readText: Self.selectedText, writeText: Self.setSelectedText)
+        self.init(
+            focus: AccessibilityFocusReader(), readRange: Self.selectedRange,
+            readText: Self.selectedText, writeText: Self.setSelectedText)
     }
 
-    init(focus: any FocusReading, readRange: @escaping (FocusedElement) -> NSRange?,
-         readText: @escaping (FocusedElement) -> String?, writeText: @escaping (FocusedElement, String) -> Bool,
-         setTimeout: @escaping (FocusedElement, Float) -> Void = { AXUIElementSetMessagingTimeout($0.ref, $1) },
-         offMainRead: @escaping @Sendable (pid_t, Bool, TimeInterval) -> Result<SelectedText, SelectionCleanupError> = MenuSelectionRead.read) {
+    init(
+        focus: any FocusReading, readRange: @escaping (FocusedElement) -> NSRange?,
+        readText: @escaping (FocusedElement) -> String?, writeText: @escaping (FocusedElement, String) -> Bool,
+        setTimeout: @escaping (FocusedElement, Float) -> Void = { AXUIElementSetMessagingTimeout($0.ref, $1) },
+        offMainRead: @escaping @Sendable (pid_t, Bool, TimeInterval) -> Result<SelectedText, SelectionCleanupError> = MenuSelectionRead.read
+    ) {
         self.setTimeout = setTimeout
         self.offMainRead = offMainRead
         self.focus = focus
@@ -139,15 +144,17 @@ private final class OnceResume: @unchecked Sendable {
         let snapshot = focus.selectionSnapshot()
         if AccessibilityFocusReader.deadlinePassed { throw SelectionCleanupError.timedOut }
         guard !snapshot.isSecure, !focus.isSecureInputEnabled,
-              let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
-              let element = snapshot.element,
-              ["AXTextField", "AXTextArea", "AXComboBox"].contains(snapshot.role ?? "") else {
+            let pid = snapshot.pid, snapshot.focusedOwnerPID == pid,
+            let element = snapshot.element,
+            ["AXTextField", "AXTextArea", "AXComboBox"].contains(snapshot.role ?? "")
+        else {
             throw SelectionCleanupError.unavailable
         }
         let range = readRange(element)
         if AccessibilityFocusReader.deadlinePassed { throw SelectionCleanupError.timedOut }
         guard let range, range.location >= 0, (1...16_000).contains(range.length),
-              let text = readText(element), !text.isEmpty, text.utf16.count == range.length else {
+            let text = readText(element), !text.isEmpty, text.utf16.count == range.length
+        else {
             throw SelectionCleanupError.unavailable
         }
         return SelectedText(pid: pid, element: element, range: range, text: text)
@@ -155,7 +162,8 @@ private final class OnceResume: @unchecked Sendable {
 
     func replace(_ original: SelectedText, with replacement: String) -> Bool {
         guard !replacement.isEmpty, replacement.utf16.count <= 16_000,
-              (try? capture()) == original, let element = original.element else { return false }
+            (try? capture()) == original, let element = original.element
+        else { return false }
         // The captured reference kept the capture's shortened timeout. 0 restores the system default the insertion path uses.
         setTimeout(element, 0)
         // The user explicitly accepts this edit. No clipboard paste, keyboard events or retry.
@@ -230,11 +238,13 @@ private final class OnceResume: @unchecked Sendable {
     var canChooseTransform: Bool { captured != nil && !submitted && !isTransforming && transformUnavailableReason == nil }
     var canChooseBasic: Bool { captured != nil && !submitted && !isTransforming && transform != nil }
 
-    init(editor: any SelectionEditing, transformer: (any SelectionTransforming)? = nil,
-         busy: @escaping () -> Bool = { false }, changed: @escaping () -> Void = {},
-         styleFor: @escaping (SelectedText) -> StyleOptions = { _ in .formal },
-         appName: @escaping (pid_t) -> String? = { NSRunningApplication(processIdentifier: $0)?.localizedName },
-         captureBudget: TimeInterval = 0.15) {
+    init(
+        editor: any SelectionEditing, transformer: (any SelectionTransforming)? = nil,
+        busy: @escaping () -> Bool = { false }, changed: @escaping () -> Void = {},
+        styleFor: @escaping (SelectedText) -> StyleOptions = { _ in .formal },
+        appName: @escaping (pid_t) -> String? = { NSRunningApplication(processIdentifier: $0)?.localizedName },
+        captureBudget: TimeInterval = 0.15
+    ) {
         self.styleFor = styleFor
         self.appName = appName
         self.captureBudget = captureBudget
@@ -250,9 +260,7 @@ private final class OnceResume: @unchecked Sendable {
         let start = ContinuousClock.now
         menuSnapshot = nil
         let selection: SelectedText
-        do { selection = try editor.capture(budget: budget) }
-        catch SelectionCleanupError.timedOut { return .timedOut }
-        catch { return .unavailable }
+        do { selection = try editor.capture(budget: budget) } catch SelectionCleanupError.timedOut { return .timedOut } catch { return .unavailable }
         if start.duration(to: .now) > .seconds(budget) { return .timedOut }
         menuSnapshot = selection
         return .ready
@@ -263,9 +271,7 @@ private final class OnceResume: @unchecked Sendable {
     func captureForMenuOffMain(budget: TimeInterval = 0.15) async -> MenuCapture {
         menuSnapshot = nil
         let selection: SelectedText
-        do { selection = try await editor.captureOffMain(budget: budget) }
-        catch SelectionCleanupError.timedOut { return .timedOut }
-        catch { return .unavailable }
+        do { selection = try await editor.captureOffMain(budget: budget) } catch SelectionCleanupError.timedOut { return .timedOut } catch { return .unavailable }
         if Task.isCancelled { return .unavailable }
         menuSnapshot = selection
         return .ready
@@ -284,8 +290,7 @@ private final class OnceResume: @unchecked Sendable {
         }
         do {
             let selection: SelectedText
-            do { selection = try editor.capture(budget: captureBudget) }
-            catch SelectionCleanupError.timedOut {
+            do { selection = try editor.capture(budget: captureBudget) } catch SelectionCleanupError.timedOut {
                 message = "Couldn’t read the selection in time. Try again."
                 return
             }
@@ -380,7 +385,8 @@ private final class OnceResume: @unchecked Sendable {
             if let cleaner = error as? CleanerError, case let .unavailable(reason) = cleaner {
                 message = reason
             } else if let cleaner = error as? CleanerError, cleaner == .outputTruncated || cleaner == .outputTooLong {
-                message = cleaner == .outputTruncated
+                message =
+                    cleaner == .outputTruncated
                     ? "\(kind.title) ran past the model's length limit, so the result was cut off and can't be used. Try a shorter selection, or cancel."
                     : "\(kind.title) returned far more text than the selection, so the result can't be used. Retry, or cancel."
             } else {
@@ -402,7 +408,8 @@ private final class OnceResume: @unchecked Sendable {
 
     /// The deterministic stages plus the tone pass. Formal also softens swearing; the other tones leave it as written.
     private static func basicCleanup(_ text: String, style: StyleOptions) -> String {
-        let options = TextPipelineOptions(fillers: true, spokenCommands: true, selfCorrection: false, countedLists: false,
+        let options = TextPipelineOptions(
+            fillers: true, spokenCommands: true, selfCorrection: false, countedLists: false,
             notation: false, numbers: false, dictionary: false, snippets: false, blend: false, whitespace: true,
             profanity: true, style: style)
         return TextPipeline().run(TextPipelineInput(text: text, options: options)).text
@@ -419,7 +426,8 @@ private final class OnceResume: @unchecked Sendable {
             return
         }
         submitted = true
-        message = transform == nil
+        message =
+            transform == nil
             ? "Replacement requested. Check the original field. You can still copy the result."
             : "Replacement requested. Check the original field. To undo, press Cmd-Z in that app, or copy the original text from here."
     }

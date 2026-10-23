@@ -24,22 +24,24 @@ enum MicrophoneChoice: Hashable {
     var status: String {
         if choice == .priorityList, let priority {
             if let selected = priority.devices.first(where: { choice in inputs.contains { $0.uid == choice.uid } }) {
-                return "Next dictation uses \(selected.name), the first available input in your list."
+                return "Using \(selected.name), the first available input in your list."
             }
-            return priority.fallbackToDefault ? "No listed input is available. Next dictation follows System Default." : "No listed input is available. Reconnect one or change your list."
+            return priority.fallbackToDefault ? "No listed input is available. Using System Default." : "No listed input is available. Reconnect one or change your list."
         }
         if let preferred, !inputs.contains(where: { $0.uid == preferred.uid }) {
             return "\(preferred.name) is unavailable. Reconnect it or choose another input."
         }
         if inputs.isEmpty { return "No microphone found. Connect one, then refresh inputs." }
-        if let preferred { return "Next dictation uses this microphone. Your system input is unchanged." }
-        return "Next dictation follows System Default" + (systemDefaultName.map { " (\($0))." } ?? ".")
+        if preferred != nil { return "Using this microphone. Your system input is unchanged." }
+        return "Using System Default" + (systemDefaultName.map { " (\($0))." } ?? ".")
     }
 
-    init(defaults: UserDefaults = .standard,
-         devices: @escaping () throws -> [MicrophoneDevice] = { try InputDevice.availableMicrophones() },
-         defaultInput: @escaping () -> AudioDeviceID? = { InputDevice.defaultInputID() },
-         onChanged: @escaping () -> Void = {}) {
+    init(
+        defaults: UserDefaults = .standard,
+        devices: @escaping () throws -> [MicrophoneDevice] = { try InputDevice.availableMicrophones() },
+        defaultInput: @escaping () -> AudioDeviceID? = { InputDevice.defaultInputID() },
+        onChanged: @escaping () -> Void = {}
+    ) {
         self.defaults = defaults
         self.devices = devices
         self.defaultInput = defaultInput
@@ -117,7 +119,8 @@ enum MicrophoneChoice: Hashable {
 
     func movePriority(uid: String, offset: Int) {
         guard let index = priority?.devices.firstIndex(where: { $0.uid == uid }),
-              let count = priority?.devices.count, (0..<count).contains(index + offset) else { return }
+            let count = priority?.devices.count, (0..<count).contains(index + offset)
+        else { return }
         updatePriority { $0.devices.swapAt(index, index + offset) }
     }
 

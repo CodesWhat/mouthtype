@@ -52,6 +52,7 @@ let package = Package(
                 "MouthtypeCore",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ],
+            exclude: ["Fixtures/normalization-cases.json"],
             resources: [.copy("Fixtures/cleanup-cases.json"), .copy("Fixtures/smart-cases.json")]
         ),
         .testTarget(
@@ -64,7 +65,8 @@ let package = Package(
         ),
         .testTarget(
             name: "MouthtypeMacTests",
-            dependencies: ["MouthtypeMac"]
+            dependencies: ["MouthtypeMac"],
+            exclude: ["Fixtures"]
         ),
         .testTarget(
             name: "MouthtypeSettingsUITests",

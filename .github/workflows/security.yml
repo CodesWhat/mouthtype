@@ -3,7 +3,7 @@ name: Security checks
 on:
   pull_request:
   push:
-    branches: [main, dev/v0.5.0]
+    branches: [main, 'dev/**']
   schedule:
     - cron: '24 7 * * 1'
   workflow_dispatch:
@@ -52,9 +52,20 @@ jobs:
       - name: Run release helper checks
         run: python3 -W error::ResourceWarning -m unittest discover -s Tests/ReleaseTests -p 'test_*.py'
 
+  swift-format:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    container: swift:6.4@sha256:6fbd5978b56a5a9ff05a48f8f678079fc45be496ecda15b4e74e8944fab857be
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint Swift formatting
+        run: swift format lint --strict --recursive Sources Tests
+
   website-dependencies:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -64,4 +75,4 @@ jobs:
           node-version: 24
       - name: Audit locked direct and transitive website dependencies
         working-directory: website
-        run: npm audit --package-lock-only --audit-level=high
+        run: ../scripts/npm-audit-retry.sh --package-lock-only --audit-level=high

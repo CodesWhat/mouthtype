@@ -37,8 +37,11 @@ import Testing
         #expect(access.snapshot() == original)
         #expect(original.items.count == 2)
         let formats = Set(original.items[0].map(\.type))
-        #expect(formats.isSuperset(of: [NSPasteboard.PasteboardType.string.rawValue,
-            NSPasteboard.PasteboardType.rtf.rawValue, NSPasteboard.PasteboardType.html.rawValue]))
+        #expect(
+            formats.isSuperset(of: [
+                NSPasteboard.PasteboardType.string.rawValue,
+                NSPasteboard.PasteboardType.rtf.rawValue, NSPasteboard.PasteboardType.html.rawValue,
+            ]))
         #expect(poster.posts == 1)
     }
 

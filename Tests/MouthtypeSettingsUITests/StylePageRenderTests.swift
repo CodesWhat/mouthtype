@@ -103,8 +103,10 @@ import MouthtypeCore
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let settings = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
         let advanced = try String(contentsOf: settings.appendingPathComponent("SettingsAdvancedPage.swift"), encoding: .utf8)
-        for title in ["Remove fillers", "Spoken commands and lists", "Format numbers", "Lowercase sentence starts", "Drop the final full stop",
-                      "Learn from my corrections", "Edit dictionary file…"] {
+        for title in [
+            "Remove fillers", "Spoken commands and lists", "Format numbers", "Lowercase sentence starts", "Drop the final full stop",
+            "Learn from my corrections", "Edit dictionary file…",
+        ] {
             #expect(advanced.contains("\"\(title)\""), "missing \(title)")
         }
         #expect(advanced.contains("PasteSettings.supportedTerminals"))

@@ -6,8 +6,10 @@ struct SavedSpellingsPage: View {
 
     var body: some View {
         if let editor = model.spellings, let suggestions = model.spellingSuggestions {
-            DesignPage(title: "Your names, spelled right.",
-                summary: "Teach Mouthtype the words it keeps mishearing. Save a spelling once and it sticks.") {
+            DesignPage(
+                title: "Your names, spelled right.",
+                summary: "Teach Mouthtype the words it keeps mishearing. Save a spelling once and it sticks."
+            ) {
                 SpellingEditorView(editor: editor, suggestions: suggestions)
             }
         } else {

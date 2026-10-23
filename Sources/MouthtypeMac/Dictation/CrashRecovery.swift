@@ -145,10 +145,12 @@ final class CrashRecovery {
     private func presentOffer(_ item: RecoverableDictation, header: String) {
         var card = DeliveryCard.recoverOffer(seconds: item.seconds, ago: max(0, clock.now().timeIntervalSince(item.startedAt)), older: 0)
         card.header = header
-        cards.present(card, actions: [
-            .recover: { [weak self] in Task { await self?.recover() } },
-            .discard: { [weak self] in Task { await self?.discard() } },
-        ])
+        cards.present(
+            card,
+            actions: [
+                .recover: { [weak self] in Task { await self?.recover() } },
+                .discard: { [weak self] in Task { await self?.discard() } },
+            ])
     }
 
     /// The card's Discard: the row ends as cancelled and the audio stays in the archive.

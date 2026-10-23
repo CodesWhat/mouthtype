@@ -12,7 +12,7 @@ import Testing
         }
         let path = try #require(ProcessInfo.processInfo.environment["MOUTHTYPE_ENGLISH_FIXTURES"])
         let fixtures = try JSONDecoder().decode([Fixture].self, from: Data(contentsOf: URL(fileURLWithPath: path)))
-        let engine = try EngineCatalog.make(id: "parakeet-tdt-v3", englishHint: true)
+        let engine = try EngineCatalog.make(id: "parakeet-tdt-v3")
         try await engine.prepare()
         for fixture in fixtures {
             let samples = try AudioLoading.loadSamples(from: URL(fileURLWithPath: fixture.path))
@@ -31,7 +31,7 @@ import Testing
         let path = try #require(ProcessInfo.processInfo.environment["MOUTHTYPE_SPEECH_FIXTURES"])
         let fixtures = try JSONDecoder().decode([Fixture].self, from: Data(contentsOf: URL(fileURLWithPath: path)))
         let detector = try await VadManager(config: VadConfig(defaultThreshold: 0.5))
-        let engine = try EngineCatalog.make(id: "parakeet-tdt-v3", englishHint: true)
+        let engine = try EngineCatalog.make(id: "parakeet-tdt-v3")
         try await engine.prepare()
         for fixture in fixtures {
             let samples = try AudioLoading.loadSamples(from: URL(fileURLWithPath: fixture.path))

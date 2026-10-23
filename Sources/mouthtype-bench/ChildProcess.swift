@@ -18,8 +18,10 @@ private final class ChildProcess: @unchecked Sendable {
         return timedOutFlag
     }
 
-    func start(executable: URL, arguments: [String], log: FileHandle, timeout: TimeInterval,
-               onExit: @escaping @Sendable (Int32) -> Void) throws {
+    func start(
+        executable: URL, arguments: [String], log: FileHandle, timeout: TimeInterval,
+        onExit: @escaping @Sendable (Int32) -> Void
+    ) throws {
         process.executableURL = executable
         process.arguments = arguments
         process.standardOutput = log

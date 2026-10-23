@@ -223,10 +223,11 @@ final class HiFiCardView: NSView {
             Self.labels(for: action, in: new, remaining: remaining)
                 .map { m5.width(of: HiFiCardText.display($0, metrics: m5)) }.max() ?? 0
         }
-        let layout = HiFiCardLayout.make(.init(
-            titleWidth: m3.width(of: title), lineCount: lines.count, lineHeight: m5.cellHeight,
-            hasBar: card.countdown != nil, buttonLabelWidths: labelWidths
-        ), m)
+        let layout = HiFiCardLayout.make(
+            .init(
+                titleWidth: m3.width(of: title), lineCount: lines.count, lineHeight: m5.cellHeight,
+                hasBar: card.countdown != nil, buttonLabelWidths: labelWidths
+            ), m)
         frames = layout
         let size = faceSize
         setFrameSize(size)
@@ -323,7 +324,8 @@ final class HiFiCardView: NSView {
     /// The window at 1x: frame, title plate with its LED and header, and the VFD with its text and bar.
     private func composeFace() -> CGImage? {
         guard let frames, let state, let canvas = HiFiCanvas(width: frames.width, height: frames.height),
-              let frameSlices = assets.slices(of: "frame") else { return nil }
+            let frameSlices = assets.slices(of: "frame")
+        else { return nil }
         let c = assets.spec.colors, m = assets.metrics
         let p = palette
         let kind = state.card.kind

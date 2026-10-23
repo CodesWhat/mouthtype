@@ -15,10 +15,17 @@ struct EngineWorker: AsyncParsableCommand {
     @Option(help: "Comma-separated names to bias recognition toward. Parakeet and Whisper use them.") var boostTerms: String?
     @Flag(help: "Use the English hint enabled by the Mac app.") var englishHint = false
 
+    /// Parakeet takes the English hint only with the flag; without it the call sends no hint, as before the hint became a
+    /// per-call argument. Whisper always decoded English here.
+    var languageRequest: DictationLanguageRequest {
+        englishHint || !engine.hasPrefix("parakeet") ? .english : .auto(candidates: [.english, .russian])
+    }
+
     func run() async throws {
-        var output = WorkerOutput(engineID: engine, displayName: engine, prepare: nil, peakRSSBytes: 0, peakFootprintBytes: nil, firstTranscribeMs: nil, modelBytes: nil, modelPath: nil, clips: [], error: nil)
+        var output = WorkerOutput(
+            engineID: engine, displayName: engine, prepare: nil, peakRSSBytes: 0, peakFootprintBytes: nil, firstTranscribeMs: nil, modelBytes: nil, modelPath: nil, clips: [], error: nil)
         do {
-            let transcriber = try EngineCatalog.make(id: engine, englishHint: englishHint)
+            let transcriber = try EngineCatalog.make(id: engine)
             output.displayName = transcriber.displayName
             if let measured = transcriber as? any MeasuredTranscriber {
                 output.prepare = try await measured.prepareMeasured()
@@ -32,7 +39,8 @@ struct EngineWorker: AsyncParsableCommand {
                 if let parakeet = transcriber as? ParakeetEngine { _ = await parakeet.awaitVocabularyBoost() }
             }
             if mode == "full" {
-                let outcome = try await Self.benchmark(transcriber, corpus: URL(fileURLWithPath: corpus), runs: runs, warmups: warmups)
+                let outcome = try await Self.benchmark(
+                    transcriber, corpus: URL(fileURLWithPath: corpus), runs: runs, warmups: warmups, language: languageRequest)
                 output.clips = outcome.clips
                 output.firstTranscribeMs = outcome.firstTranscribeMs
             }
@@ -45,7 +53,7 @@ struct EngineWorker: AsyncParsableCommand {
     }
 
     static func benchmark(
-        _ transcriber: any Transcriber, corpus: URL, runs: Int, warmups: Int
+        _ transcriber: any Transcriber, corpus: URL, runs: Int, warmups: Int, language: DictationLanguageRequest = .english
     ) async throws -> (clips: [ClipResult], firstTranscribeMs: Double?) {
         let clock = ContinuousClock()
         var results: [ClipResult] = []
@@ -55,31 +63,32 @@ struct EngineWorker: AsyncParsableCommand {
             let audioSeconds = Double(samples.count) / AudioLoading.targetSampleRate
             for _ in 0..<warmups {
                 let start = clock.now
-                _ = try await transcriber.transcribe(samples: samples)
+                _ = try await transcriber.transcribe(samples: samples, language: language)
                 if firstTranscribeMs == nil { firstTranscribeMs = (clock.now - start).seconds * 1000 }
             }
             var latencies: [Double] = []
             var hypothesis = ""
             for _ in 0..<runs {
                 let start = clock.now
-                hypothesis = try await transcriber.transcribe(samples: samples).text
+                hypothesis = try await transcriber.transcribe(samples: samples, language: language).text
                 latencies.append((clock.now - start).seconds * 1000)
             }
             let median = Stats.median(latencies)
             let counts = TextMetrics.errorCounts(reference: clip.reference, hypothesis: hypothesis)
-            results.append(ClipResult(
-                name: clip.name,
-                set: ClipSet(clipName: clip.name),
-                audioSeconds: audioSeconds,
-                latenciesMs: latencies,
-                medianMs: median,
-                p95Ms: Stats.percentile(latencies, 95),
-                rtfx: median > 0 ? audioSeconds / (median / 1000) : 0,
-                reference: clip.reference,
-                hypothesis: hypothesis,
-                edits: counts.edits,
-                referenceWords: counts.referenceWords
-            ))
+            results.append(
+                ClipResult(
+                    name: clip.name,
+                    set: ClipSet(clipName: clip.name),
+                    audioSeconds: audioSeconds,
+                    latenciesMs: latencies,
+                    medianMs: median,
+                    p95Ms: Stats.percentile(latencies, 95),
+                    rtfx: median > 0 ? audioSeconds / (median / 1000) : 0,
+                    reference: clip.reference,
+                    hypothesis: hypothesis,
+                    edits: counts.edits,
+                    referenceWords: counts.referenceWords
+                ))
         }
         return (results, firstTranscribeMs)
     }
@@ -91,9 +100,11 @@ struct EngineWorker: AsyncParsableCommand {
     }
 
     static func directorySize(_ url: URL) -> Int? {
-        guard let enumerator = FileManager.default.enumerator(
-            at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]
-        ) else { return nil }
+        guard
+            let enumerator = FileManager.default.enumerator(
+                at: url, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey]
+            )
+        else { return nil }
         var total = 0
         for case let file as URL in enumerator {
             let values = try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .isRegularFileKey])

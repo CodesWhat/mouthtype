@@ -5,11 +5,13 @@ import MouthtypeCore
 struct DictationSession: Sendable {
     var id: String
     var startedAt: Date
-    var keyDownAt: UInt64 // host nanoseconds (`HostClock`)
+    var keyDownAt: UInt64  // host nanoseconds (`HostClock`)
     var startFocus: FocusSnapshot?
     var cleanupStyle: StyleOptions?
     /// A rule's cleanup level; nil uses the global one.
     var cleanupLevel: CleanupLevel?
+    /// A rule's instructions for Thorough; nil uses the global ones.
+    var cleanupInstructions: String?
     /// True when the dictation goes into a terminal, code editor or agent app or site, so spoken slash commands are typed.
     var codingTarget = false
     /// False when the store is missing or `begin` failed; later writes are then skipped.
@@ -28,6 +30,8 @@ struct TranscribedDictation: Sendable {
     var words: [WordTiming]
     /// Words and tags the guard dropped.
     var guardEdits: [EditOp] = []
+    /// The language the take was settled as. Nil reads as English.
+    var language: DictationLanguage?
 }
 
 /// What a dictation's cleanup needs, read once so one dictation sees one set of switches.
@@ -111,6 +115,11 @@ struct DictationPipeline: Sendable {
     var vocabulary: any VocabularyProviding = EmptyVocabulary()
     var boostSavedWords: @Sendable () -> Bool = { VocabularyBoostSetting.isEnabled() }
     var editorHints: @Sendable () -> Bool = { EditorHintsSetting.isEnabled() }
+    var contextNames: @Sendable () -> Bool = { ContextNamesSetting.isEnabled() }
+    /// What the engine is told about the take's language. English until the setting feeds it.
+    var languageRequest: @Sendable () -> DictationLanguageRequest = { .english }
+    /// Settles an Auto take's language from its transcript. Without a detector Auto falls back to its first candidate.
+    var languageResolver = LanguageResolver(detector: nil)
     var settings: @Sendable () -> CleanupSettings = { CleanupSettings.load() }
     var appStyles: @Sendable () -> AppCleanupStyles = { (try? AppCleanupStyles.load()) ?? AppCleanupStyles() }
     var textPipeline = TextPipeline()
@@ -203,7 +212,7 @@ struct DictationPipeline: Sendable {
         guard let hints else { return nil }
         return Task {
             let editorTerms = await hints.value
-            guard !editorTerms.isEmpty, !Task.isCancelled else { return }
+            guard !editorTerms.isEmpty, !Task.isCancelled, languageRequest().allowsVocabularyBoost else { return }
             let bias = VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary(), editorTerms: editorTerms)
             // An earlier take still in recognition or boosting would be rescored with these names (or lose its own
             // while this build starts), so this take falls back to the release-time path.
@@ -225,15 +234,17 @@ struct DictationPipeline: Sendable {
         }
         func rounded(_ ms: Double?) -> Int? { ms.map { Int($0.rounded()) } }
         let recorded = await write(session, "recordCapture") { store in
-            try await store.recordCapture(session.id, CaptureRecord(
-                captureStartMs: rounded(audio.captureStartMs), firstSampleMs: rounded(audio.firstSampleMs),
-                firstNonzeroMs: rounded(audio.firstNonzeroMs), keyUpMs: keyUpMs, audioMs: rounded(audio.audioMs),
-                voicedMs: rounded(features.voicedMs), audioPath: audioPath,
-                audioExpiresAt: audioPath == nil ? nil : audioRetention().expiration(from: clock.now()),
-                inputDeviceUID: audio.deviceUID, inputDeviceName: audio.deviceName, inputTransport: audio.deviceTransport,
-                sampleRateHz: Int(audio.sampleRate), rmsDb: features.rmsDb, peakDb: features.peakDb,
-                noiseFloorDb: features.noiseFloorDb
-            ))
+            try await store.recordCapture(
+                session.id,
+                CaptureRecord(
+                    captureStartMs: rounded(audio.captureStartMs), firstSampleMs: rounded(audio.firstSampleMs),
+                    firstNonzeroMs: rounded(audio.firstNonzeroMs), keyUpMs: keyUpMs, audioMs: rounded(audio.audioMs),
+                    voicedMs: rounded(features.voicedMs), audioPath: audioPath,
+                    audioExpiresAt: audioPath == nil ? nil : audioRetention().expiration(from: clock.now()),
+                    inputDeviceUID: audio.deviceUID, inputDeviceName: audio.deviceName, inputTransport: audio.deviceTransport,
+                    sampleRateHz: Int(audio.sampleRate), rmsDb: features.rmsDb, peakDb: features.peakDb,
+                    noiseFloorDb: features.noiseFloorDb
+                ))
         }
         return (features, audioPath != nil && (recorded || store == nil || !session.rowOpen))
     }
@@ -253,11 +264,17 @@ struct DictationPipeline: Sendable {
         let rules = vocabulary.dictionary()
         let editorTerms = await session.editorHints?.value ?? []
         // Only a take with editor names waits for the model rebuild they cause. Saved words alone build in the background.
+        let language = languageRequest()
+        // The boost model is English, so a take that can't be English gets no bias.
         await engine.setVocabularyBias(
-            VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: rules, editorTerms: editorTerms),
+            language.allowsVocabularyBoost
+                ? VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: rules, editorTerms: editorTerms) : nil,
             settleWithin: editorTerms.isEmpty ? nil : VocabularyBias.editorSettle
         )
-        var transcription = try await engine.transcribe(samples: trimmed.samples)
+        var transcription = try await engine.transcribe(samples: trimmed.samples, language: language)
+        // Auto with several candidates is settled from the transcript, once per take. Live preview never detects.
+        let resolvedLanguage = transcription.language ?? languageResolver.resolve(language, text: transcription.text)
+        transcription.language = resolvedLanguage
         // Editor names help this take and nothing else: they never reach the stored record.
         transcription.boostTermsApplied = VocabularyBoostSetting.withoutEditorTerms(
             transcription.boostTermsApplied, editorTerms: editorTerms, rules: rules
@@ -275,12 +292,14 @@ struct DictationPipeline: Sendable {
         }
         let onset = shifted.words.first.map { Int(((audio.firstSampleMs ?? 0) + $0.start * 1000).rounded()) }
         await write(session, "recordTranscription") { store in
-            try await store.recordTranscription(session.id, TranscriptionRecord(
-                transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset,
-                boostTerms: transcription.boostTermsApplied
-            ))
+            try await store.recordTranscription(
+                session.id,
+                TranscriptionRecord(
+                    transcription: shifted, rawText: transcription.text, asrDoneMs: asrDoneMs, speechOnsetMs: onset,
+                    language: shifted.language?.code, boostTerms: transcription.boostTermsApplied
+                ))
         }
-        let guarded = TranscriptGuard().apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)
+        let guarded = TranscriptGuard(language: resolvedLanguage).apply(shifted, voicedMs: voicedMs, clean: session.cleanupLevel.map { $0 != .off } ?? settings().enabled)
         guard !guarded.isEmpty else {
             if !guarded.edits.isEmpty { await write(session, "appendEdits") { try await $0.appendEdits(session.id, guarded.edits) } }
             await finish(session, .empty)
@@ -288,7 +307,7 @@ struct DictationPipeline: Sendable {
         }
         return TranscribedDictation(
             text: guarded.text, rawText: transcription.text, asrDoneMs: asrDoneMs, words: shifted.words,
-            guardEdits: guarded.edits
+            guardEdits: guarded.edits, language: resolvedLanguage
         )
     }
 
@@ -297,20 +316,22 @@ struct DictationPipeline: Sendable {
         return styles.resolve(bundleID: bundleID, websiteHost: websiteHost, fallback: settings().style)
     }
 
-    func cleanupInputs(style: StyleOptions? = nil, level: CleanupLevel? = nil) -> CleanupInputs {
+    func cleanupInputs(style: StyleOptions? = nil, level: CleanupLevel? = nil, instructions: String? = nil) -> CleanupInputs {
         var chosen = settings()
         if let style { chosen.style = style }
         if let level { chosen.level = level }
+        if let instructions { chosen.instructions = instructions }
         return CleanupInputs(settings: chosen, dictionary: vocabulary.dictionary(), snippets: vocabulary.snippets(), now: clock.now())
     }
 
     /// The cleanup. The deterministic pass cannot lose a dictation: past the time budget, or when it leaves nothing
     /// for text that had words, the guarded text is delivered instead. At light and medium the local model then works on
-    /// its output, and anything it does wrong delivers the deterministic text. `context` and `clipboard` are used
-    /// here and dropped.
+    /// its output, and anything it does wrong delivers the deterministic text. `context`, `clipboard` and `hintNames`
+    /// (names read from the screen for this take) are used here and dropped.
     func clean(
         _ transcribed: TranscribedDictation, inputs: CleanupInputs, context: InsertionContext?, clipboard: String?,
-        destination: S1MiniControls.Destination = .general, appName: String? = nil, codingTarget: Bool = false
+        destination: S1MiniControls.Destination = .general, appName: String? = nil, codingTarget: Bool = false,
+        hintNames: [String] = []
     ) async -> CleanedDictation {
         let settings = inputs.settings
         guard settings.enabled else {
@@ -321,8 +342,9 @@ struct DictationPipeline: Sendable {
         }
         let clock = ContinuousClock()
         let start = clock.now
-        let phrases = SnippetExpander(snippets: settings.pipelineOptions.snippets ? inputs.snippets : [],
-                                     now: inputs.now, clipboard: clipboard)
+        let phrases = SnippetExpander(
+            snippets: settings.pipelineOptions.snippets ? inputs.snippets : [],
+            now: inputs.now, clipboard: clipboard)
         let spoken = phrases.matchingTriggers(in: transcribed.text)
         var options = settings.pipelineOptions
         options.snippets = false
@@ -330,7 +352,8 @@ struct DictationPipeline: Sendable {
         // or a snippet trigger heard in the text.
         // The same goes for written spellings and snippet text, which the fallback passes run without the dictionary.
         let snippetsOn = settings.pipelineOptions.snippets
-        let protectedPhrases = inputs.dictionary.flatMap { [$0.heard, $0.written] }
+        let protectedPhrases =
+            inputs.dictionary.flatMap { [$0.heard, $0.written] }
             + (snippetsOn ? inputs.snippets.flatMap { [$0.trigger, $0.expansion] } : [])
         let protectedWords = inputs.dictionary.map(\.written) + (snippetsOn ? inputs.snippets.map(\.expansion) : [])
 
@@ -340,16 +363,21 @@ struct DictationPipeline: Sendable {
             var only = TextPipelineOptions.none
             only.profanity = true
             only.style = options.style
-            return textPipeline.run(TextPipelineInput(text: text, options: only, protectedPhrases: protectedPhrases, protectedWords: protectedWords))
+            return textPipeline.run(
+                TextPipelineInput(
+                    text: text, options: only, protectedPhrases: protectedPhrases, protectedWords: protectedWords,
+                    language: transcribed.language))
         }
 
         func deterministic(_ dictionary: [DictionaryRule], startedAt start: ContinuousClock.Instant)
-            -> (result: TextPipelineResult, expanded: StageResult, expected: [String], ms: Double) {
-            var result = textPipeline.run(TextPipelineInput(
-                text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
-                now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases,
-                protectedWords: protectedWords, codingTarget: codingTarget
-            ))
+            -> (result: TextPipelineResult, expanded: StageResult, expected: [String], ms: Double)
+        {
+            var result = textPipeline.run(
+                TextPipelineInput(
+                    text: transcribed.text, dictionary: dictionary, snippets: [], context: context,
+                    now: inputs.now, clipboard: clipboard, options: options, protectedPhrases: protectedPhrases,
+                    protectedWords: protectedWords, codingTarget: codingTarget, language: transcribed.language
+                ))
             // Cleanup may remove a filler or format a number that is part of a saved trigger.
             // Keep the spoken trigger intact rather than silently losing its replacement.
             if !spoken.isEmpty, phrases.matchingTriggers(in: result.text) != spoken {
@@ -395,14 +423,19 @@ struct DictationPipeline: Sendable {
                 let heard = asHeard(transcribed.text)
                 return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
             }
-            return CleanedDictation(text: fallback.expanded.text,
+            return CleanedDictation(
+                text: fallback.expanded.text,
                 edits: transcribed.guardEdits + fallback.result.edits + fallback.expanded.edits, cleanup: record)
         }
-        guard let delivery = await smart.runReady(SmartCleanupRequest(
-            text: result.text, level: level, style: settings.style, destination: destination,
-            dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
-            protectedPhrases: protectedPhrases
-        ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text))) else {
+        guard
+            let delivery = await smart.runReady(
+                SmartCleanupRequest(
+                    text: result.text, level: level, style: settings.style, destination: destination,
+                    dictionary: inputs.dictionary, snippets: [], context: context, appName: appName,
+                    protectedPhrases: protectedPhrases, language: transcribed.language, contextNames: hintNames,
+                    instructions: settings.instructions
+                ), waitingUpTo: SmartCleanup.defaultBudget(words: TextMetrics.wordCount(result.text)))
+        else {
             if let fallback = fullDictionaryFallback() { return fallback }
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
@@ -425,8 +458,9 @@ struct DictationPipeline: Sendable {
             return CleanedDictation(text: expanded.text, edits: edits + expanded.edits, cleanup: record)
         }
         let modelEdits = (modelResult.edit(from: result.text).map { [$0] } ?? []) + modelResult.postEdits
-        return CleanedDictation(text: final.text, edits: edits + modelEdits + final.edits, cleanup: record,
-                                deterministicText: final.text == expanded.text ? nil : expanded.text)
+        return CleanedDictation(
+            text: final.text, edits: edits + modelEdits + final.edits, cleanup: record,
+            deterministicText: final.text == expanded.text ? nil : expanded.text)
     }
 
     static let cleanerID = "deterministic"
@@ -440,12 +474,14 @@ struct DictationPipeline: Sendable {
     func recordInsertion(_ result: DeliveryResult, session: DictationSession, cleaned: CleanedDictation? = nil) async {
         let insertDoneMs = clock.milliseconds(from: session.keyDownAt, to: clock.nowNanos())
         await write(session, "recordInsertion") { store in
-            try await store.recordInsertion(session.id, InsertionRecord(
-                finalText: result.finalText, detText: cleaned?.deterministicText ?? cleaned?.text, cleanup: cleaned?.cleanup, method: result.storeMethod,
-                outcome: result.storeOutcome, focusMoved: result.focusMoved, pasteReceiptMs: result.pasteReceiptMs,
-                insertDoneMs: insertDoneMs,
-                target: result.target?.target
-            ))
+            try await store.recordInsertion(
+                session.id,
+                InsertionRecord(
+                    finalText: result.finalText, detText: cleaned?.deterministicText ?? cleaned?.text, cleanup: cleaned?.cleanup, method: result.storeMethod,
+                    outcome: result.storeOutcome, focusMoved: result.focusMoved, pasteReceiptMs: result.pasteReceiptMs,
+                    insertDoneMs: insertDoneMs,
+                    target: result.target?.target
+                ))
         }
         if let edits = cleaned?.edits, !edits.isEmpty {
             await write(session, "appendEdits") { try await $0.appendEdits(session.id, edits) }

@@ -47,7 +47,7 @@ import Testing
     }
 
     @Test func localDayUsesTheGivenZone() throws {
-        let instant = Date(timeIntervalSince1970: 1_760_000_000) // 2025-10-09 08:53:20 UTC
+        let instant = Date(timeIntervalSince1970: 1_760_000_000)  // 2025-10-09 08:53:20 UTC
         #expect(Streaks.localDay(for: instant, in: try #require(TimeZone(identifier: "UTC"))) == "2025-10-09")
         #expect(Streaks.localDay(for: instant, in: try #require(TimeZone(identifier: "Pacific/Auckland"))) == "2025-10-09")
         #expect(Streaks.localDay(for: instant, in: try #require(TimeZone(identifier: "Pacific/Honolulu"))) == "2025-10-08")

@@ -9,10 +9,13 @@ final class PasteMenuSection: NSObject, MenuSection {
     private var targetBundle: String?
     var items: [NSMenuItem] { [parent] }
 
-    init(defaults: UserDefaults = .standard, frontApp: @escaping @MainActor () -> (bundleID: String, name: String)? = {
-        guard let app = NSWorkspace.shared.frontmostApplication, let id = app.bundleIdentifier else { return nil }
-        return (id, app.localizedName ?? id)
-    }) {
+    init(
+        defaults: UserDefaults = .standard,
+        frontApp: @escaping @MainActor () -> (bundleID: String, name: String)? = {
+            guard let app = NSWorkspace.shared.frontmostApplication, let id = app.bundleIdentifier else { return nil }
+            return (id, app.localizedName ?? id)
+        }
+    ) {
         self.defaults = defaults
         self.frontApp = frontApp
         super.init()

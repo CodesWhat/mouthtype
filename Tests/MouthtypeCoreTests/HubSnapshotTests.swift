@@ -10,7 +10,8 @@ private struct CachedFiles {
         "model.safetensors": Data([1]),
     ]
     var isComplete: Bool {
-        HubDownloader.snapshotIsComplete(files: Array(entries.keys),
+        HubDownloader.snapshotIsComplete(
+            files: Array(entries.keys),
             fileExists: { entries[$0]?.isEmpty == false }, contents: { entries[$0] })
     }
 }
@@ -19,8 +20,10 @@ private final class DownloadProbe: Downloader, @unchecked Sendable {
     private let lock = NSLock()
     private var requests: [Bool] = []
     var latest: [Bool] { lock.withLock { requests } }
-    func download(id: String, revision: String?, matching patterns: [String], useLatest: Bool,
-                  progressHandler: @Sendable @escaping (Progress) -> Void) async throws -> URL {
+    func download(
+        id: String, revision: String?, matching patterns: [String], useLatest: Bool,
+        progressHandler: @Sendable @escaping (Progress) -> Void
+    ) async throws -> URL {
         lock.withLock { requests.append(useLatest) }
         progressHandler(Progress(totalUnitCount: 1))
         return URL(fileURLWithPath: "/virtual/model")

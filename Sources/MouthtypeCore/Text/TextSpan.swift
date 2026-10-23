@@ -44,7 +44,7 @@ enum SpanRewriter {
         var edits: [EditOp] = []
         for span in ordered {
             guard span.range.lowerBound >= cursor, span.cut.upperBound <= chars.count,
-                  span.cut.lowerBound <= span.range.lowerBound, span.cut.upperBound >= span.range.upperBound
+                span.cut.lowerBound <= span.range.lowerBound, span.cut.upperBound >= span.range.upperBound
             else { continue }
             let cutStart = max(span.cut.lowerBound, cursor)
             out.append(contentsOf: chars[cursor..<cutStart])
@@ -55,14 +55,15 @@ enum SpanRewriter {
             let to = span.replacement.trimmingCharacters(in: spaceSet)
             if from == to { continue }
             let kind: EditOp.Kind = to.isEmpty ? .delete : (from.isEmpty ? .insert : .replace)
-            edits.append(EditOp(
-                stage: stage,
-                kind: kind,
-                fromText: from.isEmpty ? nil : from,
-                toText: to.isEmpty ? nil : to,
-                wordDelta: TextMetrics.wordCount(to) - TextMetrics.wordCount(from),
-                position: span.range.lowerBound
-            ))
+            edits.append(
+                EditOp(
+                    stage: stage,
+                    kind: kind,
+                    fromText: from.isEmpty ? nil : from,
+                    toText: to.isEmpty ? nil : to,
+                    wordDelta: TextMetrics.wordCount(to) - TextMetrics.wordCount(from),
+                    position: span.range.lowerBound
+                ))
         }
         out.append(contentsOf: chars[cursor...])
         return StageResult(text: out, edits: edits, notes: notes)

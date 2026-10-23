@@ -21,8 +21,10 @@ import os
     var items: [NSMenuItem] { [parent] }
 
     /// `open` gets nil for Clean up and the AI transform otherwise.
-    init(open: @escaping (TextTransform?) -> Void, editTransforms: @escaping () -> Void,
-         aiUnavailableReason: @escaping () -> String? = { nil }, capture: @escaping @MainActor () async -> MenuCapture = { .ready }) {
+    init(
+        open: @escaping (TextTransform?) -> Void, editTransforms: @escaping () -> Void,
+        aiUnavailableReason: @escaping () -> String? = { nil }, capture: @escaping @MainActor () async -> MenuCapture = { .ready }
+    ) {
         self.open = open
         self.editTransforms = editTransforms
         self.aiUnavailableReason = aiUnavailableReason

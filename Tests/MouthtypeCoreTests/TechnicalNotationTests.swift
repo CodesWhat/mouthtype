@@ -4,9 +4,13 @@ import Testing
 
 @Suite struct TechnicalNotationTests {
     private func format(_ text: String) -> String {
-        TextPipeline().run(TextPipelineInput(text: text, options: TextPipelineOptions(
-            fillers: false, spokenCommands: false, selfCorrection: false, countedLists: false,
-            numbers: false, dictionary: false, snippets: false, blend: false, whitespace: false))).text
+        TextPipeline().run(
+            TextPipelineInput(
+                text: text,
+                options: TextPipelineOptions(
+                    fillers: false, spokenCommands: false, selfCorrection: false, countedLists: false,
+                    numbers: false, dictionary: false, snippets: false, blend: false, whitespace: false))
+        ).text
     }
 
     @Test(arguments: [

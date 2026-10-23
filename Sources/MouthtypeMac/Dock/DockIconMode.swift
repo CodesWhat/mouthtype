@@ -49,8 +49,9 @@ struct DockWindowFacts: Equatable, Sendable {
     var countsForDock: Bool { !isClosing && !isPanel && canBecomeMain && (isVisible || isMiniaturized) }
 
     @MainActor init(_ window: NSWindow, closing: NSWindow? = nil) {
-        self.init(isVisible: window.isVisible, isMiniaturized: window.isMiniaturized, isPanel: window is NSPanel,
-                  canBecomeMain: window.canBecomeMain, isClosing: window === closing)
+        self.init(
+            isVisible: window.isVisible, isMiniaturized: window.isMiniaturized, isPanel: window is NSPanel,
+            canBecomeMain: window.canBecomeMain, isClosing: window === closing)
     }
 
     init(isVisible: Bool, isMiniaturized: Bool = false, isPanel: Bool = false, canBecomeMain: Bool = true, isClosing: Bool = false) {

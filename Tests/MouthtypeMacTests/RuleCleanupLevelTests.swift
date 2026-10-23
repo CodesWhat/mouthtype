@@ -73,9 +73,9 @@ import MouthtypeCore
         let (d, cleanUp) = try defaults()
         defer { cleanUp() }
         let old = """
-        {"version":1,"entries":[{"bundleID":"com.apple.MobileSMS","appName":"Messages","capitalisation":"sentence","endingPunctuation":"dropFinalFullStop"}],\
-        "websites":[{"domain":"slack.com","capitalisation":"lowercase","endingPunctuation":"keep"}]}
-        """
+            {"version":1,"entries":[{"bundleID":"com.apple.MobileSMS","appName":"Messages","capitalisation":"sentence","endingPunctuation":"dropFinalFullStop"}],\
+            "websites":[{"domain":"slack.com","capitalisation":"lowercase","endingPunctuation":"keep"}]}
+            """
         d.set(Data(old.utf8), forKey: AppCleanupStyles.preferenceKey)
         let styles = try AppCleanupStyles.load(d)
         #expect(styles.entries.count == 1 && styles.entries[0].level == nil && styles.entries[0].style != nil)

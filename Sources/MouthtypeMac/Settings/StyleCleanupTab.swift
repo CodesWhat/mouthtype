@@ -24,7 +24,14 @@ struct StyleCleanupTab: View {
                 }
             }
             differences
-            Text("Fast and Thorough run on this Mac and never change what you meant. Until a model is downloaded and ready, takes use Basic.\(modelNote)")
+            instructions
+            if model.showsFastLanguageNote {
+                Text(DictationLanguageSetting.fastEnglishOnlyNote)
+                    .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
+                    .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
+                    .accessibilityIdentifier("style-fast-language-note")
+            }
+            Text("Fast and Thorough run on this Mac. Takes use Basic until a model is ready.\(modelNote)")
                 .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         }
@@ -35,7 +42,9 @@ struct StyleCleanupTab: View {
     private func card(_ level: CleanupLevel) -> some View {
         let selected = model.cleanup.level == level
         return VStack(alignment: .leading, spacing: 8) {
-            Button { model.setLevel(level) } label: {
+            Button {
+                model.setLevel(level)
+            } label: {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(level.title).font(DesignFont.serif(20)).foregroundStyle(DesignPalette.ink).fixedSize(horizontal: false, vertical: true)
                     Text(blurb(level)).font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
@@ -83,7 +92,10 @@ struct StyleCleanupTab: View {
             statusText("NO MODEL · INSTANT")
         } else if selected, let cleaner = actions.cleaner {
             switch cleaner.state {
-            case .ready: HStack(spacing: 6) { Circle().fill(DesignPalette.success).frame(width: 6, height: 6).accessibilityHidden(true); statusText("READY") }
+            case .ready:
+                HStack(spacing: 6) {
+                    Circle().fill(DesignPalette.success).frame(width: 6, height: 6).accessibilityHidden(true); statusText("READY")
+                }
             case .absent, .failed:
                 HStack(spacing: 8) {
                     statusText(cleaner.state == .absent ? "NOT DOWNLOADED" : "FAILED")
@@ -125,6 +137,26 @@ struct StyleCleanupTab: View {
         }
     }
 
+    // MARK: Instructions
+
+    private var instructions: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            DesignEyebrow("Instructions · Thorough only")
+            DesignCard {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Tell Thorough how your text should read. Apps and websites can have their own.")
+                        .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    StyleInstructionsEditor(
+                        saved: CleanupInstructions.normalize(model.cleanup.instructions), placeholder: StyleContextID.other.instructionsExample,
+                        label: "Instructions for every app", identifier: "style-instructions-global"
+                    ) { model.setInstructions($0 ?? "") }
+                }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+            }
+        }
+    }
+
     // MARK: Differences
 
     private var differences: some View {
@@ -143,8 +175,10 @@ struct StyleCleanupTab: View {
                     }
                 }
                 if ownLevels > 0 {
-                    DesignRow(title: "\(ownLevels) of your own app or website \(ownLevels == 1 ? "rule sets" : "rules set") a cleanup level",
-                              detail: "They win over the lists. Find them on the Other tab, or under the context their tone matches.") { EmptyView() }
+                    DesignRow(
+                        title: "\(ownLevels) of your own app or website \(ownLevels == 1 ? "rule sets" : "rules set") a cleanup level",
+                        detail: "They win over the lists. Look under the matching tab."
+                    ) { EmptyView() }
                 }
                 DesignRow(title: followText(following, level: model.cleanup.level)) {
                     Text("\(following.count) OF \(StyleContextID.allCases.count) FOLLOW").font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8)
@@ -155,7 +189,7 @@ struct StyleCleanupTab: View {
     }
 
     private func detail(_ id: StyleContextID) -> String {
-        id == .other ? "Terminals, editors and everything unlisted. Basic never rewrites a command." : "Apps and websites listed under \(id.title)."
+        id == .other ? "Terminals, editors and everything unlisted." : "Apps and websites listed under \(id.title)."
     }
 
     private func followText(_ ids: [StyleContextID], level: CleanupLevel) -> String {

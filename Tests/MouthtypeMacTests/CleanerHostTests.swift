@@ -349,7 +349,9 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         let (host, _, _) = host(downloaded: true) { $0.loadGate = gate }
         host.start()
         #expect(await host.readiness(waitingUpTo: .milliseconds(20)) == nil)
-        Task { try? await Task.sleep(for: .milliseconds(50)); await gate.release() }
+        Task {
+            try? await Task.sleep(for: .milliseconds(50)); await gate.release()
+        }
         // The limit is generous because it only bounds a hang; the release above is what ends the wait.
         #expect(await host.readiness(waitingUpTo: .seconds(60)) != nil)
     }
@@ -533,7 +535,9 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
 
     @Test func choosingDownloadAsksFirstAndDeclineFetchesNothing() {
         var asked: [Int] = []
-        let (section, host, model, menu) = make(downloaded: false) { asked.append($0); return false }
+        let (section, host, model, menu) = make(downloaded: false) {
+            asked.append($0); return false
+        }
         let download = item(menu, prefix: "Download Cleanup Model")!
         _ = download.target?.perform(download.action, with: download)
         #expect(asked == [1447] && host.state == .absent && model.downloads == 0)

@@ -44,7 +44,7 @@ Names shorter than four letters and everyday words like "value", "item" and "use
 
 - It doesn't store anything. Names live in memory for that one dictation, aren't logged, and aren't saved with the take in your history.
 - It doesn't read terminal screens or scrollback, other windows, or file contents.
-- It doesn't turn on extra accessibility in the editor or ask for Automation permission.
+- It doesn't turn on extra accessibility in the editor or ask for Automation permission. (The separate **Names on screen** switch does set the Electron accessibility flag; see the [settings reference](../SETTINGS.md).)
 
 ## Limits
 

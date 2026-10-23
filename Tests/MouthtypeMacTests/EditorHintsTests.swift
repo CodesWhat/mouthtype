@@ -97,11 +97,15 @@ private final class ReaderCalls: @unchecked Sendable {
     func readers(context: InsertionContext? = nil, block: DispatchSemaphore? = nil) -> EditorHintsGatherer.Readers {
         EditorHintsGatherer.Readers(
             cursorContext: { [self] _, deadline in
-                lock.withLock { counts.cursor += 1; onMain.append(Thread.isMainThread); deadlines.append(deadline) }
+                lock.withLock {
+                    counts.cursor += 1; onMain.append(Thread.isMainThread); deadlines.append(deadline)
+                }
                 block?.wait()
                 return context
             },
-            documentURL: { [self] _, _ in lock.withLock { counts.document += 1 }; return nil },
+            documentURL: { [self] _, _ in
+                lock.withLock { counts.document += 1 }; return nil
+            },
             workingDirectory: { _, _ in nil },
             workspaceFolder: { _, _ in nil }
         )
@@ -175,8 +179,10 @@ private struct FakeSource: BoundedTextSource {
     }
 
     @Test func coversEditorsAndSupportedTerminals() {
-        for bundle in ["com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "com.apple.dt.Xcode", "com.apple.Terminal",
-                       "com.mitchellh.ghostty", "com.googlecode.iterm2", "net.kovidgoyal.kitty", "com.github.wez.wezterm"] {
+        for bundle in [
+            "com.microsoft.VSCode", "com.todesktop.230313mzl4w4u92", "com.apple.dt.Xcode", "com.apple.Terminal",
+            "com.mitchellh.ghostty", "com.googlecode.iterm2", "net.kovidgoyal.kitty", "com.github.wez.wezterm",
+        ] {
             #expect(EditorHintsSurface.of(bundleID: bundle) != nil, "\(bundle)")
         }
         #expect(EditorHintsSurface.of(bundleID: "com.apple.finder") == nil)
@@ -185,11 +191,12 @@ private struct FakeSource: BoundedTextSource {
     @Test func gathersTitleAndCursorNamesInAnEditor() async throws {
         let calls = ReaderCalls()
         let context = InsertionContext(before: "func render() { applyTheme(", after: ")")
-        let task = try #require(EditorHintsGatherer.start(
-            enabled: true, boostEnabled: true,
-            focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
-            readers: calls.readers(context: context)
-        ))
+        let task = try #require(
+            EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true,
+                focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
+                readers: calls.readers(context: context), deadline: .seconds(60)
+            ))
         let terms = await task.value
         #expect(terms.map(\.text) == ["applyTheme", "DictationPipeline", "mouthtype"])
         #expect(calls.cursor == 1)
@@ -212,24 +219,41 @@ private struct FakeSource: BoundedTextSource {
         let calls = ReaderCalls()
         let gate = DispatchSemaphore(value: 0)
         defer { gate.signal() }
-        let task = try #require(EditorHintsGatherer.start(
-            enabled: true, boostEnabled: true,
-            focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
-            readers: calls.readers(context: InsertionContext(before: "applyTheme(", after: nil), block: gate),
-            deadline: .milliseconds(50)
-        ))
+        let task = try #require(
+            EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true,
+                focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
+                readers: calls.readers(context: InsertionContext(before: "applyTheme(", after: nil), block: gate),
+                deadline: .milliseconds(50)
+            ))
+        // The gate stays shut until the defer, so a gather that waited on the read would never return.
         #expect(await task.value.map(\.text) == ["DictationPipeline", "mouthtype"])
+    }
+
+    @Test func theCursorReaderGetsTheGatherDeadline() async throws {
+        let calls = ReaderCalls()
+        let before = ContinuousClock.now
+        let task = try #require(
+            EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true,
+                focus: focus("com.microsoft.VSCode", title: "DictationPipeline.swift - mouthtype - Visual Studio Code"),
+                readers: calls.readers(context: InsertionContext(before: "applyTheme(", after: nil)),
+                deadline: .seconds(60)
+            ))
+        _ = await task.value
         let deadline = try #require(calls.lastDeadline)
-        #expect(deadline <= ContinuousClock.now + .milliseconds(50))
+        #expect(deadline > before)
+        #expect(deadline <= ContinuousClock.now + .seconds(60))
     }
 
     @Test func onlyASourceEditorsTextAreaIsRead() async throws {
         for (role, subrole) in [(nil, nil), ("AXTextField", nil), ("AXGroup", nil), ("AXTextArea", "AXSearchField"), ("AXTextArea", "AXTerminal")] as [(String?, String?)] {
             let calls = ReaderCalls()
-            let task = try #require(EditorHintsGatherer.start(
-                enabled: true, boostEnabled: true, focus: focus("com.microsoft.VSCode", title: "a.swift - proj - Visual Studio Code", role: role, subrole: subrole),
-                readers: calls.readers(context: InsertionContext(before: "secretTerminalOutput(", after: nil))
-            ))
+            let task = try #require(
+                EditorHintsGatherer.start(
+                    enabled: true, boostEnabled: true, focus: focus("com.microsoft.VSCode", title: "a.swift - proj - Visual Studio Code", role: role, subrole: subrole),
+                    readers: calls.readers(context: InsertionContext(before: "secretTerminalOutput(", after: nil))
+                ))
             let terms = await task.value
             #expect(calls.cursor == 0, "\(role ?? "nil") \(subrole ?? "nil")")
             #expect(!terms.contains { $0.text == "secretTerminalOutput" })
@@ -287,9 +311,10 @@ private struct FakeSource: BoundedTextSource {
     @Test func terminalsNeverReadTheirScreenText() async throws {
         let calls = ReaderCalls()
         let context = InsertionContext(before: "secretCommandOutput", after: nil)
-        let task = try #require(EditorHintsGatherer.start(
-            enabled: true, boostEnabled: true, focus: focus("com.apple.Terminal"), readers: calls.readers(context: context)
-        ))
+        let task = try #require(
+            EditorHintsGatherer.start(
+                enabled: true, boostEnabled: true, focus: focus("com.apple.Terminal"), readers: calls.readers(context: context)
+            ))
         #expect(await task.value.isEmpty)
         #expect(calls.cursor == 0)
     }

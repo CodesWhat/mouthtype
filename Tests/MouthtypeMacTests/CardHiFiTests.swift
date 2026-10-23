@@ -57,10 +57,12 @@ private func hifiView(_ card: DeliveryCard, scale: PillScale = .standard, readou
 
 /// How many pixels of `image` are exactly `hex`.
 private func pixelCount(_ image: CGImage?, hex: String) -> Int {
-    guard let image, let context = CGContext(
-        data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
-        space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-    ), let data = context.data else { return 0 }
+    guard let image,
+        let context = CGContext(
+            data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: image.width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ), let data = context.data
+    else { return 0 }
     context.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
     let value = UInt32(hex.dropFirst(), radix: 16) ?? 0
     let (r, g, b) = (UInt8((value >> 16) & 0xFF), UInt8((value >> 8) & 0xFF), UInt8(value & 0xFF))
@@ -74,14 +76,16 @@ private func pixelCount(_ image: CGImage?, hex: String) -> Int {
 
 @MainActor
 @Suite struct HiFiCardTests {
-    private let longTranscript = String(repeating: "Please send the revised mockups to Sean before Friday and copy the design channel on it. ", count: 6)
+    private let longTranscript =
+        String(repeating: "Please send the revised mockups to Sean before Friday and copy the design channel on it. ", count: 6)
         + String(repeating: "Supercalifragilisticexpialidocious", count: 4)
 
     private func event(_ type: NSEvent.EventType, in view: NSView, at point: CGPoint, window: NSWindow?) throws -> NSEvent {
-        try #require(NSEvent.mouseEvent(
-            with: type, location: view.convert(point, to: nil), modifierFlags: [], timestamp: 0, windowNumber: window?.windowNumber ?? 0,
-            context: nil, eventNumber: 0, clickCount: 1, pressure: 1
-        ))
+        try #require(
+            NSEvent.mouseEvent(
+                with: type, location: view.convert(point, to: nil), modifierFlags: [], timestamp: 0, windowNumber: window?.windowNumber ?? 0,
+                context: nil, eventNumber: 0, clickCount: 1, pressure: 1
+            ))
     }
 
     private func click(_ control: NSView, window: NSWindow?) throws {
@@ -434,7 +438,7 @@ private func pixelCount(_ image: CGImage?, hex: String) -> Int {
         #expect(assets.pill.sprites["led_on"] != nil)
     }
 
-    @Test func exportingTwiceChangesNoBytes() throws {
+    @Test func exportingTwiceChangesNoBytes() async throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let script = root.appendingPathComponent("design/pill/export.py")
         let output = root.appendingPathComponent("Sources/MouthtypeMac/Resources/Pill/hifi")
@@ -445,19 +449,18 @@ private func pixelCount(_ image: CGImage?, hex: String) -> Int {
             for case let url as URL in files where !url.hasDirectoryPath { result[url.path] = try Data(contentsOf: url) }
             return result
         }
-        func export() throws {
+        func export() async throws {
             let process = Process()
             process.executableURL = URL(fileURLWithPath: "/usr/bin/python3")
             process.arguments = ["-I", script.path]
             process.standardOutput = FileHandle.nullDevice
-            try process.run()
-            process.waitUntilExit()
+            _ = try await runProcess(process)
             #expect(process.terminationStatus == 0)
         }
         let before = try snapshot()
-        try export()
+        try await export()
         let first = try snapshot()
-        try export()
+        try await export()
         let second = try snapshot()
         #expect(first == before && first == second && first.keys.contains { $0.hasSuffix("card/frame.png") })
     }

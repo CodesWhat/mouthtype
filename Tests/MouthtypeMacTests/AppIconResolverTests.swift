@@ -13,4 +13,11 @@ import Testing
         #expect(first != nil)
         #expect(AppIconResolver.cachedIcon(bundleIDs: ["com.apple.finder"]) === first)
     }
+
+    @Test func skipsUninstalledIDsAndUsesTheInstalledOne() {
+        let missing = "com.example.not-installed-\(UUID().uuidString)"
+        let icon = AppIconResolver.icon(bundleIDs: [missing, "com.apple.Safari"])
+        #expect(icon != nil)
+        #expect(AppIconResolver.cachedIcon(bundleIDs: [missing]) == nil)
+    }
 }

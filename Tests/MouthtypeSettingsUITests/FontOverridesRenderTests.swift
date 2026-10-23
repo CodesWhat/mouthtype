@@ -27,10 +27,11 @@ import Testing
     }
 
     private func render(_ model: SettingsModel, name: String, size: NSSize) throws {
-        let view = NSHostingView(rootView: FontOverridesSection(model: model)
-            .font(.custom("InstrumentSans-Regular", size: 13)).padding(24)
-            .frame(width: size.width, height: size.height, alignment: .topLeading)
-            .background(Color(nsColor: .textBackgroundColor)))
+        let view = NSHostingView(
+            rootView: FontOverridesSection(model: model)
+                .font(.custom("InstrumentSans-Regular", size: 13)).padding(24)
+                .frame(width: size.width, height: size.height, alignment: .topLeading)
+                .background(Color(nsColor: .textBackgroundColor)))
         view.setFrameSize(size)
         view.layoutSubtreeIfNeeded()
         let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))

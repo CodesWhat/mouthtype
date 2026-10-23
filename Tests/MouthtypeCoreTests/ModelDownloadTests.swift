@@ -125,7 +125,7 @@ import Testing
         #expect(step(0.75, .compiling).completedBytes == total)
         #expect(step(1, .finished).completedBytes == total)
         for _ in 1...3 {
-            #expect(step(0.5, .downloading).completedBytes == total)   // cached
+            #expect(step(0.5, .downloading).completedBytes == total)  // cached
             #expect(step(0.75, .compiling).completedBytes == total)
             #expect(step(1, .finished).completedBytes == total)
         }

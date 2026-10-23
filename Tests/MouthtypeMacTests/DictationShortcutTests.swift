@@ -54,9 +54,11 @@ import Testing
     @Test func anUnrelatedModifierChordMustFullyReleaseBeforeStarting() {
         let shortcut = DictationShortcut(keyCode: 61, keyName: "Right Option")
         var matcher = ShortcutMatcher()
-        let values = [sample(.flagsChanged, 55, Self.command), sample(.flagsChanged, 61, Self.command | Self.option),
-            sample(.flagsChanged, 55, Self.option), sample(.flagsChanged, 61), sample(.flagsChanged, 61, Self.option)]
-            .map { matcher.update($0, shortcut: shortcut) }
+        let values = [
+            sample(.flagsChanged, 55, Self.command), sample(.flagsChanged, 61, Self.command | Self.option),
+            sample(.flagsChanged, 55, Self.option), sample(.flagsChanged, 61), sample(.flagsChanged, 61, Self.option),
+        ]
+        .map { matcher.update($0, shortcut: shortcut) }
         #expect(values == [false, false, false, false, true])
     }
 
@@ -64,11 +66,14 @@ import Testing
         var mapper = HotkeyInputMapper(source: .shortcut(DictationShortcut(keyCode: 40, modifiers: Self.control, keyName: "K")))
         var engine = GestureEngine()
         var events: [GestureEvent] = []
-        for s in [sample(.keyDown, 40, Self.control, 0), sample(.keyUp, 40, Self.control, 100),
-                  sample(.keyDown, 40, Self.control, 200), sample(.keyUp, 40, Self.control, 300),
-                  sample(.keyDown, 53, 0, 500)] {
+        for s in [
+            sample(.keyDown, 40, Self.control, 0), sample(.keyUp, 40, Self.control, 100),
+            sample(.keyDown, 40, Self.control, 200), sample(.keyUp, 40, Self.control, 300),
+            sample(.keyDown, 53, 0, 500),
+        ] {
             if let mapped = mapper.map(s, otherKeysHeld: { false }),
-               let event = engine.process(mapped.keyEvent, now: Date(timeIntervalSinceReferenceDate: Double(s.timestamp) / 1000)) {
+                let event = engine.process(mapped.keyEvent, now: Date(timeIntervalSinceReferenceDate: Double(s.timestamp) / 1000))
+            {
                 events.append(event)
             }
             mapper.lockedRecording = engine.isLocked

@@ -34,11 +34,19 @@ public struct SmartCleanupRequest: Sendable {
     public var appName: String?
     /// Phrases swearing removal must leave alone after the model, such as snippet triggers the caller expands itself.
     public var protectedPhrases: [String]
+    /// The language of the take. Nil means English.
+    public var language: DictationLanguage?
+    /// Names read from the focused field and window for this take, offered to name joining beside the nearby spellings.
+    public var contextNames: [String]
+    /// The user's instructions for Thorough's tone and formatting. Fast ignores them. The guard still checks the output against
+    /// the dictation, so they can't change what was said.
+    public var instructions: String?
 
     public init(
         text: String, level: CleanupLevel, style: StyleOptions = .formal,
         destination: S1MiniControls.Destination = .general, dictionary: [DictionaryRule] = [], snippets: [Snippet] = [],
-        context: InsertionContext? = nil, appName: String? = nil, protectedPhrases: [String] = []
+        context: InsertionContext? = nil, appName: String? = nil, protectedPhrases: [String] = [],
+        language: DictationLanguage? = nil, contextNames: [String] = [], instructions: String? = nil
     ) {
         self.text = text
         self.level = level
@@ -49,6 +57,9 @@ public struct SmartCleanupRequest: Sendable {
         self.context = context
         self.appName = appName
         self.protectedPhrases = protectedPhrases
+        self.language = language
+        self.contextNames = contextNames
+        self.instructions = CleanupInstructions.normalize(instructions)
     }
 }
 
@@ -129,8 +140,17 @@ public actor SmartCleanup {
     private var transforming: Task<Result<String, Error>, Never>?
     private var modelPaused = false
     private let customBudget: Bool
+    private let languageDetector: (any LanguageDetector)?
+    private let thoroughLanguages: Set<DictationLanguage>
 
-    public init(cleaner: any TextCleaner, budget: (@Sendable (Int) -> Duration)? = nil) {
+    /// `languageDetector` checks that a non-English take comes back in its own language. Without one that check is off.
+    /// `thoroughLanguages` is the set of non-English languages Thorough runs in.
+    public init(
+        cleaner: any TextCleaner, budget: (@Sendable (Int) -> Duration)? = nil, languageDetector: (any LanguageDetector)? = nil,
+        thoroughLanguages: Set<DictationLanguage> = SmartLanguageSupport.thoroughLanguages
+    ) {
+        self.languageDetector = languageDetector
+        self.thoroughLanguages = thoroughLanguages
         self.cleaner = cleaner
         self.budget = budget ?? (cleaner.usesNativeControls ? SmartCleanup.defaultBudget : SmartCleanup.qualityBudget)
         self.customBudget = budget != nil
@@ -178,7 +198,11 @@ public actor SmartCleanup {
             do { return .success(try await cleaner.clean(text, context: CleanupContext(transform: kind))) } catch { return .failure(error) }
         }
         transforming = work
-        let outcome = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+        let outcome = await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
         if transforming == work { transforming = nil }
         return try outcome.get()
     }
@@ -205,18 +229,36 @@ public actor SmartCleanup {
             )
         }
         guard !modelPaused, request.level.needsModel, words >= Self.minWords, words <= Self.maxWords else { return finish(.skipped) }
+        let language = DictationLanguage.isEnglish(request.language) ? nil : request.language
+        guard
+            SmartLanguageSupport.supports(
+                level: request.level, language: language, nativeControls: cleaner.usesNativeControls,
+                thorough: thoroughLanguages)
+        else { return finish(.skipped, rejection: SmartLanguageSupport.skipReason) }
 
-        let context = CleanupContext(vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
+        let context = CleanupContext(
+            vocabulary: DictionaryReplacer(rules: request.dictionary).cleanupVocabulary(), appName: request.appName,
             level: request.level, before: request.context?.before, after: request.context?.after,
-            omitProfanity: request.style == .formal)
-        let joining = NameJoining.candidates(in: request.text,
-            spellings: CleanupPrompt.nearbySpellings(context) + request.dictionary.map(\.written))
-        let text = CorrectionCommas.apply(request.text)
-        let settleCorrections = !cleaner.usesNativeControls && text.range(
-            of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
-            options: [.regularExpression, .caseInsensitive]) != nil
-        let allowance = customBudget || cleaner.usesNativeControls ? budget(words)
-            : Self.qualityAllowance(words: words, passes: settleCorrections ? 2 : 1)
+            omitProfanity: request.style == .formal, language: language, excited: request.style.excited,
+            instructions: cleaner.usesNativeControls ? nil : request.instructions)
+        // Name joining, correction commas and the correction pass read English cues, so outside English they are off.
+        let joining =
+            language == nil
+            ? NameJoining.candidates(
+                in: request.text,
+                spellings: CleanupPrompt.nearbySpellings(context) + request.contextNames + request.dictionary.map(\.written))
+            : []
+        let text = language == nil ? CorrectionCommas.apply(request.text) : request.text
+        let settleCorrections =
+            language == nil && !cleaner.usesNativeControls
+            && text.range(
+                of: #"(?:,\s*|[.!?]\s+)(?:actually|no\s+wait|no\s+sorry|sorry|i\s+mean|or\s+rather|make\s+that|scratch\s+that)\b"#,
+                options: [.regularExpression, .caseInsensitive]) != nil
+        let budgetWords = Int((Double(words) * SmartLanguageSupport.budgetMultiplier(for: language)).rounded(.up))
+        let allowance =
+            customBudget || cleaner.usesNativeControls
+            ? budget(budgetWords)
+            : Self.qualityAllowance(words: budgetWords, passes: settleCorrections ? 2 : 1)
         let deadline = start + allowance
         // A generation that outlived its own timeout still holds the model; wait for it, within this budget.
         while true {
@@ -232,7 +274,8 @@ public actor SmartCleanup {
         }
 
         guard !modelPaused else { return finish(.skipped) }
-        let passes = cleaner.usesNativeControls
+        let passes =
+            cleaner.usesNativeControls
             ? Self.passes(level: request.level, style: request.style, destination: request.destination)
             : [S1MiniControls.benchmark]
         let cleaner = cleaner
@@ -242,7 +285,7 @@ public actor SmartCleanup {
             do {
                 let ordinary = joining.filter { !approved.contains($0) }
                 let guardInput = NameJoining.applying(approved, to: request.text)
-                var output = CorrectionCommas.apply(guardInput)
+                var output = language == nil ? CorrectionCommas.apply(guardInput) : guardInput
                 var resolvedInput: String?
                 if settleCorrections {
                     try Task.checkCancellation()
@@ -263,7 +306,8 @@ public actor SmartCleanup {
             }
         }
         current = work
-        var description = cleaner.usesNativeControls
+        var description =
+            cleaner.usesNativeControls
             ? ([S1MiniPrompt.system] + passes.map(\.line)).joined(separator: "\n")
             : CleanupPrompt.system(for: context) + CleanupPrompt.reference(context)
         if settleCorrections { description = CleanupPrompt.system(for: correctionContext) + "\n" + description }
@@ -279,22 +323,31 @@ public actor SmartCleanup {
         case let .failure(error):
             return finish(.failed, rejection: String(describing: error), sha: sha)
         case let .success(draft):
-            let model = SmartCleanupGuard.restoringMeridiem(input: request.text, output: SmartCleanupGuard.restoringTerminal(
-                input: request.text, output: CleanupPrompt.sanitize(draft.text, input: request.text)))
-            if SmartCleanupGuard.copiesSurroundingText(input: request.text, output: model,
-                references: [context.before, context.after].compactMap { $0 }) {
+            let model = SmartCleanupGuard.restoringMeridiem(
+                input: request.text,
+                output: SmartCleanupGuard.restoringTerminal(
+                    input: request.text, output: CleanupPrompt.sanitize(draft.text, input: request.text)))
+            if SmartCleanupGuard.copiesSurroundingText(
+                input: request.text, output: model,
+                references: [context.before, context.after].compactMap { $0 })
+            {
                 return finish(.guardRejected, rejection: "surrounding text copied into output", sha: sha)
             }
             let restoredNames = NameJoining.candidates(in: model, spellings: approved.map(\.written))
                 .filter { NameJoining.isProjectReference($0, in: model) }
-            let post = Self.reapply(NameJoining.applying(restoredNames, to: model), request: request,
+            if let reason = SmartCleanupGuard.languageChange(output: model, language: language, detector: languageDetector) {
+                return finish(.guardRejected, rejection: reason, sha: sha)
+            }
+            let post = Self.reapply(
+                NameJoining.applying(restoredNames, to: model), request: request,
                 deferredNames: Set(joining.map(\.written)))
             guard NameJoining.preservesOrdinary(draft.ordinary, in: post.text) else {
                 return finish(.guardRejected, rejection: "ordinary words changed into a name", sha: sha)
             }
             if let reason = SmartCleanupGuard.rejection(
                 input: draft.guardInput, output: post.text, level: request.level, dictionary: request.dictionary,
-                snippets: request.snippets, nearbySpellings: CleanupPrompt.nearbySpellings(context), resolvedInput: draft.resolvedInput
+                snippets: request.snippets, nearbySpellings: CleanupPrompt.nearbySpellings(context), resolvedInput: draft.resolvedInput,
+                language: language, strictNames: context.instructions != nil
             ) {
                 return finish(.guardRejected, rejection: reason, sha: sha)
             }
@@ -309,9 +362,10 @@ public actor SmartCleanup {
             whitespace: true, style: request.style
         )
         let rules = request.dictionary.filter { !$0.isJoinedSpelling || !deferredNames.contains($0.written) }
-        return TextPipeline().run(TextPipelineInput(
-            text: text, dictionary: rules, context: request.context, options: options,
-            protectedPhrases: request.protectedPhrases + request.dictionary.map(\.heard)))
+        return TextPipeline().run(
+            TextPipelineInput(
+                text: text, dictionary: rules, context: request.context, options: options,
+                protectedPhrases: request.protectedPhrases + request.dictionary.map(\.heard), language: request.language))
     }
 
     /// Whether `task` finished before `deadline`. The watcher on the task is not a child of this call, so a task

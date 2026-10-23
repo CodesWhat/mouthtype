@@ -1,0 +1,26 @@
+[
+  {
+    "id": "cs-collision-number-ten",
+    "language": "cs",
+    "raw": "Ten dům je velký.",
+    "notes": "Czech demonstrative 'ten' (this), the same collision as Polish, 0.5.0 number formatting writes '10 dům je velký.'"
+  },
+  {
+    "id": "cs-short-1",
+    "language": "cs",
+    "raw": "Pošlete mi prosím soubor před obědem.",
+    "notes": "Short, 6 words."
+  },
+  {
+    "id": "cs-medium-1",
+    "language": "cs",
+    "raw": "Můžeme přesunout schůzku na čtvrtek, protože zákazník přijede do Brna až v jedenáct hodin?",
+    "notes": "Medium, 14 words."
+  },
+  {
+    "id": "cs-long-1",
+    "language": "cs",
+    "raw": "Dobrý den všem, krátká aktualizace o stavu migrace. Přepnutí databáze skončilo včera večer bez jakéhokoli výpadku a čtecí repliky jsou již synchronizované s hlavním serverem.",
+    "notes": "Long, 25 words."
+  }
+]

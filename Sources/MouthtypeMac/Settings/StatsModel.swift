@@ -20,6 +20,8 @@ import Observation
     @ObservationIgnored private var observation: TakesObservation?
     /// Bumped on every deactivate. A reload that started under an older value is dropped when it finishes.
     @ObservationIgnored private var lifecycleGeneration = 0
+    /// Bumped on every `observe()`, so a callback from a replaced observation that was already queued is dropped.
+    @ObservationIgnored private var observationGeneration = 0
     @ObservationIgnored private var rolloverTask: Task<Void, Never>?
     @ObservationIgnored private var rolloverObservers: [(NotificationCenter, NSObjectProtocol)] = []
     /// Tickets for results: a result applies only if no newer one has been applied.
@@ -36,12 +38,15 @@ import Observation
         try store.statsSnapshot(now: now, timeZone: zone)
     }
     /// Starts the store observation. Replaceable so a test can make it fail.
-    @ObservationIgnored var startObservation: (TranscriptStore, TimeZone, @escaping @Sendable () -> Date,
-                                               @escaping @Sendable (Error) -> Void,
-                                               @escaping @Sendable (StatsSnapshot) -> Void) -> TakesObservation? = {
-        store, zone, clock, onError, onChange in
-        store.observeStats(timeZone: zone, now: clock, onError: onError, onChange: onChange)
-    }
+    @ObservationIgnored var startObservation:
+        (
+            TranscriptStore, TimeZone, @escaping @Sendable () -> Date,
+            @escaping @Sendable (Error) -> Void,
+            @escaping @Sendable (StatsSnapshot) -> Void
+        ) -> TakesObservation? = {
+            store, zone, clock, onError, onChange in
+            store.observeStats(timeZone: zone, now: clock, onError: onError, onChange: onChange)
+        }
     /// Nil until the first load finishes.
     private(set) var snapshot: StatsSnapshot?
     private(set) var error: String?
@@ -86,7 +91,7 @@ import Observation
         issued += 1
         let ticket = issued
         do {
-            let snapshot = try await Task.detached { try read(store, instant, zone) }.value
+            let snapshot = try await OffPool.run { try read(store, instant, zone) }
             guard generation == lifecycleGeneration, ticket > applied, !Task.isCancelled else { return }
             applied = ticket
             apply(snapshot, failure: nil)
@@ -107,25 +112,34 @@ import Observation
             if isActive { apply(nil, failure: "Stats are unavailable.") }
             return
         }
+        observationGeneration += 1
+        let observationID = observationGeneration
         let generation = lifecycleGeneration
         let clock = now
         scheduleRollover()
-        observation = startObservation(store, timeZoneProvider(), clock, { [weak self] error in
-            Log.app.error("stats observation failed: \(error.localizedDescription, privacy: .public)")
-            let message = error.localizedDescription
-            MainActor.assumeIsolated {
-                guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
-                self.apply(nil, failure: message)
-            }
-        }, { [weak self] snapshot in
-            MainActor.assumeIsolated {
-                guard let self, self.isActive, generation == self.lifecycleGeneration else { return }
-                // Newer than any read already in flight, so a slower earlier one can't overwrite it.
-                self.issued += 1
-                self.applied = self.issued
-                self.apply(snapshot, failure: nil)
-            }
-        })
+        observation = startObservation(
+            store, timeZoneProvider(), clock,
+            { [weak self] error in
+                Log.app.error("stats observation failed: \(error.localizedDescription, privacy: .public)")
+                let message = error.localizedDescription
+                MainActor.assumeIsolated {
+                    guard let self, self.isActive, generation == self.lifecycleGeneration,
+                        observationID == self.observationGeneration
+                    else { return }
+                    self.apply(nil, failure: message)
+                }
+            },
+            { [weak self] snapshot in
+                MainActor.assumeIsolated {
+                    guard let self, self.isActive, generation == self.lifecycleGeneration,
+                        observationID == self.observationGeneration
+                    else { return }
+                    // Newer than any read already in flight, so a slower earlier one can't overwrite it.
+                    self.issued += 1
+                    self.applied = self.issued
+                    self.apply(snapshot, failure: nil)
+                }
+            })
     }
 
     private func apply(_ snapshot: StatsSnapshot?, failure: String?) {
@@ -157,8 +171,12 @@ import Observation
             rolloverObservers.append((center, center.addObserver(forName: name, object: nil, queue: .main, using: refresh)))
         }
         let workspace = NSWorkspace.shared.notificationCenter
-        rolloverObservers.append((workspace, workspace.addObserver(
-            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: refresh)))
+        rolloverObservers.append(
+            (
+                workspace,
+                workspace.addObserver(
+                    forName: NSWorkspace.didWakeNotification, object: nil, queue: .main, using: refresh)
+            ))
 
         rolloverTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
@@ -175,8 +193,10 @@ import Observation
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = timeZoneProvider()
         let current = now()
-        let midnight = calendar.nextDate(after: current, matching: DateComponents(hour: 0, minute: 0, second: 0),
-                                         matchingPolicy: .nextTime) ?? current.addingTimeInterval(3_600)
+        let midnight =
+            calendar.nextDate(
+                after: current, matching: DateComponents(hour: 0, minute: 0, second: 0),
+                matchingPolicy: .nextTime) ?? current.addingTimeInterval(3_600)
         return (.seconds(max(1, midnight.timeIntervalSince(current))), sleep)
     }
 }

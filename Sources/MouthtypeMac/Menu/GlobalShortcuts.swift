@@ -12,7 +12,7 @@ final class GlobalShortcuts {
         static let copyLast = Shortcut(keyCode: kVK_ANSI_C, modifiers: cmdKey | controlKey)
     }
 
-    private static let signature: OSType = 0x4D54_5950   // 'MTYP'
+    private static let signature: OSType = 0x4D54_5950  // 'MTYP'
 
     private var actions: [UInt32: @MainActor () -> Void] = [:]
     private var refs: [EventHotKeyRef] = []

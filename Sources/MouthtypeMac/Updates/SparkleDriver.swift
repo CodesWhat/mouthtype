@@ -51,7 +51,8 @@ import Sparkle
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
         let failure = error as NSError?
-        let ordinaryOutcome = failure?.domain == SUSparkleErrorDomain
+        let ordinaryOutcome =
+            failure?.domain == SUSparkleErrorDomain
             && (failure?.code == Int(SUError.noUpdateError.rawValue) || failure?.code == Int(SUError.installationCanceledError.rawValue))
         delegate?.updateFinished(error: ordinaryOutcome ? nil : error)
     }

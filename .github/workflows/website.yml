@@ -2,31 +2,73 @@ name: Website
 
 on:
   push:
-    branches: [main, dev/v0.5.0]
+    branches: [main, 'dev/**']
     paths: ["website/**", ".github/workflows/website.yml"]
   pull_request:
-    paths: ["website/**", ".github/workflows/website.yml"]
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Pull requests run the real job only when a path from the push filter changed; pushes always do.
+      - id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(website/|\.github/workflows/website\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   website:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
         working-directory: website
     steps:
+      - name: Skipped, no relevant changes
+        if: needs.changes.outputs.run != 'true'
+        working-directory: .
+        run: echo "No matching paths changed, nothing to check."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.run == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: needs.changes.outputs.run == 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: website/package-lock.json
       - run: npm ci
+        if: needs.changes.outputs.run == 'true'
       - run: npm run build
+        if: needs.changes.outputs.run == 'true'
       - run: npx playwright install --with-deps chromium
+        if: needs.changes.outputs.run == 'true'
       - run: npm test
+        if: needs.changes.outputs.run == 'true'

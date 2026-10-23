@@ -108,7 +108,7 @@ import MouthtypeCore
     @Test func everyOpenPageRoutesToItsNewHome() {
         let expected: [AutomationPage: SettingsDestination?] = [
             .home: .page(.home), .settings: nil, .stats: .page(.stats), .records: .page(.stats), .spellings: .page(.dictionary),
-            .phrases: .page(.transforms), .transcribe: .transcribeFile, .general: .settings(.general), .writing: .page(.style),
+            .phrases: .page(.transforms), .transcribe: .transcribeFile, .general: .settings(.general), .microphone: .settings(.microphone), .writing: .page(.style),
             .appearance: .page(.appearance), .diagnostics: .settings(.health),
         ]
         #expect(Set(expected.keys) == Set(AutomationPage.allCases))
@@ -129,17 +129,21 @@ import MouthtypeCore
         let vocabulary = FileVocabulary(url: dir.appendingPathComponent("dictionary.json"))
         let spellings = SpellingEditor(store: vocabulary)
         var transcribeOpens = 0
-        let model = SettingsModel(defaults: defaults, spellings: spellings,
+        let model = SettingsModel(
+            defaults: defaults, spellings: spellings,
             spellingSuggestions: SpellingSuggestionsModel(vocabulary: vocabulary, dismissedURL: dir.appendingPathComponent("dismissed.json")),
             phrases: PhraseEditor(store: FilePhrases(url: dir.appendingPathComponent("phrases.json"))),
             openTranscribeWindow: { transcribeOpens += 1 })
         var asked = 0
         var answer = false
-        model.confirmDiscard = { _, _ in asked += 1; return answer }
-        let router = AutomationRouter(actions: AutomationActions(
-            startDictation: {}, stopDictation: {}, toggleDictation: {}, cancelDictation: {}, copyLast: {}, pasteLast: {},
-            open: { if let destination = $0.destination { model.open(destination) } }
-        ), isEnabled: { false })
+        model.confirmDiscard = { _, _ in
+            asked += 1; return answer
+        }
+        let router = AutomationRouter(
+            actions: AutomationActions(
+                startDictation: {}, stopDictation: {}, toggleDictation: {}, cancelDictation: {}, copyLast: {}, pasteLast: {},
+                open: { if let destination = $0.destination { model.open(destination) } }
+            ), isEnabled: { false })
 
         model.page = .dictionary
         spellings.newSpelling()

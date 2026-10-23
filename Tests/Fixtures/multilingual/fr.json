@@ -1,0 +1,74 @@
+[
+  {
+    "id": "fr-punct-exclaim",
+    "language": "fr",
+    "raw": "Bonjour !",
+    "notes": "French no-break space before '!'. Verify against a real clip whether v3 emits it."
+  },
+  {
+    "id": "fr-punct-question",
+    "language": "fr",
+    "raw": "Quoi ?",
+    "notes": "French no-break space before '?'. Verify against a real clip whether v3 emits it."
+  },
+  {
+    "id": "fr-short-1",
+    "language": "fr",
+    "raw": "Veuillez m'envoyer le fichier avant le déjeuner.",
+    "notes": "Short, 7 words."
+  },
+  {
+    "id": "fr-short-2",
+    "language": "fr",
+    "raw": "La réunion commence demain matin à neuf heures.",
+    "notes": "Short, 8 words."
+  },
+  {
+    "id": "fr-medium-1",
+    "language": "fr",
+    "raw": "Pouvons-nous déplacer la réunion à jeudi, parce que le client n'arrive à Marseille qu'à onze heures ?",
+    "notes": "Medium, 17 words."
+  },
+  {
+    "id": "fr-medium-2",
+    "language": "fr",
+    "raw": "J'ai relu les chiffres ce matin et le deuxième trimestre est meilleur que prévu.",
+    "notes": "Medium, 14 words."
+  },
+  {
+    "id": "fr-long-1",
+    "language": "fr",
+    "raw": "Bonjour à tous, un point rapide sur l'état de la migration. La bascule de la base de données s'est terminée hier soir sans aucune interruption, et les réplicas en lecture sont déjà à jour avec le serveur principal.",
+    "notes": "Long, 38 words."
+  },
+  {
+    "id": "fr-long-2",
+    "language": "fr",
+    "raw": "Merci d'avoir envoyé la proposition révisée. J'ai passé en revue le calendrier et le budget avec l'équipe ce matin, et nous sommes globalement d'accord sur le plan du prochain trimestre.",
+    "notes": "Long, 30 words."
+  },
+  {
+    "id": "fr-colon",
+    "language": "fr",
+    "raw": "Voici la liste : pain, lait et œufs.",
+    "notes": "French no-break space before ':'."
+  },
+  {
+    "id": "fr-messy-1",
+    "language": "fr",
+    "raw": "Alors, euh, on se retrouve demain à, euh, à dix heures au bureau et, et on parle du plan pour la semaine prochaine.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "fr-messy-2",
+    "language": "fr",
+    "raw": "Envoie-moi le fichier pour mardi, non attends, pour mercredi, et préviens aussi l'équipe.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "fr-messy-3",
+    "language": "fr",
+    "raw": "Il nous faut premièrement plus de temps pour les tests deuxièmement un développeur de plus et troisièmement un budget clair sinon ça ne marchera pas",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
+  }
+]

@@ -39,12 +39,12 @@ final class FileVocabulary: VocabularyProviding, Sendable {
 
     /// Two entries to show the shape. The user edits or replaces them.
     static let exampleContents = """
-    [
-      { "heard": "mouth type", "written": "Mouthtype", "starred": false },
-      { "heard": "super whisper", "written": "Superwhisper", "starred": false }
-    ]
+        [
+          { "heard": "mouth type", "written": "Mouthtype", "starred": false },
+          { "heard": "super whisper", "written": "Superwhisper", "starred": false }
+        ]
 
-    """
+        """
 
     let url: URL
     private let snapshot = OSAllocatedUnfairLock(initialState: Snapshot())
@@ -124,7 +124,8 @@ final class FileVocabulary: VocabularyProviding, Sendable {
     @discardableResult
     func save(heard: String, written: String) throws -> SaveResult {
         guard !heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !written.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            !written.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else {
             throw WriteError.invalid("Enter both the heard phrase and the spelling to use.")
         }
         guard FileManager.default.fileExists(atPath: url.path) else {
@@ -172,7 +173,8 @@ final class FileVocabulary: VocabularyProviding, Sendable {
     }
 
     func save(original: DictionaryRule?, rule: DictionaryRule) throws {
-        let rule = DictionaryRule(heard: rule.heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
+        let rule = DictionaryRule(
+            heard: rule.heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
             written: rule.written.trimmingCharacters(in: .whitespacesAndNewlines), starred: rule.starred)
         if let message = Self.validationMessage(heard: rule.heard, written: rule.written) { throw WriteError.invalid(message) }
         var entries = try managedEntries()
@@ -180,7 +182,9 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         if let original {
             guard let found = entries.firstIndex(where: { Self.rule($0) == original }) else { throw WriteError.changed }
             index = found
-        } else { index = nil }
+        } else {
+            index = nil
+        }
         guard !entries.indices.contains(where: { $0 != index && Self.heardKey(Self.rule(entries[$0]).heard) == Self.heardKey(rule.heard) }) else {
             throw WriteError.invalid("A spelling for this heard phrase already exists.")
         }
@@ -199,7 +203,8 @@ final class FileVocabulary: VocabularyProviding, Sendable {
     /// phrase survives keeps its place and extra keys, dropped phrases are removed, new ones are appended.
     func saveWord(original: [DictionaryRule], rules: [DictionaryRule]) throws {
         let rules = rules.map {
-            DictionaryRule(heard: $0.heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
+            DictionaryRule(
+                heard: $0.heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
                 written: $0.written.trimmingCharacters(in: .whitespacesAndNewlines), starred: $0.starred)
         }
         for rule in rules {
@@ -270,7 +275,9 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         for index in indices.sorted(by: >) { entries.remove(at: index) }
         try write(Self.render(entries))
         let after = try libraryContents()
-        return removed.map { var entry = $0; entry.contentsAfter = after; return entry }
+        return removed.map {
+            var entry = $0; entry.contentsAfter = after; return entry
+        }
     }
 
     /// Puts a removed entry back at its old index, extra keys and all. See `restore(_ removed: [RemovedEntry])`.
@@ -302,39 +309,39 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         try write(Self.render(entries))
     }
 
-    func previewImport(_ data: Data) throws -> SpellingImportPreview {
+    func previewImport(_ data: Data, source: SpellingImportSource = .mouthtype) throws -> SpellingImportPreview {
         let original = try libraryContents()
         let entries = try managedEntries(contents: original)
-        let records: [SpellingCSV.Record]
-        do { records = try SpellingCSV.records(from: data) }
-        catch { return SpellingImportPreview(rows: [], problem: error.localizedDescription, originalContents: original) }
-        let header = records.first?.fields.map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() } ?? []
-        let namesOnly = header == ["name"]
-        guard namesOnly || (header.count == 2 && Set(header) == ["heard", "written"]) else {
-            return SpellingImportPreview(rows: [], problem: "Use a name column, or heard,written columns with a header row.", originalContents: original)
-        }
-        let heardColumn = namesOnly ? 0 : header.firstIndex(of: "heard")!
-        let writtenColumn = namesOnly ? 0 : header.firstIndex(of: "written")!
+        let candidates: [SpellingImportSource.Candidate]
+        do { candidates = try source.candidates(from: data) } catch { return SpellingImportPreview(rows: [], problem: error.localizedDescription, originalContents: original) }
         let existing = Dictionary(uniqueKeysWithValues: entries.map { (Self.heardKey(Self.rule($0).heard), Self.rule($0).written) })
         var seen: [String: String] = [:]
-        let rows = records.dropFirst().map { record -> SpellingImportPreview.Row in
-            guard record.fields.count == header.count else {
-                return .init(id: record.line, rule: DictionaryRule(heard: record.fields.first ?? "", written: ""),
-                    status: .invalid("Expected \(header.count) column\(header.count == 1 ? "" : "s")."))
+        let rows = candidates.map { candidate -> SpellingImportPreview.Row in
+            let line: Int, heard: String, written: String
+            switch candidate {
+            case let .bad(badLine, badHeard, message):
+                return .init(id: badLine, rule: DictionaryRule(heard: badHeard, written: ""), status: .invalid(message))
+            case let .pair(pairLine, pairHeard, pairWritten):
+                line = pairLine
+                heard = pairHeard.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                written = pairWritten.trimmingCharacters(in: .whitespacesAndNewlines)
             }
-            let heard = record.fields[heardColumn].split(whereSeparator: \.isWhitespace).joined(separator: " ")
-            let written = record.fields[writtenColumn].trimmingCharacters(in: .whitespacesAndNewlines)
             let rule = DictionaryRule(heard: heard, written: written)
             let key = Self.heardKey(heard)
             let status: SpellingImportPreview.Row.Status
-            if let message = Self.validationMessage(heard: heard, written: written) { status = .invalid(message) }
-            else if let saved = existing[key] { status = saved == written ? .existing : .invalid("Conflicts with the saved spelling “\(saved)”.") }
-            else if let earlier = seen[key] { status = earlier == written ? .duplicate : .invalid("Conflicts with another CSV row.") }
-            else { status = .add }
+            if let message = Self.validationMessage(heard: heard, written: written) {
+                status = .invalid(message)
+            } else if let saved = existing[key] {
+                status = saved == written ? .existing : .invalid("Conflicts with the saved spelling “\(saved)”.")
+            } else if let earlier = seen[key] {
+                status = earlier == written ? .duplicate : .invalid("Conflicts with another CSV row.")
+            } else {
+                status = .add
+            }
             seen[key] = written
-            return .init(id: record.line, rule: rule, status: status)
+            return .init(id: line, rule: rule, status: status)
         }
-        return SpellingImportPreview(rows: rows, problem: rows.isEmpty ? "The CSV has no spellings to import." : nil, originalContents: original)
+        return SpellingImportPreview(rows: rows, problem: rows.isEmpty ? source.emptyProblem : nil, originalContents: original)
     }
 
     func importSpellings(_ preview: SpellingImportPreview) throws {
@@ -350,8 +357,7 @@ final class FileVocabulary: VocabularyProviding, Sendable {
 
     private func libraryContents() throws -> Data? {
         guard FileManager.default.fileExists(atPath: url.path) else { return nil }
-        do { return try Data(contentsOf: url) }
-        catch { throw WriteError.failed(error.localizedDescription) }
+        do { return try Data(contentsOf: url) } catch { throw WriteError.failed(error.localizedDescription) }
     }
 
     private func managedEntries() throws -> [[String: Any]] {
@@ -361,8 +367,7 @@ final class FileVocabulary: VocabularyProviding, Sendable {
     private func managedEntries(contents: Data?) throws -> [[String: Any]] {
         guard let contents else { return [] }
         let (_, entries) = try readEntries(contents: contents)
-        do { _ = try JSONDecoder().decode([Entry].self, from: contents) }
-        catch { throw WriteError.malformed(Self.describe(error)) }
+        do { _ = try JSONDecoder().decode([Entry].self, from: contents) } catch { throw WriteError.malformed(Self.describe(error)) }
         var seen = Set<String>()
         for entry in entries {
             let rule = Self.rule(entry)
@@ -423,7 +428,8 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         var parts = ["\"heard\": \(quoted(heard))", "\"written\": \(quoted(written))", "\"starred\": \(starred)"]
         for key in extra.keys.sorted() {
             guard let data = try? JSONSerialization.data(withJSONObject: [extra[key] as Any], options: .withoutEscapingSlashes),
-                  var value = String(data: data, encoding: .utf8) else { continue }
+                var value = String(data: data, encoding: .utf8)
+            else { continue }
             value.removeFirst()
             value.removeLast()
             parts.append("\(quoted(key)): \(value)")
@@ -436,10 +442,11 @@ final class FileVocabulary: VocabularyProviding, Sendable {
         let lines = entries.map { entry -> String in
             var extra = entry
             for key in ["heard", "written", "starred"] { extra[key] = nil }
-            return "  " + line(
-                heard: string(entry["heard"]) ?? "", written: string(entry["written"]) ?? "",
-                starred: (entry["starred"] as? Bool) ?? false, extra: extra
-            )
+            return "  "
+                + line(
+                    heard: string(entry["heard"]) ?? "", written: string(entry["written"]) ?? "",
+                    starred: (entry["starred"] as? Bool) ?? false, extra: extra
+                )
         }
         return "[\n" + lines.joined(separator: ",\n") + "\n]\n"
     }
@@ -456,7 +463,7 @@ final class FileVocabulary: VocabularyProviding, Sendable {
 
     private static func stamp(of url: URL) -> Stamp? {
         guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
-              let modified = attributes[.modificationDate] as? Date
+            let modified = attributes[.modificationDate] as? Date
         else { return nil }
         return Stamp(modified: modified, size: (attributes[.size] as? Int) ?? 0)
     }

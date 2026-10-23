@@ -15,10 +15,20 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     public var transform: TextTransform?
     /// The Formal tone: the shared prompt asks the model to leave swearing out.
     public var omitProfanity: Bool
+    /// The language of the transcript. Nil means English, which keeps the English prompt.
+    public var language: DictationLanguage?
+    /// The Excited tone: the shared prompt asks for exclamation marks where the speaker sounds enthusiastic.
+    public var excited: Bool
+    /// The user's own instructions for tone and formatting, already normalized. Only the shared prompt carries them, so Fast
+    /// (S1-mini, which takes fixed controls) ignores them.
+    public var instructions: String?
 
-    public init(vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
-                level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false,
-                transform: TextTransform? = nil, omitProfanity: Bool = false) {
+    public init(
+        vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
+        level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false,
+        transform: TextTransform? = nil, omitProfanity: Bool = false, language: DictationLanguage? = nil,
+        excited: Bool = false, instructions: String? = nil
+    ) {
         self.vocabulary = vocabulary
         self.appName = appName
         self.s1Controls = s1Controls
@@ -34,14 +44,17 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
         self.correctionsOnly = correctionsOnly
         self.transform = transform
         self.omitProfanity = omitProfanity
+        self.language = language
+        self.excited = excited
+        self.instructions = CleanupInstructions.normalize(instructions)
     }
 }
 
 public protocol TextCleaner: Sendable {
-    var id: String { get }                 // stable slug, e.g. "gemma-4-e2b-it-4bit"
+    var id: String { get }  // stable slug, e.g. "gemma-4-e2b-it-4bit"
     var displayName: String { get }
     var usesNativeControls: Bool { get }
-    func prepare() async throws            // download if needed + load; idempotent
+    func prepare() async throws  // download if needed + load; idempotent
     func clean(_ transcript: String, context: CleanupContext) async throws -> String
 }
 

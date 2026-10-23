@@ -39,7 +39,7 @@ for (const width of [1440, 320]) {
       await expect(page).toHaveURL(/\/linux\/$/);
       await expect(page.getByRole('heading', { level: 1 })).toHaveText('Mouthtype for Linux.');
       const main=page.locator('main');
-      for(const text of ['experimental', 'Arch/Omarchy', 'x86_64', 'Hyprland', 'PipeWire', 'source', 'install.py', 'setup_speech.py', 'recovery-only', 'tools/omarchy-plugin/install.py', 'Launch at Login', 'Paste into the active window', 'agent-install.md']) await expect(main).toContainText(text);
+      for(const text of ['experimental', 'Arch/Omarchy', 'x86_64', 'Hyprland', 'PipeWire', 'source', 'install.py', 'setup.py', 'Basic cleanup is on by default', 'recovery-only', 'Log in again', 'tools/omarchy-plugin/install.py', 'coming', 'mouthtype-linux-setup --uninstall', 'Launch at Login', 'Paste into the active window', 'agent-install.md']) await expect(main).toContainText(text);
       await expect(page.getByRole('link', { name: 'agent-install.md', exact: true })).toHaveAttribute('href', '/linux/agent-install.md');
       await expect(page.getByRole('link', { name: 'Download Linux source', exact: false })).toHaveAttribute('href', '/source');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);

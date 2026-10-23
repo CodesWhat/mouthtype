@@ -74,8 +74,9 @@ public actor MLXCleaner: MeasuredCleaner {
         _ = try await resolve(
             configuration: configuration, from: downloadSource, useLatest: true,
             progressHandler: {
-                report(ModelDownloadProgress(
-                    hubCompletedUnits: $0.completedUnitCount, hubTotalUnits: $0.totalUnitCount, knownTotalBytes: known))
+                report(
+                    ModelDownloadProgress(
+                        hubCompletedUnits: $0.completedUnitCount, hubTotalUnits: $0.totalUnitCount, knownTotalBytes: known))
             })
     }
 
@@ -156,7 +157,8 @@ public actor MLXCleaner: MeasuredCleaner {
             let iterator = try Self.makeIterator(
                 prepared: prepared, stableTokens: stableTokens, model: model.model, parameters: parameters,
                 caches: prefixCaches)
-            return generateTask(promptTokenCount: prepared.text.tokens.size,
+            return generateTask(
+                promptTokenCount: prepared.text.tokens.size,
                 modelConfiguration: model.configuration, tokenizer: model.tokenizer, iterator: iterator,
                 toolCallPolicy: parameters.toolCallPolicy)
         }
@@ -234,12 +236,12 @@ public actor MLXCleaner: MeasuredCleaner {
         if stable >= minimumPrefixTokens, (best?.tokens.count ?? 0) < stable {
             let base = try best?.cache.map { $0.copy() } ?? model.newCache(parameters: parameters)
             let from = best?.tokens.count ?? 0
-            let extra = LMInput(tokens: MLXArray(Array(tokens[from ..< stable])))
+            let extra = LMInput(tokens: MLXArray(Array(tokens[from..<stable])))
             var warm = parameters
             warm.maxTokens = 1
             // Constructing the iterator prefills `extra` into `base`.
             _ = try TokenIterator(input: extra, model: model, cache: base, parameters: warm)
-            let entry = PrefixCaches.Entry(tokens: Array(tokens[0 ..< stable]), cache: base)
+            let entry = PrefixCaches.Entry(tokens: Array(tokens[0..<stable]), cache: base)
             caches.insert(entry)
             best = entry
         }
@@ -268,7 +270,8 @@ public actor MLXCleaner: MeasuredCleaner {
 
 public enum S1MiniPrompt {
     /// Required verbatim by the model card.
-    public static let system = "You are a text normalizer for speech-to-text transcripts. The input begins with a control line specifying the styling, structure, and context settings; clean the transcript to match those settings and output only the cleaned text."
+    public static let system =
+        "You are a text normalizer for speech-to-text transcripts. The input begins with a control line specifying the styling, structure, and context settings; clean the transcript to match those settings and output only the cleaned text."
 
     public static let controlLine = S1MiniControls.benchmark.line
 

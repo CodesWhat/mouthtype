@@ -1,0 +1,62 @@
+[
+  {
+    "id": "it-collision-command-comma",
+    "language": "it",
+    "raw": "Vedi l'articolo 5 comma 2.",
+    "notes": "Damage table: 'comma' is a legal noun, the spoken command table writes 'Vedi l'articolo 5, 2.' in 0.5.0."
+  },
+  {
+    "id": "it-short-1",
+    "language": "it",
+    "raw": "Per favore, mandami il file prima di pranzo.",
+    "notes": "Short, 8 words."
+  },
+  {
+    "id": "it-short-2",
+    "language": "it",
+    "raw": "La riunione inizia domani mattina alle nove.",
+    "notes": "Short, 7 words."
+  },
+  {
+    "id": "it-medium-1",
+    "language": "it",
+    "raw": "Possiamo spostare la riunione a giovedì, perché il cliente arriva a Torino solo alle undici?",
+    "notes": "Medium, 15 words."
+  },
+  {
+    "id": "it-medium-2",
+    "language": "it",
+    "raw": "Ho riguardato i numeri questa mattina e il secondo trimestre è meglio di quanto ci aspettassimo.",
+    "notes": "Medium, 16 words."
+  },
+  {
+    "id": "it-long-1",
+    "language": "it",
+    "raw": "Ciao a tutti, un breve aggiornamento sullo stato della migrazione. Il passaggio del database è terminato ieri sera senza alcuna interruzione, e le repliche in lettura sono già allineate con il server principale.",
+    "notes": "Long, 33 words."
+  },
+  {
+    "id": "it-long-2",
+    "language": "it",
+    "raw": "Grazie per aver inviato la proposta rivista. Ho esaminato il calendario e il budget con la squadra questa mattina, e siamo per lo più d'accordo sul piano per il prossimo trimestre.",
+    "notes": "Long, 31 words."
+  },
+  {
+    "id": "it-messy-1",
+    "language": "it",
+    "raw": "Allora, ehm, ci vediamo domani alle, ehm, alle dieci in ufficio e, e parliamo del piano per la prossima settimana.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "it-messy-2",
+    "language": "it",
+    "raw": "Mandami il file entro martedì, no aspetta, entro mercoledì, e avvisa anche la squadra.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "it-messy-3",
+    "language": "it",
+    "raw": "Ci servono prima di tutto più tempo per i test poi uno sviluppatore in più e infine un budget chiaro altrimenti non funziona",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
+  }
+]

@@ -37,7 +37,10 @@ enum EngineReadiness: Equatable {
 protocol DictationEngine: AnyObject, Sendable {
     var readiness: EngineReadiness { get }
     func transcribe(samples: [Float]) async throws -> Transcription
+    /// The same with the take's language. Engines that take a hint override this; the default ignores it.
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription
     func preview(samples: [Float]) async throws -> String?
+    func preview(samples: [Float], language: DictationLanguageRequest) async throws -> String?
     func setVocabularyBias(_ bias: VocabularyBias?) async
     /// `settleWithin` is how long a changed vocabulary may hold the call for the engine's model. Nil never waits.
     func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async
@@ -45,6 +48,12 @@ protocol DictationEngine: AnyObject, Sendable {
 
 extension DictationEngine {
     func preview(samples: [Float]) async throws -> String? { nil }
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+        try await transcribe(samples: samples)
+    }
+    func preview(samples: [Float], language: DictationLanguageRequest) async throws -> String? {
+        try await preview(samples: samples)
+    }
     /// Engines without a recognition-time hook ignore the bias.
     func setVocabularyBias(_ bias: VocabularyBias?) async {}
     func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
@@ -171,10 +180,11 @@ final class MicCapture: DictationCapturing {
 
     func start(keyDownAtNanos: UInt64) async throws {
         try await preparation.start {
-            await capture.setInterruptionHandler(CaptureInterruption.hop { [weak self] in
-                self?.preparation.invalidate()
-                self?.onInterrupted?()
-            })
+            await capture.setInterruptionHandler(
+                CaptureInterruption.hop { [weak self] in
+                    self?.preparation.invalidate()
+                    self?.onInterrupted?()
+                })
             try await capture.start(keyDownAtNanos: keyDownAtNanos)
         }
     }
@@ -205,8 +215,12 @@ final class HostEngine: DictationEngine {
     }
 
     func transcribe(samples: [Float]) async throws -> Transcription {
+        try await transcribe(samples: samples, language: .english)
+    }
+
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
         guard let engine = host.engine else { throw EngineError.notPrepared(id: EngineHost.defaultEngineID) }
-        return try await engine.transcribe(samples: samples)
+        return try await engine.transcribe(samples: samples, language: language)
     }
 
     func setVocabularyBias(_ bias: VocabularyBias?) async {
@@ -222,6 +236,11 @@ final class HostEngine: DictationEngine {
     func preview(samples: [Float]) async throws -> String? {
         guard let preview = host.engine as? any SpeechPreview else { return nil }
         return try await preview.preview(samples: samples)
+    }
+
+    func preview(samples: [Float], language: DictationLanguageRequest) async throws -> String? {
+        guard let preview = host.engine as? any SpeechPreview else { return nil }
+        return try await preview.preview(samples: samples, language: language)
     }
 }
 

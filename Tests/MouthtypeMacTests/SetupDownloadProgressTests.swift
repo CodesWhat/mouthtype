@@ -84,7 +84,11 @@ private actor ScriptedEngine: PreparationReporting {
         let gate = DownloadGate()
         var clock = 0.0
         let engine = ScriptedEngine(reports: [progress(0.1), progress(0.2), progress(0.3)], gate: gate)
-        let host = EngineHost(makeEngine: { _ in engine }, uptime: { defer { clock += 2 }; return clock })
+        let host = EngineHost(
+            makeEngine: { _ in engine },
+            uptime: {
+                defer { clock += 2 }; return clock
+            })
         host.start()
         await waitUntil { host.downloadProgress?.fraction == 0.3 }
         guard case let .downloading(shown) = host.downloadStatus else { Issue.record("not downloading: \(host.downloadStatus)"); return }

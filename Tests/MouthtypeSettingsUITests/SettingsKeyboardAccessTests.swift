@@ -19,7 +19,7 @@ import Testing
                 for n in 0..<8 { model.addContextSite(context, domain: "filler\(n).\(context.rawValue).example.com") }
             }
         }
-        let controller = SettingsWindow(model: model, reduceTransparency: { true }, fullKeyboardAccess: { fullKeyboardAccess })
+        let controller = SettingsWindow(model: model, reduceTransparency: { true }, fullKeyboardAccess: { fullKeyboardAccess }, favicons: SettingsRender.favicons)
         controller.window?.contentView?.layoutSubtreeIfNeeded()
         return controller
     }
@@ -28,8 +28,10 @@ import Testing
         let controller = makeWindow(page: .home)
         let window = try #require(controller.window)
         #expect(window is SettingsNSWindow)
-        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
-            windowNumber: window.windowNumber, context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13))
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13))
         #expect(window.performKeyEquivalent(with: event))
     }
 
@@ -113,8 +115,11 @@ import Testing
         var view = proxies.first { $0.superview === window.contentView }
         while let current = view, seen.insert(ObjectIdentifier(current)).inserted {
             let x = current.convert(current.bounds, to: nil).minX
-            if String(describing: type(of: current)) == "KeyViewProxy" { stops.append(LoopStop(isProxy: true, x: x)) }
-            else if current is NSPopUpButton || current is NSSwitch || (current as? NSTextField)?.isEditable == true { stops.append(LoopStop(isProxy: false, x: x)) }
+            if String(describing: type(of: current)) == "KeyViewProxy" {
+                stops.append(LoopStop(isProxy: true, x: x))
+            } else if current is NSPopUpButton || current is NSSwitch || (current as? NSTextField)?.isEditable == true {
+                stops.append(LoopStop(isProxy: false, x: x))
+            }
             view = current.nextKeyView
         }
         return stops
@@ -129,10 +134,10 @@ import Testing
         let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
         #expect(sidebar.count == SettingsPage.allCases.count + 1)
         let pageStops = stops.dropFirst(sidebar.count).filter { $0.x >= SettingsTheme.sidebarWidth }
-        #expect(pageStops.count >= PillSkinKind.allCases.count + PreviewWallpaper.allCases.count + PillSize.allCases.count,
-                "Appearance: \(pageStops.count) page Tab stops")
+        #expect(
+            pageStops.count >= PillSkinKind.allCases.count + PreviewWallpaper.allCases.count + PillSize.allCases.count,
+            "Appearance: \(pageStops.count) page Tab stops")
     }
-
 
     /// Home's Copy and Recover buttons are plain buttons, so they are proxies in the loop. Tab must walk the sidebar rows (Home included)
     /// and then reach every row button in order, and `previousKeyView` must mirror it so Shift-Tab steps back through the same stops.
@@ -277,8 +282,10 @@ import Testing
 
     private func press(_ key: UInt32, keyCode: UInt16, in window: NSWindow) throws {
         let characters = String(UnicodeScalar(key)!)
-        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function], timestamp: 0,
-            windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
+        let event = try #require(
+            NSEvent.keyEvent(
+                with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function], timestamp: 0,
+                windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
         window.sendEvent(event)
         for _ in 0..<3 { while let e = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(e) } }
     }
@@ -372,7 +379,9 @@ import Testing
         try press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
         #expect(controller.model.page == .stats)
         let stats = try #require(SettingsPage.allCases.firstIndex(of: .stats))
-        #expect(window.firstResponder === rows[stats], "responder \(String(describing: window.firstResponder)) rows \(rows.map { ObjectIdentifier($0) == ObjectIdentifier(window.firstResponder ?? window) })")
+        #expect(
+            window.firstResponder === rows[stats],
+            "responder \(String(describing: window.firstResponder)) rows \(rows.map { ObjectIdentifier($0) == ObjectIdentifier(window.firstResponder ?? window) })")
     }
 
     /// The ring is AppKit's first responder, not the @FocusState, so a page change has to move the responder itself.

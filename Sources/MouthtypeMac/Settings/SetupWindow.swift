@@ -14,7 +14,7 @@ import SwiftUI
 }
 
 @MainActor final class SetupWindow: NSWindowController, NSWindowDelegate {
-    static let contentSize = NSSize(width: 560, height: 440)
+    static let contentSize = NSSize(width: 560, height: 500)
 
     let model: SetupModel
     private let refresh: () -> Void
@@ -28,9 +28,11 @@ import SwiftUI
     var isPolling: Bool { pollTimer != nil }
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
-    init(model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
-         reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
-         notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+    init(
+        model: SetupModel, actions: SetupActions, pollInterval: TimeInterval = 2,
+        reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+        notifications: NotificationCenter = NSWorkspace.shared.notificationCenter
+    ) {
         self.model = model
         self.pollInterval = pollInterval
         self.reduceTransparency = reduceTransparency
@@ -38,7 +40,8 @@ import SwiftUI
         refresh = actions.refresh
         poll = actions.poll
         self.actions = actions
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+        let window = NSWindow(
+            contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Set Up Mouthtype"
         window.titlebarAppearsTransparent = true
@@ -114,6 +117,7 @@ import SwiftUI
     func windowWillClose(_ notification: Notification) {
         stopPolling()
         stopObservingTransparency()
+        if let testTake = model.testTake { Task { await testTake.cancel() } }
     }
 
     private func startPolling() {
@@ -139,14 +143,15 @@ struct SetupView: View {
     /// The window extends under the title bar, so the dots sit below the traffic lights (about 28 pt tall) with a gap.
     static let dotsTopInset: CGFloat = 36
 
-    private var step: SetupStep { model.readiness.step }
+    private var step: SetupStep { model.step }
 
     var body: some View {
         VStack(spacing: 0) {
             SetupStepDots(dots: step.dots).padding(.top, SetupView.dotsTopInset)
             ScrollView {
                 VStack(spacing: 12) {
-                    SetupLips().padding(.bottom, 6)
+                    // The Models page is the one dense card, so it gives up the lips to keep Continue in view.
+                    if step != .models { SetupLips().padding(.bottom, 6) }
                     Text(title).font(DesignFont.serif(DesignFont.headline)).foregroundStyle(DesignPalette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
@@ -154,7 +159,7 @@ struct SetupView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     controls.padding(.top, 6)
                     if step == .ready {
-                        Text("Change your shortcut or recording behavior in Settings. Fast and Thorough use Basic until their cleanup model is ready.")
+                        Text("Change your shortcut or recording behavior in Settings.")
                             .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.sideInk)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
@@ -192,7 +197,7 @@ struct SetupView: View {
     /// The eyebrow under the card's control. Only Accessibility says it is being re-checked, because that is the step the
     /// user leaves the window for.
     private var stepCaption: String {
-        let base = "Step \(step.rawValue) of 4"
+        let base = "Step \(step.rawValue) of 5"
         return step == .accessibility ? base + " · Checking every few seconds" : base
     }
 
@@ -200,14 +205,15 @@ struct SetupView: View {
     private var footerSteps: some View {
         let line = SetupStep.footerNames.enumerated().reduce(Text("")) { text, entry in
             let name = Text(entry.element).foregroundColor(entry.offset + 1 == step.rawValue ? DesignPalette.ink : DesignPalette.sideInk)
-            return entry.offset == 0 ? name : text + Text(" · ").foregroundColor(DesignPalette.hair) + name
+            return entry.offset == 0 ? name : Text("\(text)\(Text(" · ").foregroundColor(DesignPalette.hair))\(name)")
         }
-        return line
-        .font(DesignFont.mono(DesignFont.eyebrow)).tracking(1)
-        .multilineTextAlignment(.trailing)
-        .fixedSize(horizontal: false, vertical: true)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
+        return
+            line
+            .font(DesignFont.mono(DesignFont.eyebrow)).tracking(1)
+            .multilineTextAlignment(.trailing)
+            .fixedSize(horizontal: false, vertical: true)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 5, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
     }
 
     private var title: String {
@@ -216,6 +222,7 @@ struct SetupView: View {
         case .accessibility: "Put your words to work."
         case .speech: "Keep recognition on your Mac."
         case .shortcut: "Check your shortcut."
+        case .models: "Choose your models."
         case .ready: "You’re ready to talk."
         }
     }
@@ -227,8 +234,7 @@ struct SetupView: View {
             case .notDetermined: "Allow microphone access so Mouthtype can hear you while you dictate. Audio stays on this Mac."
             case .denied, .restricted: "Microphone access is not allowed. Enable Mouthtype in System Settings, then return here."
             case .authorized:
-                if model.capturePreparing { "Preparing your microphone…" }
-                else { model.captureError ?? "Access allowed. Prepare your microphone to continue." }
+                if model.capturePreparing { "Preparing your microphone…" } else { model.captureError ?? "Access allowed. Prepare your microphone to continue." }
             @unknown default: "Check Microphone access in System Settings."
             }
         case .accessibility:
@@ -237,6 +243,8 @@ struct SetupView: View {
             speechStatus + "\nDownloaded once. Recognition runs on your Mac."
         case .shortcut:
             model.inputDetail + "\nCheck your shortcut with Change shortcut to continue."
+        case .models:
+            "Only speech is required. Fast and Thorough use Basic until ready."
         case .ready:
             model.instructions
         }
@@ -277,8 +285,15 @@ struct SetupView: View {
             speechControls
         case .shortcut:
             action("Change shortcut…", identifier: "setup-input-settings", perform: actions.inputSettings)
+        case .models:
+            VStack(spacing: 10) {
+                SetupModelsList(
+                    entries: model.modelEntries, retrySpeech: actions.retrySpeech, downloadNames: model.turnOnNames,
+                    downloadCleanup: model.downloadCleanupModel, cancelCleanup: model.cancelCleanupDownload)
+                action("Continue", identifier: "setup-models-continue", perform: model.finishModels)
+            }
         case .ready:
-            SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel, cancel: model.cancelCleanupDownload)
+            if let testTake = model.testTake { SetupTestTakeView(take: testTake) }
         }
     }
 
@@ -335,87 +350,117 @@ struct SetupProgressBar: View {
     }
 }
 
-/// Fast and Thorough on the ready step, each with its own bar. They download in the background, so setup can close first.
-struct SetupCleanupModels: View {
-    var models: [CleanupModelStatus]
-    var download: (CleanupLevel) -> Void
-    var cancel: (CleanupLevel) -> Void
+/// Every model download on one page: the required speech model first, then the optional ones. Optional rows can be left
+/// alone, and their downloads keep going in the background if setup closes.
+struct SetupModelsList: View {
+    var entries: [SetupModelEntry]
+    var retrySpeech: () -> Void
+    var downloadNames: () -> Void
+    var downloadCleanup: (CleanupLevel) -> Void
+    var cancelCleanup: (CleanupLevel) -> Void
 
     var body: some View {
-        if !models.isEmpty {
-            DesignSection(eyebrow: "Cleanup models") {
-                ForEach(models) { model in
-                    SetupCleanupRow(model: model, download: { download(model.level) }, cancel: { cancel(model.level) })
-                }
+        DesignSection(eyebrow: "Models") {
+            ForEach(entries) { entry in
+                SetupModelRow(entry: entry, start: { start(entry) }, cancel: { cancel(entry) })
             }
-            .multilineTextAlignment(.leading)
-            .accessibilityIdentifier("setup-cleanup-models")
         }
+        .multilineTextAlignment(.leading)
+        .accessibilityIdentifier("setup-models")
+    }
+
+    private func start(_ entry: SetupModelEntry) {
+        switch entry.id {
+        case .speech: retrySpeech()
+        case .names: downloadNames()
+        case let .cleanup(level): downloadCleanup(level)
+        }
+    }
+
+    private func cancel(_ entry: SetupModelEntry) {
+        if case let .cleanup(level) = entry.id { cancelCleanup(level) }
     }
 }
 
-struct SetupCleanupRow: View {
-    var model: CleanupModelStatus
-    var download: () -> Void
+/// The one row layout for every model: name and size, one line on why, and its state on the right. A download draws its
+/// bar and caption under the row; a failure draws its message there.
+struct SetupModelRow: View {
+    var entry: SetupModelEntry
+    var start: () -> Void
     var cancel: () -> Void
 
-    private var size: String { ModelDownloadFormat.size(Int64(model.sizeMB) * 1_000_000) }
+    private var slug: String {
+        switch entry.id {
+        case .speech: "speech"
+        case .names: "names"
+        case let .cleanup(level): "cleanup-\(level.rawValue)"
+        }
+    }
+
+    /// The line under the name: why you'd want it, or while it downloads the progress, or after a failure what went wrong.
+    @ViewBuilder private var subline: some View {
+        switch entry.state {
+        case let .downloading(_, caption):
+            Text(caption).foregroundStyle(DesignPalette.ink2)
+        case let .failed(message):
+            Text(message).foregroundStyle(DesignPalette.danger)
+        default:
+            Text(entry.detail).foregroundStyle(DesignPalette.ink2)
+        }
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 6) {
-                        Text(model.level.title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
-                        if model.selected {
+                        Text(entry.title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
+                        Text(entry.size).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+                        if entry.selected {
                             Text("Selected").designEyebrow().foregroundStyle(DesignPalette.accentText)
                         }
                     }
-                    Text("\(model.name) · \(size)").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-                        .fixedSize(horizontal: false, vertical: true)
+                    subline.font(DesignFont.sans(DesignFont.caption)).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 trailing
             }
-            switch model.status {
-            case let .downloading(progress):
-                VStack(alignment: .leading, spacing: 4) {
-                    SetupProgressBar(fraction: progress.fraction)
-                    Text(ModelDownloadFormat.caption(progress)).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(model.level.title) cleanup model download")
-                .accessibilityValue("\(Int((progress.fraction * 100).rounded())) percent, \(ModelDownloadFormat.caption(progress))")
-            case let .failed(message):
-                Text(message).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.danger)
-                    .fixedSize(horizontal: false, vertical: true)
-            default:
-                EmptyView()
+            if case let .downloading(fraction, caption) = entry.state {
+                SetupProgressBar(fraction: fraction)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(entry.title) download")
+                    .accessibilityValue("\(Int((min(max(fraction, 0), 1) * 100).rounded())) percent, \(caption)")
+                    .accessibilityIdentifier("setup-\(slug)-progress")
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 9)
-        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-        .accessibilityIdentifier("setup-cleanup-\(model.level.rawValue)")
+        .padding(.horizontal, 14).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+        .accessibilityIdentifier("setup-model-\(slug)")
     }
 
     @ViewBuilder private var trailing: some View {
-        switch model.status {
+        switch entry.state {
         case .available:
-            Button("Download", action: download).buttonStyle(.designSecondary)
-                .accessibilityLabel("Download \(model.level.title) cleanup model, \(size)")
+            Button("Download", action: start).buttonStyle(.designSecondary)
+                .accessibilityLabel("Download \(entry.title), \(entry.size)")
+                .accessibilityIdentifier("setup-\(slug)-download")
         case .downloading:
-            Button("Cancel", action: cancel).buttonStyle(.designSecondary)
-                .accessibilityLabel("Cancel \(model.level.title) cleanup model download")
-                .accessibilityIdentifier("setup-cleanup-cancel-\(model.level.rawValue)")
+            if case .cleanup = entry.id {
+                Button("Cancel", action: cancel).buttonStyle(.designSecondary)
+                    .accessibilityLabel("Cancel \(entry.title) download")
+                    .accessibilityIdentifier("setup-\(slug)-cancel")
+            } else {
+                Text("Downloading").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+            }
         case .preparing:
-            Text("Downloading").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-        case .done:
-            Label("Done", systemImage: "checkmark.circle.fill").font(DesignFont.sans(DesignFont.detail, .medium))
+            Text("Preparing").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+        case .ready:
+            Label("Ready", systemImage: "checkmark.circle.fill").font(DesignFont.sans(DesignFont.detail, .medium))
                 .foregroundStyle(DesignPalette.success)
         case .failed:
-            Button("Retry", action: download).buttonStyle(.designSecondary)
-                .accessibilityLabel("Retry \(model.level.title) cleanup model download")
+            Button("Retry", action: start).buttonStyle(.designSecondary)
+                .accessibilityLabel("Retry \(entry.title) download")
+                .accessibilityIdentifier("setup-\(slug)-retry")
         }
     }
 }
@@ -448,7 +493,8 @@ struct SetupLips: View {
 
     var body: some View {
         if let url = Bundle.module.url(forResource: "lips-36x22", withExtension: "png", subdirectory: "Settings"),
-           let sprite = NSImage(contentsOf: url) {
+            let sprite = NSImage(contentsOf: url)
+        {
             Image(nsImage: sprite).resizable().interpolation(.none).antialiased(false)
                 .frame(width: Self.size.width * Self.scale, height: Self.size.height * Self.scale)
                 .accessibilityHidden(true)

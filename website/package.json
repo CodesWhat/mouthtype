@@ -1,6 +1,6 @@
 {
   "name": "mouthtype-website",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -15,6 +15,6 @@
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
-    "vite": "8.3.4"
+    "vite": "8.3.5"
   }
 }

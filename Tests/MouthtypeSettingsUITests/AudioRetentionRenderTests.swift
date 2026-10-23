@@ -12,9 +12,10 @@ import MouthtypeCore
         defer { defaults.removePersistentDomain(forName: name) }
         let model = SettingsModel(defaults: defaults)
         if appearance == "dark" { model.setAudioRetentionAge(.noAgeLimit); model.setAudioRetentionSize(.gb10) }
-        let view = NSHostingView(rootView: AudioRetentionSection(model: model).padding(24).frame(width: 620, height: 310)
-            .background(appearance == "dark" ? Color.black : Color.white)
-            .environment(\.colorScheme, appearance == "dark" ? .dark : .light))
+        let view = NSHostingView(
+            rootView: AudioRetentionSection(model: model).padding(24).frame(width: 620, height: 310)
+                .background(appearance == "dark" ? Color.black : Color.white)
+                .environment(\.colorScheme, appearance == "dark" ? .dark : .light))
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 620, height: 310), styleMask: [], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
         window.contentView = view

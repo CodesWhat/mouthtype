@@ -66,6 +66,7 @@ Likely cause: no text field had focus, or the app didn't report the paste.
 
 - Make sure a text field has focus. With nowhere to paste, the card says "Nothing to paste into" and keeps the text.
 - If the field didn't change after a paste, the card says "Paste didn't land" and offers the transcript to copy. Some apps don't report a change even when text arrived, so look at the field before pasting again.
+- If a take you held for a second or more produced nothing, the card says "Microphone heard nothing" (no sound at all) or "No speech heard" (sound but no speech) and names the microphone that was recording. **Sound settings** opens the input list. **Try a test take** on Setup's last card (**Settings > Health > Set Up Mouthtype**) checks the microphone without pasting.
 - **Paste Last Take** (<kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>V</kbd>) and **Copy Last Take** (<kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>C</kbd>) work on the latest saved take, even after a restart. **Recent Takes** in the menu lists earlier ones.
 
 > [!WARNING]

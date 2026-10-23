@@ -59,7 +59,10 @@ private final class GrantBox {
         section.update(accessibilityGranted: false)
         section.update(hotkeyHealth: .recovering)
         section.update(globe: GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true))
-        #expect(section.items.map(\.title) == ["Accessibility: needed", "Dictation input: recovering · Fn / Globe", "Globe key opens Emoji & Symbols", "Remap Fn key (hides the emoji picker)", "Change Dictation Shortcut…"])
+        #expect(
+            section.items.map(\.title) == [
+                "Accessibility: needed", "Dictation input: recovering · Fn / Globe", "Globe key opens Emoji & Symbols", "Remap Fn key (hides the emoji picker)", "Change Dictation Shortcut…",
+            ])
         #expect(section.items[0].action != nil)
         #expect(!section.items[2].isHidden)
         section.update(accessibilityGranted: true)

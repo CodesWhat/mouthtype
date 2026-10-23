@@ -105,6 +105,13 @@ class NotaryAuthTests(unittest.TestCase):
             (self.directory / 'private_keys').mkdir(exist_ok=True)
             (self.directory / 'private_keys' / f'AuthKey_{key_id}.p8').write_text('fake key')
 
+    def test_release_build_env_is_repeatable_mode_at_the_fixed_scratch_path(self):
+        env = release.release_build_env(pathlib.Path('/out/0.1.0'), {'MOUTHTYPE_UNSIGNED': '1', 'PATH': '/usr/bin'})
+        self.assertEqual(env['MOUTHTYPE_SCRATCH_PATH'], release.RELEASE_SCRATCH_PATH)
+        self.assertEqual(env['MOUTHTYPE_BUILD_DIR'], '/out/0.1.0')
+        self.assertNotIn('MOUTHTYPE_UNSIGNED', env)
+        self.assertEqual(env['PATH'], '/usr/bin')
+
     def test_api_key_is_the_default_when_the_key_file_exists(self):
         self.store('# comment\nexport ASC_KEY_ID=FAKEKEY123\nexport ASC_ISSUER_ID="fake-issuer-id"\n', 'FAKEKEY123')
         self.assertEqual(release.notary_auth(None, self.directory), [

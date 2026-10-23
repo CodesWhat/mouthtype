@@ -3,10 +3,10 @@
 <plist version="1.0">
 <dict>
     <key>MouthtypeDisplayVersion</key>
-    <string>0.5.0</string>
+    <string>0.6.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.5.0</string>
+    <string>0.6.0</string>
     <key>CFBundleVersion</key>
-    <string>19</string>
+    <string>20</string>
 </dict>
 </plist>

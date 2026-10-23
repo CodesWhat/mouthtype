@@ -177,7 +177,8 @@ public struct SelfCorrection: Sendable {
             guard i + 1 < tokens.count, inside(i, i + 1) else { return 0 }
             if isMeridiemWord(tokens[i + 1].lower) { return 1 }
             if tokens[i + 1].lower == "a" || tokens[i + 1].lower == "p", i + 2 < tokens.count, inside(i + 1, i + 2),
-               tokens[i + 2].lower == "m" {
+                tokens[i + 2].lower == "m"
+            {
                 return 2
             }
             return 0
@@ -186,7 +187,8 @@ public struct SelfCorrection: Sendable {
         private func meridiemSuffix(from start: Int, to end: Int) -> String {
             for i in (start..<end).reversed() {
                 let word = tokens[i].lower
-                let split = (word == "a" || word == "p") && i + 1 < end
+                let split =
+                    (word == "a" || word == "p") && i + 1 < end
                     && tokens[i + 1].lower == "m" && inside(i, i + 1)
                 if isMeridiemWord(word) || split { return word.hasPrefix("p") ? " PM" : " AM" }
             }
@@ -248,7 +250,8 @@ public struct SelfCorrection: Sendable {
             }
             // "twenty first" .. "thirty first"
             if let tens = NumberWords.tens[w], tens == 20 || tens == 30, i + 1 < tokens.count, inside(i, i + 1),
-               let v = SelfCorrection.ordinalValues[tokens[i + 1].lower], v < 10 {
+                let v = SelfCorrection.ordinalValues[tokens[i + 1].lower], v < 10
+            {
                 return (i + 2, tens + v)
             }
             return nil
@@ -297,7 +300,9 @@ public struct SelfCorrection: Sendable {
             // Number: digits or words, each valid end, then what can follow it.
             var runs: [(end: Int, value: Int)] = []
             if numeric(w) {
-                if let v = Int(w.replacingOccurrences(of: ",", with: "")) { runs = [(s + 1, v)] } else {
+                if let v = Int(w.replacingOccurrences(of: ",", with: "")) {
+                    runs = [(s + 1, v)]
+                } else {
                     runs = [(s + 1, -1)]
                 }
             } else {
@@ -338,7 +343,8 @@ public struct SelfCorrection: Sendable {
                 // "two thirty": an hour word and a minute run of 10 to 59, or "oh five".
                 guard end < tokens.count, inside(end - 1, end) else { continue }
                 if tokens[end].lower == "oh" || tokens[end].lower == "o", end + 1 < tokens.count, inside(end, end + 1),
-                   let u = NumberWords.units[tokens[end + 1].lower] {
+                    let u = NumberWords.units[tokens[end + 1].lower]
+                {
                     _ = u
                     var stop = end + 2
                     let after = meridiem(after: stop - 1)
@@ -447,11 +453,14 @@ public struct SelfCorrection: Sendable {
                 if tokens[cueEnd].lower == "no", tokens[b].lower == "one", best == b + 1, nextWord != nil { return nil }
                 return (b, best, nil)
             }
-            let sentenceEnd = b + 1 == tokens.count || chars[tokens[b].end..<tokens[b + 1].start]
-                .contains(where: { $0 == "." || $0 == "!" || $0 == "?" })
+            let sentenceEnd =
+                b + 1 == tokens.count
+                || chars[tokens[b].end..<tokens[b + 1].start]
+                    .contains(where: { $0 == "." || $0 == "!" || $0 == "?" })
             if kinds.contains(.time), values.contains(where: { $0.kind == .number && $0.end == b + 1 }),
-               let hour = NumberWords.units[tokens[b].lower] ?? NumberWords.teens[tokens[b].lower] ?? Int(tokens[b].lower),
-               (1...12).contains(hour), sentenceEnd {
+                let hour = NumberWords.units[tokens[b].lower] ?? NumberWords.teens[tokens[b].lower] ?? Int(tokens[b].lower),
+                (1...12).contains(hour), sentenceEnd
+            {
                 return (b, b + 1, hour)
             }
             return nil

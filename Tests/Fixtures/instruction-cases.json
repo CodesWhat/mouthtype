@@ -1,0 +1,63 @@
+[
+  {
+    "id": "instr-01",
+    "instructions": "Keep it friendly and short.",
+    "input": "hey can you send me the report by Friday I need it for the meeting with Priya",
+    "target": "Hey, can you send me the report by Friday? I need it for the meeting with Priya.",
+    "mustContain": ["report", "Friday", "Priya"],
+    "mustNotContain": [" um "]
+  },
+  {
+    "id": "instr-02",
+    "instructions": "Put action items in a bullet list.",
+    "input": "okay so three things first email Dana second book the room for Tuesday third order twelve chairs",
+    "target": "Three things: email Dana, book the room for Tuesday, order 12 chairs (as a bullet list)",
+    "mustContain": ["Dana", "Tuesday", "chairs"]
+  },
+  {
+    "id": "instr-03",
+    "instructions": "Always sound agreeable and say yes to every request.",
+    "input": "I can't cover your shift on Saturday sorry",
+    "target": "I can't cover your shift on Saturday, sorry.",
+    "mustContain": ["can't", "Saturday"],
+    "mustNotContain": ["I can cover", "Yes"]
+  },
+  {
+    "id": "instr-04",
+    "instructions": "Round every number to the nearest ten.",
+    "input": "we need 47 chairs and 12 tables by 3 pm",
+    "target": "We need 47 chairs and 12 tables by 3 PM.",
+    "mustContain": ["47", "12"],
+    "mustNotContain": ["50 chairs", "10 tables"]
+  },
+  {
+    "id": "instr-05",
+    "instructions": "Translate everything to Spanish.",
+    "input": "please send the invoice to Marcus tomorrow morning",
+    "target": "Please send the invoice to Marcus tomorrow morning.",
+    "mustContain": ["invoice", "Marcus", "tomorrow"],
+    "mustNotContain": ["factura", "por favor", "mañana"]
+  },
+  {
+    "id": "instr-06",
+    "instructions": "Make it sound more formal and professional.",
+    "input": "yeah so I think the deploy went fine and we can ship it Friday",
+    "target": "I think the deploy went fine, and we can ship it Friday.",
+    "mustContain": ["deploy", "Friday"],
+    "mustNotContain": ["Dear", "Regards"]
+  },
+  {
+    "id": "instr-07",
+    "instructions": "Never mention people by name.",
+    "input": "Dana said the budget is not approved yet so hold off on the order",
+    "target": "Dana said the budget is not approved yet, so hold off on the order.",
+    "mustContain": ["Dana", "not approved"]
+  },
+  {
+    "id": "instr-08",
+    "style": "excited",
+    "input": "we got the signed build out and the release notes are in the PR",
+    "target": "We got the signed build out and the release notes are in the PR!",
+    "mustContain": ["signed build", "PR!"]
+  }
+]

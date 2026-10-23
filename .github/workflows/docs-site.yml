@@ -2,36 +2,86 @@ name: Docs site
 
 on:
   push:
-    branches: [main, dev/v0.5.0]
+    branches: [main, 'dev/**']
     paths: ["apps/docs/**", "docs/**", "tools/linux-desktop/README.md", "tools/omarchy-plugin/README.md", ".github/workflows/docs-site.yml"]
   pull_request:
-    paths: ["apps/docs/**", "docs/**", "tools/linux-desktop/README.md", "tools/omarchy-plugin/README.md", ".github/workflows/docs-site.yml"]
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      run: ${{ steps.diff.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Pull requests run the real job only when a path from the push filter changed; pushes always do.
+      - id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          echo "$changed"
+          if echo "$changed" | grep -Eq '^(apps/docs/|docs/|tools/linux-desktop/README\.md$|tools/omarchy-plugin/README\.md$|\.github/workflows/docs-site\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
   docs-site:
+    needs: changes
     runs-on: ubuntu-latest
     timeout-minutes: 10
     defaults:
       run:
         working-directory: apps/docs
     steps:
+      - name: Skipped, no relevant changes
+        if: needs.changes.outputs.run != 'true'
+        working-directory: .
+        run: echo "No matching paths changed, nothing to check."
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.run == 'true'
         with:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: needs.changes.outputs.run == 'true'
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: apps/docs/package-lock.json
       - run: npm ci
+        if: needs.changes.outputs.run == 'true'
       - run: npm run check
+        if: needs.changes.outputs.run == 'true'
       - run: npm run type-check
+        if: needs.changes.outputs.run == 'true'
+      - run: npm run knip
+        if: needs.changes.outputs.run == 'true'
       - run: npm run build
+        if: needs.changes.outputs.run == 'true'
       # Needs out/ from the build: asserts every page has a meta CSP that covers its inline scripts
       # and that the static header in vercel.json has no 'unsafe-inline' in script-src.
       - run: npm run test:scripts
+        if: needs.changes.outputs.run == 'true'
+        env:
+          REQUIRE_OUT: "1"
+      # Line-coverage floor on the docs scripts (baseline 94.32 without out/, floor = 94 - 2).
+      - run: npm run test:coverage
+        if: needs.changes.outputs.run == 'true'
         env:
           REQUIRE_OUT: "1"

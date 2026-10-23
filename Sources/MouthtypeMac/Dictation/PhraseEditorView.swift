@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 import MouthtypeCore
 
 /// The Transforms page body: a "When you say" card with one row per saved phrase and a New transform row, then an "On selected text"
@@ -85,7 +86,9 @@ struct PhraseEditorView: View {
                     .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 14).padding(.top, 12).padding(.bottom, 4)
             }
             HStack(spacing: 8) {
-                Button { editor.newPhrase(); sheetOpen = true } label: {
+                Button {
+                    editor.newPhrase(); sheetOpen = true
+                } label: {
                     HStack(spacing: 8) {
                         Image(systemName: "plus").font(.system(size: 11, weight: .semibold)).foregroundStyle(DesignPalette.accentText)
                             .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.accentSoft))
@@ -96,12 +99,31 @@ struct PhraseEditorView: View {
                 }
                 .buttonStyle(.plain).disabled(editor.isDirty || editor.loadFailed)
                 .accessibilityLabel("New transform").accessibilityIdentifier("phrase-new")
+                Button("Export CSV…") { exportCSV() }.buttonStyle(.designSecondary)
+                    .disabled(editor.items.isEmpty || editor.loadFailed)
+                    .accessibilityLabel("Export phrases as CSV").accessibilityIdentifier("phrase-export-csv")
                 Spacer(minLength: 8)
                 Text("Whole phrases, any capitalization. Works at every cleanup level except Off.")
                     .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                     .fixedSize(horizontal: false, vertical: true).multilineTextAlignment(.trailing).padding(.trailing, 6)
             }
             .padding(.leading, 8).padding(.trailing, 10).padding(.vertical, 5)
+        }
+    }
+
+    private func exportCSV() {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.nameFieldStringValue = "mouthtype-phrases.csv"
+        panel.message = "Saves every phrase as trigger,expansion."
+        let handle: (NSApplication.ModalResponse) -> Void = { response in
+            guard response == .OK, let url = panel.url else { return }
+            editor.exportCSV(to: url)
+        }
+        if let window = SettingsNSWindow.existing {
+            panel.beginSheetModal(for: window, completionHandler: handle)
+        } else {
+            panel.begin(completionHandler: handle)
         }
     }
 
@@ -139,9 +161,11 @@ struct PhraseEditorView: View {
     }
 
     private var onSelectedText: some View {
-        DesignSection(eyebrow: "On selected text \u{00B7} from the menu bar",
-            footer: "Select text in any app, then choose Transform Selection from the menu bar. You review the result before anything is replaced."
-                + (unavailableReason.map { " \($0)" } ?? "")) {
+        DesignSection(
+            eyebrow: "On selected text \u{00B7} from the menu bar",
+            footer: "Choose Transform Selection from the menu bar. You review the result before anything is replaced."
+                + (unavailableReason.map { " \($0)" } ?? "")
+        ) {
             ForEach(Self.menuTransforms) { transform in
                 HStack(alignment: .center, spacing: 12) {
                     Text(transform.title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
@@ -176,10 +200,11 @@ struct PhraseEditorView: View {
 private extension View {
     /// Fades the last 24 pt to nothing so a clipped line reads as continuing rather than cut off.
     func fadeEdge() -> some View {
-        mask(HStack(spacing: 0) {
-            Rectangle()
-            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 24)
-        })
+        mask(
+            HStack(spacing: 0) {
+                Rectangle()
+                LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing).frame(width: 24)
+            })
     }
 }
 
@@ -195,8 +220,10 @@ struct PhraseFormSheet: View {
                 Text(editor.original == nil ? "New transform" : "Edit transform").designEyebrow()
                 Spacer()
                 if editor.isDirty { Text("Unsaved changes").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2) }
-                DesignCloseButton(label: "Close without saving") { editor.cancel(); close() }
-                    .keyboardShortcut(.cancelAction).accessibilityIdentifier("phrase-close")
+                DesignCloseButton(label: "Close without saving") {
+                    editor.cancel(); close()
+                }
+                .keyboardShortcut(.cancelAction).accessibilityIdentifier("phrase-close")
             }
             Text("Save a transform.").font(DesignFont.serif(24)).foregroundStyle(DesignPalette.ink)
                 .accessibilityAddTraits(.isHeader)
@@ -234,8 +261,12 @@ struct PhraseFormSheet: View {
         .frame(width: 520)
         .background(DesignPalette.bg)
         .confirmationDialog("Delete this transform?", isPresented: $confirmDelete, titleVisibility: .visible) {
-            Button("Delete Transform", role: .destructive) { editor.delete(); if editor.error == nil { close() } }
-        } message: { Text("Your other saved transforms will stay in the library.") }
+            Button("Delete Transform", role: .destructive) {
+                editor.delete(); if editor.error == nil { close() }
+            }
+        } message: {
+            Text("Your other saved transforms will stay in the library.")
+        }
     }
 
     private var footer: some View {
@@ -246,10 +277,14 @@ struct PhraseFormSheet: View {
             }
             Text("\u{2318}\u{21A9} SAVES \u{00B7} ESC CANCELS").designEyebrow().fixedSize(horizontal: false, vertical: true)
             Spacer()
-            Button("Cancel") { editor.cancel(); close() }.buttonStyle(.designSecondary)
-            Button("Save") { editor.save(); if editor.error == nil && !editor.isDirty { close() } }
-                .buttonStyle(.designPrimary).disabled(!editor.canSave)
-                .keyboardShortcut(.return, modifiers: .command)
+            Button("Cancel") {
+                editor.cancel(); close()
+            }.buttonStyle(.designSecondary)
+            Button("Save") {
+                editor.save(); if editor.error == nil && !editor.isDirty { close() }
+            }
+            .buttonStyle(.designPrimary).disabled(!editor.canSave)
+            .keyboardShortcut(.return, modifiers: .command)
         }
     }
 

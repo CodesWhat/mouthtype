@@ -11,6 +11,8 @@ struct CleanupSettings: Equatable, Sendable {
     var slashCommands = true
     var numbers = true
     var style = StyleOptions.formal
+    /// Your own tone and formatting instructions for Thorough cleanup, for every app and site no rule of its own covers. Empty means none.
+    var instructions = ""
 
     var enabled: Bool { level != .off }
 
@@ -24,6 +26,9 @@ struct CleanupSettings: Equatable, Sendable {
         static let slashCommands = "cleanupSlashCommands"
         static let capitalisation = "cleanupCapitalisation"
         static let endingPunctuation = "cleanupEndingPunctuation"
+        /// Absent means off.
+        static let excited = "cleanupExcited"
+        static let instructions = "cleanupInstructions"
     }
 
     static func load(_ defaults: UserDefaults = .standard) -> CleanupSettings {
@@ -35,8 +40,10 @@ struct CleanupSettings: Equatable, Sendable {
             slashCommands: flag(Key.slashCommands), numbers: flag(Key.numbers),
             style: StyleOptions(
                 capitalisation: defaults.string(forKey: Key.capitalisation).flatMap(Capitalisation.init(rawValue:)) ?? .sentence,
-                endingPunctuation: defaults.string(forKey: Key.endingPunctuation).flatMap(EndingPunctuation.init(rawValue:)) ?? .keep
-            )
+                endingPunctuation: defaults.string(forKey: Key.endingPunctuation).flatMap(EndingPunctuation.init(rawValue:)) ?? .keep,
+                excited: defaults.object(forKey: Key.excited) as? Bool ?? false
+            ),
+            instructions: CleanupInstructions.normalize(defaults.string(forKey: Key.instructions)) ?? ""
         )
     }
 
@@ -48,13 +55,20 @@ struct CleanupSettings: Equatable, Sendable {
         defaults.set(slashCommands, forKey: Key.slashCommands)
         defaults.set(style.capitalisation.rawValue, forKey: Key.capitalisation)
         defaults.set(style.endingPunctuation.rawValue, forKey: Key.endingPunctuation)
+        defaults.set(style.excited, forKey: Key.excited)
+        if let instructions = CleanupInstructions.normalize(instructions) {
+            defaults.set(instructions, forKey: Key.instructions)
+        } else {
+            defaults.removeObject(forKey: Key.instructions)
+        }
     }
 
     /// What the text pipeline runs. With cleanup off nothing runs at all, style included.
     var pipelineOptions: TextPipelineOptions {
         guard enabled else { return .none }
-        return TextPipelineOptions(fillers: fillers, spokenCommands: spokenCommands, slashCommands: slashCommands,
-                                   countedLists: spokenCommands, numbers: numbers, style: style)
+        return TextPipelineOptions(
+            fillers: fillers, spokenCommands: spokenCommands, slashCommands: slashCommands,
+            countedLists: spokenCommands, numbers: numbers, style: style)
     }
 
     /// The `style` column value: the preset name, or "custom".

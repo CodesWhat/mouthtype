@@ -40,7 +40,8 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
         1. Output only the edited text. No preamble, no explanation, no quotation marks around it, no code fences and no <text> tags.
         2. Keep names, numbers, dates, URLs, file names, identifiers and code exactly as written.
         3. Keep paragraph breaks and list structure. Do not add information that is not in the text.
-        4. If nothing needs to change, return the text unchanged.
+        4. Reply in the same language as the text. Never translate it.
+        5. If nothing needs to change, return the text unchanged.
         """
     }
 
@@ -76,7 +77,8 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
     /// The text between `open` and `close` when they wrap all of it, and the input didn't start or end with them.
     private static func enclosed(_ text: String, source: String, open: String, close: String) -> String? {
         guard text.count >= open.count + close.count, text.hasPrefix(open), text.hasSuffix(close),
-              !startsWithQuote(source, open), !endsWithQuote(source, close) else { return nil }
+            !startsWithQuote(source, open), !endsWithQuote(source, close)
+        else { return nil }
         let inner = String(text.dropFirst(open.count).dropLast(close.count))
         guard !inner.contains(open), !inner.contains(close) else { return nil }
         return inner
@@ -101,7 +103,8 @@ public enum TextTransform: String, CaseIterable, Sendable, Equatable, Hashable {
         guard text.hasPrefix("```"), text.hasSuffix("```"), !source.hasPrefix("```"), !source.hasSuffix("```") else { return nil }
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         guard lines.count >= 3, lines[lines.count - 1].trimmingCharacters(in: .whitespaces) == "```",
-              lines[0].range(of: #"^```[A-Za-z0-9_+.-]*$"#, options: .regularExpression) != nil else { return nil }
+            lines[0].range(of: #"^```[A-Za-z0-9_+.-]*$"#, options: .regularExpression) != nil
+        else { return nil }
         let inner = lines[1..<(lines.count - 1)].joined(separator: "\n")
         return inner.contains("```") ? nil : inner
     }

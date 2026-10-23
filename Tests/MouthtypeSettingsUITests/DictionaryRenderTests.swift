@@ -27,9 +27,11 @@ import MouthtypeCore
         return Fixture(dir: dir, store: store, editor: editor, suggestions: suggestions, model: model)
     }
 
-    private let sample = [("priya", "Priya"), ("pre ya", "Priya"), ("mouth type", "Mouthtype"), ("mouse type", "Mouthtype"),
-                          ("tahoe", "Tahoe"), ("win", "Nguyen"),
-                          ("a very long phrase that people say out loud before it becomes one name", "Hyprland")]
+    private let sample = [
+        ("priya", "Priya"), ("pre ya", "Priya"), ("mouth type", "Mouthtype"), ("mouse type", "Mouthtype"),
+        ("tahoe", "Tahoe"), ("win", "Nguyen"),
+        ("a very long phrase that people say out loud before it becomes one name", "Hyprland"),
+    ]
 
     @Test func dictionaryPageRendersWordsInLightAndDark() throws {
         let f = try fixture(words: sample)
@@ -76,7 +78,7 @@ import MouthtypeCore
         let word = try #require(f.editor.words.first { $0.written == "Nguyen" })
         #expect(word.warning != nil)
         f.editor.select(word)
-        #expect(f.editor.everydayWarning?.contains("everyday word") == true)
+        #expect(f.editor.everydayWarning?.contains("everyday English word") == true)
         let bitmap = try SettingsRender.render(SpellingWordSheet(editor: f.editor), dark: false, size: NSSize(width: 500, height: 520))
         try SettingsRender.save(bitmap, name: "dictionary-edit-word-warning")
     }

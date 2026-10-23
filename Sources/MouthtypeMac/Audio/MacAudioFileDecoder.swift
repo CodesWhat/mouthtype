@@ -18,13 +18,15 @@ struct MacAudioFileDecoder: AudioFileDecoding {
             let file = try AVAudioFile(forReading: url, commonFormat: .pcmFormatFloat32, interleaved: false)
             let format = file.processingFormat
             guard format.sampleRate.isFinite, format.sampleRate > 0, format.sampleRate <= 384_000,
-                  (1...8).contains(format.channelCount), file.length > 0 else { throw AudioFileError.invalidAudio }
+                (1...8).contains(format.channelCount), file.length > 0
+            else { throw AudioFileError.invalidAudio }
             let duration = Double(file.length) / format.sampleRate
             guard duration.isFinite, duration <= limits.maximumSeconds else { throw AudioFileError.tooLong }
             guard let target = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: 16_000, channels: 1, interleaved: false),
-                  let converter = AVAudioConverter(from: format, to: target),
-                  let input = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: Self.chunkFrames),
-                  let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: Self.chunkFrames) else {
+                let converter = AVAudioConverter(from: format, to: target),
+                let input = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: Self.chunkFrames),
+                let output = AVAudioPCMBuffer(pcmFormat: target, frameCapacity: Self.chunkFrames)
+            else {
                 throw AudioFileError.unsupportedFormat
             }
             converter.downmix = true

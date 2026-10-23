@@ -29,7 +29,7 @@ import MouthtypeCore
     @Test func windowIs900By620WithMinimum860By600() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        let controller = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
+        let controller = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true }, favicons: SettingsRender.favicons)
         let window = try #require(controller.window)
         #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 900, height: 620))
         #expect(window.contentMinSize == NSSize(width: 860, height: 600))
@@ -42,22 +42,22 @@ import MouthtypeCore
     @Test func sidebarIsGlassUnlessReduceTransparencyIsOn() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        let glass = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false })
+        let glass = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false }, favicons: SettingsRender.favicons)
         #expect(glass.window?.contentView is NSGlassEffectView)
         #expect(glass.window?.backgroundColor == .clear)
-        let solid = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
+        let solid = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true }, favicons: SettingsRender.favicons)
         #expect(!(solid.window?.contentView is NSGlassEffectView))
         #expect(solid.window?.contentView is NSHostingView<SettingsView>)
     }
 
     // MARK: Sidebar
 
-    @Test func sidebarListsSixPagesAndTheSettingsModalHasThreeBeforeAdvanced() {
+    @Test func sidebarListsSixPagesAndTheSettingsModalHasFourBeforeAdvanced() {
         #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Dictionary", "Transforms", "Style", "Appearance"])
-        #expect(SettingsModalPage.visible(advanced: false).map(\.title) == ["General", "Mac", "Health"])
-        #expect(SettingsModalPage.visible(advanced: true).map(\.title) == ["General", "Mac", "Health", "Advanced"])
+        #expect(SettingsModalPage.visible(advanced: false).map(\.title) == ["General", "Microphone", "Mac", "Health"])
+        #expect(SettingsModalPage.visible(advanced: true).map(\.title) == ["General", "Microphone", "Mac", "Health", "Advanced"])
         #expect(SettingsPage.allCases.map(\.symbol) == ["house", "chart.bar", "book.closed", "wand.and.stars", "textformat", "capsule"])
-        #expect(SettingsModalPage.allCases.map(\.symbol) == ["gearshape", "laptopcomputer", "heart.text.square", "slider.horizontal.3"])
+        #expect(SettingsModalPage.allCases.map(\.symbol) == ["gearshape", "mic", "laptopcomputer", "heart.text.square", "slider.horizontal.3"])
     }
 
     @Test func advancedSwitchPersistsAndAddsThePage() throws {
@@ -81,7 +81,7 @@ import MouthtypeCore
     @Test func nestedEditorsAttachToTheTopmostSheet() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        let controller = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
+        let controller = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true }, favicons: SettingsRender.favicons)
         let window = try #require(controller.window)
         #expect(controller.topmostWindow === window)
         let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
@@ -188,8 +188,10 @@ import MouthtypeCore
             let (view, _) = SettingsRender.hostModal(model: model, actions: actions(), dark: dark)
             let scroll = try #require(descendants(of: view).compactMap { $0 as? NSScrollView }.first)
             let document = try #require(scroll.documentView)
-            #expect(document.frame.height <= scroll.contentView.bounds.height + 1,
-                    "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
+            print("MEASURED General dark=\(dark) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height)")
+            #expect(
+                document.frame.height <= scroll.contentView.bounds.height + 1,
+                "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
         }
     }
 
@@ -198,8 +200,10 @@ import MouthtypeCore
     private static let longMic = "Scott’s AirPods Pro 2 – Hands-Free Microphone (Bluetooth)"
 
     private func longMicModel(_ defaults: UserDefaults) -> SettingsModel {
-        let devices = [MicrophoneDevice(uid: "long", name: Self.longMic, input: .init(sampleRate: 16_000, channels: 1, id: 7)),
-                       MicrophoneDevice(uid: "mac", name: "MacBook Pro Microphone", input: .init(sampleRate: 48_000, channels: 1, id: 8))]
+        let devices = [
+            MicrophoneDevice(uid: "long", name: Self.longMic, input: .init(sampleRate: 16_000, channels: 1, id: 7)),
+            MicrophoneDevice(uid: "mac", name: "MacBook Pro Microphone", input: .init(sampleRate: 48_000, channels: 1, id: 8)),
+        ]
         try? PreferredMicrophone.save(.init(uid: "long", name: Self.longMic), in: defaults)
         let mic = MicrophoneSettingsModel(defaults: defaults, devices: { devices }, defaultInput: { 8 })
         return SettingsModel(defaults: defaults, microphone: mic)
@@ -222,19 +226,22 @@ import MouthtypeCore
     }
 
     @Test(arguments: [NSSize(width: 760, height: 540)])
-    func longMicrophoneNameKeepsGeneralInsideTheModal(size: NSSize) throws {
+    func longMicrophoneNameKeepsMicrophonePageInsideTheModal(size: NSSize) throws {
         let name = "SettingsLayoutLong-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
         FontRegistry.registerBundledFonts()
         let model = longMicModel(defaults)
-        model.modalPage = .general
+        model.modalPage = .microphone
         let (view, window) = SettingsRender.hostModal(model: model, actions: actions(), dark: false)
         let scroll = try #require(descendants(of: view).compactMap { $0 as? NSScrollView }.first)
         let document = try #require(scroll.documentView)
-        print("MEASURED General \(Int(size.width))x\(Int(size.height)) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height) docWidth=\(document.frame.width) viewport=\(scroll.contentView.bounds.width)")
-        #expect(document.frame.height <= scroll.contentView.bounds.height + 1,
-                "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
+        print(
+            "MEASURED Microphone \(Int(size.width))x\(Int(size.height)) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height) docWidth=\(document.frame.width) viewport=\(scroll.contentView.bounds.width)"
+        )
+        #expect(
+            document.frame.height <= scroll.contentView.bounds.height + 1,
+            "Microphone needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
         #expect(document.frame.width <= scroll.contentView.bounds.width + 1)
         #expect(textsAreUntruncated(in: view).isEmpty, "\(textsAreUntruncated(in: view))")
         // The design popup is drawn rather than an NSPopUpButton, so check the model and let the width and untruncated checks above cover layout.
@@ -279,8 +286,8 @@ import MouthtypeCore
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
         model.websiteDomain = "slack"
-        let first = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
-        let second = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false })
+        let first = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true }, favicons: SettingsRender.favicons)
+        let second = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false }, favicons: SettingsRender.favicons)
         _ = (first, second)
         #expect(model.websiteDomain == "slack")
     }
@@ -292,16 +299,20 @@ import MouthtypeCore
         let directory = root.appendingPathComponent("Sources/MouthtypeMac/Settings")
         let files = try FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0.hasSuffix(".swift") }
         let source = try files.map { try String(contentsOf: directory.appendingPathComponent($0), encoding: .utf8) }.joined()
-        let identifiers = ["settings-setup", "settings-shortcut", "settings-recording-mode",
-                           "settings-quiet-audio", "settings-live-preview", "settings-microphone", "settings-microphone-refresh",
-                           "settings-audio-age", "settings-audio-size", "settings-font-overrides", "settings-font-reset",
-                           "style-website-domain"]
+        let identifiers = [
+            "settings-setup", "settings-shortcut", "settings-recording-mode",
+            "settings-quiet-audio", "settings-live-preview", "settings-microphone", "settings-microphone-refresh",
+            "settings-audio-age", "settings-audio-size", "settings-font-overrides", "settings-font-reset",
+            "style-website-domain",
+        ]
         for id in identifiers { #expect(source.contains("\"\(id)\""), "missing \(id)") }
-        let titles = ["Microphone", "Shortcut", "Recording behavior", "Cleanup", "Quiet other audio", "Live words",
-                      "Recording sounds", "Launch at login", "Updates", "Remove fillers", "Spoken commands and lists", "Format numbers", "Learn from my corrections",
-                      "Lowercase sentence starts", "Drop the final full stop", "Edit dictionary file…", "Pill style", "Pill size",
-                      "Text font", "Choose Font…", "Override individual fonts", "Keep completed recordings",
-                      "Completed audio size limit", "Download…", "Check for Updates…", "Set Up Mouthtype…", "Transcribe a file…"]
+        let titles = [
+            "Microphone", "Shortcut", "Recording behavior", "Cleanup", "Quiet other audio", "Live words",
+            "Recording sounds", "Launch at login", "Updates", "Remove fillers", "Spoken commands and lists", "Format numbers", "Learn from my corrections",
+            "Lowercase sentence starts", "Drop the final full stop", "Edit dictionary file…", "Pill style", "Pill size",
+            "Text font", "Choose Font…", "Override individual fonts", "Keep completed recordings",
+            "Completed audio size limit", "Download…", "Check for Updates…", "Set Up Mouthtype…", "Transcribe a file…",
+        ]
         for title in titles { #expect(source.contains("\"\(title)\""), "missing \(title)") }
     }
 }

@@ -157,7 +157,8 @@ public struct CountedLists: Sendable {
             start = word.start - 1
             endChar = word.end + 1
         } else if lw == "first", w + 2 < words.count, words[w + 1].lower == "of", words[w + 2].lower == "all",
-                  gapIsSpaces(chars, words, w, w + 1), gapIsSpaces(chars, words, w + 1, w + 2) {
+            gapIsSpaces(chars, words, w, w + 1), gapIsSpaces(chars, words, w + 1, w + 2)
+        {
             family = "ordinal"; value = 1; lastWord = w + 2; endChar = words[w + 2].end
         } else if Self.prefixes.contains(lw), w + 1 < words.count, gapIsSpaces(chars, words, w, w + 1) {
             let next = words[w + 1]
@@ -198,7 +199,8 @@ public struct CountedLists: Sendable {
         let nextChar = chars[after]
         guard TextScan.isWordChar(nextChar) || "\"\u{201C}'(".contains(nextChar) else { return nil }
         if !punctuated, let nextWord = words.first(where: { $0.start >= after }), nextWord.start == after,
-           Self.unpunctuatedBlockedFollowers.contains(nextWord.lower) {
+            Self.unpunctuatedBlockedFollowers.contains(nextWord.lower)
+        {
             return nil
         }
 
@@ -372,7 +374,8 @@ public struct CountedLists: Sendable {
             // Capitalise the item's first word.
             let nextWord = m.lastWord + 1
             if nextWord < words.count, TextScan.onlySpaces(chars, m.end, words[nextWord].start),
-               let up = TextScan.capitalized(chars, words[nextWord]) {
+                let up = TextScan.capitalized(chars, words[nextWord])
+            {
                 rangeEnd = words[nextWord].end
                 cutEnd = rangeEnd
                 replacement += up

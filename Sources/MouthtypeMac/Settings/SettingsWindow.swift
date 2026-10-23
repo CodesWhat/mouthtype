@@ -11,22 +11,28 @@ import MouthtypeCore
     private var actions: SettingsActions
     private let reduceTransparency: () -> Bool
     private let fullKeyboardAccess: @MainActor () -> Bool
+    private let favicons: SiteFaviconStore
     private let notifications: NotificationCenter
     private nonisolated(unsafe) var transparencyObserver: NSObjectProtocol?
     private var presentedThisTurn = false
     var isObservingTransparency: Bool { transparencyObserver != nil }
 
-    init(model: SettingsModel, actions: SettingsActions = SettingsActions(),
-         reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
-         fullKeyboardAccess: @escaping @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess,
-         notifications: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+    init(
+        model: SettingsModel, actions: SettingsActions = SettingsActions(),
+        reduceTransparency: @escaping () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency },
+        fullKeyboardAccess: @escaping @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess,
+        notifications: NotificationCenter = NSWorkspace.shared.notificationCenter,
+        favicons: SiteFaviconStore = .shared
+    ) {
         self.model = model
         self.fullKeyboardAccess = fullKeyboardAccess
+        self.favicons = favicons
         self.actions = actions
         self.reduceTransparency = reduceTransparency
         self.notifications = notifications
         refreshDiagnostics = actions.refreshDiagnostics
-        let window = SettingsNSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize),
+        let window = SettingsNSWindow(
+            contentRect: NSRect(origin: .zero, size: Self.contentSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
         window.title = "Mouthtype Settings"
         window.titlebarAppearsTransparent = true
@@ -50,7 +56,7 @@ import MouthtypeCore
     private func applyContent() {
         guard let window else { return }
         let solid = reduceTransparency()
-        let hosting = NSHostingView(rootView: SettingsView(model: model, actions: actions, solid: solid, fullKeyboardAccess: fullKeyboardAccess))
+        let hosting = NSHostingView(rootView: SettingsView(model: model, actions: actions, solid: solid, fullKeyboardAccess: fullKeyboardAccess, favicons: favicons))
         hosting.sizingOptions = []
         if solid {
             window.backgroundColor = .windowBackgroundColor
@@ -229,7 +235,8 @@ final class SettingsNSWindow: NSWindow {
         var target = responder as? NSView
         if let editor = responder as? NSText, editor.isFieldEditor, let owner = editor.delegate as? NSView { target = owner }
         guard let view = target, view.enclosingScrollView != nil,
-              view.convert(view.bounds, to: nil).minX >= SettingsTheme.sidebarWidth else { return }
+            view.convert(view.bounds, to: nil).minX >= SettingsTheme.sidebarWidth
+        else { return }
         view.scrollToVisible(view.bounds.insetBy(dx: 0, dy: -12))
     }
 }

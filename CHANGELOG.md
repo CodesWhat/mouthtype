@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-23
+
+### Added
+
+- Dictation in the 25 languages Parakeet v3 covers. Auto-detect is the default and picks each take's language from among English and the languages in your Mac's preferred list. You can also pick one language in Settings > General. Thorough cleanup covers English, German, Spanish, French, Italian, Portuguese, Dutch, Polish and Russian. Other languages get Basic cleanup. Fillers, spoken commands, slash commands, counted lists, self-correction, number formatting and swearing removal are English only. See [`docs/LANGUAGES.md`](docs/LANGUAGES.md).
+- A Mouse button setting (None, Middle, Back or Forward) in Settings > General that dictates like the shortcut, in hold or toggle mode.
+- Export the dictionary as CSV, and import Wispr Flow CSV and VoiceInk JSON dictionaries with a preview before anything is saved.
+- A Models page in Set Up Mouthtype that puts every model download in one place, and a last card to get names right.
+- A warning card when a take of a second or more heard nothing, naming the microphone that was recording, and an optional test take on Setup's last card. The test take never pastes and saves no transcript or audio.
+- Each website in the Style lists shows its own favicon.
+- A Microphone page in Settings, right after General, for the microphone picker and priority list.
+- A Homebrew cask: `brew install --cask codeswhat/tap/mouthtype`.
+- Instructions for Thorough cleanup. Write up to 500 characters on the Cleanup tab for every app, or on a single app or website row, such as "Keep it warm and short". They change tone and formatting only. The checks Thorough always runs still throw out any result that changes a name, number, negation or the language. Fast ignores them.
+- A Start from menu beside each instructions box with three ready-made instructions: Slack, Keep my wording and Code comments. Choosing one fills the box for you to edit, and nothing is saved until you choose Save.
+- An Excited tone beside Formal, Casual and Very casual. A short message ends with an exclamation mark, and Thorough uses them where you sound enthusiastic.
+
+### Changed
+
+- Release builds run in a repeatable mode with a fixed scratch path, and the manifest records it with the toolchain versions. See [`docs/REPEATABLE-BUILD.md`](docs/REPEATABLE-BUILD.md).
+- Names on screen is now on by default. It still only acts when Boost saved words is on (off by default). If you turned it off before, it stays off. It also reads names from wider Accessibility text on screen.
+
 ## [0.5.0] - 2026-10-21
 
 ### Added
@@ -32,7 +53,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Fn remap: repairs are bounded and re-verified against the live HID mapping, and the crash guard restores your own Fn mapping.
-- SIGTERM and SIGINT go through the normal quit path, drafts are kept on a signal quit and aren't restored at launch, and open-URL events wait for launch to finish.
+- SIGTERM and SIGINT go through the normal quit path, drafts saved on a signal quit are offered back on the recovery card at the next launch, and open-URL events wait for launch to finish.
 - Paste is refused when the focused element belongs to another process, and the paste owner is judged by AX application instead of raw pid.
 - An undone take is archived before waiting on the earlier job.
 - Completed-audio listing ignores a stale stamped expiry.
@@ -109,7 +130,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/CodesWhat/mouthtype/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/CodesWhat/mouthtype/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/CodesWhat/mouthtype/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/CodesWhat/mouthtype/compare/v0.2.0...v0.3.0

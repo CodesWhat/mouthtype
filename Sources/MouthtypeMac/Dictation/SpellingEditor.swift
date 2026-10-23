@@ -18,6 +18,7 @@ import Observation
     private(set) var loadFailed = false
     private(set) var importPreview: SpellingImportPreview?
     private(set) var importFileName = ""
+    private(set) var importSource = SpellingImportSource.mouthtype
     private(set) var importError: String?
     private(set) var importMessage: String?
     var showingImport = false
@@ -25,30 +26,40 @@ import Observation
     @ObservationIgnored var onLibraryChanged: @MainActor () -> Void = {}
     var canImport: Bool { !isDirty && !loadFailed && importError == nil && importPreview?.canImport == true }
 
-    func previewImport(data: Data, fileName: String) {
+    func previewImport(data: Data, fileName: String, source: SpellingImportSource = .mouthtype) {
         guard !isDirty, !loadFailed else { return }
         cancelImport()
         importMessage = nil
         importFileName = fileName
+        importSource = source
         showingImport = true
-        do { importPreview = try store.previewImport(data) }
-        catch { importError = error.localizedDescription }
+        do { importPreview = try store.previewImport(data, source: source) } catch { importError = error.localizedDescription }
     }
 
-    func previewImport(fileURL: URL) {
+    func previewImport(fileURL: URL, source: SpellingImportSource = .mouthtype) {
         guard !isDirty, !loadFailed else { return }
         do {
             let file = try FileHandle(forReadingFrom: fileURL)
             defer { try? file.close() }
             let data = try file.read(upToCount: SpellingCSV.maximumBytes + 1) ?? Data()
-            previewImport(data: data, fileName: fileURL.lastPathComponent)
+            previewImport(data: data, fileName: fileURL.lastPathComponent, source: source)
         } catch {
             cancelImport()
             importMessage = nil
             importFileName = fileURL.lastPathComponent
+            importSource = source
             importError = error.localizedDescription
             showingImport = true
         }
+    }
+
+    /// Writes the Dictionary to `url` as `heard,written` CSV, the headers Import CSV reads, and says how many rows went out.
+    func exportCSV(to url: URL) {
+        guard !loadFailed else { return }
+        do {
+            try Data(SpellingCSV.export(items).utf8).write(to: url, options: .atomic)
+            importMessage = "Exported \(items.count) spelling\(items.count == 1 ? "" : "s")."
+        } catch { importMessage = "Could not export: \(error.localizedDescription)" }
     }
 
     func cancelImport() {

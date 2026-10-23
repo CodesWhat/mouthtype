@@ -27,7 +27,7 @@ The editor rejects blank or duplicate rules, keeps your other entries, and holds
 
 - It uses up to 200 saved words, starred ones first.
 - The first time you use it Mouthtype downloads an extra speech model of about 100 MB, and dictation never waits for it.
-- It's English, so it helps English names best.
+- It's an English model, so it helps English names best.
 - If it can't load or answer in time, you get the ordinary transcript.
 
 ## Suggestions

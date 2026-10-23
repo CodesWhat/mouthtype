@@ -16,7 +16,10 @@ import SwiftUI
         let now = Date()
         let samples: [(Double, String, String?)] = [
             (1, "Can you move the review to Thursday afternoon? I have the planning call until two.", "Slack"),
-            (9, "Remember to send Priya the updated agenda before the end of the day, and loop in Hove on the build status so nobody is surprised tomorrow morning when the release notes go out.", "Mail"),
+            (
+                9, "Remember to send Priya the updated agenda before the end of the day, and loop in Hove on the build status so nobody is surprised tomorrow morning when the release notes go out.",
+                "Mail"
+            ),
             (26, "Pick up oat milk, the good bread, and those batteries.", "Notes"),
         ]
         for (minutesAgo, text, app) in samples {
@@ -25,8 +28,11 @@ import SwiftUI
         }
         let home = HomeLogModel(store: store)
         await home.loadText()
-        home.attach([RecoverableDictation(id: "sample-lost", startedAt: now.addingTimeInterval(-14 * 60),
-            audioURL: URL(fileURLWithPath: "/tmp/sample.wav"), seconds: 7, isPartial: false)])
+        home.attach([
+            RecoverableDictation(
+                id: "sample-lost", startedAt: now.addingTimeInterval(-14 * 60),
+                audioURL: URL(fileURLWithPath: "/tmp/sample.wav"), seconds: 7, isPartial: false)
+        ])
         #expect(home.takes.count == 4)
         #expect(home.takes.compactMap(\.text).contains(samples[1].1))
         let model = SettingsModel(defaults: defaults, home: home)

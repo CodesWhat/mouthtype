@@ -65,8 +65,10 @@ import Testing
         let suite = "priority-settings-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        let devices = [MicrophoneDevice(uid: "a", name: "A", input: .init(sampleRate: 48_000, channels: 1, id: 1)),
-                       MicrophoneDevice(uid: "b", name: "B", input: .init(sampleRate: 48_000, channels: 1, id: 2))]
+        let devices = [
+            MicrophoneDevice(uid: "a", name: "A", input: .init(sampleRate: 48_000, channels: 1, id: 1)),
+            MicrophoneDevice(uid: "b", name: "B", input: .init(sampleRate: 48_000, channels: 1, id: 2)),
+        ]
         var changed = 0
         let model = MicrophoneSettingsModel(defaults: defaults, devices: { devices }, defaultInput: { 1 }, onChanged: { changed += 1 })
         model.choose(.priorityList)
