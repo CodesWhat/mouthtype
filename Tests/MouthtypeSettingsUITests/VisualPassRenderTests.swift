@@ -170,8 +170,9 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
             deviceTransport: "usb", firstSampleMs: 0, firstNonzeroMs: nil, captureStartMs: 0, audioMs: 1_000)
     }
 
+    /// A Setup model with every requirement passing. On the Models page until `finished`, which is Continue.
     private func readyModel(
-        defaults: UserDefaults, take: SetupTestTake
+        defaults: UserDefaults, take: SetupTestTake, listing: VisualListing? = nil, finished: Bool = true
     ) async throws -> SetupModel {
         let diagnostics = SettingsDiagnostics()
         diagnostics.microphoneStatus = .authorized
@@ -181,22 +182,27 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
         await host.load()
         let mic = MicrophonePreparation()
         _ = try await mic.prepare { true }
-        let listing = VisualListing(models: [
-            CleanupModelStatus(level: .light, name: "S1-mini by Superwhisper", sizeMB: 1447, status: .done, selected: true),
-            CleanupModelStatus(level: .medium, name: "Gemma 4 E4B", sizeMB: 5150, status: .available, selected: false),
-        ])
+        let listing =
+            listing
+            ?? VisualListing(models: [
+                CleanupModelStatus(level: .light, name: "S1-mini by Superwhisper", sizeMB: 1447, status: .done, selected: true),
+                CleanupModelStatus(level: .medium, name: "Gemma 4 E4B", sizeMB: 5150, status: .available, selected: false),
+            ])
         let model = SetupModel(diagnostics: diagnostics, engine: host, microphone: mic, cleanup: listing, testTake: take, defaults: defaults)
         #expect(model.readiness.step == .ready)
+        if finished { model.finishModels() }
+        #expect(model.step == (finished ? .ready : .models))
         return model
+    }
+
+    private func take(level: Float, text: String, sleep: @escaping @Sendable (Duration) async throws -> Void = { _ in await Task.yield() }) -> SetupTestTake {
+        SetupTestTake(
+            capture: VisualCapture(audio: samples(level)), engine: VisualTakeEngine(text: text), readLevel: { -20 },
+            language: { .english }, sleep: sleep)
     }
 
     @Test func setupLastCard() async throws {
         let size = SetupWindow.contentSize
-        func take(level: Float, text: String, sleep: @escaping @Sendable (Duration) async throws -> Void = { _ in await Task.yield() }) -> SetupTestTake {
-            SetupTestTake(
-                capture: VisualCapture(audio: samples(level)), engine: VisualTakeEngine(text: text), readLevel: { -20 },
-                language: { .english }, sleep: sleep)
-        }
         func finish(_ take: SetupTestTake) async { for _ in 0..<2_000 where take.isBusy { await Task.yield() } }
 
         let name = "VisualPassSetup-\(UUID().uuidString)"
@@ -204,12 +210,12 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
         defer { defaults.removePersistentDomain(forName: name) }
         FontRegistry.registerBundledFonts()
 
-        // Test take: idle, recording, spoken, silent. Names offer stays in its default state throughout.
+        // The final card's test take: idle, recording, spoken, silent.
         let idle = take(level: 0.3, text: "")
         let idleModel = try await readyModel(defaults: defaults, take: idle)
-        try both("e1-setup-take-idle") { try setupBitmap(idleModel, dark: $0, size: size) }
+        try both("e2-setup-take-idle") { try setupBitmap(idleModel, dark: $0, size: size) }
         // The real window is fixed at `contentSize`; this taller frame shows whatever the last card holds below it.
-        try both("e1b-setup-ready-tall") { try setupBitmap(idleModel, dark: $0, size: NSSize(width: size.width, height: 800)) }
+        try both("e2b-setup-ready-tall") { try setupBitmap(idleModel, dark: $0, size: NSSize(width: size.width, height: 800)) }
 
         let ticks = TickGate(limit: 6)
         let recording = take(level: 0.3, text: "", sleep: { _ in try await ticks.tick() })
@@ -217,31 +223,52 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
         recording.start()
         for _ in 0..<2_000 where !ticks.reachedLimit { await Task.yield() }
         #expect(recording.state == .recording)
-        try both("e2-setup-take-recording") { try setupBitmap(recordingModel, dark: $0, size: size) }
+        try both("e3-setup-take-recording") { try setupBitmap(recordingModel, dark: $0, size: size) }
         await recording.cancel()
 
         let spoken = take(level: 0.3, text: "Send the mockups to Sean before Friday.")
         let spokenModel = try await readyModel(defaults: defaults, take: spoken)
         spoken.start()
         await finish(spoken)
-        try both("e3-setup-take-spoken") { try setupBitmap(spokenModel, dark: $0, size: size) }
+        try both("e4-setup-take-spoken") { try setupBitmap(spokenModel, dark: $0, size: size) }
 
         let silent = take(level: 0, text: "")
         let silentModel = try await readyModel(defaults: defaults, take: silent)
         silent.start()
         await finish(silent)
-        try both("e4-setup-take-silent") { try setupBitmap(silentModel, dark: $0, size: size) }
+        try both("e5-setup-take-silent") { try setupBitmap(silentModel, dark: $0, size: size) }
+    }
 
-        // Get names right: before and after turning it on (its own defaults, so Boost starts off).
-        let namesName = "VisualPassNames-\(UUID().uuidString)"
-        let namesDefaults = try #require(UserDefaults(suiteName: namesName))
-        defer { namesDefaults.removePersistentDomain(forName: namesName) }
-        let names = try await readyModel(defaults: namesDefaults, take: take(level: 0.3, text: ""))
-        #expect(names.offersNames)
-        try both("e5-setup-names-before") { try setupBitmap(names, dark: $0, size: size) }
-        names.turnOnNames()
-        #expect(names.namesChoice == .turnedOn)
-        try both("e6-setup-names-after") { try setupBitmap(names, dark: $0, size: size) }
+    @Test func setupModelsPage() async throws {
+        let size = SetupWindow.contentSize
+        let name = "VisualPassModels-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        FontRegistry.registerBundledFonts()
+        // Names reads the process-wide boost status; put it back after.
+        defer { VocabularyBoostStatusCenter.set(.off) }
+
+        // Mixed states: speech Ready, Fast downloading with progress, Thorough still a Download button, Names Ready.
+        var fast = ModelDownloadProgress(hubCompletedUnits: 612_000_000, hubTotalUnits: 1_447_000_000)
+        fast.secondsRemaining = 95
+        let listing = VisualListing(models: [
+            CleanupModelStatus(level: .light, name: "S1-mini by Superwhisper", sizeMB: 1447, status: .downloading(fast), selected: true),
+            CleanupModelStatus(level: .medium, name: "Gemma 4 E4B", sizeMB: 5150, status: .available, selected: false),
+        ])
+        VocabularyBoostSetting.set(true, in: defaults)
+        VocabularyBoostStatusCenter.set(.ready)
+        let mixed = try await readyModel(defaults: defaults, take: take(level: 0.3, text: ""), listing: listing, finished: false)
+        let states = mixed.modelEntries.map(\.state)
+        guard case .ready = states[0], case .downloading = states[1], case .available = states[2], case .ready = states[3] else {
+            Issue.record("unexpected model states \(states)")
+            return
+        }
+        try both("e1-setup-models-mixed") { try setupBitmap(mixed, dark: $0, size: size) }
+        // The window scrolls its card at `contentSize`, so the Names row sits below the fold. The list alone shows all four rows.
+        let list = SetupModelsList(
+            entries: mixed.modelEntries, retrySpeech: {}, downloadNames: {}, downloadCleanup: { _ in }, cancelCleanup: { _ in }
+        ).padding(24)
+        try both("e1b-setup-models-list-all-rows") { try SettingsRender.render(list, dark: $0, size: NSSize(width: 560, height: 430)) }
     }
 
     // MARK: f, g. Style page
@@ -252,7 +279,31 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
         }
     }
 
+    /// Site rows read the favicon cache on disk and fetch over the network on a miss. Seed a fresh miss for every site a Style render can
+    /// show so nothing is fetched, plus any fake icons, and return what was created so the caller can remove it.
+    private func seedFavicons(icons: [(host: String, data: Data)] = [], misses: [String] = []) throws -> [URL] {
+        let directory = SiteFaviconStore.defaultDirectory
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        var created: [URL] = []
+        for (host, data) in icons {
+            let url = directory.appendingPathComponent(host + ".icon")
+            try data.write(to: url)
+            created.append(url)
+        }
+        let builtIn = ["linkedin.com", "teams.microsoft.com", "mail.google.com", "outlook.office.com", "linear.app"]
+        for host in builtIn + misses {
+            let icon = directory.appendingPathComponent(host + ".icon")
+            let miss = directory.appendingPathComponent(host + ".miss")
+            guard !FileManager.default.fileExists(atPath: icon.path), !FileManager.default.fileExists(atPath: miss.path) else { continue }
+            try Data().write(to: miss)
+            created.append(miss)
+        }
+        return created
+    }
+
     @Test func cleanupInstructions() throws {
+        let seeded = try seedFavicons()
+        defer { seeded.forEach { try? FileManager.default.removeItem(at: $0) } }
         try throwaway { defaults in
             let model = SettingsModel(defaults: defaults)
             let nearCap = String(
@@ -288,6 +339,67 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
             try both("g-style-excited-tone") {
                 try SettingsRender.render(stylePage(model, .context(.personal)), dark: $0, size: NSSize(width: 900, height: 1500))
             }
+        }
+    }
+
+    // MARK: i. Website favicons
+
+    private func fakeFavicon(_ colour: NSColor, letter: String) throws -> Data {
+        let image = NSImage(size: NSSize(width: 64, height: 64), flipped: false) { rect in
+            colour.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 14, yRadius: 14).fill()
+            let text = NSAttributedString(
+                string: letter, attributes: [.font: NSFont.boldSystemFont(ofSize: 40), .foregroundColor: NSColor.white])
+            let box = text.size()
+            text.draw(at: NSPoint(x: rect.midX - box.width / 2, y: rect.midY - box.height / 2))
+            return true
+        }
+        let tiff = try #require(image.tiffRepresentation)
+        return try #require(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]))
+    }
+
+    @Test func websiteRulesWithFavicons() async throws {
+        // Fake icons for hosts that cannot exist, and a fresh miss for one more so it keeps the globe. Nothing is fetched.
+        let icons = [
+            ("docs.visual-pass.example", NSColor.systemIndigo, "D"), ("mail.visual-pass.example", NSColor.systemOrange, "M"),
+            ("tracker.visual-pass.example", NSColor.systemTeal, "T"),
+        ]
+        let missing = "plain.visual-pass.example"
+        let created = try seedFavicons(icons: icons.map { ($0.0, try fakeFavicon($0.1, letter: $0.2)) }, misses: [missing])
+        defer { created.forEach { try? FileManager.default.removeItem(at: $0) } }
+
+        try throwaway { defaults in
+            let model = SettingsModel(defaults: defaults)
+            for host in icons.map(\.0) + [missing] { model.addContextSite(.work, domain: host) }
+            model.setWebsiteInstructions(domain: icons[0].0, instructions: "Put action items in a bullet list.")
+            let size = NSSize(width: 900, height: 900)
+            for dark in [false, true] {
+                let (view, window) = SettingsRender.host(stylePage(model, .context(.work)), dark: dark, size: size)
+                // The icon loads in a task after the first layout; let it land before drawing.
+                for _ in 0..<20 {
+                    RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+                    view.layoutSubtreeIfNeeded()
+                }
+                let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+                view.cacheDisplay(in: view.bounds, to: bitmap)
+                #expect(!window.isVisible)
+                try write(bitmap, "i-website-rules-favicons-\(dark ? "dark" : "light")")
+            }
+        }
+    }
+
+    // MARK: j. Start from… presets
+
+    @Test func startFromPresetButton() throws {
+        let chosen = try #require(CleanupInstructionPresets.all.first)
+        for (label, saved) in [("empty", nil), ("preset-text", StyleInstructionsEditor.draft(startingFrom: chosen))] as [(String, String?)] {
+            let content = DesignCard {
+                StyleInstructionsEditor(
+                    saved: saved, placeholder: StyleContextID.work.instructionsExample, label: "Instructions", identifier: "visual-pass-preset-\(label)"
+                ) { _ in }
+                .padding(.horizontal, 14).padding(.vertical, 12)
+            }.padding(20)
+            try both("j-start-from-presets-\(label)") { try SettingsRender.render(content, dark: $0, size: NSSize(width: 720, height: 220)) }
         }
     }
 
