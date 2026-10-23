@@ -12,6 +12,14 @@ An Apple Silicon Mac running macOS 26 or later. That's the only supported setup 
 2. Drag Mouthtype.app into Applications. If an older Mouthtype is running, quit it first.
 3. Open Mouthtype from Applications.
 
+Or install it with Homebrew from the CodesWhat tap:
+
+```sh
+brew install --cask codeswhat/tap/mouthtype
+```
+
+It installs the same signed, notarized build. Mouthtype updates itself from the menu, so you don't need `brew upgrade`. `brew uninstall --zap --cask mouthtype` also removes its settings and history.
+
 > [!NOTE]
 > The app is Developer ID signed and notarized. If macOS rejects it anyway, note the exact message. Don't turn off Gatekeeper.
 

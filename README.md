@@ -91,6 +91,8 @@ The Mac app is at 0.5.0, a stable release. It supports **Apple Silicon and macOS
 3. Grant Microphone and Accessibility access when prompted. The speech model and a small speech detector download on first launch.
 4. Click an ordinary text field, hold **Fn**, speak, then release.
 
+Prefer Homebrew? `brew install --cask codeswhat/tap/mouthtype` installs the same signed DMG build from the CodesWhat tap. The app still updates itself.
+
 Hold Fn, double-tap Fn, or use Fn+Space. **Control+Command+V** pastes the last delivered take and **Control+Command+C** copies it. A single recording stops after 20 minutes, with a warning at 19.
 
 See the [install notes](https://docs.mouthtype.app/getting-started/install-notes/) and the [getting-started guide](https://docs.mouthtype.app/getting-started/) for the full walkthrough. What changed in each release is in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).

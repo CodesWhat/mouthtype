@@ -131,6 +131,10 @@
 .start-aside .text-link {
   font-size: 13px;
 }
+.start-aside code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
 .help-section {
   padding: 55px 0 20px;
   border-top: 1px solid var(--ink);
