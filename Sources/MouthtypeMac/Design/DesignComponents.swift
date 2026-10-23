@@ -111,6 +111,28 @@ struct DesignRow<Controls: View>: View {
     }
 }
 
+/// A small info button that opens a popover with detail too long for a row description.
+struct DesignInfoButton: View {
+    let title: String
+    let text: String
+    @State private var shown = false
+
+    var body: some View {
+        Button {
+            shown.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+        }
+        .buttonStyle(.plain).foregroundStyle(DesignPalette.ink2)
+        .accessibilityLabel("About \(title)")
+        .popover(isPresented: $shown, arrowEdge: .bottom) {
+            Text(text).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 280, alignment: .leading).padding(12)
+        }
+    }
+}
+
 struct DesignPageHeader<Trailing: View>: View {
     let title: String
     var summary: String?
@@ -176,7 +198,9 @@ struct DesignSwitchStyle: ToggleStyle {
 
     func makeBody(configuration: Configuration) -> some View {
         let width: CGFloat = compact ? 36 : 42, height: CGFloat = compact ? 20 : 24, knob = height - 4
-        Button { configuration.isOn.toggle() } label: {
+        Button {
+            configuration.isOn.toggle()
+        } label: {
             ZStack(alignment: configuration.isOn ? .trailing : .leading) {
                 if configuration.isOn {
                     Capsule().fill(DesignPalette.accentMark)
@@ -247,7 +271,9 @@ struct DesignSegmented<Value: Hashable>: View {
         HStack(spacing: 2) {
             ForEach(choices) { choice in
                 let selected = choice.value == selection
-                Button { selection = choice.value } label: {
+                Button {
+                    selection = choice.value
+                } label: {
                     HStack(spacing: 6) {
                         if let dot = choice.dot { Circle().fill(dot).frame(width: 9, height: 9) }
                         Text(choice.label).font(DesignFont.sans(DesignFont.detail, selected ? .medium : .regular))

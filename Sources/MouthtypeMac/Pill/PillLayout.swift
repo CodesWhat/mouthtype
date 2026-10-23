@@ -94,14 +94,17 @@ struct PillAssets {
     static func loadHiFi(bundle: Bundle = .module) throws -> PillAssets {
         func url(_ file: String) throws -> URL {
             let name = file as NSString
-            guard let found = bundle.url(
-                forResource: name.deletingPathExtension, withExtension: name.pathExtension, subdirectory: hifiDirectory
-            ) else { throw LoadError.missing(file) }
+            guard
+                let found = bundle.url(
+                    forResource: name.deletingPathExtension, withExtension: name.pathExtension, subdirectory: hifiDirectory
+                )
+            else { throw LoadError.missing(file) }
             return found
         }
         func image(_ file: String) throws -> CGImage {
             guard let source = CGImageSourceCreateWithURL(try url(file) as CFURL, nil),
-                  let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw LoadError.undecodable(file) }
+                let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+            else { throw LoadError.undecodable(file) }
             return image
         }
         let layout = try JSONDecoder().decode(PillLayout.self, from: Data(contentsOf: url("layout.json")))

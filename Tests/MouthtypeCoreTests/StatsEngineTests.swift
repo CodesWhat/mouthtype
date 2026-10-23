@@ -24,7 +24,7 @@ import Testing
         ])
         let r = engine.report(today: "2026-10-18")
         #expect(r.wordsToday == 15)
-        #expect(r.wordsThisWeek == 22) // Oct 12...18; Oct 11 is the 8th day back
+        #expect(r.wordsThisWeek == 22)  // Oct 12...18; Oct 11 is the 8th day back
         #expect(r.wordsAllTime == 123)
     }
 
@@ -45,16 +45,16 @@ import Testing
 
     @Test func wpmIsWordsOverSpeakingTimeAndIgnoresShortOrImplausibleSamples() {
         let engine = StatsEngine(samples: [
-            s("2026-10-18", words: 60, ms: 30_000),   // 120 wpm
-            s("2026-10-18", words: 30, ms: 30_000),   // 60 wpm
-            s("2026-10-18", words: 3, ms: 3_000),     // too few words
-            s("2026-10-18", words: 50, ms: 2_000),    // too short
+            s("2026-10-18", words: 60, ms: 30_000),  // 120 wpm
+            s("2026-10-18", words: 30, ms: 30_000),  // 60 wpm
+            s("2026-10-18", words: 3, ms: 3_000),  // too few words
+            s("2026-10-18", words: 50, ms: 2_000),  // too short
             s("2026-10-18", words: 500, ms: 10_000),  // 3000 wpm, bad timing
-            s("2026-10-18", words: 40, ms: nil),      // no duration
+            s("2026-10-18", words: 40, ms: nil),  // no duration
         ])
         let r = engine.report(today: "2026-10-18")
         #expect(r.bestWPM == 120)
-        #expect(r.averageWPM == 90) // 90 words over 1 minute
+        #expect(r.averageWPM == 90)  // 90 words over 1 minute
     }
 
     @Test func streaksCurrentAndLongest() {
@@ -72,9 +72,9 @@ import Testing
     @Test func recordsCarryTheDateTheyWereSet() {
         let engine = StatsEngine(samples: [
             s("2026-10-01", words: 20, ms: 20_000, t: 1), s("2026-10-02", words: 20, ms: 20_000, t: 2),
-            s("2026-10-03", words: 80, ms: 40_000, t: 3), // 120 wpm, the biggest day and the longest dictation
+            s("2026-10-03", words: 80, ms: 40_000, t: 3),  // 120 wpm, the biggest day and the longest dictation
             s("2026-10-04", words: 5, ms: 5_000, t: 4),
-            s("2026-10-10", words: 80, ms: 40_000, t: 5), // ties on every count; the earlier one keeps it
+            s("2026-10-10", words: 80, ms: 40_000, t: 5),  // ties on every count; the earlier one keeps it
         ])
         let rec = engine.records()
         #expect(rec.wpm == Record(value: 120, setOn: "2026-10-03"))
@@ -103,7 +103,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = try TranscriptStore(url: dir.appendingPathComponent("m.sqlite"))
         let utc = TimeZone(identifier: "UTC")!
-        let noon = Date(timeIntervalSince1970: 1_791_806_400) // 2026-10-12 12:00 UTC
+        let noon = Date(timeIntervalSince1970: 1_791_806_400)  // 2026-10-12 12:00 UTC
         for (offset, words) in [(0.0, 60), (86_400, 30)] {
             let id = try store.begin(DictationStart(startedAt: noon.addingTimeInterval(offset), timeZone: utc))
             try store.recordCapture(id, CaptureRecord(audioMs: 30_000, voicedMs: 30_000))

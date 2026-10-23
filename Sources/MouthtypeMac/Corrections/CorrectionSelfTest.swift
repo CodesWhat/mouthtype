@@ -104,13 +104,15 @@ enum CorrectionSelfTest {
             return probe.pid == ProcessInfo.processInfo.processIdentifier && probe.element != nil
         }
         let seen = reader.probe()
-        report("accessibility trusted \(AXIsProcessTrusted()), own pid \(ProcessInfo.processInfo.processIdentifier), frontmost pid \(seen.pid.map(String.init) ?? "none"), focused element \(seen.element != nil), app active \(NSApp.isActive), window key \(window.isKeyWindow)")
+        report(
+            "accessibility trusted \(AXIsProcessTrusted()), own pid \(ProcessInfo.processInfo.processIdentifier), frontmost pid \(seen.pid.map(String.init) ?? "none"), focused element \(seen.element != nil), app active \(NSApp.isActive), window key \(window.isKeyWindow)"
+        )
         check("the test window's text view has Accessibility focus", focused)
         guard focused else { return finish(window, directory) }
 
         // Pass one: a fix.
         let pasted = "Hove said the new build is ready for review today"
-        try? store.begin(DictationStart(id: "selftest-fix"))
+        _ = try? store.begin(DictationStart(id: "selftest-fix"))
         textView.string = pasted
         let target = AccessibilityFocusReader().snapshot()
         check("the focused element is a text area or field", target.role == "AXTextArea" || target.role == "AXTextField")
@@ -152,7 +154,7 @@ enum CorrectionSelfTest {
         // Pass two: a rewrite.
         let before = trace.count
         let second = "Please send Priya the updated agenda before the end of the day"
-        try? store.begin(DictationStart(id: "selftest-rewrite"))
+        _ = try? store.begin(DictationStart(id: "selftest-rewrite"))
         textView.string = second
         let target2 = AccessibilityFocusReader().snapshot()
         watcher.pasted(second, dictationID: "selftest-rewrite", target: target2)

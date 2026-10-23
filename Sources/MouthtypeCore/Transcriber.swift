@@ -1,10 +1,18 @@
 import Foundation
 
 public protocol Transcriber: Sendable {
-    var id: String { get }                 // stable slug, e.g. "parakeet-tdt-v3"
+    var id: String { get }  // stable slug, e.g. "parakeet-tdt-v3"
     var displayName: String { get }
-    func prepare() async throws            // download if needed + load; idempotent
-    func transcribe(samples: [Float]) async throws -> Transcription   // 16 kHz mono Float32, -1...1
+    func prepare() async throws  // download if needed + load; idempotent
+    func transcribe(samples: [Float]) async throws -> Transcription  // 16 kHz mono Float32, -1...1
+    /// The same with the take's language. Engines that use it override this; the default ignores it.
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription
+}
+
+extension Transcriber {
+    public func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+        try await transcribe(samples: samples)
+    }
 }
 
 public struct PrepareTimings: Sendable, Codable, Equatable {

@@ -19,7 +19,6 @@ private func cleanupBench(_ arguments: [String]) throws -> (status: Int32, outpu
     return (process.terminationStatus, String(decoding: data, as: UTF8.self))
 }
 
-
 /// The nineteen acceptance dictations against the real S1-mini by Superwhisper, through the bench binary: MLX finds
 /// its Metal library next to the executable it runs in, which the test host is not. Skipped when the model isn't
 /// on disk.
@@ -52,14 +51,46 @@ struct QualityRealModelTests {
         #expect(result.output.contains("12/12 cases pass"), "\(result.output)")
     }
 
+    /// Thorough with the user's own instructions, including ones that try to change the meaning: every delivered text must keep
+    /// the facts, whether the model followed the instruction harmlessly or the guard threw its output away.
+    @Test func instructionCasesKeepWhatWasSaid() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixtures = root.appendingPathComponent("Tests/Fixtures/instruction-cases.json")
+        let result = try cleanupBench(["clean", "--smart", "medium", "--file", fixtures.path, "--smart-timeout-ms", "20000"])
+        #expect(result.status == 0, "\(result.output)")
+        #expect(result.output.contains("8/8 cases pass the automatic checks at medium"), "\(result.output)")
+    }
+
+    /// Each shipped instruction preset over its eval takes: at least 90 percent must pass the guard, and every delivered text
+    /// must keep the facts the checks name. The eval write-up is docs/evals/instruction-presets-2026-10.md.
+    @Test func instructionPresetsPassTheGuard() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixtures = root.appendingPathComponent("Tests/Fixtures/instruction-preset-cases.json")
+        let resultFile = FileManager.default.temporaryDirectory.appendingPathComponent("instruction-presets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: resultFile) }
+        let result = try cleanupBench([
+            "clean", "--smart", "medium", "--file", fixtures.path, "--smart-timeout-ms", "20000", "--result", resultFile.path,
+        ])
+        #expect(result.status == 0, "\(result.output)")
+        let records = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: resultFile)) as? [[String: Any]])
+        for preset in CleanupInstructionPresets.all {
+            let own = records.filter { ($0["id"] as? String)?.hasPrefix(preset.id + "-") == true }
+            let accepted = own.filter { $0["outcome"] as? String == "ok" }.count
+            #expect(own.count >= 10, "\(preset.id) has \(own.count) takes")
+            #expect(Double(accepted) >= 0.9 * Double(own.count), "\(preset.id): \(accepted) of \(own.count) accepted")
+        }
+    }
+
     @Test(arguments: [50, 250])
     func timedOutGenerationExitsWithoutCrashing(budgetMs: Int) throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let fixture = root.appendingPathComponent("Tests/Fixtures/long-read-through.json")
         let resultFile = FileManager.default.temporaryDirectory.appendingPathComponent("cleanup-lifetime-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: resultFile) }
-        let result = try cleanupBench(["clean", "--smart", "light", "--file", fixture.path,
-            "--smart-timeout-ms", String(budgetMs), "--result", resultFile.path])
+        let result = try cleanupBench([
+            "clean", "--smart", "light", "--file", fixture.path,
+            "--smart-timeout-ms", String(budgetMs), "--result", resultFile.path,
+        ])
         #expect(result.status == 1, "Expected an ordinary failed-fixture exit, got \(result.status): \(result.output)")
         let records = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: resultFile)) as? [[String: Any]])
         let record = try #require(records.first)
@@ -113,8 +144,10 @@ struct SavedSpellingRealModelTests {
         guard (cleaner as? MLXCleaner)?.isDownloaded == true else { return }
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let fixture = root.appendingPathComponent("Tests/Fixtures/saved-spelling-fidelity.json")
-        let result = try cleanupBench(["clean", "--smart", "medium", "--cleaner", model,
-            "--file", fixture.path, "--smart-timeout-ms", "10000"])
+        let result = try cleanupBench([
+            "clean", "--smart", "medium", "--cleaner", model,
+            "--file", fixture.path, "--smart-timeout-ms", "10000",
+        ])
         #expect(result.status == 0, "\(result.output)")
         #expect(result.output.contains("5/5 cases pass"), "\(result.output)")
     }

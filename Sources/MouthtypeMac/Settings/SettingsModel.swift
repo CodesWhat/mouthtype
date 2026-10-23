@@ -10,6 +10,8 @@ import UniformTypeIdentifiers
     private let onCleanupChanged: @MainActor () -> Void
     private let onSkinChanged: @MainActor (PillSkinKind) -> Void
     private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
+    private let onMouseTriggerChanged: @MainActor (MouseTrigger) -> String?
+    private let isRecording: @MainActor () -> Bool
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
     private let onDockIconModeChanged: @MainActor (DockIconMode) -> Void
@@ -51,28 +53,38 @@ import UniformTypeIdentifiers
     private(set) var font: TextFontChoice
     private(set) var recordingMode: RecordingMode
     private(set) var recordingModeError: String?
+    private(set) var mouseTrigger: MouseTrigger
+    private(set) var mouseTriggerError: String?
+    private(set) var recordingModeNotice: String?
+    private(set) var mouseTriggerNotice: String?
+    private(set) var dictationLanguage: DictationLanguageSetting
     private(set) var loginState: NSControl.StateValue = .off
     private(set) var shortcut = "Fn"
     private(set) var learnCorrections = true
     private(set) var boostSavedWords = false
     private(set) var editorHints = false
+    private(set) var contextNames = true
     private(set) var boostStatus = VocabularyBoostStatusCenter.current
     private(set) var chunkedTerminals: Set<String> = []
     private(set) var appStyles = AppCleanupStyles()
     private(set) var appStylesError: String?
 
-    init(defaults: UserDefaults = .standard, loginItem: LoginItem = LoginItem(),
-         onCleanupChanged: @escaping @MainActor () -> Void = {},
-         onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
-         onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
-         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
-         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
-         onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
-         onDockIconModeChanged: @escaping @MainActor (DockIconMode) -> Void = { _ in },
-         home: HomeLogModel = HomeLogModel(observing: false),
-         stats: StatsModel = StatsModel(observing: false),
-         spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil,
-         openTranscribeWindow: @escaping @MainActor () -> Void = {}) {
+    init(
+        defaults: UserDefaults = .standard, loginItem: LoginItem = LoginItem(),
+        onCleanupChanged: @escaping @MainActor () -> Void = {},
+        onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
+        onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
+        onMouseTriggerChanged: @escaping @MainActor (MouseTrigger) -> String? = { _ in nil },
+        isRecording: @escaping @MainActor () -> Bool = { false },
+        microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
+        onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+        onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
+        onDockIconModeChanged: @escaping @MainActor (DockIconMode) -> Void = { _ in },
+        home: HomeLogModel = HomeLogModel(observing: false),
+        stats: StatsModel = StatsModel(observing: false),
+        spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil,
+        openTranscribeWindow: @escaping @MainActor () -> Void = {}
+    ) {
         self.openTranscribeWindow = openTranscribeWindow
         self.onDockIconModeChanged = onDockIconModeChanged
         self.home = home
@@ -90,9 +102,13 @@ import UniformTypeIdentifiers
         self.onCleanupChanged = onCleanupChanged
         self.onSkinChanged = onSkinChanged
         self.onRecordingModeChanged = onRecordingModeChanged
+        self.onMouseTriggerChanged = onMouseTriggerChanged
+        self.isRecording = isRecording
         self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
         self.onBoostSavedWordsChanged = onBoostSavedWordsChanged
         recordingMode = RecordingModePreference.current(defaults)
+        mouseTrigger = MouseTriggerPreference.current(defaults)
+        dictationLanguage = DictationLanguageSetting.load(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)
@@ -253,6 +269,8 @@ import UniformTypeIdentifiers
         readoutColour = PillReadoutPreference.current(defaults)
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
+        mouseTrigger = MouseTriggerPreference.current(defaults)
+        dictationLanguage = DictationLanguageSetting.load(defaults)
         fontOverrides = TextFontOverrides.load(defaults)
         FontRegistry.ensureRegistered()
         fontFamilies = FontFamilyCache.families()
@@ -264,9 +282,9 @@ import UniformTypeIdentifiers
         learnCorrections = CorrectionSettings.isEnabled(defaults)
         boostSavedWords = VocabularyBoostSetting.isEnabled(defaults)
         editorHints = EditorHintsSetting.isEnabled(defaults)
+        contextNames = ContextNamesSetting.isEnabled(defaults)
         chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
-        do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil }
-        catch { appStylesError = error.localizedDescription }
+        do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil } catch { appStylesError = error.localizedDescription }
     }
 
     var recordingInstructions: String {
@@ -280,7 +298,11 @@ import UniformTypeIdentifiers
         return "Hold your shortcut while you speak, then release to finish. Use How to Use Mouthtype in the menu for the gestures available with your chosen key."
     }
 
+    private static let cancelledNotice = "The active recording was cancelled."
+
     func setRecordingMode(_ value: RecordingMode) {
+        let wasRecording = isRecording()
+        recordingModeNotice = nil
         if let error = onRecordingModeChanged(value) {
             recordingModeError = error
             return
@@ -288,6 +310,20 @@ import UniformTypeIdentifiers
         RecordingModePreference.set(value, in: defaults)
         recordingMode = value
         recordingModeError = nil
+        if wasRecording { recordingModeNotice = Self.cancelledNotice }
+    }
+
+    func setMouseTrigger(_ value: MouseTrigger) {
+        let wasRecording = isRecording()
+        mouseTriggerNotice = nil
+        if let error = onMouseTriggerChanged(value) {
+            mouseTriggerError = error
+            return
+        }
+        MouseTriggerPreference.set(value, in: defaults)
+        mouseTrigger = value
+        mouseTriggerError = nil
+        if wasRecording { mouseTriggerNotice = Self.cancelledNotice }
     }
 
     func updateAppStyles(_ change: (inout AppCleanupStyles) throws -> Void) {
@@ -303,15 +339,15 @@ import UniformTypeIdentifiers
     /// Setting the tone keeps the rule's cleanup level; nil is "Use default" and drops the rule once neither is set.
     func setAppStyle(bundleID: String, appName: String, tone: StylePreset?) {
         updateAppStyles {
-            let level = $0.entries.first { $0.bundleID == bundleID }?.level
-            try $0.set(bundleID: bundleID, appName: appName, style: tone?.options, level: level)
+            let rule = $0.entries.first { $0.bundleID == bundleID }
+            try $0.set(bundleID: bundleID, appName: appName, style: tone?.options, level: rule?.level, instructions: rule?.instructions)
         }
     }
 
     func setAppCleanupLevel(bundleID: String, appName: String, level: CleanupLevel?) {
         updateAppStyles {
-            let style = $0.entries.first { $0.bundleID == bundleID }?.style
-            try $0.set(bundleID: bundleID, appName: appName, style: style, level: level)
+            let rule = $0.entries.first { $0.bundleID == bundleID }
+            try $0.set(bundleID: bundleID, appName: appName, style: rule?.style, level: level, instructions: rule?.instructions)
         }
     }
 
@@ -319,8 +355,8 @@ import UniformTypeIdentifiers
     func setAppStyle(bundleIDs: [String], appName: String, tone: StylePreset?) {
         updateAppStyles { styles in
             for id in bundleIDs {
-                let level = styles.entries.first { $0.bundleID == id }?.level
-                try styles.set(bundleID: id, appName: appName, style: tone?.options, level: level)
+                let rule = styles.entries.first { $0.bundleID == id }
+                try styles.set(bundleID: id, appName: appName, style: tone?.options, level: rule?.level, instructions: rule?.instructions)
             }
         }
     }
@@ -328,8 +364,8 @@ import UniformTypeIdentifiers
     func setAppCleanupLevel(bundleIDs: [String], appName: String, level: CleanupLevel?) {
         updateAppStyles { styles in
             for id in bundleIDs {
-                let style = styles.entries.first { $0.bundleID == id }?.style
-                try styles.set(bundleID: id, appName: appName, style: style, level: level)
+                let rule = styles.entries.first { $0.bundleID == id }
+                try styles.set(bundleID: id, appName: appName, style: rule?.style, level: level, instructions: rule?.instructions)
             }
         }
     }
@@ -338,22 +374,43 @@ import UniformTypeIdentifiers
 
     func setWebsiteStyle(domain: String, tone: StylePreset?) {
         updateAppStyles {
-            let level = $0.websiteRule(domain: domain)?.level
-            try $0.setWebsite(domain: domain, style: tone?.options, level: level)
+            let rule = $0.websiteRule(domain: domain)
+            try $0.setWebsite(domain: domain, style: tone?.options, level: rule?.level, instructions: rule?.instructions)
         }
     }
 
     /// The add form sets tone and level together, replacing any rule already on that domain.
     func addWebsiteRule(domain: String, tone: StylePreset?, level: CleanupLevel?) {
-        updateAppStyles { try $0.setWebsite(domain: domain, style: tone?.options, level: level) }
+        updateAppStyles { try $0.setWebsite(domain: domain, style: tone?.options, level: level, instructions: $0.websiteRule(domain: domain)?.instructions) }
     }
 
     func setWebsiteCleanupLevel(domain: String, level: CleanupLevel?) {
         updateAppStyles {
-            let style = $0.websiteRule(domain: domain)?.style
-            try $0.setWebsite(domain: domain, style: style, level: level)
+            let rule = $0.websiteRule(domain: domain)
+            try $0.setWebsite(domain: domain, style: rule?.style, level: level, instructions: rule?.instructions)
         }
     }
+
+    /// Instructions for Thorough on one app, across every identifier a row is bound to. Each keeps its own tone and level. Empty
+    /// clears them, and the rule goes away once it sets nothing else.
+    func setAppInstructions(bundleIDs: [String], appName: String, instructions: String?) {
+        updateAppStyles { styles in
+            for id in bundleIDs {
+                let rule = styles.entries.first { $0.bundleID == id }
+                try styles.set(bundleID: id, appName: appName, style: rule?.style, level: rule?.level, instructions: instructions)
+            }
+        }
+    }
+
+    func setWebsiteInstructions(domain: String, instructions: String?) {
+        updateAppStyles {
+            let rule = $0.websiteRule(domain: domain)
+            try $0.setWebsite(domain: domain, style: rule?.style, level: rule?.level, instructions: instructions)
+        }
+    }
+
+    /// The instructions for everything no rule of its own covers.
+    func setInstructions(_ text: String) { update { $0.instructions = CleanupInstructions.normalize(text) ?? "" } }
     func removeWebsiteStyle(domain: String) { updateAppStyles { $0.removeWebsite(domain: domain) } }
 
     func removeAppStyle(bundleID: String) { updateAppStyles { $0.remove(bundleID: bundleID) } }
@@ -378,7 +435,8 @@ import UniformTypeIdentifiers
             appStylesError = "That application has no readable bundle identifier."
             return
         }
-        let appName = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
+        let appName =
+            bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String
             ?? bundle.object(forInfoDictionaryKey: "CFBundleName") as? String
             ?? url.deletingPathExtension().lastPathComponent
         let style = CleanupSettings.load(defaults).style
@@ -401,6 +459,15 @@ import UniformTypeIdentifiers
         learnCorrections = enabled
     }
 
+    /// The next take reads the setting from defaults, so nothing else needs telling.
+    func setDictationLanguage(_ value: DictationLanguageSetting) {
+        DictationLanguageSetting.set(value, in: defaults)
+        dictationLanguage = value
+    }
+
+    /// Fast is English only, so an explicit non-English language shows the note under the level choice.
+    var showsFastLanguageNote: Bool { cleanup.level == .light && dictationLanguage.isExplicitNonEnglish }
+
     func setBoostSavedWords(_ enabled: Bool) {
         VocabularyBoostSetting.set(enabled, in: defaults)
         boostSavedWords = enabled
@@ -410,6 +477,11 @@ import UniformTypeIdentifiers
     func setEditorHints(_ enabled: Bool) {
         EditorHintsSetting.set(enabled, in: defaults)
         editorHints = enabled
+    }
+
+    func setContextNames(_ enabled: Bool) {
+        ContextNamesSetting.set(enabled, in: defaults)
+        contextNames = enabled
     }
 
     func setAudioRetentionAge(_ value: AudioRetentionAge) {

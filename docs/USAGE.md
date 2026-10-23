@@ -6,7 +6,7 @@ Click a text field, hold <kbd>Fn</kbd> and speak, then release to paste. Double-
 
 ## Mac release
 
-The latest published release, 0.5.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
+The latest published release, 0.6.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
 
 > [!NOTE]
 > Existing alpha.1–3 users need this download once to get the built-in updater.
@@ -46,7 +46,7 @@ Allow Microphone and Accessibility access when macOS asks. Settings > Health has
 
 The speech model and a small speech detector download on first launch. The detector keeps empty recordings from becoming invented words. Download and loading status are in Settings > Health; an attention item in the menu opens it when preparation fails.
 
-Transcription runs locally. Parakeet v3 decoding uses an English language hint to prevent accidental Cyrillic output; Whisper also requests English. Smart cleanup is a separate optional model download, with basic cleanup available without it.
+Transcription runs locally. Parakeet v3 covers 25 European languages, and Whisper engines decode in the language you picked or detect it. **Settings → General → Language** chooses between Auto-detect and a fixed language. English gets every cleanup rule and other languages get a smaller set, see [languages](LANGUAGES.md). Smart cleanup is a separate optional model download, with basic cleanup available without it.
 
 ## Cleanup models
 
@@ -155,7 +155,7 @@ The ordered install checklist is at [mouthtype.app/linux/agent-install.md](../we
 
 ## Recovery and sound
 
-A single recording stops after 20 minutes; a "One minute left" card appears at 19. If the field doesn't change after a paste, Mouthtype shows "Paste didn't land" with the transcript to copy. Secure fields and "Nothing to paste into" also keep the text for copying. If the microphone disconnects mid-recording, what was captured is saved and you can Insert or Discard it. When you correct a dictated word, Mouthtype can offer "Remember this spelling?"; **Learn from my corrections** in Advanced writing turns that off.
+A single recording stops after 20 minutes; a "One minute left" card appears at 19. If the field doesn't change after a paste, Mouthtype shows "Paste didn't land" with the transcript to copy. Secure fields and "Nothing to paste into" also keep the text for copying. If the microphone disconnects mid-recording, what was captured is saved and you can Insert or Discard it. If a take you held for a second or more picked up no sound or no speech, a "Microphone heard nothing" or "No speech heard" card names the microphone that was recording and has a **Sound settings** button. It shows at most once every 30 seconds, and a quick tap never triggers it. When you correct a dictated word, Mouthtype can offer "Remember this spelling?"; **Learn from my corrections** in Advanced writing turns that off.
 
 If a paste fails or there's nowhere to paste, the result stays available to copy. **Paste Last Take** and **Copy Last Take** restore the latest saved take after restart. <kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>V</kbd> and <kbd>Control</kbd>+<kbd>Command</kbd>+<kbd>C</kbd> are their global shortcuts, shown beside them in the menu, unless your dictation shortcut uses the same combination, in which case the menu shows none. **Recent Takes** lists earlier ones.
 

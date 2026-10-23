@@ -48,7 +48,9 @@ struct SpellingSuggestionsSection: View {
 
     private var maybeToggle: some View {
         let count = model.maybe.count
-        return Button { showMaybe.toggle() } label: {
+        return Button {
+            showMaybe.toggle()
+        } label: {
             HStack(spacing: 6) {
                 Image(systemName: showMaybe ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).frame(width: 10)
                     .accessibilityHidden(true)
@@ -140,7 +142,9 @@ struct SpellingSuggestionRow: View {
     private var actions: some View {
         HStack(spacing: 4) {
             if !suggestion.evidence.isEmpty {
-                Button { expanded.toggle() } label: {
+                Button {
+                    expanded.toggle()
+                } label: {
                     Text(expanded ? "Hide examples" : "Examples").font(DesignFont.sans(DesignFont.detail, .medium))
                         .foregroundStyle(DesignPalette.ink2).padding(.horizontal, 10).frame(minHeight: 28).contentShape(Rectangle())
                 }
@@ -154,7 +158,9 @@ struct SpellingSuggestionRow: View {
                 Button("Add") { model.add(suggestion) }.buttonStyle(.designPrimary).disabled(busy)
                     .accessibilityLabel("Add: \(Self.title(suggestion))")
             }
-            Button { model.dismiss(suggestion) } label: {
+            Button {
+                model.dismiss(suggestion)
+            } label: {
                 Image(systemName: "xmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(DesignPalette.ink3)
                     .frame(width: 28, height: 28).contentShape(Rectangle())
             }
@@ -164,10 +170,12 @@ struct SpellingSuggestionRow: View {
 
     static func title(_ suggestion: SpellingSuggestion) -> String {
         if suggestion.kind == .removeHazard {
-            let pairs = suggestion.hazardRules.isEmpty
+            let pairs =
+                suggestion.hazardRules.isEmpty
                 ? ["‘\(suggestion.heardForms.first ?? "")’ → \(suggestion.written)"]
                 : suggestion.hazardRules.map { "‘\($0.heard)’ → \($0.written)" }
-            let list = pairs.count <= 2
+            let list =
+                pairs.count <= 2
                 ? pairs.joined(separator: " and ")
                 : pairs.dropLast().joined(separator: ", ") + ", and " + pairs[pairs.count - 1]
             return "Remove " + list
@@ -178,7 +186,7 @@ struct SpellingSuggestionRow: View {
     static func reason(_ suggestion: SpellingSuggestion) -> String {
         let times = suggestion.count == 1 ? "1 time" : "\(suggestion.count) times"
         if suggestion.kind == .removeHazard {
-            return suggestion.count == 0 ? "Matched nothing in your recent takes." : "Rewrites an everyday word. Heard \(times)."
+            return suggestion.count == 0 ? "Matched nothing in your recent takes." : "Rewrites an everyday English word. Heard \(times)."
         }
         return "Heard \(times)"
     }

@@ -11,18 +11,20 @@ Natural speech in, clean text out.
 </div>
 
 <p align="center">
-  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.5.0-2ea44f" alt="Version 0.5.0"></a>
+  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.6.0-2ea44f" alt="Version 0.6.0"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-000000?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
   <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
   <a href="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml"><img src="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml/badge.svg" alt="Security CI"></a>
+  <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/mouthtype"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/mouthtype?label=openssf+scorecard&amp;style=flat" alt="OpenSSF Scorecard"></a>
+  <a href="https://www.bestpractices.dev/projects/15781"><img src="https://www.bestpractices.dev/projects/15781/badge" alt="OpenSSF Best Practices"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
 </p>
 
 <hr>
 
 > [!IMPORTANT]
-> **Not verified on a device for 0.5.0:** fresh installation, VoiceOver, and Bluetooth and USB microphones. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
+> **Not verified on a device for 0.6.0:** fresh installation, VoiceOver, and Bluetooth and USB microphones. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 
 <h2 align="center">Contents</h2>
 
@@ -51,21 +53,24 @@ Natural speech in, clean text out.
 | Download | [mouthtype.app/download](https://mouthtype.app/download) |
 | Getting started | [docs.mouthtype.app/getting-started](https://docs.mouthtype.app/getting-started/) |
 | Docs | [docs.mouthtype.app](https://docs.mouthtype.app/) |
+| Architecture | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
 | Dictating | [docs.mouthtype.app/dictating](https://docs.mouthtype.app/dictating/) |
 | Install, update and remove | [docs.mouthtype.app/getting-started/install-notes](https://docs.mouthtype.app/getting-started/install-notes/) |
 | Usage and cleanup reference | [docs.mouthtype.app/reference/usage-overview](https://docs.mouthtype.app/reference/usage-overview/) |
 | Settings, tone rules and input selection | [docs.mouthtype.app/reference/settings](https://docs.mouthtype.app/reference/settings/) |
+| Languages (25 European languages, what runs in each) | [docs.mouthtype.app/reference/languages](https://docs.mouthtype.app/reference/languages/) |
 | Spoken commands and counted lists | [docs.mouthtype.app/reference/spoken-commands](https://docs.mouthtype.app/reference/spoken-commands/) |
 | File transcription | [docs.mouthtype.app/transcribe-audio-files](https://docs.mouthtype.app/transcribe-audio-files/) |
 | Saved audio and retention | [docs.mouthtype.app/privacy-and-data/saved-audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/) |
 | Automation (`mouthtype://` and the command-line script) | [docs.mouthtype.app/automation/url-scheme-and-cli](https://docs.mouthtype.app/automation/url-scheme-and-cli/) |
 | Troubleshooting | [docs.mouthtype.app/troubleshooting](https://docs.mouthtype.app/troubleshooting/) |
-| Known limits for 0.5.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
+| Known limits for 0.6.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
 | Release notes | [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) |
 | Roadmap | See [Roadmap](#roadmap) below |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
 | Contributing | [`CONTRIBUTING.md`](CONTRIBUTING.md) |
 | Code of conduct | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) |
+| Governance | [`GOVERNANCE.md`](GOVERNANCE.md) |
 | Security policy | [`SECURITY.md`](SECURITY.md) |
 | Security controls and limits | [docs.mouthtype.app/reference/security](https://docs.mouthtype.app/reference/security/) |
 | Third-party notices | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) |
@@ -79,12 +84,14 @@ Natural speech in, clean text out.
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.5.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
+The Mac app is at 0.6.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
 
-1. Download the signed, notarized ZIP from [mouthtype.app/download](https://mouthtype.app/download).
-2. Extract Mouthtype, move it to Applications and open it.
+1. Download the signed, notarized DMG from [mouthtype.app/download](https://mouthtype.app/download).
+2. Open the DMG, drag Mouthtype to Applications and open it.
 3. Grant Microphone and Accessibility access when prompted. The speech model and a small speech detector download on first launch.
 4. Click an ordinary text field, hold **Fn**, speak, then release.
+
+Prefer Homebrew? `brew install --cask codeswhat/tap/mouthtype` installs the same signed DMG build from the CodesWhat tap. The app still updates itself.
 
 Hold Fn, double-tap Fn, or use Fn+Space. **Control+Command+V** pastes the last delivered take and **Control+Command+C** copies it. A single recording stops after 20 minutes, with a warning at 19.
 
@@ -134,7 +141,7 @@ It's early days. App compatibility, clipboard behavior and fresh-install setup s
 |---|---|---|
 | 🎙️ | **Hold or Hands-Free Dictation** | Hold Fn, double-tap Fn, or use Fn+Space. Recording behavior and shortcuts are configurable. |
 | 🧹 | **Local Cleanup** | Basic formatting works without a cleanup model. Fast (the default level) and Thorough use optional local models and preserve wording. Until the selected model finishes downloading, dictations use Basic. |
-| 🎚️ | **Writing Rules** | Choose Formal, Casual or Very casual, with per-app and website rules for tone and cleanup level. |
+| 🎚️ | **Writing Rules** | Choose Formal, Casual, Very casual or Excited, with per-app and website rules for tone, cleanup level and your own instructions. |
 | 📖 | **Saved Spellings and Phrases** | Keep exact local spelling rules and reusable text, including multiline phrases. Optional Boost my saved words favors them while recognizing. |
 | ✍️ | **Transform Selection** | Preview Clean up, Fix grammar, Make shorter, More formal or More casual on text you've selected in another app, then explicitly accept the replacement. Accept only replaces the text if the app, field and selection are unchanged. |
 | 📁 | **File Transcription** | Import one WAV, AIFF or M4A, up to 10 minutes and 512 MB, then explicitly copy or save the result. |
@@ -210,7 +217,8 @@ High-level themes only, with no dates. [`CHANGELOG.md`](CHANGELOG.md) has per-re
 | **0.3.x** ✅ | Home and Stats | Home page with recent takes and Recover, Stats page, suggested spellings |
 | **0.4.0** ✅ | One window | Single redesigned window, Transform Selection preview, Transforms page, separate Transcribe Audio File window, automation, editor hints |
 | **0.5.0** ✅ | Speed and slash commands | Launch and dictation speed, spoken slash commands in coding apps, Show in Dock, a docs site, Fn remap and quit-path hardening, cleanup fixes, real app icons in Style lists |
-| **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style, custom tones |
+| **0.6.0** ✅ | Languages and names | Dictation in 25 languages with Auto-detect, a mouse-button trigger, dictionary export and Wispr Flow and VoiceInk import, names on screen and a Models page in Setup, a silent-microphone warning, per-app cleanup instructions, an Excited tone, repeatable release builds, a Homebrew cask |
+| **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style |
 
 **Still open:** fresh-install, VoiceOver, and Bluetooth and USB microphone verification, and wider app-compatibility testing. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 

@@ -43,7 +43,8 @@ struct CoreAudioQuietOutputTests {
         let output = CoreAudioQuietOutput()
         let device = try output.currentOutput()
         try #require(try !output.isMuted(device), "Native audio checks require an initially unmuted output")
-        var address = AudioObjectPropertyAddress(mSelector: kAudioDevicePropertyVolumeScalar,
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyVolumeScalar,
             mScope: kAudioDevicePropertyScopeOutput, mElement: kAudioObjectPropertyElementMain)
         var volume: Float32 = 0
         var size = UInt32(MemoryLayout<Float32>.size)

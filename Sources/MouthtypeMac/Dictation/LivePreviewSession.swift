@@ -65,7 +65,8 @@ final class LivePreviewSession {
                 let snapshot = await current.source(Self.maximumSamples)
                 guard !Task.isCancelled, generation == current.generation, ContinuousClock.now < expiresAt else { return }
                 guard snapshot.samples.count >= Self.minimumSamples,
-                      snapshot.capturedSampleCount > lastSampleCount else { continue }
+                    snapshot.capturedSampleCount > lastSampleCount
+                else { continue }
                 lastSampleCount = snapshot.capturedSampleCount
                 let samples = Array(snapshot.samples.suffix(Self.maximumSamples))
                 let text = try await current.recognize(samples)

@@ -8,16 +8,17 @@ import Testing
 
     private let sentence = "Hove said the new build is ready for review today"
 
-    @Test(arguments: [
-        ("Hove said the new build is ready for review today", "Hov said the new build is ready for review today", ["Hove>Hov"]),
-        ("Ask praya to send the notes before lunch tomorrow", "Ask Priya to send the notes before lunch tomorrow", ["praya>Priya"]),
-        ("Open mouth type and start the new dictation now", "Open Mouthtype and start the new dictation now", ["mouth type>Mouthtype"]),
-        ("We moved to dry dock for the deploys this week", "We moved to Drydock for the deploys this week", ["dry dock>Drydock"]),
-        ("Ask the prayer to send the notes before lunch", "Ask the Priya to send the notes before lunch", ["prayer>Priya"]),
-        ("Tell there that the lunch is ready now", "Tell Thayer that the lunch is ready now", ["there>Thayer"]),
-        ("Send it to zoe about the new schedule tomorrow", "Send it to Zoë about the new schedule tomorrow", ["zoe>Zoë"]),
-        ("Ask shunade to join the call this afternoon", "Ask Sinead to join the call this afternoon", ["shunade>Sinead"]),
-    ] as [(String, String, [String])])
+    @Test(
+        arguments: [
+            ("Hove said the new build is ready for review today", "Hov said the new build is ready for review today", ["Hove>Hov"]),
+            ("Ask praya to send the notes before lunch tomorrow", "Ask Priya to send the notes before lunch tomorrow", ["praya>Priya"]),
+            ("Open mouth type and start the new dictation now", "Open Mouthtype and start the new dictation now", ["mouth type>Mouthtype"]),
+            ("We moved to dry dock for the deploys this week", "We moved to Drydock for the deploys this week", ["dry dock>Drydock"]),
+            ("Ask the prayer to send the notes before lunch", "Ask the Priya to send the notes before lunch", ["prayer>Priya"]),
+            ("Tell there that the lunch is ready now", "Tell Thayer that the lunch is ready now", ["there>Thayer"]),
+            ("Send it to zoe about the new schedule tomorrow", "Send it to Zoë about the new schedule tomorrow", ["zoe>Zoë"]),
+            ("Ask shunade to join the call this afternoon", "Ask Sinead to join the call this afternoon", ["shunade>Sinead"]),
+        ] as [(String, String, [String])])
     func vocabularyFixesAreProposed(pasted: String, field: String, expected: [String]) {
         #expect(pairs(pasted, field) == expected)
     }
@@ -27,7 +28,7 @@ import Testing
         let start = ContinuousClock.now
         #expect(pairs("alpha \(huge) omega", "alpha \(huge)b omega").isEmpty)
         #expect(!CorrectionLearner.similar(huge, huge + "b"))
-        #expect(ContinuousClock.now - start < .seconds(2))
+        if TextTestSupport.timingAssertsEnabled { #expect(ContinuousClock.now - start < .seconds(2)) }
     }
 
     @Test func textTypedBeforeAndAfterTheSpanIsSkipped() {

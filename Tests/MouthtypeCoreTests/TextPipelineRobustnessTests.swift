@@ -38,9 +38,10 @@ import Testing
         for round in 0..<1500 {
             let text = randomText(&rng)
             let ctx: InsertionContext? = round % 3 == 0 ? nil : InsertionContext(before: round % 3 == 1 ? "and" : "Done. ", after: round % 7 == 0 ? "x" : nil)
-            let (result, trace) = pipeline.runTraced(TextPipelineInput(
-                text: text, dictionary: rules, snippets: snippets, context: ctx, now: Date(timeIntervalSince1970: 0), clipboard: round % 2 == 0 ? "clip" : nil
-            ))
+            let (result, trace) = pipeline.runTraced(
+                TextPipelineInput(
+                    text: text, dictionary: rules, snippets: snippets, context: ctx, now: Date(timeIntervalSince1970: 0), clipboard: round % 2 == 0 ? "clip" : nil
+                ))
             for stage in trace where stage.stage != "whitespace" {
                 #expect(
                     TextTestSupport.replay(stage.edits, on: stage.input) == TextTestSupport.stripWhitespace(stage.output),

@@ -73,15 +73,18 @@ enum SpellingCSV {
         for character in text {
             let newline = character == "\n" || character == "\r" || character == "\r\n"
             if state == .quoted {
-                if character == "\"" { state = .closed }
-                else { field.append(character) }
+                if character == "\"" { state = .closed } else { field.append(character) }
                 if newline { line += 1 }
                 continue
             }
             if character == "\"" {
-                if state == .start { state = .quoted; touched = true }
-                else if state == .closed { field.append(character); state = .quoted }
-                else { throw Invalid(message: "Row \(line): a quote must start a quoted field.") }
+                if state == .start {
+                    state = .quoted; touched = true
+                } else if state == .closed {
+                    field.append(character); state = .quoted
+                } else {
+                    throw Invalid(message: "Row \(line): a quote must start a quoted field.")
+                }
             } else if character == "," {
                 fields.append(field)
                 field = ""

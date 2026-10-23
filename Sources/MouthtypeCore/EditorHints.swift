@@ -143,7 +143,8 @@ public enum EditorHints {
     }
 
     /// Words every codebase uses. They are close to plain speech, so they never become terms or lone aliases.
-    private static let codeWords: Set<String> = Set("""
+    private static let codeWords: Set<String> = Set(
+        """
         user users data value values item items name names type types list lists string strings number numbers index key
         keys node nodes text file files path paths size time date result results error errors count flag mode state
         config options option info input output default object objects array arrays model models view views action
@@ -165,8 +166,9 @@ public enum EditorHints {
     public static func term(_ raw: String, allowEverydayCompound: Bool = false) -> VocabularyBias.Term? {
         let text = raw.trimmingCharacters(in: CharacterSet(charactersIn: "_-."))
         guard text.count >= minLength, text.count <= maxLength,
-              text.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }),
-              text.contains(where: \.isLetter) else { return nil }
+            text.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }),
+            text.contains(where: \.isLetter)
+        else { return nil }
         let words = spokenWords(text)
         guard !words.isEmpty else { return nil }
         if words.count == 1 {
@@ -253,14 +255,14 @@ public enum EditorHints {
         private let running = Mutex(false)
         public init() {}
         public var isBusy: Bool { running.withLock { $0 } }
-        fileprivate func acquire() -> Bool {
+        public func acquire() -> Bool {
             running.withLock { busy in
                 guard !busy else { return false }
                 busy = true
                 return true
             }
         }
-        fileprivate func release() { running.withLock { $0 = false } }
+        public func release() { running.withLock { $0 = false } }
     }
 
     /// The terms for one dictation. The cheap sources are always used; the cursor read and the file source are used

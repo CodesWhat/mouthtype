@@ -33,9 +33,9 @@ import Testing
         let data = AudioArchive.wavData(samples: samples(100))
         #expect(String(decoding: data[0..<4], as: UTF8.self) == "RIFF")
         #expect(String(decoding: data[8..<16], as: UTF8.self) == "WAVEfmt ")
-        #expect(data[22] == 1)                       // channels
-        #expect(data[24] == 0x80 && data[25] == 0x3E) // 16000 Hz little endian
-        #expect(data[34] == 16)                      // bits per sample
+        #expect(data[22] == 1)  // channels
+        #expect(data[24] == 0x80 && data[25] == 0x3E)  // 16000 Hz little endian
+        #expect(data[34] == 16)  // bits per sample
     }
 
     @Test func rejectsNonWav() {
@@ -70,7 +70,7 @@ import Testing
         let archive = AudioArchive(supportDirectory: dir)
         let now = Date()
         for (id, age) in [("a", 3.0), ("b", 2.0), ("c", 1.0)] {
-            try archive.write(samples: samples(1000), id: id)   // 2044 bytes each
+            try archive.write(samples: samples(1000), id: id)  // 2044 bytes each
             try setAge(archive, id: id, daysAgo: age, now: now)
         }
         let removed = try archive.purge(olderThan: now.addingTimeInterval(-86_400 * 90), maxTotalBytes: 2 * 2044 + 10)

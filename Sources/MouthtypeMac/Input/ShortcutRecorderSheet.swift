@@ -17,7 +17,8 @@ final class ShortcutRecorderSheet: NSObject, NSWindowDelegate {
         recorder = ShortcutRecorder(saved: saved)
         self.apply = apply
         self.onClose = onClose
-        let window = CaptureWindow(contentRect: NSRect(x: 0, y: 0, width: 520, height: 330),
+        let window = CaptureWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 520, height: 330),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.title = "Dictation Shortcut"
         window.isReleasedWhenClosed = false
@@ -62,7 +63,7 @@ final class ShortcutRecorderSheet: NSObject, NSWindowDelegate {
             stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -20),
             recordButton.widthAnchor.constraint(equalTo: stack.widthAnchor),
             hint.widthAnchor.constraint(equalTo: stack.widthAnchor),
-            buttons.widthAnchor.constraint(equalTo: stack.widthAnchor)
+            buttons.widthAnchor.constraint(equalTo: stack.widthAnchor),
         ])
         recorder.onChange = { [weak self] in self?.refresh() }
         refresh()
@@ -104,8 +105,10 @@ final class ShortcutRecorderSheet: NSObject, NSWindowDelegate {
         case .flagsChanged: kind = .flagsChanged
         default: return false
         }
-        recorder.receive(TapSample(kind: kind, keyCode: event.keyCode, flags: UInt64(event.modifierFlags.rawValue), timestamp: 0,
-            isAutorepeat: kind == .keyDown && event.isARepeat), keyName: kind == .keyDown ? event.charactersIgnoringModifiers : nil)
+        recorder.receive(
+            TapSample(
+                kind: kind, keyCode: event.keyCode, flags: UInt64(event.modifierFlags.rawValue), timestamp: 0,
+                isAutorepeat: kind == .keyDown && event.isARepeat), keyName: kind == .keyDown ? event.charactersIgnoringModifiers : nil)
         return true
     }
 

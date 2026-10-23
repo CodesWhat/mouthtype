@@ -22,7 +22,6 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     }
 
     private let version: AsrModelVersion
-    private let language: Language?
     private var manager: AsrManager?
     private var loadedModels: AsrModels?
     private var previewManager: AsrManager?
@@ -30,10 +29,9 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     private var speechDetector: VadManager?
     private let booster: VocabularyBooster
 
-    init(version: AsrModelVersion, language: Language? = nil) {
+    init(version: AsrModelVersion) {
         ModelPins.installFluidAudioRevisions()
         self.version = version
-        self.language = language
         switch version {
         case .v2:
             id = Self.v2ID
@@ -101,19 +99,21 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
 
         var directory = modelDirectory
         let downloadTime = try await clock.measure {
-            directory = try await AsrModels.download(version: version, progressHandler: { progress in
-                guard let report else { return }
-                let event: StagedDownloadTracker.Event
-                switch progress.phase {
-                case .listing: event = .listing
-                case .downloading: event = .downloading
-                case let .compiling(modelName): event = modelName.isEmpty ? .finished : .compiling
-                }
-                let (update, complete) = tracker.withLock { ($0.update(fraction: progress.fractionCompleted, event: event), $0.isComplete) }
-                // Compiling one model while the next still downloads is not the compile stage the user waits on.
-                let stage: EnginePreparation = complete ? .compiling : .progress(update)
-                Task { await report(stage) }
-            })
+            directory = try await AsrModels.download(
+                version: version,
+                progressHandler: { progress in
+                    guard let report else { return }
+                    let event: StagedDownloadTracker.Event
+                    switch progress.phase {
+                    case .listing: event = .listing
+                    case .downloading: event = .downloading
+                    case let .compiling(modelName): event = modelName.isEmpty ? .finished : .compiling
+                    }
+                    let (update, complete) = tracker.withLock { ($0.update(fraction: progress.fractionCompleted, event: event), $0.isComplete) }
+                    // Compiling one model while the next still downloads is not the compile stage the user waits on.
+                    let stage: EnginePreparation = complete ? .compiling : .progress(update)
+                    Task { await report(stage) }
+                })
         }
         await report?(.loadingModel)
         let newManager = AsrManager(config: .default)
@@ -122,18 +122,20 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
             let models = try await AsrModels.load(from: directory, version: version)
             try await newManager.loadModels(models)
             loadedModels = models
-            newDetector = try await VadManager(config: VadConfig(defaultThreshold: 0.5), progressHandler: { progress in
-                guard let report else { return }
-                let stage: EnginePreparation
-                switch progress.phase {
-                case .listing: stage = .downloading(fraction: 0)
-                case .downloading: stage = .downloading(fraction: progress.fractionCompleted)
-                case .compiling: stage = .compiling
-                }
-                Task { await report(stage) }
-            })
+            newDetector = try await VadManager(
+                config: VadConfig(defaultThreshold: 0.5),
+                progressHandler: { progress in
+                    guard let report else { return }
+                    let stage: EnginePreparation
+                    switch progress.phase {
+                    case .listing: stage = .downloading(fraction: 0)
+                    case .downloading: stage = .downloading(fraction: progress.fractionCompleted)
+                    case .compiling: stage = .compiling
+                    }
+                    Task { await report(stage) }
+                })
             var state = TdtDecoderState.make(decoderLayers: await newManager.decoderLayerCount)
-            _ = try await newManager.transcribe([Float](repeating: 0, count: 16_000), decoderState: &state, language: version == .v3 ? language : nil)
+            _ = try await newManager.transcribe([Float](repeating: 0, count: 16_000), decoderState: &state, language: version == .v3 ? DictationLanguageRequest.english.parakeetHint : nil)
         }
         manager = newManager
         speechDetector = newDetector
@@ -145,13 +147,19 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     }
 
     public func preview(samples: [Float]) async throws -> String? {
+        try await preview(samples: samples, language: .english)
+    }
+
+    public func preview(samples: [Float], language: DictationLanguageRequest) async throws -> String? {
         guard samples.count >= 32_000 else { return nil }
         guard let loadedModels, let speechDetector else { throw EngineError.notPrepared(id: id) }
-        return try await inference.withPreview(prepare: {
-            try await self.preparePreview(samples: samples, models: loadedModels, detector: speechDetector)
-        }, predict: { input in
-            try await self.predictPreview(input)
-        })
+        return try await inference.withPreview(
+            prepare: {
+                try await self.preparePreview(samples: samples, models: loadedModels, detector: speechDetector)
+            },
+            predict: { input in
+                try await self.predictPreview(input, language: language)
+            })
     }
 
     private struct PreparedPreview: Sendable {
@@ -176,29 +184,36 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
         return PreparedPreview(manager: previewManager, state: state, samples: window)
     }
 
-    private func predictPreview(_ input: PreparedPreview?) async throws -> String? {
+    private func predictPreview(_ input: PreparedPreview?, language: DictationLanguageRequest) async throws -> String? {
         try Task.checkCancellation()
         guard var input else { return "" }
-        let result = try await input.manager.transcribe(input.samples, decoderState: &input.state, language: version == .v3 ? language : nil)
+        let result = try await input.manager.transcribe(input.samples, decoderState: &input.state, language: version == .v3 ? language.parakeetHint : nil)
         try Task.checkCancellation()
         return result.text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     public func transcribe(samples: [Float]) async throws -> Transcription {
+        try await transcribe(samples: samples, language: .english)
+    }
+
+    public func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
         guard let manager, let speechDetector else { throw EngineError.notPrepared(id: id) }
         let startedAt = ContinuousClock.now
         return try await inference.withFinal {
-            try await self.transcribeWithAccess(samples: samples, manager: manager, detector: speechDetector, startedAt: startedAt)
+            try await self.transcribeWithAccess(
+                samples: samples, request: language, manager: manager, detector: speechDetector, startedAt: startedAt)
         }
     }
 
-    private func transcribeWithAccess(samples: [Float], manager: AsrManager, detector: VadManager,
-                                     startedAt: ContinuousClock.Instant) async throws -> Transcription {
+    private func transcribeWithAccess(
+        samples: [Float], request: DictationLanguageRequest, manager: AsrManager, detector: VadManager,
+        startedAt: ContinuousClock.Instant
+    ) async throws -> Transcription {
         let clock = ContinuousClock()
         let start = startedAt
         // VAD and ASR run together. VAD stays the filter for noise the recogniser would turn into words: with no speech
         // the ASR result is dropped, and an ASR failure only matters when there was speech.
-        let language = version == .v3 ? language : nil
+        let language = version == .v3 ? request.parakeetHint : nil
         async let asr: Result<ASRResult, Error> = {
             do {
                 var state = TdtDecoderState.make(decoderLayers: await manager.decoderLayerCount)
@@ -224,7 +239,9 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
         var words = WordAssembly.assemble(units)
         var applied: [String]?
         if let timings = result.tokenTimings,
-           let boosted = await booster.boost(text: result.text, tokenTimings: timings, samples: samples) {
+            request.allowsVocabularyBoost,
+            let boosted = await booster.boost(text: result.text, tokenTimings: timings, samples: samples)
+        {
             // Replaced spans take the times of the words they replaced; untouched words keep theirs.
             text = boosted.text
             words = VocabularyBooster.realign(words, to: boosted.text)

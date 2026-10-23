@@ -13,10 +13,11 @@ import Testing
         clipboard: String? = nil,
         options: TextPipelineOptions = .all
     ) -> TextPipelineResult {
-        pipeline.run(TextPipelineInput(
-            text: text, dictionary: dictionary, snippets: snippets, context: context,
-            now: Date(timeIntervalSince1970: 1_791_763_200), clipboard: clipboard, options: options
-        ))
+        pipeline.run(
+            TextPipelineInput(
+                text: text, dictionary: dictionary, snippets: snippets, context: context,
+                now: Date(timeIntervalSince1970: 1_791_763_200), clipboard: clipboard, options: options
+            ))
     }
 
     // MARK: Acceptance
@@ -197,20 +198,25 @@ import Testing
     static let logInputs: [(text: String, rules: [DictionaryRule], snippets: [Snippet], context: InsertionContext?)] = [
         ("um so I think we should uh ship it", [], [], nil),
         ("let's meet at two thirty p m new line bring the the deck", [], [], nil),
-        ("send it to Mouth Type comma Then go new paragraph thanks",
-         [DictionaryRule(heard: "Mouth Type", written: "Mouthtype")], [], nil),
-        ("uh my sig is twenty one dollars period",
-         [], [Snippet(trigger: "my sig", expansion: "Best regards, Scott")], nil),
+        (
+            "send it to Mouth Type comma Then go new paragraph thanks",
+            [DictionaryRule(heard: "Mouth Type", written: "Mouthtype")], [], nil
+        ),
+        (
+            "uh my sig is twenty one dollars period",
+            [], [Snippet(trigger: "my sig", expansion: "Best regards, Scott")], nil
+        ),
         ("Then we ship it period", [], [], InsertionContext(before: "and", after: "x")),
         ("Hmm, I I think hello comma, world", [DictionaryRule(heard: "world", written: "World")], [], nil),
     ]
 
     @Test func replayingTheLogReproducesEveryStage() {
         for item in Self.logInputs {
-            let (result, trace) = pipeline.runTraced(TextPipelineInput(
-                text: item.text, dictionary: item.rules, snippets: item.snippets, context: item.context,
-                now: Date(timeIntervalSince1970: 1_791_763_200)
-            ))
+            let (result, trace) = pipeline.runTraced(
+                TextPipelineInput(
+                    text: item.text, dictionary: item.rules, snippets: item.snippets, context: item.context,
+                    now: Date(timeIntervalSince1970: 1_791_763_200)
+                ))
             var logged: [EditOp] = []
             for stage in trace {
                 let replayed = TextTestSupport.replay(stage.edits, on: stage.input)
@@ -258,8 +264,8 @@ import Testing
         )
         #expect(out.text == "So send it to Mouthtype, Then Scott 21 apples")
         let counts = Dictionary(grouping: out.edits, by: \.stage).mapValues(\.count)
-        #expect(counts["filler"] == 3)         // um, so -> So, uh
-        #expect(counts["spoken command"] == 1) // comma
+        #expect(counts["filler"] == 3)  // um, so -> So, uh
+        #expect(counts["spoken command"] == 1)  // comma
         #expect(counts["number format"] == 1)
         #expect(counts["dictionary"] == 1)
         #expect(counts["snippet"] == 1)
@@ -303,7 +309,8 @@ import Testing
     // MARK: Performance
 
     static func paragraph(words target: Int) -> String {
-        let sentence = "um so I think we should uh ship the the new build to twenty one customers period "
+        let sentence =
+            "um so I think we should uh ship the the new build to twenty one customers period "
             + "the trial period is over and Mouth Type works fine comma then we send it to my sig new line "
             + "let's meet at two thirty p m and bring the deck. "
         var text = ""
@@ -326,12 +333,13 @@ import Testing
 
     @Test func threeHundredWordParagraphIsFast() {
         let input = benchmarkInput(Self.paragraph(words: 300))
-        _ = pipeline.run(input)   // warm up
+        _ = pipeline.run(input)  // warm up
         let clock = ContinuousClock()
         let runs = 50
         let elapsed = clock.measure { for _ in 0..<runs { _ = pipeline.run(input) } }
         let ms = (Double(elapsed.components.seconds) * 1000 + Double(elapsed.components.attoseconds) / 1e15) / Double(runs)
         print("TEXTPIPELINE-PERF 300 words: \(ms) ms average over \(runs) runs")
+        guard TextTestSupport.timingAssertsEnabled else { return }
         #if DEBUG
         // Debug builds are several times slower than release; the 5 ms target applies to release.
         #expect(ms < 50, "300 words took \(ms) ms")
@@ -349,6 +357,6 @@ import Testing
         print("TEXTPIPELINE-PERF 10000 words: \(ms) ms")
         #expect(!out.text.isEmpty)
         #expect(!out.edits.isEmpty)
-        #expect(ms < 3000, "10,000 words took \(ms) ms")
+        if TextTestSupport.timingAssertsEnabled { #expect(ms < 3000, "10,000 words took \(ms) ms") }
     }
 }

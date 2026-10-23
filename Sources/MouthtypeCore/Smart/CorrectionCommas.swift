@@ -29,7 +29,8 @@ enum CorrectionCommas {
                 inserts.insert(previous.end)
                 let end = words[k + cue.words.count - 1].end
                 if cue.commaAfter, end < chars.count, TextScan.isSpace(chars[end]),
-                   k + cue.words.count < words.count, TextScan.onlySpaces(chars, end, words[k + cue.words.count].start) {
+                    k + cue.words.count < words.count, TextScan.onlySpaces(chars, end, words[k + cue.words.count].start)
+                {
                     inserts.insert(end)
                 }
             }

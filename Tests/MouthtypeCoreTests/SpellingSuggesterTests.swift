@@ -20,6 +20,24 @@ private struct SplitMix64: RandomNumberGenerator {
         SuggestionTake(id: id, rawText: raw, finalText: final ?? raw, boostTermsApplied: boost, app: "Orca")
     }
 
+    @Test func suggestsFromEnglishTakesOnly() throws {
+        func lang(_ id: String, _ raw: String, _ language: DictationLanguage?) -> SuggestionTake {
+            SuggestionTake(id: id, rawText: raw, finalText: raw, boostTermsApplied: ["Siobhan"], app: "Orca", language: language)
+        }
+        let german = [lang("g1", "ask Chavon about it", .german), lang("g2", "Chavon agreed", .german)]
+        #expect(SpellingSuggester.suggest(takes: german, rules: rules).allSatisfy { $0.kind == .removeHazard })
+        let russian = [lang("r1", "ask Chavon about it", .russian), lang("r2", "Chavon agreed", .russian)]
+        #expect(SpellingSuggester.suggest(takes: russian, rules: rules).allSatisfy { $0.kind == .removeHazard })
+        for language in [nil, DictationLanguage.english] {
+            let english = [lang("e1", "ask Chavon about it", language), lang("e2", "Chavon agreed", language)]
+            #expect(SpellingSuggester.suggest(takes: english, rules: rules).contains { $0.written == "Siobhan" })
+        }
+        let mixed = german + [lang("e1", "ask Chavon about it", nil), lang("e2", "Chavon agreed", .english)]
+        let out = SpellingSuggester.suggest(takes: mixed, rules: rules)
+        let s = try #require(out.first { $0.written == "Siobhan" })
+        #expect(s.evidence.allSatisfy { $0.takeID.hasPrefix("e") })
+    }
+
     private let rules = [
         DictionaryRule(heard: "shivon", written: "Siobhan"),
         DictionaryRule(heard: "praya", written: "Priya"),
@@ -36,13 +54,14 @@ private struct SplitMix64: RandomNumberGenerator {
     }
 
     @Test func misheardVariantsOfASavedNameGroupUnderIt() throws {
-        let takes = [
-            take("a", raw: "Shaban took a minute", boost: ["Siobhan"]),
-            take("b", raw: "then Shaban called back"),
-            take("c", raw: "Shabon took a minute"),
-            take("d", raw: "Shabon agreed"),
-            take("e", raw: "ask Chavon about it"),
-        ] + filler(5)
+        let takes =
+            [
+                take("a", raw: "Shaban took a minute", boost: ["Siobhan"]),
+                take("b", raw: "then Shaban called back"),
+                take("c", raw: "Shabon took a minute"),
+                take("d", raw: "Shabon agreed"),
+                take("e", raw: "ask Chavon about it"),
+            ] + filler(5)
         let out = SpellingSuggester.suggest(takes: takes, rules: rules)
         let s = try #require(out.first { $0.kind == .misheardVariant && $0.written == "Siobhan" })
         // Chavon is a single folded-key sighting, so it stays out.
@@ -244,7 +263,12 @@ private struct SplitMix64: RandomNumberGenerator {
     }
 
     @Test func thousandTakesStayFast() {
-        let brands = ["Drydock", "Sockguard", "Portwing", "Mouthtype", "Wispr Flow", "CodesWhat", "Siobhan", "Priya", "Nguyen", "Kubernetes", "Tailscale", "Postgres", "Grafana", "Terraform", "Cloudflare", "Anthropic", "Figma", "Linear", "Notion", "Vercel", "Supabase", "Stripe", "Datadog", "Sentry", "Raycast", "Obsidian", "Homebrew", "Xcode", "Swiftly", "Cursor", "Ghostty", "Warp", "Zed", "Docker", "Compose", "Nginx", "Traefik", "Caddy", "Prometheus", "Loki", "Tempo", "Mimir", "Alloy", "Vector", "Fluentd", "Kibana", "Elastic", "Mongo", "Redis", "Valkey", "Kafka", "Pulsar", "Temporal", "Dagster", "Airflow", "Metabase", "Superset", "Retool", "Zapier"]
+        let brands = [
+            "Drydock", "Sockguard", "Portwing", "Mouthtype", "Wispr Flow", "CodesWhat", "Siobhan", "Priya", "Nguyen", "Kubernetes", "Tailscale", "Postgres", "Grafana", "Terraform", "Cloudflare",
+            "Anthropic", "Figma", "Linear", "Notion", "Vercel", "Supabase", "Stripe", "Datadog", "Sentry", "Raycast", "Obsidian", "Homebrew", "Xcode", "Swiftly", "Cursor", "Ghostty", "Warp", "Zed",
+            "Docker", "Compose", "Nginx", "Traefik", "Caddy", "Prometheus", "Loki", "Tempo", "Mimir", "Alloy", "Vector", "Fluentd", "Kibana", "Elastic", "Mongo", "Redis", "Valkey", "Kafka", "Pulsar",
+            "Temporal", "Dagster", "Airflow", "Metabase", "Superset", "Retool", "Zapier",
+        ]
         let r = brands.enumerated().map { DictionaryRule(heard: "heard\($0.offset)", written: $0.element) }
         let syllables = ["ka", "lo", "mi", "ra", "te", "vu", "no", "pi", "sa", "du", "fe", "gro", "bli", "tre", "sho", "quan", "zel", "man", "dor", "win"]
         var rng = SplitMix64(seed: 0x4D6F757468)
@@ -262,7 +286,7 @@ private struct SplitMix64: RandomNumberGenerator {
         let out = SpellingSuggester.suggest(takes: takes, rules: r, limit: 100)
         let elapsed = Date().timeIntervalSince(start)
         print("SpellingSuggester 1000 takes, \(r.count) rules: \(Int(elapsed * 1000)) ms")
-        #expect(elapsed < 2.0)
+        if TextTestSupport.timingAssertsEnabled { #expect(elapsed < 2.0) }
         #expect(out.contains { $0.written == "Siobhan" })
         #expect(out.contains { $0.written == "Drydock" })
     }

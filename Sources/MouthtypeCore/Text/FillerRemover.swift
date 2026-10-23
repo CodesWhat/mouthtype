@@ -130,7 +130,8 @@ public struct FillerRemover: Sendable {
                 add(core: s..<coreEnd, cut: s..<cutEnd, replacement: "")
                 let next = k + 1
                 if next < words.count, words[next].start == cutEnd, !isFiller(next),
-                   let up = TextScan.capitalized(chars, words[next]) {
+                    let up = TextScan.capitalized(chars, words[next])
+                {
                     spans.append(TextSpan(range: words[next].start..<words[next].end, replacement: up))
                     lastCutEnd = max(lastCutEnd, words[next].end)
                 }
@@ -174,7 +175,8 @@ public struct FillerRemover: Sendable {
             guard t.contains(where: { $0.isLetter }), !t.contains(where: { $0.isNumber }) else { return false }
             guard !FillerRemover.doubledAllowList.contains(t), !NumberWords.isNumberWord(t) else { return false }
             if t == "is", kept.count >= 3, words[kept[kept.count - 3]].lower == "what",
-               words[kept[kept.count - 2]].lower == "it" {
+                words[kept[kept.count - 2]].lower == "it"
+            {
                 return false
             }
             var i = wp.end

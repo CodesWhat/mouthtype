@@ -166,12 +166,14 @@ public final class TextInserter {
             return DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: moved, target: now, finalText: "")
         }
         guard !closing else {
-            return DeliveryResult(method: .none, outcome: .failed("Mouthtype is quitting"),
-                                  focusMoved: false, target: nil, finalText: text)
+            return DeliveryResult(
+                method: .none, outcome: .failed("Mouthtype is quitting"),
+                focusMoved: false, target: nil, finalText: text)
         }
         guard !deliveryActive else {
-            return DeliveryResult(method: .none, outcome: .failed("Another paste is still in progress"),
-                                  focusMoved: false, target: nil, finalText: text)
+            return DeliveryResult(
+                method: .none, outcome: .failed("Another paste is still in progress"),
+                focusMoved: false, target: nil, finalText: text)
         }
         deliveryActive = true
         defer { deliveryActive = false }
@@ -181,28 +183,33 @@ public final class TextInserter {
         }
         let previous = clipboard.pasteGeneration
         if DeliveryDecision.decide(now: now, secureInput: secureInput) != .discardSecure,
-           clipboard.holdsPaste(previous) {
+            clipboard.holdsPaste(previous)
+        {
             let settled = await waitForPreviousPaste(previous)
             if Task.isCancelled {
                 lastText = text
-                return DeliveryResult(method: .none, outcome: .failed("Paste canceled"),
-                                      focusMoved: moved, target: now, finalText: text)
+                return DeliveryResult(
+                    method: .none, outcome: .failed("Paste canceled"),
+                    focusMoved: moved, target: now, finalText: text)
             }
             var checked = focus.snapshot()
             let checkedSecureInput = focus.isSecureInputEnabled
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
                 checked.isSecure = checked.isSecure || checkedSecureInput
-                return DeliveryResult(method: .none, outcome: .secureDiscard,
-                                      focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
+                return DeliveryResult(
+                    method: .none, outcome: .secureDiscard,
+                    focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
             }
             lastText = text
             guard checked.pid == now.pid, checked.bundleID == now.bundleID, checked.element == now.element else {
-                return DeliveryResult(method: .none, outcome: .failed("Focus changed before paste"),
-                                      focusMoved: true, target: checked, finalText: text)
+                return DeliveryResult(
+                    method: .none, outcome: .failed("Focus changed before paste"),
+                    focusMoved: true, target: checked, finalText: text)
             }
             guard settled else {
-                return DeliveryResult(method: .none, outcome: .failed("The previous paste has not settled. Copy this result after the app responds."),
-                                      focusMoved: moved, target: checked, finalText: text)
+                return DeliveryResult(
+                    method: .none, outcome: .failed("The previous paste has not settled. Copy this result after the app responds."),
+                    focusMoved: moved, target: checked, finalText: text)
             }
             now = checked
             secureInput = checkedSecureInput
@@ -241,20 +248,23 @@ public final class TextInserter {
                 if let preceding = continuation.character { before = .character(preceding) }
             }
             let spaced = Spacing.spaced(text, before: before)
-            observeBoundary(PasteBoundaryDiagnostic(
-                before: before, continuation: continuation, original: text, spaced: spaced, target: now
-            ))
+            observeBoundary(
+                PasteBoundaryDiagnostic(
+                    before: before, continuation: continuation, original: text, spaced: spaced, target: now
+                ))
             let keyCode = keys.pasteKeyCode()
             // Accessibility reads can wait on another app. Recheck before borrowing the clipboard or posting keys.
             // The baseline only feeds the read-back, so it is read only when someone is listening for the verdict.
-            let fieldBefore = onVerified != nil && PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
+            let fieldBefore =
+                onVerified != nil && PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
                 ? now.element.map { element in focus.prePaste { focus.readField(of: element) } } : nil
             axReads = axReads || fieldBefore != nil
             let checkedSecureInput = focus.isSecureInputEnabled
             var checked = now
             if axReads {
                 let light = focus.prePaste { focus.recheck() }
-                let steady = light.pid == now.pid && light.bundleID == now.bundleID && light.element == now.element
+                let steady =
+                    light.pid == now.pid && light.bundleID == now.bundleID && light.element == now.element
                     && !light.isSecure && !light.focusOwnerDiffersFromFrontmost && !checkedSecureInput
                 // Anything unsteady gets the full read, so the guards and the reported target see the whole snapshot.
                 if !steady {
@@ -270,18 +280,21 @@ public final class TextInserter {
             }
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
                 checked.isSecure = checked.isSecure || checkedSecureInput
-                return DeliveryResult(method: .none, outcome: .secureDiscard,
-                                      focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
+                return DeliveryResult(
+                    method: .none, outcome: .secureDiscard,
+                    focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
             }
             if checked.focusOwnerDiffersFromFrontmost {
-                return leaveOnClipboard(text, because: "focus moved to another process during paste preparation",
-                                        moved: moved || now.hasChanged(to: checked), target: checked)
+                return leaveOnClipboard(
+                    text, because: "focus moved to another process during paste preparation",
+                    moved: moved || now.hasChanged(to: checked), target: checked)
             }
             lastText = text
             guard checked.pid == now.pid, checked.bundleID == now.bundleID, checked.element == now.element else {
                 Log.app.info("focus changed during paste preparation; no paste or clipboard write")
-                return DeliveryResult(method: .none, outcome: .failed("Focus changed before paste"),
-                                      focusMoved: true, target: checked, finalText: text)
+                return DeliveryResult(
+                    method: .none, outcome: .failed("Focus changed before paste"),
+                    focusMoved: true, target: checked, finalText: text)
             }
             guard let keyCode else {
                 clipboard.copy(spaced)
@@ -295,13 +308,15 @@ public final class TextInserter {
             if split {
                 guard let parts = PasteChunks.parts(spaced), inputGeneration() != nil else {
                     clipboard.copy(spaced)
-                    return DeliveryResult(method: .clipboardOnly, outcome: .failed("Long paste cannot be split safely"),
-                                          focusMoved: moved, target: now, finalText: spaced)
+                    return DeliveryResult(
+                        method: .clipboardOnly, outcome: .failed("Long paste cannot be split safely"),
+                        focusMoved: moved, target: now, finalText: spaced)
                 }
                 guard await pasteInParts(parts, keyCode: keyCode, target: now) else {
                     lastPaste = nil
-                    return DeliveryResult(method: .paste, outcome: .partialPaste,
-                                          focusMoved: moved, target: now, finalText: spaced)
+                    return DeliveryResult(
+                        method: .paste, outcome: .partialPaste,
+                        focusMoved: moved, target: now, finalText: spaced)
                 }
             } else if !clipboard.paste(spaced, keyCode: keyCode, targetPID: now.pid) {
                 clipboard.copy(spaced)
@@ -320,8 +335,11 @@ public final class TextInserter {
             }
             startVerification(
                 generation: generation, pasted: spaced, target: now,
-                baseline: fieldBefore.map { PasteVerifier.Baseline(reading: $0, input: afterInput,
-                    unchangedProvesFailure: reliableReadBack && !split) }
+                baseline: fieldBefore.map {
+                    PasteVerifier.Baseline(
+                        reading: $0, input: afterInput,
+                        unchangedProvesFailure: reliableReadBack && !split)
+                }
             )
             return DeliveryResult(
                 method: .paste, outcome: .unknown, focusMoved: moved, target: now, finalText: spaced,
@@ -488,8 +506,10 @@ final class SystemPasteEventPoster: PasteEventPosting {
     private let targetPID: pid_t?
     private let post: @MainActor (CGEvent, pid_t) -> Void
 
-    init(stamp: Int64, targetPID: pid_t? = nil,
-         post: @escaping @MainActor (CGEvent, pid_t) -> Void = { event, pid in event.postToPid(pid) }) {
+    init(
+        stamp: Int64, targetPID: pid_t? = nil,
+        post: @escaping @MainActor (CGEvent, pid_t) -> Void = { event, pid in event.postToPid(pid) }
+    ) {
         self.stamp = stamp
         self.targetPID = targetPID
         self.post = post

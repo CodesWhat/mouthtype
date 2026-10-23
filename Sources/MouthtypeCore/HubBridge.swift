@@ -64,10 +64,11 @@ struct HubDownloader: MLXLMCommon.Downloader {
     private static func completeSnapshot(repo: Repo.ID, ref: String) -> URL? {
         let cache = HubCache.default
         guard let commit = resolveCommit(repo: repo, ref: ref),
-              let snapshot = try? cache.snapshotPath(repo: repo, kind: .model, commitHash: commit)
+            let snapshot = try? cache.snapshotPath(repo: repo, kind: .model, commitHash: commit)
         else { return nil }
         let fm = FileManager.default
-        return snapshotIsComplete(files: (try? fm.contentsOfDirectory(atPath: snapshot.path)) ?? [],
+        return snapshotIsComplete(
+            files: (try? fm.contentsOfDirectory(atPath: snapshot.path)) ?? [],
             fileExists: { fileIsNonempty(snapshot.appendingPathComponent($0)) },
             contents: { try? Data(contentsOf: snapshot.appendingPathComponent($0)) }) ? snapshot : nil
     }
@@ -80,8 +81,9 @@ struct HubDownloader: MLXLMCommon.Downloader {
         let snapshots = repoDirectory.appendingPathComponent("snapshots")
         func linkedBlobs(in snapshot: URL) -> Set<String> {
             let files = (fm.enumerator(at: snapshot, includingPropertiesForKeys: nil)?.allObjects as? [URL]) ?? []
-            return Set(files.compactMap { try? fm.destinationOfSymbolicLink(atPath: $0.path) }
-                .map { URL(fileURLWithPath: $0, relativeTo: snapshot).standardizedFileURL.lastPathComponent })
+            return Set(
+                files.compactMap { try? fm.destinationOfSymbolicLink(atPath: $0.path) }
+                    .map { URL(fileURLWithPath: $0, relativeTo: snapshot).standardizedFileURL.lastPathComponent })
         }
         let target = snapshots.appendingPathComponent(commit)
         let mine = linkedBlobs(in: target)
@@ -107,8 +109,9 @@ struct HubDownloader: MLXLMCommon.Downloader {
         guard fileExists("config.json"), fileExists("tokenizer.json") else { return false }
         if files.contains("model.safetensors.index.json") {
             guard let data = contents("model.safetensors.index.json"),
-                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let weightMap = json["weight_map"] as? [String: String], !weightMap.isEmpty else { return false }
+                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let weightMap = json["weight_map"] as? [String: String], !weightMap.isEmpty
+            else { return false }
             return Set(weightMap.values).allSatisfy(fileExists)
         }
         return files.contains { $0.hasSuffix(".safetensors") && fileExists($0) }

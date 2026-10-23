@@ -41,23 +41,27 @@ extension SettingsView {
         }
         DesignCard {
             if model.skin.hasGlassSwitch {
-                DesignRow(title: "Glass", detail: "Draws the pill and its cards on the system glass material. Falls back to solid when Reduce Transparency is on.") {
+                DesignRow(title: "Glass", detail: "Uses the system glass material. Solid when Reduce Transparency is on.") {
                     Toggle("Glass", isOn: Binding(get: { model.skin == .glass }, set: { model.setSkin($0 ? .glass : .classic) }))
                         .labelsHidden().toggleStyle(.designSwitch).accessibilityIdentifier("settings-pill-glass")
                 }
             }
-            DesignRow(title: "Pill size", detail: "Automatic picks Large on wide screens. Applies the next time the pill appears.") {
-                DesignSegmented(title: "Pill size", selection: Binding(get: { model.pillSize }, set: { model.setPillSize($0) }),
-                                choices: PillSize.allCases.map { DesignChoice($0.title, $0) })
-                    .accessibilityIdentifier("settings-pill-size")
+            DesignRow(title: "Pill size", detail: "Automatic picks Large on wide screens.") {
+                DesignSegmented(
+                    title: "Pill size", selection: Binding(get: { model.pillSize }, set: { model.setPillSize($0) }),
+                    choices: PillSize.allCases.map { DesignChoice($0.title, $0) }
+                )
+                .accessibilityIdentifier("settings-pill-size")
             }
             if model.skin.hasReadoutColour {
                 DesignRow(title: "Readout colour", detail: "The meter, timer and message text on the chassis.") {
-                    DesignSegmented(title: "Readout colour", selection: Binding(get: { model.readoutColour }, set: { model.setReadoutColour($0) }),
-                                    choices: PillReadoutColour.allCases.map {
-                                        DesignChoice($0.title, $0, dot: Color(cgColor: PillLayout.color(hex: $0.swatchHex)))
-                                    })
-                        .accessibilityIdentifier("settings-readout-colour")
+                    DesignSegmented(
+                        title: "Readout colour", selection: Binding(get: { model.readoutColour }, set: { model.setReadoutColour($0) }),
+                        choices: PillReadoutColour.allCases.map {
+                            DesignChoice($0.title, $0, dot: Color(cgColor: PillLayout.color(hex: $0.swatchHex)))
+                        }
+                    )
+                    .accessibilityIdentifier("settings-readout-colour")
                 }
             }
             if model.skin.usesTextFont {
@@ -66,11 +70,11 @@ extension SettingsView {
             }
         }
         if !model.skin.usesTextFont {
-            Text("Hi-Fi keeps its own bitmap type, so the text font settings only show for the other styles.")
+            Text("Hi-Fi uses its own bitmap type, so font settings are hidden.")
                 .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         } else if model.fontOverrides.enabled {
-            Text("Switching overrides off keeps your choices. Hi-Fi\u{2019}s bitmap readouts keep their own artwork.")
+            Text("Turning overrides off keeps your choices.")
                 .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         }
@@ -81,9 +85,14 @@ extension SettingsView {
         var choices = standard
         if case .custom = model.font { choices.append(DesignChoice(model.font.title, model.font.title)) }
         return DesignRow(title: model.fontOverrides.enabled ? "Base text font" : "Text font", detail: model.skin.textFontDetail) {
-            DesignPopup(title: "Text font", selection: Binding(get: { model.font.title }, set: { name in
-                if let font = TextFontChoice.standard.first(where: { $0.title == name }) { model.setFont(font) }
-            }), choices: choices).accessibilityIdentifier("settings-text-font")
+            DesignPopup(
+                title: "Text font",
+                selection: Binding(
+                    get: { model.font.title },
+                    set: { name in
+                        if let font = TextFontChoice.standard.first(where: { $0.title == name }) { model.setFont(font) }
+                    }), choices: choices
+            ).accessibilityIdentifier("settings-text-font")
             Button("Choose Font…", action: actions.chooseFont).buttonStyle(.designSecondary)
                 .accessibilityLabel("Choose a font").accessibilityIdentifier("settings-choose-font")
         }
@@ -96,9 +105,11 @@ extension SettingsView {
         VStack(spacing: 8) {
             GeometryReader { proxy in
                 ZStack(alignment: .bottom) {
-                    PillPreviewStageView(kind: model.skin, size: model.pillSize, readout: model.readoutColour, wallpaper: model.previewWallpaper,
-                                         onStatus: { status in DispatchQueue.main.async { if model.previewStatus != status { model.previewStatus = status } } })
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    PillPreviewStageView(
+                        kind: model.skin, size: model.pillSize, readout: model.readoutColour, wallpaper: model.previewWallpaper,
+                        onStatus: { status in DispatchQueue.main.async { if model.previewStatus != status { model.previewStatus = status } } }
+                    )
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     Text("\(model.skin.title) \u{00B7} live preview \u{00B7} \(model.pillSize.previewTitle) size".uppercased())
                         .font(DesignFont.mono(DesignFont.eyebrow)).tracking(DesignFont.eyebrowTracking)
                         .foregroundStyle(model.previewWallpaper.captionColor).padding(.bottom, 10).accessibilityHidden(true)
@@ -131,7 +142,9 @@ extension SettingsView {
         return HStack(spacing: 0) {
             ForEach(PreviewWallpaper.allCases) { wallpaper in
                 let selected = wallpaper == model.previewWallpaper
-                Button { model.previewWallpaper = wallpaper } label: {
+                Button {
+                    model.previewWallpaper = wallpaper
+                } label: {
                     Text(wallpaper.title).font(DesignFont.sans(DesignFont.caption, .medium)).fixedSize()
                         .foregroundStyle(ink.opacity(selected ? 1 : 0.7))
                         .padding(.horizontal, 10).frame(minHeight: 24)
@@ -156,8 +169,10 @@ private struct PreviewWidthKey: PreferenceKey {
 @MainActor enum SettingsPillImage {
     /// A settled still of the pill on the preview canvas, for a window that is not on screen, where a live skin never
     /// finishes its entrance. `.automatic` previews as Standard: the preview cannot know which screen the pill will land on.
-    static func make(skin: PillSkinKind, size: PillSize, readout: PillReadoutColour = .default, wallpaper: PreviewWallpaper = .dark,
-                     glassEnvironment: GlassPillEnvironment = .system) -> NSImage? {
+    static func make(
+        skin: PillSkinKind, size: PillSize, readout: PillReadoutColour = .default, wallpaper: PreviewWallpaper = .dark,
+        glassEnvironment: GlassPillEnvironment = .system
+    ) -> NSImage? {
         let canvas = PreviewFit.canvas
         let scale = size.resolved(visibleWidth: 0)
         let height = skin.pillHeight * scale.factor + 2 * PillGeometry.verticalMargin
@@ -168,8 +183,11 @@ private struct PreviewWidthKey: PreferenceKey {
         view.showRecording(locked: false)
         view.showFractions(PreviewLevel.still)
         view.setElapsed(0)
-        guard let context = CGContext(data: nil, width: Int(canvas.width * 2), height: Int(height * 2), bitsPerComponent: 8, bytesPerRow: 0,
-                                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        guard
+            let context = CGContext(
+                data: nil, width: Int(canvas.width * 2), height: Int(height * 2), bitsPerComponent: 8, bytesPerRow: 0,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)
+        else { return nil }
         context.scaleBy(x: 2, y: 2)
         view.renderOffscreen(in: context)
         guard let image = context.makeImage() else { return nil }

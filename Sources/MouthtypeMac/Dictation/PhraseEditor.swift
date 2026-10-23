@@ -22,6 +22,18 @@ import Observation
         reload()
     }
 
+    /// Writes the phrases to `url` as `trigger,expansion` CSV. Returns whether it was written; failure lands in `error`.
+    @discardableResult
+    func exportCSV(to url: URL) -> Bool {
+        do {
+            try Data(SpellingCSV.export(items).utf8).write(to: url, options: .atomic)
+            return true
+        } catch {
+            self.error = "Could not export: \(error.localizedDescription)"
+            return false
+        }
+    }
+
     func reload() {
         guard !isDirty else { return }
         do {

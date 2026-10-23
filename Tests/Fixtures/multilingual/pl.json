@@ -1,0 +1,68 @@
+[
+  {
+    "id": "pl-collision-number-ten",
+    "language": "pl",
+    "raw": "Ten dom jest duży.",
+    "notes": "Damage table: 'ten' is the demonstrative 'this', 0.5.0 number formatting writes '10 dom jest duży.'"
+  },
+  {
+    "id": "pl-short-1",
+    "language": "pl",
+    "raw": "Proszę wysłać mi plik przed obiadem.",
+    "notes": "Short, 6 words."
+  },
+  {
+    "id": "pl-short-2",
+    "language": "pl",
+    "raw": "Spotkanie zaczyna się jutro rano o dziewiątej.",
+    "notes": "Short, 7 words."
+  },
+  {
+    "id": "pl-medium-1",
+    "language": "pl",
+    "raw": "Czy możemy przenieść spotkanie na czwartek, bo klient przyjeżdża do Poznania dopiero o jedenastej?",
+    "notes": "Medium, 14 words."
+  },
+  {
+    "id": "pl-medium-2",
+    "language": "pl",
+    "raw": "Dziś rano jeszcze raz przejrzałem liczby i drugi kwartał wygląda lepiej, niż się spodziewaliśmy.",
+    "notes": "Medium, 14 words."
+  },
+  {
+    "id": "pl-long-1",
+    "language": "pl",
+    "raw": "Cześć wszystkim, krótka aktualizacja dotycząca stanu migracji. Przełączenie bazy danych zakończyło się wczoraj wieczorem bez żadnej przerwy, a repliki do odczytu są już zsynchronizowane z serwerem głównym.",
+    "notes": "Long, 27 words."
+  },
+  {
+    "id": "pl-long-2",
+    "language": "pl",
+    "raw": "Dziękuję za przesłanie poprawionej propozycji. Dziś rano omówiłem harmonogram i budżet z zespołem i w dużej mierze zgadzamy się co do planu na następny kwartał tego roku.",
+    "notes": "Long, 27 words."
+  },
+  {
+    "id": "pl-tech-iw",
+    "language": "pl",
+    "raw": "Pojedziemy do Łodzi I W sobotę.",
+    "notes": "Technical notation: Polish conjunction 'i' and 'w' must stay as written. Also Łódź casing."
+  },
+  {
+    "id": "pl-messy-1",
+    "language": "pl",
+    "raw": "No więc, yyy, spotykamy się jutro o, yyy, o dziesiątej w biurze i, i omawiamy plan na przyszły tydzień.",
+    "notes": "Messy: fillers and a repeated word, 22 words or so. The model should drop the fillers and keep the language."
+  },
+  {
+    "id": "pl-messy-2",
+    "language": "pl",
+    "raw": "Wyślij mi plik do wtorku, nie czekaj, do środy, i daj też znać zespołowi.",
+    "notes": "Messy: a spoken self-correction. The model keeps Wednesday and drops the correction."
+  },
+  {
+    "id": "pl-messy-3",
+    "language": "pl",
+    "raw": "Potrzebujemy po pierwsze więcej czasu na testy po drugie jeszcze jednego programisty i po trzecie jasnego budżetu inaczej nic z tego nie będzie",
+    "notes": "Messy: an unpunctuated list with counted items. The model may format it as a list."
+  }
+]

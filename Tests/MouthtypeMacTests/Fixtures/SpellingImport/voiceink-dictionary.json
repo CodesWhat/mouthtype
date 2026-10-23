@@ -1,0 +1,14 @@
+{
+  "format": "voiceink.dictionary",
+  "schemaVersion": 1,
+  "exportedAt": "2026-10-01T12:00:00Z",
+  "appVersion": "1.70",
+  "vocabulary": [
+    { "term": "Drydock", "createdAt": "2026-09-01T09:00:00Z" },
+    { "term": "Sockguard" }
+  ],
+  "replacements": [
+    { "sources": ["dry doc", "dry dock"], "replacement": "Drydock", "createdAt": "2026-09-02T09:00:00Z" },
+    { "sources": ["shawn"], "replacement": "Sean" }
+  ]
+}

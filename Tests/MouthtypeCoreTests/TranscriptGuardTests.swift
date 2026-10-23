@@ -52,9 +52,11 @@ import Testing
     // MARK: Start cue
 
     @Test func cueSoundBeforeAGapIsDropped() {
-        let out = guarded("Tink. Send the notes", [
-            ("Tink.", 0.05, 0.2, 0.3), ("Send", 0.9, 1.1, 0.95), ("the", 1.1, 1.2, 0.9), ("notes", 1.2, 1.5, 0.9),
-        ])
+        let out = guarded(
+            "Tink. Send the notes",
+            [
+                ("Tink.", 0.05, 0.2, 0.3), ("Send", 0.9, 1.1, 0.95), ("the", 1.1, 1.2, 0.9), ("notes", 1.2, 1.5, 0.9),
+            ])
         #expect(out.text == "Send the notes")
         #expect(out.edits == [EditOp(stage: "filler", kind: .delete, fromText: "Tink.", toText: nil, wordDelta: -1, position: 0)])
     }
@@ -105,5 +107,24 @@ import Testing
         #expect(out.edits.isEmpty)
         #expect(!out.isEmpty)
         #expect(TranscriptGuard().apply(t, voicedMs: 10, clean: false).isEmpty)
+    }
+
+    @Test(arguments: [("ich", DictationLanguage.german), ("oui", .french), ("und", .german), ("que", .spanish)])
+    func hesitantOpenerSurvivesOutsideEnglish(_ word: String, _ language: DictationLanguage) {
+        let t = transcription("\(word) komme", [(word, 0.1, 0.2, 0.2), ("komme", 0.5, 0.8, 0.9)])
+        let out = TranscriptGuard(language: language).apply(t, voicedMs: 900)
+        #expect(out.text.hasPrefix(word))
+        #expect(out.edits.isEmpty)
+    }
+
+    @Test func cueSoundStillDropsOutsideEnglish() {
+        let t = transcription("tink Guten Morgen", [("tink", 0.1, 0.2, 0.2), ("Guten", 0.5, 0.8, 0.9), ("Morgen", 0.9, 1.2, 0.9)])
+        #expect(TranscriptGuard(language: .german).apply(t, voicedMs: 900).text == "Guten Morgen")
+    }
+
+    @Test func shortUnknownWordStillDropsInEnglishAndNil() {
+        let t = transcription("zzz hello there", [("zzz", 0.1, 0.2, 0.2), ("hello", 0.5, 0.8, 0.9), ("there", 0.9, 1.2, 0.9)])
+        #expect(TranscriptGuard().apply(t, voicedMs: 900).text == "hello there")
+        #expect(TranscriptGuard(language: .english).apply(t, voicedMs: 900).text == "hello there")
     }
 }

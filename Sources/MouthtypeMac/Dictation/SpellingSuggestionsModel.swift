@@ -16,8 +16,9 @@ struct DismissedSuggestions: Codable, Equatable {
 
     static func load(from url: URL) -> DismissedSuggestions {
         guard let data = try? Data(contentsOf: url),
-              var saved = try? JSONDecoder().decode(DismissedSuggestions.self, from: data),
-              saved.version == currentVersion else { return DismissedSuggestions() }
+            var saved = try? JSONDecoder().decode(DismissedSuggestions.self, from: data),
+            saved.version == currentVersion
+        else { return DismissedSuggestions() }
         saved.counts = saved.counts.filter { countRange.contains($0.value) }
         return saved
     }
@@ -134,8 +135,9 @@ struct DismissedSuggestions: Codable, Equatable {
         let isKnownWord = isKnownWord
         let previous = lastRun
         computeTask?.cancel()
-        let work = Task.detached { () -> Computed? in
-            guard let records = try? fetch(store, limit), let rules = try? vocabulary.allRules(), !Task.isCancelled else { return nil }
+        let work = Task.detached { () async -> Computed? in
+            let records = try? await OffPool.run { try fetch(store, limit) }
+            guard let records, let rules = try? vocabulary.allRules(), !Task.isCancelled else { return nil }
             if let previous, previous.records == records, previous.rules == rules {
                 return previous
             }
@@ -143,7 +145,11 @@ struct DismissedSuggestions: Codable, Equatable {
             return Task.isCancelled ? nil : Computed(records: records, rules: rules, found: found)
         }
         computeTask = work
-        let computed = await withTaskCancellationHandler { await work.value } onCancel: { work.cancel() }
+        let computed = await withTaskCancellationHandler {
+            await work.value
+        } onCancel: {
+            work.cancel()
+        }
         guard mine == generation, !Task.isCancelled, let computed else { return }
         lastRun = computed
         all = computed.found
@@ -153,12 +159,16 @@ struct DismissedSuggestions: Codable, Equatable {
     nonisolated static func takes(from records: [TakeRecord]) -> [SuggestionTake] {
         records.compactMap { record in
             guard record.isSecure != true, let raw = record.rawText, let final = record.finalText,
-                  !final.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-            let boosted = record.boostTermsAppliedJson
+                !final.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            else { return nil }
+            let boosted =
+                record.boostTermsAppliedJson
                 .flatMap { $0.data(using: .utf8) }
                 .flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
-            return SuggestionTake(id: record.id, rawText: raw, finalText: final, boostTermsApplied: boosted,
-                app: record.appName, date: Date(timeIntervalSince1970: record.startedAt))
+            return SuggestionTake(
+                id: record.id, rawText: raw, finalText: final, boostTermsApplied: boosted,
+                app: record.appName, date: Date(timeIntervalSince1970: record.startedAt),
+                language: record.language.flatMap { DictationLanguage(code: $0) })
         }
     }
 
@@ -173,7 +183,8 @@ struct DismissedSuggestions: Codable, Equatable {
         var added: [DictionaryRule] = []
         do {
             for heard in suggestion.heardForms {
-                let rule = DictionaryRule(heard: heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
+                let rule = DictionaryRule(
+                    heard: heard.split(whereSeparator: \.isWhitespace).joined(separator: " "),
                     written: suggestion.written.trimmingCharacters(in: .whitespacesAndNewlines))
                 try vocabulary.save(original: nil, rule: rule)
                 added.append(rule)
@@ -232,8 +243,7 @@ struct DismissedSuggestions: Codable, Equatable {
 
     func dismiss(_ suggestion: SpellingSuggestion) {
         dismissed.counts[suggestion.id] = max(suggestion.count, 1)
-        do { try dismissed.write(to: dismissedURL); error = nil }
-        catch { self.error = "Couldn't remember that dismissal: \(error.localizedDescription)" }
+        do { try dismissed.write(to: dismissedURL); error = nil } catch { self.error = "Couldn't remember that dismissal: \(error.localizedDescription)" }
         publish()
     }
 

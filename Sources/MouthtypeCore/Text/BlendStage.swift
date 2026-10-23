@@ -20,6 +20,8 @@ public struct InsertionContext: Sendable, Equatable {
 /// - `after` starts with text, allowing spaces/tabs but not a new line: drop one trailing full stop (not an ellipsis).
 /// - Otherwise, at the start of a sentence or with no context, capitalise the first letter (same exceptions).
 ///
+/// German is the exception to the mid-sentence rule: its nouns are capitalized, so the first word stays as written.
+///
 /// Known miss: a proper noun that starts the result mid-sentence ("Sarah said yes") is lowercased, because
 /// the engine's capital cannot be told apart from a sentence start.
 ///
@@ -29,10 +31,12 @@ public struct BlendStage: Sendable {
 
     private let context: InsertionContext?
     private let protectedWords: Set<String>
+    private let language: DictationLanguage?
 
-    public init(context: InsertionContext?, protectedWords: Set<String> = []) {
+    public init(context: InsertionContext?, protectedWords: Set<String> = [], language: DictationLanguage? = nil) {
         self.context = context
         self.protectedWords = protectedWords
+        self.language = language
     }
 
     /// First word of each string, exactly as written, for use as `protectedWords`.
@@ -62,6 +66,8 @@ public struct BlendStage: Sendable {
                 if !protectedWords.contains(original) && !isPronounI(original) {
                     switch position() {
                     case .midSentence:
+                        // German capitalizes every noun, so a capital mid-sentence is usually correct.
+                        if language == .german { break }
                         if let low = lowercasedFirst(original) {
                             spans.append(TextSpan(range: word.start..<word.end, replacement: low))
                         }
@@ -107,7 +113,7 @@ public struct BlendStage: Sendable {
     private func lowercasedFirst(_ word: String) -> String? {
         guard let first = word.first, first.isUppercase else { return nil }
         let rest = word.dropFirst()
-        if rest.contains(where: { $0.isUppercase }) { return nil }   // acronym or mixed case
+        if rest.contains(where: { $0.isUppercase }) { return nil }  // acronym or mixed case
         return first.lowercased() + rest
     }
 }

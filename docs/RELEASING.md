@@ -25,11 +25,13 @@ Follow the CodesWhat dev-branch, reviewed-PR and main-sync procedure. Keep defer
 
 ### 3. Package the release
 
-Run `python3 scripts/package-release.py --output-dir /absolute/path/to/release-output` from the exact tagged source. It builds, signs, submits to Apple, waits with a ten-minute limit, staples, makes the final ZIP, extracts it, and requires signature/staple/Gatekeeper checks to pass on the extracted app. It then builds the DMG from the stapled app, signs it with the same Developer ID, notarizes and staples the DMG through the same submit/wait/log flow, mounts it read-only, and requires the signature, ticket and Gatekeeper (`spctl --type open`) checks to pass on the image and the app inside it.
+Run `python3 scripts/package-release.py --output-dir /absolute/path/to/release-output` from the exact tagged source. It builds in repeatable mode (fixed scratch path `/private/tmp/mouthtype-release-scratch`, see [REPEATABLE-BUILD.md](REPEATABLE-BUILD.md)), signs, submits to Apple, waits with a ten-minute limit, staples, makes the final ZIP, extracts it, and requires signature/staple/Gatekeeper checks to pass on the extracted app. It then builds the DMG from the stapled app, signs it with the same Developer ID, notarizes and staples the DMG through the same submit/wait/log flow, mounts it read-only, and requires the signature, ticket and Gatekeeper (`spctl --type open`) checks to pass on the image and the app inside it.
 
 The DMG is the public first-install download and the ZIP is the Sparkle update archive; the appcast keeps pointing at the ZIP. `scripts/build-dmg.py` makes the DMG: dmgbuild (pinned in `scripts/dmg/requirements.txt`, installed into the git-ignored `build/dmg-venv` on first run) writes the window layout and runs hdiutil, so no Finder scripting is involved. The window background comes from `scripts/dmg/background.py` (stdlib, deterministic, 1x and 2x combined with `tiffutil`) and the volume icon is rendered from the built app's own system icon by `scripts/dmg/volume-icon.swift`, so it keeps the squircle. The volume is named Mouthtype and compressed UDZO. Preview one without the release flow: `MOUTHTYPE_TIMESTAMP=none python3 scripts/build-dmg.py --app build/Mouthtype.app --output build/dmg-preview/Mouthtype.dmg`.
 
 The ZIP contains only Mouthtype.app at its root so Finder expansion and Sparkle installation share the same artifact. Install notes and license are inside Contents/Resources. The helper never installs or launches the app and refuses to replace an existing release-output directory.
+
+The manifest records `repeatableBuild`, `scratchPath` and the `toolchain` versions (`swift --version`, `xcodebuild -version`). To reproduce a release from its tag, follow "Releases are built this way" in REPEATABLE-BUILD.md.
 
 Notarization uses the App Store Connect API key by default. The helper reads `ASC_KEY_ID` and `ASC_ISSUER_ID` from `~/.appstoreconnect/config.env`, finds the key at `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8`, and passes them to `notarytool` as `--key`, `--key-id` and `--issuer`. It never prints them. Pass `--notary-profile <name>` to use a Keychain profile instead. With neither available it stops before building. Never commit private keys, key IDs, issuer IDs or passwords.
 
@@ -67,6 +69,21 @@ Verify each of these:
 
 > [!NOTE]
 > A unit test, HTTP 200, signed feed or updater-state test does not prove installation over an older live app. Coordinate an actual update-install/relaunch test separately; never use Scott’s running app for an uncoordinated update. Existing alpha.1–3 users must manually install the first updater-enabled build once.
+
+## Verifying release signatures
+
+`.github/workflows/release-sign.yml` runs when a release is published (or by manual dispatch with a tag). It signs every release asset with keyless cosign, attaches a `<asset>.sigstore.json` bundle next to each one, and records a build provenance attestation. It never re-uploads the original assets, so Sparkle signatures and notarization are untouched. A release event runs the workflow file from the tagged commit, so the signing identity is the tag ref for published releases and `main` for a dispatched backfill.
+
+```sh
+cosign verify-blob \
+  --bundle Mouthtype-X.Y.Z-macos-arm64.dmg.sigstore.json \
+  --certificate-identity-regexp '^https://github.com/CodesWhat/mouthtype/.github/workflows/release-sign.yml@refs/(heads/main|tags/v.+)$' \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  Mouthtype-X.Y.Z-macos-arm64.dmg
+gh attestation verify Mouthtype-X.Y.Z-macos-arm64.dmg --repo CodesWhat/mouthtype
+```
+
+To backfill an older release, dispatch `release-sign.yml` from `main` with its tag. Dispatch only works once the file is on `main`.
 
 ## Signing and Sparkle
 

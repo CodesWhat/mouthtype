@@ -1,0 +1,26 @@
+[
+  {
+    "id": "el-short-1",
+    "language": "el",
+    "raw": "Παρακαλώ στείλτε μου το αρχείο πριν το μεσημεριανό.",
+    "notes": "Short, 8 words. Greek: the English hint filters Greek tokens, so this needs no hint."
+  },
+  {
+    "id": "el-medium-1",
+    "language": "el",
+    "raw": "Μπορούμε να μετακινήσουμε τη συνάντηση την Πέμπτη, επειδή ο πελάτης φτάνει στο Ηράκλειο μόλις στις έντεκα;",
+    "notes": "Medium, 16 words. Greek question mark is a semicolon."
+  },
+  {
+    "id": "el-long-1",
+    "language": "el",
+    "raw": "Γεια σε όλους, μια σύντομη ενημέρωση για την πορεία της μετάβασης. Η αλλαγή της βάσης δεδομένων ολοκληρώθηκε χθες το βράδυ χωρίς καμία διακοπή, και τα αντίγραφα ανάγνωσης είναι ήδη ενημερωμένα.",
+    "notes": "Long, 30 words."
+  },
+  {
+    "id": "el-sigma",
+    "language": "el",
+    "raw": "Ο Οδυσσέας έφτασε στην Αθήνα.",
+    "notes": "Final sigma casing for dictionary and snippet boundaries (Οδυσσέας)."
+  }
+]

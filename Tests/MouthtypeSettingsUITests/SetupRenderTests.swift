@@ -48,46 +48,51 @@ import Testing
         let actions = SetupActions(refresh: count, poll: count, microphone: count, accessibility: count, retrySpeech: count, inputSettings: count, done: count)
         let controller = SetupWindow(model: model, actions: actions)
         #expect(controller.window?.title == "Set Up Mouthtype")
-        try render(model: model, actions: actions, name: "setup-pending", size: NSSize(width: 560, height: 440))
-        try render(model: model, actions: actions, name: "setup-pending-light", size: NSSize(width: 560, height: 440), appearance: .aqua)
+        try render(model: model, actions: actions, name: "setup-pending", size: SetupWindow.contentSize)
+        try render(model: model, actions: actions, name: "setup-pending-light", size: SetupWindow.contentSize, appearance: .aqua)
         #expect(model.readiness.step == .microphone)
         diagnostics.microphoneStatus = .denied
-        try render(model: model, actions: actions, name: "setup-denied-minimum", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-denied-minimum", size: SetupWindow.contentSize)
         diagnostics.microphoneStatus = .authorized
         var finishPreparation: CheckedContinuation<Bool, any Error>?
         var preparation: Task<Bool, any Error>!
         await withCheckedContinuation { started in
-            preparation = Task { try await model.microphone.prepare {
-                try await withCheckedThrowingContinuation {
-                    finishPreparation = $0
-                    started.resume()
+            preparation = Task {
+                try await model.microphone.prepare {
+                    try await withCheckedThrowingContinuation {
+                        finishPreparation = $0
+                        started.resume()
+                    }
                 }
-            } }
+            }
         }
-        try render(model: model, actions: actions, name: "setup-microphone-preparing", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-microphone-preparing", size: SetupWindow.contentSize)
         finishPreparation?.resume(throwing: CaptureError.selectedMicrophoneUnavailable)
         _ = try? await preparation.value
-        try render(model: model, actions: actions, name: "setup-microphone-failed-minimum", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-microphone-failed-minimum", size: SetupWindow.contentSize)
         _ = try await model.microphone.prepare { true }
         #expect(model.readiness.step == .accessibility)
-        try render(model: model, actions: actions, name: "setup-accessibility", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-accessibility", size: SetupWindow.contentSize)
         diagnostics.accessibilityGranted = true
         #expect(model.readiness.step == .speech)
-        try render(model: model, actions: actions, name: "setup-model-loading", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-model-loading", size: SetupWindow.contentSize)
         await host.load()
         diagnostics.hotkeyHealth = .secureInputOn
         #expect(model.readiness.step == .shortcut)
-        try render(model: model, actions: actions, name: "setup-input-minimum", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-input-minimum", size: SetupWindow.contentSize)
         diagnostics.hotkeyHealth = .listening
         #expect(model.readiness.isReady)
-        try render(model: model, actions: actions, name: "setup-ready", size: NSSize(width: 560, height: 440))
-        try render(model: model, actions: actions, name: "setup-ready-light-minimum", size: NSSize(width: 560, height: 440), appearance: .aqua)
+        #expect(model.step == .models)
+        try render(model: model, actions: actions, name: "setup-models", size: SetupWindow.contentSize)
+        model.finishModels()
+        try render(model: model, actions: actions, name: "setup-ready", size: SetupWindow.contentSize)
+        try render(model: model, actions: actions, name: "setup-ready-light-minimum", size: SetupWindow.contentSize, appearance: .aqua)
         let failure = EngineHost(makeEngine: { _ in SetupRenderEngine(fails: true) })
         await failure.load()
         let failedModel = SetupModel(diagnostics: diagnostics, engine: failure, defaults: defaults)
         _ = try await failedModel.microphone.prepare { true }
         #expect(failedModel.readiness.step == .speech)
-        try render(model: failedModel, actions: actions, name: "setup-failed-minimum", size: NSSize(width: 560, height: 440))
+        try render(model: failedModel, actions: actions, name: "setup-failed-minimum", size: SetupWindow.contentSize)
         #expect(!failedModel.readiness.isReady)
         #expect(actionsInvoked == 0)
         #expect(controller.window?.isVisible == false)
@@ -239,10 +244,14 @@ import Testing
         try both("4-shortcut")
         diagnostics.hotkeyHealth = .listening
         #expect(model.readiness.step == .ready)
-        try both("5-ready")
+        #expect(model.step == .models)
+        try both("5-models")
+        model.finishModels()
+        #expect(model.step == .ready)
+        try both("6-ready")
     }
 
-    @Test func speechStepDrawsADeterminateBarAndReadyStepListsBothCleanupModels() async throws {
+    @Test func speechStepDrawsADeterminateBarAndModelsStepListsBothCleanupModels() async throws {
         let name = "SetupRenderTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
@@ -261,7 +270,11 @@ import Testing
         func speechModel(fraction: Double) async -> SetupModel {
             var clock = 0.0
             let engine = ProgressRenderEngine(steps: [fraction - 0.01, fraction].map { .progress(ModelDownloadProgress(fraction: $0, knownTotalBytes: 483_000_000)) }, gate: gate)
-            let host = EngineHost(makeEngine: { _ in engine }, uptime: { defer { clock += 3 }; return clock })
+            let host = EngineHost(
+                makeEngine: { _ in engine },
+                uptime: {
+                    defer { clock += 3 }; return clock
+                })
             host.start()
             for _ in 0..<300 where host.downloadProgress?.fraction != fraction { try? await Task.sleep(for: .milliseconds(10)) }
             return SetupModel(diagnostics: diagnostics, engine: host, microphone: micModel.microphone, defaults: defaults)
@@ -277,7 +290,7 @@ import Testing
         try save(midBitmap, name: "setup-progress-speech-light")
         try save(try bitmap(model: mid, actions: actions, size: size, appearance: .darkAqua), name: "setup-progress-speech-dark")
 
-        // Ready step: Fast downloading, Thorough available.
+        // Models step: Fast downloading, Thorough available.
         var fast = ModelDownloadProgress(hubCompletedUnits: 612_000_000, hubTotalUnits: 1_447_000_000)
         fast.secondsRemaining = 95
         let listing = FakeCleanupListing(models: [
@@ -287,8 +300,9 @@ import Testing
         let readyHost = EngineHost(makeEngine: { _ in SetupRenderEngine() })
         await readyHost.load()
         let ready = SetupModel(diagnostics: diagnostics, engine: readyHost, microphone: micModel.microphone, cleanup: listing, defaults: defaults)
-        #expect(ready.readiness.step == .ready)
+        #expect(ready.step == .models)
         #expect(ready.cleanupModels.count == 2)
+        #expect(ready.modelEntries.count == 4)
         try save(try bitmap(model: ready, actions: actions, size: size, appearance: .aqua), name: "setup-progress-ready-light")
         try save(try bitmap(model: ready, actions: actions, size: size, appearance: .darkAqua), name: "setup-progress-ready-dark")
         listing.models[0].status = .done
@@ -303,8 +317,9 @@ import Testing
 
     private func bitmap(model: SetupModel, actions: SetupActions, size: NSSize, appearance: NSAppearance.Name) throws -> NSBitmapImageRep {
         let dark = appearance == .darkAqua
-        let host = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: true)
-            .environment(\.colorScheme, dark ? .dark : .light))
+        let host = NSHostingView(
+            rootView: SetupView(model: model, actions: actions, solid: true)
+                .environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: appearance)
         window.contentView = host
@@ -327,8 +342,9 @@ import Testing
     private func render(model: SetupModel, actions: SetupActions, name: String, size: NSSize, appearance: NSAppearance.Name? = nil) throws {
         let controller = SetupWindow(model: model, actions: actions)
         let dark = appearance == .darkAqua
-        let host = NSHostingView(rootView: SetupView(model: model, actions: actions, solid: true)
-            .environment(\.colorScheme, dark ? .dark : .light))
+        let host = NSHostingView(
+            rootView: SetupView(model: model, actions: actions, solid: true)
+                .environment(\.colorScheme, dark ? .dark : .light))
         let window = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.contentView = host

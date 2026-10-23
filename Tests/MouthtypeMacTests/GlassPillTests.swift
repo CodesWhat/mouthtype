@@ -316,8 +316,10 @@ private final class SamplerProbe: @unchecked Sendable {
     }
 
     @Test func realPicturesAreAccepted() {
-        for path in ["/Users/scott/Pictures/lake.jpg", "/System/Library/Desktop Pictures/Sequoia.heic",
-                     "/System/Library/CoreServices/Other.heic", "/Users/scott/DefaultDesktop.heic"] {
+        for path in [
+            "/Users/scott/Pictures/lake.jpg", "/System/Library/Desktop Pictures/Sequoia.heic",
+            "/System/Library/CoreServices/Other.heic", "/Users/scott/DefaultDesktop.heic",
+        ] {
             let url = URL(fileURLWithPath: path)
             #expect(GlassBackdropCache.usableWallpaper(url) == url, "\(path)")
         }

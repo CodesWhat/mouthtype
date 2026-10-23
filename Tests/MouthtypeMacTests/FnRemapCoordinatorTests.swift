@@ -235,7 +235,7 @@ private final class FakeGuardian: FnGuarding {
         let store = FakeKeyStore()
         let dead = FnRemap(store: store, defaults: marker)
         _ = dead.apply()
-        store.mapping = [theirFn]   // rewritten while the app was down; marker still says applied
+        store.mapping = [theirFn]  // rewritten while the app was down; marker still says applied
         let guardian = FakeGuardian()
         let coordinator = FnRemapCoordinator(
             remap: FnRemap(store: store, defaults: marker),

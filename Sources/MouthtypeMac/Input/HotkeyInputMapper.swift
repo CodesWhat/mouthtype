@@ -14,7 +14,7 @@ extension Key {
 
 struct MappedInput: Equatable {
     var keyEvent: KeyEvent
-    var timestampNanos: UInt64 // host nanoseconds, as `CGEvent.timestamp`
+    var timestampNanos: UInt64  // host nanoseconds, as `CGEvent.timestamp`
 }
 
 /// Turns tap samples into the processor's `KeyEvent`s. Pure, so it is tested without a live tap.
@@ -54,8 +54,10 @@ struct HotkeyInputMapper {
             let wasHeld = shortcutMatcher.held
             let held = shortcutMatcher.update(sample, shortcut: shortcut)
             if held != wasHeld {
-                return MappedInput(keyEvent: KeyEvent(key: held && otherKeysHeld() ? .heldElsewhere : nil,
-                    modifiers: held ? [.fn] : []), timestampNanos: sample.timestamp)
+                return MappedInput(
+                    keyEvent: KeyEvent(
+                        key: held && otherKeysHeld() ? .heldElsewhere : nil,
+                        modifiers: held ? [.fn] : []), timestampNanos: sample.timestamp)
             }
             guard held || lockedRecording else { return nil }
             if held, sample.kind == .flagsChanged, sample.flags & DictationShortcut.modifierMask & ~shortcut.requiredFlags != 0 {
@@ -103,7 +105,8 @@ struct HotkeyInputMapper {
 
     private func edge(wasHeld: Bool, _ sample: TapSample, otherKeysHeld: () -> Bool) -> MappedInput? {
         let isHeld = hotkeyHeld
-        let refuse = !wasHeld && isHeld
+        let refuse =
+            !wasHeld && isHeld
             && (ModifierState.hasOtherModifierFlags(sample.flags) || otherKeysHeld())
         let key: Key? = refuse ? .heldElsewhere : nil
         // While the hotkey is up, still pass modifier changes on: the processor needs the full release to clear a dirty chord.

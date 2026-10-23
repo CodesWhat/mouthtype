@@ -149,7 +149,11 @@ import MouthtypeCore
         editor.selected = SelectedText(pid: 77, element: nil, range: NSRange(location: 0, length: 0), text: "Okay that is fine.")
         editor.selected.range.length = editor.selected.text.utf16.count
         var seen: pid_t?
-        let model = SelectionCleanupModel(editor: editor, styleFor: { seen = $0.pid; return StylePreset.veryCasual.options })
+        let model = SelectionCleanupModel(
+            editor: editor,
+            styleFor: {
+                seen = $0.pid; return StylePreset.veryCasual.options
+            })
         model.prepare()
         #expect(seen == 77 && model.result == "okay that is fine")
     }
@@ -252,7 +256,7 @@ import MouthtypeCore
     }
 
     @Test func oneCutoffAppliesToBothInputs() {
-        let big = String(repeating: "word ", count: 500) // 2,500 characters
+        let big = String(repeating: "word ", count: 500)  // 2,500 characters
         let small = "word one two"
         // A big original used to diff up to 4,000 characters, and a big result was never checked by original().
         #expect(SelectionDiff.original(big + "gone", result: "word").allSatisfy { !$0.marked })

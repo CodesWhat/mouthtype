@@ -12,37 +12,42 @@ import Testing
         @State var size = "auto"
 
         var body: some View {
-            DesignPage(title: "Your recent takes.", summary: "Everything you dictated lately.", trailing: {
-                Button("Transcribe a file…") {}.buttonStyle(.designSecondary)
-            }, content: {
-                DesignSection(eyebrow: "Dictation", footer: "A footer note wraps under the card.") {
-                    DesignRow(title: "Shortcut", detail: "Hold it, speak, let go.") {
-                        DesignKbd("Fn")
-                        Button("Change…") {}.buttonStyle(.designSecondary)
+            DesignPage(
+                title: "Your recent takes.", summary: "Everything you dictated lately.",
+                trailing: {
+                    Button("Transcribe a file…") {}.buttonStyle(.designSecondary)
+                },
+                content: {
+                    DesignSection(eyebrow: "Dictation", footer: "A footer note wraps under the card.") {
+                        DesignRow(title: "Shortcut", detail: "Hold it, speak, let go.") {
+                            DesignKbd("Fn")
+                            Button("Change…") {}.buttonStyle(.designSecondary)
+                        }
+                        DesignRow(title: "Recording behavior", detail: "Hold to talk, or press once to start and again to stop.") {
+                            DesignPopup(
+                                title: "Recording behavior", selection: $behavior,
+                                choices: [DesignChoice("Hold to talk", "hold"), DesignChoice("Press to toggle", "toggle")])
+                        }
+                        DesignRow(title: "Recording sounds", detail: "A small cue when you start and finish.") {
+                            Toggle("Recording sounds", isOn: $sounds).labelsHidden().toggleStyle(.designSwitch)
+                        }
+                        DesignRow(title: "Live words") {
+                            Toggle("Live words", isOn: $live).labelsHidden().toggleStyle(.designSwitch)
+                        }
+                        DesignRow(title: "Pill size") {
+                            DesignSegmented(
+                                title: "Pill size", selection: $size,
+                                choices: [DesignChoice("Auto", "auto"), DesignChoice("Large", "large", dot: DesignPalette.accent)])
+                        }
                     }
-                    DesignRow(title: "Recording behavior", detail: "Hold to talk, or press once to start and again to stop.") {
-                        DesignPopup(title: "Recording behavior", selection: $behavior,
-                                    choices: [DesignChoice("Hold to talk", "hold"), DesignChoice("Press to toggle", "toggle")])
+                    HStack(spacing: 8) {
+                        ForEach(Array(DesignPalette.chart.enumerated()), id: \.offset) { _, color in
+                            RoundedRectangle(cornerRadius: 6).fill(color).frame(width: 36, height: 24)
+                        }
+                        Button("Save") {}.buttonStyle(.designPrimary)
+                        ForEach(SettingsPage.allCases) { Image(systemName: $0.symbol) }
                     }
-                    DesignRow(title: "Recording sounds", detail: "A small cue when you start and finish.") {
-                        Toggle("Recording sounds", isOn: $sounds).labelsHidden().toggleStyle(.designSwitch)
-                    }
-                    DesignRow(title: "Live words") {
-                        Toggle("Live words", isOn: $live).labelsHidden().toggleStyle(.designSwitch)
-                    }
-                    DesignRow(title: "Pill size") {
-                        DesignSegmented(title: "Pill size", selection: $size,
-                                        choices: [DesignChoice("Auto", "auto"), DesignChoice("Large", "large", dot: DesignPalette.accent)])
-                    }
-                }
-                HStack(spacing: 8) {
-                    ForEach(Array(DesignPalette.chart.enumerated()), id: \.offset) { _, color in
-                        RoundedRectangle(cornerRadius: 6).fill(color).frame(width: 36, height: 24)
-                    }
-                    Button("Save") {}.buttonStyle(.designPrimary)
-                    ForEach(SettingsPage.allCases) { Image(systemName: $0.symbol) }
-                }
-            })
+                })
         }
     }
 

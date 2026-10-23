@@ -57,9 +57,10 @@ enum GlassPillPolicy {
         var values = [Double]()
         values.reserveCapacity(count)
         for i in 0..<count {
-            values.append(luminance(
-                red: Double(pixels[4 * i]) / 255, green: Double(pixels[4 * i + 1]) / 255, blue: Double(pixels[4 * i + 2]) / 255
-            ))
+            values.append(
+                luminance(
+                    red: Double(pixels[4 * i]) / 255, green: Double(pixels[4 * i + 1]) / 255, blue: Double(pixels[4 * i + 2]) / 255
+                ))
         }
         let mean = values.reduce(0, +) / Double(count)
         let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Double(count)
@@ -87,11 +88,13 @@ enum GlassBackdropSampler {
         let (w, h) = sampleSize
         var pixels = [UInt8](repeating: 0, count: w * h * 4)
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
-            guard let context = CGContext(
-                data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
-                space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
-                bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-            ) else { return false }
+            guard
+                let context = CGContext(
+                    data: buffer.baseAddress, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+                    space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+                )
+            else { return false }
             context.interpolationQuality = .medium
             context.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
             return true
@@ -199,7 +202,7 @@ final class GlassBackdropCache {
         inFlight[screen] = key
         let measure = measure
         return Task.detached(priority: .utility) { [weak self] in
-            let result = measure(file, screenFrame, region)
+            let result = await OffPool.run { measure(file, screenFrame, region) }
             await self?.finish(screen: screen, key: key, backdrop: result)
         }
     }
@@ -211,7 +214,7 @@ final class GlassBackdropCache {
         latest[screen] = key
         if let entry = entries[screen], entry.key == key { return entry.backdrop }
         let measure = measure
-        let result = await Task.detached(priority: .userInitiated) { measure(file, screenFrame, region) }.value
+        let result = await OffPool.run { measure(file, screenFrame, region) }
         finish(screen: screen, key: key, backdrop: result)
         return result
     }
@@ -238,7 +241,8 @@ extension GlassBackdropCache {
 
     /// Rejects the system's `DefaultDesktop*` placeholder in `/System/Library/CoreServices/`; any other URL passes.
     static func usableWallpaper(_ url: URL) -> URL? {
-        let isPlaceholder = url.deletingLastPathComponent().standardizedFileURL.path == "/System/Library/CoreServices"
+        let isPlaceholder =
+            url.deletingLastPathComponent().standardizedFileURL.path == "/System/Library/CoreServices"
             && url.lastPathComponent.hasPrefix("DefaultDesktop")
         return isPlaceholder ? nil : url
     }
@@ -266,11 +270,12 @@ extension GlassBackdropCache {
     static func heldRegion(frame: CGRect, visibleFrame: CGRect, backing: CGFloat, size: PillSize) -> CGRect {
         let scale = size.resolved(visibleWidth: visibleFrame.width)
         let panel = PillGeometry.panelSize(for: scale)
-        let origin = PillPlacement.origin(
-            pointer: CGPoint(x: frame.midX, y: frame.midY),
-            screens: [PillPlacement.Screen(frame: frame, visibleFrame: visibleFrame)],
-            panelSize: panel, pillPadding: PillGeometry.verticalMargin
-        ) ?? frame.origin
+        let origin =
+            PillPlacement.origin(
+                pointer: CGPoint(x: frame.midX, y: frame.midY),
+                screens: [PillPlacement.Screen(frame: frame, visibleFrame: visibleFrame)],
+                panelSize: panel, pillPadding: PillGeometry.verticalMargin
+            ) ?? frame.origin
         // The pill's panel is placed on whole points (rounded down), so the region has to be too, or the key never matches.
         let placed = CGPoint(x: origin.x.rounded(.down), y: origin.y.rounded(.down))
         return GlassPillView.heldBodyRegion(bounds: panel, size: scale, backing: backing).offsetBy(dx: placed.x, dy: placed.y)

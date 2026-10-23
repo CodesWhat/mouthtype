@@ -22,10 +22,11 @@ import Testing
     }
 
     private func canvas(_ size: CGSize, backing: CGFloat) throws -> CGContext {
-        let context = try #require(CGContext(
-            data: nil, width: Int(size.width * backing), height: Int(size.height * backing), bitsPerComponent: 8,
-            bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        ))
+        let context = try #require(
+            CGContext(
+                data: nil, width: Int(size.width * backing), height: Int(size.height * backing), bitsPerComponent: 8,
+                bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+            ))
         context.scaleBy(x: backing, y: backing)
         let colors = [NSColor(hex: 0x3B4A6B).cgColor, NSColor(hex: 0x1D2436).cgColor]
         let gradient = try #require(CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB), colors: colors as CFArray, locations: [0, 1]))
@@ -51,10 +52,11 @@ import Testing
         window.contentView = view
         view.setFrameSize(size)
         view.layoutSubtreeIfNeeded()
-        let bitmap = try #require(NSBitmapImageRep(
-            bitmapDataPlanes: nil, pixelsWide: Int(size.width * backing), pixelsHigh: Int(size.height * backing), bitsPerSample: 8,
-            samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-        ))
+        let bitmap = try #require(
+            NSBitmapImageRep(
+                bitmapDataPlanes: nil, pixelsWide: Int(size.width * backing), pixelsHigh: Int(size.height * backing), bitsPerSample: 8,
+                samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
+            ))
         bitmap.size = size
         view.cacheDisplay(in: view.bounds, to: bitmap)
         context.interpolationQuality = .none
@@ -88,8 +90,9 @@ import Testing
         }
         // Side by side with the mock-up, which is drawn at 3 pixels per art pixel: the card is rendered at that scale.
         guard let directory, let path = ProcessInfo.processInfo.environment["MOUTHTYPE_HIFI_DECK_REFERENCE"],
-              let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
-              let reference = CGImageSourceCreateImageAtIndex(source, 0, nil) else { return }
+            let source = CGImageSourceCreateWithURL(URL(fileURLWithPath: path) as CFURL, nil),
+            let reference = CGImageSourceCreateImageAtIndex(source, 0, nil)
+        else { return }
         for scene in [Scene.failed, .undo] {
             let card = try composite(card: scene.card, scale: .standard, readout: .amber, backing: 3)
             let size = CGSize(width: CGFloat(reference.width + card.width + 30), height: CGFloat(max(reference.height, card.height)))

@@ -8,12 +8,15 @@ struct AppCleanupStyle: Equatable, Sendable {
     let style: StyleOptions?
     /// Nil keeps the cleanup level the next rule down would give.
     var level: CleanupLevel?
+    /// Tone and formatting instructions for Thorough cleanup in this app. Nil keeps the next rule down's (then the global ones).
+    var instructions: String?
 }
 
 struct WebsiteCleanupStyle: Equatable, Sendable {
     let domain: String
     let style: StyleOptions?
     var level: CleanupLevel?
+    var instructions: String?
 }
 
 struct AppCleanupStyles: Equatable, Sendable {
@@ -44,6 +47,10 @@ struct AppCleanupStyles: Equatable, Sendable {
         let endingPunctuation: String?
         /// Absent in rules saved before cleanup levels existed.
         let cleanupLevel: String?
+        /// Absent in rules saved before the Excited tone existed, and in every tone but Excited.
+        let excited: Bool?
+        /// Absent in rules saved before instructions existed, and when the rule has none.
+        let instructions: String?
     }
 
     private struct WebsiteRecord: Codable {
@@ -51,18 +58,23 @@ struct AppCleanupStyles: Equatable, Sendable {
         let capitalisation: String?
         let endingPunctuation: String?
         let cleanupLevel: String?
+        let excited: Bool?
+        let instructions: String?
     }
 
     /// Both tone fields or neither; a rule that sets nothing at all is never stored.
-    private static func decode(capitalisation: String?, ending: String?, level: String?) throws -> (StyleOptions?, CleanupLevel?) {
+    private static func decode(
+        capitalisation: String?, ending: String?, level: String?, excited: Bool?, instructions: String?
+    ) throws -> (StyleOptions?, CleanupLevel?, String?) {
         var style: StyleOptions?
         switch (capitalisation, ending) {
-        case (nil, nil): break
+        case (nil, nil):
+            guard excited != true else { throw ValidationError.invalidPreferences }
         case let (cap?, end?):
             guard let cap = Capitalisation(rawValue: cap), let end = EndingPunctuation(rawValue: end) else {
                 throw ValidationError.invalidPreferences
             }
-            style = StyleOptions(capitalisation: cap, endingPunctuation: end)
+            style = StyleOptions(capitalisation: cap, endingPunctuation: end, excited: excited ?? false)
         default: throw ValidationError.invalidPreferences
         }
         var cleanup: CleanupLevel?
@@ -70,8 +82,9 @@ struct AppCleanupStyles: Equatable, Sendable {
             guard let parsed = CleanupLevel(rawValue: level) else { throw ValidationError.invalidPreferences }
             cleanup = parsed
         }
-        guard style != nil || cleanup != nil else { throw ValidationError.invalidPreferences }
-        return (style, cleanup)
+        let notes = CleanupInstructions.normalize(instructions)
+        guard style != nil || cleanup != nil || notes != nil else { throw ValidationError.invalidPreferences }
+        return (style, cleanup, notes)
     }
 
     private struct Document: Codable {
@@ -88,21 +101,23 @@ struct AppCleanupStyles: Equatable, Sendable {
             guard document.version == 1 else { throw ValidationError.invalidPreferences }
             var result = AppCleanupStyles()
             for entry in document.entries {
-                let (style, level) = try Self.decode(capitalisation: entry.capitalisation, ending: entry.endingPunctuation,
-                                                     level: entry.cleanupLevel)
+                let (style, level, instructions) = try Self.decode(
+                    capitalisation: entry.capitalisation, ending: entry.endingPunctuation,
+                    level: entry.cleanupLevel, excited: entry.excited, instructions: entry.instructions)
                 let bundleID = entry.bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
                 guard !result.entries.contains(where: { $0.bundleID == bundleID }) else {
                     throw ValidationError.invalidPreferences
                 }
-                try result.set(bundleID: bundleID, appName: entry.appName, style: style, level: level)
+                try result.set(bundleID: bundleID, appName: entry.appName, style: style, level: level, instructions: instructions)
             }
             for entry in document.websites ?? [] {
-                let (style, level) = try Self.decode(capitalisation: entry.capitalisation, ending: entry.endingPunctuation,
-                                                     level: entry.cleanupLevel)
+                let (style, level, instructions) = try Self.decode(
+                    capitalisation: entry.capitalisation, ending: entry.endingPunctuation,
+                    level: entry.cleanupLevel, excited: entry.excited, instructions: entry.instructions)
                 guard !result.websites.contains(where: { $0.domain == Self.normalizedDomain(entry.domain) }) else {
                     throw ValidationError.invalidPreferences
                 }
-                try result.setWebsite(domain: entry.domain, style: style, level: level)
+                try result.setWebsite(domain: entry.domain, style: style, level: level, instructions: instructions)
             }
             result.contexts = StyleContexts.load(defaults)
             return result
@@ -112,28 +127,39 @@ struct AppCleanupStyles: Equatable, Sendable {
     }
 
     func save(to defaults: UserDefaults = .standard) throws {
-        let document = Document(entries: entries.map {
-            Record(bundleID: $0.bundleID, appName: $0.appName, capitalisation: $0.style?.capitalisation.rawValue,
-                   endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue)
-        }, websites: websites.map {
-            WebsiteRecord(domain: $0.domain, capitalisation: $0.style?.capitalisation.rawValue,
-                          endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue)
-        })
+        let document = Document(
+            entries: entries.map {
+                Record(
+                    bundleID: $0.bundleID, appName: $0.appName, capitalisation: $0.style?.capitalisation.rawValue,
+                    endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue,
+                    excited: $0.style?.excited == true ? true : nil, instructions: $0.instructions)
+            },
+            websites: websites.map {
+                WebsiteRecord(
+                    domain: $0.domain, capitalisation: $0.style?.capitalisation.rawValue,
+                    endingPunctuation: $0.style?.endingPunctuation.rawValue, cleanupLevel: $0.level?.rawValue,
+                    excited: $0.style?.excited == true ? true : nil, instructions: $0.instructions)
+            })
         defaults.set(try JSONEncoder().encode(document), forKey: Self.preferenceKey)
         try contexts.save(to: defaults)
     }
 
-    /// A rule that sets neither tone nor level is removed, the same as choosing "Use default" for both.
-    mutating func set(bundleID: String, appName: String, style: StyleOptions?, level: CleanupLevel? = nil) throws {
+    /// A rule that sets none of tone, level and instructions is removed, the same as choosing "Use default" for all of them.
+    mutating func set(
+        bundleID: String, appName: String, style: StyleOptions?, level: CleanupLevel? = nil, instructions: String? = nil
+    ) throws {
         let bundleID = bundleID.trimmingCharacters(in: .whitespacesAndNewlines)
         let allowed = CharacterSet(charactersIn: "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-")
-        guard !bundleID.isEmpty, bundleID.split(separator: ".", omittingEmptySubsequences: false).allSatisfy({
-            !$0.isEmpty && $0.unicodeScalars.allSatisfy(allowed.contains)
-        }) else { throw ValidationError.invalidBundleID }
+        guard !bundleID.isEmpty,
+            bundleID.split(separator: ".", omittingEmptySubsequences: false).allSatisfy({
+                !$0.isEmpty && $0.unicodeScalars.allSatisfy(allowed.contains)
+            })
+        else { throw ValidationError.invalidBundleID }
         let appName = appName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !appName.isEmpty else { throw ValidationError.missingAppName }
-        guard style != nil || level != nil else { remove(bundleID: bundleID); return }
-        let entry = AppCleanupStyle(bundleID: bundleID, appName: appName, style: style, level: level)
+        let instructions = CleanupInstructions.normalize(instructions)
+        guard style != nil || level != nil || instructions != nil else { remove(bundleID: bundleID); return }
+        let entry = AppCleanupStyle(bundleID: bundleID, appName: appName, style: style, level: level, instructions: instructions)
         if let index = entries.firstIndex(where: { $0.bundleID == bundleID }) {
             entries[index] = entry
         } else {
@@ -154,17 +180,20 @@ struct AppCleanupStyles: Equatable, Sendable {
         if domain.hasSuffix(".") { domain.removeLast() }
         let labels = domain.split(separator: ".", omittingEmptySubsequences: false)
         let allowed = Set("abcdefghijklmnopqrstuvwxyz0123456789-")
-        guard domain.utf8.count <= 253, labels.count >= 2, labels.allSatisfy({
-            !$0.isEmpty && $0.utf8.count <= 63 && $0.first != "-" && $0.last != "-" && $0.allSatisfy(allowed.contains)
-        }) else { return nil }
+        guard domain.utf8.count <= 253, labels.count >= 2,
+            labels.allSatisfy({
+                !$0.isEmpty && $0.utf8.count <= 63 && $0.first != "-" && $0.last != "-" && $0.allSatisfy(allowed.contains)
+            })
+        else { return nil }
         return domain
     }
 
-    mutating func setWebsite(domain: String, style: StyleOptions?, level: CleanupLevel? = nil) throws {
+    mutating func setWebsite(domain: String, style: StyleOptions?, level: CleanupLevel? = nil, instructions: String? = nil) throws {
         guard let domain = Self.normalizedDomain(domain) else { throw ValidationError.invalidDomain }
         websites.removeAll { $0.domain == domain }
-        guard style != nil || level != nil else { return }
-        websites.append(WebsiteCleanupStyle(domain: domain, style: style, level: level))
+        let instructions = CleanupInstructions.normalize(instructions)
+        guard style != nil || level != nil || instructions != nil else { return }
+        websites.append(WebsiteCleanupStyle(domain: domain, style: style, level: level, instructions: instructions))
         websites.sort { $0.domain < $1.domain }
     }
 
@@ -196,6 +225,7 @@ struct AppCleanupStyles: Equatable, Sendable {
     private struct Layer {
         let style: StyleOptions?
         let level: CleanupLevel?
+        var instructions: String?
     }
 
     /// What you configured always beats a built-in default. In order: your website rules (the longest matching domain only, so a
@@ -206,8 +236,10 @@ struct AppCleanupStyles: Equatable, Sendable {
         var result: [Layer] = []
         var hasListedSite = false
         let host = supportedHost(websiteHost, bundleID: bundleID)
-        if let host, let rule = websiteRule(websiteHost: host, bundleID: bundleID) { result.append(Layer(style: rule.style, level: rule.level)) }
-        if let rule = entries.first(where: { $0.bundleID == bundleID }) { result.append(Layer(style: rule.style, level: rule.level)) }
+        if let host, let rule = websiteRule(websiteHost: host, bundleID: bundleID) { result.append(Layer(style: rule.style, level: rule.level, instructions: rule.instructions)) }
+        if let rule = entries.first(where: { $0.bundleID == bundleID }) {
+            result.append(Layer(style: rule.style, level: rule.level, instructions: rule.instructions))
+        }
         if let host, let match = contexts.siteMatch(host: host) {
             hasListedSite = true
             result.append(Layer(style: contexts.tone(match.context)?.options, level: contexts.level(match.context)))
@@ -235,4 +267,13 @@ struct AppCleanupStyles: Equatable, Sendable {
     func resolveLevel(bundleID: String?, websiteHost: String? = nil) -> CleanupLevel? {
         layers(bundleID: bundleID, websiteHost: websiteHost).lazy.compactMap(\.level).first
     }
+
+    /// Your website rule's instructions, else your app rule's. Nil means neither sets any, so the global instructions stand.
+    /// Contexts carry a tone and a level but no instructions.
+    func resolveInstructions(bundleID: String?, websiteHost: String? = nil) -> String? {
+        layers(bundleID: bundleID, websiteHost: websiteHost).lazy.compactMap(\.instructions).first
+    }
+
+    /// The instructions saved on exactly this app's rule, if any.
+    func instructions(bundleID: String) -> String? { entries.first { $0.bundleID == bundleID }?.instructions }
 }

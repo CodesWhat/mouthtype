@@ -25,6 +25,18 @@
 #   MOUTHTYPE_SIGN_IDENTITY   signing identity (default: the keychain's Developer ID)
 #   MOUTHTYPE_TIMESTAMP=none  skip the secure timestamp (local builds, offline)
 #   MOUTHTYPE_BUILD_DIR       output directory (default: build)
+#   MOUTHTYPE_SCRATCH_PATH    repeatable-build mode. Copies the sources into <path>/mouthtype and builds
+#                             them there with SwiftPM state in <path>/build, so every absolute path the
+#                             compilers see is the same on any machine and in any checkout directory.
+#                             Swift bakes source-path lengths into the binary, which no prefix-map flag
+#                             fixes. Unset (the default) builds in place with .build, which is faster
+#                             and keeps .build/artifacts populated but is not path-independent.
+#   MOUTHTYPE_UNSIGNED=1      assemble the app but skip every codesign step (used by
+#                             scripts/verify-repeatable-build.sh; never ship this output)
+#
+# The build maps the checkout path to /src in compiler output and pins the root package's
+# resource-bundle identifier, so the unsigned contents do not depend on the checkout's
+# directory name. See docs/REPEATABLE-BUILD.md.
 
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -43,10 +55,35 @@ APP="$OUT/Mouthtype.app"
 IDENTITY="${MOUTHTYPE_SIGN_IDENTITY:-$(security find-identity -v -p codesigning \
     | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -1)}"
 
+if [ -n "${MOUTHTYPE_SCRATCH_PATH:-}" ]; then
+    mkdir -p "$MOUTHTYPE_SCRATCH_PATH"
+    SRC="$(cd "$MOUTHTYPE_SCRATCH_PATH" && pwd -P)/mouthtype"
+    SCRATCH="$(dirname "$SRC")/build"
+    # ld's default (fast) objc stubs come out in one of two layouts at random from identical inputs;
+    # the small stubs layout is deterministic.
+    LINK_FLAGS=(-Xlinker -objc_stubs_small)
+    echo "→ copying sources to $SRC"
+    mkdir -p "$SRC"
+    rsync -a --delete --exclude /.build --exclude /.git --exclude /build --exclude /.claude --exclude /.planning ./ "$SRC/"
+else
+    SRC="$PWD"
+    SCRATCH="$PWD/.build"
+    LINK_FLAGS=()
+fi
+SWIFT_ARGS=(-c release --arch arm64 --package-path "$SRC" --scratch-path "$SCRATCH")
+# Keep the source path out of the binaries (C++ __FILE__ in Cmlx, Swift debug paths). The compilers
+# see the resolved path (/private/var/... for a /var/... checkout), so map both spellings.
+PATH_MAP_FLAGS=()
+for root in "$SRC" "$(cd "$SRC" && pwd -P)"; do
+    PATH_MAP_FLAGS+=(-Xcc "-ffile-prefix-map=$root=/src" -Xswiftc -file-prefix-map -Xswiftc "$root=/src")
+    [ "$SRC" = "$(cd "$SRC" && pwd -P)" ] && break
+done
+
 echo "→ building Mouthtype $VERSION (release, arm64)"
-swift build -c release --arch arm64 --jobs 4 --product Mouthtype
-swift build -c release --arch arm64 --jobs 4 --product mouthtype-fn-guard
-BIN_DIR="$(swift build -c release --arch arm64 --show-bin-path)"
+# Run from $SRC: the tools' working directory still reaches the output (objc stub layout) otherwise.
+(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" ${LINK_FLAGS[@]+"${LINK_FLAGS[@]}"} --product Mouthtype)
+(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --jobs 4 "${PATH_MAP_FLAGS[@]}" ${LINK_FLAGS[@]+"${LINK_FLAGS[@]}"} --product mouthtype-fn-guard)
+BIN_DIR="$(cd "$SRC" && swift build "${SWIFT_ARGS[@]}" --show-bin-path)"
 
 echo "→ assembling $APP"
 rm -rf "$APP"
@@ -55,6 +92,18 @@ cp "$BIN_DIR/Mouthtype" "$APP/Contents/MacOS/Mouthtype"
 strip -x "$APP/Contents/MacOS/Mouthtype"
 cp "$BIN_DIR/mouthtype-fn-guard" "$APP/Contents/MacOS/mouthtype-fn-guard"
 strip -x "$APP/Contents/MacOS/mouthtype-fn-guard"
+# ld derives LC_UUID from its inputs' paths, so identical code gets a different UUID per checkout.
+# Replace it with a hash of the binary's own contents. Done on copies outside the bundle (codesign
+# on the main executable would sign the whole bundle early); the signing steps below add the
+# signature back.
+UUID_TMP="$(mktemp -d)"
+for exe in Mouthtype mouthtype-fn-guard; do
+    cp "$APP/Contents/MacOS/$exe" "$UUID_TMP/$exe"
+    codesign --remove-signature "$UUID_TMP/$exe" 2>/dev/null || true
+    python3 -I scripts/normalize-macho-uuid.py "$UUID_TMP/$exe"
+    cp "$UUID_TMP/$exe" "$APP/Contents/MacOS/$exe"
+done
+rm -rf "$UUID_TMP"
 cp packaging/Info.plist "$APP/Contents/Info.plist"
 cp packaging/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # macOS 26 icon: the Icon Composer bundle compiled to Assets.car (CFBundleIconName), so the system masks it and
@@ -88,11 +137,30 @@ BUNDLES=()
 for bundle in "$BIN_DIR"/*.bundle; do
     case "$(basename "$bundle")" in *mouthtype-bench*) continue ;; esac
     ditto "$bundle" "$APP/Contents/Resources/$(basename "$bundle")"
+    # SwiftPM names the root package's bundle id after the checkout directory. Pin it to what a
+    # checkout named "mouthtype" produces so the shipped id never depends on where the build ran.
+    case "$(basename "$bundle")" in
+        Mouthtype_*.bundle)
+            target="$(basename "$bundle" .bundle)"
+            plutil -replace CFBundleIdentifier -string "mouthtype.${target#Mouthtype_}.resources" \
+                "$APP/Contents/Resources/$(basename "$bundle")/Contents/Info.plist"
+            ;;
+    esac
     BUNDLES+=("$APP/Contents/Resources/$(basename "$bundle")")
 done
 
 TIMESTAMP="--timestamp"
 [ "${MOUTHTYPE_TIMESTAMP:-}" = "none" ] && TIMESTAMP="--timestamp=none"
+
+if [ "${MOUTHTYPE_UNSIGNED:-}" = "1" ]; then
+    echo "! MOUTHTYPE_UNSIGNED=1: assembling without code signatures."
+    SPARKLE="$SCRATCH/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+    test -d "$SPARKLE"
+    mkdir -p "$APP/Contents/Frameworks"
+    ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"
+    echo "$APP"
+    exit 0
+fi
 
 if [ -n "$IDENTITY" ]; then
     echo "→ signing as $IDENTITY"
@@ -105,7 +173,7 @@ else
 fi
 
 # SwiftPM links this dynamic framework but does not assemble a standalone app.
-SPARKLE=".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
+SPARKLE="$SCRATCH/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"
 test -d "$SPARKLE"
 mkdir -p "$APP/Contents/Frameworks"
 ditto "$SPARKLE" "$APP/Contents/Frameworks/Sparkle.framework"

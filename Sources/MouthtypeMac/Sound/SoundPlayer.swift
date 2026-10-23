@@ -82,7 +82,6 @@ final class ClickSoundPlayer: SoundPlayer {
         guard SoundPreference.isEnabled(defaults), let sound else { return }
         sound.stop()
         sound.currentTime = 0
-        if sound.play() { Log.app.info("Click cue \(name, privacy: .public)") }
-        else { Log.app.error("Click cue \(name, privacy: .public) could not play") }
+        if sound.play() { Log.app.info("Click cue \(name, privacy: .public)") } else { Log.app.error("Click cue \(name, privacy: .public) could not play") }
     }
 }

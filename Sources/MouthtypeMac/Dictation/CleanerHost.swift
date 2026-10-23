@@ -127,7 +127,7 @@ final class CleanerHost: CleanupModelManaging {
 
     init(
         model: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
-        budget: (@Sendable (Int) -> Duration)? = nil,
+        budget: (@Sendable (Int) -> Duration)? = nil, languageDetector: (any LanguageDetector)? = NLLanguageDetector(),
         idleUnloadDelay: Duration = CleanerHost.defaultIdleUnloadDelay,
         uptime: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
@@ -135,7 +135,7 @@ final class CleanerHost: CleanupModelManaging {
         self.idleUnloadDelay = idleUnloadDelay
         self.model = model
         self.level = level
-        smart = SmartCleanup(cleaner: model, budget: budget)
+        smart = SmartCleanup(cleaner: model, budget: budget, languageDetector: languageDetector)
         state = model.isDownloaded ? .unloaded : .absent
     }
 
@@ -212,7 +212,8 @@ final class CleanerHost: CleanupModelManaging {
                 let loadSeconds = (clock.now - start).seconds
                 let warmStart = clock.now
                 _ = try? await model.clean(Self.warmUpTranscript, context: CleanupContext())
-                Log.cleaner.info("model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
+                Log.cleaner.info(
+                    "model \(model.id, privacy: .public) loaded in \(loadSeconds, format: .fixed(precision: 2))s, warm-up \((clock.now - warmStart).seconds, format: .fixed(precision: 3))s")
                 await smart.resumeAfterModelLoad()
                 finishLoad(.ready(loadSeconds: loadSeconds))
             } catch {
@@ -302,7 +303,7 @@ final class CleanerHost: CleanupModelManaging {
         downloadTask = Task { [model] in
             do {
                 try await model.downloadReporting(report: { progress in
-                    Task { @MainActor [weak self] in self?.receive(progress) }
+                    Task { @MainActor in self.receive(progress) }
                 })
                 downloadTask = nil
                 downloadProgress = nil

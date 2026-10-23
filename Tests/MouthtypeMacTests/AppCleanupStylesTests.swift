@@ -84,7 +84,7 @@ import MouthtypeCore
             """,
             """
             {"version":2,"entries":[]}
-            """
+            """,
         ] {
             let data = Data(json.utf8)
             d.set(data, forKey: AppCleanupStyles.preferenceKey)

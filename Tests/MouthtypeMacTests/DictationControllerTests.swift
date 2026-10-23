@@ -141,7 +141,11 @@ private final class SpySmart: SmartCleaning, @unchecked Sendable {
     func readiness(waitingUpTo limit: Duration) async -> SmartCleanerInfo? { nil }
     func run(_ request: SmartCleanupRequest) async -> SmartCleanupResult { fatalError("not used") }
     func recordingStarted() {}
-    func recordingStarted(level: CleanupLevel, take: String) { lock.withLock { _levels.append(level); _takes.append(take) } }
+    func recordingStarted(level: CleanupLevel, take: String) {
+        lock.withLock {
+            _levels.append(level); _takes.append(take)
+        }
+    }
     func releasePrewarm(for take: String) { lock.withLock { _released.append(take) } }
 }
 
@@ -237,7 +241,9 @@ private final class FakeInserter: DictationInserting {
     var websiteGate: DispatchSemaphore?
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? {
         let value = website, gate = websiteGate, log = log
-        return { log.add("inserter.website"); _ = gate?.wait(timeout: .now() + 30); return value }
+        return {
+            log.add("inserter.website"); _ = gate?.wait(timeout: .now() + 30); return value
+        }
     }
     var context: InsertionContext?
     var clipboard: String?
@@ -505,6 +511,7 @@ private struct Rig {
     let clock: FakeClock
     var finishedAttempts: Counter
     let handsFreeChanges = Counter()
+    let soundSettingsOpened = Counter()
 
     final class Counter {
         var count = 0
@@ -537,10 +544,12 @@ private struct Rig {
         pipeline.vocabulary = vocabulary
         pipeline.textPipeline = textPipeline
         pipeline.audioRetention = { audioRetention }
+        let opened = soundSettingsOpened
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
             cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil,
-            preview: LivePreviewSession(pause: { try await clock.sleep(forSeconds: 2) }), previewEnabled: { previewEnabled }
+            preview: LivePreviewSession(pause: { try await clock.sleep(forSeconds: 2) }), previewEnabled: { previewEnabled },
+            openSoundSettings: { opened.count += 1 }
         )
         let counter = Counter()
         finishedAttempts = counter
@@ -1179,12 +1188,13 @@ private final class FakeCorrections: CorrectionObserving {
         let rig = Rig()
         await rig.dictate()
 
-        #expect(rig.log.all == [
-            "card.dismiss", "inserter.application", "capture.start", "inserter.snapshot", "sound.start", "pill.recording", "store.begin",
-            "pill.processing", "capture.stop", "sound.stop",
-            "archive.write", "store.recordCapture", "engine.transcribe", "store.recordTranscription",
-            "inserter.deliver", "store.recordInsertion", "pill.hide",
-        ])
+        #expect(
+            rig.log.all == [
+                "card.dismiss", "inserter.application", "capture.start", "inserter.snapshot", "sound.start", "pill.recording", "store.begin",
+                "pill.processing", "capture.stop", "sound.stop",
+                "archive.write", "store.recordCapture", "engine.transcribe", "store.recordTranscription",
+                "inserter.deliver", "store.recordInsertion", "pill.hide",
+            ])
         #expect(rig.controller.phase == .idle)
         #expect(rig.finishedAttempts.count == 1)
         #expect(rig.capture.keyDownAtNanos == keyDown)
@@ -1311,10 +1321,11 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.store.finishes.map(\.0) == [.cancelled])
         #expect(rig.store.insertion?.finalText == "Hello world.")
         let tail = Array(rig.log.all.drop { $0 != "store.reopen" })
-        #expect(tail == [
-            "store.reopen", "pill.processing", "archive.write", "store.recordCapture", "engine.transcribe",
-            "store.recordTranscription", "inserter.deliver", "store.recordInsertion", "pill.hide",
-        ])
+        #expect(
+            tail == [
+                "store.reopen", "pill.processing", "archive.write", "store.recordCapture", "engine.transcribe",
+                "store.recordTranscription", "inserter.deliver", "store.recordInsertion", "pill.hide",
+            ])
         #expect(rig.controller.phase == .idle && rig.clock.sleeperCount == 0)
 
         // The expiry timer is gone: running the clock out dismisses nothing more.
@@ -1336,7 +1347,7 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.controller.phase == .processing)
 
         let undo = Task { await rig.controller.undoCancel() }
-        await rig.settle()
+        await rig.until { rig.store.reopens == 1 }
         // Queued behind the first take: reopened and archived already, but nothing delivered yet.
         #expect(rig.inserter.delivered.isEmpty && rig.store.reopens == 1)
 
@@ -1357,7 +1368,7 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.controller.handle(.pressed(at: keyUp + 1))
         await rig.controller.handle(.cancelled(reason: .escape))
         let undo = Task { await rig.controller.undoCancel() }
-        await rig.settle()
+        await rig.until { rig.store.reopens == 1 }
 
         // The first take is still held. Quit must not wait on it to see the second take's audio saved.
         #expect(await rig.controller.prepareForTermination())
@@ -1600,10 +1611,10 @@ private final class FakeCorrections: CorrectionObserving {
         rig.engine.error = Boom()
         await rig.controller.handle(.pressed(at: keyDown))
         await rig.controller.handle(.released(at: keyUp))
-        await rig.settle()
+        await rig.engine.waitForHeld()
         await rig.controller.handle(.pressed(at: keyUp + 1))
         rig.engine.releaseHeld()
-        await rig.settle()
+        await rig.controller.waitForProcessing()
         #expect(rig.store.finishes.map(\.0) == [.failed])
         #expect(rig.controller.phase == .recording)
         #expect(!rig.log.contains("capture.cancel") && rig.pill.messages.isEmpty)
@@ -1785,17 +1796,67 @@ private final class FakeCorrections: CorrectionObserving {
     }
 
     @Test func silenceNeverReachesTheEngine() async {
-        let rig = Rig(audio: CapturedAudio(
-            samples: [Float](repeating: 0, count: 16_000), sampleRate: 16_000, deviceUID: nil, deviceName: nil,
-            deviceTransport: "built-in", firstSampleMs: 20, firstNonzeroMs: nil, captureStartMs: 10, audioMs: 1_000
-        ))
+        let rig = Rig(
+            audio: CapturedAudio(
+                samples: [Float](repeating: 0, count: 16_000), sampleRate: 16_000, deviceUID: nil, deviceName: nil,
+                deviceTransport: "built-in", firstSampleMs: 20, firstNonzeroMs: nil, captureStartMs: 10, audioMs: 1_000
+            ))
         await rig.dictate()
 
         #expect(rig.store.finishes.map(\.0) == [.empty])
         #expect(!rig.log.contains("engine.transcribe"))
         #expect(rig.log.contains("archive.write"))
         #expect(rig.inserter.delivered.isEmpty)
-        #expect(rig.pill.messages.isEmpty)
+    }
+
+    private func silentAudio(level: Float = 0, deviceName: String? = "Studio Mic") -> CapturedAudio {
+        CapturedAudio(
+            samples: [Float](repeating: level, count: 16_000), sampleRate: 16_000, deviceUID: nil, deviceName: deviceName,
+            deviceTransport: "usb", firstSampleMs: 20, firstNonzeroMs: nil, captureStartMs: 10, audioMs: 1_000
+        )
+    }
+
+    @Test func aSilentTakeHeldLongEnoughNamesTheMicAndOffersSoundSettings() async {
+        let rig = Rig(audio: silentAudio())
+        await rig.dictate()
+        let card = rig.cards.presented.last
+        #expect(rig.cards.presented.count == 1)
+        #expect(card?.kind == .silentMic)
+        #expect(card?.header == "Microphone heard nothing\nCheck Studio Mic")
+        #expect(card?.actions == [.openSoundSettings])
+        rig.cards.click(.openSoundSettings)
+        #expect(rig.soundSettingsOpened.count == 1)
+    }
+
+    @Test func aTapTooShortToBeADictationRaisesNoCard() async {
+        let rig = Rig(audio: silentAudio())
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyDown + 500_000_000))
+        await rig.controller.waitForProcessing()
+        #expect(rig.store.finishes.map(\.0) == [.empty])
+        #expect(rig.cards.presented.isEmpty)
+    }
+
+    @Test func repeatedSilentTakesRaiseOneCard() async {
+        let rig = Rig(audio: silentAudio())
+        await rig.dictate()
+        await rig.dictate()
+        #expect(rig.cards.presented.count == 1)
+    }
+
+    @Test func audibleNoiseWithoutSpeechSaysNoSpeechWasHeard() async {
+        // Steady low hiss: above the no-signal floor, never voiced.
+        let rig = Rig(audio: silentAudio(level: 0.002, deviceName: nil))
+        await rig.dictate()
+        #expect(rig.cards.presented.last?.header == "No speech heard\nCheck your microphone")
+    }
+
+    @Test func anEmptyResultFromRealSpeechRaisesNoSilentMicCard() async {
+        let rig = Rig()
+        rig.engine.result.text = "[BLANK_AUDIO]"
+        await rig.dictate()
+        #expect(rig.store.finishes.map(\.0) == [.empty])
+        #expect(rig.cards.presented.isEmpty)
     }
 
     @Test func eachDeliveryOutcomeMapsToTheRightCard() async {
@@ -1829,10 +1890,11 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.lockIn(.doubleTap)
 
         #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
-        #expect(rig.log.all == [
-            "card.dismiss", "inserter.application", "capture.start", "inserter.snapshot", "sound.start", "pill.recording", "store.begin",
-            "sound.lock", "pill.handsFree", "store.recordLock",
-        ])
+        #expect(
+            rig.log.all == [
+                "card.dismiss", "inserter.application", "capture.start", "inserter.snapshot", "sound.start", "pill.recording", "store.begin",
+                "sound.lock", "pill.handsFree", "store.recordLock",
+            ])
         let lock = try #require(rig.store.handsFreeLock)
         #expect(lock.0 == .handsFree && lock.1 == .doubleTap)
         #expect(rig.handsFreeChanges.count == 1)
@@ -1941,6 +2003,8 @@ private final class FakeCorrections: CorrectionObserving {
     @Test func aStopQueuedBehindAStartingRecordingStopsIt() async {
         let rig = Rig()
         let gate = StartGate()
+        // Real clock off: a starved runner must not fire the 10 s wait limit and drop the queued command.
+        rig.controller.automationWaitLimit = { try await Task.sleep(for: .seconds(3600)) }
         rig.capture.duringStart = { await gate.wait() }
         rig.controller.enqueueAutomation(.start)
         rig.controller.enqueueAutomation(.stop)
@@ -1958,6 +2022,8 @@ private final class FakeCorrections: CorrectionObserving {
     @Test func aCancelQueuedBehindAStartingRecordingCancelsIt() async {
         let rig = Rig()
         let gate = StartGate()
+        // Real clock off: a starved runner must not fire the 10 s wait limit and drop the queued command.
+        rig.controller.automationWaitLimit = { try await Task.sleep(for: .seconds(3600)) }
         rig.capture.duringStart = { await gate.wait() }
         rig.controller.enqueueAutomation(.start)
         rig.controller.enqueueAutomation(.cancel)
@@ -2001,7 +2067,9 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.settle()
         // Still waiting: the limit has not fired and the start has not returned.
         var endRan = false
-        let watcher = Task { @MainActor in await endTask?.value; endRan = true }
+        let watcher = Task { @MainActor in
+            await endTask?.value; endRan = true
+        }
         await rig.settle()
         #expect(!endRan)
         limit.open()
@@ -2054,7 +2122,9 @@ private final class FakeCorrections: CorrectionObserving {
         let limit = StartGate()
         let startB = StartGate()
         var locks = 0
-        rig.store.duringLock = { locks += 1; if locks == 1 { await lockGate.wait() } }
+        rig.store.duringLock = {
+            locks += 1; if locks == 1 { await lockGate.wait() }
+        }
         rig.controller.automationWaitLimit = { await limit.wait() }
         // A comes up hands-free, then suspends writing its lock.
         rig.controller.enqueueAutomation(.start)
@@ -2302,10 +2372,11 @@ private final class FakeCorrections: CorrectionObserving {
         await controller.consume(events)
 
         let capturing = log.all.filter { $0.hasPrefix("capture.") }
-        #expect(capturing == [
-            "capture.start.begin", "capture.start.end", "capture.cancel.begin", "capture.cancel.end",
-            "capture.start.begin", "capture.start.end",
-        ])
+        #expect(
+            capturing == [
+                "capture.start.begin", "capture.start.end", "capture.cancel.begin", "capture.cancel.end",
+                "capture.start.begin", "capture.start.end",
+            ])
         #expect(capture.failures == 0)
         #expect(capture.running && capture.keyDownAtNanos == keyDown + 200_000_000)
         #expect(controller.phase == .recording && controller.isHandsFree)
@@ -2484,8 +2555,7 @@ private final class SlowCapture: DictationCapturing {
             rig.capture.interrupt()
             await rig.settle()
         }
-        if duringCaptureStart { rig.capture.duringStart = interrupt }
-        else { rig.store.duringBegin = interrupt }
+        if duringCaptureStart { rig.capture.duringStart = interrupt } else { rig.store.duringBegin = interrupt }
 
         await rig.controller.handle(.pressed(at: keyDown))
         await rig.settle()
@@ -2591,8 +2661,7 @@ private final class SlowCapture: DictationCapturing {
         let archive = RetryArchive()
         let rig = Rig(archive: archive)
         await rig.controller.handle(.pressed(at: keyDown))
-        if failure == "archive" { archive.setFailing(true) }
-        else { rig.store.failing.insert(failure) }
+        if failure == "archive" { archive.setFailing(true) } else { rig.store.failing.insert(failure) }
         #expect(!(await rig.controller.prepareForTermination()))
         #expect(rig.inserter.delivered.isEmpty)
         await rig.controller.handle(.pressed(at: keyUp + 1))
@@ -2659,8 +2728,7 @@ private final class SlowCapture: DictationCapturing {
         await rig.engine.waitForHeld()
         await rig.controller.handle(.pressed(at: keyUp + 1))
         let queuedID = try #require(rig.store.start?.id)
-        if failure == "archive" { archive.setFailing(true) }
-        else { rig.store.failing.insert("recordCapture") }
+        if failure == "archive" { archive.setFailing(true) } else { rig.store.failing.insert("recordCapture") }
         await rig.controller.handle(.released(at: keyUp + 2))
         await rig.until { rig.log.all.filter { $0 == "store.recordCapture" }.count == 2 }
         #expect(!(await rig.controller.prepareForTermination()))
@@ -2779,6 +2847,7 @@ private final class SlowCapture: DictationCapturing {
 
     @Test func terminationDuringCaptureStartupWaitsForRegistrationAndKeepsTheTail() async throws {
         let rig = Rig()
+        rig.controller.terminationWait = .seconds(600)
         var completion: Task<Bool, Never>?
         rig.capture.duringStart = {
             completion = Task { await rig.controller.prepareForTermination() }
@@ -2869,10 +2938,11 @@ private final class SlowCapture: DictationCapturing {
     }
 
     @Test func aLostMicrophoneWithNothingCapturedFailsTheRow() async {
-        let rig = Rig(audio: CapturedAudio(
-            samples: [], sampleRate: 16_000, deviceUID: nil, deviceName: nil, deviceTransport: "usb",
-            firstSampleMs: nil, firstNonzeroMs: nil, captureStartMs: 0, audioMs: 0
-        ))
+        let rig = Rig(
+            audio: CapturedAudio(
+                samples: [], sampleRate: 16_000, deviceUID: nil, deviceName: nil, deviceTransport: "usb",
+                firstSampleMs: nil, firstNonzeroMs: nil, captureStartMs: 0, audioMs: 0
+            ))
         await rig.controller.handle(.pressed(at: keyDown))
         rig.capture.interrupt()
         await rig.until { rig.controller.phase == .idle }

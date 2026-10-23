@@ -10,14 +10,14 @@ struct SpellingImportView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
-                DesignEyebrow(editor.importFileName.isEmpty ? "Import CSV" : "Import CSV · \(editor.importFileName)").padding(.leading, 0)
+                DesignEyebrow(editor.importFileName.isEmpty ? editor.importSource.sheetEyebrow : "\(editor.importSource.sheetEyebrow) · \(editor.importFileName)").padding(.leading, 0)
                 Spacer(minLength: 12)
                 DesignCloseButton(label: "Close without importing") { editor.cancelImport() }
             }
             VStack(alignment: .leading, spacing: 4) {
                 Text("Import spellings.").font(DesignFont.serif(24)).foregroundStyle(DesignPalette.ink)
                     .accessibilityAddTraits(.isHeader)
-                Text("A \(Text("heard,written").font(DesignFont.mono(11.5))) pair per row, or a single \(Text("name").font(DesignFont.mono(11.5))) column. Include a header row. Existing spellings stay as they are.")
+                Text(editor.importSource.summaryLine)
                     .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.ink2).fixedSize(horizontal: false, vertical: true)
             }
             if let preview = editor.importPreview, !preview.rows.isEmpty {
@@ -84,7 +84,8 @@ struct SpellingImportView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(shown.enumerated()), id: \.element.id) { index, row in
                         if index > 0 { DesignHairline() }
-                        columns(row: String(row.id), heard: row.rule.heard, written: row.rule.written,
+                        columns(
+                            row: String(row.id), heard: row.rule.heard, written: row.rule.written,
                             result: resultLabel(row.status), invalid: isInvalid(row.status), warning: row.everydayWarning)
                     }
                     if hidden > 0 {
@@ -99,8 +100,10 @@ struct SpellingImportView: View {
         }
     }
 
-    private func columns(row: String, heard: String, written: String, result: String, invalid: Bool = false,
-                         warning: String? = nil, header: Bool = false) -> some View {
+    private func columns(
+        row: String, heard: String, written: String, result: String, invalid: Bool = false,
+        warning: String? = nil, header: Bool = false
+    ) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 12) {
             Text(row).font(header ? DesignFont.mono(DesignFont.eyebrow) : DesignFont.mono(11)).monospacedDigit()
                 .foregroundStyle(DesignPalette.ink3).frame(width: 32, alignment: .leading)

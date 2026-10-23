@@ -20,7 +20,7 @@ export function buildUrlMap(pages) {
  * - External URLs and in-page anchors are left alone.
  * Fenced code blocks are skipped.
  */
-export const GITHUB_BASE = "https://github.com/CodesWhat/mouthtype";
+const GITHUB_BASE = "https://github.com/CodesWhat/mouthtype";
 
 export function rewriteLinks(text, srcPath, urlMap, statPath = () => "file") {
   const srcDir = posix.dirname(srcPath);

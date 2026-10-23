@@ -45,7 +45,13 @@ public struct TranscriptGuard: Sendable {
         "put", "use", "buy", "pay", "yet", "ago", "may", "wow", "ooh", "aha", "ugh", "hmm", "uh", "um",
     ]
 
-    public init() {}
+    private let language: DictationLanguage?
+
+    /// Outside English only the known cue sounds are dropped as the start cue. The "short word, low confidence"
+    /// rule relies on an English opener list, and would drop a hesitant "ich", "und" or "oui".
+    public init(language: DictationLanguage? = nil) {
+        self.language = language
+    }
 
     public func apply(_ transcription: Transcription, voicedMs: Double?, clean: Bool = true) -> GuardedTranscript {
         let original = transcription.text
@@ -62,9 +68,10 @@ public struct TranscriptGuard: Sendable {
         if let cue = cueWord(transcription.words) {
             let stripped = Self.dropLeadingToken(text, matching: cue.word)
             if stripped != text {
-                edits.append(EditOp(
-                    stage: Self.stageName, kind: .delete, fromText: cue.word, toText: nil, wordDelta: -1, position: 0
-                ))
+                edits.append(
+                    EditOp(
+                        stage: Self.stageName, kind: .delete, fromText: cue.word, toText: nil, wordDelta: -1, position: 0
+                    ))
                 text = stripped
             }
         }
@@ -87,6 +94,7 @@ public struct TranscriptGuard: Sendable {
         guard !letters.isEmpty, !first.word.contains(where: \.isWhitespace) else { return nil }
         let isCueSound = Self.cueSounds.contains(letters)
         if !isCueSound {
+            guard DictationLanguage.isEnglish(language) else { return nil }
             guard letters.count < 4, !Self.realOpeners.contains(letters) else { return nil }
         }
         if words.count > 1 {
@@ -121,13 +129,15 @@ public struct TranscriptGuard: Sendable {
             let close: Character? = open == "[" ? "]" : open == "(" ? ")" : open == "*" ? "*" : nil
             let startsToken = i == 0 || chars[i - 1].isWhitespace
             if let close, startsToken, i + 1 < chars.count, let end = chars[(i + 1)...].firstIndex(of: close),
-               chars[..<i].allSatisfy(\.isWhitespace) || chars[(end + 1)...].allSatisfy(\.isWhitespace),
-               end + 1 == chars.count || chars[end + 1].isWhitespace,
-               artefactTags.contains(String(chars[(i + 1)..<end]).lowercased().trimmingCharacters(in: .whitespaces)) {
-                edits.append(EditOp(
-                    stage: stageName, kind: .delete, fromText: String(chars[i...end]), toText: nil, wordDelta: 0,
-                    position: i
-                ))
+                chars[..<i].allSatisfy(\.isWhitespace) || chars[(end + 1)...].allSatisfy(\.isWhitespace),
+                end + 1 == chars.count || chars[end + 1].isWhitespace,
+                artefactTags.contains(String(chars[(i + 1)..<end]).lowercased().trimmingCharacters(in: .whitespaces))
+            {
+                edits.append(
+                    EditOp(
+                        stage: stageName, kind: .delete, fromText: String(chars[i...end]), toText: nil, wordDelta: 0,
+                        position: i
+                    ))
                 i = end + 1
                 while i < chars.count, chars[i].isWhitespace { i += 1 }
                 continue

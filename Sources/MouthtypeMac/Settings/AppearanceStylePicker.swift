@@ -83,8 +83,9 @@ private struct AppearanceStyleTile: View {
         let key = "\(skin.rawValue)-\(readout.rawValue)-\(wallpaper.rawValue)"
         if let cached = cache[key] { return cached }
         guard let full = SettingsPillImage.make(skin: skin, size: .standard, readout: readout, wallpaper: wallpaper),
-              let cg = full.cgImage(forProposedRect: nil, context: nil, hints: nil), let box = opaqueBounds(cg),
-              let part = cg.cropping(to: box) else { return nil }
+            let cg = full.cgImage(forProposedRect: nil, context: nil, hints: nil), let box = opaqueBounds(cg),
+            let part = cg.cropping(to: box)
+        else { return nil }
         let image = NSImage(cgImage: part, size: NSSize(width: CGFloat(part.width) / 2, height: CGFloat(part.height) / 2))
         cache[key] = image
         return image
@@ -93,9 +94,12 @@ private struct AppearanceStyleTile: View {
     /// The pixels holding anything drawn, with a pixel of margin.
     static func opaqueBounds(_ image: CGImage) -> CGRect? {
         let width = image.width, height = image.height
-        guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
-                                      space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-              let data = context.data else { return nil }
+        guard
+            let context = CGContext(
+                data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+            let data = context.data
+        else { return nil }
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         let bytes = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
         var minX = width, minY = height, maxX = -1, maxY = -1
@@ -107,8 +111,9 @@ private struct AppearanceStyleTile: View {
         guard maxX >= minX, maxY >= minY else { return nil }
         // The context's rows run bottom-up, CGImage cropping is top-down.
         let top = height - 1 - maxY
-        return CGRect(x: max(0, minX - 1), y: max(0, top - 1), width: min(width, maxX + 2) - max(0, minX - 1),
-                      height: min(height, height - 1 - minY + 2) - max(0, top - 1))
+        return CGRect(
+            x: max(0, minX - 1), y: max(0, top - 1), width: min(width, maxX + 2) - max(0, minX - 1),
+            height: min(height, height - 1 - minY + 2) - max(0, top - 1))
     }
 }
 

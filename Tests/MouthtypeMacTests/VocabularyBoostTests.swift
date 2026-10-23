@@ -10,9 +10,14 @@ private final class BiasRecordingEngine: DictationEngine {
     var seen: [VocabularyBias?] = []
     private var current: VocabularyBias?
     func setVocabularyBias(_ bias: VocabularyBias?) async { current = bias }
+    var languages: [DictationLanguageRequest] = []
     func transcribe(samples: [Float]) async throws -> Transcription {
         seen.append(current)
         return Transcription(text: "hello", processingSeconds: 0, engineID: "bias")
+    }
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+        languages.append(language)
+        return try await transcribe(samples: samples)
     }
 }
 
@@ -60,9 +65,12 @@ private struct SavedRules: VocabularyProviding {
         )
     }
 
-    private func run(enabled: Bool, rules: [DictionaryRule]) async throws -> VocabularyBias? {
+    private func run(
+        enabled: Bool, rules: [DictionaryRule], language: DictationLanguageRequest = .english
+    ) async throws -> VocabularyBias? {
         let engine = BiasRecordingEngine()
         var pipeline = DictationPipeline(store: nil, archive: nil, engine: engine, clock: SystemDictationClock())
+        pipeline.languageRequest = { language }
         pipeline.vocabulary = SavedRules(rules: rules)
         pipeline.boostSavedWords = { enabled }
         let clock = SystemDictationClock()
@@ -79,6 +87,23 @@ private struct SavedRules: VocabularyProviding {
 
     @Test func requestCarriesNothingWhenOff() async throws {
         #expect(try await run(enabled: false, rules: rules) == nil)
+    }
+
+    @Test func aTakeThatCannotBeEnglishGetsNoBias() async throws {
+        #expect(try await run(enabled: true, rules: rules, language: .explicit(.german)) == nil)
+        #expect(try await run(enabled: true, rules: rules, language: .auto(candidates: [.english, .german]))?.terms == ["Maya", "Drydock"])
+    }
+
+    @Test func theEngineGetsTheRequestAndTheStoreGetsTheLanguage() async throws {
+        let engine = BiasRecordingEngine()
+        let store = RecordingStore()
+        var pipeline = DictationPipeline(store: store, archive: nil, engine: engine, clock: SystemDictationClock())
+        pipeline.languageRequest = { .explicit(.german) }
+        let clock = SystemDictationClock()
+        let session = DictationSession(id: "t", startedAt: clock.now(), keyDownAt: clock.nowNanos(), rowOpen: true)
+        _ = try await pipeline.transcribe(audio(), session: session, voicedMs: 1000)
+        #expect(engine.languages == [.explicit(.german)])
+        #expect(store.transcription?.language == "de")
     }
 
     @Test func nothingSavedMeansNoBiasEvenWhenOn() async throws {

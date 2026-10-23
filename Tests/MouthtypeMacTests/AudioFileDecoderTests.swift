@@ -18,10 +18,14 @@ import MouthtypeCore
         buffer.frameLength = buffer.frameCapacity
         for channel in 0..<2 {
             let data = try #require(buffer.floatChannelData?[channel])
-            for frame in 0..<Int(buffer.frameLength) { data[frame] = activeChannel == nil || activeChannel == channel
-                    ? Float(sin(2 * Double.pi * 440 * Double(frame) / rate)) * 0.5 : 0 }
+            for frame in 0..<Int(buffer.frameLength) {
+                data[frame] =
+                    activeChannel == nil || activeChannel == channel
+                    ? Float(sin(2 * Double.pi * 440 * Double(frame) / rate)) * 0.5 : 0
+            }
         }
-        let settings: [String: Any] = compressed
+        let settings: [String: Any] =
+            compressed
             ? [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: rate, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 128_000]
             : [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: rate, AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false]
         let file = try AVAudioFile(forWriting: url, settings: settings)

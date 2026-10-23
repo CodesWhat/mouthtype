@@ -14,7 +14,7 @@ import MouthtypeCore
         let model = SettingsModel(defaults: defaults)
         let state = diagnostics()
         let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state, updater: AppUpdater(driver: PreviewUpdateDriver(), activity: { .idle }))
-        let controller = SettingsWindow(model: model, actions: actions, reduceTransparency: { true })
+        let controller = SettingsWindow(model: model, actions: actions, reduceTransparency: { true }, favicons: SettingsRender.favicons)
         #expect(controller.window?.isVisible == false)
         #expect(controller.window?.title == "Mouthtype Settings")
         for appearance in ["light", "dark"] {
@@ -54,12 +54,13 @@ import MouthtypeCore
         state.microphoneStatus = .denied
         state.globe = GlobeKeyCheck(action: .showEmoji, fnKeyPresent: true)
         let actions = SettingsActions(cleaner: PreviewCleaner(), diagnostics: state, updater: AppUpdater(driver: PreviewUpdateDriver(), activity: { .idle }))
-        let controller = SettingsWindow(model: model, actions: actions, reduceTransparency: { true })
+        let controller = SettingsWindow(model: model, actions: actions, reduceTransparency: { true }, favicons: SettingsRender.favicons)
         model.setRecordingMode(.toggle)
         for page in [SettingsPage.home, .style, .appearance] {
             model.page = page
-            let bitmap = try SettingsRender.render(model: model, actions: actions, dark: false,
-                                                   size: SettingsTheme.minimumSize)
+            let bitmap = try SettingsRender.render(
+                model: model, actions: actions, dark: false,
+                size: SettingsTheme.minimumSize)
             #expect(bitmap.pixelsWide >= 860 && bitmap.pixelsHigh >= 600)
             try SettingsRender.save(bitmap, name: "settings-\(page.rawValue)-minimum")
         }

@@ -52,8 +52,8 @@ public enum SilenceTrimmer {
         let peak = levels.max() ?? 0
         let threshold = max(minimumLevel, peak * relativeLevel)
         guard peak >= threshold,
-              let first = levels.firstIndex(where: { $0 >= threshold }),
-              let last = levels.lastIndex(where: { $0 >= threshold })
+            let first = levels.firstIndex(where: { $0 >= threshold }),
+            let last = levels.lastIndex(where: { $0 >= threshold })
         else { return nil }
         let start = max(0, first * frameLength - Int(leadMargin * Double(sampleRate)))
         let end = min(audio.count, (last + 1) * frameLength + Int(trailMargin * Double(sampleRate)))

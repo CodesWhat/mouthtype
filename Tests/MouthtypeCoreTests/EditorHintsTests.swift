@@ -126,31 +126,39 @@ import Testing
     // MARK: Title parsing
 
     @Test func parsesVSCodeTitles() {
-        #expect(EditorHints.parseTitle("DictationPipeline.swift - mouthtype - Visual Studio Code", style: .vscode)
-            == .init(file: "DictationPipeline.swift", project: "mouthtype"))
-        #expect(EditorHints.parseTitle("\u{25CF} index.ts \u{2014} my-app \u{2014} Visual Studio Code", style: .vscode)
-            == .init(file: "index.ts", project: "my-app"))
-        #expect(EditorHints.parseTitle("main.py - api (Workspace) - Visual Studio Code", style: .vscode)
-            == .init(file: "main.py", project: "api"))
-        #expect(EditorHints.parseTitle("[Extension Development Host] ext.ts - plugin - Visual Studio Code", style: .vscode)
-            == .init(file: "ext.ts", project: "plugin"))
+        #expect(
+            EditorHints.parseTitle("DictationPipeline.swift - mouthtype - Visual Studio Code", style: .vscode)
+                == .init(file: "DictationPipeline.swift", project: "mouthtype"))
+        #expect(
+            EditorHints.parseTitle("\u{25CF} index.ts \u{2014} my-app \u{2014} Visual Studio Code", style: .vscode)
+                == .init(file: "index.ts", project: "my-app"))
+        #expect(
+            EditorHints.parseTitle("main.py - api (Workspace) - Visual Studio Code", style: .vscode)
+                == .init(file: "main.py", project: "api"))
+        #expect(
+            EditorHints.parseTitle("[Extension Development Host] ext.ts - plugin - Visual Studio Code", style: .vscode)
+                == .init(file: "ext.ts", project: "plugin"))
         #expect(EditorHints.parseTitle("README.md - Visual Studio Code", style: .vscode) == .init(file: "README.md"))
         #expect(EditorHints.parseTitle("mouthtype - Visual Studio Code", style: .vscode) == .init(project: "mouthtype"))
         #expect(EditorHints.parseTitle("Visual Studio Code", style: .vscode) == .init())
     }
 
     @Test func parsesCursorTitles() {
-        #expect(EditorHints.parseTitle("route.tsx - storefront - Cursor", style: .vscode)
-            == .init(file: "route.tsx", project: "storefront"))
-        #expect(EditorHints.parseTitle("route.tsx \u{2014} storefront \u{2014} Cursor", style: .vscode)
-            == .init(file: "route.tsx", project: "storefront"))
+        #expect(
+            EditorHints.parseTitle("route.tsx - storefront - Cursor", style: .vscode)
+                == .init(file: "route.tsx", project: "storefront"))
+        #expect(
+            EditorHints.parseTitle("route.tsx \u{2014} storefront \u{2014} Cursor", style: .vscode)
+                == .init(file: "route.tsx", project: "storefront"))
     }
 
     @Test func parsesXcodeTitles() {
-        #expect(EditorHints.parseTitle("Mouthtype \u{2014} AppDelegate.swift", style: .xcode)
-            == .init(file: "AppDelegate.swift", project: "Mouthtype"))
-        #expect(EditorHints.parseTitle("Mouthtype \u{2014} AppDelegate.swift \u{2014} Edited", style: .xcode)
-            == .init(file: "AppDelegate.swift", project: "Mouthtype"))
+        #expect(
+            EditorHints.parseTitle("Mouthtype \u{2014} AppDelegate.swift", style: .xcode)
+                == .init(file: "AppDelegate.swift", project: "Mouthtype"))
+        #expect(
+            EditorHints.parseTitle("Mouthtype \u{2014} AppDelegate.swift \u{2014} Edited", style: .xcode)
+                == .init(file: "AppDelegate.swift", project: "Mouthtype"))
         #expect(EditorHints.parseTitle("Mouthtype \u{2014} Build Succeeded", style: .xcode) == .init(project: "Mouthtype"))
         #expect(EditorHints.parseTitle("Mouthtype", style: .xcode) == .init(project: "Mouthtype"))
         #expect(EditorHints.parseTitle("", style: .xcode) == .init())
@@ -165,7 +173,7 @@ import Testing
                 InsertionContext(before: Thread.isMainThread ? "" : "applyTheme(", after: nil)
             }
         )
-        let terms = await EditorHints.gather(input, deadline: .seconds(2))
+        let terms = await EditorHints.gather(input, deadline: .seconds(60))
         #expect(terms.map(\.text) == ["applyTheme", "AppDelegate", "mouthtype"])
     }
 
@@ -174,19 +182,23 @@ import Testing
         defer { gate.signal() }
         let input = EditorHints.Input(
             windowTitle: "AppDelegate.swift - mouthtype - Visual Studio Code", titleStyle: .vscode,
-            readCursor: { _ in gate.wait(); return InsertionContext(before: "applyTheme(", after: nil) }
+            readCursor: { _ in
+                gate.wait(); return InsertionContext(before: "applyTheme(", after: nil)
+            }
         )
-        let clock = ContinuousClock()
-        let start = clock.now
+        // The gate stays shut until the defer, so a gather that waited on the read would never return.
         let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
-        #expect(clock.now - start < .seconds(1))
         #expect(terms.map(\.text) == ["AppDelegate", "mouthtype"])
     }
 
     @Test func aStuckCursorReadKeepsOneWorkerInFlightAndFreesWhenItExits() async {
         final class Calls: Sendable {
             private let n = Mutex(0)
-            func next() -> Int { n.withLock { $0 += 1; return $0 } }
+            func next() -> Int {
+                n.withLock {
+                    $0 += 1; return $0
+                }
+            }
             var count: Int { n.withLock { $0 } }
         }
         let hold = DispatchSemaphore(value: 0)
@@ -207,9 +219,7 @@ import Testing
         let started = clock.now + .seconds(60)
         while calls.count == 0, clock.now < started { await Task.yield() }
         for _ in 0..<3 {
-            let start = clock.now
             let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
-            #expect(clock.now - start < .seconds(1))
             #expect(terms.map(\.text) == ["AppDelegate", "mouthtype"])
         }
         #expect(calls.count == 1)
@@ -219,7 +229,7 @@ import Testing
         let giveUp = clock.now + .seconds(60)
         while readGate.isBusy, clock.now < giveUp { await Task.yield() }
         #expect(!readGate.isBusy)
-        let terms = await EditorHints.gather(input, deadline: .seconds(2))
+        let terms = await EditorHints.gather(input, deadline: .seconds(60))
         #expect(calls.count == 2)
         #expect(terms.map(\.text) == ["applyTheme", "AppDelegate", "mouthtype"])
     }
@@ -228,15 +238,12 @@ import Testing
         let input = EditorHints.Input(
             cursorBefore: "applyTheme()", windowTitle: "AppDelegate.swift - mouthtype - Visual Studio Code", titleStyle: .vscode,
             files: {
-                try? await Task.sleep(for: .seconds(5))
+                // Cancellation ends the sleep. A gather that waited for the files would sit here for an hour.
+                try? await Task.sleep(for: .seconds(3600))
                 return ["Slow/NeverArrives.swift"]
             }
         )
-        let clock = ContinuousClock()
-        let start = clock.now
         let terms = await EditorHints.gather(input, deadline: .milliseconds(100))
-        let elapsed = clock.now - start
-        #expect(elapsed < .seconds(1))
         #expect(terms.map(\.text) == ["applyTheme", "AppDelegate", "mouthtype"])
     }
 
@@ -245,7 +252,7 @@ import Testing
             cursorBefore: nil, windowTitle: "mouthtype - Visual Studio Code", titleStyle: .vscode,
             files: { ["Sources/Deep/FileNameStem.swift", "Top.swift"] }
         )
-        let terms = await EditorHints.gather(input, deadline: .seconds(2))
+        let terms = await EditorHints.gather(input, deadline: .seconds(60))
         #expect(terms.map(\.text) == ["mouthtype", "FileNameStem"])
     }
 

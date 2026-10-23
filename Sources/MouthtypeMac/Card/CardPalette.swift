@@ -89,7 +89,8 @@ struct CardPalette {
         if primaryLightens {
             return primaryFill.blended(withFraction: pressed ? 0.40 : hovered ? 0.25 : 0, of: .white) ?? primaryFill
         }
-        return pressed ? primaryFill.blended(withFraction: 0.18, of: .black) ?? primaryFill
+        return pressed
+            ? primaryFill.blended(withFraction: 0.18, of: .black) ?? primaryFill
             : hovered ? primaryFill.blended(withFraction: 0.5, of: .white) ?? primaryFill : primaryFill
     }
 
@@ -144,7 +145,9 @@ struct CardPalette {
         case .matrix, .minimal:
             let flavor: SquircleFlavor = style == .matrix ? .matrix : .minimal
             let s = SquirclePalette.resolve(flavor, dark: dark)
-            let tint = dark ? CardTint(color: .white, rest: 0.10, hover: 0.16, press: 0.24)
+            let tint =
+                dark
+                ? CardTint(color: .white, rest: 0.10, hover: 0.16, press: 0.24)
                 : CardTint(color: .black, rest: 0.07, hover: 0.12, press: 0.18)
             return CardPalette(
                 ink: s.text, body: dark ? classicBody : NSColor(hex: 0x2C2C2E), emphasis: s.text,

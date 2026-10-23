@@ -31,8 +31,11 @@ import Testing
 
     @Test func groupsApplyIndependentlyAndPreserveRoleSizes() {
         let base = Typography(choice: .systema)
-        let font = Typography(choice: .systema, overrides: TextFontOverrides(enabled: true,
-            families: [.heading: "Menlo", .body: "Avenir Next", .readout: "Menlo"]))
+        let font = Typography(
+            choice: .systema,
+            overrides: TextFontOverrides(
+                enabled: true,
+                families: [.heading: "Menlo", .body: "Avenir Next", .readout: "Menlo"]))
         for role in [TextRole.header, .pillMessage, .numeric] { #expect(font.font(role).familyName == "Menlo") }
         for role in [TextRole.body, .pillDetail, .button] { #expect(font.font(role).familyName == "Avenir Next") }
         for role in TextRole.allCases { #expect(font.font(role).pointSize == base.font(role).pointSize) }
@@ -42,8 +45,11 @@ import Testing
         let base = Typography(choice: .rounded)
         let saved = TextFontOverrides(enabled: false, families: [.heading: "Menlo"])
         let disabled = Typography(choice: .rounded, overrides: saved)
-        let missing = Typography(choice: .rounded, overrides: TextFontOverrides(enabled: true,
-            families: [.heading: "Not Installed Family"]), isInstalled: { _ in false })
+        let missing = Typography(
+            choice: .rounded,
+            overrides: TextFontOverrides(
+                enabled: true,
+                families: [.heading: "Not Installed Family"]), isInstalled: { _ in false })
         for role in TextRole.allCases {
             #expect(disabled.font(role).fontName == base.font(role).fontName)
             #expect(missing.font(role).fontName == base.font(role).fontName)
@@ -52,8 +58,12 @@ import Testing
     }
 
     @Test func numericOverridesKeepTabularDigits() {
-        let font = Typography(choice: .systema, overrides: TextFontOverrides(enabled: true,
-            families: [.readout: "Avenir Next"])).font(.numeric)
+        let font = Typography(
+            choice: .systema,
+            overrides: TextFontOverrides(
+                enabled: true,
+                families: [.readout: "Avenir Next"])
+        ).font(.numeric)
         #expect(font.familyName == "Avenir Next")
         func width(_ text: String) -> CGFloat { NSAttributedString(string: text, attributes: [.font: font]).size().width }
         #expect(abs(width("1111") - width("8888")) < 0.01)

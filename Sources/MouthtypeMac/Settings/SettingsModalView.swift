@@ -102,11 +102,14 @@ struct SettingsModalView: View {
         case .general:
             host.generalInput
             host.generalRecording
+        case .microphone:
+            host.microphonePage
         case .mac:
             host.macPage
         case .health:
-            if let diagnostics = actions.diagnostics { SettingsDiagnosticsView(state: diagnostics, model: model, actions: actions) }
-            else {
+            if let diagnostics = actions.diagnostics {
+                SettingsDiagnosticsView(state: diagnostics, model: model, actions: actions)
+            } else {
                 DesignSection(eyebrow: "HEALTH") { ModalCardNote(text: "Diagnostic status is unavailable.") }
             }
         case .advanced:

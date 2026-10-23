@@ -39,11 +39,13 @@ import MouthtypeCore
         let (defaults, name) = preferences()
         defer { defaults.removePersistentDomain(forName: name) }
         var activated: [RecordingMode] = []
-        let model = SettingsModel(defaults: defaults, onRecordingModeChanged: { mode in
-            #expect(RecordingModePreference.current(defaults) == .hold)
-            activated.append(mode)
-            return nil
-        })
+        let model = SettingsModel(
+            defaults: defaults,
+            onRecordingModeChanged: { mode in
+                #expect(RecordingModePreference.current(defaults) == .hold)
+                activated.append(mode)
+                return nil
+            })
         #expect(model.recordingMode == .hold && model.recordingModeError == nil)
         model.refresh()
         #expect(activated.isEmpty)
@@ -78,6 +80,18 @@ import MouthtypeCore
         model.setRecordingMode(.toggle)
         #expect(!model.recordingInstructions.contains("Escape cancels."))
         #expect(model.recordingInstructions.contains("Cancel Dictation in the menu"))
+    }
+
+    @Test func changingModeDuringARecordingSaysItWasCancelled() {
+        let (defaults, name) = preferences()
+        defer { defaults.removePersistentDomain(forName: name) }
+        var recording = true
+        let model = SettingsModel(defaults: defaults, onRecordingModeChanged: { _ in nil }, isRecording: { recording })
+        model.setRecordingMode(.toggle)
+        #expect(model.recordingModeNotice == "The active recording was cancelled.")
+        recording = false
+        model.setRecordingMode(.hold)
+        #expect(model.recordingModeNotice == nil)
     }
 
     @Test func failedActivationKeepsSavedModeAndRetryClearsError() {

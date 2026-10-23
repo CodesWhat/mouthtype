@@ -67,8 +67,12 @@ final class EventTap {
             mask = flagsMask
             options = .listenOnly
         case .keys:
-            mask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
+            mask =
+                (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
                 | (context.shortcut == nil ? 0 : 1 << CGEventType.flagsChanged.rawValue)
+            options = .defaultTap
+        case .mouse:
+            mask = Self.triggerButtonMask
             options = .defaultTap
         }
         let retained = Unmanaged.passRetained(context)
@@ -100,6 +104,11 @@ final class EventTap {
     static let pointerMask: CGEventMask =
         (1 << CGEventType.leftMouseDown.rawValue) | (1 << CGEventType.rightMouseDown.rawValue)
         | (1 << CGEventType.otherMouseDown.rawValue)
+
+    /// Presses, releases and drags of the extra buttons. Left and right clicks are never in the mask.
+    static let triggerButtonMask: CGEventMask =
+        (1 << CGEventType.otherMouseDown.rawValue) | (1 << CGEventType.otherMouseUp.rawValue)
+        | (1 << CGEventType.otherMouseDragged.rawValue)
 
     var isEnabled: Bool { CGEvent.tapIsEnabled(tap: port) }
 
@@ -139,6 +148,15 @@ private func tapCallback(
         context.sink.yield(.disabled(context.role))
         return Unmanaged.passUnretained(event)
     }
+    if context.role == .mouse {
+        guard context.mouseButton == event.getIntegerValueField(.mouseEventButtonNumber),
+            event.getIntegerValueField(.eventSourceUserData) != SyntheticEvents.stamp
+        else { return Unmanaged.passUnretained(event) }
+        if type != .otherMouseDragged {
+            context.sink.yield(.mouse(MouseSample(isDown: type == .otherMouseDown, flags: event.flags.rawValue, timestamp: event.timestamp)))
+        }
+        return nil
+    }
     if TapPolicy.isPointerDown(type) {
         if event.getIntegerValueField(.eventSourceUserData) != SyntheticEvents.stamp {
             context.shared.userInput.wrappingAdd(1, ordering: .relaxed)
@@ -157,7 +175,9 @@ private func tapCallback(
     let shortcutHeld: Bool
     if context.role == .keys, let shortcut = context.shortcut {
         shortcutHeld = shared.shortcutMatcher.withLock { $0.update(sample, shortcut: shortcut) }
-    } else { shortcutHeld = wasHeld }
+    } else {
+        shortcutHeld = wasHeld
+    }
     let decision = TapPolicy.decide(
         sample,
         role: context.role,
@@ -174,7 +194,8 @@ private func tapCallback(
         shared.hotkeyHeld.store(held, ordering: .relaxed)
     }
     if let combo = decision.replacement, let emulator = context.emulator,
-       emulator.post(combo, keyDown: sample.kind == .keyDown, originalFlags: sample.flags, autorepeat: sample.isAutorepeat) {
+        emulator.post(combo, keyDown: sample.kind == .keyDown, originalFlags: sample.flags, autorepeat: sample.isAutorepeat)
+    {
         shared.emulated.wrappingAdd(1, ordering: .relaxed)
     }
     if context.role == .keys {

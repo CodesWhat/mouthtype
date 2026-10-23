@@ -577,7 +577,9 @@ private struct Rig {
 
     @Test func saveRunsTheHandlerConfirmsInPlaceThenLeaves() async {
         let (presenter, surface, clock, log) = rig()
-        presenter.onOfferAccepted = { log.accepted.append($0.kind); return true }
+        presenter.onOfferAccepted = {
+            log.accepted.append($0.kind); return true
+        }
         presenter.present(.rememberSpelling(pair))
         presenter.perform(.save)
         await settle()
@@ -652,7 +654,9 @@ private struct Rig {
 
     @Test func otherCardsNeverSeeTheOfferHandlers() {
         let (presenter, _, _, log) = rig()
-        presenter.onOfferAccepted = { _ in log.accepted.append(.secure); return true }
+        presenter.onOfferAccepted = { _ in
+            log.accepted.append(.secure); return true
+        }
         presenter.present(.pasteFailed("x"))
         presenter.perform(.save)
         presenter.perform(.notNow)

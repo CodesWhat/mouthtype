@@ -9,9 +9,10 @@ enum WebsiteContext {
 
     static func host(document: String?, bundleID: String?) -> String? {
         guard supports(bundleID: bundleID), let document,
-              let url = URLComponents(string: document),
-              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
-              url.user == nil, url.password == nil, let host = url.host else { return nil }
+            let url = URLComponents(string: document),
+            ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+            url.user == nil, url.password == nil, let host = url.host
+        else { return nil }
         return AppCleanupStyles.normalizedDomain(host)
     }
 }

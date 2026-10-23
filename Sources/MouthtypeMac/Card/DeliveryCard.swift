@@ -1,7 +1,8 @@
 import Foundation
+import MouthtypeCore
 
 enum CardAction: Equatable, Sendable {
-    case copy, insert, undo, save, notNow, forget, keep, recover, discard
+    case copy, insert, undo, save, notNow, forget, keep, recover, discard, openSoundSettings
 
     var title: String {
         switch self {
@@ -14,6 +15,7 @@ enum CardAction: Equatable, Sendable {
         case .keep: "Keep"
         case .recover: "Recover"
         case .discard: "Discard"
+        case .openSoundSettings: "Sound settings"
         }
     }
 }
@@ -28,7 +30,7 @@ struct SpellingPair: Equatable, Sendable {
 struct DeliveryCard: Equatable, Sendable {
     enum Kind: Equatable, Sendable {
         case secure, nowhere, pasteFailed, cancelled, recovered, rememberSpelling, forgetSpelling
-        case recoverOffer, micDisconnected, limitWarning
+        case recoverOffer, micDisconnected, limitWarning, silentMic
 
         /// A question about the dictionary rather than a report on a delivery.
         var isOffer: Bool { self == .rememberSpelling || self == .forgetSpelling }
@@ -126,6 +128,16 @@ struct DeliveryCard: Equatable, Sendable {
         )
     }
 
+    /// A take that heard nothing. `micName` is the input that was recording, so the fix starts with the right device.
+    static func silentMic(_ kind: SilentTakeKind, micName: String?) -> DeliveryCard {
+        let mic = micName.flatMap { $0.isEmpty ? nil : $0 } ?? "your microphone"
+        let header = kind == .noSignal ? "Microphone heard nothing" : "No speech heard"
+        return DeliveryCard(
+            kind: .silentMic, header: "\(header)\nCheck \(mic)", transcript: nil,
+            actions: [.openSoundSettings], countdown: nil
+        )
+    }
+
     static func durationText(_ seconds: Double) -> String {
         let total = max(1, Int(seconds.rounded()))
         func unit(_ n: Int, _ name: String) -> String { "\(n) \(name)\(n == 1 ? "" : "s")" }
@@ -167,8 +179,9 @@ struct DeliveryCard: Equatable, Sendable {
         switch (result.method, result.outcome) {
         case (_, .secureDiscard): return .secure(text)
         case (_, .partialPaste):
-            return DeliveryCard(kind: .pasteFailed, header: "Paste stopped\nSome text may already be there", transcript: text,
-                                actions: [.copy], countdown: nil)
+            return DeliveryCard(
+                kind: .pasteFailed, header: "Paste stopped\nSome text may already be there", transcript: text,
+                actions: [.copy], countdown: nil)
         case (_, .failed): return .pasteFailed(text)
         case (.clipboardOnly, _): return .nowhere(text)
         default: return nil
