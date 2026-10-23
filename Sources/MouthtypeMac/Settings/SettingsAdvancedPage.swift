@@ -19,7 +19,6 @@ extension SettingsView {
                 title: "Names on screen",
                 detail: "Favours names on screen, in any app. Needs the boost above.",
                 isOn: Binding(get: { model.contextNames }, set: model.setContextNames), identifier: "settings-context-names")
-            MicrophonePriorityRows(model: model.microphone)
         }
         DesignSection(
             eyebrow: "TONE DETAILS",

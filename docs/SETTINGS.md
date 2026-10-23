@@ -5,7 +5,7 @@ Everything you can change in Mouthtype, page by page, in sidebar order.
 > [!NOTE]
 > The Mouthtype menu has **Settings…**. <kbd>Command</kbd>+<kbd>,</kbd> opens the same window while Mouthtype is active.
 
-The Mouthtype window has six pages in the sidebar: **Home**, **Stats**, **Dictionary**, **Transforms**, **Style** and **Appearance**. A **Settings** row at the foot of the sidebar opens the Settings modal. The modal has General, Mac and Health pages, plus an Advanced page while the Advanced options switch in its footer is on.
+The Mouthtype window has six pages in the sidebar: **Home**, **Stats**, **Dictionary**, **Transforms**, **Style** and **Appearance**. A **Settings** row at the foot of the sidebar opens the Settings modal. The modal has General, Microphone, Mac and Health pages, plus an Advanced page while the Advanced options switch in its footer is on.
 
 **Open Mouthtype** in the menu opens Home. **Settings…** (<kbd>Command</kbd>+<kbd>,</kbd>) opens the modal on General.
 
@@ -81,7 +81,7 @@ Stats is built from the dictation log on this Mac (nothing extra is stored). It 
 
 ## General
 
-**General** (Settings modal) contains the dictation shortcut, Recording behavior and Microphone, then Recording sounds, Live words and Quiet other audio. **Mac** holds Launch at login, Show in Dock and the update settings. The cleanup level lives on the Style page (Cleanup tab).
+**General** (Settings modal) contains the dictation shortcut, Recording behavior, Language and Mouse button, then Recording sounds, Live words and Quiet other audio. **Microphone** (its own page, right after General) holds the microphone picker, Refresh inputs and the priority list. **Mac** holds Launch at login, Show in Dock and the update settings. The cleanup level lives on the Style page (Cleanup tab).
 
 ### Shortcut and recording behavior
 
@@ -112,7 +112,7 @@ Choose **Hold to talk** or **Press to toggle** under Recording behavior beside t
 
 ### Microphone
 
-Choose **System Default** to follow macOS, or select a microphone for Mouthtype only. The explicit choice is remembered by its persistent device identity, so reconnecting it under a new runtime ID keeps the choice. This does not change the Mac's system input. Use Refresh inputs after connecting a device.
+Find this under Settings > Microphone. Choose **System Default** to follow macOS, or select a microphone for Mouthtype only. The explicit choice is remembered by its persistent device identity, so reconnecting it under a new runtime ID keeps the choice. This does not change the Mac's system input. Use Refresh inputs after connecting a device.
 
 An unavailable saved microphone stays selected and visible. Reconnect it or explicitly select another input; Mouthtype does not silently record from a different microphone. An unreadable saved choice is retained until you explicitly choose a replacement.
 
@@ -246,7 +246,7 @@ Rules you made before the redesign keep working unchanged as explicit overrides.
 
 **Advanced** holds the set-once options:
 
-- Boost saved words, Learn from my corrections, Code names from your editor, Names on screen and the microphone priority list.
+- Boost saved words, Learn from my corrections, Code names from your editor and Names on screen.
 - Remove fillers, Spoken commands and lists, Slash commands in coding apps (on by default; "slash research" types /research in terminals, editors and agent apps), Format numbers, Lowercase sentence starts and Drop the final full stop.
 - Split long pastes per supported terminal. It starts off, applies to the chosen terminal's windows and does not identify the command-line program inside them.
 - Keep finished audio for, Dictionary file, and Remap Fn.
@@ -472,4 +472,4 @@ The ordinary `swift test --jobs 4` command includes all package test targets, in
 
 For native checks without running Core model replays, run `swift test --jobs 4 --filter 'MouthtypeMacTests|MouthtypeSettingsUITests|FnRemapKitTests'`. That includes the functional macOS tests, the offscreen render tests and the Fn tests. For only the rendering checks, run `swift test --jobs 4 --filter MouthtypeSettingsUITests`. All rendering tests run even when no PNG output directory is set.
 
-To save the actual-view PNGs, run `MOUTHTYPE_SETTINGS_PREVIEWS=/tmp/mouthtype-settings-previews swift test --jobs 4 --filter MouthtypeSettingsUITests`. Change the output directory as needed. The settings render cases cover all six pages and the General, Mac, Health and Advanced pages of the Settings modal in light and dark, plus the Style tabs, Large pill size and a Health attention state at 860×590pt. The Import CSV sheet adds all-valid, invalid-with-warnings and many-row cases in light and dark. Setup uses the app palette, type and buttons, and adds individual permission, microphone preparation/failure, speech loading/failure, shortcut and ready cards, including the minimum window, without invoking permission or hardware actions. Font overrides add Default, Custom, unavailable-family/minimum-width and disabled-state renders without opening the font panel. Functional settings model/menu/setup/font tests remain in `MouthtypeMacTests`.
+To save the actual-view PNGs, run `MOUTHTYPE_SETTINGS_PREVIEWS=/tmp/mouthtype-settings-previews swift test --jobs 4 --filter MouthtypeSettingsUITests`. Change the output directory as needed. The settings render cases cover all six pages and the General, Microphone, Mac, Health and Advanced pages of the Settings modal in light and dark, plus the Style tabs, Large pill size and a Health attention state at 860×590pt. The Import CSV sheet adds all-valid, invalid-with-warnings and many-row cases in light and dark. Setup uses the app palette, type and buttons, and adds individual permission, microphone preparation/failure, speech loading/failure, shortcut and ready cards, including the minimum window, without invoking permission or hardware actions. Font overrides add Default, Custom, unavailable-family/minimum-width and disabled-state renders without opening the font panel. Functional settings model/menu/setup/font tests remain in `MouthtypeMacTests`.
