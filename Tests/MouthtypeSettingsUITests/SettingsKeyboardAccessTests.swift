@@ -19,7 +19,7 @@ import Testing
                 for n in 0..<8 { model.addContextSite(context, domain: "filler\(n).\(context.rawValue).example.com") }
             }
         }
-        let controller = SettingsWindow(model: model, reduceTransparency: { true }, fullKeyboardAccess: { fullKeyboardAccess })
+        let controller = SettingsWindow(model: model, reduceTransparency: { true }, fullKeyboardAccess: { fullKeyboardAccess }, favicons: SettingsRender.favicons)
         controller.window?.contentView?.layoutSubtreeIfNeeded()
         return controller
     }

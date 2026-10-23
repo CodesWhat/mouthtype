@@ -50,7 +50,8 @@ import Testing
         let (model, defaults, name) = model(wallpaper: wallpaper)
         defer { defaults.removePersistentDomain(forName: name) }
         let size = SettingsTheme.windowSize
-        let host = NSHostingView(rootView: AnyView(SettingsView(model: model, actions: SettingsActions(), solid: true).frame(width: size.width, height: size.height)))
+        let settings = SettingsView(model: model, actions: SettingsActions(), solid: true, favicons: SettingsRender.favicons)
+        let host = NSHostingView(rootView: AnyView(settings.frame(width: size.width, height: size.height)))
         let window = NSWindow(contentRect: NSRect(origin: NSPoint(x: 120, y: 120), size: size), styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = host
