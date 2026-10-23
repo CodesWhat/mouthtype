@@ -27,6 +27,11 @@ struct StyleInstructionsEditor: View {
     static let explanation =
         "Thorough follows these for tone and formatting. It never changes what you said: names, numbers and your language stay as spoken, and a result that drifts is thrown away. Fast ignores instructions."
 
+    /// What the box holds after a preset is chosen: the preset's text in place of whatever was typed. Nothing is saved until Save.
+    static func draft(startingFrom preset: CleanupInstructionPreset) -> String {
+        CleanupInstructions.limited(preset.text)
+    }
+
     private var changed: Bool { CleanupInstructions.normalize(draft) != saved }
 
     var body: some View {
@@ -48,6 +53,12 @@ struct StyleInstructionsEditor: View {
                 Spacer(minLength: 8)
                 Text("\(draft.count) / \(CleanupInstructions.maxLength)").font(DesignFont.mono(DesignFont.eyebrow))
                     .foregroundStyle(DesignPalette.ink3).fixedSize().accessibilityIdentifier(identifier + "-count")
+                Menu("Start from…") {
+                    ForEach(CleanupInstructionPresets.all) { preset in
+                        Button(preset.title) { draft = Self.draft(startingFrom: preset) }
+                    }
+                }.menuStyle(.button).buttonStyle(.designSecondary).fixedSize()
+                    .accessibilityIdentifier(identifier + "-presets")
                 if saved != nil {
                     Button("Clear") {
                         draft = ""; save(nil)

@@ -1,0 +1,445 @@
+[
+  {
+    "id": "slack-01",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "hey can you send me the report by Friday I need it for the meeting with Priya",
+    "target": "",
+    "mustContain": [
+      "report",
+      "Friday",
+      "Priya"
+    ]
+  },
+  {
+    "id": "slack-02",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "okay so three things first email Dana second book the room for Tuesday third order twelve chairs",
+    "target": "",
+    "mustContain": [
+      "Dana",
+      "Tuesday",
+      "chairs"
+    ]
+  },
+  {
+    "id": "slack-03",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "I can't cover your shift on Saturday sorry",
+    "target": "",
+    "mustContain": [
+      "Saturday"
+    ]
+  },
+  {
+    "id": "slack-04",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "we need 47 chairs and 12 tables by 3 pm",
+    "target": "",
+    "mustContain": [
+      "47",
+      "12"
+    ]
+  },
+  {
+    "id": "slack-05",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "please send the invoice to Marcus tomorrow morning",
+    "target": "",
+    "mustContain": [
+      "invoice",
+      "Marcus",
+      "tomorrow"
+    ]
+  },
+  {
+    "id": "slack-06",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "yeah so I think the deploy went fine and we can ship it Friday",
+    "target": "",
+    "mustContain": [
+      "deploy",
+      "Friday"
+    ]
+  },
+  {
+    "id": "slack-07",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "Dana said the budget is not approved yet so hold off on the order",
+    "target": "",
+    "mustContain": [
+      "Dana",
+      "approved"
+    ]
+  },
+  {
+    "id": "slack-08",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "hey joey, we still on for coffee or? I think we maybe should leave earlier to make it there in time there might um be traffic. What are you thinking?",
+    "target": "",
+    "mustContain": [
+      "Joey",
+      "coffee",
+      "traffic"
+    ]
+  },
+  {
+    "id": "slack-09",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "Send it to Dana, no wait, send it to Priya.",
+    "target": "",
+    "mustContain": [
+      "Priya"
+    ]
+  },
+  {
+    "id": "slack-10",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "The total is four hundred and twelve dollars, due on the fifth.",
+    "target": "",
+    "mustContain": [
+      "412"
+    ]
+  },
+  {
+    "id": "slack-11",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "I don't think we should move the launch to the twenty second because Priya is out until the twenty fifth",
+    "target": "",
+    "mustContain": [
+      "Priya",
+      "launch"
+    ]
+  },
+  {
+    "id": "slack-12",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "hello Dana I wanted to let you know the deployment finished successfully at 4 pm and nothing is broken best regards Scott",
+    "target": "",
+    "mustContain": [
+      "Dana",
+      "4"
+    ]
+  },
+  {
+    "id": "slack-13",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "so basically what I'm trying to say is that we should probably look at the logs again because the error rate went up to 5 percent after the release",
+    "target": "",
+    "mustContain": [
+      "logs",
+      "5",
+      "release"
+    ]
+  },
+  {
+    "id": "slack-14",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "I really really appreciate you taking the time to meet with me yesterday it was super helpful and I learned a lot and I'm not going to forget it",
+    "target": "",
+    "mustContain": [
+      "yesterday",
+      "not"
+    ]
+  },
+  {
+    "id": "slack-15",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "the meeting is on Thursday at 2 pm in room 4B and Marcus won't be there",
+    "target": "",
+    "mustContain": [
+      "Thursday",
+      "4B",
+      "Marcus",
+      "won't"
+    ]
+  },
+  {
+    "id": "slack-16",
+    "instructions": "Write it like a quick Slack message: short and casual, with contractions. No greeting and no sign-off.",
+    "input": "thanks for sending that over I looked at the numbers and the Q3 total of 18400 is correct but the Q2 figure isn't",
+    "target": "",
+    "mustContain": [
+      "Q3",
+      "Q2"
+    ]
+  },
+  {
+    "id": "keep-my-wording-01",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "hey can you send me the report by Friday I need it for the meeting with Priya",
+    "target": "",
+    "mustContain": [
+      "report",
+      "Friday",
+      "Priya"
+    ]
+  },
+  {
+    "id": "keep-my-wording-02",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "okay so three things first email Dana second book the room for Tuesday third order twelve chairs",
+    "target": "",
+    "mustContain": [
+      "Dana",
+      "Tuesday",
+      "chairs"
+    ]
+  },
+  {
+    "id": "keep-my-wording-03",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "I can't cover your shift on Saturday sorry",
+    "target": "",
+    "mustContain": [
+      "Saturday"
+    ]
+  },
+  {
+    "id": "keep-my-wording-04",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "we need 47 chairs and 12 tables by 3 pm",
+    "target": "",
+    "mustContain": [
+      "47",
+      "12"
+    ]
+  },
+  {
+    "id": "keep-my-wording-05",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "please send the invoice to Marcus tomorrow morning",
+    "target": "",
+    "mustContain": [
+      "invoice",
+      "Marcus",
+      "tomorrow"
+    ]
+  },
+  {
+    "id": "keep-my-wording-06",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "yeah so I think the deploy went fine and we can ship it Friday",
+    "target": "",
+    "mustContain": [
+      "deploy",
+      "Friday"
+    ]
+  },
+  {
+    "id": "keep-my-wording-07",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "Dana said the budget is not approved yet so hold off on the order",
+    "target": "",
+    "mustContain": [
+      "Dana",
+      "approved"
+    ]
+  },
+  {
+    "id": "keep-my-wording-08",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "hey joey, we still on for coffee or? I think we maybe should leave earlier to make it there in time there might um be traffic. What are you thinking?",
+    "target": "",
+    "mustContain": [
+      "Joey",
+      "coffee",
+      "traffic"
+    ]
+  },
+  {
+    "id": "keep-my-wording-09",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "Send it to Dana, no wait, send it to Priya.",
+    "target": "",
+    "mustContain": [
+      "Priya"
+    ]
+  },
+  {
+    "id": "keep-my-wording-10",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "The total is four hundred and twelve dollars, due on the fifth.",
+    "target": "",
+    "mustContain": [
+      "412"
+    ]
+  },
+  {
+    "id": "keep-my-wording-11",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "I don't think we should move the launch to the twenty second because Priya is out until the twenty fifth",
+    "target": "",
+    "mustContain": [
+      "Priya",
+      "launch"
+    ]
+  },
+  {
+    "id": "keep-my-wording-12",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "hello Dana I wanted to let you know the deployment finished successfully at 4 pm and nothing is broken best regards Scott",
+    "target": "",
+    "mustContain": [
+      "Dana",
+      "4"
+    ]
+  },
+  {
+    "id": "keep-my-wording-13",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "so basically what I'm trying to say is that we should probably look at the logs again because the error rate went up to 5 percent after the release",
+    "target": "",
+    "mustContain": [
+      "logs",
+      "5",
+      "release"
+    ]
+  },
+  {
+    "id": "keep-my-wording-14",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "I really really appreciate you taking the time to meet with me yesterday it was super helpful and I learned a lot and I'm not going to forget it",
+    "target": "",
+    "mustContain": [
+      "yesterday",
+      "not"
+    ]
+  },
+  {
+    "id": "keep-my-wording-15",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "the meeting is on Thursday at 2 pm in room 4B and Marcus won't be there",
+    "target": "",
+    "mustContain": [
+      "Thursday",
+      "4B",
+      "Marcus",
+      "won't"
+    ]
+  },
+  {
+    "id": "keep-my-wording-16",
+    "instructions": "Keep my exact wording. Only fix punctuation, capitalization and grammar. Don't rephrase or reorder anything.",
+    "input": "thanks for sending that over I looked at the numbers and the Q3 total of 18400 is correct but the Q2 figure isn't",
+    "target": "",
+    "mustContain": [
+      "Q3",
+      "Q2"
+    ]
+  },
+  {
+    "id": "code-comments-01",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "this function returns null if the user isn't found",
+    "target": "",
+    "mustContain": [
+      "null"
+    ]
+  },
+  {
+    "id": "code-comments-02",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "don't call this before init has finished",
+    "target": "",
+    "mustContain": [
+      "init"
+    ]
+  },
+  {
+    "id": "code-comments-03",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "retry up to three times then give up",
+    "target": "",
+    "mustContain": [
+      "three"
+    ]
+  },
+  {
+    "id": "code-comments-04",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "TODO fix the race condition with the cache refresh",
+    "target": "",
+    "mustContain": [
+      "TODO",
+      "cache"
+    ]
+  },
+  {
+    "id": "code-comments-05",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "we skip validation here because Marcus already checks the input upstream",
+    "target": "",
+    "mustContain": [
+      "Marcus",
+      "validation"
+    ]
+  },
+  {
+    "id": "code-comments-06",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "the timeout is 30 seconds and it must not be lowered below 10",
+    "target": "",
+    "mustContain": [
+      "30",
+      "10"
+    ]
+  },
+  {
+    "id": "code-comments-07",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "um so this loop walks the list backwards so removing items doesn't shift the index",
+    "target": "",
+    "mustContain": [
+      "backwards"
+    ]
+  },
+  {
+    "id": "code-comments-08",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "Dana said this endpoint is deprecated so use the v2 one instead",
+    "target": "",
+    "mustContain": [
+      "Dana",
+      "v2"
+    ]
+  },
+  {
+    "id": "code-comments-09",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "we need 47 chairs and 12 tables by 3 pm",
+    "target": "",
+    "mustContain": [
+      "47",
+      "12"
+    ]
+  },
+  {
+    "id": "code-comments-10",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "Dana said the budget is not approved yet so hold off on the order",
+    "target": "",
+    "mustContain": [
+      "Dana",
+      "approved"
+    ]
+  },
+  {
+    "id": "code-comments-11",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "returns true when the file exists and false otherwise",
+    "target": "",
+    "mustContain": [
+      "true",
+      "false"
+    ]
+  },
+  {
+    "id": "code-comments-12",
+    "instructions": "Write it as a code comment: terse, plain words. No trailing period on a one-line comment.",
+    "input": "this is not thread safe so take the lock before writing",
+    "target": "",
+    "mustContain": [
+      "thread safe"
+    ]
+  }
+]

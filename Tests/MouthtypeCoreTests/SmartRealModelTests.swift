@@ -61,6 +61,26 @@ struct QualityRealModelTests {
         #expect(result.output.contains("8/8 cases pass the automatic checks at medium"), "\(result.output)")
     }
 
+    /// Each shipped instruction preset over its eval takes: at least 90 percent must pass the guard, and every delivered text
+    /// must keep the facts the checks name. The eval write-up is docs/evals/instruction-presets-2026-10.md.
+    @Test func instructionPresetsPassTheGuard() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let fixtures = root.appendingPathComponent("Tests/Fixtures/instruction-preset-cases.json")
+        let resultFile = FileManager.default.temporaryDirectory.appendingPathComponent("instruction-presets-\(UUID().uuidString).json")
+        defer { try? FileManager.default.removeItem(at: resultFile) }
+        let result = try cleanupBench([
+            "clean", "--smart", "medium", "--file", fixtures.path, "--smart-timeout-ms", "20000", "--result", resultFile.path,
+        ])
+        #expect(result.status == 0, "\(result.output)")
+        let records = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: resultFile)) as? [[String: Any]])
+        for preset in CleanupInstructionPresets.all {
+            let own = records.filter { ($0["id"] as? String)?.hasPrefix(preset.id + "-") == true }
+            let accepted = own.filter { $0["outcome"] as? String == "ok" }.count
+            #expect(own.count >= 10, "\(preset.id) has \(own.count) takes")
+            #expect(Double(accepted) >= 0.9 * Double(own.count), "\(preset.id): \(accepted) of \(own.count) accepted")
+        }
+    }
+
     @Test(arguments: [50, 250])
     func timedOutGenerationExitsWithoutCrashing(budgetMs: Int) throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()

@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Instructions for Thorough cleanup. Write up to 500 characters on the Cleanup tab for every app, or on a single app or website row, such as "Keep it warm and short". They change tone and formatting only. The checks Thorough always runs still throw out any result that changes a name, number, negation or the language. Fast ignores them.
+- A Start from menu beside each instructions box with three ready-made instructions: Slack, Keep my wording and Code comments. Choosing one fills the box for you to edit, and nothing is saved until you choose Save.
 - An Excited tone beside Formal, Casual and Very casual. A short message ends with an exclamation mark, and Thorough uses them where you sound enthusiastic.
 
 ### Changed

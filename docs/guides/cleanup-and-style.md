@@ -63,6 +63,8 @@ Instructions are a few sentences of your own that tell Thorough how the text sho
 - **Everywhere.** On the Cleanup tab, under **Instructions**.
 - **One app or website.** Click the list icon on its row on a context tab, or on a row under Your own rules on the Other tab, and write them in the box that opens. An app or website with its own instructions uses those instead of the ones for everywhere.
 
+Not sure what to write? Use the **Start from...** menu beside the box. It offers Slack (short and casual, no greeting or sign-off), Keep my wording (only punctuation, capitalization and grammar) and Code comments (terse, no trailing period on a one-line comment). Choosing one fills the box with its text, which you can edit. Nothing is saved until you choose **Save**.
+
 Instructions are limited to 500 characters. Choose **Save** to keep them and **Clear** to remove them. A rule that only holds instructions is fine, and clearing them removes a rule that sets nothing else.
 
 Instructions only change tone, wording style and formatting. Thorough is still told to keep what you said: names, numbers, dates, negations and the language stay as spoken. After the model answers, the same checks Thorough always runs compare its text with yours. If the result changed a name or number, dropped a "not", was translated, or answered the dictation instead of cleaning it, it's thrown away and you get the Basic text. So an instruction like "round every number" or "translate to Spanish" can't change what you said.
