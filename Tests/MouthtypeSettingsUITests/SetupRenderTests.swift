@@ -48,11 +48,11 @@ import Testing
         let actions = SetupActions(refresh: count, poll: count, microphone: count, accessibility: count, retrySpeech: count, inputSettings: count, done: count)
         let controller = SetupWindow(model: model, actions: actions)
         #expect(controller.window?.title == "Set Up Mouthtype")
-        try render(model: model, actions: actions, name: "setup-pending", size: NSSize(width: 560, height: 440))
-        try render(model: model, actions: actions, name: "setup-pending-light", size: NSSize(width: 560, height: 440), appearance: .aqua)
+        try render(model: model, actions: actions, name: "setup-pending", size: SetupWindow.contentSize)
+        try render(model: model, actions: actions, name: "setup-pending-light", size: SetupWindow.contentSize, appearance: .aqua)
         #expect(model.readiness.step == .microphone)
         diagnostics.microphoneStatus = .denied
-        try render(model: model, actions: actions, name: "setup-denied-minimum", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-denied-minimum", size: SetupWindow.contentSize)
         diagnostics.microphoneStatus = .authorized
         var finishPreparation: CheckedContinuation<Bool, any Error>?
         var preparation: Task<Bool, any Error>!
@@ -66,33 +66,33 @@ import Testing
                 }
             }
         }
-        try render(model: model, actions: actions, name: "setup-microphone-preparing", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-microphone-preparing", size: SetupWindow.contentSize)
         finishPreparation?.resume(throwing: CaptureError.selectedMicrophoneUnavailable)
         _ = try? await preparation.value
-        try render(model: model, actions: actions, name: "setup-microphone-failed-minimum", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-microphone-failed-minimum", size: SetupWindow.contentSize)
         _ = try await model.microphone.prepare { true }
         #expect(model.readiness.step == .accessibility)
-        try render(model: model, actions: actions, name: "setup-accessibility", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-accessibility", size: SetupWindow.contentSize)
         diagnostics.accessibilityGranted = true
         #expect(model.readiness.step == .speech)
-        try render(model: model, actions: actions, name: "setup-model-loading", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-model-loading", size: SetupWindow.contentSize)
         await host.load()
         diagnostics.hotkeyHealth = .secureInputOn
         #expect(model.readiness.step == .shortcut)
-        try render(model: model, actions: actions, name: "setup-input-minimum", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-input-minimum", size: SetupWindow.contentSize)
         diagnostics.hotkeyHealth = .listening
         #expect(model.readiness.isReady)
         #expect(model.step == .models)
-        try render(model: model, actions: actions, name: "setup-models", size: NSSize(width: 560, height: 440))
+        try render(model: model, actions: actions, name: "setup-models", size: SetupWindow.contentSize)
         model.finishModels()
-        try render(model: model, actions: actions, name: "setup-ready", size: NSSize(width: 560, height: 440))
-        try render(model: model, actions: actions, name: "setup-ready-light-minimum", size: NSSize(width: 560, height: 440), appearance: .aqua)
+        try render(model: model, actions: actions, name: "setup-ready", size: SetupWindow.contentSize)
+        try render(model: model, actions: actions, name: "setup-ready-light-minimum", size: SetupWindow.contentSize, appearance: .aqua)
         let failure = EngineHost(makeEngine: { _ in SetupRenderEngine(fails: true) })
         await failure.load()
         let failedModel = SetupModel(diagnostics: diagnostics, engine: failure, defaults: defaults)
         _ = try await failedModel.microphone.prepare { true }
         #expect(failedModel.readiness.step == .speech)
-        try render(model: failedModel, actions: actions, name: "setup-failed-minimum", size: NSSize(width: 560, height: 440))
+        try render(model: failedModel, actions: actions, name: "setup-failed-minimum", size: SetupWindow.contentSize)
         #expect(!failedModel.readiness.isReady)
         #expect(actionsInvoked == 0)
         #expect(controller.window?.isVisible == false)

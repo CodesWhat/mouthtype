@@ -14,7 +14,7 @@ import SwiftUI
 }
 
 @MainActor final class SetupWindow: NSWindowController, NSWindowDelegate {
-    static let contentSize = NSSize(width: 560, height: 440)
+    static let contentSize = NSSize(width: 560, height: 500)
 
     let model: SetupModel
     private let refresh: () -> Void
@@ -150,7 +150,8 @@ struct SetupView: View {
             SetupStepDots(dots: step.dots).padding(.top, SetupView.dotsTopInset)
             ScrollView {
                 VStack(spacing: 12) {
-                    SetupLips().padding(.bottom, 6)
+                    // The Models page is the one dense card, so it gives up the lips to keep Continue in view.
+                    if step != .models { SetupLips().padding(.bottom, 6) }
                     Text(title).font(DesignFont.serif(DesignFont.headline)).foregroundStyle(DesignPalette.ink)
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
@@ -285,7 +286,7 @@ struct SetupView: View {
         case .shortcut:
             action("Change shortcut…", identifier: "setup-input-settings", perform: actions.inputSettings)
         case .models:
-            VStack(spacing: 14) {
+            VStack(spacing: 10) {
                 SetupModelsList(
                     entries: model.modelEntries, retrySpeech: actions.retrySpeech, downloadNames: model.turnOnNames,
                     downloadCleanup: model.downloadCleanupModel, cancelCleanup: model.cancelCleanupDownload)
@@ -396,8 +397,20 @@ struct SetupModelRow: View {
         }
     }
 
+    /// The line under the name: why you'd want it, or while it downloads the progress, or after a failure what went wrong.
+    @ViewBuilder private var subline: some View {
+        switch entry.state {
+        case let .downloading(_, caption):
+            Text(caption).foregroundStyle(DesignPalette.ink2)
+        case let .failed(message):
+            Text(message).foregroundStyle(DesignPalette.danger)
+        default:
+            Text(entry.detail).foregroundStyle(DesignPalette.ink2)
+        }
+    }
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 5) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 6) {
@@ -407,32 +420,21 @@ struct SetupModelRow: View {
                             Text("Selected").designEyebrow().foregroundStyle(DesignPalette.accentText)
                         }
                     }
-                    Text(entry.detail).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-                        .fixedSize(horizontal: false, vertical: true)
+                    subline.font(DesignFont.sans(DesignFont.caption)).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 trailing
             }
-            switch entry.state {
-            case let .downloading(fraction, caption):
-                VStack(alignment: .leading, spacing: 4) {
-                    SetupProgressBar(fraction: fraction)
-                    Text(caption).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(entry.title) download")
-                .accessibilityValue("\(Int((min(max(fraction, 0), 1) * 100).rounded())) percent, \(caption)")
-                .accessibilityIdentifier("setup-\(slug)-progress")
-            case let .failed(message):
-                Text(message).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.danger)
-                    .fixedSize(horizontal: false, vertical: true)
-            default:
-                EmptyView()
+            if case let .downloading(fraction, caption) = entry.state {
+                SetupProgressBar(fraction: fraction)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("\(entry.title) download")
+                    .accessibilityValue("\(Int((min(max(fraction, 0), 1) * 100).rounded())) percent, \(caption)")
+                    .accessibilityIdentifier("setup-\(slug)-progress")
             }
         }
-        .padding(.horizontal, 14).padding(.vertical, 9)
-        .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
+        .padding(.horizontal, 14).padding(.vertical, 6)
+        .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
         .accessibilityIdentifier("setup-model-\(slug)")
     }
 

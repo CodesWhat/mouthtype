@@ -477,6 +477,7 @@ enum AppIconResolver {
 /// The app's real icon, a letter tile in the app's colour when it isn't installed, or a website's own favicon with a globe until it loads.
 struct StyleMemberIcon: View {
     let member: StyleMember
+    @Environment(\.siteFavicons) private var siteFavicons
     @State private var loaded: NSImage?
     @State private var favicon: NSImage?
 
@@ -507,8 +508,8 @@ struct StyleMemberIcon: View {
         .task(id: member.keys) {
             if member.kind == .site, let domain = member.keys.first {
                 guard favicon == nil else { return }
-                favicon = SiteFaviconStore.shared.cachedImage(for: domain)
-                if favicon == nil { favicon = await SiteFaviconStore.shared.image(for: domain) }
+                favicon = siteFavicons.cachedImage(for: domain)
+                if favicon == nil { favicon = await siteFavicons.image(for: domain) }
                 return
             }
             guard member.kind == .app, loaded == nil else { return }
