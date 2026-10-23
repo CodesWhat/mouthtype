@@ -20,9 +20,10 @@ WORK="$(mktemp -d "${TMPDIR:-/tmp}/mouthtype-repeatable.XXXXXX")"
 cleanup() { rm -rf "$SCRATCH"; [ "$KEEP" = 1 ] && echo "kept: $WORK" || rm -rf "$WORK"; }
 trap cleanup EXIT
 
-# Same scratch path for both: dependency source paths end up in the binary, so it must not vary.
+# The release path (RELEASE_SCRATCH_PATH in scripts/package-release.py), so the unsigned output is
+# comparable to a published release. Same path for both builds: dependency source paths end up in the binary, so it must not vary.
 # Cleared first so each run starts from a clean build.
-SCRATCH="/private/tmp/mouthtype-repeatable-scratch"
+SCRATCH="/private/tmp/mouthtype-release-scratch"
 
 # Different directory names on purpose: the build must not depend on either.
 DIRS=("$WORK/mouthtype" "$WORK/another-name.checkout")

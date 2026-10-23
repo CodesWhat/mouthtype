@@ -16,13 +16,24 @@ The script copies the sources to `<path>/mouthtype`, keeps SwiftPM state in `<pa
 - ld derives `LC_UUID` from input paths. `scripts/normalize-macho-uuid.py` rewrites it to a hash of the binary's own contents.
 - ld's default objc stubs come out in one of two layouts at random from identical inputs. `-Xlinker -objc_stubs_small` is deterministic.
 
+## Releases are built this way
+
+`scripts/package-release.py` runs `build-app.sh` with `MOUTHTYPE_SCRATCH_PATH=/private/tmp/mouthtype-release-scratch` (cleared first), so every release gets the source copy, objc small stubs, UUID normalization and bundle-id pinning. UUID normalization and bundle-id pinning run in every build; the fixed-path source copy and the small objc stubs apply only in repeatable mode (the prefix maps always run, but only map the fixed path in this mode). `release-manifest.json` records `repeatableBuild`, `scratchPath` and the `toolchain` (`swift --version`, `xcodebuild -version`).
+
+Reproduce a release:
+
+1. Install the Xcode and Swift versions in the manifest's `toolchain`.
+2. Check out the release tag (`git checkout v<version>`).
+3. Run `scripts/verify-repeatable-build.sh --keep`. It builds unsigned at the same scratch path the release used and keeps the apps.
+4. Compare the kept `Mouthtype.app` with the published one file by file. They match except `Assets.car` and code signatures (including the Sparkle framework and any Mach-O whose only difference is its signature).
+
 ## Verify it
 
 ```sh
 scripts/verify-repeatable-build.sh        # add --keep to leave the temp checkouts and outputs
 ```
 
-The script clones HEAD into two differently named temp directories, builds each unsigned (`MOUTHTYPE_UNSIGNED=1`, repeatable mode, no codesign, no notarization, no secrets), hashes every file in both apps and lists the differences. It builds committed content only, so commit first. Expect two full release builds, about eight minutes in total, including dependency fetches. It uses and then deletes `/private/tmp/mouthtype-repeatable-scratch`.
+The script clones HEAD into two differently named temp directories, builds each unsigned (`MOUTHTYPE_UNSIGNED=1`, repeatable mode, no codesign, no notarization, no secrets), hashes every file in both apps and lists the differences. It builds committed content only, so commit first. Expect two full release builds, about eight minutes in total, including dependency fetches. It uses and then deletes `/private/tmp/mouthtype-release-scratch`, the release scratch path.
 
 ## Known exceptions
 

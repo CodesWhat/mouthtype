@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -45,6 +46,24 @@ def verify_source(root, version):
     if head != tagged:
         raise RuntimeError('HEAD must match the exact release tag')
     return head
+
+
+# Fixed so the path-dependent bytes in the binary match for anyone rebuilding the tag.
+# docs/REPEATABLE-BUILD.md and scripts/verify-repeatable-build.sh use the same path.
+RELEASE_SCRATCH_PATH = '/private/tmp/mouthtype-release-scratch'
+
+
+def release_build_env(output, base_env=None):
+    """Environment for scripts/build-app.sh: repeatable mode at the fixed scratch path, signed."""
+    env = dict(os.environ if base_env is None else base_env)
+    env.pop('MOUTHTYPE_UNSIGNED', None)
+    env['MOUTHTYPE_BUILD_DIR'] = str(output)
+    env['MOUTHTYPE_SCRATCH_PATH'] = RELEASE_SCRATCH_PATH
+    return env
+
+
+def toolchain_versions():
+    return {'swift': run(['swift', '--version']).strip(), 'xcodebuild': run(['xcodebuild', '-version']).strip()}
 
 
 def create_output(base, version):
@@ -179,8 +198,9 @@ def main():
     output = create_output(args.output_dir.resolve(), version)
     app = output / 'Mouthtype.app'
     print(f'Building {version} from {source}', flush=True)
-    env = os.environ.copy()
-    env['MOUTHTYPE_BUILD_DIR'] = str(output)
+    env = release_build_env(output)
+    toolchain = toolchain_versions()
+    shutil.rmtree(RELEASE_SCRATCH_PATH, ignore_errors=True)
     with (output / 'build.log').open('w') as log:
         subprocess.run(['bash', 'scripts/build-app.sh'], cwd=root, env=env,
                        stdout=log, stderr=subprocess.STDOUT, check=True, timeout=1200)
@@ -228,7 +248,8 @@ def main():
                 'dmg': image_name, 'dmgSHA256': image_digest, 'dmgBytes': image.stat().st_size,
                 'dmgNotarizationID': image_submission_id, 'dmgNotarizationStatus': image_status['status'],
                 'dmgSignatureVerified': True, 'dmgStapleVerified': True, 'dmgGatekeeperAccepted': True,
-                'freshInstallVerified': False}
+                'freshInstallVerified': False,
+                'repeatableBuild': True, 'scratchPath': RELEASE_SCRATCH_PATH, 'toolchain': toolchain}
     (output / 'release-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
     upload.unlink()
     print(json.dumps(manifest, indent=2), flush=True)
