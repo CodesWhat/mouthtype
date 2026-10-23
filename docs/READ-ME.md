@@ -1,4 +1,4 @@
-# Mouthtype 0.5.0
+# Mouthtype 0.6.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,21 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.6.0
+
+Dictation in 25 languages, a mouse-button trigger, dictionary import and export, and cleanup instructions.
+
+- Added: Dictation in 25 languages. Auto-detect is the default. Thorough cleanup covers English, German, Spanish, French, Italian, Portuguese, Dutch, Polish and Russian, and the rest get Basic cleanup. Fillers, spoken commands, counted lists and number formatting are English only.
+- Added: A Mouse button setting (Middle, Back or Forward) as a dictation trigger, off by default.
+- Added: Export the dictionary as CSV, and import Wispr Flow CSV and VoiceInk JSON dictionaries.
+- Added: A Models page and a name accuracy card in Setup, a warning when a take heard nothing, and an optional test take.
+- Added: Instructions for Thorough cleanup per app or website, three presets, and an Excited tone.
+- Added: Website favicons in the Style lists, a Microphone page in Settings, and a Homebrew cask (`brew install --cask codeswhat/tap/mouthtype`).
+- Changed: Names on screen is on by default. Releases are built in a repeatable mode.
+
+> [!NOTE]
+> Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release. Speech in languages other than English and the new screens were checked with renders and synthetic voices only. See the known limits.
 
 ## What changed in 0.5.0
 
