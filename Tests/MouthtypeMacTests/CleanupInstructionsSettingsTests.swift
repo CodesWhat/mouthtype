@@ -16,6 +16,14 @@ import MouthtypeCore
         SettingsModel(defaults: defaults ?? self.defaults())
     }
 
+    // MARK: Presets
+
+    @Test func startFromReplacesTheBoxWithThePresetText() {
+        for preset in CleanupInstructionPresets.all {
+            #expect(StyleInstructionsEditor.draft(startingFrom: preset) == preset.text)
+        }
+    }
+
     // MARK: Rules
 
     @Test func appAndWebsiteInstructionsRoundTrip() throws {

@@ -216,6 +216,8 @@ Built-in entries are tagged BUILT IN and yours ADDED BY YOU. Apps show their rea
 
 Free-text **Instructions** (500 characters at most) tell Thorough how text should read, for example "Keep it warm and short". The Cleanup tab holds the ones for every app and website. Each app or website row has a list icon that opens its own box, and Your own rules on the Other tab have one too. An app or website with its own instructions uses those instead. **Save** keeps them and **Clear** removes them.
 
+Each box has a **Start from...** menu with three ready-made instructions: Slack, Keep my wording and Code comments. Choosing one puts its text in the box for you to edit. Nothing is saved until you choose **Save**, same as typing. Each was checked against the same guard that checks your own instructions.
+
 Instructions can change tone, wording style and formatting, never meaning. Names, numbers, dates, negations and the language stay as spoken, and a result that drifts from what you said is discarded for the Basic text. Fast ignores instructions because it isn't driven by a prompt. The tone cards don't preview instructions, since that would mean loading the model on the settings page.
 
 ### Which rule wins
