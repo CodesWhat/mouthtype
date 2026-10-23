@@ -48,8 +48,10 @@ jobs:
           mkdir -p "${RUNNER_TEMP}/assets"
           gh release download "${RELEASE_TAG}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --dir "${RUNNER_TEMP}/assets" \
-            --exclude '*.sigstore.json'
+            --dir "${RUNNER_TEMP}/assets"
+          # gh has no exclude flag. Drop existing bundles so re-runs and
+          # backfills don't sign the signatures themselves.
+          find "${RUNNER_TEMP}/assets" -maxdepth 1 -type f -name '*.sigstore.json' -delete
           ls -l "${RUNNER_TEMP}/assets"
 
       - name: Install cosign
