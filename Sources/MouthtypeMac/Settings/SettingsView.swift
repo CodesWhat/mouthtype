@@ -11,6 +11,8 @@ struct SettingsView: View {
     var solid = true
     /// Reads the system Keyboard navigation setting. Injectable so tests can force either path.
     var fullKeyboardAccess: @MainActor () -> Bool = SettingsView.systemFullKeyboardAccess
+    /// Where website rows load favicons from. Tests inject a store with no network.
+    var favicons: SiteFaviconStore = .shared
     @State private var keyboardNavigation: Bool?
     @State var previewWidth: CGFloat = 0
     @FocusState private var sidebarFocus: SettingsPage?
@@ -28,6 +30,7 @@ struct SettingsView: View {
         .font(DesignFont.sans(DesignFont.body))
         .foregroundStyle(DesignPalette.ink)
         .tint(SettingsTheme.control)
+        .environment(\.siteFavicons, favicons)
         .ignoresSafeArea()
         .frame(minWidth: SettingsTheme.minimumSize.width, minHeight: SettingsTheme.minimumSize.height)
         .sheet(isPresented: $model.settingsOpen) {
