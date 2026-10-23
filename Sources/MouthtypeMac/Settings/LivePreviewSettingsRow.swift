@@ -6,7 +6,7 @@ struct LivePreviewSettingsRow: View {
     var body: some View {
         ModalToggleRow(
             title: "Live words",
-            detail: "Shows words as you speak, above the pill. Only the final text is inserted after you stop. Applies to the next recording.",
+            detail: "Shows words above the pill as you speak. Only the final text is inserted.",
             isOn: Binding(get: { model.livePreview }, set: model.setLivePreview), identifier: "settings-live-preview")
     }
 }

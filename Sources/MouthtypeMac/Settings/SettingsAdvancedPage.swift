@@ -13,11 +13,11 @@ extension SettingsView {
                 isOn: Binding(get: { model.learnCorrections }, set: model.setLearnCorrections), identifier: "settings-learn-corrections")
             ModalToggleRow(
                 title: "Code names from your editor",
-                detail: "While you dictate in VS Code, Cursor, Xcode or a terminal, favour file, folder and function names from the window you\u{2019}re in. Needs the boost above. Nothing is stored.",
+                detail: "Favours file and function names in your editor. Needs the boost above.",
                 isOn: Binding(get: { model.editorHints }, set: model.setEditorHints), identifier: "settings-editor-hints")
             ModalToggleRow(
                 title: "Names on screen",
-                detail: "Favour names from the text around your cursor and the window title, in any app. Needs the boost above. Nothing is stored.",
+                detail: "Favours names on screen, in any app. Needs the boost above.",
                 isOn: Binding(get: { model.contextNames }, set: model.setContextNames), identifier: "settings-context-names")
             MicrophonePriorityRows(model: model.microphone)
         }
@@ -25,7 +25,7 @@ extension SettingsView {
             eyebrow: "TONE DETAILS",
             footer: sharedControlsEnabled
                 ? nil
-                : "Cleanup is Off. Your dictation keeps its original wording and style; these options apply when cleanup is enabled."
+                : "Cleanup is Off, so these options don\u{2019}t apply yet."
         ) {
             ModalToggleRow(title: "Remove fillers", isOn: Binding(get: { model.cleanup.fillers }, set: model.setFillers), identifier: "settings-fillers")
             ModalToggleRow(
@@ -44,7 +44,7 @@ extension SettingsView {
         }.disabled(!sharedControlsEnabled)
         DesignSection(
             eyebrow: "DELIVERY",
-            footer: "Applies to that terminal app\u{2019}s windows. Mouthtype can\u{2019}t tell what\u{2019}s running inside it. Off by default."
+            footer: "Applies to every window of that terminal app. Off by default."
         ) {
             DesignRow(title: "Split long pastes in these terminals", detail: "Long takes are pasted in pieces, only in the apps you turn on.") { EmptyView() }
             ForEach(PasteSettings.supportedTerminals, id: \.bundleID) { terminal in
@@ -75,9 +75,7 @@ extension SettingsView {
     private var sharedControlsEnabled: Bool { model.cleanup.enabled || model.appStyles.enablesCleanup }
 
     private var boostDetail: String {
-        var text =
-            "Favours your saved spellings in the speech model, and English only. "
-            + "The first time, it downloads an extra speech model of about 100 MB. Dictation works without it until it is ready."
+        var text = model.boostSavedWords ? "English only." : "English only. Downloads about 100 MB the first time."
         let status = model.boostStatus.text
         if model.boostSavedWords, !status.isEmpty { text += " " + status + "." }
         return text

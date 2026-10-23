@@ -82,6 +82,18 @@ import MouthtypeCore
         #expect(model.recordingInstructions.contains("Cancel Dictation in the menu"))
     }
 
+    @Test func changingModeDuringARecordingSaysItWasCancelled() {
+        let (defaults, name) = preferences()
+        defer { defaults.removePersistentDomain(forName: name) }
+        var recording = true
+        let model = SettingsModel(defaults: defaults, onRecordingModeChanged: { _ in nil }, isRecording: { recording })
+        model.setRecordingMode(.toggle)
+        #expect(model.recordingModeNotice == "The active recording was cancelled.")
+        recording = false
+        model.setRecordingMode(.hold)
+        #expect(model.recordingModeNotice == nil)
+    }
+
     @Test func failedActivationKeepsSavedModeAndRetryClearsError() {
         let (defaults, name) = preferences()
         defer { defaults.removePersistentDomain(forName: name) }

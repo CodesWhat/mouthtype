@@ -76,7 +76,7 @@ struct MicrophonePriorityRows: View {
                 )
                 .disabled(priority.devices.isEmpty)
                 if priority.devices.isEmpty { ModalCardNote(text: "Add a microphone before turning off System Default fallback.") }
-                ModalCardNote(text: "The first available listed microphone is chosen at the start of a take. A device change during recording still cancels that take.")
+                ModalCardNote(text: "A device change during recording still cancels that take.")
             } else {
                 DesignRow(title: "Microphone priority list", detail: "Rank your inputs. The first one that's connected wins the take.") {
                     Button("Use priority list") { model.choose(.priorityList) }.buttonStyle(.designSecondary).fixedSize()

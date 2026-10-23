@@ -25,7 +25,7 @@ struct StyleInstructionsEditor: View {
     }
 
     static let explanation =
-        "Thorough follows these for tone and formatting. It never changes what you said: names, numbers and your language stay as spoken, and a result that drifts is thrown away. Fast ignores instructions."
+        "Thorough follows these for tone and formatting. It never changes what you said. Fast ignores them."
 
     private var changed: Bool { CleanupInstructions.normalize(draft) != saved }
 

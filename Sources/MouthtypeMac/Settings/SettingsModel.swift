@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
     private let onSkinChanged: @MainActor (PillSkinKind) -> Void
     private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
     private let onMouseTriggerChanged: @MainActor (MouseTrigger) -> String?
+    private let isRecording: @MainActor () -> Bool
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
     private let onDockIconModeChanged: @MainActor (DockIconMode) -> Void
@@ -54,6 +55,8 @@ import UniformTypeIdentifiers
     private(set) var recordingModeError: String?
     private(set) var mouseTrigger: MouseTrigger
     private(set) var mouseTriggerError: String?
+    private(set) var recordingModeNotice: String?
+    private(set) var mouseTriggerNotice: String?
     private(set) var dictationLanguage: DictationLanguageSetting
     private(set) var loginState: NSControl.StateValue = .off
     private(set) var shortcut = "Fn"
@@ -72,6 +75,7 @@ import UniformTypeIdentifiers
         onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
         onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
         onMouseTriggerChanged: @escaping @MainActor (MouseTrigger) -> String? = { _ in nil },
+        isRecording: @escaping @MainActor () -> Bool = { false },
         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
         onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
@@ -99,6 +103,7 @@ import UniformTypeIdentifiers
         self.onSkinChanged = onSkinChanged
         self.onRecordingModeChanged = onRecordingModeChanged
         self.onMouseTriggerChanged = onMouseTriggerChanged
+        self.isRecording = isRecording
         self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
         self.onBoostSavedWordsChanged = onBoostSavedWordsChanged
         recordingMode = RecordingModePreference.current(defaults)
@@ -293,7 +298,11 @@ import UniformTypeIdentifiers
         return "Hold your shortcut while you speak, then release to finish. Use How to Use Mouthtype in the menu for the gestures available with your chosen key."
     }
 
+    private static let cancelledNotice = "The active recording was cancelled."
+
     func setRecordingMode(_ value: RecordingMode) {
+        let wasRecording = isRecording()
+        recordingModeNotice = nil
         if let error = onRecordingModeChanged(value) {
             recordingModeError = error
             return
@@ -301,9 +310,12 @@ import UniformTypeIdentifiers
         RecordingModePreference.set(value, in: defaults)
         recordingMode = value
         recordingModeError = nil
+        if wasRecording { recordingModeNotice = Self.cancelledNotice }
     }
 
     func setMouseTrigger(_ value: MouseTrigger) {
+        let wasRecording = isRecording()
+        mouseTriggerNotice = nil
         if let error = onMouseTriggerChanged(value) {
             mouseTriggerError = error
             return
@@ -311,6 +323,7 @@ import UniformTypeIdentifiers
         MouseTriggerPreference.set(value, in: defaults)
         mouseTrigger = value
         mouseTriggerError = nil
+        if wasRecording { mouseTriggerNotice = Self.cancelledNotice }
     }
 
     func updateAppStyles(_ change: (inout AppCleanupStyles) throws -> Void) {

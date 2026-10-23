@@ -92,6 +92,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
                 onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
                 onMouseTriggerChanged: { [weak self] trigger in self?.activateMouseTrigger(trigger) },
+                isRecording: { [weak self] in self?.dictation?.phase == .recording },
                 onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
                 onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
                 onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },

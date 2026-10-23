@@ -111,6 +111,28 @@ struct DesignRow<Controls: View>: View {
     }
 }
 
+/// A small info button that opens a popover with detail too long for a row description.
+struct DesignInfoButton: View {
+    let title: String
+    let text: String
+    @State private var shown = false
+
+    var body: some View {
+        Button {
+            shown.toggle()
+        } label: {
+            Image(systemName: "info.circle")
+        }
+        .buttonStyle(.plain).foregroundStyle(DesignPalette.ink2)
+        .accessibilityLabel("About \(title)")
+        .popover(isPresented: $shown, arrowEdge: .bottom) {
+            Text(text).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(width: 280, alignment: .leading).padding(12)
+        }
+    }
+}
+
 struct DesignPageHeader<Trailing: View>: View {
     let title: String
     var summary: String?
