@@ -26,14 +26,23 @@ import MouthtypeCore
         return SettingsActions(cleaner: ModalCleaner(), diagnostics: state, updater: AppUpdater(driver: ModalUpdateDriver(), activity: { .idle }))
     }
 
-    @Test func generalHoldsShortcutRecordingBehaviorMicrophoneAndTheRecordingSwitches() throws {
-        let text = try source(["SettingsGeneralPage", "MicrophoneSettingsSection", "LivePreviewSettingsRow"])
+    @Test func generalHoldsShortcutRecordingBehaviorAndTheRecordingSwitches() throws {
+        let text = try source(["SettingsGeneralPage", "LivePreviewSettingsRow"])
         for needle in [
-            "settings-shortcut", "settings-recording-mode", "settings-microphone", "settings-microphone-refresh", "settings-sounds",
+            "settings-shortcut", "settings-recording-mode", "settings-sounds",
             "settings-live-preview", "settings-quiet-audio", "\"Shortcut\"", "\"Recording behavior\"", "\"Recording sounds\"",
             "\"Live words\"", "\"Quiet other audio\"",
         ] {
             #expect(text.contains(needle), "General is missing \(needle)")
+        }
+    }
+
+    @Test func microphoneHoldsThePickerRefreshAndPriorityList() throws {
+        let text = try source(["SettingsGeneralPage", "MicrophoneSettingsSection"])
+        for needle in [
+            "microphonePage", "settings-microphone", "settings-microphone-refresh", "settings-microphone-priority", "Microphone priority list",
+        ] {
+            #expect(text.contains(needle), "Microphone is missing \(needle)")
         }
     }
 
@@ -57,9 +66,9 @@ import MouthtypeCore
     }
 
     @Test func advancedHoldsEveryOptionTheReadmeMovesThere() throws {
-        let text = try source(["SettingsAdvancedPage", "AudioRetentionSection", "MicrophoneSettingsSection"])
+        let text = try source(["SettingsAdvancedPage", "AudioRetentionSection"])
         for needle in [
-            "Boost saved words", "Learn from my corrections", "Microphone priority list", "Remove fillers", "Spoken commands and lists",
+            "Boost saved words", "Learn from my corrections", "Remove fillers", "Spoken commands and lists",
             "Format numbers", "Lowercase sentence starts", "Drop the final full stop", "Split long pastes", "Keep finished audio for",
             "Dictionary file", "Remap Fn to hide the emoji picker", "settings-audio-age", "settings-audio-size", "settings-remap-fn",
             "setBoostSavedWords", "setLearnCorrections", "setChunks", "toggleRemap", "editDictionary",
@@ -83,7 +92,7 @@ import MouthtypeCore
         }
     }
 
-    @Test func advancedShowsThePriorityListOnceItIsChosen() throws {
+    @Test func microphoneShowsThePriorityListOnceItIsChosen() throws {
         let name = "ModalPriority-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
@@ -95,7 +104,7 @@ import MouthtypeCore
         let microphone = MicrophoneSettingsModel(defaults: defaults, devices: { devices }, defaultInput: { 2 })
         let model = SettingsModel(defaults: defaults, microphone: microphone)
         model.setAdvancedOptions(true)
-        model.modalPage = .advanced
+        model.modalPage = .microphone
         #expect(microphone.choice == .systemDefault && microphone.priority == nil)
         microphone.choose(.priorityList)
         microphone.addPriority(uid: "mac")
@@ -105,7 +114,7 @@ import MouthtypeCore
             let (view, _) = SettingsRender.hostModal(model: model, actions: actions(), dark: dark)
             let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
             view.cacheDisplay(in: view.bounds, to: bitmap)
-            try SettingsRender.save(bitmap, name: "modal-advanced-priority-\(dark ? "dark" : "light")")
+            try SettingsRender.save(bitmap, name: "modal-microphone-priority-\(dark ? "dark" : "light")")
         }
     }
 

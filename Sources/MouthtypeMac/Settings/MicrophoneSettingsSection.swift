@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// General: the microphone popup row. The priority list lives on the Advanced page (`MicrophonePriorityRows`).
+/// Microphone page: the microphone popup row, then the priority list (`MicrophonePriorityRows`).
 struct MicrophoneSettingsSection: View {
     @Bindable var model: MicrophoneSettingsModel
 
@@ -29,7 +29,7 @@ struct MicrophoneSettingsSection: View {
     }
 }
 
-/// Advanced: rank your inputs, the first one connected wins the take. While the list isn't the chosen microphone, one row switches to it.
+/// Microphone page: rank your inputs, the first one connected wins the take. While the list isn't the chosen microphone, one row switches to it.
 struct MicrophonePriorityRows: View {
     @Bindable var model: MicrophoneSettingsModel
 

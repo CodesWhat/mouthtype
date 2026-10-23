@@ -52,12 +52,12 @@ import MouthtypeCore
 
     // MARK: Sidebar
 
-    @Test func sidebarListsSixPagesAndTheSettingsModalHasThreeBeforeAdvanced() {
+    @Test func sidebarListsSixPagesAndTheSettingsModalHasFourBeforeAdvanced() {
         #expect(SettingsPage.allCases.map(\.title) == ["Home", "Stats", "Dictionary", "Transforms", "Style", "Appearance"])
-        #expect(SettingsModalPage.visible(advanced: false).map(\.title) == ["General", "Mac", "Health"])
-        #expect(SettingsModalPage.visible(advanced: true).map(\.title) == ["General", "Mac", "Health", "Advanced"])
+        #expect(SettingsModalPage.visible(advanced: false).map(\.title) == ["General", "Microphone", "Mac", "Health"])
+        #expect(SettingsModalPage.visible(advanced: true).map(\.title) == ["General", "Microphone", "Mac", "Health", "Advanced"])
         #expect(SettingsPage.allCases.map(\.symbol) == ["house", "chart.bar", "book.closed", "wand.and.stars", "textformat", "capsule"])
-        #expect(SettingsModalPage.allCases.map(\.symbol) == ["gearshape", "laptopcomputer", "heart.text.square", "slider.horizontal.3"])
+        #expect(SettingsModalPage.allCases.map(\.symbol) == ["gearshape", "mic", "laptopcomputer", "heart.text.square", "slider.horizontal.3"])
     }
 
     @Test func advancedSwitchPersistsAndAddsThePage() throws {
@@ -188,6 +188,7 @@ import MouthtypeCore
             let (view, _) = SettingsRender.hostModal(model: model, actions: actions(), dark: dark)
             let scroll = try #require(descendants(of: view).compactMap { $0 as? NSScrollView }.first)
             let document = try #require(scroll.documentView)
+            print("MEASURED General dark=\(dark) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height)")
             #expect(
                 document.frame.height <= scroll.contentView.bounds.height + 1,
                 "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
@@ -225,22 +226,22 @@ import MouthtypeCore
     }
 
     @Test(arguments: [NSSize(width: 760, height: 540)])
-    func longMicrophoneNameKeepsGeneralInsideTheModal(size: NSSize) throws {
+    func longMicrophoneNameKeepsMicrophonePageInsideTheModal(size: NSSize) throws {
         let name = "SettingsLayoutLong-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { defaults.removePersistentDomain(forName: name) }
         FontRegistry.registerBundledFonts()
         let model = longMicModel(defaults)
-        model.modalPage = .general
+        model.modalPage = .microphone
         let (view, window) = SettingsRender.hostModal(model: model, actions: actions(), dark: false)
         let scroll = try #require(descendants(of: view).compactMap { $0 as? NSScrollView }.first)
         let document = try #require(scroll.documentView)
         print(
-            "MEASURED General \(Int(size.width))x\(Int(size.height)) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height) docWidth=\(document.frame.width) viewport=\(scroll.contentView.bounds.width)"
+            "MEASURED Microphone \(Int(size.width))x\(Int(size.height)) content=\(document.frame.height) visible=\(scroll.contentView.bounds.height) docWidth=\(document.frame.width) viewport=\(scroll.contentView.bounds.width)"
         )
         #expect(
             document.frame.height <= scroll.contentView.bounds.height + 1,
-            "General needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
+            "Microphone needs \(document.frame.height) pt but only \(scroll.contentView.bounds.height) pt is visible")
         #expect(document.frame.width <= scroll.contentView.bounds.width + 1)
         #expect(textsAreUntruncated(in: view).isEmpty, "\(textsAreUntruncated(in: view))")
         // The design popup is drawn rather than an NSPopUpButton, so check the model and let the width and untruncated checks above cover layout.

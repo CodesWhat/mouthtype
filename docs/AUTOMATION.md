@@ -43,6 +43,7 @@ The old page names keep working and go to their new homes.
 | `transcribe` | Opens or focuses the Transcribe Audio File window, which is its own window and leaves the Mouthtype window where it is | n/a |
 | `writing` | Style | Old name for Style |
 | `general` | The Settings modal on General | n/a |
+| `microphone` | The Settings modal on Microphone | n/a |
 | `appearance` | Appearance | n/a |
 | `diagnostics` | The Settings modal on Health | n/a |
 

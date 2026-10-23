@@ -2,7 +2,7 @@ import SwiftUI
 import MouthtypeCore
 
 extension SettingsView {
-    /// Settings modal, General: Dictation (shortcut, recording behavior, microphone).
+    /// Settings modal, General: Dictation (shortcut, recording behavior, language, mouse button).
     @ViewBuilder var generalInput: some View {
         DesignSection(eyebrow: "DICTATION") {
             DesignRow(title: "Shortcut", detail: model.recordingMode == .hold ? "Hold it, speak, let go." : "Press it once to start, again to stop.") {
@@ -45,7 +45,14 @@ extension SettingsView {
             }
             if let error = model.mouseTriggerError { ModalCardNote(text: error, tone: .red) }
             if let notice = model.mouseTriggerNotice { ModalCardNote(text: notice) }
+        }
+    }
+
+    /// Settings modal, Microphone: the input picker and the priority list.
+    @ViewBuilder var microphonePage: some View {
+        DesignSection(eyebrow: "INPUT") {
             MicrophoneSettingsSection(model: model.microphone)
+            MicrophonePriorityRows(model: model.microphone)
         }
     }
 

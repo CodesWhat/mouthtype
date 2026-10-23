@@ -237,10 +237,10 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
         let namesDefaults = try #require(UserDefaults(suiteName: namesName))
         defer { namesDefaults.removePersistentDomain(forName: namesName) }
         let names = try await readyModel(defaults: namesDefaults, take: take(level: 0.3, text: ""))
-        #expect(names.offersNames)
+        #expect(names.modelEntries.first { $0.id == .names }?.state == .available)
         try both("e5-setup-names-before") { try setupBitmap(names, dark: $0, size: size) }
         names.turnOnNames()
-        #expect(names.namesChoice == .turnedOn)
+        #expect(names.modelEntries.first { $0.id == .names }?.state != .available)
         try both("e6-setup-names-after") { try setupBitmap(names, dark: $0, size: size) }
     }
 

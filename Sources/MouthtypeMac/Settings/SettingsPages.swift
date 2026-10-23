@@ -54,13 +54,14 @@ enum SettingsPage: String, CaseIterable, Identifiable {
 
 /// The pages inside the Settings modal. Advanced only shows while the footer switch is on.
 enum SettingsModalPage: String, CaseIterable, Identifiable {
-    case general, mac, health, advanced
+    case general, microphone, mac, health, advanced
     var id: String { rawValue }
     var title: String { rawValue.capitalized }
     /// Line glyphs for now. The handoff leaves pixel versions of these four as a follow-up.
     var symbol: String {
         switch self {
         case .general: "gearshape"
+        case .microphone: "mic"
         case .mac: "laptopcomputer"
         case .health: "heart.text.square"
         case .advanced: "slider.horizontal.3"
@@ -69,7 +70,8 @@ enum SettingsModalPage: String, CaseIterable, Identifiable {
     var headline: String { title }
     var summary: String {
         switch self {
-        case .general: "Set your shortcut, pick a microphone, and carry on."
+        case .general: "Set your shortcut, choose how recording behaves, and carry on."
+        case .microphone: "Which input Mouthtype listens to, and what happens when it changes."
         case .mac: "How Mouthtype starts and stays up to date."
         case .health: "Model progress, permissions and input. Repairs in one place."
         case .advanced: "The set-once options. Off the main path on purpose."
