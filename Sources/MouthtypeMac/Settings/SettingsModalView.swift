@@ -102,6 +102,8 @@ struct SettingsModalView: View {
         case .general:
             host.generalInput
             host.generalRecording
+        case .microphone:
+            host.microphonePage
         case .mac:
             host.macPage
         case .health:

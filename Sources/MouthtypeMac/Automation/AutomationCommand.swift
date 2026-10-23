@@ -2,7 +2,7 @@ import Foundation
 
 /// A page the `open` verb can show. `home` and `settings` are destinations; the rest are Settings pages by name.
 enum AutomationPage: String, CaseIterable, Equatable {
-    case home, settings, stats, records, spellings, phrases, transcribe, general, writing, appearance, diagnostics
+    case home, settings, stats, records, spellings, phrases, transcribe, general, microphone, writing, appearance, diagnostics
 
     /// Where this opens in the Mouthtype window. Old page names map to their new homes: Records is part of Stats, spellings is the
     /// Dictionary, phrases is Transforms, writing is Style, and General and Diagnostics are pages of the Settings modal (the latter
@@ -16,6 +16,7 @@ enum AutomationPage: String, CaseIterable, Equatable {
         case .phrases: .page(.transforms)
         case .transcribe: .transcribeFile
         case .general: .settings(.general)
+        case .microphone: .settings(.microphone)
         case .writing: .page(.style)
         case .appearance: .page(.appearance)
         case .diagnostics: .settings(.health)

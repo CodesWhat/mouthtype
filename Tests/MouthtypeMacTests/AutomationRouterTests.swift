@@ -108,7 +108,7 @@ import MouthtypeCore
     @Test func everyOpenPageRoutesToItsNewHome() {
         let expected: [AutomationPage: SettingsDestination?] = [
             .home: .page(.home), .settings: nil, .stats: .page(.stats), .records: .page(.stats), .spellings: .page(.dictionary),
-            .phrases: .page(.transforms), .transcribe: .transcribeFile, .general: .settings(.general), .writing: .page(.style),
+            .phrases: .page(.transforms), .transcribe: .transcribeFile, .general: .settings(.general), .microphone: .settings(.microphone), .writing: .page(.style),
             .appearance: .page(.appearance), .diagnostics: .settings(.health),
         ]
         #expect(Set(expected.keys) == Set(AutomationPage.allCases))
