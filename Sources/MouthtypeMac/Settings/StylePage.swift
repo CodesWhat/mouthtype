@@ -474,10 +474,11 @@ enum AppIconResolver {
     }
 }
 
-/// The app's real icon, a letter tile in the app's colour when it isn't installed, or a globe for a website.
+/// The app's real icon, a letter tile in the app's colour when it isn't installed, or a website's own favicon with a globe until it loads.
 struct StyleMemberIcon: View {
     let member: StyleMember
     @State private var loaded: NSImage?
+    @State private var favicon: NSImage?
 
     private static let brand: [String: UInt32] = [
         "Messages": 0x34C759, "WhatsApp": 0x25D366, "Telegram": 0x2AABEE, "Discord": 0x5865F2, "Signal": 0x3A76F0,
@@ -487,8 +488,13 @@ struct StyleMemberIcon: View {
     var body: some View {
         Group {
             if member.kind == .site {
-                Image(systemName: "globe").font(.system(size: 12)).foregroundStyle(DesignPalette.ink2)
-                    .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.sel))
+                if let favicon {
+                    Image(nsImage: favicon).resizable().interpolation(.high).scaledToFit().frame(width: 18, height: 18)
+                        .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.sel))
+                } else {
+                    Image(systemName: "globe").font(.system(size: 12)).foregroundStyle(DesignPalette.ink2)
+                        .frame(width: 24, height: 24).background(RoundedRectangle(cornerRadius: 6).fill(DesignPalette.sel))
+                }
             } else if let icon = loaded ?? AppIconResolver.cachedIcon(bundleIDs: member.keys) {
                 Image(nsImage: icon).resizable().frame(width: 24, height: 24)
             } else {
@@ -499,6 +505,12 @@ struct StyleMemberIcon: View {
         }
         .accessibilityHidden(true)
         .task(id: member.keys) {
+            if member.kind == .site, let domain = member.keys.first {
+                guard favicon == nil else { return }
+                favicon = SiteFaviconStore.shared.cachedImage(for: domain)
+                if favicon == nil { favicon = await SiteFaviconStore.shared.image(for: domain) }
+                return
+            }
             guard member.kind == .app, loaded == nil else { return }
             let ids = member.keys
             loaded = await Task.detached(priority: .userInitiated) { AppIconResolver.icon(bundleIDs: ids) }.value

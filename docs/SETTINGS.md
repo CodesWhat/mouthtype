@@ -218,6 +218,10 @@ Free-text **Instructions** (500 characters at most) tell Thorough how text shoul
 
 Instructions can change tone, wording style and formatting, never meaning. Names, numbers, dates, negations and the language stay as spoken, and a result that drifts from what you said is discarded for the Basic text. Fast ignores instructions because it isn't driven by a prompt. The tone cards don't preview instructions, since that would mean loading the model on the settings page.
 
+### Icons in the lists
+
+Apps show their real icon from the installed app, and a letter tile when the app isn't installed. Websites show their own favicon, with a globe until it loads or when the site has none. Mouthtype fetches a site's icon once, straight from that site (its home page, then the icon it names, then `/favicon.ico`), and caches it in the Mac's Caches folder for 30 days. A failed lookup is remembered for a day. No third-party icon service is used, and there's no setting for it. Only websites you've listed or that are built in are ever contacted.
+
 ### Which rule wins
 
 The app where recording starts determines the rule for that take. Resolution runs per field, tone and cleanup level each falling through on their own:
