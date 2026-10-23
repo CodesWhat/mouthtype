@@ -279,31 +279,7 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
         }
     }
 
-    /// Site rows read the favicon cache on disk and fetch over the network on a miss. Seed a fresh miss for every site a Style render can
-    /// show so nothing is fetched, plus any fake icons, and return what was created so the caller can remove it.
-    private func seedFavicons(icons: [(host: String, data: Data)] = [], misses: [String] = []) throws -> [URL] {
-        let directory = SiteFaviconStore.defaultDirectory
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        var created: [URL] = []
-        for (host, data) in icons {
-            let url = directory.appendingPathComponent(host + ".icon")
-            try data.write(to: url)
-            created.append(url)
-        }
-        let builtIn = ["linkedin.com", "teams.microsoft.com", "mail.google.com", "outlook.office.com", "linear.app"]
-        for host in builtIn + misses {
-            let icon = directory.appendingPathComponent(host + ".icon")
-            let miss = directory.appendingPathComponent(host + ".miss")
-            guard !FileManager.default.fileExists(atPath: icon.path), !FileManager.default.fileExists(atPath: miss.path) else { continue }
-            try Data().write(to: miss)
-            created.append(miss)
-        }
-        return created
-    }
-
     @Test func cleanupInstructions() throws {
-        let seeded = try seedFavicons()
-        defer { seeded.forEach { try? FileManager.default.removeItem(at: $0) } }
         try throwaway { defaults in
             let model = SettingsModel(defaults: defaults)
             let nearCap = String(
@@ -359,14 +335,13 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
     }
 
     @Test func websiteRulesWithFavicons() async throws {
-        // Fake icons for hosts that cannot exist, and a fresh miss for one more so it keeps the globe. Nothing is fetched.
+        // Fake icons for hosts that cannot exist, in a temp store whose fetch always fails, so one more host keeps the globe.
         let icons = [
             ("docs.visual-pass.example", NSColor.systemIndigo, "D"), ("mail.visual-pass.example", NSColor.systemOrange, "M"),
             ("tracker.visual-pass.example", NSColor.systemTeal, "T"),
         ]
         let missing = "plain.visual-pass.example"
-        let created = try seedFavicons(icons: icons.map { ($0.0, try fakeFavicon($0.1, letter: $0.2)) }, misses: [missing])
-        defer { created.forEach { try? FileManager.default.removeItem(at: $0) } }
+        let favicons = SettingsRender.fakeFavicons(icons: Dictionary(uniqueKeysWithValues: try icons.map { ($0.0, try fakeFavicon($0.1, letter: $0.2)) }))
 
         try throwaway { defaults in
             let model = SettingsModel(defaults: defaults)
@@ -374,7 +349,7 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
             model.setWebsiteInstructions(domain: icons[0].0, instructions: "Put action items in a bullet list.")
             let size = NSSize(width: 900, height: 900)
             for dark in [false, true] {
-                let (view, window) = SettingsRender.host(stylePage(model, .context(.work)), dark: dark, size: size)
+                let (view, window) = SettingsRender.host(stylePage(model, .context(.work)), dark: dark, size: size, favicons: favicons)
                 // The icon loads in a task after the first layout; let it land before drawing.
                 for _ in 0..<20 {
                     RunLoop.current.run(until: Date().addingTimeInterval(0.05))

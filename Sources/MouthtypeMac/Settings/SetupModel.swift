@@ -118,7 +118,7 @@ import Observation
             }
         }
         return SetupModelEntry(
-            id: .names, title: "Names model", size: "About 100 MB", detail: "Optional. Spells your saved and on-screen names right.", state: state)
+            id: .names, title: "Names model", size: "About 100 MB", detail: "Optional. Spells saved and on-screen names.", state: state)
     }
 }
 

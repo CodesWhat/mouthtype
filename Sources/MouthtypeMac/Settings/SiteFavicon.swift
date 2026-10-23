@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 /// One HTTP response for a favicon lookup. `truncated` means the body hit the size cap.
 struct FaviconResponse: Sendable {
@@ -98,6 +99,14 @@ actor SiteFaviconStore {
         return caches.appendingPathComponent("Mouthtype", isDirectory: true).appendingPathComponent("SiteFavicons", isDirectory: true)
     }
 
+    static var runningUnderTests: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["XCTestConfigurationFilePath"] != nil || environment["XCTestBundlePath"] != nil
+            || environment["SWT_EXPERIMENTAL_EVENT_STREAM_OUTPUT"] != nil || NSClassFromString("XCTestCase") != nil
+            || ["xctest", "swiftpm-testing-helper"].contains(ProcessInfo.processInfo.processName)
+            || Bundle.allBundles.contains { $0.bundlePath.hasSuffix(".xctest") }
+    }
+
     /// A lowercase hostname that is safe to put in a path and worth a request, or nil.
     static func normalizedHost(_ domain: String) -> String? {
         let host = domain.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -169,6 +178,8 @@ actor SiteFaviconStore {
 
     /// Ephemeral session (no cookies or credential store), 5 second timeout, plain User-Agent, at most 5 https redirects, body capped.
     @Sendable static func liveFetch(_ url: URL) async throws -> FaviconResponse {
+        // A test that reaches here forgot to inject a store. Fail loudly instead of hitting the network and the real cache.
+        precondition(!runningUnderTests, "SiteFaviconStore.liveFetch ran under a test. Inject a store with a temp directory and a fake fetch.")
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 5
         configuration.timeoutIntervalForResource = 5
@@ -200,5 +211,17 @@ actor SiteFaviconStore {
             count += 1
             completionHandler(count <= 5 && request.url?.scheme == "https" ? request : nil)
         }
+    }
+}
+
+private struct SiteFaviconStoreKey: EnvironmentKey {
+    static var defaultValue: SiteFaviconStore { SiteFaviconStore.shared }
+}
+
+extension EnvironmentValues {
+    /// The favicon store site rows read. The app uses the shared one; tests inject a temp directory and a fake fetch.
+    var siteFavicons: SiteFaviconStore {
+        get { self[SiteFaviconStoreKey.self] }
+        set { self[SiteFaviconStoreKey.self] = newValue }
     }
 }
