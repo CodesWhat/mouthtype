@@ -1,4 +1,24 @@
-Mouthtype 0.5.0
+Mouthtype 0.6.0
+
+Languages. Mouthtype now dictates in the 25 languages the Parakeet v3 speech model covers. Auto-detect is the default: each take picks its language from what you said, among English and the languages in your Mac's preferred list. You can also pick one language in Settings > General. Thorough cleanup covers English, German, Spanish, French, Italian, Portuguese, Dutch, Polish and Russian. The other languages get Basic cleanup. Fillers, spoken commands, slash commands, counted lists, self-correction, number formatting and swearing removal are English only. Each take has one language, so switching mid-sentence isn't supported. See docs/LANGUAGES.md.
+
+Mouse button. Settings > General can add Middle, Back or Forward as a dictation trigger. It follows your recording behavior, hold or toggle, and it is off by default.
+
+Dictionary. Export your saved spellings as CSV. Import Wispr Flow CSV and VoiceInk JSON dictionaries from More on the Dictionary page, with a preview before anything is saved.
+
+Names. Names on screen is now on by default. It still only acts when Boost saved words is on, and it reads wider Accessibility text, including Electron apps. Set Up Mouthtype has a Models page for every model download in one place, and the last card offers name accuracy.
+
+Silent microphone. If you hold the shortcut for a second or more and the take heard nothing, the card says so and names the microphone that was recording. Setup's last card has an optional test take that records about four seconds, shows the transcript and the input level, and never pastes or saves anything.
+
+Cleanup instructions. Write up to 500 characters of instructions for Thorough cleanup for every app, or for one app or website, with a Start from menu of three presets: Slack, Keep my wording and Code comments. They change tone and formatting only, and the checks that protect names, numbers, negations and the language still apply. Fast ignores them. There is also an Excited tone beside Formal, Casual and Very casual.
+
+Style lists show each listed website's own favicon. The microphone controls moved to their own Settings page, right after General.
+
+Releases are now built in a repeatable mode that records its scratch path and toolchain in the manifest. Mouthtype is also available through Homebrew: brew install --cask codeswhat/tap/mouthtype. The app still updates itself.
+
+Not verified on a device for this release: fresh installation, VoiceOver, and Bluetooth and USB microphones. Speech in languages other than English and the new screens were checked with renders and synthetic voices only, not by someone speaking those languages on a Mac.
+
+Earlier in 0.5.0:
 
 Faster. Launch is quicker: the menu bar icon appears before anything draws with a bundled font, fonts register off the launch path, and the Settings window is built when you first open it. Dictation is quicker too, because voice activity detection and transcription run together. Thorough cleanup caches the unchanging part of its prompt between takes, so each take only processes what follows. In one benchmark the median per-case time went from 823 ms to 435 ms. The cleanup model unloads after 10 minutes without use and reloads when you start your next take.
 
