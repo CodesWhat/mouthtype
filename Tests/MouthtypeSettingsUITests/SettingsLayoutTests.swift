@@ -29,7 +29,7 @@ import MouthtypeCore
     @Test func windowIs900By620WithMinimum860By600() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        let controller = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
+        let controller = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true }, favicons: SettingsRender.favicons)
         let window = try #require(controller.window)
         #expect(window.contentRect(forFrameRect: window.frame).size == NSSize(width: 900, height: 620))
         #expect(window.contentMinSize == NSSize(width: 860, height: 600))
@@ -42,10 +42,10 @@ import MouthtypeCore
     @Test func sidebarIsGlassUnlessReduceTransparencyIsOn() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        let glass = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false })
+        let glass = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false }, favicons: SettingsRender.favicons)
         #expect(glass.window?.contentView is NSGlassEffectView)
         #expect(glass.window?.backgroundColor == .clear)
-        let solid = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
+        let solid = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true }, favicons: SettingsRender.favicons)
         #expect(!(solid.window?.contentView is NSGlassEffectView))
         #expect(solid.window?.contentView is NSHostingView<SettingsView>)
     }
@@ -81,7 +81,7 @@ import MouthtypeCore
     @Test func nestedEditorsAttachToTheTopmostSheet() throws {
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
-        let controller = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
+        let controller = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true }, favicons: SettingsRender.favicons)
         let window = try #require(controller.window)
         #expect(controller.topmostWindow === window)
         let sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
@@ -286,8 +286,8 @@ import MouthtypeCore
         let (model, cleanup) = try makeModel()
         defer { cleanup() }
         model.websiteDomain = "slack"
-        let first = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true })
-        let second = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false })
+        let first = SettingsWindow(model: model, actions: actions(), reduceTransparency: { true }, favicons: SettingsRender.favicons)
+        let second = SettingsWindow(model: model, actions: actions(), reduceTransparency: { false }, favicons: SettingsRender.favicons)
         _ = (first, second)
         #expect(model.websiteDomain == "slack")
     }

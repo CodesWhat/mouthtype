@@ -25,7 +25,7 @@ import Testing
     ) -> (NSHostingView<AnyView>, NSWindow) {
         let view = NSHostingView(
             rootView: AnyView(
-                SettingsView(model: model, actions: actions, solid: true)
+                SettingsView(model: model, actions: actions, solid: true, favicons: favicons)
                     .frame(width: size.width, height: size.height)
                     .environment(\.siteFavicons, favicons)
                     .environment(\.colorScheme, dark ? .dark : .light)))
