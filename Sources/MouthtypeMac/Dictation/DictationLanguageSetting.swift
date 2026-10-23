@@ -70,9 +70,12 @@ enum DictationLanguageSetting: Equatable, Sendable {
 
     static let fastEnglishOnlyNote = "Fast cleanup is English only. Using Basic for this language."
 
-    static let autoDetail = "Picks the language from what you said, among English and your Mac\u{2019}s preferred languages."
-    static let detail =
-        "English runs every cleanup rule. Other languages get punctuation, capitalization, your dictionary and snippets, and Thorough cleanup. "
+    static let autoDetail = "Detected from your speech. Some cleanup steps are English only."
+    static let detail = "Some cleanup steps are English only."
+    /// The per-language breakdown behind the info button on the Language row.
+    static let infoText =
+        "Auto-detect picks the language from what you said, among English and your Mac\u{2019}s preferred languages.\n\n"
+        + "English runs every cleanup rule. Other languages get punctuation, capitalization, your dictionary and snippets, and Thorough cleanup. "
         + "Fast, spoken commands, number formatting and filler removal are English only for now."
 
     /// What the engine and pipeline are told for a take.

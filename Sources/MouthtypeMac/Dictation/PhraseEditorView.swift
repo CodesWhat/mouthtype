@@ -163,7 +163,7 @@ struct PhraseEditorView: View {
     private var onSelectedText: some View {
         DesignSection(
             eyebrow: "On selected text \u{00B7} from the menu bar",
-            footer: "Select text in any app, then choose Transform Selection from the menu bar. You review the result before anything is replaced."
+            footer: "Choose Transform Selection from the menu bar. You review the result before anything is replaced."
                 + (unavailableReason.map { " \($0)" } ?? "")
         ) {
             ForEach(Self.menuTransforms) { transform in

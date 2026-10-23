@@ -91,10 +91,10 @@ struct StyleTabBar: View {
 private extension StylePreset {
     var blurb: String {
         switch self {
-        case .formal: "Sentence case. Keeps your punctuation. Softens swearing. Swearing removal is English only."
+        case .formal: "Sentence case, your punctuation, softened swearing (English only)."
         case .casual: "Sentence case. No full stop at the end."
         case .veryCasual: "Lowercase starts. No full stop at the end."
-        case .excited: "Sentence case. A short message ends with an exclamation mark. Thorough adds them where you sound enthusiastic."
+        case .excited: "Sentence case. Exclamation marks, more with Thorough."
         }
     }
 }
@@ -147,7 +147,7 @@ struct StyleContextTab: View {
                 DesignCard {
                     DesignRow(
                         title: "Everything not listed under Personal, Work or Email",
-                        detail: "Terminals, editors and any app or website with no list of its own. It uses the tone above."
+                        detail: "Terminals, editors and anything unlisted. Uses the tone above."
                     ) { EmptyView() }
                 }
             }
@@ -193,17 +193,17 @@ struct StyleContextTab: View {
 
     private var cleanupDetail: String {
         switch context {
-        case .personal: "Set on the Cleanup tab for everything. Change it here only if personal messages should differ."
-        case .work: "Set on the Cleanup tab for everything. Change it here only if work messages should differ."
-        case .email: "Set on the Cleanup tab for everything. Long emails are where Thorough earns its keep, if you want it only here."
-        case .other: "Set on the Cleanup tab for everything. Basic here keeps a model from rewriting a command in a terminal."
+        case .personal: "Set on the Cleanup tab. Change it here only for personal messages."
+        case .work: "Set on the Cleanup tab. Change it here only for work messages."
+        case .email: "Set on the Cleanup tab. Set Thorough here if only long emails need it."
+        case .other: "Set on the Cleanup tab. Basic here keeps a model from rewriting a terminal command."
         }
     }
 
     private var footnote: String {
         switch context {
-        case .email: "Say \"new paragraph\" to break lines. That's a spoken command, so it works at every tone."
-        default: "Anything not listed under Personal, Work or Email counts as Other. A website wins over the browser it's in."
+        case .email: "Say \"new paragraph\" to break lines. Works at every tone."
+        default: "Anything not under Personal, Work or Email counts as Other."
         }
     }
 }
@@ -544,7 +544,7 @@ struct StyleOwnRules: View {
                         }
                     }
                 }
-                Text("Rules you set for one app or website win over its list. A website rule wins over the browser it's in.")
+                Text("Your own app or website rules win over its list. A website wins over its browser.")
                     .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
                     .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
             }

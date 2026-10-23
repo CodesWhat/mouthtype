@@ -9,7 +9,7 @@ struct AudioRetentionSection: View {
         DesignSection(
             eyebrow: "STORAGE",
             footer:
-                "The oldest completed recordings are removed when either limit is reached. Changes apply to existing recordings the next time Mouthtype launches. Text and word timings stay unchanged. Unfinished recordings and audio kept for recovery are separate and aren't removed by these limits."
+                "The oldest completed recordings are removed when either limit is reached. Changes apply the next time Mouthtype launches."
         ) {
             DesignRow(title: "Keep finished audio for", detail: "Unfinished and recovery audio is kept regardless.") {
                 DesignPopup(

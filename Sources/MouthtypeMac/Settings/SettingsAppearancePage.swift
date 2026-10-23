@@ -41,12 +41,12 @@ extension SettingsView {
         }
         DesignCard {
             if model.skin.hasGlassSwitch {
-                DesignRow(title: "Glass", detail: "Draws the pill and its cards on the system glass material. Falls back to solid when Reduce Transparency is on.") {
+                DesignRow(title: "Glass", detail: "Uses the system glass material. Solid when Reduce Transparency is on.") {
                     Toggle("Glass", isOn: Binding(get: { model.skin == .glass }, set: { model.setSkin($0 ? .glass : .classic) }))
                         .labelsHidden().toggleStyle(.designSwitch).accessibilityIdentifier("settings-pill-glass")
                 }
             }
-            DesignRow(title: "Pill size", detail: "Automatic picks Large on wide screens. Applies the next time the pill appears.") {
+            DesignRow(title: "Pill size", detail: "Automatic picks Large on wide screens.") {
                 DesignSegmented(
                     title: "Pill size", selection: Binding(get: { model.pillSize }, set: { model.setPillSize($0) }),
                     choices: PillSize.allCases.map { DesignChoice($0.title, $0) }
@@ -70,11 +70,11 @@ extension SettingsView {
             }
         }
         if !model.skin.usesTextFont {
-            Text("Hi-Fi keeps its own bitmap type, so the text font settings only show for the other styles.")
+            Text("Hi-Fi uses its own bitmap type, so font settings are hidden.")
                 .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         } else if model.fontOverrides.enabled {
-            Text("Switching overrides off keeps your choices. Hi-Fi\u{2019}s bitmap readouts keep their own artwork.")
+            Text("Turning overrides off keeps your choices.")
                 .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         }

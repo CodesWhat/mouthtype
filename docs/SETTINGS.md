@@ -97,7 +97,7 @@ Choose **Hold to talk** or **Press to toggle** under Recording behavior beside t
 - The pill and menu retain Stop and Cancel.
 
 > [!NOTE]
-> Changing behavior cancels an active recording instead of inserting it. If the listener cannot change mode, the previous mode remains saved and Settings shows the error.
+> Changing behavior cancels an active recording instead of inserting it, and Settings says so under the row when it happens. If the listener cannot change mode, the previous mode remains saved and Settings shows the error.
 
 ### Mouse button
 
@@ -108,7 +108,7 @@ Choose **Hold to talk** or **Press to toggle** under Recording behavior beside t
 - It follows the same guards as the keyboard shortcut. A press made while a key or modifier is down is ignored, <kbd>Escape</kbd> cancels, and another key typed early in a hold discards it.
 - While it is set, Mouthtype consumes only that button's presses, releases and drags, so the button no longer reaches other apps. Left and right clicks, scrolling and every other button are untouched, and with None nothing is listened to.
 - It uses the Accessibility permission Mouthtype already needs for the shortcut. No new permission is requested.
-- Changing the button cancels an active recording. If the listener cannot start, the previous choice remains saved and Settings shows the error.
+- Changing the button cancels an active recording, and Settings says so under the row when it happens. If the listener cannot start, the previous choice remains saved and Settings shows the error.
 
 ### Microphone
 

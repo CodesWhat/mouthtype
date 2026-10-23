@@ -24,16 +24,16 @@ enum MicrophoneChoice: Hashable {
     var status: String {
         if choice == .priorityList, let priority {
             if let selected = priority.devices.first(where: { choice in inputs.contains { $0.uid == choice.uid } }) {
-                return "Next dictation uses \(selected.name), the first available input in your list."
+                return "Using \(selected.name), the first available input in your list."
             }
-            return priority.fallbackToDefault ? "No listed input is available. Next dictation follows System Default." : "No listed input is available. Reconnect one or change your list."
+            return priority.fallbackToDefault ? "No listed input is available. Using System Default." : "No listed input is available. Reconnect one or change your list."
         }
         if let preferred, !inputs.contains(where: { $0.uid == preferred.uid }) {
             return "\(preferred.name) is unavailable. Reconnect it or choose another input."
         }
         if inputs.isEmpty { return "No microphone found. Connect one, then refresh inputs." }
-        if preferred != nil { return "Next dictation uses this microphone. Your system input is unchanged." }
-        return "Next dictation follows System Default" + (systemDefaultName.map { " (\($0))." } ?? ".")
+        if preferred != nil { return "Using this microphone. Your system input is unchanged." }
+        return "Using System Default" + (systemDefaultName.map { " (\($0))." } ?? ".")
     }
 
     init(

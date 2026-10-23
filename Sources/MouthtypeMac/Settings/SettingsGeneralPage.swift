@@ -10,7 +10,7 @@ extension SettingsView {
                 Button("Change…", action: actions.changeShortcut).buttonStyle(.designSecondary).fixedSize()
                     .accessibilityLabel("Change dictation shortcut").accessibilityIdentifier("settings-shortcut")
             }
-            DesignRow(title: "Recording behavior", detail: "Hold to talk, or press once to start and again to stop. Changing this cancels an active recording.") {
+            DesignRow(title: "Recording behavior", detail: "Hold to talk, or tap once to start and again to stop.") {
                 DesignPopup(
                     title: "Recording behavior",
                     selection: Binding(get: { model.recordingMode.rawValue }, set: { if let mode = RecordingMode(rawValue: $0) { model.setRecordingMode(mode) } }),
@@ -20,7 +20,7 @@ extension SettingsView {
             }
             DesignRow(
                 title: "Language",
-                detail: model.dictationLanguage == .auto ? DictationLanguageSetting.autoDetail + " " + DictationLanguageSetting.detail : DictationLanguageSetting.detail
+                detail: model.dictationLanguage == .auto ? DictationLanguageSetting.autoDetail : DictationLanguageSetting.detail
             ) {
                 DesignPopup(
                     title: "Language",
@@ -30,9 +30,12 @@ extension SettingsView {
                     choices: DictationLanguageSetting.pickerChoices
                 )
                 .accessibilityIdentifier("settings-dictation-language")
+                DesignInfoButton(title: "Language", text: DictationLanguageSetting.infoText)
+                    .accessibilityIdentifier("settings-dictation-language-info")
             }
             if let error = model.recordingModeError { ModalCardNote(text: error, tone: .red) }
-            DesignRow(title: "Mouse button", detail: "An extra button that dictates like the shortcut. Only that button is used; other clicks are untouched.") {
+            if let notice = model.recordingModeNotice { ModalCardNote(text: notice) }
+            DesignRow(title: "Mouse button", detail: "An extra mouse button that works like the shortcut.") {
                 DesignPopup(
                     title: "Mouse button",
                     selection: Binding(get: { model.mouseTrigger.rawValue }, set: { if let trigger = MouseTrigger(rawValue: $0) { model.setMouseTrigger(trigger) } }),
@@ -41,6 +44,7 @@ extension SettingsView {
                 .accessibilityIdentifier("settings-mouse-trigger")
             }
             if let error = model.mouseTriggerError { ModalCardNote(text: error, tone: .red) }
+            if let notice = model.mouseTriggerNotice { ModalCardNote(text: notice) }
             MicrophoneSettingsSection(model: model.microphone)
         }
     }

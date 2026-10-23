@@ -25,7 +25,7 @@ struct StyleInstructionsEditor: View {
     }
 
     static let explanation =
-        "Thorough follows these for tone and formatting. It never changes what you said: names, numbers and your language stay as spoken, and a result that drifts is thrown away. Fast ignores instructions."
+        "Thorough follows these for tone and formatting. It never changes what you said. Fast ignores them."
 
     /// What the box holds after a preset is chosen: the preset's text in place of whatever was typed. Nothing is saved until Save.
     static func draft(startingFrom preset: CleanupInstructionPreset) -> String {

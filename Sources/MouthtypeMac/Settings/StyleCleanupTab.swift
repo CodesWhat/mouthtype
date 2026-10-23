@@ -31,7 +31,7 @@ struct StyleCleanupTab: View {
                     .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
                     .accessibilityIdentifier("style-fast-language-note")
             }
-            Text("Fast and Thorough run on this Mac and never change what you meant. Until a model is downloaded and ready, takes use Basic.\(modelNote)")
+            Text("Fast and Thorough run on this Mac. Takes use Basic until a model is ready.\(modelNote)")
                 .font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.horizontal, 4)
         }
@@ -144,7 +144,7 @@ struct StyleCleanupTab: View {
             DesignEyebrow("Instructions · Thorough only")
             DesignCard {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Tell Thorough how your text should read. It applies to every app and website unless one has its own instructions, which you can add from the list icon on its row.")
+                    Text("Tell Thorough how your text should read. Apps and websites can have their own.")
                         .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                     StyleInstructionsEditor(
@@ -177,7 +177,7 @@ struct StyleCleanupTab: View {
                 if ownLevels > 0 {
                     DesignRow(
                         title: "\(ownLevels) of your own app or website \(ownLevels == 1 ? "rule sets" : "rules set") a cleanup level",
-                        detail: "They win over the lists. Find them on the Other tab, or under the context their tone matches."
+                        detail: "They win over the lists. Look under the matching tab."
                     ) { EmptyView() }
                 }
                 DesignRow(title: followText(following, level: model.cleanup.level)) {
@@ -189,7 +189,7 @@ struct StyleCleanupTab: View {
     }
 
     private func detail(_ id: StyleContextID) -> String {
-        id == .other ? "Terminals, editors and everything unlisted. Basic never rewrites a command." : "Apps and websites listed under \(id.title)."
+        id == .other ? "Terminals, editors and everything unlisted." : "Apps and websites listed under \(id.title)."
     }
 
     private func followText(_ ids: [StyleContextID], level: CleanupLevel) -> String {

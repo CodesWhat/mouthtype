@@ -15,6 +15,7 @@ Mouthtype dictates in the 25 languages the Parakeet v3 speech model covers. Engl
 | English | Every take is English. Nothing is detected. |
 | Any of the other 24 languages | Every take is that language. Nothing is detected. |
 
+- The info button beside the Language row shows the same English-only breakdown as the support matrix below.
 - On a Mac whose preferred languages are English only, Auto-detect has one candidate, skips detection and behaves exactly as 0.5.0 did.
 - With two or more candidates, Mouthtype reads the finished transcript with Apple's language recognizer, limited to those candidates. A take with fewer than 3 words, or one the recognizer isn't confident about, uses the first candidate, normally English.
 - Each take has one language. Switching language in the middle of a sentence isn't supported. The speech model usually keeps both languages in the text, but cleanup treats the take as one language.

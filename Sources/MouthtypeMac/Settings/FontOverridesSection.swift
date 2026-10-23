@@ -11,7 +11,7 @@ struct FontOverridesSection: View {
     var body: some View {
         DesignSection(
             eyebrow: "Font overrides",
-            footer: model.fontOverrides.enabled ? "Switching overrides off keeps your choices. Hi-Fi\u{2019}s bitmap readouts keep their own artwork." : nil
+            footer: model.fontOverrides.enabled ? "Turning overrides off keeps your choices." : nil
         ) {
             rows
         }
@@ -22,7 +22,7 @@ struct FontOverridesSection: View {
             title: "Override individual fonts",
             detail: model.fontOverrides.enabled
                 ? "Use the base text font, or choose a family for each part."
-                : "Separate heading, body and readout families. Turn it on to pick each one."
+                : "Pick separate heading, body and readout fonts."
         ) {
             Toggle("Override individual fonts", isOn: Binding(get: { model.fontOverrides.enabled }, set: model.setFontOverridesEnabled))
                 .labelsHidden().toggleStyle(.designSwitch).accessibilityIdentifier("settings-font-overrides")
