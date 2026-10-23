@@ -143,7 +143,7 @@ struct SetupView: View {
     /// The window extends under the title bar, so the dots sit below the traffic lights (about 28 pt tall) with a gap.
     static let dotsTopInset: CGFloat = 36
 
-    private var step: SetupStep { model.readiness.step }
+    private var step: SetupStep { model.step }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -158,7 +158,7 @@ struct SetupView: View {
                         .fixedSize(horizontal: false, vertical: true)
                     controls.padding(.top, 6)
                     if step == .ready {
-                        Text("Change your shortcut or recording behavior in Settings. Fast and Thorough use Basic until their cleanup model is ready.")
+                        Text("Change your shortcut or recording behavior in Settings.")
                             .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.sideInk)
                             .fixedSize(horizontal: false, vertical: true)
                     } else {
@@ -196,7 +196,7 @@ struct SetupView: View {
     /// The eyebrow under the card's control. Only Accessibility says it is being re-checked, because that is the step the
     /// user leaves the window for.
     private var stepCaption: String {
-        let base = "Step \(step.rawValue) of 4"
+        let base = "Step \(step.rawValue) of 5"
         return step == .accessibility ? base + " · Checking every few seconds" : base
     }
 
@@ -212,7 +212,7 @@ struct SetupView: View {
             .multilineTextAlignment(.trailing)
             .fixedSize(horizontal: false, vertical: true)
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 4, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
+            .accessibilityLabel(step == .ready ? "Setup complete" : "Step \(step.rawValue) of 5, \(SetupStep.footerNames[step.rawValue - 1].capitalized)")
     }
 
     private var title: String {
@@ -221,6 +221,7 @@ struct SetupView: View {
         case .accessibility: "Put your words to work."
         case .speech: "Keep recognition on your Mac."
         case .shortcut: "Check your shortcut."
+        case .models: "Choose your models."
         case .ready: "You’re ready to talk."
         }
     }
@@ -241,6 +242,8 @@ struct SetupView: View {
             speechStatus + "\nDownloaded once. Recognition runs on your Mac."
         case .shortcut:
             model.inputDetail + "\nCheck your shortcut with Change shortcut to continue."
+        case .models:
+            "Only speech is required. Fast and Thorough use Basic until ready."
         case .ready:
             model.instructions
         }
@@ -281,12 +284,15 @@ struct SetupView: View {
             speechControls
         case .shortcut:
             action("Change shortcut…", identifier: "setup-input-settings", perform: actions.inputSettings)
-        case .ready:
-            VStack(spacing: 12) {
-                if let testTake = model.testTake { SetupTestTakeView(take: testTake) }
-                if model.offersNames { SetupNamesOffer(model: model) }
-                SetupCleanupModels(models: model.cleanupModels, download: model.downloadCleanupModel, cancel: model.cancelCleanupDownload)
+        case .models:
+            VStack(spacing: 14) {
+                SetupModelsList(
+                    entries: model.modelEntries, retrySpeech: actions.retrySpeech, downloadNames: model.turnOnNames,
+                    downloadCleanup: model.downloadCleanupModel, cancelCleanup: model.cancelCleanupDownload)
+                action("Continue", identifier: "setup-models-continue", perform: model.finishModels)
             }
+        case .ready:
+            if let testTake = model.testTake { SetupTestTakeView(take: testTake) }
         }
     }
 
@@ -343,101 +349,81 @@ struct SetupProgressBar: View {
     }
 }
 
-/// Fast and Thorough on the ready step, each with its own bar. They download in the background, so setup can close first.
-struct SetupCleanupModels: View {
-    var models: [CleanupModelStatus]
-    var download: (CleanupLevel) -> Void
-    var cancel: (CleanupLevel) -> Void
+/// Every model download on one page: the required speech model first, then the optional ones. Optional rows can be left
+/// alone, and their downloads keep going in the background if setup closes.
+struct SetupModelsList: View {
+    var entries: [SetupModelEntry]
+    var retrySpeech: () -> Void
+    var downloadNames: () -> Void
+    var downloadCleanup: (CleanupLevel) -> Void
+    var cancelCleanup: (CleanupLevel) -> Void
 
     var body: some View {
-        if !models.isEmpty {
-            DesignSection(eyebrow: "Cleanup models") {
-                ForEach(models) { model in
-                    SetupCleanupRow(model: model, download: { download(model.level) }, cancel: { cancel(model.level) })
-                }
+        DesignSection(eyebrow: "Models") {
+            ForEach(entries) { entry in
+                SetupModelRow(entry: entry, start: { start(entry) }, cancel: { cancel(entry) })
             }
-            .multilineTextAlignment(.leading)
-            .accessibilityIdentifier("setup-cleanup-models")
-        }
-    }
-}
-
-/// "Get names right" on the ready card: one button for Boost saved words and Names on screen, or Not now.
-struct SetupNamesOffer: View {
-    var model: SetupModel
-
-    var body: some View {
-        DesignSection(eyebrow: "Get names right") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(
-                    "Mouthtype can favour names from your dictionary and from the window you\u{2019}re dictating into. "
-                        + "That needs a one-time download of about 100 MB."
-                )
-                .font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.sideInk)
-                .fixedSize(horizontal: false, vertical: true)
-                if model.namesChoice == .turnedOn {
-                    progress
-                } else {
-                    HStack(spacing: 10) {
-                        Button("Turn on name accuracy", action: model.turnOnNames).buttonStyle(.designSecondary)
-                            .accessibilityIdentifier("setup-names-turn-on")
-                        Button("Not now", action: model.skipNames).buttonStyle(.plain)
-                            .font(DesignFont.sans(12.5)).foregroundStyle(DesignPalette.sideInk)
-                            .accessibilityIdentifier("setup-names-not-now")
-                    }
-                }
-            }
-            .padding(.horizontal, 14).padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .multilineTextAlignment(.leading)
-        .accessibilityIdentifier("setup-names")
+        .accessibilityIdentifier("setup-models")
     }
 
-    @ViewBuilder private var progress: some View {
-        let status = model.boostStatus
-        if case let .downloading(fraction) = status {
-            SetupDownloadMeter(fraction: fraction ?? 0, caption: status.text, label: "Name accuracy model download")
-        } else if !status.text.isEmpty {
-            Text(status.text + ".").font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
-                .fixedSize(horizontal: false, vertical: true)
+    private func start(_ entry: SetupModelEntry) {
+        switch entry.id {
+        case .speech: retrySpeech()
+        case .names: downloadNames()
+        case let .cleanup(level): downloadCleanup(level)
         }
+    }
+
+    private func cancel(_ entry: SetupModelEntry) {
+        if case let .cleanup(level) = entry.id { cancelCleanup(level) }
     }
 }
 
-struct SetupCleanupRow: View {
-    var model: CleanupModelStatus
-    var download: () -> Void
+/// The one row layout for every model: name and size, one line on why, and its state on the right. A download draws its
+/// bar and caption under the row; a failure draws its message there.
+struct SetupModelRow: View {
+    var entry: SetupModelEntry
+    var start: () -> Void
     var cancel: () -> Void
 
-    private var size: String { ModelDownloadFormat.size(Int64(model.sizeMB) * 1_000_000) }
+    private var slug: String {
+        switch entry.id {
+        case .speech: "speech"
+        case .names: "names"
+        case let .cleanup(level): "cleanup-\(level.rawValue)"
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 12) {
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 6) {
-                        Text(model.level.title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
-                        if model.selected {
+                        Text(entry.title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
+                        Text(entry.size).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+                        if entry.selected {
                             Text("Selected").designEyebrow().foregroundStyle(DesignPalette.accentText)
                         }
                     }
-                    Text("\(model.name) · \(size)").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+                    Text(entry.detail).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 8)
                 trailing
             }
-            switch model.status {
-            case let .downloading(progress):
+            switch entry.state {
+            case let .downloading(fraction, caption):
                 VStack(alignment: .leading, spacing: 4) {
-                    SetupProgressBar(fraction: progress.fraction)
-                    Text(ModelDownloadFormat.caption(progress)).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+                    SetupProgressBar(fraction: fraction)
+                    Text(caption).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(model.level.title) cleanup model download")
-                .accessibilityValue("\(Int((progress.fraction * 100).rounded())) percent, \(ModelDownloadFormat.caption(progress))")
+                .accessibilityLabel("\(entry.title) download")
+                .accessibilityValue("\(Int((min(max(fraction, 0), 1) * 100).rounded())) percent, \(caption)")
+                .accessibilityIdentifier("setup-\(slug)-progress")
             case let .failed(message):
                 Text(message).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.danger)
                     .fixedSize(horizontal: false, vertical: true)
@@ -447,26 +433,32 @@ struct SetupCleanupRow: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 9)
         .frame(maxWidth: .infinity, minHeight: 48, alignment: .leading)
-        .accessibilityIdentifier("setup-cleanup-\(model.level.rawValue)")
+        .accessibilityIdentifier("setup-model-\(slug)")
     }
 
     @ViewBuilder private var trailing: some View {
-        switch model.status {
+        switch entry.state {
         case .available:
-            Button("Download", action: download).buttonStyle(.designSecondary)
-                .accessibilityLabel("Download \(model.level.title) cleanup model, \(size)")
+            Button("Download", action: start).buttonStyle(.designSecondary)
+                .accessibilityLabel("Download \(entry.title), \(entry.size)")
+                .accessibilityIdentifier("setup-\(slug)-download")
         case .downloading:
-            Button("Cancel", action: cancel).buttonStyle(.designSecondary)
-                .accessibilityLabel("Cancel \(model.level.title) cleanup model download")
-                .accessibilityIdentifier("setup-cleanup-cancel-\(model.level.rawValue)")
+            if case .cleanup = entry.id {
+                Button("Cancel", action: cancel).buttonStyle(.designSecondary)
+                    .accessibilityLabel("Cancel \(entry.title) download")
+                    .accessibilityIdentifier("setup-\(slug)-cancel")
+            } else {
+                Text("Downloading").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+            }
         case .preparing:
-            Text("Downloading").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
-        case .done:
-            Label("Done", systemImage: "checkmark.circle.fill").font(DesignFont.sans(DesignFont.detail, .medium))
+            Text("Preparing").font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
+        case .ready:
+            Label("Ready", systemImage: "checkmark.circle.fill").font(DesignFont.sans(DesignFont.detail, .medium))
                 .foregroundStyle(DesignPalette.success)
         case .failed:
-            Button("Retry", action: download).buttonStyle(.designSecondary)
-                .accessibilityLabel("Retry \(model.level.title) cleanup model download")
+            Button("Retry", action: start).buttonStyle(.designSecondary)
+                .accessibilityLabel("Retry \(entry.title) download")
+                .accessibilityIdentifier("setup-\(slug)-retry")
         }
     }
 }

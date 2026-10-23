@@ -28,12 +28,13 @@ import MouthtypeCore
     }
 
     @Test func stepDotsMarkDoneActiveAndPendingAndFinishWhenReady() {
-        #expect(SetupStep.microphone.dots == [.active, .pending, .pending, .pending])
-        #expect(SetupStep.accessibility.dots == [.done, .active, .pending, .pending])
-        #expect(SetupStep.speech.dots == [.done, .done, .active, .pending])
-        #expect(SetupStep.shortcut.dots == [.done, .done, .done, .active])
-        #expect(SetupStep.ready.dots == [.done, .done, .done, .done])
-        #expect(SetupStep.footerNames == ["MICROPHONE", "ACCESSIBILITY", "SPEECH", "SHORTCUT"])
+        #expect(SetupStep.microphone.dots == [.active, .pending, .pending, .pending, .pending])
+        #expect(SetupStep.accessibility.dots == [.done, .active, .pending, .pending, .pending])
+        #expect(SetupStep.speech.dots == [.done, .done, .active, .pending, .pending])
+        #expect(SetupStep.shortcut.dots == [.done, .done, .done, .active, .pending])
+        #expect(SetupStep.models.dots == [.done, .done, .done, .done, .active])
+        #expect(SetupStep.ready.dots == [.done, .done, .done, .done, .done])
+        #expect(SetupStep.footerNames == ["MICROPHONE", "ACCESSIBILITY", "SPEECH", "SHORTCUT", "MODELS"])
     }
 
     @Test func cardsAdvanceOnlyWhenTheirPrerequisiteActuallyPasses() {

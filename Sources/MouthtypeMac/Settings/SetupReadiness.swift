@@ -2,13 +2,13 @@ import AVFoundation
 import Foundation
 
 enum SetupStep: Int {
-    case microphone = 1, accessibility, speech, shortcut, ready
+    case microphone = 1, accessibility, speech, shortcut, models, ready
 
-    static let footerNames = ["MICROPHONE", "ACCESSIBILITY", "SPEECH", "SHORTCUT"]
+    static let footerNames = ["MICROPHONE", "ACCESSIBILITY", "SPEECH", "SHORTCUT", "MODELS"]
 
     /// One dot per setup step. The ready step has nothing left to do, so every dot is done.
     var dots: [SetupDot] {
-        (1...4).map { index in
+        (1...5).map { index in
             if self == .ready || index < rawValue { .done } else if index == rawValue { .active } else { .pending }
         }
     }
@@ -26,6 +26,8 @@ struct SetupReadiness {
     var captureReady: Bool
     var globeConflict: Bool = false
 
+    /// The last prerequisite step. `.ready` here means every requirement passed; the optional Models page sits between
+    /// that and the final card, and `SetupModel.step` is what the window shows.
     var step: SetupStep {
         guard microphone == .authorized, captureReady else { return .microphone }
         guard accessibility else { return .accessibility }

@@ -82,6 +82,9 @@ import Testing
         try render(model: model, actions: actions, name: "setup-input-minimum", size: NSSize(width: 560, height: 440))
         diagnostics.hotkeyHealth = .listening
         #expect(model.readiness.isReady)
+        #expect(model.step == .models)
+        try render(model: model, actions: actions, name: "setup-models", size: NSSize(width: 560, height: 440))
+        model.finishModels()
         try render(model: model, actions: actions, name: "setup-ready", size: NSSize(width: 560, height: 440))
         try render(model: model, actions: actions, name: "setup-ready-light-minimum", size: NSSize(width: 560, height: 440), appearance: .aqua)
         let failure = EngineHost(makeEngine: { _ in SetupRenderEngine(fails: true) })
@@ -241,10 +244,14 @@ import Testing
         try both("4-shortcut")
         diagnostics.hotkeyHealth = .listening
         #expect(model.readiness.step == .ready)
-        try both("5-ready")
+        #expect(model.step == .models)
+        try both("5-models")
+        model.finishModels()
+        #expect(model.step == .ready)
+        try both("6-ready")
     }
 
-    @Test func speechStepDrawsADeterminateBarAndReadyStepListsBothCleanupModels() async throws {
+    @Test func speechStepDrawsADeterminateBarAndModelsStepListsBothCleanupModels() async throws {
         let name = "SetupRenderTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
         defer { defaults.removePersistentDomain(forName: name) }
@@ -283,7 +290,7 @@ import Testing
         try save(midBitmap, name: "setup-progress-speech-light")
         try save(try bitmap(model: mid, actions: actions, size: size, appearance: .darkAqua), name: "setup-progress-speech-dark")
 
-        // Ready step: Fast downloading, Thorough available.
+        // Models step: Fast downloading, Thorough available.
         var fast = ModelDownloadProgress(hubCompletedUnits: 612_000_000, hubTotalUnits: 1_447_000_000)
         fast.secondsRemaining = 95
         let listing = FakeCleanupListing(models: [
@@ -293,8 +300,9 @@ import Testing
         let readyHost = EngineHost(makeEngine: { _ in SetupRenderEngine() })
         await readyHost.load()
         let ready = SetupModel(diagnostics: diagnostics, engine: readyHost, microphone: micModel.microphone, cleanup: listing, defaults: defaults)
-        #expect(ready.readiness.step == .ready)
+        #expect(ready.step == .models)
         #expect(ready.cleanupModels.count == 2)
+        #expect(ready.modelEntries.count == 4)
         try save(try bitmap(model: ready, actions: actions, size: size, appearance: .aqua), name: "setup-progress-ready-light")
         try save(try bitmap(model: ready, actions: actions, size: size, appearance: .darkAqua), name: "setup-progress-ready-dark")
         listing.models[0].status = .done

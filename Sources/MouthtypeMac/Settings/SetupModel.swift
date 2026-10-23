@@ -15,9 +15,8 @@ import Observation
     private(set) var instructions = ""
     /// The optional test take on the ready step. Nil where setup has no capture to record with.
     let testTake: SetupTestTake?
-    /// Where the optional "Get names right" offer stands on the ready card. In memory only: Setup asks again next time.
-    enum NamesChoice { case offered, turnedOn, skipped }
-    private(set) var namesChoice = NamesChoice.offered
+    /// The Models page shows once every requirement passes and stays until Continue. In memory only: Setup shows it next time.
+    private(set) var modelsReviewed = false
     private(set) var boostStatus = VocabularyBoostStatusCenter.current
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
 
@@ -39,26 +38,22 @@ import Observation
         }
     }
 
-    /// The offer shows until declined, and never when Boost saved words is already on (an existing user's choice stands).
-    var offersNames: Bool {
-        switch namesChoice {
-        case .offered: !VocabularyBoostSetting.isEnabled(defaults)
-        case .turnedOn: true
-        case .skipped: false
-        }
+    /// The step the window shows: the readiness step, with the optional Models page before the final card.
+    var step: SetupStep {
+        let required = readiness.step
+        return required == .ready && !modelsReviewed ? .models : required
     }
+
+    func finishModels() { modelsReviewed = true }
 
     /// Does what turning on Boost saved words and Names on screen in Settings > Advanced does: the same two settings, and the
     /// same change callback, which hands the engine the bias and so starts the model download.
     func turnOnNames() {
         VocabularyBoostSetting.set(true, in: defaults)
         ContextNamesSetting.set(true, in: defaults)
-        namesChoice = .turnedOn
         boostStatus = VocabularyBoostStatusCenter.current
         onBoostSavedWordsChanged(true)
     }
-
-    func skipNames() { namesChoice = .skipped }
 
     /// Fast and Thorough, with their download state. Empty when the app gave setup no cleanup models.
     var cleanupModels: [CleanupModelStatus] { cleanup?.cleanupModels() ?? [] }
@@ -85,4 +80,86 @@ import Observation
             .components(separatedBy: "\n\n").dropFirst().first
             ?? "Click a text field in another app, then use your dictation shortcut."
     }
+
+    /// Every model Setup knows about, in page order: the required speech model, then the optional cleanup and names models.
+    var modelEntries: [SetupModelEntry] {
+        var entries = [speechEntry]
+        entries += cleanupModels.map { SetupModelEntry(cleanup: $0) }
+        entries.append(namesEntry)
+        return entries
+    }
+
+    private var speechEntry: SetupModelEntry {
+        let state: SetupModelState
+        if case .ready = engine.state {
+            state = .ready
+        } else {
+            switch engine.downloadStatus {
+            case .failed: state = .failed(engine.statusText)
+            case let .downloading(progress): state = .downloading(fraction: progress.fraction, caption: ModelDownloadFormat.caption(progress))
+            case .done: state = .ready
+            case .preparing, .available: state = .preparing
+            }
+        }
+        return SetupModelEntry(
+            id: .speech, title: "Speech model", size: "About 480 MB", detail: "Required. Turns your voice into text on this Mac.", state: state)
+    }
+
+    private var namesEntry: SetupModelEntry {
+        let state: SetupModelState
+        if !VocabularyBoostSetting.isEnabled(defaults) {
+            state = .available
+        } else {
+            switch boostStatus {
+            case .ready: state = .ready
+            case let .downloading(fraction): state = .downloading(fraction: fraction ?? 0, caption: boostStatus.text)
+            case .off, .preparing: state = .preparing
+            case let .failed(message): state = .failed(message)
+            }
+        }
+        return SetupModelEntry(
+            id: .names, title: "Names model", size: "About 100 MB", detail: "Optional. Spells your saved and on-screen names right.", state: state)
+    }
+}
+
+/// One row on the Models page: what it is, its size, why you'd want it, and where it stands.
+struct SetupModelEntry: Identifiable, Equatable {
+    enum Kind: Hashable { case speech, cleanup(CleanupLevel), names }
+    var id: Kind
+    var title: String
+    var size: String
+    var detail: String
+    var state: SetupModelState
+    var selected = false
+
+    init(id: Kind, title: String, size: String, detail: String, state: SetupModelState, selected: Bool = false) {
+        self.id = id
+        self.title = title
+        self.size = size
+        self.detail = detail
+        self.state = state
+        self.selected = selected
+    }
+
+    init(cleanup model: CleanupModelStatus) {
+        let state: SetupModelState
+        switch model.status {
+        case .available: state = .available
+        case let .downloading(progress): state = .downloading(fraction: progress.fraction, caption: ModelDownloadFormat.caption(progress))
+        case .preparing: state = .preparing
+        case .done: state = .ready
+        case let .failed(message): state = .failed(message)
+        }
+        self.init(
+            id: .cleanup(model.level), title: "\(model.level.title) cleanup",
+            size: ModelDownloadFormat.size(Int64(model.sizeMB) * 1_000_000),
+            detail: model.level == .light ? "Optional. Faster cleanup with light edits." : "Optional. Fuller edits that follow your style.",
+            state: state, selected: model.selected)
+    }
+}
+
+enum SetupModelState: Equatable {
+    case ready, available, preparing
+    case downloading(fraction: Double, caption: String)
+    case failed(String)
 }
