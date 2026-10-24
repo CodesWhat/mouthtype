@@ -63,6 +63,16 @@ jobs:
       - name: Lint Swift formatting
         run: swift format lint --strict --recursive Sources Tests
 
+      - name: Fuzz the phrase matcher
+        run: scripts/swift-fuzz.sh
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: failure()
+        with:
+          name: swift-fuzz-failures
+          path: build/fuzz/artifacts/
+          if-no-files-found: ignore
+
   website-dependencies:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
