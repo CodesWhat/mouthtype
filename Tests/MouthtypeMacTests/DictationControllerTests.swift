@@ -1077,7 +1077,9 @@ private struct Rig {
         await rig.controller.handle(.released(at: keyUp + 2))
         await rig.controller.waitForProcessing()
         #expect(rig.controller.phase == .idle)
-        #expect(lastPill(rig) != "pill.recording" && lastPill(rig) != "pill.processing")
+        #expect(rig.cards.presented == [.secure("First one."), .secure("Second one.")])
+        #expect(rig.pill.cardMessage == PillMessage(DeliveryCard.textIsSafe, isError: true))
+        #expect(lastPill(rig) == "pill.card:\(DeliveryCard.textIsSafe)")
     }
 
     @Test func aCardWithNoDetailLeavesThePillHidden() async {
@@ -1585,7 +1587,7 @@ private final class FakeCorrections: CorrectionObserving {
         for index in 0..<3 {
             await rig.controller.handle(.pressed(at: keyDown + UInt64(index) * 10))
             await rig.controller.handle(.released(at: keyUp + UInt64(index) * 10))
-            await rig.settle()
+            if index == 0 { await rig.engine.waitForHeld() }
         }
         // All three are captured and archived while the first still sits in the engine.
         await rig.until { rig.log.all.filter { $0 == "archive.write" }.count == 3 }

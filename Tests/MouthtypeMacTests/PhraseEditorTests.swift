@@ -120,19 +120,4 @@ import MouthtypeCore
             .write(to: URL(fileURLWithPath: path + ".small.png"))
     }
 
-    @Test func phraseMenuActionWorksWithCleanupOff() throws {
-        let name = "PhraseEditorTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: name))
-        defer { defaults.removePersistentDomain(forName: name) }
-        var settings = CleanupSettings()
-        settings.level = .off
-        settings.save(to: defaults)
-        var opened = 0
-        let section = CleanupMenuSection(defaults: defaults, managePhrases: { opened += 1 })
-        let menu = try #require(section.items.first?.submenu)
-        let item = try #require(menu.items.first { $0.title == "Phrase Replacements…" })
-        #expect(item.isEnabled)
-        _ = item.target?.perform(item.action, with: item)
-        #expect(opened == 1)
-    }
 }

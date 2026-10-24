@@ -25,7 +25,9 @@ files=()
 add_range() {
   local range="$1"
   while IFS= read -r -d '' f; do
-    [[ "$f" == *.swift && -f "$f" ]] && files+=("$f")
+    if [[ "$f" == *.swift && -f "$f" ]]; then
+      files+=("$f")
+    fi
   done < <(git diff --name-only --diff-filter=ACMR -z "$range" --)
 }
 

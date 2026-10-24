@@ -20,7 +20,8 @@
 | Problem | Workaround |
 | --- | --- |
 | Clear Glass over a dark window on a light wallpaper can be hard to read. Glass picks clear or smoked from the wallpaper it measures, so a dark window behind it on a bright desktop can lower the contrast. | Switch Pill style on the Appearance page. Under Reduce Transparency, Glass is solid instead. |
-| The Matrix padlock sprite is low-detail at small size. It's a pixel-art sprite. | Choose Pill size Large (Settings → Appearance) for more room. |
+| The Matrix padlock sprite is low-detail at its 9 px size. It's a pixel-art sprite. | Choose Pill size Large (Settings → Appearance) for more room. |
+| The Hi-Fi ears and 4 px gap were positioned by eye and haven't had a physical display check. | Use Classic if the spacing looks wrong on your display. |
 | The Hi-Fi card falls back to the Classic card for text its pixel font can't draw. Characters outside the font's range would turn into question marks. | Nothing to do. The card shows your text in the Classic style instead, and the text is unchanged. |
 
 ## Recognition and cleanup

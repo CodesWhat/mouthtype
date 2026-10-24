@@ -39,22 +39,6 @@ import Testing
         }
     }
 
-    @Test func sizeMenuPersistsTheChoiceForEitherSkin() throws {
-        let preferences = defaults()
-        var selected: [PillSkinKind] = []
-        let section = PillSkinMenuSection(defaults: preferences, onSelect: { selected.append($0) })
-        let styles = try #require(section.items.first?.submenu)
-        let sizes = try #require(styles.items.first(where: { $0.title == "Pill Size" })?.submenu)
-        #expect(sizes.items.map(\.title) == ["Automatic", "Standard", "Large"])
-        #expect(sizes.items.map(\.state) == [.on, .off, .off])
-        let bigger = try #require(sizes.items.last)
-        _ = bigger.target?.perform(bigger.action, with: bigger)
-        #expect(preferences.string(forKey: "pillSize") == "large")
-        #expect(preferences.string(forKey: "pillSkin") == nil)
-        #expect(selected == [.classic])
-        #expect(sizes.items.map(\.state) == [.off, .off, .on])
-    }
-
     @Test func cardClearsTheLargerPill() throws {
         let standard = controller(size: "standard")
         let large = controller(size: "large")
@@ -77,13 +61,11 @@ import Testing
         preferences.set("hifi", forKey: "pillSkin")
         preferences.set("standard", forKey: "pillSize")
         let pill = PillController(level: { .silence }, defaults: preferences)
-        let section = PillSkinMenuSection(defaults: preferences, onSelect: { pill.setSkin($0) })
-        let sizes = try #require(section.items[0].submenu?.items.first(where: { $0.title == "Pill Size" })?.submenu)
         pill.showHandsFree()
         defer { pill.hide() }
         let original = pill.skin
-        let bigger = try #require(sizes.items.last)
-        _ = bigger.target?.perform(bigger.action, with: bigger)
+        PillSizePreference.set(.large, in: preferences)
+        pill.setSkin(.hifi)
         #expect(pill.skin === original && pill.skin.isLocked && pill.pillScale == .standard)
         pill.hide()
         pill.showRecording()
@@ -103,12 +85,13 @@ import Testing
         preferences.set("hifi", forKey: "pillSkin")
         preferences.set("standard", forKey: "pillSize")
         let pill = PillController(level: { .silence }, defaults: preferences)
-        let section = PillSkinMenuSection(defaults: preferences, onSelect: { pill.setSkin($0) })
-        let sizes = try #require(section.items[0].submenu?.items.first(where: { $0.title == "Pill Size" })?.submenu)
         pill.showRecording()
         defer { pill.hide() }
         let original = pill.skin
-        for item in sizes.items.filter({ $0.title != "Automatic" }).reversed() { _ = item.target?.perform(item.action, with: item) }
+        for size in [PillSize.large, .standard] {
+            PillSizePreference.set(size, in: preferences)
+            pill.setSkin(.hifi)
+        }
         pill.hide()
         pill.showRecording()
         #expect(pill.skin === original)
