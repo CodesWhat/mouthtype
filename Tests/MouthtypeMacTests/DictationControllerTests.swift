@@ -1585,7 +1585,7 @@ private final class FakeCorrections: CorrectionObserving {
         for index in 0..<3 {
             await rig.controller.handle(.pressed(at: keyDown + UInt64(index) * 10))
             await rig.controller.handle(.released(at: keyUp + UInt64(index) * 10))
-            await rig.settle()
+            if index == 0 { await rig.engine.waitForHeld() }
         }
         // All three are captured and archived while the first still sits in the engine.
         await rig.until { rig.log.all.filter { $0 == "archive.write" }.count == 3 }
