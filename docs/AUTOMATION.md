@@ -51,6 +51,8 @@ Every verb goes through the same code as the menu and hotkeys, so the busy, perm
 
 Anything else is ignored and logged: unknown verbs, unknown pages, extra path segments, other schemes. Parameters other than `page` are dropped. URLs can't return a value, so there's no `status` yet.
 
+While you hold the dictation key, command notices are suppressed so the recording pill stays visible. A hands-free recording can show a notice briefly and then return to its recording controls. Check the automation setting before starting a held-key recording if a command appears to do nothing.
+
 ## Command line
 
 `scripts/mouthtype` is a shell wrapper around `open -g mouthtype://...`. A SwiftPM executable would add a build target and a signing step to forward a string to LaunchServices, and `open` already launches the app if it isn't running.

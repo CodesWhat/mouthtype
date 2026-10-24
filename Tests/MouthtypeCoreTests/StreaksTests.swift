@@ -30,6 +30,12 @@ import Testing
         #expect(s.longest == 3)
     }
 
+    @Test(arguments: ["2026-10-10", "2026-10-11"])
+    func crossingTheDateLineWestKeepsTheLatestStreak(today: String) {
+        let s = Streaks.compute(days: ["2026-10-10", "2026-10-11", "2026-10-12"], today: today)
+        #expect(s.current == 3 && s.longest == 3)
+    }
+
     @Test func runsCrossMonthAndYearAndLeapDay() {
         let s = Streaks.compute(days: ["2023-12-31", "2024-01-01", "2024-02-28", "2024-02-29", "2024-03-01"], today: "2024-03-01")
         #expect(s.current == 3 && s.longest == 3)

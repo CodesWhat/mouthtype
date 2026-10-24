@@ -1077,7 +1077,9 @@ private struct Rig {
         await rig.controller.handle(.released(at: keyUp + 2))
         await rig.controller.waitForProcessing()
         #expect(rig.controller.phase == .idle)
-        #expect(lastPill(rig) != "pill.recording" && lastPill(rig) != "pill.processing")
+        #expect(rig.cards.presented == [.secure("First one."), .secure("Second one.")])
+        #expect(rig.pill.cardMessage == PillMessage(DeliveryCard.textIsSafe, isError: true))
+        #expect(lastPill(rig) == "pill.card:\(DeliveryCard.textIsSafe)")
     }
 
     @Test func aCardWithNoDetailLeavesThePillHidden() async {
