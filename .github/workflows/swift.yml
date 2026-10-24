@@ -39,7 +39,7 @@ jobs:
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 
-  # Headless tests run on PRs and after merge. Settings UI tests run locally at the release merge.
+  # Headless tests and offscreen Settings renders run on PRs and after merge. Desktop tests run locally.
   test:
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
     runs-on: xcode-27
@@ -62,13 +62,12 @@ jobs:
           fi
           xcrun metal --version
 
-      # MouthtypeSettingsUITests builds real Settings and preview windows and drives focus and key events through them.
-      # The hosted runner has no GUI or accessibility session, so those tests fail there and the run can die before it
-      # prints a Swift Testing summary. The target is built here and runs locally at the release merge.
+      # Keyboard navigation and live preview tests activate real windows and need a free desktop. Offscreen renders
+      # assert that their windows stay hidden, so they run here alongside the logic tests.
       # --no-parallel: Swift Testing runs unrelated MainActor-heavy suites at once, and on the 7.5 GB runner that causes the
       # recurring timing flakes.
       - name: Test with coverage
-        run: scripts/swift-test.sh --no-parallel --enable-code-coverage --skip MouthtypeSettingsUITests
+        run: scripts/swift-test.sh --no-parallel --enable-code-coverage --skip 'SettingsKeyboardAccessTests|AppearancePreviewLiveTests|glassInAShownWindowOverEachSwatch'
 
       - name: Coverage report
         run: |
