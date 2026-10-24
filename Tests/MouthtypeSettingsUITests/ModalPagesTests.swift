@@ -92,6 +92,19 @@ import MouthtypeCore
         }
     }
 
+    @Test(arguments: [false, true])
+    func whisperLanguageSettingsRenderWithTheDownloadNotice(dark: Bool) throws {
+        let (model, cleanup) = try makeModel()
+        defer { cleanup() }
+        model.setDictationLanguage(.explicit(.japanese))
+        model.modalPage = .general
+        #expect(model.dictationLanguage.usesWhisper)
+        #expect(model.dictationLanguage.detailText.contains("1.6 GB"))
+        let bitmap = try SettingsRender.renderModal(model: model, actions: actions(), dark: dark)
+        #expect(bitmap.pixelsWide >= 760 && bitmap.pixelsHigh >= 540)
+        try SettingsRender.save(bitmap, name: "general-whisper-\(dark ? "dark" : "light")")
+    }
+
     @Test func microphoneShowsThePriorityListOnceItIsChosen() throws {
         let name = "ModalPriority-\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: name))

@@ -2,7 +2,7 @@ import Foundation
 import WhisperKit
 
 public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
-    static let turboID = "whisper-large-v3-turbo"
+    public static let turboID = "whisper-large-v3-turbo"
     static let turboDisplayName = "Whisper large-v3 turbo"
     static let turboVariant = "large-v3-v20240930_turbo"
     static let smallEnID = "whisper-small-en"
@@ -85,6 +85,13 @@ public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
         )
     }
 
+    static func transcriptionLanguage(variant: String, request: DictationLanguageRequest, detectedCode: String?) -> DictationLanguage? {
+        if variant == smallEnVariant { return .english }
+        if let resolved = request.resolved { return resolved }
+        guard let detectedCode, let detected = DictationLanguage(code: detectedCode), request.possibleLanguages.contains(detected) else { return nil }
+        return detected
+    }
+
     public func transcribe(samples: [Float]) async throws -> Transcription {
         try await transcribe(samples: samples, language: .english)
     }
@@ -119,7 +126,8 @@ public actor WhisperEngine: MeasuredTranscriber, VocabularyBiasing {
             confidence: nil,
             processingSeconds: elapsed,
             engineID: id,
-            modelRevision: "\(Self.modelRepo)/openai_whisper-\(variant)"
+            modelRevision: "\(Self.modelRepo)/openai_whisper-\(variant)",
+            language: Self.transcriptionLanguage(variant: variant, request: request, detectedCode: results.first?.language)
         )
     }
 }

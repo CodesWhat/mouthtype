@@ -1,6 +1,9 @@
 # Languages
 
-Mouthtype dictates in the 25 languages the Parakeet v3 speech model covers. English gets every cleanup rule. The other languages get a smaller, safer set, listed below.
+Development builds support 28 languages: the 25 Parakeet v3 languages, plus Japanese, Hindi and Tamil through Whisper Turbo. The three new languages are in Beta. English gets every cleanup rule; other languages get the smaller set below.
+
+> [!NOTE]
+> The released 0.6.0 app supports the 25 Parakeet languages. The Whisper routing described here is in development and is not part of that release.
 
 > [!NOTE]
 > Dictation language is separate from the language of the app. Mouthtype's menus and settings are English only.
@@ -11,13 +14,15 @@ Mouthtype dictates in the 25 languages the Parakeet v3 speech model covers. Engl
 
 | Choice | What happens |
 | --- | --- |
-| Auto-detect (the default) | Each take picks its language from what you said, among English and the languages in your Mac's preferred language list that Parakeet v3 supports. |
+| Auto-detect (the default) | Each take picks its language from what you said, among English and the languages in your Mac's preferred language list that Mouthtype supports. |
 | English | Every take is English. Nothing is detected. |
-| Any of the other 24 languages | Every take is that language. Nothing is detected. |
+| Any other listed language | Every take is that language. Nothing is detected. |
 
 - The info button beside the Language row shows the same English-only breakdown as the support matrix below.
 - On a Mac whose preferred languages are English only, Auto-detect has one candidate, skips detection and behaves exactly as 0.5.0 did.
-- With two or more candidates, Mouthtype reads the finished transcript with Apple's language recognizer, limited to those candidates. A take with fewer than 3 words, or one the recognizer isn't confident about, uses the first candidate, normally English.
+- With two or more candidates, Parakeet takes use Apple's language recognizer on the finished transcript, limited to those candidates. A take with fewer than 3 words, or one the recognizer isn't confident about, uses the first candidate, normally English. Whisper takes keep the engine's detected language when it is one of the candidates, including Japanese text without spaces.
+- A setting that includes Japanese, Hindi or Tamil uses Whisper Turbo for every take, including English in that Auto-detect set. The first use downloads a separate model of about 1.6 GB. Settings and Setup show its preparation state. Settings changes prepare the new model before another recording can start; a take already recording keeps its original language.
+- Live words aren't available while using Whisper Turbo. The saved Live words preference applies again when you return to a Parakeet language setting.
 - Each take has one language. Switching language in the middle of a sentence isn't supported. The speech model usually keeps both languages in the text, but cleanup treats the take as one language.
 - Pick the language yourself if Auto-detect keeps guessing wrong for you.
 
@@ -45,7 +50,15 @@ Word error rates are from FluidAudio's published FLEURS results for Parakeet v3.
 | Slovenian (Beta) | 27.4 percent | Basic only |
 | Greek (Beta) | 36.9 percent | Basic only |
 
-Basic only means the take gets the Basic rules and the Thorough model doesn't run for that language yet.
+The development branch also offers these Whisper languages. These measurements are from five synthetic macOS-voice clips per language, not FLEURS or fluent speakers, and aren't directly comparable to the table above.
+
+| Language | Speech model | Synthetic measurement | Thorough cleanup |
+| --- | --- | --- | --- |
+| Japanese (Beta) | Whisper Turbo | 2.1 percent character error | Basic only |
+| Hindi (Beta) | Whisper Turbo | 18 percent word error | Basic only |
+| Tamil (Beta) | Whisper Turbo | 27 percent word error | Basic only |
+
+Basic only means the take gets the Basic rules and the Thorough model doesn't run for that language yet. Synthetic clips verify routing and script output; a fluent tester still needs to check real dictation.
 
 ## What runs outside English
 
@@ -92,12 +105,11 @@ These are Mouthtype's own engine measurements from 22 October 2026, using synthe
 
 | Language | Status |
 | --- | --- |
-| Hindi, Tamil, Telugu, Bengali, Kannada and other Indian languages | Not supported. Parakeet v3 has no Indian-language support and returns romanized gibberish that looks like text. A Whisper route is planned for Hindi and Tamil, which measured at 18 and 27 percent word error on synthetic speech. Telugu, Bengali and Kannada measured 41 to 74 percent and would be experimental. A dedicated model (AI4Bharat IndicConformer) is the planned route for real quality. |
-| Japanese | Not supported. Parakeet v3 returns romaji (182.6 percent character error). Whisper or the separate Parakeet Japanese model, which measured 2.1 and 3.5 percent character error, are planned. |
+| Telugu, Bengali, Kannada and other Indian languages | Not supported. Parakeet v3 has no Indian-language support and returns romanized gibberish that looks like text. Whisper measured 41 to 74 percent word error for Telugu, Bengali and Kannada on synthetic speech. A dedicated model (AI4Bharat IndicConformer) is the planned route for real quality. |
 | Chinese, Korean, Arabic and others | Not supported. |
 | Indian English | Works on the default path (6 percent word error on synthetic speech). |
 
-The planned routing for these languages (Whisper, and later IndicConformer) isn't in 0.6.0.
+Japanese, Hindi and Tamil routing is not in the released 0.6.0 app. IndicConformer isn't integrated.
 
 ## Other limits
 

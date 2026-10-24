@@ -83,6 +83,11 @@ private final class FakeEngine: DictationEngine {
         processingSeconds: 0.2, engineID: "fake"
     )
     var previewCalls = 0
+    var languages: [DictationLanguageRequest] = []
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+        languages.append(language)
+        return try await transcribe(samples: samples)
+    }
     func preview(samples: [Float]) async throws -> String? {
         previewCalls += 1
         return "Provisional words that must not be inserted."
@@ -496,6 +501,14 @@ private final class FakeAudioQuiet: RecordingAudioQuieting {
     func end() { log.add("audio.restore") }
 }
 
+private final class CaptureLanguageChoice: @unchecked Sendable {
+    // Every read and write uses the lock, including the pipeline's Sendable callback.
+    private let lock = NSLock()
+    private var value = DictationLanguageRequest.explicit(.german)
+    func get() -> DictationLanguageRequest { lock.withLock { value } }
+    func change() { lock.withLock { value = .explicit(.japanese) } }
+}
+
 @MainActor
 private struct Rig {
     let log = CallLog()
@@ -523,7 +536,7 @@ private struct Rig {
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
         quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false,
         audioRetention: AudioRetentionPolicy = AudioRetentionPolicy(), storeWriter: (any DictationStoring)? = nil,
-        smart: (any SmartCleaning)? = nil
+        smart: (any SmartCleaning)? = nil, languageRequest: @escaping @Sendable () -> DictationLanguageRequest = { .english }
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -539,6 +552,7 @@ private struct Rig {
             store: storeWriter ?? (withStore ? store : nil), archive: archive ?? FakeArchive(log: log, writesPartials: partials), engine: engine, clock: clock
         )
         pipeline.settings = { settings }
+        pipeline.languageRequest = languageRequest
         pipeline.appStyles = appStyles
         pipeline.smart = smart
         pipeline.vocabulary = vocabulary
@@ -613,6 +627,38 @@ private struct Rig {
 
     private let messy = "um so the build is uh green new line ship it"
     private let cleaned = "So the build is green\nShip it"
+
+    @Test func recordingKeepsTheLanguageChosenAtKeyDown() async {
+        let choice = CaptureLanguageChoice()
+        let rig = Rig(languageRequest: { choice.get() })
+        rig.engine.result.text = "Das ist ein deutscher Satz."
+        await rig.controller.handle(.pressed(at: keyDown))
+        choice.change()
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.controller.waitForProcessing()
+        #expect(rig.engine.languages == [.explicit(.german)])
+        #expect(rig.inserter.delivered == ["Das ist ein deutscher Satz."])
+    }
+
+    @Test func pressKeepsItsLanguageWhileWaitingForAnEarlierStop() async {
+        let choice = CaptureLanguageChoice()
+        let rig = Rig(languageRequest: { choice.get() })
+        await rig.lockIn()
+        let gate = StartGate()
+        defer { gate.open() }
+        rig.capture.duringStop = { await gate.wait() }
+        rig.controller.stopHandsFree()
+        let next = Task { await rig.controller.handle(.pressed(at: keyDown + 4_000_000_000)) }
+        await rig.until { rig.controller.isStartReserved }
+        #expect(rig.controller.isStartReserved)
+        choice.change()
+        rig.capture.duringStop = nil
+        gate.open()
+        await next.value
+        await rig.controller.handle(.released(at: keyUp + 4_000_000_000))
+        await rig.controller.waitForProcessing()
+        #expect(rig.engine.languages == [.explicit(.german), .explicit(.german)])
+    }
 
     @Test func appToneUsesRecordingStartAppAndSurvivesPreferenceChanges() async throws {
         final class Styles: @unchecked Sendable {

@@ -1,6 +1,6 @@
 import Foundation
 
-/// The languages the speech engine (Parakeet TDT v3) covers. Raw value is the BCP 47 language code.
+/// The languages the shipped speech engines cover. Raw value is the BCP 47 language code.
 ///
 /// A nil language anywhere in the text pipeline means English, so callers that never set one behave as before.
 public enum DictationLanguage: String, Sendable, Codable, CaseIterable, Hashable {
@@ -15,8 +15,10 @@ public enum DictationLanguage: String, Sendable, Codable, CaseIterable, Hashable
     case french = "fr"
     case german = "de"
     case greek = "el"
+    case hindi = "hi"
     case hungarian = "hu"
     case italian = "it"
+    case japanese = "ja"
     case latvian = "lv"
     case lithuanian = "lt"
     case maltese = "mt"
@@ -28,9 +30,17 @@ public enum DictationLanguage: String, Sendable, Codable, CaseIterable, Hashable
     case spanish = "es"
     case swedish = "sv"
     case russian = "ru"
+    case tamil = "ta"
     case ukrainian = "uk"
 
     public var code: String { rawValue }
+
+    public var requiresWhisper: Bool {
+        switch self {
+        case .japanese, .hindi, .tamil: true
+        default: false
+        }
+    }
 
     public var isEnglish: Bool { self == .english }
 

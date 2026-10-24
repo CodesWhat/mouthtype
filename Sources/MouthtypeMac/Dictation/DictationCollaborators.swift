@@ -219,27 +219,28 @@ final class HostEngine: DictationEngine {
     }
 
     func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
-        guard let engine = host.engine else { throw EngineError.notPrepared(id: EngineHost.defaultEngineID) }
+        guard let engine = host.preparedEngine(for: language) else { throw EngineError.notPrepared(id: language.speechEngineID) }
         return try await engine.transcribe(samples: samples, language: language)
     }
 
     func setVocabularyBias(_ bias: VocabularyBias?) async {
-        guard let biasing = host.engine as? any VocabularyBiasing else { return }
-        await biasing.setVocabularyBias(bias)
+        for case let biasing as any VocabularyBiasing in host.preparedEngines {
+            await biasing.setVocabularyBias(bias)
+        }
     }
 
     func setVocabularyBias(_ bias: VocabularyBias?, settleWithin: Duration?) async {
-        guard let biasing = host.engine as? any VocabularyBiasing else { return }
-        await biasing.setVocabularyBias(bias, settleWithin: settleWithin)
+        for case let biasing as any VocabularyBiasing in host.preparedEngines {
+            await biasing.setVocabularyBias(bias, settleWithin: settleWithin)
+        }
     }
 
     func preview(samples: [Float]) async throws -> String? {
-        guard let preview = host.engine as? any SpeechPreview else { return nil }
-        return try await preview.preview(samples: samples)
+        try await preview(samples: samples, language: .english)
     }
 
     func preview(samples: [Float], language: DictationLanguageRequest) async throws -> String? {
-        guard let preview = host.engine as? any SpeechPreview else { return nil }
+        guard let preview = host.preparedEngine(for: language) as? any SpeechPreview else { return nil }
         return try await preview.preview(samples: samples, language: language)
     }
 }

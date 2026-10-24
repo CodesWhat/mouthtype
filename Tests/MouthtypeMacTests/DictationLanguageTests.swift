@@ -27,8 +27,8 @@ private final class TextEngine: DictationEngine {
     @Test func candidatesAreTheSupportedPreferredLanguagesWithEnglish() {
         #expect(DictationLanguageSetting.candidates(preferredLanguages: ["en-US"]) == [.english])
         #expect(DictationLanguageSetting.candidates(preferredLanguages: []) == [.english])
-        #expect(DictationLanguageSetting.candidates(preferredLanguages: ["ja-JP"]) == [.english])
-        #expect(DictationLanguageSetting.candidates(preferredLanguages: ["en-US", "de-DE", "ja-JP", "pt-BR"]) == [.english, .german, .portuguese])
+        #expect(DictationLanguageSetting.candidates(preferredLanguages: ["ja-JP"]) == [.japanese, .english])
+        #expect(DictationLanguageSetting.candidates(preferredLanguages: ["en-US", "de-DE", "ja-JP", "pt-BR"]) == [.english, .german, .japanese, .portuguese])
         #expect(DictationLanguageSetting.candidates(preferredLanguages: ["de-DE", "de-AT"]) == [.german, .english])
         #expect(DictationLanguageSetting.candidates(preferredLanguages: ["fr", "en", "fr-CA"]) == [.french, .english])
     }
@@ -73,6 +73,29 @@ private final class TextEngine: DictationEngine {
         let clock = SystemDictationClock()
         let session = DictationSession(id: "t", startedAt: clock.now(), keyDownAt: clock.nowNanos())
         return try await pipeline.transcribe(audio(), session: session, voicedMs: 1000)
+    }
+
+    @Test func aQueuedTakeKeepsItsCapturedLanguageAfterTheSettingChanges() async throws {
+        final class Engine: DictationEngine {
+            var readiness: EngineReadiness { .ready }
+            var seen: DictationLanguageRequest?
+            func transcribe(samples: [Float]) async throws -> Transcription {
+                Transcription(text: "Das ist ein deutscher Satz.", processingSeconds: 0, engineID: "test")
+            }
+            func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+                seen = language
+                return try await transcribe(samples: samples)
+            }
+        }
+        let engine = Engine()
+        var pipeline = DictationPipeline(store: nil, archive: nil, engine: engine, clock: SystemDictationClock())
+        pipeline.languageRequest = { .english }
+        let clock = SystemDictationClock()
+        let session = DictationSession(
+            id: "captured-language", startedAt: clock.now(), keyDownAt: clock.nowNanos(), languageRequest: .explicit(.german))
+        let result = try await pipeline.transcribe(audio(), session: session, voicedMs: 1000)
+        #expect(engine.seen == .explicit(.german))
+        #expect(result?.language == .german)
     }
 
     private let german = "Das ist ein ganz normaler deutscher Satz."
