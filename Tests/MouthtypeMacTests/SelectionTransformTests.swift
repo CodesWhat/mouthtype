@@ -63,13 +63,13 @@ import MouthtypeCore
         let transformer = FakeTransformer()
         transformer.reason = "AI transforms need the model."
         let model = SelectionCleanupModel(editor: TransformEditor(), transformer: transformer)
-        model.prepare(transform: .fixGrammar)
+        await model.prepare(transform: .fixGrammar)
         #expect(model.message == "AI transforms need the model.")
         #expect(!model.hasPreview && !model.canChooseTransform)
         #expect(transformer.calls.isEmpty)
         #expect(SelectionCleanupModel(editor: TransformEditor()).transformUnavailableReason != nil)
         // Basic cleanup keeps working without a model.
-        model.prepare()
+        await model.prepare()
         #expect(model.hasPreview && model.transform == nil)
     }
 
@@ -77,7 +77,7 @@ import MouthtypeCore
         let editor = TransformEditor()
         let transformer = FakeTransformer()
         let model = SelectionCleanupModel(editor: editor, transformer: transformer)
-        model.prepare(transform: .fixGrammar)
+        await model.prepare(transform: .fixGrammar)
         #expect(model.isTransforming && !model.canAccept)
         await settle(model)
         #expect(transformer.calls.count == 1 && transformer.calls[0].0 == .fixGrammar && transformer.calls[0].1 == "me and him goes")
@@ -93,7 +93,7 @@ import MouthtypeCore
     @Test func acceptRefusesWhenTheSelectionChangedAfterTheTransform() async {
         let editor = TransformEditor()
         let model = SelectionCleanupModel(editor: editor, transformer: FakeTransformer())
-        model.prepare(transform: .shorter)
+        await model.prepare(transform: .shorter)
         await settle(model)
         var changed = editor.selected
         changed.range.location += 2
@@ -106,7 +106,7 @@ import MouthtypeCore
     @Test func retryAndSwitchingReRunOnTheOriginalAndCancelDropsText() async {
         let transformer = FakeTransformer()
         let model = SelectionCleanupModel(editor: TransformEditor(), transformer: transformer)
-        model.prepare(transform: .moreFormal)
+        await model.prepare(transform: .moreFormal)
         await settle(model)
         transformer.output = "Second."
         model.retry()
@@ -125,7 +125,7 @@ import MouthtypeCore
         let transformer = FakeTransformer()
         transformer.output = "  \n"
         let model = SelectionCleanupModel(editor: TransformEditor(), transformer: transformer)
-        model.prepare(transform: .shorter)
+        await model.prepare(transform: .shorter)
         await settle(model)
         #expect(model.result.isEmpty && !model.canAccept && model.message.contains("nothing"))
     }
@@ -142,7 +142,7 @@ import MouthtypeCore
         let transformer = FakeTransformer()
         transformer.output = output
         let model = SelectionCleanupModel(editor: editor, transformer: transformer)
-        model.prepare(transform: .fixGrammar)
+        await model.prepare(transform: .fixGrammar)
         await settle(model)
         model.accept()
         #expect(editor.replaced == [expected])
@@ -152,7 +152,7 @@ import MouthtypeCore
         let editor = TransformEditor()
         editor.selected = SelectedText(pid: 7, element: nil, range: NSRange(location: 10, length: 13), text: "hello there. ")
         let model = SelectionCleanupModel(editor: editor)
-        model.prepare()
+        await model.prepare()
         model.accept()
         #expect(editor.replaced.count == 1 && editor.replaced[0].hasSuffix(" ") && !editor.replaced[0].hasPrefix(" "))
     }
@@ -160,7 +160,7 @@ import MouthtypeCore
     @Test func thePreviewIsNotEditableWhileTransforming() async {
         let model = SelectionCleanupModel(editor: TransformEditor(), transformer: FakeTransformer())
         #expect(!model.isEditable)
-        model.prepare(transform: .fixGrammar)
+        await model.prepare(transform: .fixGrammar)
         #expect(model.isTransforming && !model.isEditable)
         await settle(model)
         #expect(model.isEditable)
@@ -177,7 +177,7 @@ import MouthtypeCore
         let transformer = FakeTransformer()
         transformer.error = error
         let model = SelectionCleanupModel(editor: editor, transformer: transformer)
-        model.prepare(transform: .shorter)
+        await model.prepare(transform: .shorter)
         await settle(model)
         #expect(model.result.isEmpty && !model.canAccept)
         #expect(model.message.contains(error == .outputTruncated ? "length limit" : "far more text"))

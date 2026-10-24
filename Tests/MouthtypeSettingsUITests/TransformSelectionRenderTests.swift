@@ -12,10 +12,10 @@ import Testing
         let transformer = SceneTransformer(reason: scene == .modelMissing ? "AI transforms need the Thorough cleanup model. Download it in Settings, then try again." : nil)
         let model = SelectionCleanupModel(editor: editor, transformer: transformer, appName: { _ in "Slack" })
         switch scene {
-        case .normal, .modelMissing: model.prepare()
-        case .aiBusy: model.prepare(transform: .fixGrammar)
+        case .normal, .modelMissing: await model.prepare()
+        case .aiBusy: await model.prepare(transform: .fixGrammar)
         case .refused:
-            model.prepare()
+            await model.prepare()
             model.accept()
         }
         let controller = SelectionCleanupWindow(model: model)

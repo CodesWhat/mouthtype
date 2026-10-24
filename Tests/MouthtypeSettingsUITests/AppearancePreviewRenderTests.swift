@@ -81,7 +81,7 @@ import Testing
         }
     }
 
-    @Test func stageShowsTheSelectedStyleSizeAndReadout() throws {
+    @Test func stageShowsTheSelectedStyleSizeAndReadout() async throws {
         let (model, defaults, name) = model(skin: .hifi, readout: .red, size: .large)
         defer { defaults.removePersistentDomain(forName: name) }
         let (view, _) = SettingsRender.host(model: model, actions: SettingsActions(), dark: false)
@@ -91,24 +91,24 @@ import Testing
         #expect(hifi.artScale == 2)
         model.setSkin(.matrix)
         view.layoutSubtreeIfNeeded()
-        RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+        try? await Task.sleep(for: .milliseconds(100))
         #expect(stage.kind == .matrix)
     }
 
     // MARK: Animation lifecycle
 
-    private func withOnscreenWindow(_ body: () throws -> Void) rethrows {
+    private func withOnscreenWindow(_ body: () async throws -> Void) async rethrows {
         let windowCheck = PillPreviewStage.windowOnscreen
         let motion = PillPreviewStage.reduceMotion
         PillPreviewStage.windowOnscreen = { $0 != nil && closedWindows.contains(ObjectIdentifier($0!)) == false }
         PillPreviewStage.reduceMotion = { false }
         closedWindows = []
         defer { PillPreviewStage.windowOnscreen = windowCheck; PillPreviewStage.reduceMotion = motion }
-        try body()
+        try await body()
     }
 
-    @Test func animationRunsWhileShownAndStopsWhenThePageChanges() throws {
-        try withOnscreenWindow {
+    @Test func animationRunsWhileShownAndStopsWhenThePageChanges() async throws {
+        try await withOnscreenWindow {
             let (model, defaults, name) = model(skin: .matrix)
             defer { defaults.removePersistentDomain(forName: name) }
             let (view, _) = SettingsRender.host(model: model, actions: SettingsActions(), dark: false)
@@ -118,13 +118,13 @@ import Testing
             weak var weakStage = stage
             model.page = .home
             view.layoutSubtreeIfNeeded()
-            RunLoop.main.run(until: Date().addingTimeInterval(0.1))
+            try? await Task.sleep(for: .milliseconds(100))
             #expect(weakStage?.isAnimating != true)
         }
     }
 
-    @Test func animationStopsWhenTheWindowClosesOrIsCovered() throws {
-        try withOnscreenWindow {
+    @Test func animationStopsWhenTheWindowClosesOrIsCovered() async throws {
+        try await withOnscreenWindow {
             let (model, defaults, name) = model(skin: .glass)
             defer { defaults.removePersistentDomain(forName: name) }
             let (view, window) = SettingsRender.host(model: model, actions: SettingsActions(), dark: false)
@@ -141,8 +141,8 @@ import Testing
         }
     }
 
-    @Test func reduceMotionKeepsTheStageStill() throws {
-        try withOnscreenWindow {
+    @Test func reduceMotionKeepsTheStageStill() async throws {
+        try await withOnscreenWindow {
             let (model, defaults, name) = model(skin: .matrix)
             defer { defaults.removePersistentDomain(forName: name) }
             PillPreviewStage.reduceMotion = { true }

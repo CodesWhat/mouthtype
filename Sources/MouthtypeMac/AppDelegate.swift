@@ -49,11 +49,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
         }, changed: { [weak self] in self?.appUpdater.refreshActivity() },
         styleFor: { selection in
-            // The tone that applies to the focused app: its rule, else the global default.
             let styles = (try? AppCleanupStyles.load()) ?? AppCleanupStyles()
-            return styles.resolve(
-                bundleID: NSRunningApplication(processIdentifier: selection.pid)?.bundleIdentifier,
-                fallback: CleanupSettings.load().style)
+            return await SelectionCleanupStyle.resolve(
+                selection, bundleID: NSRunningApplication(processIdentifier: selection.pid)?.bundleIdentifier,
+                styles: styles, fallback: CleanupSettings.load().style, focus: AccessibilityFocusReader())
         })
     private lazy var selectionCleanupWindow = SelectionCleanupWindow(model: selectionCleanupModel)
     private lazy var fileTranscriptionModel: FileTranscriptionModel = FileTranscriptionModel(

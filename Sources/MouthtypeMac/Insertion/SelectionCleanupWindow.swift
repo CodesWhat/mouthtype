@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor final class SelectionCleanupWindow: NSWindowController, NSWindowDelegate {
     let model: SelectionCleanupModel
     private let maximumContentHeight: CGFloat
+    private(set) var preparationTask: Task<Void, Never>?
 
     init(model: SelectionCleanupModel, maximumContentHeight: CGFloat? = nil) {
         self.model = model
@@ -30,13 +31,23 @@ import SwiftUI
     required init?(coder: NSCoder) { nil }
 
     func present(transform: TextTransform? = nil) {
-        model.prepare(transform: transform)
-        resizeToFitContent()
-        // The original app keeps activation so Accept can check its exact selection.
-        window?.orderFrontRegardless()
+        preparationTask?.cancel()
+        model.cancel()
+        preparationTask = Task { [weak self] in
+            guard let self, !Task.isCancelled else { return }
+            await model.prepare(transform: transform)
+            guard !Task.isCancelled else { return }
+            resizeToFitContent()
+            // The original app keeps activation so Accept can check its exact selection.
+            window?.orderFrontRegardless()
+        }
     }
 
-    func windowWillClose(_ notification: Notification) { model.cancel() }
+    func windowWillClose(_ notification: Notification) {
+        preparationTask?.cancel()
+        preparationTask = nil
+        model.cancel()
+    }
 
     private func resizeToFitContent() {
         guard let window, let content = window.contentView else { return }
