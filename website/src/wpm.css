@@ -374,6 +374,21 @@
 .wpm-a-input textarea:disabled {
   opacity: 0.6;
 }
+.wpm-type-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 14px;
+}
+#wpm-type-countdown {
+  color: var(--action);
+  font: 14px/1.5 var(--mono);
+}
+.wpm-type-controls button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
 .wpm-a-input p {
   margin: 8px 0 0;
 }

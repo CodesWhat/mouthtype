@@ -169,8 +169,12 @@
                 <div class="example-text">
                   <p class="wpm-sentence" id="wpm-sentence" data-target="I finished the draft and will send it over before lunch, so take a look when you have a minute and let me know what you think.">I finished the draft and will send it over before lunch, so take a look when you have a minute and let me know what you think.</p>
                   <div class="wpm-a-input">
+                    <div class="wpm-type-controls">
+                      <button class="wpm-download" type="button" id="wpm-type-start">Start typing <span aria-hidden="true">→</span></button>
+                      <span id="wpm-type-countdown" role="status" aria-live="polite" aria-atomic="true" hidden></span>
+                    </div>
                     <label class="sr-only" for="wpm-input">Type the sentence above</label>
-                    <textarea id="wpm-input" rows="2" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="wpm-sentence wpm-hint" placeholder="Click here and start typing."></textarea>
+                    <textarea id="wpm-input" rows="2" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="wpm-sentence wpm-hint" placeholder="Press Start typing to begin." disabled></textarea>
                     <p id="wpm-hint">The clock starts on your first key. Press <kbd>Enter</kbd> when you're done.</p>
                   </div>
                 </div>
