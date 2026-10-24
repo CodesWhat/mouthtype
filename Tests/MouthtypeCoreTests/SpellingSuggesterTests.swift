@@ -301,6 +301,30 @@ private struct SplitMix64: RandomNumberGenerator {
         #expect(unused.contains { $0.kind == .removeHazard })
     }
 
+    @Test(arguments: ["'git hub", "git hub'", "'git hub'"])
+    func aQuotedHeardFormNeedsItsBoundaryApostrophes(heard: String) {
+        let rules = [DictionaryRule(heard: heard, written: "Forge")]
+        let unquoted = (0..<120).map { take("t\($0)", raw: "open git hub for build \($0)") }
+        #expect(DictionaryReplacer(rules: rules).apply(to: unquoted[0].rawText) == unquoted[0].rawText)
+        #expect(SpellingSuggester.suggest(takes: unquoted, rules: rules).contains { $0.kind == .removeHazard })
+        let quoted = (0..<120).map { take("q\($0)", raw: "open \(heard) for build \($0)") }
+        #expect(!SpellingSuggester.suggest(takes: quoted, rules: rules).contains { $0.kind == .removeHazard })
+    }
+
+    @Test func anUnquotedHeardFormStillMatchesInsideQuotes() {
+        let rules = [DictionaryRule(heard: "git hub", written: "Forge")]
+        let quoted = (0..<120).map { take("q\($0)", raw: "open 'git hub' for build \($0)") }
+        #expect(!SpellingSuggester.suggest(takes: quoted, rules: rules).contains { $0.kind == .removeHazard })
+    }
+
+    @Test func aQuotedSingleWordHeardFormMustActuallyMatch() {
+        let rules = [DictionaryRule(heard: "'shivon'", written: "Siobhan")]
+        let unquoted = (0..<120).map { take("t\($0)", raw: "ask shivon about build \($0)") }
+        #expect(SpellingSuggester.suggest(takes: unquoted, rules: rules).contains { $0.kind == .removeHazard })
+        let quoted = (0..<120).map { take("q\($0)", raw: "ask 'shivon' about build \($0)") }
+        #expect(!SpellingSuggester.suggest(takes: quoted, rules: rules).contains { $0.kind == .removeHazard })
+    }
+
     @Test func boundaryApostrophesBreakCompounds() {
         let takes = [take("a", raw: "a 'dry' doc called"), take("b", raw: "the 'dry' doc again")]
         let out = SpellingSuggester.suggest(takes: takes, rules: rules)

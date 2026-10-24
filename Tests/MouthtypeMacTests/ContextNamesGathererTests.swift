@@ -22,11 +22,11 @@ private final class Calls: @unchecked Sendable {
     var cursor: Int { lock.withLock { _cursor } }
     var flagged: [pid_t?] { lock.withLock { _flag } }
 
-    func readers(context: InsertionContext? = nil, delay: TimeInterval = 0) -> ContextNamesGatherer.Readers {
+    func readers(context: InsertionContext? = nil, block: DispatchSemaphore? = nil) -> ContextNamesGatherer.Readers {
         ContextNamesGatherer.Readers(
             cursorText: { [self] _, _ in
                 lock.withLock { _cursor += 1 }
-                if delay > 0 { Thread.sleep(forTimeInterval: delay) }
+                block?.wait()
                 return context
             },
             enableManualAccessibility: { [self] pid in lock.withLock { _flag.append(pid) } }
@@ -97,12 +97,12 @@ private final class Calls: @unchecked Sendable {
 
     @Test func aSlowAppCostsItsOwnReadNotTheDictation() async {
         let calls = Calls()
-        let started = ContinuousClock.now
+        let gate = DispatchSemaphore(value: 0)
+        defer { gate.signal() }
         let names = await ContextNamesGatherer.gather(
             focus: focus(title: "Slack | Acme Launch"),
-            readers: calls.readers(context: InsertionContext(before: "Maya Okonkwo", after: nil), delay: 1.5),
+            readers: calls.readers(context: InsertionContext(before: "Maya Okonkwo", after: nil), block: gate),
             deadline: .milliseconds(100), readGate: EditorHints.ReadGate())
-        #expect(ContinuousClock.now - started < .milliseconds(800))
         #expect(names.map(\.text) == ["Acme", "Launch"])
     }
 

@@ -396,11 +396,16 @@ struct DictationPipeline: Sendable {
             cleanerID: Self.cleanerID, level: CleanupLevel.basic.rawValue, style: settings.styleName,
             ms: Int(ms.rounded()), outcome: "ok"
         )
+        func timedOut() -> CleanedDictation {
+            let heard = asHeard(transcribed.text)
+            let expanded = phrases.apply(heard.text)
+            return CleanedDictation(
+                text: expanded.text, edits: transcribed.guardEdits + heard.edits + expanded.edits, cleanup: record)
+        }
         if ms > cleanupBudget {
             Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the guarded text")
             record.outcome = "timeout"
-            let heard = asHeard(transcribed.text)
-            return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
+            return timedOut()
         }
         for note in result.notes { Log.app.info("cleanup note: \(note, privacy: .public)") }
         let edits = transcribed.guardEdits + result.edits
@@ -420,8 +425,7 @@ struct DictationPipeline: Sendable {
             if totalMs > cleanupBudget {
                 Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
                 record.outcome = "timeout"
-                let heard = asHeard(transcribed.text)
-                return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
+                return timedOut()
             }
             return CleanedDictation(
                 text: fallback.expanded.text,

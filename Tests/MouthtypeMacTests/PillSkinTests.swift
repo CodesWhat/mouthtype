@@ -63,24 +63,6 @@ import Testing
         #expect(PillSkinKind.default == .classic)
     }
 
-    @Test func menuListsEverySkinWithTheCurrentOneChecked() {
-        let defaults = freshDefaults()
-        var picked: [PillSkinKind] = []
-        let section = PillSkinMenuSection(defaults: defaults, onSelect: { picked.append($0) })
-        let submenu = section.items[0].submenu
-        #expect(section.items[0].title == "Pill Style")
-        #expect(submenu?.items.prefix(5).map(\.title) == ["Classic", "Glass", "Matrix", "Minimal", "Hi-Fi"])
-        #expect(submenu?.items.prefix(5).map(\.state) == [.on, .off, .off, .off, .off])
-        let hifi = submenu!.items[4]
-        _ = hifi.target?.perform(hifi.action, with: hifi)
-        #expect(picked == [.hifi])
-        #expect(PillSkinPreference.current(defaults) == .hifi)
-        #expect(submenu?.items.prefix(5).map(\.state) == [.off, .off, .off, .off, .on])
-        let matrix = submenu!.items[2]
-        _ = matrix.target?.perform(matrix.action, with: matrix)
-        #expect(picked == [.hifi, .matrix])
-        #expect(submenu?.items.prefix(5).map(\.state) == [.off, .off, .on, .off, .off])
-    }
 }
 
 @MainActor

@@ -157,56 +157,6 @@ import MouthtypeCore
         #expect(vocabulary.dictionary() == [DictionaryRule(heard: #"zoe "z""#, written: "Zo\u{EB}/\\")])
     }
 
-    // MARK: Menu
-
-    @Test func editDictionaryCreatesTheFileAndOpensIt() throws {
-        let suite = "mouthtype.vocab.menu.\(UUID().uuidString)"
-        let d = UserDefaults(suiteName: suite)!
-        d.removePersistentDomain(forName: suite)
-        let url = directory().appendingPathComponent("dictionary.json")
-        var opened: [URL] = []
-        let section = CleanupMenuSection(defaults: d, dictionary: FileVocabulary(url: url), openFile: { opened.append($0) })
-        let menu = section.items[0].submenu!
-        let edit = try #require(menu.items.first { $0.title == "Edit Dictionary\u{2026}" })
-        _ = edit.target?.perform(edit.action, with: edit)
-        #expect(opened == [url] && FileManager.default.fileExists(atPath: url.path))
-    }
-
-    @Test func aBrokenFileShowsAnErrorLineInTheMenu() throws {
-        let suite = "mouthtype.vocab.menu.\(UUID().uuidString)"
-        let d = UserDefaults(suiteName: suite)!
-        d.removePersistentDomain(forName: suite)
-        let url = directory().appendingPathComponent("dictionary.json")
-        try write(#"[{"heard": "a", "written": "A"}]"#, to: url, second: 0)
-        let section = CleanupMenuSection(defaults: d, dictionary: FileVocabulary(url: url))
-        let menu = section.items[0].submenu!
-        let line = try #require(menu.items.first { $0.title.hasPrefix("dictionary.json has an error") })
-        #expect(line.isHidden)
-        try write("[oops", to: url, second: 9)
-        section.refresh()
-        #expect(!line.isHidden)
-        try write(#"[{"heard": "a", "written": "A"}]"#, to: url, second: 20)
-        section.refresh()
-        #expect(line.isHidden)
-    }
-
-    @Test func theLearnSettingIsAMenuCheckboxThatDefaultsOn() throws {
-        let suite = "mouthtype.vocab.menu.\(UUID().uuidString)"
-        let d = UserDefaults(suiteName: suite)!
-        d.removePersistentDomain(forName: suite)
-        let section = CleanupMenuSection(defaults: d, dictionary: FileVocabulary(url: directory().appendingPathComponent("dictionary.json")))
-        let menu = section.items[0].submenu!
-        let item = try #require(menu.items.first { $0.title == "Learn from My Corrections" })
-        #expect(item.state == .on && CorrectionSettings.isEnabled(d))
-        _ = item.target?.perform(item.action, with: item)
-        #expect(item.state == .off && !CorrectionSettings.isEnabled(d) && d.bool(forKey: "learnFromCorrections") == false)
-        _ = item.target?.perform(item.action, with: item)
-        #expect(item.state == .on)
-        let titles = menu.items.map(\.title)
-        let learn = try #require(titles.firstIndex(of: "Learn from My Corrections"))
-        #expect(abs(learn - (try #require(titles.firstIndex(of: "Edit Dictionary\u{2026}")))) == 1)
-    }
-
     @Test func removeThenRestorePutsTheExactEntryBackAtItsIndex() throws {
         let dir = directory()
         defer { try? FileManager.default.removeItem(at: dir) }

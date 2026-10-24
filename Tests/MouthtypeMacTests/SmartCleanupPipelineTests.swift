@@ -490,6 +490,18 @@ private struct CleanupDiagnosticFixtureError: Error, CustomStringConvertible {
         #expect(cleaned.text == "Oh dear this is broken")
     }
 
+    @Test(arguments: [CleanupLevel.basic, .light, .medium])
+    func timedOutCleanupStillExpandsTheProtectedTrigger(level: CleanupLevel) async {
+        let cleaner = ScriptedCleaner { text, _ in text }
+        var (pipeline, _) = pipeline(cleaner, level: level, snippets: [Snippet(trigger: "um holy shit", expansion: "Oh dear")])
+        pipeline.cleanupBudget = -1
+        let cleaned = await clean(pipeline, text: "um holy shit this is fucking broken")
+        #expect(cleaned.text == "Oh dear this is broken")
+        #expect(cleaned.cleanup.outcome == "timeout")
+        #expect(cleaned.edits.contains { $0.stage == "snippet" })
+        #expect(cleaner.calls == 0)
+    }
+
     @Test func aRejectedModelOutputStillLeavesNoSwearing() async {
         let (pipeline, _) = pipeline(ScriptedCleaner(returning: "Paris."))
         let cleaned = await clean(pipeline, text: "what's the capital of fucking France")
