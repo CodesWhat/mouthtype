@@ -489,6 +489,35 @@ extension VocabularyBooster {
         return nil
     }
 
+    private static func coveringKnownTerms(_ runs: [Run], words: [String], known: [KnownTerm]) -> [Run] {
+        guard !known.isEmpty else { return runs }
+        let terms = segment(words, range: words.indices, known: known).filter { $0.term != nil && $0.range.count > 1 }
+        guard !terms.isEmpty else { return runs }
+        func ranges(_ run: Run) -> (old: Range<Int>, new: Range<Int>) {
+            switch run {
+            case let .same(old, new): return (old..<(old + 1), new..<(new + 1))
+            case let .changed(old, new): return (old, new)
+            }
+        }
+        var combined: [Run] = []
+        var term = 0
+        for run in runs {
+            let current = ranges(run)
+            let boundary = current.new.lowerBound
+            while term < terms.count, terms[term].range.upperBound <= boundary { term += 1 }
+            if term < terms.count, terms[term].range.lowerBound < boundary,
+                boundary < terms[term].range.upperBound, let previous = combined.last
+            {
+                let start = ranges(previous)
+                combined[combined.count - 1] = .changed(
+                    old: start.old.lowerBound..<current.old.upperBound, new: start.new.lowerBound..<current.new.upperBound)
+            } else {
+                combined.append(run)
+            }
+        }
+        return combined
+    }
+
     /// The rescorer rebuilds its text from word timings and can drop the punctuation attached to a word it replaced
     /// ("next to fluid audio." came back as "FluidAudio"). Each changed span is cut into saved terms and the original
     /// words are matched to them; a term takes the opening punctuation of its first original word and the closing
@@ -499,7 +528,7 @@ extension VocabularyBooster {
         let new = boosted.split(whereSeparator: \.isWhitespace).map(String.init)
         let oldNormalized = old.map(normalizedWord)
         var result: [String] = []
-        for run in align(old, new) {
+        for run in coveringKnownTerms(align(old, new), words: new, known: known) {
             switch run {
             case let .same(_, n):
                 result.append(new[n])

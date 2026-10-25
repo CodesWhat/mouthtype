@@ -151,6 +151,7 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     }
 
     public func preview(samples: [Float], language: DictationLanguageRequest) async throws -> String? {
+        guard !language.possibleLanguages.contains(where: \.requiresWhisper) else { return nil }
         guard samples.count >= 32_000 else { return nil }
         guard let loadedModels, let speechDetector else { throw EngineError.notPrepared(id: id) }
         return try await inference.withPreview(
@@ -197,6 +198,9 @@ public actor ParakeetEngine: MeasuredTranscriber, PreparationReporting, SpeechPr
     }
 
     public func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+        if let unsupported = language.possibleLanguages.first(where: \.requiresWhisper) {
+            throw EngineError.unsupportedLanguage(id: id, language: unsupported)
+        }
         guard let manager, let speechDetector else { throw EngineError.notPrepared(id: id) }
         let startedAt = ContinuousClock.now
         return try await inference.withFinal {

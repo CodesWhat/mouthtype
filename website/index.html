@@ -75,7 +75,7 @@
               · <a href="/linux/">Linux test client</a>
             </p>
             <p class="availability">
-              0.6.0 · macOS 26+ · APPLE SILICON
+              0.7.0 · macOS 26+ · APPLE SILICON
             </p>
           </div>
           <div class="object-stage" data-skin="classic">
@@ -155,10 +155,13 @@
               No microphone. Nothing is saved or sent.
             </p>
           </div>
-          <div class="example" id="wpm-card">
+          <div class="wpm-lab" id="wpm-card" role="group" aria-labelledby="wpm-lab-title">
             <div id="wpm-main">
               <div class="example-top">
-                <span class="mono" id="wpm-step-label">A quick check</span>
+                <div class="wpm-lab-heading">
+                  <h3 id="wpm-lab-title">Your speed test</h3>
+                  <span class="mono" id="wpm-step-label">A quick check</span>
+                </div>
                 <div class="compare-switch" role="group" aria-label="Steps">
                   <button type="button" data-step="type" data-n="1" aria-pressed="true">Type</button
                   ><button type="button" data-step="speak" data-n="2" aria-pressed="false">Speak</button
@@ -169,8 +172,12 @@
                 <div class="example-text">
                   <p class="wpm-sentence" id="wpm-sentence" data-target="I finished the draft and will send it over before lunch, so take a look when you have a minute and let me know what you think.">I finished the draft and will send it over before lunch, so take a look when you have a minute and let me know what you think.</p>
                   <div class="wpm-a-input">
+                    <div class="wpm-type-controls">
+                      <button class="wpm-download" type="button" id="wpm-type-start">Start typing <span aria-hidden="true">→</span></button>
+                      <span id="wpm-type-countdown" role="status" aria-live="polite" aria-atomic="true" hidden></span>
+                    </div>
                     <label class="sr-only" for="wpm-input">Type the sentence above</label>
-                    <textarea id="wpm-input" rows="2" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="wpm-sentence wpm-hint" placeholder="Click here and start typing."></textarea>
+                    <textarea id="wpm-input" rows="2" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" aria-describedby="wpm-sentence wpm-hint" placeholder="Press Start typing to begin." disabled></textarea>
                     <p id="wpm-hint">The clock starts on your first key. Press <kbd>Enter</kbd> when you're done.</p>
                   </div>
                 </div>
@@ -346,12 +353,12 @@
             <p class="eyebrow">SMALL TOOL. EARLY DAYS.</p>
             <h2 id="alpha-title">Still finding its voice.</h2>
             <p>
-              Mouthtype 0.6.0 is a stable release. We’re using it, listening
+              Mouthtype 0.7.0 is a stable release. We’re using it, listening
               closely,<br />and making the everyday bits better.
             </p>
           </div>
           <div class="alpha-stamp">
-            <span class="status-dot"></span><strong>0.6.0</strong
+            <span class="status-dot"></span><strong>0.7.0</strong
             ><span>macOS 26+<br />Apple Silicon</span>
           </div>
         </section>

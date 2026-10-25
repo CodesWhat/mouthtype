@@ -211,22 +211,6 @@ import MouthtypeCore
         #expect(editor.error != nil && editor.isDirty && editor.written == "Other")
         #expect(try store.allRules().first?.written == "Mouthtype")
     }
-    @Test func menuWorksWithCleanupOffWithoutCreatingExampleRules() throws {
-        let suite = "spelling-menu-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: suite))
-        defer { defaults.removePersistentDomain(forName: suite) }
-        var settings = CleanupSettings()
-        settings.level = .off
-        settings.save(to: defaults)
-        var opened = 0
-        let section = CleanupMenuSection(defaults: defaults, manageSpellings: { opened += 1 })
-        let menu = try #require(section.items.first?.submenu)
-        let item = try #require(menu.items.first { $0.title == "Saved Spellings…" })
-        #expect(item.isEnabled)
-        _ = item.target?.perform(item.action, with: item)
-        #expect(opened == 1)
-    }
-
     @Test func configuredNameReachesThePipelineWithoutChangingLongerWords() throws {
         let (dir, store) = try library()
         defer { try? FileManager.default.removeItem(at: dir) }

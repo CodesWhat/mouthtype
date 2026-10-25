@@ -2,7 +2,7 @@ import Foundation
 
 enum Streaks {
     /// `days` are `YYYY-MM-DD`, ascending, each with at least one word. The current streak is the run ending at the
-    /// last day, and only counts if that day is `today` or the day before.
+    /// last day, and counts if that day is yesterday or later, including a saved local date ahead after travel.
     static func compute(days: [String], today: String) -> (current: Int, longest: Int) {
         let numbers = days.compactMap(dayNumber).reduce(into: [Int]()) { out, n in
             if out.last != n { out.append(n) }
@@ -16,7 +16,7 @@ enum Streaks {
             longest = max(longest, run)
         }
         // `run` now holds the run that ends at the last day.
-        let current = last >= todayNumber - 1 && last <= todayNumber ? run : 0
+        let current = last >= todayNumber - 1 ? run : 0
         return (current, longest)
     }
 

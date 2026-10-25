@@ -39,10 +39,8 @@ jobs:
       - name: Build (warnings as errors)
         run: swift build -Xswiftc -warnings-as-errors
 
-  # Post-merge only. Hosted runners are memory-starved (7.5 GB, no swap), so timing flakes show up here that don't
-  # happen locally. Those are tracked in the roadmap as T-2 and T-3, and the full suite runs locally at the release merge.
+  # Headless tests and offscreen Settings renders run on PRs and after merge. Desktop tests run locally.
   test:
-    if: github.event_name != 'pull_request'
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
     runs-on: xcode-27
     timeout-minutes: 60
@@ -64,36 +62,19 @@ jobs:
           fi
           xcrun metal --version
 
-      # MouthtypeSettingsUITests builds real Settings and preview windows and drives focus and key events through them.
-      # The hosted runner has no GUI or accessibility session, so those tests fail there and the run can die before it
-      # prints a Swift Testing summary. The target is built here and runs locally at the release merge.
+      # Keyboard navigation and live preview tests activate real windows and need a free desktop. Offscreen renders
+      # assert that their windows stay hidden, so they run here alongside the logic tests.
       # --no-parallel: Swift Testing runs unrelated MainActor-heavy suites at once, and on the 7.5 GB runner that causes the
       # recurring timing flakes.
       - name: Test with coverage
-        run: scripts/swift-test.sh --no-parallel --enable-code-coverage --skip MouthtypeSettingsUITests
+        run: scripts/swift-test.sh --no-parallel --enable-code-coverage --skip 'SettingsKeyboardAccessTests|AppearancePreviewLiveTests|glassInAShownWindowOverEachSwatch'
 
       - name: Coverage report
         run: |
-          set -euo pipefail
-          codecov_dir="$(dirname "$(swift test --show-codecov-path)")"
-          profdata="$(find "$(dirname "$codecov_dir")" -name default.profdata -print -quit)"
-          test -n "$profdata" || { echo "no default.profdata under $(dirname "$codecov_dir")" >&2; exit 1; }
-          # The Xcode build system emits one .xctest bundle per test target, so pass each binary to llvm-cov.
-          objects=()
-          while IFS= read -r bundle; do
-            binary="$bundle/Contents/MacOS/$(basename "$bundle" .xctest)"
-            [ -f "$binary" ] || { echo "missing test binary $binary" >&2; exit 1; }
-            objects+=("$binary")
-          done < <(find "$(dirname "$codecov_dir")" -maxdepth 1 -name '*.xctest')
-          test "${#objects[@]}" -gt 0 || { echo "no .xctest bundles beside $codecov_dir" >&2; exit 1; }
-          xcrun llvm-cov report "${objects[0]}" "${objects[@]:1}" -instr-profile="$profdata" \
-            -ignore-filename-regex='(\.build|Tests)/' > coverage-report.txt
-          cat coverage-report.txt
-          total="$(awk '/^TOTAL/ {print $(NF-3)}' coverage-report.txt)"
-          echo "Total line coverage: $total"
-          echo "Total line coverage: $total" >> "$GITHUB_STEP_SUMMARY"
+          python3 -m unittest discover -s Tests/ReleaseTests -p test_swift_coverage.py
+          scripts/swift-coverage.sh
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: swift-coverage
