@@ -1,6 +1,6 @@
 # Languages
 
-Development builds support 28 languages: the 25 Parakeet v3 languages, plus Japanese, Hindi and Tamil through Whisper Turbo. The three new languages are in Beta. English gets every cleanup rule; other languages get the smaller set below.
+Mouthtype 0.7.0 supports 28 languages: the 25 Parakeet v3 languages, plus Japanese, Hindi and Tamil through Whisper Turbo. The three new languages are in Beta. English gets every cleanup rule; other languages get the smaller set below.
 
 > [!NOTE]
 > The 0.7.0 app supports the 25 Parakeet languages. Japanese, Hindi and Tamil ship as Beta in 0.7.0, routed through the multilingual Whisper Turbo model (a separate 1.6 GB download, no live words). They were checked with synthetic speech only.

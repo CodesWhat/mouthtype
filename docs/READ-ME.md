@@ -20,9 +20,9 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 Japanese, Hindi and Tamil dictation in Beta, plus selected-text and dictionary fixes.
 
-- Added: Dictation in Japanese, Hindi and Tamil, marked Beta in Settings. They use the multilingual Whisper Turbo model, a separate 1.6 GB download, and live words are unavailable in them. Auto-detect candidate sets can include them. A take, a Setup test take or a file import keeps its starting language if Settings changes mid-take.
-- Changed: Selected-text cleanup applies the website tone, then the app tone, then the global tone, and reads the selection off the main thread with a timeout. The website typing speed test has a Start typing button and a 3-2-1 countdown.
-- Fixed: Punctuation near a saved multiword term, cleanup timeout fallbacks that skipped saved phrases, dictionary rules with apostrophes, the streak after westward date-line travel, and domain fields in Settings that didn't select their text on keyboard re-entry.
+- Added: Dictation in Japanese, Hindi and Tamil, marked Beta in Settings. They use the multilingual Whisper Turbo model, a separate 1.6 GB download. Live words are unavailable whenever Whisper Turbo is used, including English takes in an Auto-detect set that contains them. Auto-detect candidate sets can include them. A take, a Setup test take or a file import keeps its starting language if Settings changes mid-take.
+- Changed: The website typing speed test has a Start typing button and a 3-2-1 countdown.
+- Fixed: Selected-text cleanup applies the website tone, then the app tone, then the global tone, and reads the selection off the main thread with a timeout. Also punctuation near a saved multiword term, cleanup timeout fallbacks that skipped saved phrases, dictionary rule usage counts with boundary apostrophes, and the streak when travel moves the local date backward.
 
 > [!NOTE]
 > Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release. Japanese, Hindi and Tamil, their 1.6 GB model download and every other non-English language were checked with renders and synthetic speech only. See the known limits.

@@ -13,26 +13,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Dictation in Japanese, Hindi and Tamil, marked Beta in Settings. They run through the pinned multilingual Whisper Turbo model, a separate 1.6 GB download. Live words are unavailable in these languages. Auto-detect candidate sets can include them. A recording, a Setup test take or a file import keeps its starting language if Settings changes mid-take. They were checked with synthetic speech only, never a fluent speaker or a physical microphone. See [`docs/LANGUAGES.md`](docs/LANGUAGES.md).
-- A Start typing button and an accessible 3-2-1 countdown on the website typing speed test, with focus and reset handling. Words per minute is timed from the first key.
+- Dictation in Japanese, Hindi and Tamil, marked Beta in Settings. They run through the pinned multilingual Whisper Turbo model, a separate 1.6 GB download. Live words are unavailable whenever Whisper Turbo is used, including English takes in an Auto-detect set containing Japanese, Hindi or Tamil; the saved Live words preference returns when you switch back to Parakeet. Auto-detect candidate sets can include them. A recording, a Setup test take or a file import keeps its starting language if Settings changes mid-take. They were checked with synthetic speech only, never a fluent speaker or a physical microphone. See [`docs/LANGUAGES.md`](docs/LANGUAGES.md).
+- A Start typing button and a 3-2-1 countdown prepared for screen-reader announcements on the website typing speed test, with focus and reset handling. Words per minute is timed from the first key.
 - A libFuzzer target for the phrase matcher, run in the security workflow.
 
 ### Changed
 
-- Selected-text cleanup applies the website tone first, then the app tone, then the global tone, and captures the selection off the main thread with a timeout.
 - The website typing speed test is styled apart from the illustrative example card.
 - CI runs the Swift tests on every pull request and holds an exact 80% Swift line-coverage floor.
 - The Formal profanity model prewarms at startup only when Formal cleanup is enabled.
-- Removed unused Cleanup, Paste and Pill Style menu code.
+- Removed unused Cleanup, Paste and Pill Style menu code. Settings keyboard and window tests are more reliable, with added regression coverage for domain-field selection on keyboard re-entry.
 
 ### Fixed
 
+- Selected-text cleanup applies the website tone first, then the app tone, then the global tone, and captures the selection off the main thread with a timeout.
 - Punctuation across a boost alignment boundary no longer lands inside a saved multiword term.
 - Cleanup timeout fallbacks (Basic, Fast and Thorough) still expand saved phrases.
 - Dictionary rule usage honours apostrophes exactly, so a quoted rule is no longer counted as used by unquoted speech.
-- The streak no longer resets after westward date-line travel.
-- Domain fields in Settings select their full text on keyboard re-entry.
-- Settings keyboard and window test failures.
+- The streak no longer resets when travel moves the local date backward.
 
 ## [0.6.0] - 2026-10-23
 
