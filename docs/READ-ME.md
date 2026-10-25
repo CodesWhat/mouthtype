@@ -1,4 +1,4 @@
-# Mouthtype 0.6.0
+# Mouthtype 0.7.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,17 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.7.0
+
+Japanese, Hindi and Tamil dictation in Beta, plus selected-text and dictionary fixes.
+
+- Added: Dictation in Japanese, Hindi and Tamil, marked Beta in Settings. They use the multilingual Whisper Turbo model, a separate 1.6 GB download, and live words are unavailable in them. Auto-detect candidate sets can include them. A take, a Setup test take or a file import keeps its starting language if Settings changes mid-take.
+- Changed: Selected-text cleanup applies the website tone, then the app tone, then the global tone, and reads the selection off the main thread with a timeout. The website typing speed test has a Start typing button and a 3-2-1 countdown.
+- Fixed: Punctuation near a saved multiword term, cleanup timeout fallbacks that skipped saved phrases, dictionary rules with apostrophes, the streak after westward date-line travel, and domain fields in Settings that didn't select their text on keyboard re-entry.
+
+> [!NOTE]
+> Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release. Japanese, Hindi and Tamil, their 1.6 GB model download and every other non-English language were checked with renders and synthetic speech only. See the known limits.
 
 ## What changed in 0.6.0
 

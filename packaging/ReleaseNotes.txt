@@ -1,4 +1,18 @@
-Mouthtype 0.6.0
+Mouthtype 0.7.0
+
+Japanese, Hindi and Tamil (Beta). Mouthtype can now dictate in Japanese, Hindi and Tamil. These three go through the multilingual Whisper Turbo model, a separate 1.6 GB download, instead of Parakeet. Live words are not available in them, and Settings marks them Beta. Auto-detect can pick them when they are among the languages in your Mac's preferred list. A recording, a Setup test take or a file import keeps the language it started in if you change the setting mid-take. Cleanup in these languages is Basic, and fillers, spoken commands and self-correction stay English only.
+
+Selected-text cleanup. Transform Selection now applies the website tone first, then the app tone, then the global one. Mouthtype also reads the selection off the main thread with a timeout, so a slow app can't hold the interface.
+
+Dictionary and cleanup fixes. Punctuation next to a saved multiword term no longer lands inside it. When Basic, Fast or Thorough cleanup times out, the fallback still expands your saved phrases. A dictionary rule written with an apostrophe now matches apostrophes exactly, so a quoted rule is no longer counted as used by unquoted speech. The Formal profanity model loads at startup only when Formal cleanup is on.
+
+Smaller fixes. The streak no longer resets after you travel west across the date line. Domain fields in Settings select their whole text when you tab back into them. Settings keyboard and window handling is steadier, and the unused Cleanup, Paste and Pill Style menu code is gone.
+
+Website. The typing speed test has a Start typing button, a 3-2-1 countdown that screen readers announce, and words per minute timed from your first key. It is now styled apart from the example card.
+
+Not verified on a device for this release: fresh installation, VoiceOver, and Bluetooth and USB microphones. Speech in languages other than English was checked with renders and synthetic voices only, never by someone speaking those languages on a Mac. That includes the Japanese, Hindi and Tamil Beta paths and their 1.6 GB model download.
+
+Earlier in 0.6.0:
 
 Languages. Mouthtype now dictates in the 25 languages the Parakeet v3 speech model covers. Auto-detect is the default: each take picks its language from what you said, among English and the languages in your Mac's preferred list. You can also pick one language in Settings > General. Thorough cleanup covers English, German, Spanish, French, Italian, Portuguese, Dutch, Polish and Russian. The other languages get Basic cleanup. Fillers, spoken commands, slash commands, counted lists, self-correction, number formatting and swearing removal are English only. Each take has one language, so switching mid-sentence isn't supported. See docs/LANGUAGES.md.
 
