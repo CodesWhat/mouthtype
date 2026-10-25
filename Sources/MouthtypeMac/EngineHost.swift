@@ -60,7 +60,10 @@ public final class EngineHost {
 
     @ObservationIgnored private var rateMeter = DownloadRateMeter()
     @ObservationIgnored private let uptime: () -> TimeInterval
-    @ObservationIgnored private let engineID: String
+    public private(set) var engineID: String
+    // Keep prepared models for earlier takes whose captured language differs from the current setting.
+    @ObservationIgnored private var prepared: [String: any Transcriber] = [:]
+    @ObservationIgnored private var generation = 0
     @ObservationIgnored private let makeEngine: @Sendable (String) throws -> any Transcriber
     @ObservationIgnored private var task: Task<Void, Never>?
 
@@ -74,53 +77,87 @@ public final class EngineHost {
         self.makeEngine = makeEngine
     }
 
+    func select(language: DictationLanguageRequest) {
+        let selectedID = language.speechEngineID
+        guard selectedID != engineID else { start(); return }
+        generation += 1
+        task?.cancel()
+        task = nil
+        engineID = selectedID
+        engine = nil
+        state = .loading
+        start()
+    }
+
+    func preparedEngine(for language: DictationLanguageRequest) -> (any Transcriber)? {
+        prepared[language.speechEngineID] ?? prepared[WhisperEngine.turboID]
+    }
+
+    var preparedEngines: [any Transcriber] { Array(prepared.values) }
+
     public func start() {
         guard task == nil else { return }
         if case .ready = state { return }
         state = .loading
+        let id = generation
         task = Task {
+            guard id == generation, !Task.isCancelled else { return }
             await load()
-            task = nil
+            if id == generation { task = nil }
         }
     }
 
     func load() async {
+        let engineID = self.engineID
+        let loadGeneration = generation
         state = .loading
         preparation = .loadingModel
         downloadProgress = nil
         downloadSettled = false
         rateMeter.reset()
         warmingUp = false
-        Log.engine.info("engine \(self.engineID, privacy: .public) loading")
+        if let cached = prepared[engineID] {
+            engine = cached
+            downloadSettled = true
+            state = .ready(engineID: engineID, loadSeconds: 0)
+            return
+        }
+        Log.engine.info("engine \(engineID, privacy: .public) loading")
         let clock = ContinuousClock()
         do {
             let transcriber = try makeEngine(engineID)
             let loadStart = clock.now
             if let reporting = transcriber as? any PreparationReporting {
-                try await reporting.prepare { [weak self] stage in await self?.report(stage) }
+                try await reporting.prepare { [weak self] stage in await self?.report(stage, generation: loadGeneration) }
             } else {
                 try await transcriber.prepare()
             }
+            try Task.checkCancellation()
+            guard loadGeneration == generation else { return }
             let loadSeconds = (clock.now - loadStart).seconds
-            Log.engine.info("engine \(self.engineID, privacy: .public) prepared in \(loadSeconds, format: .fixed(precision: 2))s")
+            Log.engine.info("engine \(engineID, privacy: .public) prepared in \(loadSeconds, format: .fixed(precision: 2))s")
 
             let warmStart = clock.now
             warmingUp = true
             _ = try await transcriber.transcribe(samples: [Float](repeating: 0, count: 16_000))
             let warmSeconds = (clock.now - warmStart).seconds
-            Log.engine.info("engine \(self.engineID, privacy: .public) warm-up in \(warmSeconds, format: .fixed(precision: 2))s")
+            Log.engine.info("engine \(engineID, privacy: .public) warm-up in \(warmSeconds, format: .fixed(precision: 2))s")
 
+            try Task.checkCancellation()
+            guard loadGeneration == generation else { return }
+            prepared[engineID] = transcriber
             engine = transcriber
             state = .ready(engineID: engineID, loadSeconds: loadSeconds)
-            Log.engine.info("engine \(self.engineID, privacy: .public) ready, load \(loadSeconds, format: .fixed(precision: 2))s")
+            Log.engine.info("engine \(engineID, privacy: .public) ready, load \(loadSeconds, format: .fixed(precision: 2))s")
         } catch {
+            guard loadGeneration == generation, !Task.isCancelled else { return }
             state = .failed(message: error.localizedDescription)
-            Log.engine.error("engine \(self.engineID, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
+            Log.engine.error("engine \(engineID, privacy: .public) failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
-    private func report(_ stage: EnginePreparation) {
-        guard state == .loading, !warmingUp else { return }
+    private func report(_ stage: EnginePreparation, generation loadGeneration: Int) {
+        guard loadGeneration == generation, state == .loading, !warmingUp else { return }
         switch stage {
         case let .progress(progress):
             record(progress)

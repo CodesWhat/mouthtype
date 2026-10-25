@@ -34,12 +34,14 @@ public protocol MeasuredTranscriber: Transcriber {
     func prepareMeasured() async throws -> PrepareTimings
 }
 
-public enum EngineError: Error, LocalizedError {
+public enum EngineError: Error, LocalizedError, Equatable {
     case notPrepared(id: String)
+    case unsupportedLanguage(id: String, language: DictationLanguage)
 
     public var errorDescription: String? {
         switch self {
         case let .notPrepared(id): return "Engine '\(id)' used before prepare()"
+        case let .unsupportedLanguage(id, language): return "Engine '\(id)' cannot transcribe \(language.englishName). Use Whisper large-v3 turbo."
         }
     }
 }

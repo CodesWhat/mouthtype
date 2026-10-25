@@ -51,7 +51,7 @@ public actor AudioFileTranscription {
         guard current == nil else { throw AudioFileError.busy }
         try Task.checkCancellation()
         let decoder = decoder
-        let language = language
+        let language = language()
         let engine = engine
         let beforeTranscribing = beforeTranscribing
         let task = Task {
@@ -66,7 +66,7 @@ public actor AudioFileTranscription {
             try Task.checkCancellation()
             await beforeTranscribing()
             try Task.checkCancellation()
-            let transcription = try await engine.transcribe(samples: audio.samples, language: language())
+            let transcription = try await engine.transcribe(samples: audio.samples, language: language)
             try Task.checkCancellation()
             return AudioFileTranscript(transcription: transcription, durationSeconds: audio.durationSeconds)
         }

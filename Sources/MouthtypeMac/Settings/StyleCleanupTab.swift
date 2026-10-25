@@ -101,7 +101,7 @@ struct StyleCleanupTab: View {
                     statusText(cleaner.state == .absent ? "NOT DOWNLOADED" : "FAILED")
                     Button("DOWNLOAD…") {
                         let target = cleaner.downloadTarget
-                        if CleanupMenuSection.askToDownload(name: target.modelName, sizeMB: target.downloadSizeMB) { target.startDownload() }
+                        if CleanupModelDownloadConfirmation.askToDownload(name: target.modelName, sizeMB: target.downloadSizeMB) { target.startDownload() }
                     }.buttonStyle(.plain).font(DesignFont.mono(DesignFont.eyebrow)).tracking(0.8).foregroundStyle(DesignPalette.ink)
                         .underline().accessibilityLabel("Download the cleanup model")
                 }

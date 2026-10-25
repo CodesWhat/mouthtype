@@ -58,6 +58,17 @@ import Testing
         #expect(entries.allSatisfy { $0.detail.count <= 70 && !$0.detail.contains("\u{2014}") && !$0.detail.contains("\u{2026}") })
     }
 
+    @Test func theModelsPageShowsTheSelectedWhisperDownload() throws {
+        let name = "SetupWhisperModel-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let model = SetupModel(
+            diagnostics: SettingsDiagnostics(), engine: EngineHost(engineID: "whisper-large-v3-turbo"), defaults: defaults)
+        let speech = try #require(model.modelEntries.first { $0.id == .speech })
+        #expect(speech.size == "About 1.6 GB")
+        #expect(speech.detail.contains("Whisper"))
+    }
+
     @Test func continuingFromTheModelsPageMovesToTheFinalCard() {
         make { model, _, _ in
             #expect(!model.modelsReviewed)

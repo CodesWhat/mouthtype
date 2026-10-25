@@ -33,8 +33,15 @@ async function open(page, { random = 0, clock = true } = {}) {
   return target;
 }
 
+async function startTyping(page, { clock = true } = {}) {
+  await page.getByRole("button", { name: "Start typing", exact: true }).click();
+  if (clock) await page.clock.runFor(3000);
+  await expect(page.getByLabel("Type the sentence above")).toBeFocused();
+}
+
 // Types the whole sentence so that it takes `ms` between first key and last.
 async function typeIn(page, target, ms, { typo = false } = {}) {
+  await startTyping(page);
   const box = page.getByLabel("Type the sentence above");
   await box.click();
   await page.keyboard.type(target[0]);
@@ -102,8 +109,82 @@ test("the section is linkable at /#speed", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Type it\./ })).toBeVisible();
 });
 
+test("the speed test has a distinct tool frame and typography from the prepared example", async ({ page }, testInfo) => {
+  await open(page);
+  const testCard = page.locator("#wpm-card");
+  const example = page.locator("#demo .example");
+  await expect(testCard.getByText("Your speed test", { exact: true })).toBeVisible();
+  const background = (el) => getComputedStyle(el).backgroundColor;
+  const font = (el) => getComputedStyle(el).fontFamily;
+  expect(await testCard.locator("#wpm-main > .example-top").evaluate(background)).not.toBe(
+    await example.locator(".example-top").evaluate(background),
+  );
+  expect(await page.locator("#wpm-sentence").evaluate(font)).not.toBe(
+    await page.locator("#example-text").evaluate(font),
+  );
+  expect(await testCard.locator("#wpm-type-live strong").evaluate(font)).not.toBe(
+    await page.locator("#example-text").evaluate(font),
+  );
+  await page.evaluate(() => document.fonts.ready);
+  await testCard.screenshot({ path: testInfo.outputPath("speed-test-card.png"), animations: "disabled" });
+  await example.screenshot({ path: testInfo.outputPath("illustrative-example.png"), animations: "disabled" });
+});
+
+test("Start typing counts down, focuses the input, and waits for the first key to time", async ({ page }) => {
+  const target = await open(page);
+  const start = page.getByRole("button", { name: "Start typing", exact: true });
+  const box = page.getByLabel("Type the sentence above");
+  const countdown = page.getByRole("status");
+  await expect(start).toBeVisible();
+  await expect(box).toBeDisabled();
+  await start.click();
+  await expect(start).toBeDisabled();
+  await expect(countdown).toHaveText("Starting in 3…");
+  await page.keyboard.type("early");
+  await expect(box).toHaveValue("");
+  await page.clock.runFor(1000);
+  await expect(countdown).toHaveText("Starting in 2…");
+  await page.clock.runFor(1000);
+  await expect(countdown).toHaveText("Starting in 1…");
+  await page.clock.runFor(999);
+  await expect(box).toBeDisabled();
+  await page.clock.runFor(1);
+  await expect(countdown).toHaveText("Go!");
+  await expect(start).toBeHidden();
+  await expect(box).toBeEnabled();
+  await expect(box).toBeFocused();
+  await page.clock.fastForward(30000);
+  await expect(page.locator("#wpm-type-live strong")).toHaveText("--");
+  await page.keyboard.type(target[0]);
+  await page.clock.fastForward(2000);
+  await page.keyboard.type(target.slice(1, 10));
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#wpm-type-live strong")).toHaveText("60");
+  await expect(page.locator("#wpm-speak-panel")).toBeVisible();
+});
+
+test("leaving the typing step cancels its countdown without moving focus later", async ({ page }) => {
+  await open(page);
+  const start = page.getByRole("button", { name: "Start typing", exact: true });
+  await start.click();
+  await page.clock.runFor(1000);
+  await page.getByRole("button", { name: "Speak", exact: true }).click();
+  await page.clock.fastForward(5000);
+  await expect(page.getByRole("button", { name: "Start", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "Type", exact: true }).click();
+  await expect(start).toBeEnabled();
+  await expect(start).toBeFocused();
+  await expect(page.getByLabel("Type the sentence above")).toBeDisabled();
+  await expect(page.getByRole("status")).toBeHidden();
+  await start.click();
+  await expect(page.getByRole("status")).toHaveText("Starting in 3…");
+  await page.clock.runFor(3000);
+  await expect(page.getByLabel("Type the sentence above")).toBeFocused();
+});
+
 test("typing flow with real keystrokes shows live WPM and moves on to speaking", async ({ page }) => {
   const target = await open(page, { clock: false });
+  await startTyping(page, { clock: false });
   const box = page.getByLabel("Type the sentence above");
   await box.click();
   await page.keyboard.type(target.slice(0, 20), { delay: 50 });
@@ -121,6 +202,7 @@ test("typing flow with real keystrokes shows live WPM and moves on to speaking",
 
 test("typing marks right characters, and the wrong character the user typed in orange", async ({ page }) => {
   const target = await open(page);
+  await startTyping(page);
   await page.getByLabel("Type the sentence above").click();
   const wrong = target[2] === "x" ? "z" : "x";
   await page.keyboard.type(target.slice(0, 2) + wrong);
@@ -168,6 +250,7 @@ test("misses lower net WPM through accuracy", async ({ page }) => {
 
 test("Enter ends the typing step early", async ({ page }) => {
   const target = await open(page);
+  await startTyping(page);
   const box = page.getByLabel("Type the sentence above");
   await box.click();
   await page.keyboard.type(target[0]);
@@ -180,11 +263,15 @@ test("Enter ends the typing step early", async ({ page }) => {
 
 test("typing guard: finishing in under a second says try again", async ({ page }) => {
   const target = await open(page);
+  await startTyping(page);
   await page.getByLabel("Type the sentence above").click();
   await page.keyboard.type(target);
   await expect(page.locator("#wpm-hint")).toContainText("Try again");
   await expect(page.locator("#wpm-type-panel")).toBeVisible();
   await expect(page.getByLabel("Type the sentence above")).toHaveValue("");
+  await expect(page.getByLabel("Type the sentence above")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Start typing", exact: true })).toBeFocused();
+  await startTyping(page);
   await expect(page.getByLabel("Type the sentence above")).toBeEnabled();
 });
 
@@ -220,7 +307,8 @@ test("Try again resets everything", async ({ page }) => {
   await speakFor(page, countWords(target) * 400);
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.locator("#wpm-type-panel")).toBeVisible();
-  await expect(page.getByLabel("Type the sentence above")).toBeFocused();
+  await expect(page.getByRole("button", { name: "Start typing", exact: true })).toBeFocused();
+  await expect(page.getByLabel("Type the sentence above")).toBeDisabled();
   await expect(page.getByLabel("Type the sentence above")).toHaveValue("");
   await expect(page.getByRole("button", { name: "Result", exact: true })).toBeDisabled();
   await expect(page.locator("#wpm-sentence")).not.toHaveAttribute("data-target", target);
@@ -256,7 +344,10 @@ test("keyboard operable and results announced only on completion", async ({ page
   const live = page.locator("#wpm-live");
   await expect(live).toHaveAttribute("aria-live", "polite");
   await expect(live).toHaveText("");
-  await page.getByLabel("Type the sentence above").focus();
+  await page.getByRole("button", { name: "Start typing", exact: true }).focus();
+  await page.keyboard.press("Enter");
+  await page.clock.runFor(3000);
+  await expect(page.getByLabel("Type the sentence above")).toBeFocused();
   await page.keyboard.type(target[0]);
   await page.clock.fastForward(target.length * 200);
   await page.keyboard.type(target.slice(1, 30));
@@ -275,6 +366,7 @@ test("keyboard operable and results announced only on completion", async ({ page
 test("reduced motion disables the caret blink", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await open(page);
+  await startTyping(page);
   const name = await page
     .locator("#wpm-sentence i[data-next]")
     .evaluate((el) => getComputedStyle(el, "::before").animationName);
@@ -284,6 +376,7 @@ test("reduced motion disables the caret blink", async ({ page }) => {
 test("with motion allowed the caret blinks", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await open(page);
+  await startTyping(page);
   const name = await page
     .locator("#wpm-sentence i[data-next]")
     .evaluate((el) => getComputedStyle(el, "::before").animationName);

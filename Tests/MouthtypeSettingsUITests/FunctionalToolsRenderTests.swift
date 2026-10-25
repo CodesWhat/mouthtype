@@ -25,9 +25,9 @@ import MouthtypeCore
         }
     }
 
-    @Test func selectionPreviewRendersWithoutActivatingOrShowingWindow() throws {
+    @Test func selectionPreviewRendersWithoutActivatingOrShowingWindow() async throws {
         let model = SelectionCleanupModel(editor: RenderSelection())
-        model.prepare()
+        await model.prepare()
         let controller = SelectionCleanupWindow(model: model)
         #expect(controller.window?.isVisible == false)
         try render(#require(controller.window?.contentView), size: NSSize(width: 680, height: 470), name: "selection-cleanup")

@@ -12,6 +12,8 @@ struct DictationSession: Sendable {
     var cleanupLevel: CleanupLevel?
     /// A rule's instructions for Thorough; nil uses the global ones.
     var cleanupInstructions: String?
+    /// The language chosen when recording started. Nil supports older recovery and direct pipeline callers.
+    var languageRequest: DictationLanguageRequest?
     /// True when the dictation goes into a terminal, code editor or agent app or site, so spoken slash commands are typed.
     var codingTarget = false
     /// False when the store is missing or `begin` failed; later writes are then skipped.
@@ -208,11 +210,12 @@ struct DictationPipeline: Sendable {
     /// (or already part way) instead of starting it. Never waits for the build; `transcribe` still applies its own
     /// settle cap, which then covers only what is left. Does nothing without editor names, or while an earlier take is still being transcribed.
     @discardableResult
-    func warmEditorBias(_ hints: Task<[VocabularyBias.Term], Never>?) -> Task<Void, Never>? {
+    func warmEditorBias(_ hints: Task<[VocabularyBias.Term], Never>?, language: DictationLanguageRequest? = nil) -> Task<Void, Never>? {
         guard let hints else { return nil }
+        let request = language ?? languageRequest()
         return Task {
             let editorTerms = await hints.value
-            guard !editorTerms.isEmpty, !Task.isCancelled, languageRequest().allowsVocabularyBoost else { return }
+            guard !editorTerms.isEmpty, !Task.isCancelled, request.allowsVocabularyBoost else { return }
             let bias = VocabularyBoostSetting.bias(enabled: boostSavedWords(), rules: vocabulary.dictionary(), editorTerms: editorTerms)
             // An earlier take still in recognition or boosting would be rescored with these names (or lose its own
             // while this build starts), so this take falls back to the release-time path.
@@ -264,7 +267,7 @@ struct DictationPipeline: Sendable {
         let rules = vocabulary.dictionary()
         let editorTerms = await session.editorHints?.value ?? []
         // Only a take with editor names waits for the model rebuild they cause. Saved words alone build in the background.
-        let language = languageRequest()
+        let language = session.languageRequest ?? languageRequest()
         // The boost model is English, so a take that can't be English gets no bias.
         await engine.setVocabularyBias(
             language.allowsVocabularyBoost
@@ -396,11 +399,16 @@ struct DictationPipeline: Sendable {
             cleanerID: Self.cleanerID, level: CleanupLevel.basic.rawValue, style: settings.styleName,
             ms: Int(ms.rounded()), outcome: "ok"
         )
+        func timedOut() -> CleanedDictation {
+            let heard = asHeard(transcribed.text)
+            let expanded = phrases.apply(heard.text)
+            return CleanedDictation(
+                text: expanded.text, edits: transcribed.guardEdits + heard.edits + expanded.edits, cleanup: record)
+        }
         if ms > cleanupBudget {
             Log.app.error("cleanup took \(ms, format: .fixed(precision: 1)) ms; delivering the guarded text")
             record.outcome = "timeout"
-            let heard = asHeard(transcribed.text)
-            return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
+            return timedOut()
         }
         for note in result.notes { Log.app.info("cleanup note: \(note, privacy: .public)") }
         let edits = transcribed.guardEdits + result.edits
@@ -420,8 +428,7 @@ struct DictationPipeline: Sendable {
             if totalMs > cleanupBudget {
                 Log.app.error("Basic fallback took \(totalMs, format: .fixed(precision: 1)) ms; delivering the guarded text")
                 record.outcome = "timeout"
-                let heard = asHeard(transcribed.text)
-                return CleanedDictation(text: heard.text, edits: transcribed.guardEdits + heard.edits, cleanup: record)
+                return timedOut()
             }
             return CleanedDictation(
                 text: fallback.expanded.text,

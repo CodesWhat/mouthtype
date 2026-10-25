@@ -7,6 +7,11 @@ public enum DictationLanguageRequest: Sendable, Equatable {
     case explicit(DictationLanguage)
     case auto(candidates: [DictationLanguage])
 
+    /// Auto needs one model that covers every candidate, so any extended language selects Whisper.
+    public var speechEngineID: String {
+        possibleLanguages.contains(where: \.requiresWhisper) ? WhisperEngine.turboID : ParakeetEngine.v3ID
+    }
+
     public static let english = DictationLanguageRequest.explicit(.english)
 
     /// The language when the request settles it: an explicit one, or Auto with a single candidate (an empty set is

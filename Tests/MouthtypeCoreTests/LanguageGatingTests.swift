@@ -134,8 +134,8 @@ import Testing
     @Test func codesParse() {
         #expect(DictationLanguage(code: "de-AT") == .german)
         #expect(DictationLanguage(code: "pt_BR") == .portuguese)
-        #expect(DictationLanguage(code: "ja") == nil)
-        #expect(DictationLanguage.allCases.count == 25)
+        #expect(DictationLanguage(code: "zh") == nil)
+        #expect(DictationLanguage.allCases.count == 28)
         #expect(DictationLanguage.isEnglish(nil))
         #expect(!DictationLanguage.isEnglish(.polish))
     }

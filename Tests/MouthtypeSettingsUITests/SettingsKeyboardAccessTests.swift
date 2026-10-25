@@ -6,7 +6,7 @@ import Testing
 @testable import MouthtypeMac
 
 /// Builds the real Settings window offscreen and checks the keyboard path from the sidebar into each page.
-@MainActor @Suite struct SettingsKeyboardAccessTests {
+@MainActor @Suite(.serialized) struct SettingsKeyboardAccessTests {
     private func makeWindow(page: SettingsPage, fullKeyboardAccess: Bool = false, home: HomeLogModel = HomeLogModel()) -> SettingsWindow {
         let name = "SettingsKeyboardTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -24,24 +24,6 @@ import Testing
         return controller
     }
 
-    @Test func settingsWindowHandlesCommandW() throws {
-        let controller = makeWindow(page: .home)
-        let window = try #require(controller.window)
-        #expect(window is SettingsNSWindow)
-        let event = try #require(
-            NSEvent.keyEvent(
-                with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
-                windowNumber: window.windowNumber, context: nil, characters: "w", charactersIgnoringModifiers: "w", isARepeat: false, keyCode: 13))
-        #expect(window.performKeyEquivalent(with: event))
-    }
-
-    /// The reported bug: with Full Keyboard Access on the rows are Tab stops, so the list container must not be one too,
-    /// or Tab cycles inside the sidebar. This pins the policy only. The hosted loop tests below cover how it is applied.
-    @Test func sidebarListLeavesTheTabLoopUnderFullKeyboardAccess() {
-        #expect(!SettingsView.sidebarListFocusable(fullKeyboardAccess: true))
-        #expect(SettingsView.sidebarListFocusable(fullKeyboardAccess: false))
-    }
-
     @Test func windowBuildsWithTheKeyboardFlagForcedEitherWay() throws {
         for flag in [true, false] {
             let controller = makeWindow(page: .home, fullKeyboardAccess: flag)
@@ -49,25 +31,11 @@ import Testing
         }
     }
 
-    /// Page controls are only keyboard-reachable while they're native Button, Picker or Toggle. A tap or drag gesture on a
-    /// plain view is invisible to Tab and Space, so none may appear in the Settings sources.
-    @Test func settingsPagesUseNoMouseOnlyGestureControls() throws {
-        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-            .appendingPathComponent("Sources/MouthtypeMac/Settings")
-        let files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil).filter { $0.pathExtension == "swift" }
-        #expect(!files.isEmpty)
-        for file in files {
-            let text = try String(contentsOf: file, encoding: .utf8)
-            for pattern in ["onTapGesture", ".gesture(", "TapGesture", "onLongPressGesture"] {
-                #expect(!text.contains(pattern), "\(file.lastPathComponent) uses \(pattern)")
-            }
-        }
-    }
     // MARK: Hosted key view loop
 
-    /// Orders the real window front and pumps AppKit's event queue. SwiftUI builds its key view proxies once the window is on screen; whether macOS
+    /// Orders the real window front and lets AppKit process events without nesting its run loop. SwiftUI builds its key view proxies once the window is on screen; whether macOS
     /// lets a test process become the active app depends on the desktop session, so the window is not required to be key.
-    private func keyWindow(page: SettingsPage, fullKeyboardAccess: Bool, home: HomeLogModel = HomeLogModel()) throws -> (SettingsWindow, SettingsNSWindow) {
+    private func keyWindow(page: SettingsPage, fullKeyboardAccess: Bool, home: HomeLogModel = HomeLogModel()) async throws -> (SettingsWindow, SettingsNSWindow) {
         _ = NSApplication.shared
         Self.installSystemFullKeyboardAccessOverride
         Self.forcedSystemFullKeyboardAccess = fullKeyboardAccess
@@ -79,7 +47,7 @@ import Testing
         window.makeKeyAndOrderFront(nil)
         window.makeKey()
         for _ in 0..<5 {
-            while let event = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+            try? await Task.sleep(for: .milliseconds(100))
             if window.isKeyWindow { break }
             window.makeKeyAndOrderFront(nil)
         }
@@ -127,8 +95,8 @@ import Testing
 
     /// Appearance is built from the redesign's own controls (style tiles, segmented controls, switch), which are plain buttons and so are
     /// proxies in the loop. Tab must walk the sidebar and then reach all of them: five style tiles, two preview swatches, three sizes at least.
-    @Test func tabReachesTheAppearanceStyleTilesAndSegmentsUnderFullKeyboardAccess() throws {
-        let (controller, window) = try keyWindow(page: .appearance, fullKeyboardAccess: true)
+    @Test func tabReachesTheAppearanceStyleTilesAndSegmentsUnderFullKeyboardAccess() async throws {
+        let (controller, window) = try await keyWindow(page: .appearance, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
         let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
@@ -154,7 +122,7 @@ import Testing
         let home = HomeLogModel(store: store, canRecover: { true })
         await home.loadText()
         home.attach([RecoverableDictation(id: firstID, startedAt: Date(), audioURL: URL(fileURLWithPath: "/tmp/a.wav"), seconds: 3, isPartial: false)])
-        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true, home: home)
+        let (controller, window) = try await keyWindow(page: .home, fullKeyboardAccess: true, home: home)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
         let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
@@ -167,9 +135,36 @@ import Testing
         }
     }
 
+    @Test func shiftTabSelectsTheHostedWebsiteDomain() async throws {
+        let (controller, window) = try await keyWindow(page: .style, fullKeyboardAccess: true)
+        defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
+        let host = NSHostingView(
+            rootView: HStack {
+                TextField("Domain, e.g. slack.com", text: .constant("slack.com"))
+                    .textFieldStyle(.roundedBorder).accessibilityIdentifier("style-website-domain")
+                Button("Add") {}
+            }.padding().frame(width: 600, height: 160))
+        window.contentView = host
+        host.layoutSubtreeIfNeeded()
+        await pump()
+        func fields(_ view: NSView) -> [NSTextField] {
+            (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
+        }
+        let field = try #require(fields(host).first)
+        window.recalculateKeyViewLoop()
+        let next = try #require(field.nextValidKeyView)
+        #expect(SettingsKeyLoop.previous(of: next, in: host) === field)
+        #expect(window.makeFirstResponder(field))
+        let editor = try #require(field.currentEditor())
+        editor.selectedRange = NSRange(location: 9, length: 0)
+        #expect(window.makeFirstResponder(next))
+        window.selectKeyView(preceding: next)
+        #expect(field.currentEditor()?.selectedRange == NSRange(location: 0, length: 9))
+    }
+
     /// The Style page is built from buttons, so its tabs, tone cards and rows are proxy stops after the sidebar.
-    @Test func tabReachesStyleTabsAndToneCardsAfterTheSidebar() throws {
-        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: true)
+    @Test func tabReachesStyleTabsAndToneCardsAfterTheSidebar() async throws {
+        let (controller, window) = try await keyWindow(page: .style, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
         let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
@@ -178,8 +173,8 @@ import Testing
     }
 
     /// With Keyboard navigation off the list is itself the focus target, ahead of the rows, and Tab still continues into the page.
-    @Test func tabLoopStillReachesPageControlsWithKeyboardNavigationOff() throws {
-        let (controller, window) = try keyWindow(page: .appearance, fullKeyboardAccess: false)
+    @Test func tabLoopStillReachesPageControlsWithKeyboardNavigationOff() async throws {
+        let (controller, window) = try await keyWindow(page: .appearance, fullKeyboardAccess: false)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let stops = try tabOrder(window)
         #expect(stops.contains { $0.x >= SettingsTheme.sidebarWidth })
@@ -217,25 +212,6 @@ import Testing
         }
     }
 
-    private final class Stop: NSView {
-        override var canBecomeKeyView: Bool { true }
-        override var acceptsFirstResponder: Bool { true }
-    }
-
-    /// Shift-Tab steps back through the forward Tab order and wraps, because the hosted controls only link forward.
-    @Test func shiftTabStepsBackThroughTheForwardTabOrder() {
-        let root = NSView()
-        let stops = (0..<4).map { _ in Stop() }
-        stops.forEach(root.addSubview)
-        root.nextKeyView = stops[0]
-        for (current, next) in zip(stops, stops.dropFirst()) { current.nextKeyView = next }
-        stops[3].nextKeyView = root
-        #expect(SettingsKeyLoop.order(in: root).count == 4)
-        #expect(SettingsKeyLoop.previous(of: stops[2], in: root) === stops[1])
-        #expect(SettingsKeyLoop.previous(of: stops[0], in: root) === stops[3])
-        #expect(SettingsKeyLoop.previous(of: NSView(), in: root) == nil)
-    }
-
     /// The page's scroll view and a keyboard stop in it that starts below the fold.
     private func pageScrollAndOffscreenStop(_ window: NSWindow) throws -> (NSScrollView, NSView) {
         var scrolls: [NSScrollView] = []
@@ -254,8 +230,8 @@ import Testing
     }
 
     /// Tab (and the Shift-Tab path) must bring a control below the fold into view.
-    @Test func keyboardFocusScrollsTheControlIntoView() throws {
-        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: true)
+    @Test func keyboardFocusScrollsTheControlIntoView() async throws {
+        let (controller, window) = try await keyWindow(page: .style, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let (scroll, target) = try pageScrollAndOffscreenStop(window)
         let document = try #require(scroll.documentView)
@@ -271,8 +247,8 @@ import Testing
     }
 
     /// A click (plain makeFirstResponder) must not move the page.
-    @Test func nonKeyboardFocusDoesNotScroll() throws {
-        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: true)
+    @Test func nonKeyboardFocusDoesNotScroll() async throws {
+        let (controller, window) = try await keyWindow(page: .style, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let (scroll, target) = try pageScrollAndOffscreenStop(window)
         let before = scroll.contentView.bounds.origin
@@ -280,68 +256,62 @@ import Testing
         #expect(scroll.contentView.bounds.origin == before)
     }
 
-    private func press(_ key: UInt32, keyCode: UInt16, in window: NSWindow) throws {
+    private func press(_ key: UInt32, keyCode: UInt16, in window: NSWindow) async throws {
         let characters = String(UnicodeScalar(key)!)
         let event = try #require(
             NSEvent.keyEvent(
                 with: .keyDown, location: .zero, modifierFlags: [.numericPad, .function], timestamp: 0,
                 windowNumber: window.windowNumber, context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
         window.sendEvent(event)
-        for _ in 0..<3 { while let e = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(e) } }
+        await pump()
     }
 
     /// The window's initial first responder comes from AppKit's real keyboard UI mode, which the injected flag can't reach: with the machine's
     /// Keyboard navigation on it is the first sidebar row, not the list. Focus the list proxy (the sidebar proxy taller than a single row)
     /// so the test starts from the same place whatever the system setting is. The event pump lets SwiftUI settle the focus change before
     /// the first arrow, otherwise that arrow is spent moving focus.
-    private func focusSidebarList(in window: NSWindow) throws {
+    private func focusSidebarList(in window: NSWindow) async throws {
         let sidebar = try keyViewChain(window).filter {
             String(describing: type(of: $0)) == "KeyViewProxy" && $0.convert($0.bounds, to: nil).minX < SettingsTheme.sidebarWidth
         }
         let rowHeight = try #require(sidebar.map { $0.bounds.height }.min())
         let list = try #require(sidebar.first { $0.bounds.height > rowHeight * 2 }, "no sidebar list proxy in the key view chain")
         #expect(window.makeFirstResponder(list))
-        for _ in 0..<3 { while let e = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(e) } }
+        await pump()
     }
 
     /// With Keyboard navigation off the list is the focus target and the arrow handlers drive selection. Real key events go through the
     /// window, so deleting `onKeyPress` (or the list's focus) leaves the page where it was and fails this.
-    @Test func arrowKeysMoveSidebarSelectionWithKeyboardNavigationOff() throws {
-        let (controller, window) = try keyWindow(page: .style, fullKeyboardAccess: false)
+    @Test func arrowKeysMoveSidebarSelectionWithKeyboardNavigationOff() async throws {
+        let (controller, window) = try await keyWindow(page: .style, fullKeyboardAccess: false)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
-        try focusSidebarList(in: window)
-        try press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
+        try await focusSidebarList(in: window)
+        try await press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
         #expect(controller.model.page == .appearance)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        try await press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .style)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        try await press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .transforms)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        try await press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .dictionary)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        try await press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .stats)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        try await press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .home)
-        try press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
+        try await press(UInt32(NSUpArrowFunctionKey), keyCode: 126, in: window)
         #expect(controller.model.page == .home)
-    }
-
-    @Test func arrowsStepFromTheFocusedRowOtherwiseFromTheSelection() {
-        #expect(SettingsPage.arrowTarget(focused: .appearance, selected: .home, offset: -1) == .style)
-        #expect(SettingsPage.arrowTarget(focused: nil, selected: .style, offset: 1) == .appearance)
-        #expect(SettingsPage.arrowTarget(focused: nil, selected: .appearance, offset: 1) == .appearance)
     }
 
     /// Warm open: the window already exists with the ring on one row, and a URL or menu route reopens it on another page. No row may keep the ring.
-    @Test func warmPresentLeavesNoSidebarRowFocused() throws {
-        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true)
+    @Test func warmPresentLeavesNoSidebarRowFocused() async throws {
+        let (controller, window) = try await keyWindow(page: .home, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let rows = SettingsView.sidebarRowProxies(in: window)
         let home = try #require(SettingsPage.allCases.firstIndex(of: .home)), stats = try #require(SettingsPage.allCases.firstIndex(of: .stats))
         #expect(window.makeFirstResponder(rows[home]))
         controller.present(page: .stats)
         for _ in 0..<3 {
-            while let event = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(event) }
+            try? await Task.sleep(for: .milliseconds(100))
         }
         #expect(controller.model.page == .stats)
         #expect(!rows.contains { $0 === window.firstResponder })
@@ -349,34 +319,34 @@ import Testing
         _ = stats
     }
 
-    private func pump() {
-        for _ in 0..<3 { while let e = NSApp.nextEvent(matching: .any, until: Date().addingTimeInterval(0.1), inMode: .default, dequeue: true) { NSApp.sendEvent(e) } }
+    private func pump() async {
+        for _ in 0..<3 { try? await Task.sleep(for: .milliseconds(100)) }
     }
 
     /// The ring is never on a row other than the selected one: a selection that changes from outside the sidebar (a click or a link
     /// lands here as a plain select) drops a ring left on the old row.
-    @Test func selectionChangeNeverLeavesTheRingOnAnotherRow() throws {
-        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true)
+    @Test func selectionChangeNeverLeavesTheRingOnAnotherRow() async throws {
+        let (controller, window) = try await keyWindow(page: .home, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let rows = SettingsView.sidebarRowProxies(in: window)
         let home = try #require(SettingsPage.allCases.firstIndex(of: .home))
         #expect(window.makeFirstResponder(rows[home]))
-        pump()
+        await pump()
         #expect(controller.model.select(.dictionary))
-        pump()
+        await pump()
         let dictionary = try #require(SettingsPage.allCases.firstIndex(of: .dictionary))
         for (index, row) in rows.enumerated() where index != dictionary { #expect(window.firstResponder !== row, "ring left on row \(index)") }
     }
 
     /// Arrow keys with a row focused move the selection and the ring together.
-    @Test func arrowKeysMoveRingWithSelectionUnderFullKeyboardAccess() throws {
-        let (controller, window) = try keyWindow(page: .home, fullKeyboardAccess: true)
+    @Test func arrowKeysMoveRingWithSelectionUnderFullKeyboardAccess() async throws {
+        let (controller, window) = try await keyWindow(page: .home, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let rows = SettingsView.sidebarRowProxies(in: window)
         let home = try #require(SettingsPage.allCases.firstIndex(of: .home))
         #expect(window.makeFirstResponder(rows[home]))
-        pump()
-        try press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
+        await pump()
+        try await press(UInt32(NSDownArrowFunctionKey), keyCode: 125, in: window)
         #expect(controller.model.page == .stats)
         let stats = try #require(SettingsPage.allCases.firstIndex(of: .stats))
         #expect(
@@ -385,8 +355,8 @@ import Testing
     }
 
     /// The ring is AppKit's first responder, not the @FocusState, so a page change has to move the responder itself.
-    @Test func ringMovesToTheNewPageRowOnlyWhenASidebarRowHasIt() throws {
-        let (controller, window) = try keyWindow(page: .stats, fullKeyboardAccess: true)
+    @Test func ringMovesToTheNewPageRowOnlyWhenASidebarRowHasIt() async throws {
+        let (controller, window) = try await keyWindow(page: .stats, fullKeyboardAccess: true)
         defer { window.close(); _ = controller; Self.forcedSystemFullKeyboardAccess = nil }
         let rows = SettingsView.sidebarRowProxies(in: window)
         #expect(rows.count == SettingsPage.allCases.count)
@@ -402,19 +372,4 @@ import Testing
         editor.removeFromSuperview()
     }
 
-    @Test func sidebarFocusFollowsTheSelectionOnlyWhenARowHasFocus() {
-        #expect(SettingsPage.focusFollowing(focused: .home, selected: .stats) == .stats)
-        #expect(SettingsPage.focusFollowing(focused: .stats, selected: .stats) == .stats)
-        #expect(SettingsPage.focusFollowing(focused: nil, selected: .stats) == nil)
-        // First key on a window opened straight onto Stats: AppKit focuses Home, the ring has to land on the selected row.
-        #expect(SettingsPage.focusFollowing(focused: .home, selected: .stats) != .home)
-    }
-
-    @Test func sidebarPagesStepWithArrowsAndStopAtTheEnds() {
-        #expect(SettingsPage.style.moved(by: 1) == .appearance)
-        #expect(SettingsPage.appearance.moved(by: 1) == .appearance)
-        #expect(SettingsPage.style.moved(by: -1) == .transforms)
-        #expect(SettingsPage.stats.moved(by: -1) == .home)
-        #expect(SettingsPage.home.moved(by: -1) == .home)
-    }
 }

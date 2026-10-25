@@ -20,7 +20,7 @@ extension SettingsView {
             }
             DesignRow(
                 title: "Language",
-                detail: model.dictationLanguage == .auto ? DictationLanguageSetting.autoDetail : DictationLanguageSetting.detail
+                detail: model.dictationLanguage.detailText
             ) {
                 DesignPopup(
                     title: "Language",

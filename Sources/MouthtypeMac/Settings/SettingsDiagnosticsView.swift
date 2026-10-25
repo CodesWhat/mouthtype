@@ -32,7 +32,7 @@ struct SettingsDiagnosticsView: View {
                         case .absent, .failed:
                             Button("Download…") {
                                 let target = cleaner.downloadTarget
-                                if CleanupMenuSection.askToDownload(name: target.modelName, sizeMB: target.downloadSizeMB) { target.startDownload() }
+                                if CleanupModelDownloadConfirmation.askToDownload(name: target.modelName, sizeMB: target.downloadSizeMB) { target.startDownload() }
                             }.buttonStyle(.designSecondary).fixedSize()
                         case .downloading: Button("Cancel download") { cleaner.cancelDownload() }.buttonStyle(.designSecondary).fixedSize()
                         default: EmptyView()

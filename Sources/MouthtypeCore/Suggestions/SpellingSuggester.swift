@@ -221,30 +221,6 @@ private struct Run {
         }?.key
     }
 
-    /// Identity of a multi-word heard form the way the dictionary replacer matches it: the words plus the literal
-    /// separators between them (whitespace runs collapse to one space), so `git-hub` and `git hub` stay distinct.
-    static func usageKey(_ source: String, words: ArraySlice<Word>) -> String {
-        var key = ""
-        var prev: Word?
-        for w in words {
-            if let p = prev {
-                key += "\u{1}" + collapseWhitespace(String(source[p.end..<w.start])) + "\u{1}"
-            }
-            key += w.lower
-            prev = w
-        }
-        return key
-    }
-
-    static func collapseWhitespace(_ s: String) -> String {
-        var out = ""
-        var inSpace = false
-        for ch in s.lowercased() {
-            if ch.isWhitespace { if !inSpace { out.append(" ") }; inSpace = true } else { out.append(ch); inSpace = false }
-        }
-        return out
-    }
-
     /// 0 or 1 when the sequences are equal or one insert, delete or substitution apart, otherwise nil. No allocation.
     static func withinOneEdit(_ a: [Unicode.Scalar], _ b: [Unicode.Scalar]) -> Int? {
         let (n, m) = (a.count, b.count)
@@ -349,18 +325,11 @@ private struct Run {
         var unigrams: [String: Hits] = [:]
         var phraseHits: [String: Hits] = [:]
         var usageHits: [String: Hits] = [:]
-        // Saved multi-word heard forms are counted by literal separators, separately from compound-join eligibility.
-        var usageKeys = Set<String>()
-        var usageFirstWords = Set<String>()
-        var usageLengths = Set<Int>()
-        for rule in rules {
-            let ws = tokenize(rule.heard)
-            guard ws.count >= 2, ws.count <= 8 else { continue }
-            usageKeys.insert(Self.usageKey(rule.heard, words: ws[...]))
-            usageFirstWords.insert(ws[0].lower)
-            usageLengths.insert(ws.count)
-        }
-        let usageSorted = usageLengths.sorted()
+        // Count literal heard forms with the dictionary's matcher, including boundary apostrophes and separators.
+        let usageForms = rules.map(\.heard).filter { !tokenize($0).isEmpty }
+        let usageMatcher = PhraseMatcher(patterns: usageForms)
+        let usageKeys = usageForms.map(PhraseKey.normalized)
+        let usageLengths = usageForms.map { tokenize($0).count }
         let phraseLengths = [2, 3]
         var minCompact = Int.max, maxCompact = 0
         for t in targets where t.compact.count >= 6 { minCompact = min(minCompact, t.compact.count); maxCompact = max(maxCompact, t.compact.count) }
@@ -403,10 +372,19 @@ private struct Run {
                     }
                 }
             }
-            for n in usageSorted where words.count >= n {
-                for wi in 0...(words.count - n) where usageFirstWords.contains(words[wi].lower) {
-                    let key = Self.usageKey(takes[ti].rawText, words: words[wi..<(wi + n)])
-                    if usageKeys.contains(key) { usageHits[key, default: Hits()].add(Position(take: ti, word: wi, length: n)) }
+            if !usageMatcher.isEmpty, !words.isEmpty {
+                let source = takes[ti].rawText
+                let chars = Array(source)
+                let indices = Array(source.indices)
+                for match in usageMatcher.allMatches(chars, lower: TextScan.lowered(chars)) {
+                    let start = indices[match.range.lowerBound]
+                    var lo = 0, hi = words.count
+                    while lo < hi {
+                        let mid = lo + (hi - lo) / 2
+                        if words[mid].end <= start { lo = mid + 1 } else { hi = mid }
+                    }
+                    let position = Position(take: ti, word: min(lo, words.count - 1), length: usageLengths[match.pattern])
+                    usageHits[usageKeys[match.pattern], default: Hits()].add(position)
                 }
             }
         }
@@ -417,7 +395,7 @@ private struct Run {
         joined(phraseHits: phraseHits, targets: targets, savedHeard: savedHeard)
         if Task.isCancelled { return [] }
         fromCorrections(savedHeard: savedHeard)
-        hazards(unigrams: unigrams, usageHits: usageHits)
+        hazards(usageHits: usageHits)
         if Task.isCancelled { return [] }
         return ranked(limit: limit)
     }
@@ -572,12 +550,11 @@ private struct Run {
 
     // MARK: 4: hazards
 
-    mutating func hazards(unigrams: [String: Hits], usageHits: [String: Hits]) {
+    mutating func hazards(usageHits: [String: Hits]) {
         for rule in rules where !rule.starred {
             let heard = Self.norm(rule.heard)
             guard !heard.isEmpty, !rule.written.isEmpty else { continue }
-            let ws = tokenize(rule.heard)
-            let hits = ws.count >= 2 ? usageHits[Self.usageKey(rule.heard, words: ws[...])] : unigrams[heard]
+            let hits = usageHits[PhraseKey.normalized(rule.heard)]
             let count = hits?.count ?? 0
             if OrdinaryWords.warning(for: rule) != nil {
                 let ev = hits.map(evidence) ?? []

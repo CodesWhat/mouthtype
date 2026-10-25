@@ -10,14 +10,35 @@ import MouthtypeCore
         return (UserDefaults(suiteName: name)!, name)
     }
 
-    @Test func pickerListsAutoEnglishThenTheOtherTwentyFourByName() {
+    @Test func languageChangesNotifyTheEngineAfterSavingTheChoice() {
+        let (defaults, name) = preferences()
+        defer { defaults.removePersistentDomain(forName: name) }
+        var seen: [DictationLanguageSetting] = []
+        let model = SettingsModel(
+            defaults: defaults,
+            onDictationLanguageChanged: { choice in
+                #expect(DictationLanguageSetting.load(defaults) == choice)
+                seen.append(choice)
+            })
+        model.setDictationLanguage(.explicit(.hindi))
+        model.setDictationLanguage(.explicit(.hindi))
+        model.setDictationLanguage(.auto)
+        #expect(seen == [.explicit(.hindi), .auto])
+        DictationLanguageSetting.set(.explicit(.tamil), in: defaults)
+        model.refresh()
+        #expect(seen == [.explicit(.hindi), .auto, .explicit(.tamil)])
+        model.refresh()
+        #expect(seen.count == 3)
+    }
+
+    @Test func pickerListsAutoEnglishThenTheOtherLanguagesByName() {
         let choices = DictationLanguageSetting.pickerChoices
-        #expect(choices.count == 26)
+        #expect(choices.count == 29)
         #expect(choices[0].label == "Auto-detect" && choices[0].value == "auto")
         #expect(choices[1].label == "English" && choices[1].value == "en")
         let rest = choices.dropFirst(2).map(\.label)
         #expect(rest == rest.sorted())
-        #expect(Set(choices.map(\.value)).count == 26)
+        #expect(Set(choices.map(\.value)).count == 29)
         #expect(choices.allSatisfy { !$0.label.contains("\u{2014}") })
     }
 
@@ -27,6 +48,9 @@ import MouthtypeCore
         #expect(labels["el"] == "Greek (Beta)")
         #expect(labels["de"] == "German")
         #expect(labels["en"] == "English")
+        #expect(labels["ja"] == "Japanese (Beta)")
+        #expect(labels["hi"] == "Hindi (Beta)")
+        #expect(labels["ta"] == "Tamil (Beta)")
     }
 
     @Test func pickerValuesRoundTrip() {

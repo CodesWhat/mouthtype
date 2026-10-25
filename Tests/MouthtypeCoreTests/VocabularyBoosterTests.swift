@@ -330,6 +330,16 @@ private let maya = VocabularyBias(terms: ["Maya"])
         #expect(out == "Meet John, FluidAudio.")
     }
 
+    @Test(arguments: [
+        ("Try open, AI today", "Try Open AI today", "Try Open AI today"),
+        ("Try Open, ai today", "Try Open AI today", "Try Open AI today"),
+        ("Try open AI, today", "Try Open AI today", "Try Open AI, today"),
+        ("Try (open, AI), today", "Try Open AI today", "Try (Open AI), today"),
+    ])
+    func punctuationStaysOutsideATermAcrossAnAlignmentBoundary(example: (String, String, String)) {
+        #expect(VocabularyBooster.restoringPunctuation(original: example.0, boosted: example.1, known: multiWordVocabulary) == example.2)
+    }
+
     @Test func singleWordReplacementsStillWorkWithAVocabulary() {
         let known = multiWordVocabulary
         #expect(VocabularyBooster.restoringPunctuation(original: "Meet Jon, Sara.", boosted: "Meet John Sarah", known: known) == "Meet John, Sarah.")

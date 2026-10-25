@@ -3,7 +3,7 @@ import MouthtypeCore
 
 @MainActor
 public final class AppDelegate: NSObject, NSApplicationDelegate {
-    private let engineHost = EngineHost()
+    private let engineHost = EngineHost(engineID: DictationLanguageSetting.load().request().speechEngineID)
     private let cleanerHost = CleanupSelection(
         fast: CleanerCatalog.makeSmartCleanup(level: .light), thorough: CleanerCatalog.makeSmartCleanup(level: .medium),
         level: { SmartTestOptions.modelLevel(in: CommandLine.arguments, saved: CleanupSettings.load().level) },
@@ -49,11 +49,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
         }, changed: { [weak self] in self?.appUpdater.refreshActivity() },
         styleFor: { selection in
-            // The tone that applies to the focused app: its rule, else the global default.
             let styles = (try? AppCleanupStyles.load()) ?? AppCleanupStyles()
-            return styles.resolve(
-                bundleID: NSRunningApplication(processIdentifier: selection.pid)?.bundleIdentifier,
-                fallback: CleanupSettings.load().style)
+            return await SelectionCleanupStyle.resolve(
+                selection, bundleID: NSRunningApplication(processIdentifier: selection.pid)?.bundleIdentifier,
+                styles: styles, fallback: CleanupSettings.load().style, focus: AccessibilityFocusReader())
         })
     private lazy var selectionCleanupWindow = SelectionCleanupWindow(model: selectionCleanupModel)
     private lazy var fileTranscriptionModel: FileTranscriptionModel = FileTranscriptionModel(
@@ -63,11 +62,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
             // A dictation in an editor leaves its code names on the shared engine. An import gets the saved words only.
             let bias = VocabularyBoostSetting.bias(enabled: VocabularyBoostSetting.isEnabled(), rules: self.dictionary.dictionary())
+            let language = DictationLanguageSetting.load().request()
             return AudioFileTranscription(
                 decoder: MacAudioFileDecoder(), engine: engine,
                 beforeTranscribing: {
                     await (engine as? any VocabularyBiasing)?.setVocabularyBias(bias)
-                })
+                }, language: { language })
         },
         canBegin: { [weak self] in
             guard let self, !self.isTerminating else { return false }
@@ -92,6 +92,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 onSkinChanged: { [weak self] kind in self?.pill?.setSkin(kind) },
                 onRecordingModeChanged: { [weak self] mode in self?.activateRecordingMode(mode) },
                 onMouseTriggerChanged: { [weak self] trigger in self?.activateMouseTrigger(trigger) },
+                onDictationLanguageChanged: { [weak self] choice in self?.engineHost.select(language: choice.request()) },
                 isRecording: { [weak self] in self?.dictation?.phase == .recording },
                 onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
                 onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
@@ -307,7 +308,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         cards.onDismiss = { [weak presenter] in presenter?.userDismissed() }
         cardController = cards
         cardPresenter = presenter
-        ProfanityRemover.prewarm()
+        let cleanupSettings = CleanupSettings.load()
+        if cleanupSettings.enabled, cleanupSettings.style == .formal { ProfanityRemover.prewarm() }
         var pipeline = DictationPipeline(
             store: store.map(TranscriptStoreWriter.init), archive: archive, engine: engine, clock: SystemDictationClock()
         )
