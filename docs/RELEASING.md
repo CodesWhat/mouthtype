@@ -38,6 +38,8 @@ Notarization uses the App Store Connect API key by default. The helper reads `AS
 > [!NOTE]
 > If Apple rejects a submission, inspect the saved notarization result and log rather than forcing acceptance. If the bounded wait expires, the submission continues at Apple; inspect its saved submission ID before attempting another upload.
 
+`--output-dir` is the parent: the helper writes the artifacts into `<output-dir>/<version>/`, so every later step points at that nested directory.
+
 Attach the final DMG, ZIP, their SHA-256 files and release manifest to the GitHub release for provenance. The website provides the public downloads. Read the uploaded release back and compare a downloaded artifact’s checksum. Keep first-install, third-party-app and recognition limitations visible in release notes; do not describe unperformed checks as passed.
 
 ### 4. Stage the public release
@@ -48,6 +50,8 @@ The ZIP enclosure is EdDSA signed; the DMG is not part of the feed. The feed mus
 
 Keep `build/public-release-assets` across releases. Staging preserves older versioned downloads, refuses changes to an existing versioned file and replaces only the current signed feed. Back up published release outputs; the retained directory is deployment state, not disposable compiler scratch. The website’s `/download/file` redirect must point at the release’s `.dmg` (not the ZIP), and `/source` at its source tarball, for the same release and build as the signed appcast. `publish-website.py` rejects a release whose manifest has a DMG when `/download/file` targets anything else, and validates every retained DMG’s checksum and notarization record.
 
+`stage-public-release.py` also requires HEAD checked out at the exact release tag, because it runs the same source check as packaging.
+
 ### 5. Publish the website
 
 Publish with `scripts/publish-website.py --public-dir` pointing at those retained artifacts. Without `--production` this validates only. With `--production` it exports only committed `website/` files plus the checked public artifacts and deploys them to the existing Mouthtype Vercel project. It never uploads the app repository, local plans or signing credentials.
@@ -56,6 +60,12 @@ Publish with `scripts/publish-website.py --public-dir` pointing at those retaine
 > Do not replace this with a bare site deployment that omits older release artifacts.
 
 Vercel preview/deployment authentication remains enabled; the public custom domain serves the download. Versioned release URLs are immutable, while `/download`, `/source` and the feed must not be cached as immutable.
+
+The GitHub release is created before the source tarball exists. After uploading the tarball, dispatch `release-sign.yml` from main with the tag so the tarball gets its cosign bundle too.
+
+### 5b. Publish the docs site
+
+docs.mouthtype.app is a separate Vercel project, `mouthtype-docs`, with root `apps/docs`. Nothing deploys it automatically, so publish it by hand for each release. From the repository root on the release tree, run `vercel link --yes --scope codeswhat --project mouthtype-docs`, then `vercel build --prod --yes`, then `vercel deploy --prebuilt --prod --yes --scope codeswhat`. Afterward remove the root `.vercel/` directory and revert any `.gitignore` line the CLI added. Check that `reference/known-limits/` on the deployed site names the new version.
 
 ### 6. Verify after publishing
 
