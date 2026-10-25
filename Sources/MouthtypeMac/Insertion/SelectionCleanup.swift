@@ -186,12 +186,33 @@ private final class OnceResume: @unchecked Sendable {
     }
 }
 
+@MainActor enum SelectionCleanupStyle {
+    static func resolve(
+        _ selection: SelectedText, bundleID: String?, styles: AppCleanupStyles, fallback: StyleOptions,
+        focus: any FocusReading, budget: TimeInterval = 0.15
+    ) async -> StyleOptions {
+        var host: String?
+        var snapshot = focus.snapshotApplication()
+        if snapshot.pid == selection.pid, snapshot.bundleID == bundleID, !snapshot.isSecure, !focus.isSecureInputEnabled,
+            WebsiteContext.supports(bundleID: bundleID), let element = selection.element
+        {
+            // Selection capture already validated this element's ownership and refused secure fields.
+            snapshot.element = element
+            snapshot.focusedOwnerPID = selection.pid
+            if let read = focus.websiteHostReader(for: snapshot) {
+                host = await DictationController.boundedRead(read, budget: budget)
+            }
+        }
+        return styles.resolve(bundleID: bundleID, websiteHost: host, fallback: fallback)
+    }
+}
+
 @MainActor @Observable final class SelectionCleanupModel {
     private let editor: any SelectionEditing
     private let transformer: (any SelectionTransforming)?
     private let busy: () -> Bool
     private let changed: () -> Void
-    private let styleFor: (SelectedText) -> StyleOptions
+    private let styleFor: (SelectedText) async -> StyleOptions
     private let appName: (pid_t) -> String?
     private let captureBudget: TimeInterval
     private var captured: SelectedText?
@@ -241,7 +262,7 @@ private final class OnceResume: @unchecked Sendable {
     init(
         editor: any SelectionEditing, transformer: (any SelectionTransforming)? = nil,
         busy: @escaping () -> Bool = { false }, changed: @escaping () -> Void = {},
-        styleFor: @escaping (SelectedText) -> StyleOptions = { _ in .formal },
+        styleFor: @escaping (SelectedText) async -> StyleOptions = { _ in .formal },
         appName: @escaping (pid_t) -> String? = { NSRunningApplication(processIdentifier: $0)?.localizedName },
         captureBudget: TimeInterval = 0.15
     ) {
@@ -278,9 +299,11 @@ private final class OnceResume: @unchecked Sendable {
     }
 
     /// Captures the selection (time-boxed like the menu read) and previews either Basic cleanup or, when `requested` is set,
-    /// an AI transform. Basic cleanup runs the pipeline with the focused app's tone.
-    func prepare(transform requested: TextTransform? = nil) {
+    /// an AI transform. Basic cleanup runs the pipeline with the app or website's tone.
+    func prepare(transform requested: TextTransform? = nil) async {
+        guard !Task.isCancelled else { return }
         cancel()
+        let id = generation
         let expected = menuSnapshot
         menuSnapshot = nil
         guard !busy() else { message = "Finish the current dictation or file job first."; return }
@@ -290,10 +313,8 @@ private final class OnceResume: @unchecked Sendable {
         }
         do {
             let selection: SelectedText
-            do { selection = try editor.capture(budget: captureBudget) } catch SelectionCleanupError.timedOut {
-                message = "Couldn’t read the selection in time. Try again."
-                return
-            }
+            selection = try await editor.captureOffMain(budget: captureBudget)
+            guard id == generation, !Task.isCancelled else { return }
             if let expected, selection != expected {
                 sourceApp = appName(expected.pid)
                 selectionChanged = true
@@ -302,7 +323,10 @@ private final class OnceResume: @unchecked Sendable {
                 return
             }
             guard !selection.text.isEmpty, selection.text.utf16.count <= 16_000 else { throw SelectionCleanupError.unavailable }
-            style = styleFor(selection)
+            let resolvedStyle = await styleFor(selection)
+            guard id == generation, !Task.isCancelled else { return }
+            guard !busy() else { message = "Finish the current dictation or file job first."; return }
+            style = resolvedStyle
             if let requested {
                 captured = selection
                 sourceApp = appName(selection.pid)
@@ -320,6 +344,11 @@ private final class OnceResume: @unchecked Sendable {
             message = Self.basicMessage
             changed()
         } catch {
+            guard id == generation, !Task.isCancelled else { return }
+            if let error = error as? SelectionCleanupError, error == .timedOut {
+                message = "Couldn’t read the selection in time. Try again."
+                return
+            }
             message = "Select up to 16,000 characters in an accessible text field, then try again. Password fields aren’t read."
         }
     }

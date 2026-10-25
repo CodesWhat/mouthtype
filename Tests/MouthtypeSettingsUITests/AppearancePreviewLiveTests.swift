@@ -7,17 +7,17 @@ import Testing
 /// window server never reports `.visible` (occlusionState stays 8192 even after makeKeyAndOrderFront and activating the
 /// app), so `windowOnscreen` falls back to the window's own `isVisible`.
 @MainActor @Suite(.serialized) struct AppearancePreviewLiveTests {
-    private func onscreen(_ body: () throws -> Void) rethrows {
+    private func onscreen(_ body: () async throws -> Void) async rethrows {
         let original = PillPreviewStage.windowOnscreen
         PillPreviewStage.windowOnscreen = { window in
             guard let window else { return false }
             return window.isVisible && !window.isMiniaturized
         }
         defer { PillPreviewStage.windowOnscreen = original }
-        try body()
+        try await body()
     }
 
-    private func spin(_ seconds: TimeInterval) { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
+    private func spin(_ seconds: TimeInterval) async { try? await Task.sleep(for: .seconds(seconds)) }
 
     private func stage(in view: NSView) -> PillPreviewStage? {
         if let found = view as? PillPreviewStage { return found }
@@ -26,7 +26,7 @@ import Testing
     }
 
     /// A shown window holding the SwiftUI stage, the way the Settings window holds it.
-    private func shownStage(_ kind: PillSkinKind) throws -> (PillPreviewStage, NSWindow) {
+    private func shownStage(_ kind: PillSkinKind) async throws -> (PillPreviewStage, NSWindow) {
         FontRegistry.registerBundledFonts()
         let size = NSSize(width: 480, height: 200)
         let host = NSHostingView(
@@ -37,7 +37,7 @@ import Testing
         window.contentView = host
         window.makeKeyAndOrderFront(nil)
         host.layoutSubtreeIfNeeded()
-        spin(0.2)
+        await spin(0.2)
         return (try #require(stage(in: host)), window)
     }
 
@@ -54,38 +54,38 @@ import Testing
     private func dotWidth(_ kind: PillSkinKind, _ scale: PillScale) -> CGFloat { kind.pillHeight * scale.factor }
 
     @Test(arguments: PillSkinKind.allCases)
-    func everySkinReachesRecordingWidthAndKeepsDrivingInARealWindow(kind: PillSkinKind) throws {
-        try onscreen {
-            let (stage, window) = try shownStage(kind)
+    func everySkinReachesRecordingWidthAndKeepsDrivingInARealWindow(kind: PillSkinKind) async throws {
+        try await onscreen {
+            let (stage, window) = try await shownStage(kind)
             defer { stage.shutDown(); window.orderOut(nil); window.close() }
             #expect(window.isVisible, "\(kind) window visible")
             #expect(stage.isAnimating, "\(kind) link running")
             #expect(!stage.showsSnapshot, "\(kind) shows the live skin")
             let skin = try #require(stage.skin)
-            spin(0.5)
+            await spin(0.5)
             if let width = bodyWidth(skin) {
                 #expect(width > dotWidth(kind, .standard) + 1, "\(kind) at recording width, not the dot (\(width))")
             }
             let before = stage.framesDriven
-            spin(0.5)
+            await spin(0.5)
             #expect(stage.framesDriven > before, "\(kind) frames driven")
             #expect(skin.layer?.speed == 1, "\(kind) layers running")
         }
     }
 
-    @Test func matrixLampBreathesWhileTheStageRuns() throws {
-        try onscreen {
-            let (stage, window) = try shownStage(.matrix)
+    @Test func matrixLampBreathesWhileTheStageRuns() async throws {
+        try await onscreen {
+            let (stage, window) = try await shownStage(.matrix)
             defer { stage.shutDown(); window.orderOut(nil); window.close() }
             let matrix = try #require(stage.skin as? MatrixPillView)
-            spin(0.3)
+            await spin(0.3)
             #expect(matrix.lampAnimation != nil)
             #expect(stage.skin?.layer?.speed == 1)
         }
     }
 
-    @Test func theEntranceWaitsForTheStageToBeOnScreen() throws {
-        try onscreen {
+    @Test func theEntranceWaitsForTheStageToBeOnScreen() async throws {
+        try await onscreen {
             FontRegistry.registerBundledFonts()
             let stage = PillPreviewStage(frame: NSRect(origin: .zero, size: PreviewFit.canvas))
             stage.configure(kind: .classic, scale: .standard, readout: .amber, wallpaper: .dark)
@@ -96,7 +96,7 @@ import Testing
             window.contentView?.addSubview(stage)
             window.makeKeyAndOrderFront(nil)
             NotificationCenter.default.post(name: NSWindow.didChangeOcclusionStateNotification, object: window)
-            spin(0.3)
+            await spin(0.3)
             defer { stage.shutDown(); window.orderOut(nil); window.close() }
             #expect(stage.isAnimating)
             #expect(classic.capsuleWidth > dotWidth(.classic, .standard) + 1)
@@ -105,8 +105,8 @@ import Testing
 
     /// Classic's appear() places the pill as a dot, so the recording state has to come after it. This is the order the
     /// stage used to get wrong: state first leaves the body at the dot width for good.
-    @Test func classicNeedsAppearBeforeTheRecordingState() throws {
-        try onscreen {
+    @Test func classicNeedsAppearBeforeTheRecordingState() async throws {
+        try await onscreen {
             FontRegistry.registerBundledFonts()
             let frame = NSRect(x: 0, y: 0, width: PreviewFit.canvas.width, height: 60)
             let right = try #require(try PillSkinFactory.make(.classic, frame: frame, scale: .standard) as? ClassicPillView)
@@ -120,16 +120,16 @@ import Testing
         }
     }
 
-    @Test func switchingPagesBackStartsTheLinkAgain() throws {
-        try onscreen {
-            let (stage, window) = try shownStage(.glass)
+    @Test func switchingPagesBackStartsTheLinkAgain() async throws {
+        try await onscreen {
+            let (stage, window) = try await shownStage(.glass)
             defer { stage.shutDown(); window.orderOut(nil); window.close() }
             #expect(stage.isAnimating)
             stage.pageVisible = false
             #expect(!stage.isAnimating)
             stage.pageVisible = true
             #expect(stage.isAnimating)
-            spin(0.4)
+            await spin(0.4)
             #expect(stage.skin?.layer?.speed == 1)
         }
     }

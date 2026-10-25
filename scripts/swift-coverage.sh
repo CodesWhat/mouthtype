@@ -27,3 +27,13 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
     echo "Total line coverage: $total" >> "$GITHUB_STEP_SUMMARY"
     echo "![Swift line coverage](https://img.shields.io/badge/Swift_line_coverage-${total%\%}%25-blue)" >> "$GITHUB_STEP_SUMMARY"
 fi
+
+read -r lines missed < <(awk '/^TOTAL/ {print $(NF-5), $(NF-4)}' coverage-report.txt)
+[[ "$lines" =~ ^[0-9]+$ && "$missed" =~ ^[0-9]+$ ]] && (( lines > 0 && missed <= lines )) || {
+    echo "invalid total line counts" >&2
+    exit 1
+}
+if ! awk -v lines="$lines" -v missed="$missed" 'BEGIN {exit (100 * (lines - missed) < 80 * lines)}'; then
+    echo "Swift line coverage is below the 80% floor ($((lines - missed))/$lines lines)." >&2
+    exit 1
+fi

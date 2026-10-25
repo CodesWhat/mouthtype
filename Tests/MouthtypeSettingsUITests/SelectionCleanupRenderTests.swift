@@ -4,10 +4,10 @@ import Testing
 
 @MainActor @Suite(.serialized) struct SelectionCleanupRenderTests {
     @Test(arguments: [false, true], ["light", "dark"])
-    func selectionStartsInCompactWindow(long: Bool, appearance: String) throws {
+    func selectionStartsInCompactWindow(long: Bool, appearance: String) async throws {
         let text = long ? String(repeating: "hello world ", count: 1_000) : "um hello  world"
         let model = SelectionCleanupModel(editor: PreviewSelectionEditor(text: text))
-        model.prepare()
+        await model.prepare()
         let controller = SelectionCleanupWindow(model: model)
         let window = try #require(controller.window)
         window.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
@@ -38,9 +38,9 @@ import Testing
         }
     }
 
-    @Test func editingPreviewGrowsAndShrinksTheSameWindow() throws {
+    @Test func editingPreviewGrowsAndShrinksTheSameWindow() async throws {
         let model = SelectionCleanupModel(editor: PreviewSelectionEditor(text: "um hello  world"))
-        model.prepare()
+        await model.prepare()
         let controller = SelectionCleanupWindow(model: model)
         let view = try #require(controller.window?.contentView)
         let shortHeight = view.frame.height
@@ -57,9 +57,9 @@ import Testing
     }
 
     @Test(arguments: [260.0, 300.0, 400.0])
-    func longSelectionFitsShortDisplay(heightLimit: CGFloat) throws {
+    func longSelectionFitsShortDisplay(heightLimit: CGFloat) async throws {
         let model = SelectionCleanupModel(editor: PreviewSelectionEditor(text: String(repeating: "hello world ", count: 1_000)))
-        model.prepare()
+        await model.prepare()
         model.accept()
         let controller = SelectionCleanupWindow(model: model, maximumContentHeight: heightLimit)
         let view = try #require(controller.window?.contentView)
