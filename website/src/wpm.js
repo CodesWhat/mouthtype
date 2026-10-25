@@ -48,6 +48,8 @@ if (card) {
   };
   const sentenceEl = $("wpm-sentence");
   const input = $("wpm-input");
+  const typeStart = $("wpm-type-start");
+  const typeCountdown = $("wpm-type-countdown");
   const hint = $("wpm-hint");
   const typeLive = $("wpm-type-live");
   const typeStats = $("wpm-type-stats");
@@ -59,6 +61,7 @@ if (card) {
   const live = $("wpm-live");
 
   const typeHintText = hint.innerHTML;
+  const typePlaceholder = input.placeholder;
   let target = "";
   let step = "type";
   let typed = null; // { wpm, accuracy }
@@ -70,6 +73,8 @@ if (card) {
   let keystrokes = 0;
   let misses = 0;
   let typingDone = false;
+  let typingReady = false;
+  let countdownTimer;
   let typeTimer;
 
   // Speaking run state.
@@ -98,7 +103,7 @@ if (card) {
         else span.dataset.bad = "";
       } else {
         span.textContent = target[i];
-        if (i === value.length) span.dataset.next = "";
+        if (i === value.length && typingReady && !typingDone) span.dataset.next = "";
       }
       frag.append(span);
     }
@@ -113,6 +118,7 @@ if (card) {
   }
 
   function setStep(next) {
+    if (next !== "type" && countdownTimer !== undefined) resetTyping();
     step = next;
     for (const [name, panel] of Object.entries(panels)) panel.hidden = name !== next;
     for (const button of stepButtons) {
@@ -123,8 +129,10 @@ if (card) {
   }
 
   function focusStep(next) {
-    if (next === "type") input.focus();
-    else if (next === "speak") speakButton.focus();
+    if (next === "type") {
+      if (typingReady && !typingDone) input.focus();
+      else if (!typingDone) typeStart.focus();
+    } else if (next === "speak") speakButton.focus();
     else {
       const body = panels.result.querySelector(".wpm-a-result");
       body.tabIndex = -1;
@@ -160,17 +168,49 @@ if (card) {
 
   function resetTyping() {
     clearInterval(typeTimer);
+    clearTimeout(countdownTimer);
+    countdownTimer = undefined;
     prev = "";
     startedAt = null;
     keystrokes = 0;
     misses = 0;
     typingDone = false;
+    typingReady = false;
+    typeStart.hidden = false;
+    typeStart.disabled = false;
+    typeCountdown.hidden = true;
+    typeCountdown.textContent = "";
     input.value = "";
-    input.disabled = false;
+    input.disabled = true;
+    input.placeholder = typePlaceholder;
     hint.innerHTML = typeHintText;
     renderSentence("");
     renderTypeLive();
   }
+
+  typeStart.addEventListener("click", () => {
+    if (typingReady || typingDone || countdownTimer !== undefined) return;
+    typeStart.disabled = true;
+    typeCountdown.hidden = false;
+    const readyAt = now() + 3000;
+    function tick() {
+      const remaining = Math.ceil((readyAt - now()) / 1000);
+      if (remaining > 0) {
+        typeCountdown.textContent = `Starting in ${remaining}…`;
+        countdownTimer = setTimeout(tick, 1000);
+        return;
+      }
+      countdownTimer = undefined;
+      typingReady = true;
+      typeStart.hidden = true;
+      typeCountdown.textContent = "Go!";
+      input.disabled = false;
+      input.placeholder = "Type the sentence above.";
+      renderSentence(prev);
+      input.focus();
+    }
+    tick();
+  });
 
   function startTyping() {
     if (startedAt !== null) return;
@@ -186,6 +226,7 @@ if (card) {
       resetTyping();
       hint.textContent = TRY_AGAIN;
       announce(TRY_AGAIN);
+      typeStart.focus();
       return;
     }
     const acc = accuracy(keystrokes, misses);
@@ -200,7 +241,7 @@ if (card) {
   }
 
   input.addEventListener("keydown", (event) => {
-    if (typingDone) return;
+    if (!typingReady || typingDone) return;
     if (event.key === "Enter") {
       event.preventDefault();
       if (startedAt !== null) finishTyping();
@@ -212,7 +253,7 @@ if (card) {
     input.addEventListener(type, (event) => event.preventDefault());
   }
   input.addEventListener("input", () => {
-    if (typingDone) return;
+    if (!typingReady || typingDone) return;
     const value = input.value.replace(/[\r\n]+/g, "");
     if (value !== input.value) input.value = value;
     if (value.length > 0) startTyping();
@@ -376,6 +417,6 @@ if (card) {
   });
 
   setTarget(pickSentence(""));
-  renderTypeLive();
+  resetTyping();
   setStep("type");
 }
