@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
     private let onSkinChanged: @MainActor (PillSkinKind) -> Void
     private let onRecordingModeChanged: @MainActor (RecordingMode) -> String?
     private let onMouseTriggerChanged: @MainActor (MouseTrigger) -> String?
+    private let onDictationLanguageChanged: @MainActor (DictationLanguageSetting) -> Void
     private let isRecording: @MainActor () -> Bool
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
@@ -75,6 +76,7 @@ import UniformTypeIdentifiers
         onSkinChanged: @escaping @MainActor (PillSkinKind) -> Void = { _ in },
         onRecordingModeChanged: @escaping @MainActor (RecordingMode) -> String? = { _ in nil },
         onMouseTriggerChanged: @escaping @MainActor (MouseTrigger) -> String? = { _ in nil },
+        onDictationLanguageChanged: @escaping @MainActor (DictationLanguageSetting) -> Void = { _ in },
         isRecording: @escaping @MainActor () -> Bool = { false },
         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
@@ -103,6 +105,7 @@ import UniformTypeIdentifiers
         self.onSkinChanged = onSkinChanged
         self.onRecordingModeChanged = onRecordingModeChanged
         self.onMouseTriggerChanged = onMouseTriggerChanged
+        self.onDictationLanguageChanged = onDictationLanguageChanged
         self.isRecording = isRecording
         self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
         self.onBoostSavedWordsChanged = onBoostSavedWordsChanged
@@ -270,7 +273,11 @@ import UniformTypeIdentifiers
         font = TextFontPreference.current(defaults)
         recordingMode = RecordingModePreference.current(defaults)
         mouseTrigger = MouseTriggerPreference.current(defaults)
-        dictationLanguage = DictationLanguageSetting.load(defaults)
+        let savedLanguage = DictationLanguageSetting.load(defaults)
+        if savedLanguage != dictationLanguage {
+            dictationLanguage = savedLanguage
+            onDictationLanguageChanged(savedLanguage)
+        }
         fontOverrides = TextFontOverrides.load(defaults)
         FontRegistry.ensureRegistered()
         fontFamilies = FontFamilyCache.families()
@@ -459,10 +466,11 @@ import UniformTypeIdentifiers
         learnCorrections = enabled
     }
 
-    /// The next take reads the setting from defaults, so nothing else needs telling.
     func setDictationLanguage(_ value: DictationLanguageSetting) {
+        guard value != dictationLanguage else { return }
         DictationLanguageSetting.set(value, in: defaults)
         dictationLanguage = value
+        onDictationLanguageChanged(value)
     }
 
     /// Fast is English only, so an explicit non-English language shows the note under the level choice.

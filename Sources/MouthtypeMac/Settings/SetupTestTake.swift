@@ -70,7 +70,8 @@ import Observation
         stopRequested = false
         level = 0
         state = .recording
-        task = Task { [weak self] in await self?.run() }
+        let request = language()
+        task = Task { [weak self] in await self?.run(language: request) }
     }
 
     /// Ends a recording early and goes on to transcribe it.
@@ -92,7 +93,7 @@ import Observation
         task = nil
     }
 
-    private func run() async {
+    private func run(language: DictationLanguageRequest) async {
         do {
             try await capture.start(keyDownAtNanos: HostClock.now())
         } catch {
@@ -129,7 +130,7 @@ import Observation
         if SilenceTrimmer.voicedRange(audio.samples) != nil {
             do {
                 let trimmed = SilenceTrimmer.trim(audio.samples)
-                transcript = try await engine.transcribe(samples: trimmed.samples, language: language()).text
+                transcript = try await engine.transcribe(samples: trimmed.samples, language: language).text
             } catch {
                 state = .failed("Recognition failed: \(error.localizedDescription)")
                 return

@@ -305,11 +305,13 @@ final class DictationController {
         let cleanupStyle = appStyles.resolve(bundleID: startFocus.bundleID, fallback: pipeline.settings().style)
         let cleanupLevel = appStyles.resolveLevel(bundleID: startFocus.bundleID)
         let cleanupInstructions = appStyles.resolveInstructions(bundleID: startFocus.bundleID)
+        let languageRequest = pipeline.languageRequest()
         // The last release's capture stop finishes first; the audio unit takes one recording at a time.
         _ = try? await stopping?.value
         var current = DictationSession(
             id: UUID().uuidString, startedAt: clock.date(atNanos: nanos), keyDownAt: nanos, startFocus: startFocus,
-            cleanupStyle: cleanupStyle, cleanupLevel: cleanupLevel, cleanupInstructions: cleanupInstructions
+            cleanupStyle: cleanupStyle, cleanupLevel: cleanupLevel, cleanupInstructions: cleanupInstructions,
+            languageRequest: languageRequest
         )
         phase = .recording
         captureStarting = true
@@ -355,7 +357,7 @@ final class DictationController {
                 readers: .system
             )
             current.editorHints = ContextNamesGatherer.merge(editorNames, screenNames)
-            pipeline.warmEditorBias(current.editorHints)
+            pipeline.warmEditorBias(current.editorHints, language: current.languageRequest)
         }
         current.rowOpen = await pipeline.begin(current, target: startFocus.target)
         // The page URL was read off the main actor while the row opened. It belongs to this recording only, and a read that missed
@@ -490,9 +492,9 @@ final class DictationController {
         if previewEnabled() {
             let capture = capture
             let engine = engine
-            let language = pipeline.languageRequest
+            let language = session.languageRequest ?? pipeline.languageRequest()
             preview.start(
-                source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0, language: language()) },
+                source: { await capture.previewSnapshot(maxSamples: $0) }, recognize: { try await engine.preview(samples: $0, language: language) },
                 update: { [weak self] text in
                     guard let self, self.phase == .recording, self.session?.id == session.id else { return }
                     self.pill.showPreview(text)

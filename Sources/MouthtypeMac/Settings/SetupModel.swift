@@ -101,8 +101,10 @@ import Observation
             case .preparing, .available: state = .preparing
             }
         }
+        let whisper = engine.engineID == WhisperEngine.turboID
         return SetupModelEntry(
-            id: .speech, title: "Speech model", size: "About 480 MB", detail: "Required. Turns your voice into text on this Mac.", state: state)
+            id: .speech, title: "Speech model", size: whisper ? "About 1.6 GB" : "About 480 MB",
+            detail: whisper ? "Required. Whisper Turbo turns your voice into text on this Mac." : "Required. Turns your voice into text on this Mac.", state: state)
     }
 
     private var namesEntry: SetupModelEntry {

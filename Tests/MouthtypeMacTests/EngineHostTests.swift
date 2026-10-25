@@ -15,8 +15,95 @@ private struct StubEngine: Transcriber {
     }
 }
 
+private actor RoutedStubEngine: Transcriber {
+    nonisolated let id: String
+    nonisolated let displayName = "Routed stub"
+    var prepares = 0
+    init(id: String) { self.id = id }
+    func prepare() async throws { prepares += 1 }
+    func transcribe(samples: [Float]) async throws -> Transcription {
+        Transcription(text: "Test sentence.", processingSeconds: 0, engineID: id)
+    }
+}
+
 @MainActor
 @Suite struct EngineHostTests {
+    private func settle(_ host: EngineHost) async {
+        for _ in 0..<500 {
+            if host.state != .loading { return }
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        Issue.record("speech preparation did not finish")
+    }
+
+    @Test func languageChangesPrepareTheRightEngineAndRetainEarlierTakes() async throws {
+        let english = RoutedStubEngine(id: EngineHost.defaultEngineID)
+        let whisper = RoutedStubEngine(id: "whisper-large-v3-turbo")
+        let host = EngineHost(makeEngine: { $0 == english.id ? english : whisper })
+        await host.load()
+        host.select(language: .explicit(.japanese))
+        #expect(host.state == .loading)
+        await settle(host)
+        #expect(host.engine?.id == "whisper-large-v3-turbo")
+        #expect(host.preparedEngine(for: .english)?.id == EngineHost.defaultEngineID)
+        #expect(host.preparedEngine(for: .explicit(.hindi))?.id == "whisper-large-v3-turbo")
+        let adapter = HostEngine(host: host)
+        #expect(try await adapter.transcribe(samples: [0], language: .english).engineID == EngineHost.defaultEngineID)
+        #expect(try await adapter.transcribe(samples: [0], language: .explicit(.tamil)).engineID == "whisper-large-v3-turbo")
+        host.select(language: .english)
+        await settle(host)
+        #expect(host.engine?.id == EngineHost.defaultEngineID)
+        #expect(await english.prepares == 1)
+        #expect(await whisper.prepares == 1)
+    }
+
+    @Test func lateModelProgressCannotReplaceTheNewSelection() async {
+        actor DelayedEngine: PreparationReporting {
+            nonisolated let id = "whisper-large-v3-turbo"
+            nonisolated let displayName = "Delayed"
+            let gate: DownloadGate
+            var completed = false
+            init(gate: DownloadGate) { self.gate = gate }
+            func prepare() async throws {}
+            func prepare(report: @escaping @Sendable (EnginePreparation) async -> Void) async throws {
+                await report(.downloading(fraction: 0.25))
+                await gate.wait()
+                await report(.downloading(fraction: 0.75))
+                completed = true
+            }
+            func transcribe(samples: [Float]) async throws -> Transcription {
+                Transcription(text: "", processingSeconds: 0, engineID: id)
+            }
+        }
+        let gate = DownloadGate()
+        let english = RoutedStubEngine(id: EngineHost.defaultEngineID)
+        let delayed = DelayedEngine(gate: gate)
+        let host = EngineHost(makeEngine: { id in
+            if id == english.id { return english }
+            return delayed
+        })
+        await host.load()
+        host.select(language: .explicit(.hindi))
+        for _ in 0..<200 where host.downloadProgress?.fraction != 0.25 { try? await Task.sleep(for: .milliseconds(5)) }
+        #expect(host.downloadProgress?.fraction == 0.25)
+        host.select(language: .english)
+        await settle(host)
+        await gate.release()
+        for _ in 0..<200 where !(await delayed.completed) { await Task.yield() }
+        #expect(host.engine?.id == EngineHost.defaultEngineID)
+        #expect({ if case .ready(engineID: EngineHost.defaultEngineID, _) = host.state { true } else { false } }())
+        #expect(host.downloadProgress == nil)
+    }
+
+    @Test func anAlreadyPreparedWhisperCanHandleAnEnglishCaller() async throws {
+        let whisper = RoutedStubEngine(id: WhisperEngine.turboID)
+        let host = EngineHost(engineID: WhisperEngine.turboID, makeEngine: { _ in whisper })
+        await host.load()
+        let adapter = HostEngine(host: host)
+        #expect(try await adapter.transcribe(samples: [0]).engineID == WhisperEngine.turboID)
+        #expect(try await adapter.transcribe(samples: [0], language: .explicit(.german)).engineID == WhisperEngine.turboID)
+    }
+
     @Test func modelDownloadProgressIsVisibleUntilPreparationFinishes() async {
         actor ProgressEngine: PreparationReporting {
             nonisolated let id = "parakeet-tdt-v3"

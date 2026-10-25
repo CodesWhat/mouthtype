@@ -18,6 +18,11 @@ private final class TakeCapture: DictationCapturing {
 private final class TakeEngine: DictationEngine {
     var readiness: EngineReadiness { .ready }
     var calls = 0
+    var languages: [DictationLanguageRequest] = []
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+        languages.append(language)
+        return try await transcribe(samples: samples)
+    }
     func transcribe(samples: [Float]) async throws -> Transcription {
         calls += 1
         return Transcription(text: "hello there", processingSeconds: 0, engineID: "fake")
@@ -45,6 +50,20 @@ private final class TakeEngine: DictationEngine {
 
     private func finish(_ take: SetupTestTake) async {
         for _ in 0..<2_000 where take.isBusy { await Task.yield() }
+    }
+
+    @Test func aTestTakeKeepsTheLanguageChosenWhenItStarts() async {
+        @MainActor final class Choice { var value = DictationLanguageRequest.explicit(.german) }
+        let choice = Choice()
+        let capture = TakeCapture(audio: audio(0.3))
+        let engine = TakeEngine()
+        let take = SetupTestTake(
+            capture: capture, engine: engine, readLevel: { -20 }, canStart: { true },
+            language: { choice.value }, sleep: { _ in await Task.yield() })
+        take.start()
+        choice.value = .explicit(.japanese)
+        await finish(take)
+        #expect(engine.languages == [.explicit(.german)])
     }
 
     @Test func aSpokenTakeShowsTheTranscriptAndLevel() async {

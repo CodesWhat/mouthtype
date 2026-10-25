@@ -24,6 +24,13 @@ private actor FileEngine: Transcriber {
     nonisolated let id = "file-test"
     nonisolated let displayName = "File test"
     private(set) var calls = 0
+    private(set) var languages: [DictationLanguageRequest] = []
+    func transcribe(samples: [Float], language: DictationLanguageRequest) async throws -> Transcription {
+        languages.append(language)
+        var result = try await transcribe(samples: samples)
+        result.language = language.resolved
+        return result
+    }
     let gate: FileGate?
     init(gate: FileGate? = nil) { self.gate = gate }
     func prepare() async throws { Issue.record("Import must use the already-prepared engine") }
@@ -54,6 +61,27 @@ private actor OrderedEngine: Transcriber {
 @Suite struct AudioFileTranscriptionTests {
     private let source = URL(fileURLWithPath: "/not-opened-by-fake/audio.wav")
     private func entered(_ gate: FileGate) async { for _ in 0..<200 where await !gate.entered { await Task.yield() } }
+
+    @Test func importKeepsTheLanguageChosenBeforeDecodingStarts() async throws {
+        // The lock protects the preference read by the Sendable language closure.
+        final class Choice: @unchecked Sendable {
+            private let lock = NSLock()
+            private var value = DictationLanguageRequest.explicit(.german)
+            func get() -> DictationLanguageRequest { lock.withLock { value } }
+            func change() { lock.withLock { value = .explicit(.japanese) } }
+        }
+        let choice = Choice()
+        let gate = FileGate()
+        let engine = FileEngine()
+        let job = AudioFileTranscription(decoder: FileDecoder(gate: gate), engine: engine, language: { choice.get() })
+        let task = Task { try await job.run(source) }
+        await entered(gate)
+        choice.change()
+        await gate.release()
+        let result = try await task.value
+        #expect(await engine.languages == [.explicit(.german)])
+        #expect(result.transcription.language == .german)
+    }
 
     @Test func decodedFileUsesExistingEngineAndReturnsExactTranscript() async throws {
         let engine = FileEngine()

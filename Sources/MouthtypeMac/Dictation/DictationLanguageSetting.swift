@@ -58,14 +58,21 @@ enum DictationLanguageSetting: Equatable, Sendable {
         return false
     }
 
-    /// Languages Parakeet v3 transcribes noticeably worse than the rest (FLEURS word error of 25 percent or more).
-    static let betaLanguages: Set<DictationLanguage> = [.lithuanian, .maltese, .latvian, .slovenian, .greek]
+    /// Weaker Parakeet languages and the new Whisper languages that still need fluent-speaker acceptance.
+    static let betaLanguages: Set<DictationLanguage> = [.lithuanian, .maltese, .latvian, .slovenian, .greek, .japanese, .hindi, .tamil]
 
-    /// Auto-detect, English, then the other 24 languages by English name, Beta marked on the weaker ones.
+    /// Auto-detect, English, then the remaining languages by English name, with Beta labels where validation is limited.
     static var pickerChoices: [DesignChoice<String>] {
         let others = DictationLanguage.allCases.filter { !$0.isEnglish }.sorted { $0.englishName < $1.englishName }
         return [DesignChoice("Auto-detect", autoValue), DesignChoice(DictationLanguage.english.englishName, DictationLanguage.english.code)]
             + others.map { DesignChoice(betaLanguages.contains($0) ? "\($0.englishName) (Beta)" : $0.englishName, $0.code) }
+    }
+
+    var usesWhisper: Bool { request().speechEngineID == WhisperEngine.turboID }
+
+    var detailText: String {
+        let base = self == .auto ? Self.autoDetail : Self.detail
+        return usesWhisper ? base + " Uses Whisper Turbo (about 1.6 GB to download). Live words aren’t available." : base
     }
 
     static let fastEnglishOnlyNote = "Fast cleanup is English only. Using Basic for this language."
@@ -75,8 +82,10 @@ enum DictationLanguageSetting: Equatable, Sendable {
     /// The per-language breakdown behind the info button on the Language row.
     static let infoText =
         "Auto-detect picks the language from what you said, among English and your Mac\u{2019}s preferred languages.\n\n"
-        + "English runs every cleanup rule. Other languages get punctuation, capitalization, your dictionary and snippets, and Thorough cleanup. "
-        + "Fast, spoken commands, number formatting and filler removal are English only for now."
+        + "English runs every cleanup rule. Other languages get punctuation, capitalization, your dictionary and snippets. Thorough runs in supported languages. "
+        + "Fast, spoken commands, number formatting and filler removal are English only for now.\n\n"
+        + "Japanese, Hindi and Tamil are in Beta. They use Whisper Turbo, a separate on-device speech model of about 1.6 GB. "
+        + "Live words aren’t available with this model. These three languages use Basic cleanup."
 
     /// What the engine and pipeline are told for a take.
     func request(preferredLanguages: [String] = Locale.preferredLanguages) -> DictationLanguageRequest {
