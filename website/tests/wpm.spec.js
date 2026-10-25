@@ -109,6 +109,27 @@ test("the section is linkable at /#speed", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /Type it\./ })).toBeVisible();
 });
 
+test("the speed test has a distinct tool frame and typography from the prepared example", async ({ page }, testInfo) => {
+  await open(page);
+  const testCard = page.locator("#wpm-card");
+  const example = page.locator("#demo .example");
+  await expect(testCard.getByText("Your speed test", { exact: true })).toBeVisible();
+  const background = (el) => getComputedStyle(el).backgroundColor;
+  const font = (el) => getComputedStyle(el).fontFamily;
+  expect(await testCard.locator("#wpm-main > .example-top").evaluate(background)).not.toBe(
+    await example.locator(".example-top").evaluate(background),
+  );
+  expect(await page.locator("#wpm-sentence").evaluate(font)).not.toBe(
+    await page.locator("#example-text").evaluate(font),
+  );
+  expect(await testCard.locator("#wpm-type-live strong").evaluate(font)).not.toBe(
+    await page.locator("#example-text").evaluate(font),
+  );
+  await page.evaluate(() => document.fonts.ready);
+  await testCard.screenshot({ path: testInfo.outputPath("speed-test-card.png"), animations: "disabled" });
+  await example.screenshot({ path: testInfo.outputPath("illustrative-example.png"), animations: "disabled" });
+});
+
 test("Start typing counts down, focuses the input, and waits for the first key to time", async ({ page }) => {
   const target = await open(page);
   const start = page.getByRole("button", { name: "Start typing", exact: true });

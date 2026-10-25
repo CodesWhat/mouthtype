@@ -441,3 +441,73 @@
 .wpm-a-result:focus {
   outline: none;
 }
+
+/* The interactive test is an instrument, separate from the editorial example card. */
+.wpm-lab {
+  border: 1px solid var(--ink);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow: 0 7px 0 var(--panel);
+}
+.wpm-lab .example-top {
+  padding: 20px 24px;
+  border-bottom: 0;
+  background: var(--ink);
+  color: var(--paper);
+}
+.wpm-lab-heading {
+  display: grid;
+  gap: 7px;
+}
+.wpm-lab-heading h3 {
+  margin: 0;
+  font: 500 14px/1.2 var(--sans);
+}
+.wpm-lab-heading .mono {
+  color: var(--lime);
+  font-size: 9px;
+  letter-spacing: 0.7px;
+}
+.wpm-lab .compare-switch {
+  background: #ffffff14;
+}
+.wpm-lab .compare-switch button {
+  color: var(--paper);
+}
+.wpm-lab .compare-switch button::before {
+  color: inherit;
+  opacity: 0.65;
+}
+.wpm-lab .compare-switch button[aria-pressed="true"] {
+  background: var(--lime);
+  color: var(--ink);
+  box-shadow: none;
+}
+.wpm-lab .example-text {
+  padding: 26px;
+  min-height: 0;
+  gap: 24px;
+  font: 500 clamp(24px, 2.1vw, 30px)/1.4 var(--sans);
+}
+.wpm-lab .wpm-a-input textarea {
+  background: var(--paper);
+  font: 16px/1.6 var(--mono);
+  padding: 14px;
+  border-radius: 8px;
+}
+.wpm-lab .example-bottom {
+  background: var(--panel);
+}
+.wpm-lab .wpm-a-live strong {
+  font: 500 32px/1 var(--mono);
+  letter-spacing: -1.5px;
+}
+@media (max-width: 600px) {
+  .wpm-lab .example-top {
+    padding: 18px 20px;
+  }
+  .wpm-lab .example-text {
+    padding: 22px 20px;
+  }
+}
