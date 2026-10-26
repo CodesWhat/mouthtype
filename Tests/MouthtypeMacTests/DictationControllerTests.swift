@@ -3198,3 +3198,14 @@ private final class SlowCapture: DictationCapturing {
         #expect(rig.inserter.returnsPressed.isEmpty)
     }
 }
+
+@MainActor
+@Suite struct SendAfterInsertSalvageTests {
+    @Test func aSalvagedTakeNeverAsksForAReturn() async {
+        let rig = Rig()
+        rig.capture.audio.wasInterrupted = true
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.inserter.returnsPressed.isEmpty)
+    }
+}

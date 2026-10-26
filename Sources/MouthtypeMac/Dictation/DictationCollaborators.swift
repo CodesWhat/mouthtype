@@ -108,7 +108,8 @@ protocol DictationInserting: AnyObject {
     func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void)
     /// Drops any read-back still waiting.
     func cancelVerification()
-    /// Presses Return in the app `result` was pasted into, when the user opted it in. Only a normal take asks.
+    /// Queues a Return for the app `result` was pasted into, sent only if the read-back confirms the paste landed and the user
+    /// opted the app in. Only a normal take asks.
     func pressReturnAfterInsert(for result: DeliveryResult) async
 }
 
@@ -284,7 +285,7 @@ extension AudioArchive: DictationArchiving {
     }
 }
 extension TextInserter: DictationInserting {
-    func pressReturnAfterInsert(for result: DeliveryResult) async { await sendReturn(after: result) }
+    func pressReturnAfterInsert(for result: DeliveryResult) async { armReturn(after: result) }
 }
 extension PillController: DictationPill {}
 

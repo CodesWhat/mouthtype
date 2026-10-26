@@ -28,7 +28,16 @@ public final class TextInserter {
     private let restrictedToPID: pid_t?
     /// Whether the user opted this app (by bundle ID) into "Press Return after inserting".
     private let sendsReturn: @MainActor (String) -> Bool
-    private var lastPasteLease: Int?
+    /// A Return waiting on the read-back's verdict for one delivery.
+    private struct ArmedReturn {
+        var generation: Int
+        var pid: pid_t
+        var bundleID: String
+        var element: FocusedElement
+    }
+    private var armedReturn: ArmedReturn?
+    /// The newest read-back verdict, so a send armed after it arrived still sees it.
+    private var lastVerdict: PasteVerification?
     private var deliveryActive = false
     private var closing = false
     private var termination: Task<Void, Never>?
@@ -95,6 +104,7 @@ public final class TextInserter {
     /// A new dictation ends the last paste's read-back. Its row keeps "unknown".
     func cancelVerification() {
         batchGeneration += 1
+        armedReturn = nil
         verification?.cancel()
         verification = nil
     }
@@ -222,6 +232,7 @@ public final class TextInserter {
         }
         deliveryGeneration += 1
         let generation = deliveryGeneration
+        lastVerdict = nil
         cancelVerification()
 
         switch DeliveryDecision.decide(now: now, secureInput: secureInput) {
@@ -332,7 +343,6 @@ public final class TextInserter {
                     focusMoved: moved, target: now, finalText: spaced
                 )
             }
-            lastPasteLease = clipboard.pasteGeneration
             let afterInput = inputGeneration()
             if let pid = now.pid, let last = spaced.last {
                 lastPaste = LastPaste(
@@ -457,7 +467,10 @@ public final class TextInserter {
             guard let self, !Task.isCancelled, self.deliveryGeneration == generation else { return }
             let verdict = PasteVerifier.judge(baseline: baseline, pasted: pasted, observations: observations, expected: offsets.count)
             Log.app.info("paste read-back: \(verdict.storeOutcome, privacy: .public)")
-            self.onVerified?(PasteVerification(id: generation, verdict: verdict, receiptMs: self.clipboard.firstReceiptMs))
+            let verification = PasteVerification(id: generation, verdict: verdict, receiptMs: self.clipboard.firstReceiptMs)
+            self.lastVerdict = verification
+            self.onVerified?(verification)
+            self.returnAfterVerdict(verification)
         }
     }
 
@@ -491,39 +504,47 @@ public final class TextInserter {
         return await deliver(lastText, startFocus: nil)
     }
 
-    /// Presses Return in the app `result` was just pasted into, when the user opted that app in. Called only by the
-    /// controller after a normal dictation take, never by `deliver`, so Paste Last, the self-tests and every other
-    /// delivery can't reach it. Sends one plain Return, or nothing: any doubt about where it would land is a skip.
-    @discardableResult
-    func sendReturn(after result: DeliveryResult) async -> Bool {
-        func skip(_ reason: String) -> Bool {
-            Log.app.info("send after insert skipped: \(reason, privacy: .public)")
-            return false
-        }
-        guard result.method == .paste, result.outcome == .unknown else { return skip("the delivery was not a clean paste") }
-        guard !result.finalText.isEmpty else { return skip("nothing was delivered") }
+    /// Queues a Return for the app `result` was just pasted into, when the user opted that app in. It goes out only
+    /// when the read-back reports that this delivery's text landed; any other verdict, or none, sends nothing.
+    /// Called only by the controller after a normal dictation take, never by `deliver`, so Paste Last, the
+    /// self-tests and every other delivery can't reach it.
+    func armReturn(after result: DeliveryResult) {
+        guard result.method == .paste, result.outcome == .unknown else { return skipReturn("the delivery was not a clean paste") }
+        guard !result.finalText.isEmpty else { return skipReturn("nothing was delivered") }
         guard let target = result.target, let pid = target.pid, pid > 0, let bundleID = target.bundleID else {
-            return skip("the paste target is unknown")
+            return skipReturn("the paste target is unknown")
         }
-        guard sendsReturn(bundleID) else { return skip("the app is not opted in") }
-        guard let generation = result.verificationID, generation == deliveryGeneration, let lease = lastPasteLease,
-            !closing, !deliveryActive
-        else { return skip("a newer delivery replaced this paste") }
-        guard !Task.isCancelled else { return skip("the take was cancelled") }
-        guard await waitForPreviousPaste(lease) else { return skip("the app did not take the paste in time") }
-        guard !Task.isCancelled, generation == deliveryGeneration, !closing, !deliveryActive else {
-            return skip("the take was cancelled or replaced while waiting")
+        guard sendsReturn(bundleID) else { return skipReturn("the app is not opted in") }
+        guard let element = target.element else { return skipReturn("the paste target has no focused element") }
+        guard let generation = result.verificationID, generation == deliveryGeneration, !closing else {
+            return skipReturn("a newer delivery replaced this paste")
+        }
+        guard !Task.isCancelled else { return skipReturn("the take was cancelled") }
+        armedReturn = ArmedReturn(generation: generation, pid: pid, bundleID: bundleID, element: element)
+        if let verdict = lastVerdict, verdict.id == generation { returnAfterVerdict(verdict) }
+    }
+
+    private func skipReturn(_ reason: String) {
+        Log.app.info("send after insert skipped: \(reason, privacy: .public)")
+    }
+
+    /// Runs when a read-back ends, or when a send is armed after it did.
+    private func returnAfterVerdict(_ verification: PasteVerification) {
+        guard let armed = armedReturn, armed.generation == verification.id else { return }
+        armedReturn = nil
+        guard verification.verdict == .confirmed else {
+            return skipReturn("the read-back said \(verification.verdict.storeOutcome)")
+        }
+        guard armed.generation == deliveryGeneration, !closing, !deliveryActive, !Task.isCancelled else {
+            return skipReturn("the take was cancelled or replaced")
         }
         let fresh = focus.snapshot()
-        guard !fresh.isSecure, !focus.isSecureInputEnabled else { return skip("a secure field or secure input is active") }
-        guard fresh.pid == pid, fresh.bundleID == bundleID, fresh.element == target.element,
+        guard !fresh.isSecure, !focus.isSecureInputEnabled else { return skipReturn("a secure field or secure input is active") }
+        guard fresh.pid == armed.pid, fresh.bundleID == armed.bundleID, let element = fresh.element, element == armed.element,
             !fresh.focusOwnerDiffersFromFrontmost
-        else { return skip("focus moved after the paste") }
-        // The Return empties the field, which the read-back would report as a paste that didn't land.
-        cancelVerification()
-        guard clipboard.pressReturn(targetPID: pid) else { return skip("the Return event could not be posted") }
+        else { return skipReturn("focus moved after the paste") }
+        guard clipboard.pressReturn(targetPID: armed.pid) else { return skipReturn("the Return event could not be posted") }
         Log.app.info("send after insert: pressed Return")
-        return true
     }
 
     /// Puts the last delivered transcript on the clipboard to stay. False when nothing was delivered yet.
