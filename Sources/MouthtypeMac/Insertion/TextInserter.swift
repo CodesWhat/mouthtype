@@ -34,7 +34,13 @@ public final class TextInserter {
         var pid: pid_t
         var bundleID: String
         var element: FocusedElement
+        /// The real key and click count right after the paste, and when the paste went out.
+        var input: UInt64
+        var pastedAt: ContinuousClock.Instant
     }
+    /// How long after the paste chord a Return may still go out.
+    static let returnWindow: TimeInterval = 2
+    private var pasteStamp: (generation: Int, input: UInt64?, at: ContinuousClock.Instant)?
     private var armedReturn: ArmedReturn?
     /// The newest read-back verdict, so a send armed after it arrived still sees it.
     private var lastVerdict: PasteVerification?
@@ -344,6 +350,7 @@ public final class TextInserter {
                 )
             }
             let afterInput = inputGeneration()
+            pasteStamp = (generation, afterInput, self.now())
             if let pid = now.pid, let last = spaced.last {
                 lastPaste = LastPaste(
                     pid: pid, bundleID: now.bundleID, element: now.element, finalCharacter: last, date: self.now(),
@@ -520,9 +527,16 @@ public final class TextInserter {
             return skipReturn("a newer delivery replaced this paste")
         }
         guard !Task.isCancelled else { return skipReturn("the take was cancelled") }
-        armedReturn = ArmedReturn(generation: generation, pid: pid, bundleID: bundleID, element: element)
+        guard let stamp = pasteStamp, stamp.generation == generation, let input = stamp.input else {
+            return skipReturn("user input can't be tracked")
+        }
+        armedReturn = ArmedReturn(
+            generation: generation, pid: pid, bundleID: bundleID, element: element, input: input, pastedAt: stamp.at)
         if let verdict = lastVerdict, verdict.id == generation { returnAfterVerdict(verdict) }
     }
+
+    /// A new recording drops any Return still waiting on a verdict.
+    func cancelPendingReturn() { armedReturn = nil }
 
     private func skipReturn(_ reason: String) {
         Log.app.info("send after insert skipped: \(reason, privacy: .public)")
@@ -538,6 +552,9 @@ public final class TextInserter {
         guard armed.generation == deliveryGeneration, !closing, !deliveryActive, !Task.isCancelled else {
             return skipReturn("the take was cancelled or replaced")
         }
+        guard now() <= armed.pastedAt.advanced(by: .seconds(Self.returnWindow)) else { return skipReturn("the send window passed") }
+        // Matching text in the field doesn't show the user left it alone; a key or click since the paste does.
+        guard inputGeneration() == armed.input else { return skipReturn("the user typed or clicked after the paste") }
         let fresh = focus.snapshot()
         guard !fresh.isSecure, !focus.isSecureInputEnabled else { return skipReturn("a secure field or secure input is active") }
         guard fresh.pid == armed.pid, fresh.bundleID == armed.bundleID, let element = fresh.element, element == armed.element,

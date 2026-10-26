@@ -275,8 +275,13 @@ private final class FakeInserter: DictationInserting {
         log.add("inserter.deliver")
         delivered.append(text)
         startFocusSeen = startFocus
+        await deliverGate?.wait()
         return result
     }
+    /// Holds `deliver` until the test opens it, so a take can still be in flight when a new recording starts.
+    var deliverGate: StartGate?
+    private(set) var pendingReturnCancels = 0
+    func cancelPendingReturn() { pendingReturnCancels += 1 }
 
     func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void) { verificationHandler = handler }
     func cancelVerification() { cancelledVerifications += 1 }
@@ -3205,6 +3210,23 @@ private final class SlowCapture: DictationCapturing {
         let rig = Rig()
         rig.capture.audio.wasInterrupted = true
         await rig.dictate()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.inserter.returnsPressed.isEmpty)
+    }
+
+    @Test func aRecordingStartedBeforeTheTakeDeliversStopsItsReturn() async {
+        let rig = Rig()
+        let gate = StartGate()
+        rig.inserter.deliverGate = gate
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.until { rig.inserter.delivered.count == 1 }
+        // The first take is still delivering when a second recording starts.
+        await rig.controller.handle(.pressed(at: keyDown + 9_000_000_000))
+        #expect(rig.inserter.pendingReturnCancels >= 1)
+        gate.open()
+        await rig.controller.waitForProcessing()
+        await rig.settle()
         #expect(rig.inserter.delivered == ["Hello world."])
         #expect(rig.inserter.returnsPressed.isEmpty)
     }

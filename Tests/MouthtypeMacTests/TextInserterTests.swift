@@ -2109,6 +2109,64 @@ private struct Rig {
         #expect(rig.poster.returns.isEmpty)
     }
 
+    @Test func typingAfterThePasteButBeforeTheVerdictSendsNothing() async {
+        let rig = rig()
+        _ = await deliverAndArm(rig)
+        rig.input.value = 1
+        await finish(rig)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func typingAfterTheVerdictButBeforeTheSendWasArmedSendsNothing() async {
+        let rig = rig()
+        let result = await rig.inserter.deliver("world", startFocus: nil)
+        await finish(rig)
+        rig.input.value = 1
+        rig.inserter.armReturn(after: result)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func untrackableUserInputSendsNothing() async {
+        let rig = rig()
+        rig.input.value = nil
+        _ = await deliverAndArm(rig)
+        await finish(rig)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aVerdictAfterTheSendWindowSendsNothing() async {
+        let rig = rig()
+        _ = await deliverAndArm(rig)
+        rig.clock.advance(TextInserter.returnWindow + 1)
+        await finish(rig)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aCachedVerdictPastTheSendWindowSendsNothing() async {
+        let rig = rig()
+        let result = await rig.inserter.deliver("world", startFocus: nil)
+        await finish(rig)
+        rig.clock.advance(TextInserter.returnWindow + 1)
+        rig.inserter.armReturn(after: result)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aVerdictInsideTheSendWindowStillSends() async {
+        let rig = rig()
+        _ = await deliverAndArm(rig)
+        rig.clock.advance(TextInserter.returnWindow - 0.5)
+        await finish(rig)
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func aRecordingStartDropsAnArmedReturn() async {
+        let rig = rig()
+        _ = await deliverAndArm(rig)
+        rig.inserter.cancelPendingReturn()
+        await finish(rig)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
     @Test func anAppThatIsNotOptedInGetsNoReturn() async {
         let rig = rig(optedIn: false)
         _ = await deliverAndArm(rig)
