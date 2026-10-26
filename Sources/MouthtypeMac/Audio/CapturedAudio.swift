@@ -14,4 +14,6 @@ public struct CapturedAudio: Sendable, Equatable {
     /// Ms from the key press until the input was running.
     public var captureStartMs: Double
     public var audioMs: Double
+    /// The input went away or failed mid-recording, so this is a salvaged partial capture.
+    public var wasInterrupted = false
 }
