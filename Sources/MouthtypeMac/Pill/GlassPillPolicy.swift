@@ -169,6 +169,9 @@ final class GlassBackdropCache {
     private var observing = false
     /// The settings the system-wide prewarm reads, replaced by the pill's own when it starts observing.
     private var settings: UserDefaults = .standard
+    /// The look the last prewarm covered, so a write to some unrelated default doesn't trigger another.
+    /// Internal so the tests can stage a stale look; the write's own notification reaches the observer first.
+    var lastLook: Look?
 
     init(
         measure: @escaping Measure = GlassBackdropSampler.measure,
@@ -284,9 +287,20 @@ extension GlassBackdropCache {
     /// Prewarms now and again whenever the desktop could have changed: a Space switch (each Space can have its own
     /// picture), a display change, or the system's desktop notification. A picture swapped without any of those is
     /// caught by the modification time on the next lookup, which then answers pending and measures for the press after.
-    private struct Look: Equatable {
+    struct Look: Equatable {
         var skin: PillSkinKind
         var size: PillSize
+    }
+
+    /// Any write to the defaults posts the change notification, so only a changed look is worth measuring for. Returns
+    /// whether the look changed and a prewarm was started.
+    @discardableResult
+    func defaultsDidChange() -> Bool {
+        let look = Look(skin: PillSkinPreference.current(settings), size: PillSizePreference.current(settings))
+        guard look != lastLook else { return false }
+        lastLook = look
+        prewarmAll()
+        return true
     }
 
     func startObserving(defaults: UserDefaults = .standard) {
@@ -309,13 +323,9 @@ extension GlassBackdropCache {
             forName: Notification.Name("com.apple.desktop"), object: nil, queue: .main, using: refresh
         )
         // A look or size change in Settings moves the region the next press samples, so measure it before that press.
-        var lastLook = Look(skin: PillSkinPreference.current(defaults), size: PillSizePreference.current(defaults))
-        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { note in
-            // Any write to the defaults posts this, so only a changed look is worth measuring for.
-            let look = Look(skin: PillSkinPreference.current(defaults), size: PillSizePreference.current(defaults))
-            guard look != lastLook else { return }
-            lastLook = look
-            refresh(note)
+        lastLook = Look(skin: PillSkinPreference.current(defaults), size: PillSizePreference.current(defaults))
+        NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { _ = self?.defaultsDidChange() }
         }
         prewarmAll()
     }
