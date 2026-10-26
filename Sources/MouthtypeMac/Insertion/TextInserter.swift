@@ -26,6 +26,9 @@ public final class TextInserter {
     private let inputGeneration: @MainActor () -> UInt64?
     private let observeBoundary: @MainActor (PasteBoundaryDiagnostic) -> Void
     private let restrictedToPID: pid_t?
+    /// Whether the user opted this app (by bundle ID) into "Press Return after inserting".
+    private let sendsReturn: @MainActor (String) -> Bool
+    private var lastPasteLease: Int?
     private var deliveryActive = false
     private var closing = false
     private var termination: Task<Void, Never>?
@@ -50,6 +53,7 @@ public final class TextInserter {
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
     public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
         self.observeBoundary = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
+        self.sendsReturn = { SendAfterInsertSettings().isEnabled(bundleID: $0) }
         self.chunkedPaste = { PasteSettings.chunksEnabled($0) }
         self.now = { ContinuousClock.now }
         self.inputGeneration = inputGeneration
@@ -68,9 +72,11 @@ public final class TextInserter {
         schedule: @escaping PasteboardSession.Schedule, sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
         now: @escaping @MainActor () -> ContinuousClock.Instant = { ContinuousClock.now }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
         restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false },
+        sendsReturn: @escaping @MainActor (String) -> Bool = { _ in false },
         observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
     ) {
         self.observeBoundary = observeBoundary
+        self.sendsReturn = sendsReturn
         self.chunkedPaste = chunkedPaste
         self.now = now
         self.inputGeneration = inputGeneration
@@ -326,6 +332,7 @@ public final class TextInserter {
                     focusMoved: moved, target: now, finalText: spaced
                 )
             }
+            lastPasteLease = clipboard.pasteGeneration
             let afterInput = inputGeneration()
             if let pid = now.pid, let last = spaced.last {
                 lastPaste = LastPaste(
@@ -484,6 +491,41 @@ public final class TextInserter {
         return await deliver(lastText, startFocus: nil)
     }
 
+    /// Presses Return in the app `result` was just pasted into, when the user opted that app in. Called only by the
+    /// controller after a normal dictation take, never by `deliver`, so Paste Last, the self-tests and every other
+    /// delivery can't reach it. Sends one plain Return, or nothing: any doubt about where it would land is a skip.
+    @discardableResult
+    func sendReturn(after result: DeliveryResult) async -> Bool {
+        func skip(_ reason: String) -> Bool {
+            Log.app.info("send after insert skipped: \(reason, privacy: .public)")
+            return false
+        }
+        guard result.method == .paste, result.outcome == .unknown else { return skip("the delivery was not a clean paste") }
+        guard !result.finalText.isEmpty else { return skip("nothing was delivered") }
+        guard let target = result.target, let pid = target.pid, pid > 0, let bundleID = target.bundleID else {
+            return skip("the paste target is unknown")
+        }
+        guard sendsReturn(bundleID) else { return skip("the app is not opted in") }
+        guard let generation = result.verificationID, generation == deliveryGeneration, let lease = lastPasteLease,
+            !closing, !deliveryActive
+        else { return skip("a newer delivery replaced this paste") }
+        guard !Task.isCancelled else { return skip("the take was cancelled") }
+        guard await waitForPreviousPaste(lease) else { return skip("the app did not take the paste in time") }
+        guard !Task.isCancelled, generation == deliveryGeneration, !closing, !deliveryActive else {
+            return skip("the take was cancelled or replaced while waiting")
+        }
+        let fresh = focus.snapshot()
+        guard !fresh.isSecure, !focus.isSecureInputEnabled else { return skip("a secure field or secure input is active") }
+        guard fresh.pid == pid, fresh.bundleID == bundleID, fresh.element == target.element,
+            !fresh.focusOwnerDiffersFromFrontmost
+        else { return skip("focus moved after the paste") }
+        // The Return empties the field, which the read-back would report as a paste that didn't land.
+        cancelVerification()
+        guard clipboard.pressReturn(targetPID: pid) else { return skip("the Return event could not be posted") }
+        Log.app.info("send after insert: pressed Return")
+        return true
+    }
+
     /// Puts the last delivered transcript on the clipboard to stay. False when nothing was delivered yet.
     public func copyLast() -> Bool {
         guard let lastText else { return false }
@@ -498,6 +540,12 @@ public final class TextInserter {
 protocol PasteEventPosting: AnyObject {
     /// Posts Cmd plus `keyCode`. False when the events could not be created.
     func postPaste(keyCode: CGKeyCode, targetPID: pid_t?) -> Bool
+    /// Posts one plain Return, with no modifiers. False when the events could not be created.
+    func postReturn(targetPID: pid_t?) -> Bool
+}
+
+extension PasteEventPosting {
+    func postReturn(targetPID: pid_t?) -> Bool { false }
 }
 
 @MainActor
@@ -531,6 +579,26 @@ final class SystemPasteEventPoster: PasteEventPosting {
         }
         return true
     }
+
+    /// Same private source, stamp and destination as the paste, with the flags cleared so a held Shift or Command
+    /// can't turn the Return into a newline or a different shortcut.
+    func postReturn(targetPID requestedPID: pid_t?) -> Bool {
+        guard let destination = targetPID ?? requestedPID, destination > 0 else { return false }
+        let source = CGEventSource(stateID: .privateState)
+        guard
+            let down = CGEvent(keyboardEventSource: source, virtualKey: Self.returnKeyCode, keyDown: true),
+            let up = CGEvent(keyboardEventSource: source, virtualKey: Self.returnKeyCode, keyDown: false)
+        else { return false }
+        for event in [down, up] {
+            event.flags = []
+            event.setIntegerValueField(.eventSourceUserData, value: stamp)
+            post(event, destination)
+        }
+        return true
+    }
+
+    /// kVK_Return.
+    static let returnKeyCode: CGKeyCode = 0x24
 }
 
 // MARK: - Clipboard
@@ -662,6 +730,8 @@ final class PasteboardSession {
     }
 
     var isRestorePending: Bool { saved != nil }
+
+    func pressReturn(targetPID: pid_t?) -> Bool { poster.postReturn(targetPID: targetPID) }
 
     var pasteGeneration: Int { generation }
     var readCount: Int { receipts?.readCount ?? 0 }

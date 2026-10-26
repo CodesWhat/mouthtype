@@ -280,6 +280,8 @@ private final class FakeInserter: DictationInserting {
 
     func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void) { verificationHandler = handler }
     func cancelVerification() { cancelledVerifications += 1 }
+    private(set) var returnsPressed: [DeliveryResult] = []
+    func pressReturnAfterInsert(for result: DeliveryResult) async { returnsPressed.append(result) }
 
     /// The read-back of a paste ends.
     func verify(_ verification: PasteVerification) { verificationHandler?(verification) }
@@ -3163,5 +3165,36 @@ private final class SlowCapture: DictationCapturing {
         for _ in 0..<100 where !limited.log.contains("audio.restore") { await Task.yield() }
         await limited.controller.waitForProcessing()
         #expect(limited.log.all.filter { $0 == "audio.restore" }.count == 1)
+    }
+}
+
+@MainActor
+@Suite struct SendAfterInsertControllerTests {
+    @Test func aNormalTakeAsksForOneReturnAfterDelivery() async {
+        let rig = Rig()
+        await rig.dictate()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.inserter.returnsPressed.count == 1)
+        #expect(rig.inserter.returnsPressed.first?.finalText == "Hello world.")
+    }
+
+    @Test func undoNeverAsksForAReturn() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        await rig.settle()
+        await rig.controller.undoCancel()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.inserter.returnsPressed.isEmpty)
+    }
+
+    @Test func aSavedInterruptedTakeNeverAsksForAReturn() async {
+        let rig = Rig()
+        await rig.controller.handle(.pressed(at: keyDown))
+        rig.capture.interrupt()
+        await rig.until { rig.controller.phase == .idle }
+        await rig.controller.insertInterrupted()
+        #expect(rig.inserter.delivered == ["Hello world."])
+        #expect(rig.inserter.returnsPressed.isEmpty)
     }
 }

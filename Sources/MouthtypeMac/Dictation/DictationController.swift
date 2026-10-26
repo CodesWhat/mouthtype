@@ -616,7 +616,7 @@ final class DictationController {
             let waits = pendingJobs > 1
             await previous?.value
             if waits { showProcessing() }
-            try await transcribeAndDeliver(audio, features: features, session: session, holdMs: keyUpMs)
+            try await transcribeAndDeliver(audio, features: features, session: session, holdMs: keyUpMs, pressesReturn: true)
         } catch {
             await failJob(session, error)
         }
@@ -642,8 +642,10 @@ final class DictationController {
 
     /// Everything after the audio is on disk, shared by a normal release, an Undo and a saved recording.
     /// `holdMs` is how long the key was held; only a take that has one can raise the silent-mic card.
+    /// `pressesReturn` is true only for a normal take: Undo and a saved recording never press Return after inserting.
     private func transcribeAndDeliver(
-        _ audio: CapturedAudio, features: AudioFeatures, session: DictationSession, holdMs: Int? = nil
+        _ audio: CapturedAudio, features: AudioFeatures, session: DictationSession, holdMs: Int? = nil,
+        pressesReturn: Bool = false
     ) async throws {
         defer {
             releasePrewarm(session)
@@ -695,6 +697,9 @@ final class DictationController {
         if verifying?.id == result.verificationID {
             verifying?.wrappedUp = true
             if let arrived = verifying?.arrived { verificationEnded(arrived) }
+        }
+        if pressesReturn, !Task.isCancelled, !shuttingDown {
+            await inserter.pressReturnAfterInsert(for: result)
         }
     }
 

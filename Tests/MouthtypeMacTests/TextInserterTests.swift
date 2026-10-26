@@ -62,6 +62,12 @@ private final class FakePoster: PasteEventPosting {
     var succeeds = true
     /// What the clipboard held when the paste event went out.
     var onPost: (() -> Void)?
+    var returns: [pid_t?] = []
+
+    func postReturn(targetPID: pid_t?) -> Bool {
+        returns.append(targetPID)
+        return true
+    }
 
     func postPaste(keyCode: CGKeyCode, targetPID: pid_t?) -> Bool {
         targetPIDs.append(targetPID)
@@ -195,7 +201,10 @@ private struct Rig {
         }
     }
 
-    init(restrictedToPID: pid_t? = nil, chunks: Bool = false, observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { _ in }) {
+    init(
+        restrictedToPID: pid_t? = nil, chunks: Bool = false, sendsReturn: @escaping @MainActor (String) -> Bool = { _ in false },
+        observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { _ in }
+    ) {
         let pauses = pauses
         let pending = pending
         let clock = clock
@@ -205,7 +214,7 @@ private struct Rig {
             schedule: { delay, work in
                 pending.add(delay, work)
             }, sleep: { delay in if chunks { await pauses.pause(delay) } }, now: { clock.instant }, inputGeneration: { input.value },
-            restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, observeBoundary: observeBoundary)
+            restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, sendsReturn: sendsReturn, observeBoundary: observeBoundary)
     }
 }
 
@@ -1984,5 +1993,184 @@ private struct Rig {
         #expect(target.windowTitle == "Shopping")
         #expect(target.fieldRole == "AXTextArea")
         #expect(target.isSecure == false)
+    }
+}
+
+@MainActor
+@Suite struct SendAfterInsertTests {
+    private let app = "com.example.app"
+
+    private func rig(optedIn: Bool = true) -> Rig {
+        let app = app
+        let rig = Rig(sendsReturn: { optedIn && $0 == app })
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: app, element: element(100))
+        rig.inserter.observeVerification { _ in }
+        return rig
+    }
+
+    /// A paste the target has read, as a normal take leaves it.
+    private func pasted(_ rig: Rig, _ text: String = "hello") async -> DeliveryResult {
+        let result = await rig.inserter.deliver(text, startFocus: nil)
+        rig.pasteboard.read()
+        return result
+    }
+
+    @Test func anOptedInAppGetsExactlyOneReturnAfterThePaste() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        let result = await pasted(rig)
+        let sent = await rig.inserter.sendReturn(after: result)
+        #expect(sent && rig.poster.returns == [100] && rig.poster.posts == 1)
+    }
+
+    @Test func anAppThatIsNotOptedInGetsNoReturn() async {
+        let rig = rig(optedIn: false)
+        defer { rig.inserter.cancelVerification() }
+        let result = await pasted(rig)
+        #expect(await rig.inserter.sendReturn(after: result) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func theDefaultRigSendsNothing() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: app, element: element(100))
+        defer { rig.inserter.cancelVerification() }
+        let result = await pasted(rig)
+        #expect(await rig.inserter.sendReturn(after: result) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aSecureFieldAfterThePasteGetsNoReturn() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        let result = await pasted(rig)
+        rig.focus.current.isSecure = true
+        #expect(await rig.inserter.sendReturn(after: result) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func secureInputAfterThePasteGetsNoReturn() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        let result = await pasted(rig)
+        rig.focus.isSecureInputEnabled = true
+        #expect(await rig.inserter.sendReturn(after: result) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func focusMovingToAnotherAppGetsNoReturn() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        let result = await pasted(rig)
+        rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other", element: element(200))
+        #expect(await rig.inserter.sendReturn(after: result) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func focusMovingToAnotherFieldGetsNoReturn() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        let result = await pasted(rig)
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: app, element: element(101))
+        #expect(await rig.inserter.sendReturn(after: result) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aFailedPasteGetsNoReturn() async {
+        let rig = rig()
+        rig.poster.succeeds = false
+        let result = await pasted(rig)
+        #expect(result.method == .clipboardOnly)
+        #expect(await rig.inserter.sendReturn(after: result) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aPasteTheTargetNeverReadsGetsNoReturn() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        let result = await rig.inserter.deliver("hello", startFocus: nil)
+        #expect(result.method == .paste)
+        #expect(await rig.inserter.sendReturn(after: result) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aDeliveryThatPastedNothingGetsNoReturn() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        let real = await pasted(rig)
+        let target = real.target
+        let cases = [
+            DeliveryResult(method: .paste, outcome: .unknown, focusMoved: false, target: target, finalText: ""),
+            DeliveryResult(method: .paste, outcome: .failed("x"), focusMoved: false, target: target, finalText: "hello"),
+            DeliveryResult(method: .paste, outcome: .partialPaste, focusMoved: false, target: target, finalText: "hello"),
+            DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: false, target: target, finalText: ""),
+            DeliveryResult(method: .none, outcome: .unknown, focusMoved: false, target: target, finalText: "hello"),
+            DeliveryResult(method: .clipboardOnly, outcome: .unknown, focusMoved: false, target: target, finalText: "hello"),
+        ]
+        for result in cases { #expect(await rig.inserter.sendReturn(after: result) == false) }
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aPasteReplacedByANewerOneGetsNoReturn() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        let first = await pasted(rig, "one")
+        _ = await pasted(rig, "two")
+        #expect(await rig.inserter.sendReturn(after: first) == false)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func pasteLastNeverPressesReturn() async {
+        let rig = rig()
+        defer { rig.inserter.cancelVerification() }
+        _ = await pasted(rig)
+        _ = await rig.inserter.pasteLast()
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func theReturnEventHasNoModifiersAndTheSameStampAndDestination() {
+        final class Box { var events: [(CGEvent, pid_t)] = [] }
+        let box = Box()
+        let poster = SystemPasteEventPoster(stamp: 4242, post: { box.events.append(($0, $1)) })
+        #expect(poster.postReturn(targetPID: 321))
+        #expect(box.events.count == 2)
+        for (event, pid) in box.events {
+            #expect(event.flags.isEmpty)
+            #expect(event.getIntegerValueField(.keyboardEventKeycode) == 0x24)
+            #expect(event.getIntegerValueField(.eventSourceUserData) == 4242)
+            #expect(pid == 321)
+        }
+        #expect(box.events.map { $0.0.type } == [.keyDown, .keyUp])
+    }
+}
+
+@Suite struct SendAfterInsertSettingsTests {
+    private func isolated(_ body: (UserDefaults) -> Void) {
+        let name = "SendAfterInsertSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        body(defaults)
+    }
+
+    @Test func noAppIsOptedInByDefault() {
+        isolated { defaults in
+            let settings = SendAfterInsertSettings(defaults: defaults)
+            #expect(settings.bundleIDs.isEmpty)
+            #expect(!settings.isEnabled(bundleID: "com.apple.Terminal"))
+            #expect(!settings.isEnabled(bundleID: ""))
+        }
+    }
+
+    @Test func addAndRemovePersistUnderOneKey() {
+        isolated { defaults in
+            let settings = SendAfterInsertSettings(defaults: defaults)
+            settings.add("com.apple.Terminal")
+            settings.add("com.apple.Terminal")
+            settings.add("")
+            #expect(SendAfterInsertSettings(defaults: defaults).isEnabled(bundleID: "com.apple.Terminal"))
+            #expect(defaults.stringArray(forKey: "sendAfterInsertBundleIDs") == ["com.apple.Terminal"])
+            settings.remove("com.apple.Terminal")
+            #expect(!SendAfterInsertSettings(defaults: defaults).isEnabled(bundleID: "com.apple.Terminal"))
+        }
     }
 }
