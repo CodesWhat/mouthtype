@@ -497,6 +497,7 @@ public struct ProfanityRemover: Sendable {
             let noun = words[k + 1]
             if noun.end < n, "'\u{2019}".contains(chars[noun.end]) { return false }
             if adjacent(k + 1), k + 2 < words.count {
+                if ["over", "around", "about", "up", "off", "with"].contains(words[k + 2].lower) { return false }
                 let after = tags.lexicalClass(at: words[k + 2].start)
                 if after == .noun || after == .adjective { return false }
             }

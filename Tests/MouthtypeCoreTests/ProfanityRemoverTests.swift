@@ -159,6 +159,8 @@ import Testing
         ("I am fucking days behind.", "I am days behind."),
         ("He was fucking miles away.", "He was miles away."),
         ("He was fucking things up.", "He was things up."),
+        ("He was fucking people over.", "He was people over."),
+        ("She was fucking guys around.", "She was guys around."),
     ]
 
     @Test(arguments: copulaVerbs)
