@@ -152,6 +152,13 @@ import Testing
         ("This is fucking great.", "This is great."),
         ("He was fucking furious.", "He was furious."),
         ("Stop fucking around.", "Stop messing around."),
+        ("I have fucking kids.", "I have kids."),
+        ("I have fucking diabetes.", "I have diabetes."),
+        ("She is fucking guys trip planner.", "She is guys trip planner."),
+        ("She was fucking hours late.", "She was hours late."),
+        ("I am fucking days behind.", "I am days behind."),
+        ("He was fucking miles away.", "He was miles away."),
+        ("He was fucking things up.", "He was things up."),
     ]
 
     @Test(arguments: copulaVerbs)

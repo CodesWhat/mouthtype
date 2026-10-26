@@ -165,11 +165,9 @@ public struct ProfanityRemover: Sendable {
     private static let personObjects: Set<String> = ["her", "him", "them", "me", "us", "you"]
     /// Plural people that can be the object of "sleep with" ("he was fucking women").
     private static let pluralPeople: Set<String> = ["men", "women", "people", "children", "guys", "girls", "boys", "kids", "folks"]
-    /// Singular nouns that end in "s", so the plural-noun check below doesn't take them for plurals.
-    private static let singularS: Set<String> = [
-        "bus", "gas", "lens", "virus", "status", "campus", "focus", "chaos", "news", "series", "atlas", "bonus", "genius", "canvas",
-    ]
     /// Singular person subjects, plain and fused with a copula, before "was fucking <plural noun>".
+    /// Forms of "be" only: "have" and the modals take a real object ("I have fucking kids").
+    private static let beForms: Set<String> = ["is", "am", "are", "was", "were", "be", "been", "being"]
     private static let singularPersonSubjects: Set<String> = ["he", "she", "i"]
     private static let singularPersonContractions: Set<String> = ["he's", "she's", "i'm"]
     /// What can sit between "fucked" and "over" in the cheating idiom ("fucked her over").
@@ -490,20 +488,21 @@ public struct ProfanityRemover: Sendable {
             }
         }
 
-        /// "He was fucking women": after he, she or I plus a copula, "fucking" before a plural noun is the verb.
+        /// "He was fucking women": after he, she or I plus a form of "be", "fucking" before a plural people noun is the
+        /// verb. The noun must not be possessive or lead into another noun or adjective ("guys trip planner").
         func isCopulaVerbReading(_ k: Int) -> Bool {
-            guard words[k].lower == "fucking", k + 1 < words.count, adjacent(k), isPluralNoun(k + 1), let before = previous(k) else { return false }
+            guard words[k].lower == "fucking", k + 1 < words.count, adjacent(k), ProfanityRemover.pluralPeople.contains(words[k + 1].lower),
+                let before = previous(k)
+            else { return false }
+            let noun = words[k + 1]
+            if noun.end < n, "'\u{2019}".contains(chars[noun.end]) { return false }
+            if adjacent(k + 1), k + 2 < words.count {
+                let after = tags.lexicalClass(at: words[k + 2].start)
+                if after == .noun || after == .adjective { return false }
+            }
             if ProfanityRemover.singularPersonContractions.contains(before) { return true }
-            guard ProfanityRemover.auxiliaries.contains(before), k > 1, adjacent(k - 2) else { return false }
+            guard ProfanityRemover.beForms.contains(before), k > 1, adjacent(k - 2) else { return false }
             return ProfanityRemover.singularPersonSubjects.contains(words[k - 2].lower)
-        }
-
-        /// A plural noun by a simple rule: a listed irregular plural, or a lowercase word ending in "s" (not "ss") that isn't a known singular.
-        func isPluralNoun(_ i: Int) -> Bool {
-            let w = words[i]
-            if ProfanityRemover.pluralPeople.contains(w.lower) { return true }
-            return chars[w.start].isLowercase && w.lower.hasSuffix("s") && !w.lower.hasSuffix("ss") && w.lower.count > 3
-                && !ProfanityRemover.singularS.contains(w.lower)
         }
 
         // MARK: Swapping
@@ -691,7 +690,7 @@ public struct ProfanityRemover: Sendable {
                         spans.append(TextSpan(range: words[over].start..<words[over].end, cut: words[over - 1].end..<words[over].end, replacement: ""))
                     } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k), isFree(k + 1),
                         ProfanityRemover.personObjects.contains(words[k + 1].lower)
-                            || (ProfanityRemover.pluralPeople.contains(words[k + 1].lower) && isCopulaVerbReading(k))
+                            || isCopulaVerbReading(k)
                     {
                         replace(k, sleep)
                     } else if let mess = ProfanityRemover.messUpForms[lower] {
