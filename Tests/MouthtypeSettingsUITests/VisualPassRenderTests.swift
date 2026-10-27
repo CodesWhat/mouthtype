@@ -387,6 +387,22 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
             try modal(defaults, page: .advanced, name: "h-advanced-recognition")
         }
     }
+
+    // MARK: k. Advanced > Press Return after inserting
+
+    @Test func pressReturnAfterInserting() throws {
+        try throwaway { defaults in
+            SendAfterInsertSettings(defaults: defaults).add("com.apple.MobileSMS")
+            SendAfterInsertSettings(defaults: defaults).add("com.tinyspeck.slackmacgap")
+            let model = SettingsModel(defaults: defaults)
+            let section = ScrollView { SendAfterInsertSection(model: model).padding(20) }
+            try both("k-press-return-after-inserting") { try SettingsRender.render(section, dark: $0, size: NSSize(width: 720, height: 300)) }
+        }
+        try throwaway { defaults in
+            let section = ScrollView { SendAfterInsertSection(model: SettingsModel(defaults: defaults)).padding(20) }
+            try both("k-press-return-after-inserting-empty") { try SettingsRender.render(section, dark: $0, size: NSSize(width: 720, height: 220)) }
+        }
+    }
 }
 
 private extension String {

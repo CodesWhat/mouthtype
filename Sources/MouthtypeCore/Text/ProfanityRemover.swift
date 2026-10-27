@@ -163,6 +163,13 @@ public struct ProfanityRemover: Sendable {
         "fuck": "mess up", "fucks": "messes up", "fucked": "messed up", "fucking": "messing up",
     ]
     private static let personObjects: Set<String> = ["her", "him", "them", "me", "us", "you"]
+    /// Plural people that can be the object of "sleep with" ("he was fucking women").
+    private static let pluralPeople: Set<String> = ["men", "women", "people", "children", "guys", "girls", "boys", "kids", "folks"]
+    /// Singular person subjects, plain and fused with a copula, before "was fucking <plural noun>".
+    /// Forms of "be" only: "have" and the modals take a real object ("I have fucking kids").
+    private static let beForms: Set<String> = ["is", "am", "are", "was", "were", "be", "been", "being"]
+    private static let singularPersonSubjects: Set<String> = ["he", "she", "i"]
+    private static let singularPersonContractions: Set<String> = ["he's", "she's", "i'm"]
     /// What can sit between "fucked" and "over" in the cheating idiom ("fucked her over").
     private static let overObjects: Set<String> = personObjects.union(["it"])
     /// A time word after "over" makes it a preposition of time ("fucked her over the weekend").
@@ -475,10 +482,28 @@ public struct ProfanityRemover: Sendable {
             if let previous, ProfanityRemover.gerundTriggers.contains(previous) { return false }
             switch next {
             case .adjective, .adverb, .interjection: return true
-            case .noun: return true
+            case .noun: return !isCopulaVerbReading(k)
             case .verb: return previous.map(ProfanityRemover.auxiliaries.contains) ?? false
             default: return false
             }
+        }
+
+        /// "He was fucking women": after he, she or I plus a form of "be", "fucking" before a plural people noun is the
+        /// verb. The noun must not be possessive or lead into another noun or adjective ("guys trip planner").
+        func isCopulaVerbReading(_ k: Int) -> Bool {
+            guard words[k].lower == "fucking", k + 1 < words.count, adjacent(k), ProfanityRemover.pluralPeople.contains(words[k + 1].lower),
+                let before = previous(k)
+            else { return false }
+            let noun = words[k + 1]
+            if noun.end < n, "'\u{2019}".contains(chars[noun.end]) { return false }
+            if adjacent(k + 1), k + 2 < words.count {
+                if ["over", "around", "about", "up", "off", "with"].contains(words[k + 2].lower) { return false }
+                let after = tags.lexicalClass(at: words[k + 2].start)
+                if after == .noun || after == .adjective { return false }
+            }
+            if ProfanityRemover.singularPersonContractions.contains(before) { return true }
+            guard ProfanityRemover.beForms.contains(before), k > 1, adjacent(k - 2) else { return false }
+            return ProfanityRemover.singularPersonSubjects.contains(words[k - 2].lower)
         }
 
         // MARK: Swapping
@@ -664,8 +689,9 @@ public struct ProfanityRemover: Sendable {
                     } else if let cheat = ProfanityRemover.cheatForms[lower], let over = splitParticle(k, "over"), isCheatingOver(k, over) {
                         replace(k, cheat)
                         spans.append(TextSpan(range: words[over].start..<words[over].end, cut: words[over - 1].end..<words[over].end, replacement: ""))
-                    } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k), isFree(k + 1),
-                        ProfanityRemover.personObjects.contains(words[k + 1].lower)
+                    } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k),
+                        (isFree(k + 1) && ProfanityRemover.personObjects.contains(words[k + 1].lower))
+                            || isCopulaVerbReading(k)
                     {
                         replace(k, sleep)
                     } else if let mess = ProfanityRemover.messUpForms[lower] {

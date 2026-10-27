@@ -108,6 +108,11 @@ protocol DictationInserting: AnyObject {
     func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void)
     /// Drops any read-back still waiting.
     func cancelVerification()
+    /// Queues a Return for the app `result` was pasted into, sent only if the read-back confirms the paste landed and the user
+    /// opted the app in. Only a normal take asks.
+    func pressReturnAfterInsert(for result: DeliveryResult) async
+    /// Drops any Return still waiting on a verdict.
+    func cancelPendingReturn()
 }
 
 extension DictationInserting {
@@ -115,6 +120,8 @@ extension DictationInserting {
     func websiteHostReader(for snapshot: FocusSnapshot) -> (@Sendable () -> String?)? { nil }
     func observeVerification(_ handler: @escaping @MainActor (PasteVerification) -> Void) {}
     func cancelVerification() {}
+    func pressReturnAfterInsert(for result: DeliveryResult) async {}
+    func cancelPendingReturn() {}
     func insertionContext() -> InsertionContext? { nil }
     func clipboardText() -> String? { nil }
 }
@@ -280,7 +287,9 @@ extension AudioArchive: DictationArchiving {
         return try Self.read(contentsOf: url)
     }
 }
-extension TextInserter: DictationInserting {}
+extension TextInserter: DictationInserting {
+    func pressReturnAfterInsert(for result: DeliveryResult) async { armReturn(after: result) }
+}
 extension PillController: DictationPill {}
 
 struct SystemDictationClock: DictationClock {

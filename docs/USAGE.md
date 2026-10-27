@@ -6,7 +6,7 @@ Click a text field, hold <kbd>Fn</kbd> and speak, then release to paste. Double-
 
 ## Mac release
 
-The latest published release, 0.7.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
+The latest published release, 0.8.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
 
 > [!NOTE]
 > Existing alpha.1–3 users need this download once to get the built-in updater.
@@ -93,6 +93,10 @@ Replacements expand after cleanup, so their spelling, capitalization, spaces, an
 - Inserted text is never expanded again.
 - Punctuation outside the spoken trigger stays outside the replacement.
 - Cleanup Off also turns phrase expansion off.
+
+## Press Return after inserting
+
+To send a message as soon as you stop talking, open **Settings > Advanced > Press Return after inserting** and add the app. After a normal dictation pastes there, Mouthtype presses Return once. It does that only when it can confirm the text landed in a text field, and not if you typed or clicked first, started another recording, or the take was recovered. It never sends in password fields. Apple Terminal can't confirm a paste, so it never sends there. Other apps send only when Mouthtype can confirm the text landed; this hasn't been tried in live apps yet. The list starts empty, so nothing is sent until you add an app.
 
 ## Pasting into terminals
 
