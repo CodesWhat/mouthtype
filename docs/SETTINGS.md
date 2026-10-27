@@ -21,6 +21,7 @@ The Mouthtype window has six pages in the sidebar: **Home**, **Stats**, **Dictio
 | Boost saved words | Off | Settings > Advanced |
 | Code names from your editor | Off | Settings > Advanced |
 | Names on screen | On (from 0.6.0; stays off if you turned it off before). Still does nothing until Boost saved words is on. Setup's Names model download turns both on | Settings > Advanced |
+| Press Return after inserting | Off | Settings > Advanced |
 | Override individual fonts | Off | Appearance |
 
 ## The menu
@@ -249,6 +250,7 @@ Rules you made before the redesign keep working unchanged as explicit overrides.
 - Boost saved words, Learn from my corrections, Code names from your editor and Names on screen.
 - Remove fillers, Spoken commands and lists, Slash commands in coding apps (on by default; "slash research" types /research in terminals, editors and agent apps), Format numbers, Lowercase sentence starts and Drop the final full stop.
 - Split long pastes per supported terminal. It starts off, applies to the chosen terminal's windows and does not identify the command-line program inside them.
+- Press Return after inserting, a list of apps that get one Return after a dictation is pasted. The list starts empty, which is off everywhere. Add App… opens the app chooser, and the x on a row removes the app. Mouthtype presses Return only when the paste read-back confirms the text landed in a text field it can read, you haven't typed or clicked since, no new recording has started, the take wasn't salvaged or recovered, and it's within two seconds. It never presses Return in password fields. Terminal, the other supported terminals and the Claude app can't confirm a paste, so they don't send yet.
 - Keep finished audio for, Dictionary file, and Remap Fn.
 
 ### Boost saved words

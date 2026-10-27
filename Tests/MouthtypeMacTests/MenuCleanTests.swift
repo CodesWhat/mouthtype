@@ -152,6 +152,26 @@ import MouthtypeCore
         #expect(Set(PasteSettings.supportedTerminals.map(\.bundleID)).count == 5)
     }
 
+    @Test func sendAfterInsertAppsAddRemoveAndPersist() {
+        let name = "MenuCleanTests-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        let model = SettingsModel(defaults: defaults)
+        #expect(model.sendAfterInsertBundleIDs.isEmpty)
+        model.addSendAfterInsert(bundleID: "com.apple.MobileSMS")
+        model.addSendAfterInsert(bundleID: "com.tinyspeck.slackmacgap")
+        model.addSendAfterInsert(bundleID: "com.apple.MobileSMS")
+        #expect(model.sendAfterInsertBundleIDs == ["com.apple.MobileSMS", "com.tinyspeck.slackmacgap"])
+        #expect(SendAfterInsertSettings(defaults: defaults).isEnabled(bundleID: "com.apple.MobileSMS"))
+        #expect(SettingsModel(defaults: defaults).sendAfterInsertBundleIDs == model.sendAfterInsertBundleIDs)
+        model.removeSendAfterInsert(bundleID: "com.apple.MobileSMS")
+        #expect(model.sendAfterInsertBundleIDs == ["com.tinyspeck.slackmacgap"])
+        #expect(!SendAfterInsertSettings(defaults: defaults).isEnabled(bundleID: "com.apple.MobileSMS"))
+        model.addSendAfterInsertApplication(at: URL(fileURLWithPath: "/tmp/not-an-app.txt"))
+        #expect(model.sendAfterInsertError != nil)
+        #expect(model.sendAfterInsertBundleIDs == ["com.tinyspeck.slackmacgap"])
+    }
+
     @Test func fullMenuMatchesTheTargetLayoutWithNoIcons() throws {
         let state = healthy()
         let daily = DailyMenu()
