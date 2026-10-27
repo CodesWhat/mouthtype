@@ -94,6 +94,10 @@ Replacements expand after cleanup, so their spelling, capitalization, spaces, an
 - Punctuation outside the spoken trigger stays outside the replacement.
 - Cleanup Off also turns phrase expansion off.
 
+## Press Return after inserting
+
+To send a message as soon as you stop talking, open **Settings > Advanced > Press Return after inserting** and add the app. After a normal dictation pastes there, Mouthtype presses Return once. It does that only when it can confirm the text landed in a text field, and not if you typed or clicked first, started another recording, or the take was recovered. It never sends in password fields, and it doesn't send in Terminal, iTerm2, Ghostty, kitty, WezTerm or the Claude app yet, because Mouthtype can't confirm a paste there. The list starts empty, so nothing is sent until you add an app.
+
 ## Pasting into terminals
 
 For a terminal that loses text from large pastes, open **Settings > Advanced > Delivery** and enable split long pastes for that app.

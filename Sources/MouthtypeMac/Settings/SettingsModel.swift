@@ -67,6 +67,9 @@ import UniformTypeIdentifiers
     private(set) var contextNames = true
     private(set) var boostStatus = VocabularyBoostStatusCenter.current
     private(set) var chunkedTerminals: Set<String> = []
+    /// Apps that get a Return after a confirmed paste, sorted. Empty means off everywhere.
+    private(set) var sendAfterInsertBundleIDs: [String] = []
+    private(set) var sendAfterInsertError: String?
     private(set) var appStyles = AppCleanupStyles()
     private(set) var appStylesError: String?
 
@@ -291,6 +294,7 @@ import UniformTypeIdentifiers
         editorHints = EditorHintsSetting.isEnabled(defaults)
         contextNames = ContextNamesSetting.isEnabled(defaults)
         chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
+        sendAfterInsertBundleIDs = SendAfterInsertSettings(defaults: defaults).bundleIDs.sorted()
         do { appStyles = try AppCleanupStyles.load(defaults); appStylesError = nil } catch { appStylesError = error.localizedDescription }
     }
 
@@ -506,6 +510,42 @@ import UniformTypeIdentifiers
     func setChunks(_ enabled: Bool, bundleID: String) {
         PasteSettings.setChunks(enabled, bundleID: bundleID, defaults: defaults)
         chunkedTerminals = Set(PasteSettings.supportedTerminals.filter { PasteSettings.chunksEnabled($0.bundleID, defaults: defaults) }.map(\.bundleID))
+    }
+
+    func addSendAfterInsert(bundleID: String) {
+        let settings = SendAfterInsertSettings(defaults: defaults)
+        settings.add(bundleID)
+        sendAfterInsertBundleIDs = settings.bundleIDs.sorted()
+    }
+
+    func removeSendAfterInsert(bundleID: String) {
+        let settings = SendAfterInsertSettings(defaults: defaults)
+        settings.remove(bundleID)
+        sendAfterInsertBundleIDs = settings.bundleIDs.sorted()
+    }
+
+    func chooseSendAfterInsertApplication() {
+        let panel = NSOpenPanel()
+        panel.title = "Choose an application"
+        panel.prompt = "Add application"
+        panel.allowedContentTypes = [.applicationBundle]
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = URL(fileURLWithPath: "/Applications", isDirectory: true)
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            self?.addSendAfterInsertApplication(at: url)
+        }
+    }
+
+    func addSendAfterInsertApplication(at url: URL) {
+        guard url.pathExtension.lowercased() == "app", let bundleID = Bundle(url: url)?.bundleIdentifier else {
+            sendAfterInsertError = "That application has no readable bundle identifier."
+            return
+        }
+        sendAfterInsertError = nil
+        addSendAfterInsert(bundleID: bundleID)
     }
 
     func setLevel(_ level: CleanupLevel) { update { $0.level = level } }

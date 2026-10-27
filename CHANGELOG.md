@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A Press Return after inserting list in Settings > Advanced. Add an app and Mouthtype presses Return once after a dictation lands there, only when the paste is confirmed in a text field you haven't touched since. It starts empty, never sends in password fields, and doesn't send in terminals or the Claude app yet.
+
 ## [0.7.0] - 2026-10-25
 
 ### Added
