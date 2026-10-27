@@ -13,11 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- A Press Return after inserting list in Settings > Advanced. Add an app and Mouthtype presses Return once after a dictation lands there, only when the paste is confirmed in a text field you haven't touched since. It starts empty, never sends in password fields, and doesn't send in terminals or the Claude app yet.
+- A Press Return after inserting list in Settings > Advanced. Add an app and Mouthtype presses Return once after a dictation lands there, only when the paste is confirmed in a text field you haven't touched since. It starts empty and never sends in password fields. Apple Terminal can't confirm a paste, so it never sends there. Other apps send only when Mouthtype can confirm the text landed; this hasn't been tried in live apps yet.
 
 ### Fixed
 
-- Formal cleanup no longer drops a real verb. a swear word before a people noun now becomes "sleeping with" instead of being deleted, so the sentence keeps its verb. This applies only after he, she or I with is, was or am and a people noun.
+- Formal cleanup no longer drops a swear word used as a verb in one narrow case: after he, she or I with a form of "be" (including he's, she's and I'm) and before a word for people such as women, men or guys. It now becomes "sleeping with".
 
 ## [0.7.0] - 2026-10-25
 

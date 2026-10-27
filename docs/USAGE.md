@@ -96,7 +96,7 @@ Replacements expand after cleanup, so their spelling, capitalization, spaces, an
 
 ## Press Return after inserting
 
-To send a message as soon as you stop talking, open **Settings > Advanced > Press Return after inserting** and add the app. After a normal dictation pastes there, Mouthtype presses Return once. It does that only when it can confirm the text landed in a text field, and not if you typed or clicked first, started another recording, or the take was recovered. It never sends in password fields, and it doesn't send in Terminal, iTerm2, Ghostty, kitty, WezTerm or the Claude app yet, because Mouthtype can't confirm a paste there. The list starts empty, so nothing is sent until you add an app.
+To send a message as soon as you stop talking, open **Settings > Advanced > Press Return after inserting** and add the app. After a normal dictation pastes there, Mouthtype presses Return once. It does that only when it can confirm the text landed in a text field, and not if you typed or clicked first, started another recording, or the take was recovered. It never sends in password fields, Apple Terminal can't confirm a paste, so it never sends there. Other apps send only when Mouthtype can confirm the text landed; this hasn't been tried in live apps yet. The list starts empty, so nothing is sent until you add an app.
 
 ## Pasting into terminals
 

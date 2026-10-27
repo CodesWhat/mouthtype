@@ -20,8 +20,8 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 Press Return after inserting, plus a Formal cleanup fix.
 
-- Added: A Press Return after inserting list in Settings > Advanced. Add an app and Mouthtype presses Return once after a dictation lands there. It starts empty, so nothing is sent until you add an app. It sends only when it can confirm through accessibility that the text landed in the same field within about two seconds, you haven't typed or clicked since, and no new recording has started. It never sends in password fields or secure input, or for recovered or interrupted takes or Paste Last. Terminal, iTerm2, Ghostty, kitty, WezTerm and the Claude app can't confirm a paste yet, so they never send.
-- Fixed: Formal cleanup no longer drops a real verb. After he, she or I with is, was or am, a swear word before a people noun such as women becomes "sleeping with" instead of being deleted.
+- Added: A Press Return after inserting list in Settings > Advanced. Add an app and Mouthtype presses Return once after a dictation lands there. It starts empty, so nothing is sent until you add an app. It sends only when it can confirm through accessibility that the text landed in the same field within about two seconds, you haven't typed or clicked since, and no new recording has started. It never sends in password fields or secure input, or for recovered or interrupted takes or Paste Last. Apple Terminal can't confirm a paste, so it never sends there. Other apps send only when Mouthtype can confirm the text landed; this hasn't been tried in live apps yet.
+- Fixed: Formal cleanup no longer drops a swear word used as a verb in one narrow case: after he, she or I with a form of "be" (including he's, she's and I'm) and before a word for people such as women, men or guys. It now becomes "sleeping with".
 
 > [!NOTE]
 > Press Return after inserting was checked with unit tests and offscreen renders only, never in a live app. Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release. Japanese, Hindi and Tamil, their 1.6 GB model download and every other non-English language were checked with renders and synthetic speech only. See the known limits.
@@ -255,7 +255,7 @@ For fixes to common problems and the full list of what this release doesn't cove
 
 - Names and context-dependent recognition can be wrong. A real example was testing recognized as dusting across takes. Check text before sending. Mouthtype does not read previous chat messages to resolve it.
 - Broader browser/terminal/Electron behavior, clipboard restoration, microphone removal, silence, stop-cue counts and explicit Undo need more live coverage. The false-failure warning behavior is not fully verified.
-- Long terminal paste splitting is off by default. No Return is sent automatically.
+- Long terminal paste splitting is off by default. Splitting adds no Return between parts. If the app is on the Press Return after inserting list, one Return can follow after the whole paste is confirmed.
 - Setup’s microphone status can lag a recovered input until you return to the app and refresh it. Device transitions still need live coverage.
 - First installation and model downloads on another Mac need confirmation. Existing developer-machine grants and caches do not verify that path.
 - Linux has an experimental source-only daemon/CLI candidate. Arch/Omarchy is an active acceptance target. Container and headless component checks do not establish physical microphone or Hyprland support. See Linux source testing below.
