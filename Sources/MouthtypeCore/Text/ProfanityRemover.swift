@@ -489,13 +489,14 @@ public struct ProfanityRemover: Sendable {
         }
 
         /// "He was fucking women": after he, she or I plus a form of "be", "fucking" before a plural people noun is the
-        /// verb. The noun must not be possessive or lead into another noun or adjective ("guys trip planner").
+        /// verb. The noun must not be possessive or hyphenated ("people-watching"), or lead into another noun or adjective ("guys trip planner").
         func isCopulaVerbReading(_ k: Int) -> Bool {
             guard words[k].lower == "fucking", k + 1 < words.count, adjacent(k), ProfanityRemover.pluralPeople.contains(words[k + 1].lower),
                 let before = previous(k)
             else { return false }
             let noun = words[k + 1]
             if noun.end < n, "'\u{2019}".contains(chars[noun.end]) { return false }
+            if noun.end < n, "-\u{2010}\u{2011}".contains(chars[noun.end]) { return false }
             if adjacent(k + 1), k + 2 < words.count {
                 if ["over", "around", "about", "up", "off", "with"].contains(words[k + 2].lower) { return false }
                 let after = tags.lexicalClass(at: words[k + 2].start)

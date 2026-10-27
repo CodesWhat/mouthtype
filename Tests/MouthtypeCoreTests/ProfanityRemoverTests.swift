@@ -161,6 +161,8 @@ import Testing
         ("He was fucking things up.", "He was things up."),
         ("He was fucking people over.", "He was people over."),
         ("She was fucking guys around.", "She was guys around."),
+        ("I'm fucking people-watching.", "I'm people-watching."),
+        ("She was fucking guys-only trip planning.", "She was guys-only trip planning."),
     ]
 
     @Test(arguments: copulaVerbs)
