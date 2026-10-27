@@ -27,7 +27,7 @@
   "dependencies": {
     "@types/mdx": "^2.0.14",
     "fumadocs-core": "^16.10.5",
-    "fumadocs-mdx": "^15.0.12",
+    "fumadocs-mdx": "^15.4.10",
     "fumadocs-ui": "^16.10.5",
     "lucide-react": "^1.14.0",
     "next": "16.4.2",
