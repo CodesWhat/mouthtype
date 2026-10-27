@@ -255,7 +255,7 @@ For fixes to common problems and the full list of what this release doesn't cove
 
 - Names and context-dependent recognition can be wrong. A real example was testing recognized as dusting across takes. Check text before sending. Mouthtype does not read previous chat messages to resolve it.
 - Broader browser/terminal/Electron behavior, clipboard restoration, microphone removal, silence, stop-cue counts and explicit Undo need more live coverage. The false-failure warning behavior is not fully verified.
-- Long terminal paste splitting is off by default. Splitting adds no Return between parts. If the app is on the Press Return after inserting list, one Return can follow after the whole paste is confirmed.
+- Long terminal paste splitting is off by default. Splitting adds no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste once it is confirmed.
 - Setup’s microphone status can lag a recovered input until you return to the app and refresh it. Device transitions still need live coverage.
 - First installation and model downloads on another Mac need confirmation. Existing developer-machine grants and caches do not verify that path.
 - Linux has an experimental source-only daemon/CLI candidate. Arch/Omarchy is an active acceptance target. Container and headless component checks do not establish physical microphone or Hyprland support. See Linux source testing below.

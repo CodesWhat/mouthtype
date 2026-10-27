@@ -168,6 +168,10 @@ import Testing
         #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
     }
 
+    @Test func swapsFuckingForSleepingWithEvenWhenThePeopleNounIsProtected() {
+        #expect(strip("He was fucking women.", protected: ["women"]) == "He was sleeping with women.")
+    }
+
     @Test func leavesTheSpeakersOwnArticlesAlone() {
         for text in ["A apple a day.", "He is an hour late.", "A university, an hour, an honest man."] {
             #expect(strip(text) == text, "\(text.debugDescription)")
