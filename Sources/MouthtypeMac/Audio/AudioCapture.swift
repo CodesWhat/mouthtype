@@ -125,7 +125,15 @@ public actor AudioCapture {
         converters.drain { buffer.appendTail($0) }
         let stats = buffer.currentStats
         logStats(stats)
-        let samples = salvaging ? buffer.finishSalvaging().samples : try buffer.finish()
+        var interrupted = false
+        let samples: [Float]
+        if salvaging {
+            let salvaged = buffer.finishSalvaging()
+            samples = salvaged.samples
+            interrupted = salvaged.routeChanged || stats.inputFailures > 0
+        } else {
+            samples = try buffer.finish()
+        }
 
         func ms(_ seconds: TimeInterval?) -> Double? { seconds.map { $0 * 1000 } }
         return CapturedAudio(
@@ -137,7 +145,8 @@ public actor AudioCapture {
             firstSampleMs: ms(stats.firstSampleDelay),
             firstNonzeroMs: ms(stats.firstSoundDelay),
             captureStartMs: startDelay * 1000,
-            audioMs: Double(samples.count) * 1000 / Self.targetSampleRate
+            audioMs: Double(samples.count) * 1000 / Self.targetSampleRate,
+            wasInterrupted: interrupted
         )
     }
 

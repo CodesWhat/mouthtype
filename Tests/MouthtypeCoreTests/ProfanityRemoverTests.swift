@@ -142,6 +142,38 @@ import Testing
         #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
     }
 
+    static let copulaVerbs: [(input: String, expected: String)] = [
+        ("He was fucking women.", "He was sleeping with women."),
+        ("She's fucking guys from work.", "She's sleeping with guys from work."),
+        ("I was fucking people I barely knew.", "I was sleeping with people I barely knew."),
+        ("It was fucking shit, honestly.", "It was stuff, honestly."),
+        ("They were fucking morons.", "They were morons."),
+        ("He was fucking idiot.", "He was idiot."),
+        ("This is fucking great.", "This is great."),
+        ("He was fucking furious.", "He was furious."),
+        ("Stop fucking around.", "Stop messing around."),
+        ("I have fucking kids.", "I have kids."),
+        ("I have fucking diabetes.", "I have diabetes."),
+        ("She is fucking guys trip planner.", "She is guys trip planner."),
+        ("She was fucking hours late.", "She was hours late."),
+        ("I am fucking days behind.", "I am days behind."),
+        ("He was fucking miles away.", "He was miles away."),
+        ("He was fucking things up.", "He was things up."),
+        ("He was fucking people over.", "He was people over."),
+        ("She was fucking guys around.", "She was guys around."),
+        ("I'm fucking people-watching.", "I'm people-watching."),
+        ("She was fucking guys-only trip planning.", "She was guys-only trip planning."),
+    ]
+
+    @Test(arguments: copulaVerbs)
+    func keepsFuckingAsAVerbBeforeAPluralObjectAfterHeSheI(_ pair: (input: String, expected: String)) {
+        #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
+    }
+
+    @Test func swapsFuckingForSleepingWithEvenWhenThePeopleNounIsProtected() {
+        #expect(strip("He was fucking women.", protected: ["women"]) == "He was sleeping with women.")
+    }
+
     @Test func leavesTheSpeakersOwnArticlesAlone() {
         for text in ["A apple a day.", "He is an hour late.", "A university, an hour, an honest man."] {
             #expect(strip(text) == text, "\(text.debugDescription)")

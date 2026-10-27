@@ -213,6 +213,43 @@ private final class SamplerProbe: @unchecked Sendable {
         probe.gate.signal()
     }
 
+    private func suite() -> (UserDefaults, String) {
+        let name = "GlassBackdropCacheTests-\(UUID().uuidString)"
+        return (UserDefaults(suiteName: name)!, name)
+    }
+
+    @Test func anUnrelatedDefaultsWriteDoesNotCountAsALookChange() {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let cache = cache(SamplerProbe())
+        cache.startObserving(defaults: defaults)
+        defaults.set("x", forKey: "somethingElse")
+        #expect(cache.defaultsDidChange() == false)
+    }
+
+    @Test func aChangedLookCountsOnceThenSettles() {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let cache = cache(SamplerProbe())
+        cache.startObserving(defaults: defaults)
+        PillSkinPreference.set(.glass, in: defaults)
+        PillSizePreference.set(.large, in: defaults)
+        // The writes above already reached the observer, so stage the look the last prewarm covered as stale.
+        cache.lastLook = .init(skin: .classic, size: .standard)
+        #expect(cache.defaultsDidChange() == true)
+        #expect(cache.lastLook == .init(skin: .glass, size: .large))
+        #expect(cache.defaultsDidChange() == false)
+    }
+
+    @Test func theLookIsRecordedWhenObservingStarts() {
+        let (defaults, name) = suite()
+        defer { defaults.removePersistentDomain(forName: name) }
+        PillSkinPreference.set(.matrix, in: defaults)
+        let cache = cache(SamplerProbe())
+        cache.startObserving(defaults: defaults)
+        #expect(cache.lastLook == .init(skin: .matrix, size: .automatic))
+    }
+
     @Test func anUnmeasuredWallpaperGetsSmokedGlassWithoutWaiting() {
         let probe = SamplerProbe()
         let cache = cache(probe)
