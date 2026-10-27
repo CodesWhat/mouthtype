@@ -52,6 +52,7 @@ extension SettingsView {
                     isOn: Binding(get: { model.chunkedTerminals.contains(terminal.bundleID) }, set: { model.setChunks($0, bundleID: terminal.bundleID) }))
             }
         }
+        SendAfterInsertSection(model: model)
         AudioRetentionSection(model: model)
         DesignSection(eyebrow: "FILES & KEYS") {
             DesignRow(title: "Dictionary file", detail: actions.diagnostics?.dictionaryError ?? "The saved spellings file, as plain text.") {

@@ -26,6 +26,24 @@ public final class TextInserter {
     private let inputGeneration: @MainActor () -> UInt64?
     private let observeBoundary: @MainActor (PasteBoundaryDiagnostic) -> Void
     private let restrictedToPID: pid_t?
+    /// Whether the user opted this app (by bundle ID) into "Press Return after inserting".
+    private let sendsReturn: @MainActor (String) -> Bool
+    /// A Return waiting on the read-back's verdict for one delivery.
+    private struct ArmedReturn {
+        var generation: Int
+        var pid: pid_t
+        var bundleID: String
+        var element: FocusedElement
+        /// The real key and click count right after the paste, and when the paste went out.
+        var input: UInt64
+        var pastedAt: ContinuousClock.Instant
+    }
+    /// How long after the paste chord a Return may still go out.
+    static let returnWindow: TimeInterval = 2
+    private var pasteStamp: (generation: Int, input: UInt64?, at: ContinuousClock.Instant)?
+    private var armedReturn: ArmedReturn?
+    /// The newest read-back verdict, so a send armed after it arrived still sees it.
+    private var lastVerdict: PasteVerification?
     private var deliveryActive = false
     private var closing = false
     private var termination: Task<Void, Never>?
@@ -50,6 +68,7 @@ public final class TextInserter {
     /// `syntheticStamp` goes on every event we post (`eventSourceUserData`), so the app's own taps can recognise them.
     public init(syntheticStamp: Int64, inputGeneration: @escaping @MainActor () -> UInt64?, restrictedToPID: pid_t? = nil) {
         self.observeBoundary = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
+        self.sendsReturn = { SendAfterInsertSettings().isEnabled(bundleID: $0) }
         self.chunkedPaste = { PasteSettings.chunksEnabled($0) }
         self.now = { ContinuousClock.now }
         self.inputGeneration = inputGeneration
@@ -68,9 +87,11 @@ public final class TextInserter {
         schedule: @escaping PasteboardSession.Schedule, sleep: @escaping @Sendable (TimeInterval) async throws -> Void = { _ in },
         now: @escaping @MainActor () -> ContinuousClock.Instant = { ContinuousClock.now }, inputGeneration: @escaping @MainActor () -> UInt64? = { 0 },
         restrictedToPID: pid_t? = nil, chunkedPaste: @escaping @MainActor (String?) -> Bool = { _ in false },
+        sendsReturn: @escaping @MainActor (String) -> Bool = { _ in false },
         observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { Log.app.info("paste boundary: \($0.metadata, privacy: .public)") }
     ) {
         self.observeBoundary = observeBoundary
+        self.sendsReturn = sendsReturn
         self.chunkedPaste = chunkedPaste
         self.now = now
         self.inputGeneration = inputGeneration
@@ -89,6 +110,7 @@ public final class TextInserter {
     /// A new dictation ends the last paste's read-back. Its row keeps "unknown".
     func cancelVerification() {
         batchGeneration += 1
+        armedReturn = nil
         verification?.cancel()
         verification = nil
     }
@@ -216,6 +238,7 @@ public final class TextInserter {
         }
         deliveryGeneration += 1
         let generation = deliveryGeneration
+        lastVerdict = nil
         cancelVerification()
 
         switch DeliveryDecision.decide(now: now, secureInput: secureInput) {
@@ -327,6 +350,7 @@ public final class TextInserter {
                 )
             }
             let afterInput = inputGeneration()
+            pasteStamp = (generation, afterInput, self.now())
             if let pid = now.pid, let last = spaced.last {
                 lastPaste = LastPaste(
                     pid: pid, bundleID: now.bundleID, element: now.element, finalCharacter: last, date: self.now(),
@@ -450,7 +474,10 @@ public final class TextInserter {
             guard let self, !Task.isCancelled, self.deliveryGeneration == generation else { return }
             let verdict = PasteVerifier.judge(baseline: baseline, pasted: pasted, observations: observations, expected: offsets.count)
             Log.app.info("paste read-back: \(verdict.storeOutcome, privacy: .public)")
-            self.onVerified?(PasteVerification(id: generation, verdict: verdict, receiptMs: self.clipboard.firstReceiptMs))
+            let verification = PasteVerification(id: generation, verdict: verdict, receiptMs: self.clipboard.firstReceiptMs)
+            self.lastVerdict = verification
+            self.onVerified?(verification)
+            self.returnAfterVerdict(verification)
         }
     }
 
@@ -484,6 +511,59 @@ public final class TextInserter {
         return await deliver(lastText, startFocus: nil)
     }
 
+    /// Queues a Return for the app `result` was just pasted into, when the user opted that app in. It goes out only
+    /// when the read-back reports that this delivery's text landed; any other verdict, or none, sends nothing.
+    /// Called only by the controller after a normal dictation take, never by `deliver`, so Paste Last, the
+    /// self-tests and every other delivery can't reach it.
+    func armReturn(after result: DeliveryResult) {
+        guard result.method == .paste, result.outcome == .unknown else { return skipReturn("the delivery was not a clean paste") }
+        guard !result.finalText.isEmpty else { return skipReturn("nothing was delivered") }
+        guard let target = result.target, let pid = target.pid, pid > 0, let bundleID = target.bundleID else {
+            return skipReturn("the paste target is unknown")
+        }
+        guard sendsReturn(bundleID) else { return skipReturn("the app is not opted in") }
+        guard let element = target.element else { return skipReturn("the paste target has no focused element") }
+        guard let generation = result.verificationID, generation == deliveryGeneration, !closing else {
+            return skipReturn("a newer delivery replaced this paste")
+        }
+        guard !Task.isCancelled else { return skipReturn("the take was cancelled") }
+        guard let stamp = pasteStamp, stamp.generation == generation, let input = stamp.input else {
+            return skipReturn("user input can't be tracked")
+        }
+        armedReturn = ArmedReturn(
+            generation: generation, pid: pid, bundleID: bundleID, element: element, input: input, pastedAt: stamp.at)
+        if let verdict = lastVerdict, verdict.id == generation { returnAfterVerdict(verdict) }
+    }
+
+    /// A new recording drops any Return still waiting on a verdict.
+    func cancelPendingReturn() { armedReturn = nil }
+
+    private func skipReturn(_ reason: String) {
+        Log.app.info("send after insert skipped: \(reason, privacy: .public)")
+    }
+
+    /// Runs when a read-back ends, or when a send is armed after it did.
+    private func returnAfterVerdict(_ verification: PasteVerification) {
+        guard let armed = armedReturn, armed.generation == verification.id else { return }
+        armedReturn = nil
+        guard verification.verdict == .confirmed else {
+            return skipReturn("the read-back said \(verification.verdict.storeOutcome)")
+        }
+        guard armed.generation == deliveryGeneration, !closing, !deliveryActive, !Task.isCancelled else {
+            return skipReturn("the take was cancelled or replaced")
+        }
+        guard now() <= armed.pastedAt.advanced(by: .seconds(Self.returnWindow)) else { return skipReturn("the send window passed") }
+        // Matching text in the field doesn't show the user left it alone; a key or click since the paste does.
+        guard inputGeneration() == armed.input else { return skipReturn("the user typed or clicked after the paste") }
+        let fresh = focus.snapshot()
+        guard !fresh.isSecure, !focus.isSecureInputEnabled else { return skipReturn("a secure field or secure input is active") }
+        guard fresh.pid == armed.pid, fresh.bundleID == armed.bundleID, let element = fresh.element, element == armed.element,
+            !fresh.focusOwnerDiffersFromFrontmost
+        else { return skipReturn("focus moved after the paste") }
+        guard clipboard.pressReturn(targetPID: armed.pid) else { return skipReturn("the Return event could not be posted") }
+        Log.app.info("send after insert: pressed Return")
+    }
+
     /// Puts the last delivered transcript on the clipboard to stay. False when nothing was delivered yet.
     public func copyLast() -> Bool {
         guard let lastText else { return false }
@@ -498,6 +578,12 @@ public final class TextInserter {
 protocol PasteEventPosting: AnyObject {
     /// Posts Cmd plus `keyCode`. False when the events could not be created.
     func postPaste(keyCode: CGKeyCode, targetPID: pid_t?) -> Bool
+    /// Posts one plain Return, with no modifiers. False when the events could not be created.
+    func postReturn(targetPID: pid_t?) -> Bool
+}
+
+extension PasteEventPosting {
+    func postReturn(targetPID: pid_t?) -> Bool { false }
 }
 
 @MainActor
@@ -531,6 +617,26 @@ final class SystemPasteEventPoster: PasteEventPosting {
         }
         return true
     }
+
+    /// Same private source, stamp and destination as the paste, with the flags cleared so a held Shift or Command
+    /// can't turn the Return into a newline or a different shortcut.
+    func postReturn(targetPID requestedPID: pid_t?) -> Bool {
+        guard let destination = targetPID ?? requestedPID, destination > 0 else { return false }
+        let source = CGEventSource(stateID: .privateState)
+        guard
+            let down = CGEvent(keyboardEventSource: source, virtualKey: Self.returnKeyCode, keyDown: true),
+            let up = CGEvent(keyboardEventSource: source, virtualKey: Self.returnKeyCode, keyDown: false)
+        else { return false }
+        for event in [down, up] {
+            event.flags = []
+            event.setIntegerValueField(.eventSourceUserData, value: stamp)
+            post(event, destination)
+        }
+        return true
+    }
+
+    /// kVK_Return.
+    static let returnKeyCode: CGKeyCode = 0x24
 }
 
 // MARK: - Clipboard
@@ -662,6 +768,8 @@ final class PasteboardSession {
     }
 
     var isRestorePending: Bool { saved != nil }
+
+    func pressReturn(targetPID: pid_t?) -> Bool { poster.postReturn(targetPID: targetPID) }
 
     var pasteGeneration: Int { generation }
     var readCount: Int { receipts?.readCount ?? 0 }

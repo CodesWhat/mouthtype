@@ -66,8 +66,9 @@ import MouthtypeCore
     }
 
     @Test func advancedHoldsEveryOptionTheReadmeMovesThere() throws {
-        let text = try source(["SettingsAdvancedPage", "AudioRetentionSection"])
+        let text = try source(["SettingsAdvancedPage", "AudioRetentionSection", "SendAfterInsertSection"])
         for needle in [
+            "PRESS RETURN AFTER INSERTING", "settings-send-after-insert-add", "settings-send-after-insert-remove",
             "Boost saved words", "Learn from my corrections", "Remove fillers", "Spoken commands and lists",
             "Format numbers", "Lowercase sentence starts", "Drop the final full stop", "Split long pastes", "Keep finished audio for",
             "Dictionary file", "Remap Fn to hide the emoji picker", "settings-audio-age", "settings-audio-size", "settings-remap-fn",
