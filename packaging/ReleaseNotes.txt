@@ -1,5 +1,12 @@
-Mouthtype 0.7.0
+Mouthtype 0.8.0
 
+Press Return after inserting. Settings > Advanced has a new list of apps. Add an app and Mouthtype presses Return once after a dictation lands there, so a chat message sends when you stop talking. The list starts empty, which means it is off everywhere. Mouthtype presses Return only when it can confirm through accessibility that the text landed in the same field, within about two seconds, with no typing or clicking since and no new recording started. It never presses Return in password fields or secure input, and never for a recovered or interrupted take or Paste Last. Terminal, iTerm2, Ghostty, kitty, WezTerm and the Claude app can't confirm a paste yet, so they never send.
+
+Formal cleanup keeps a real verb. After he, she or I with is, was or am, a swear word before a people noun like women used to be deleted, so the sentence lost its verb. It now becomes "sleeping with", so the sentence reads "He was sleeping with women."
+
+Not verified on a device for this release: press Return after inserting was checked with unit tests and offscreen renders only, never in a live app. Fresh installation, VoiceOver, and Bluetooth and USB microphones were not checked either. Speech in languages other than English was checked with renders and synthetic voices only, never by someone speaking those languages on a Mac. That includes the Japanese, Hindi and Tamil Beta paths and their 1.6 GB model download.
+
+Earlier in 0.7.0:
 Japanese, Hindi and Tamil (Beta). Mouthtype can now dictate in Japanese, Hindi and Tamil. These three go through the multilingual Whisper Turbo model, a separate 1.6 GB download, instead of Parakeet. Settings marks them Beta. Live words are not available whenever Whisper Turbo is used, including English takes in an Auto-detect set that contains Japanese, Hindi or Tamil; your saved Live words preference returns when you switch back to a Parakeet language. Auto-detect can pick them when they are among the languages in your Mac's preferred list. A recording, a Setup test take or a file import keeps the language it started in if you change the setting mid-take. Cleanup in these languages is Basic, and fillers, spoken commands and self-correction stay English only.
 
 Selected-text cleanup. Transform Selection now applies the website tone first, then the app tone, then the global one. Mouthtype also reads the selection off the main thread with a timeout, so a slow app can't hold the interface.

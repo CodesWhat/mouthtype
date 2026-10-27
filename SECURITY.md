@@ -4,17 +4,18 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.7.x | Supported. Security fixes ship in 0.7.x patch releases or the next minor release |
-| 0.6.x | Unsupported. Upgrade to 0.7.0 |
-| 0.5.x | Unsupported. Upgrade to 0.7.0 |
-| 0.4.x | Unsupported. Upgrade to 0.7.0 |
-| 0.3.x | Unsupported. Upgrade to 0.7.0 |
-| 0.2.x | Unsupported. Upgrade to 0.7.0 |
-| 0.1.x | Unsupported. Upgrade to 0.7.0 |
-| 0.1.0-rc.x, 0.1.0-beta.x and 0.1.0-alpha.x | Unsupported. Upgrade to 0.7.0 |
+| 0.8.x | Supported. Security fixes ship in 0.8.x patch releases or the next minor release |
+| 0.7.x | Unsupported. Upgrade to 0.8.0 |
+| 0.6.x | Unsupported. Upgrade to 0.8.0 |
+| 0.5.x | Unsupported. Upgrade to 0.8.0 |
+| 0.4.x | Unsupported. Upgrade to 0.8.0 |
+| 0.3.x | Unsupported. Upgrade to 0.8.0 |
+| 0.2.x | Unsupported. Upgrade to 0.8.0 |
+| 0.1.x | Unsupported. Upgrade to 0.8.0 |
+| 0.1.0-rc.x, 0.1.0-beta.x and 0.1.0-alpha.x | Unsupported. Upgrade to 0.8.0 |
 | Experimental Linux source | Development only; no supported desktop release |
 
-Fixes land on the active development branch and ship in a 0.7.x patch release or the next minor release. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current version.
+Fixes land on the active development branch and ship in a 0.8.x patch release or the next minor release. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current version.
 
 ## Report a vulnerability
 

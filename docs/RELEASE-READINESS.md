@@ -1,8 +1,9 @@
-# Mac 0.7.0 release readiness
+# Mac 0.8.0 release readiness
 
 What each stable release added:
 
-- Stable 0.7.0 (build 21) adds Japanese, Hindi and Tamil dictation in Beta through the multilingual Whisper Turbo model (a separate 1.6 GB download, no live words while Whisper Turbo is in use), selected-text cleanup that applies website, then app, then global tone and reads the selection off the main thread, fixes for punctuation near saved multiword terms, cleanup timeout fallbacks, dictionary rule usage with boundary apostrophes and the streak when the local date moves backward, a website typing speed test with a countdown, Swift tests on every pull request with an 80% line-coverage floor, and a fuzz target for the phrase matcher.
+- Stable 0.8.0 (build 22) adds Press Return after inserting, an opt-in list in Settings > Advanced of apps where Mouthtype presses Return once after a confirmed paste (off by default, never in password fields or secure input, never for recovered takes or Paste Last, and never in terminals or the Claude app, which can't confirm a paste), and a Formal cleanup fix so a real verb is no longer dropped after he, she or I.
+- Stable 0.7.0 (build 21) added Japanese, Hindi and Tamil dictation in Beta through the multilingual Whisper Turbo model (a separate 1.6 GB download, no live words while Whisper Turbo is in use), selected-text cleanup that applies website, then app, then global tone and reads the selection off the main thread, fixes for punctuation near saved multiword terms, cleanup timeout fallbacks, dictionary rule usage with boundary apostrophes and the streak when the local date moves backward, a website typing speed test with a countdown, Swift tests on every pull request with an 80% line-coverage floor, and a fuzz target for the phrase matcher.
 - Stable 0.6.0 (build 20) added dictation in 25 languages with Auto-detect, a mouse-button trigger, dictionary export and Wispr Flow and VoiceInk import, a Models page and name accuracy card in Setup, a silent-microphone warning with a Setup test take, cleanup instructions with presets and an Excited tone, website favicons in the Style lists, a Microphone settings page, repeatable release builds and a Homebrew cask.
 - Stable 0.5.0 (build 19) added faster launch, dictation and Thorough cleanup, spoken slash commands in coding apps, Show in Dock, the docs site, Fn remap and quit-path hardening, cleanup fixes, real app icons in the Style lists, and a notarized DMG as the first-install download.
 - Stable 0.4.0 (build 18) added the one-window redesign, Transform Selection from the menu bar, the Transforms page, a separate Transcribe Audio File window, the mouthtype:// URL scheme and command-line script behind an automation switch, optional editor hints for the saved-word boost, and Quiet other audio on by default.
@@ -10,12 +11,13 @@ What each stable release added:
 - Stable 0.2.0 (build 16) added selected-text transforms, optional saved-word boosting during recognition, cleanup levels in app and website rules, the Formal swearing change, Settings keyboard access and the Appearance preview change.
 - Stable 0.1.0 (build 15) was cut from the rc.4 tree plus the quit-recovery fix and a docs correction.
 
-Not verified on a device for stable 0.7.0:
+Not verified on a device for stable 0.8.0:
 
 - Fresh install on a Mac that has never run Mouthtype.
 - VoiceOver.
 - Bluetooth and USB microphones.
 - Real speech in languages other than English. Those paths were checked with fixtures and synthetic voices only.
+- Press Return after inserting, which was checked with unit tests and offscreen renders and never in a live app.
 - The Japanese, Hindi and Tamil Beta paths and their 1.6 GB model download, which were checked with synthetic speech and renders only.
 - The new Setup, Microphone and Style screens, which were checked by renders and no one has used them on a Mac yet.
 

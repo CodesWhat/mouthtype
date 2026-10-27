@@ -1,4 +1,4 @@
-# Mouthtype 0.7.0
+# Mouthtype 0.8.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,16 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.8.0
+
+Press Return after inserting, plus a Formal cleanup fix.
+
+- Added: A Press Return after inserting list in Settings > Advanced. Add an app and Mouthtype presses Return once after a dictation lands there. It starts empty, so nothing is sent until you add an app. It sends only when it can confirm through accessibility that the text landed in the same field within about two seconds, you haven't typed or clicked since, and no new recording has started. It never sends in password fields or secure input, or for recovered or interrupted takes or Paste Last. Terminal, iTerm2, Ghostty, kitty, WezTerm and the Claude app can't confirm a paste yet, so they never send.
+- Fixed: Formal cleanup no longer drops a real verb. After he, she or I with is, was or am, a swear word before a people noun such as women becomes "sleeping with" instead of being deleted.
+
+> [!NOTE]
+> Press Return after inserting was checked with unit tests and offscreen renders only, never in a live app. Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release. Japanese, Hindi and Tamil, their 1.6 GB model download and every other non-English language were checked with renders and synthetic speech only. See the known limits.
 
 ## What changed in 0.7.0
 

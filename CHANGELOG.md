@@ -9,9 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-10-27
+
 ### Added
 
 - A Press Return after inserting list in Settings > Advanced. Add an app and Mouthtype presses Return once after a dictation lands there, only when the paste is confirmed in a text field you haven't touched since. It starts empty, never sends in password fields, and doesn't send in terminals or the Claude app yet.
+
+### Fixed
+
+- Formal cleanup no longer drops a real verb. a swear word before a people noun now becomes "sleeping with" instead of being deleted, so the sentence keeps its verb. This applies only after he, she or I with is, was or am and a people noun.
 
 ## [0.7.0] - 2026-10-25
 
@@ -157,7 +163,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/CodesWhat/mouthtype/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/CodesWhat/mouthtype/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/CodesWhat/mouthtype/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/CodesWhat/mouthtype/compare/v0.4.0...v0.5.0
