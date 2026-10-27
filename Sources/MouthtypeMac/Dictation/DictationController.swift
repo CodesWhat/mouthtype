@@ -91,6 +91,8 @@ final class DictationController {
     @ObservationIgnored private var terminationCapture: (session: DictationSession, audio: CapturedAudio, keyUpMs: Int)?
     @ObservationIgnored private var unsavedQueuedAudio: [String: (session: DictationSession, audio: CapturedAudio, keyUpMs: Int)] = [:]
     @ObservationIgnored private var interruptedDuringStart = false
+    /// Bumped by every recording start. A take may press Return only if no recording started since it was released.
+    @ObservationIgnored private var recordingEpoch = 0
     @ObservationIgnored private var undo: PendingUndo?
     /// The last job queued. A job waits for the one before it, so the chain keeps deliveries in order.
     @ObservationIgnored private var processing: Task<Void, Never>?
@@ -294,6 +296,9 @@ final class DictationController {
         undo = nil
         if interrupted == nil { cards.dismiss() }
         limitCardUp = false
+        // An earlier take still in flight must not press Return into this recording.
+        recordingEpoch += 1
+        inserter.cancelPendingReturn()
         if pendingJobs == 0 {
             inserter.cancelVerification()
             verifying = nil
@@ -581,8 +586,9 @@ final class DictationController {
         phase = .processing
         showProcessing()
         captureFinalizations += 1
+        let epoch = recordingEpoch
         enqueue { [self] previous in
-            await process(current, releasedAt: nanos, stopped: stopped, saving: saving, after: previous)
+            await process(current, releasedAt: nanos, stopped: stopped, saving: saving, after: previous, returnEpoch: epoch)
         }
     }
 
@@ -599,7 +605,7 @@ final class DictationController {
 
     private func process(
         _ session: DictationSession, releasedAt: UInt64, stopped: Task<CapturedAudio, Error>,
-        saving: Task<Void, Never>?, after previous: Task<Void, Never>?
+        saving: Task<Void, Never>?, after previous: Task<Void, Never>?, returnEpoch: Int
     ) async {
         var savingCapture = true
         defer { if savingCapture { captureFinalizations -= 1 } }
@@ -616,7 +622,9 @@ final class DictationController {
             let waits = pendingJobs > 1
             await previous?.value
             if waits { showProcessing() }
-            try await transcribeAndDeliver(audio, features: features, session: session, holdMs: keyUpMs)
+            try await transcribeAndDeliver(
+                audio, features: features, session: session, holdMs: keyUpMs,
+                returnEpoch: audio.wasInterrupted ? nil : returnEpoch)
         } catch {
             await failJob(session, error)
         }
@@ -642,8 +650,10 @@ final class DictationController {
 
     /// Everything after the audio is on disk, shared by a normal release, an Undo and a saved recording.
     /// `holdMs` is how long the key was held; only a take that has one can raise the silent-mic card.
+    /// `returnEpoch` is set only for a normal, uninterrupted take, and only counts while no newer recording has started: Undo, a saved recording and any salvaged capture never press Return after inserting.
     private func transcribeAndDeliver(
-        _ audio: CapturedAudio, features: AudioFeatures, session: DictationSession, holdMs: Int? = nil
+        _ audio: CapturedAudio, features: AudioFeatures, session: DictationSession, holdMs: Int? = nil,
+        returnEpoch: Int? = nil
     ) async throws {
         defer {
             releasePrewarm(session)
@@ -695,6 +705,9 @@ final class DictationController {
         if verifying?.id == result.verificationID {
             verifying?.wrappedUp = true
             if let arrived = verifying?.arrived { verificationEnded(arrived) }
+        }
+        if let returnEpoch, returnEpoch == recordingEpoch, phase != .recording, !Task.isCancelled, !shuttingDown {
+            await inserter.pressReturnAfterInsert(for: result)
         }
     }
 
