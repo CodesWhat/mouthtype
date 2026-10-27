@@ -3,7 +3,7 @@
 # then a warnings-as-errors build when any Swift file changed.
 #
 # Usage:
-#   scripts/pre-push.sh [base-ref]   compare HEAD against base-ref (default origin/dev/v0.7.0,
+#   scripts/pre-push.sh [base-ref]   compare HEAD against base-ref (default origin/dev/v0.8.0,
 #                                    falling back to origin/main)
 #   scripts/pre-push.sh --stdin      read git's pre-push ref lines from stdin (used by the hook)
 set -euo pipefail
@@ -13,7 +13,7 @@ cd "$root"
 
 zero=0000000000000000000000000000000000000000
 default_base() {
-  for ref in origin/dev/v0.7.0 origin/main; do
+  for ref in origin/dev/v0.8.0 origin/main; do
     if git rev-parse --verify --quiet "$ref" >/dev/null; then
       echo "$ref"
       return
