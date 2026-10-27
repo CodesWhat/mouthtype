@@ -689,8 +689,8 @@ public struct ProfanityRemover: Sendable {
                     } else if let cheat = ProfanityRemover.cheatForms[lower], let over = splitParticle(k, "over"), isCheatingOver(k, over) {
                         replace(k, cheat)
                         spans.append(TextSpan(range: words[over].start..<words[over].end, cut: words[over - 1].end..<words[over].end, replacement: ""))
-                    } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k), isFree(k + 1),
-                        ProfanityRemover.personObjects.contains(words[k + 1].lower)
+                    } else if let sleep = ProfanityRemover.sleepForms[lower], adjacent(k),
+                        (isFree(k + 1) && ProfanityRemover.personObjects.contains(words[k + 1].lower))
                             || isCopulaVerbReading(k)
                     {
                         replace(k, sleep)
