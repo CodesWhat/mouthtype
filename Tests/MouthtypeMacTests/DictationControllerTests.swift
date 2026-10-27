@@ -2190,7 +2190,7 @@ private final class FakeCorrections: CorrectionObserving {
         rig.controller.enqueueAutomation(.stop)
         rig.controller.enqueueAutomation(.start)
         limit.open()
-        await rig.settle()
+        await rig.until { rig.controller.automationStartPending }
         #expect(rig.controller.automationStartPending)
         // A's lock write finishes while B is pending, which used to wipe B's flags.
         lockGate.open()
@@ -2198,7 +2198,7 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.controller.automationStartPending)
         rig.controller.enqueueAutomation(.stop)
         let stopB = rig.controller.automationTail
-        await rig.settle()
+        await rig.until { rig.controller.pendingAutomationEnd == .stop }
         #expect(rig.controller.pendingAutomationEnd == .stop)
         startB.open()
         await stopB?.value
