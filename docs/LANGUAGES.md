@@ -3,7 +3,7 @@
 Mouthtype 0.8.0 supports 28 languages: the 25 Parakeet v3 languages, plus Japanese, Hindi and Tamil through Whisper Turbo. The three new languages are in Beta. English gets every cleanup rule; other languages get the smaller set below.
 
 > [!NOTE]
-> The 0.8.0 app supports the 25 Parakeet languages. Japanese, Hindi and Tamil ship as Beta in 0.7.0, routed through the multilingual Whisper Turbo model (a separate 1.6 GB download, no live words). They were checked with synthetic speech only.
+> The 0.8.0 app supports the 25 Parakeet languages. Japanese, Hindi and Tamil were introduced as Beta in 0.7.0 and are still Beta in 0.8.0. They are routed through the multilingual Whisper Turbo model (a separate 1.6 GB download, no live words). They were checked with synthetic speech only.
 
 > [!NOTE]
 > Dictation language is separate from the language of the app. Mouthtype's menus and settings are English only.
@@ -109,7 +109,7 @@ These are Mouthtype's own engine measurements from 22 October 2026, using synthe
 | Chinese, Korean, Arabic and others | Not supported. |
 | Indian English | Works on the default path (6 percent word error on synthetic speech). |
 
-Japanese, Hindi and Tamil ship as Beta in 0.7.0 through Whisper Turbo, not IndicConformer. IndicConformer isn't integrated.
+Japanese, Hindi and Tamil were introduced as Beta in 0.7.0 and are still Beta in 0.8.0. They run through Whisper Turbo, not IndicConformer. IndicConformer isn't integrated.
 
 ## Other limits
 

@@ -110,7 +110,7 @@ For a terminal that loses text from large pastes, open **Settings > Advanced > D
 6. An interrupted paste offers the full transcript with Copy and warns that some text may already be there. Check the field before pasting the full copy, to avoid duplicates.
 
 > [!NOTE]
-> Split pastes preserve the text exactly and never send Return. A read permits advancing the clipboard; it does not prove insertion.
+> Split pastes preserve the text exactly and add no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste once it is confirmed. A read permits advancing the clipboard; it does not prove insertion.
 
 Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanup styles are available on the **Style** page. Your own rules start empty. Built-in app and website lists carry their own tones, and everything else uses the default tone.
 
