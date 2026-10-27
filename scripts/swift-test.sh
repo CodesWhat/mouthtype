@@ -14,6 +14,7 @@ workdir="$(mktemp -d -t swift-test.XXXXXX)"
 log="$workdir/output.log"
 stalled_flag="$workdir/stalled"
 fifo="$workdir/output.fifo"
+pidfile="$workdir/descendants"
 : >"$log"
 mkfifo "$fifo"
 
@@ -53,26 +54,62 @@ unfinished_tests() {
   ' "$1" | sort -n | cut -f2-
 }
 
+# Every descendant seen so far, as "pid<TAB>start time". Orphans reparent to launchd once swift test exits, so pgrep -P can no
+# longer find them; the start time keeps a recycled pid from being mistaken for one of ours.
+record_descendants() {
+  local pid
+  for pid in $(descendants "$swift_pid"); do
+    grep -q "^$pid"$'\t' "$pidfile" 2>/dev/null || printf '%s\t%s\n' "$pid" "$(ps -o lstart= -p "$pid" 2>/dev/null)" >>"$pidfile"
+  done
+}
+
+# Recorded pids that are still the same process.
+recorded_pids() {
+  local pid start
+  [ -f "$pidfile" ] || return 0
+  while IFS="$(printf '\t')" read -r pid start; do
+    [ -n "$pid" ] && [ "$(ps -o lstart= -p "$pid" 2>/dev/null)" = "$start" ] && echo "$pid"
+  done <"$pidfile"
+}
+
+# TERM everything we own (live descendants, recorded survivors, swift test, tee), KILL what is still up after a short grace.
+stop_tree() {
+  local pids="" pid alive
+  if [ -n "$swift_pid" ] && kill -0 "$swift_pid" 2>/dev/null; then
+    pids="$(descendants "$swift_pid" | sed '1!G;h;$!d') $swift_pid"
+  fi
+  pids="$pids $(recorded_pids) $tee_pid"
+  for pid in $pids; do kill -TERM "$pid" 2>/dev/null; done
+  for _ in 1 2 3 4 5 6; do
+    alive=0
+    for pid in $pids; do kill -0 "$pid" 2>/dev/null && alive=1; done
+    [ "$alive" -eq 0 ] && return 0
+    sleep 0.5
+  done
+  for pid in $pids; do kill -KILL "$pid" 2>/dev/null; done
+}
+
 watchdog() {
   local limit="$1" last_size current_size idle=0 pid victims sleeper=""
   trap '[ -n "$sleeper" ] && kill "$sleeper" 2>/dev/null; exit 0' TERM INT
   last_size="$(file_size "$log")"
   while kill -0 "$swift_pid" 2>/dev/null; do
-    sleep 10 &
+    sleep 2 &
     sleeper=$!
     wait "$sleeper"
     sleeper=""
+    record_descendants
     current_size="$(file_size "$log")"
     if [ "$current_size" != "$last_size" ]; then
       last_size="$current_size"
       idle=0
       continue
     fi
-    idle=$((idle + 10))
+    idle=$((idle + 2))
     [ "$idle" -ge "$limit" ] || continue
 
     : >"$stalled_flag"
-    victims="$(descendants "$swift_pid")"
+    victims="$( (descendants "$swift_pid"; recorded_pids) | awk '!seen[$0]++')"
     {
       echo
       echo "swift-test: no test output for $idle s, sampling and stopping"
@@ -93,14 +130,19 @@ watchdog() {
 }
 
 cleanup() {
+  trap - EXIT INT TERM
   if [ -n "$watchdog_pid" ]; then
     pkill -TERM -P "$watchdog_pid" 2>/dev/null
     kill "$watchdog_pid" 2>/dev/null
+    wait "$watchdog_pid" 2>/dev/null
   fi
+  stop_tree
+  wait 2>/dev/null
   rm -rf "$workdir"
 }
 trap cleanup EXIT
-trap 'exit 130' INT TERM
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 tee "$log" <"$fifo" &
 tee_pid=$!
@@ -114,17 +156,35 @@ fi
 
 wait "$swift_pid"
 status=$?
-wait "$tee_pid" 2>/dev/null
+
+# Once stall termination has begun the watchdog owns the TERM/KILL escalation, so let it finish.
 if [ -n "$watchdog_pid" ]; then
-  pkill -TERM -P "$watchdog_pid" 2>/dev/null
-  kill "$watchdog_pid" 2>/dev/null
-  wait "$watchdog_pid" 2>/dev/null
+  if [ -e "$stalled_flag" ]; then
+    wait "$watchdog_pid" 2>/dev/null
+  else
+    pkill -TERM -P "$watchdog_pid" 2>/dev/null
+    kill "$watchdog_pid" 2>/dev/null
+    wait "$watchdog_pid" 2>/dev/null
+  fi
   watchdog_pid=""
 fi
+
+# A descendant that outlived swift test can keep the fifo open, so bound the drain.
+drain_hung=0
+for _ in $(seq 1 30); do
+  kill -0 "$tee_pid" 2>/dev/null || break
+  sleep 1
+done
+if kill -0 "$tee_pid" 2>/dev/null; then
+  drain_hung=1
+  stop_tree
+fi
+wait "$tee_pid" 2>/dev/null
 
 failed=0
 complain() { echo "swift-test: $1" >&2; failed=1; }
 
+[ "$drain_hung" -eq 0 ] || complain "test output did not close after swift test exited"
 [ ! -e "$stalled_flag" ] || complain "test run stalled for $stall_seconds s"
 
 [ "$status" -eq 0 ] || complain "swift test exited $status"
