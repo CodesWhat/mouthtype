@@ -24,7 +24,7 @@ body:
     attributes:
       label: Mouthtype version
       description: Shown in About Mouthtype
-      placeholder: "e.g. 0.9.0 (build 23)"
+      placeholder: "e.g. 0.9.1 (build 24)"
     validations:
       required: true
 
