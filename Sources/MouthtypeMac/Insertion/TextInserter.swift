@@ -33,8 +33,7 @@ public final class TextInserter {
         var generation: Int
         var pid: pid_t
         var bundleID: String
-        /// Nil only for an app whose paste is never confirmed, which may report no focused element.
-        var element: FocusedElement?
+        var element: FocusedElement
         /// The real key and click count right after the paste, and when the paste went out.
         var input: UInt64
         var pastedAt: ContinuousClock.Instant
@@ -528,9 +527,7 @@ public final class TextInserter {
             return skipReturn("the paste target is unknown")
         }
         guard sendsReturn(bundleID) else { return skipReturn("the app is not opted in") }
-        let confirms = PasteTargetPolicy.confirmsPaste(bundleID: bundleID)
-        // Only an app that can't confirm a paste may go without a focused element; the rest need one to compare.
-        if confirms, target.element == nil { return skipReturn("the paste target has no focused element") }
+        guard let element = target.element else { return skipReturn("the paste target has no focused element") }
         guard let generation = result.verificationID, generation == deliveryGeneration, !closing else {
             return skipReturn("a newer delivery replaced this paste")
         }
@@ -539,8 +536,8 @@ public final class TextInserter {
             return skipReturn("user input can't be tracked")
         }
         let armed = ArmedReturn(
-            generation: generation, pid: pid, bundleID: bundleID, element: target.element, input: input, pastedAt: stamp.at)
-        guard confirms else { return armUnconfirmedSend(armed) }
+            generation: generation, pid: pid, bundleID: bundleID, element: element, input: input, pastedAt: stamp.at)
+        guard PasteTargetPolicy.confirmsPaste(bundleID: bundleID) else { return armUnconfirmedSend(armed) }
         armedReturn = armed
         if let verdict = lastVerdict, verdict.id == generation { returnAfterVerdict(verdict) }
     }
@@ -606,11 +603,9 @@ public final class TextInserter {
         guard inputGeneration() == armed.input else { return "the user typed or clicked after the paste" }
         let fresh = focus.snapshot()
         guard !fresh.isSecure, !focus.isSecureInputEnabled else { return "a secure field or secure input is active" }
-        guard fresh.pid == armed.pid, fresh.bundleID == armed.bundleID, !fresh.focusOwnerDiffersFromFrontmost else {
-            return "focus moved after the paste"
-        }
-        // A known element must still be focused; the confirmed path always has one.
-        if let element = armed.element, fresh.element != element { return "focus moved after the paste" }
+        guard fresh.pid == armed.pid, fresh.bundleID == armed.bundleID, fresh.element == armed.element,
+            !fresh.focusOwnerDiffersFromFrontmost
+        else { return "focus moved after the paste" }
         return nil
     }
 

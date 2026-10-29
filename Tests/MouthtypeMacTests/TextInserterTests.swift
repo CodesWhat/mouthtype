@@ -156,7 +156,10 @@ private final class BatchPauses {
 @MainActor
 private final class VerifyGate {
     var closed = false
+    /// Holds the unconfirmed-send delay, apart from the read-back's sleeps.
+    var delayClosed = false
     private var waiters: [CheckedContinuation<Void, Never>] = []
+    private var delayWaiters: [CheckedContinuation<Void, Never>] = []
     private static let delays: Set<TimeInterval> = {
         var previous = 0.0
         var out = Set<TimeInterval>()
@@ -168,14 +171,31 @@ private final class VerifyGate {
     }()
 
     func pass(_ delay: TimeInterval) async {
-        guard closed, Self.delays.contains(delay) || delay == TextInserter.unconfirmedSendDelay else { return }
+        if delay == TextInserter.unconfirmedSendDelay {
+            guard delayClosed else { return }
+            await withCheckedContinuation { delayWaiters.append($0) }
+            return
+        }
+        guard closed, Self.delays.contains(delay) else { return }
         await withCheckedContinuation { waiters.append($0) }
     }
 
     func open() {
+        openVerification()
+        openDelay()
+    }
+
+    func openVerification() {
         closed = false
         let held = waiters
         waiters = []
+        held.forEach { $0.resume() }
+    }
+
+    func openDelay() {
+        delayClosed = false
+        let held = delayWaiters
+        delayWaiters = []
         held.forEach { $0.resume() }
     }
 }
@@ -237,6 +257,7 @@ private struct Rig {
         let pauses = pauses
         let gate = gate
         gate.closed = gated
+        gate.delayClosed = gated
         let pending = pending
         let clock = clock
         let input = input
@@ -2081,32 +2102,56 @@ private struct Rig {
         #expect(rig.poster.returns == [100])
     }
 
-    @Test func aLateVerdictDoesNotSendASecondReturn() async {
-        let rig = rig()
+    @Test func aLateConfirmedVerdictDoesNotSendASecondReturn() async {
+        let rig = rig(bundleID: "com.stablyai.orca")
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
         let task = await arm(rig)
-        await release(rig, task)
+        rig.gate.openDelay()
+        await task?.value
         #expect(rig.poster.returns == [100])
-        #expect(rig.inserter.unconfirmedSend == nil)
-    }
-
-    @Test func aVerdictThatArrivedFirstDoesNotSendAnUnconfirmedArm() async {
-        let rig = rig()
-        let result = await rig.inserter.deliver("world", startFocus: nil)
-        rig.gate.open()
+        rig.gate.openVerification()
         await rig.inserter.waitForVerification()
-        rig.gate.closed = true
-        rig.inserter.armReturn(after: result)
-        #expect(rig.poster.returns.isEmpty)
-        let task = rig.inserter.unconfirmedSend
-        await release(rig, task)
+        #expect(seen.map(\.verdict) == [.confirmed])
         #expect(rig.poster.returns == [100])
     }
 
-    @Test func aNilElementStillSendsWhenPidAndBundleMatch() async {
+    @Test func aConfirmedVerdictBeforeTheDelayDoesNotSendASecondReturn() async {
+        let rig = rig(bundleID: "com.stablyai.orca")
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        let task = await arm(rig)
+        rig.gate.openVerification()
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.verdict) == [.confirmed])
+        #expect(rig.poster.returns.isEmpty)
+        rig.gate.openDelay()
+        await task?.value
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func aTargetWithoutAFocusedElementSendsNothing() async {
         let rig = rig(elementKnown: false)
         let task = await arm(rig)
+        #expect(task == nil)
         await release(rig, task)
-        #expect(rig.poster.returns == [100])
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func theFocusedElementChangingDuringTheDelaySendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.current.element = element(101)
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func theFocusedElementClosingDuringTheDelaySendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.current.element = nil
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
     }
 
     @Test func userInputAfterThePasteSendsNothing() async {
