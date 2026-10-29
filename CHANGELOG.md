@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Press Return after inserting now works in terminals you add (Terminal, iTerm2, Ghostty, WezTerm, Warp, kitty, Alacritty, Hyper and Orca). They can't confirm a paste, so Mouthtype presses Return a moment after it without checking, never in password fields, after a recovered take, or if you typed or clicked first. Settings shows a note on those rows.
+- Press Return after inserting now works in Electron apps like the Claude desktop app even with context names off. Mouthtype turns on their accessibility when a recording starts in a listed app, so it can confirm the paste.
 
 ## [0.8.0] - 2026-10-27
 
