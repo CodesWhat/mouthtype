@@ -71,6 +71,14 @@ import Testing
         }
     }
 
+    @Test func onlyTerminalRowsGetTheUnconfirmedNote() {
+        for bundleID in PasteTargetPolicy.unconfirmedSendBundleIDs {
+            #expect(SendAfterInsertSection.note(for: bundleID) == "Can't confirm the paste here, so Return goes out without checking.")
+        }
+        #expect(SendAfterInsertSection.note(for: "com.apple.finder") == nil)
+        #expect(SendAfterInsertSection.note(for: "test.chatty") == nil)
+    }
+
     @Test func nameFallsBackToTheIdentifierForAnUnknownApp() {
         #expect(SendAfterInsertApps.name(bundleID: "test.not.installed.\(UUID().uuidString)").hasPrefix("test.not.installed."))
     }
