@@ -590,7 +590,8 @@ private struct Rig {
                         log.add("readiness.probe")
                         readinessGate?.wait()
                         return true
-                    }
+                    },
+                    now: { now }
                 )
             }
         )
