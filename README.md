@@ -306,13 +306,15 @@ Mouthtype is the one desktop app here. The other three tools are for Docker host
 Mouthtype is licensed under [GPL-3.0](LICENSE). [Corresponding release source](https://mouthtype.app/source) is available separately from the app download. Dependencies, fonts, adapted code and downloaded models have their own terms. [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) records adapted code, fonts, the S1-mini model, the Swift package dependencies and the downloaded models.
 
 
-<a href="https://github.com/CodesWhat">
+<a href="https://codeswhat.com">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/assets/codeswhat-logo-dark.svg" />
     <source media="(prefers-color-scheme: light)" srcset="docs/assets/codeswhat-logo-original.svg" />
     <img src="docs/assets/codeswhat-logo-original.svg" alt="CodesWhat" height="28">
   </picture>
 </a>
+
+[CodesWhat](https://codeswhat.com): small, sharp tools from one developer and a lot of agents.
 
 <a href="#mouthtype">Back to top</a>
 
