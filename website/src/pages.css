@@ -288,6 +288,9 @@
   color: var(--muted);
   margin: 0;
 }
+.page-footer .footer-note {
+  flex-basis: 100%;
+}
 .page-footer nav {
   margin-left: auto;
   display: flex;
