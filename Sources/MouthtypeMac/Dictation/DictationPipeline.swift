@@ -21,6 +21,8 @@ struct DictationSession: Sendable {
     /// Code names read from the editor for this dictation (see `EditorHintsGatherer`). Held in memory only: never
     /// stored, logged or written to history. Nil when the setting is off or the app isn't one it covers.
     var editorHints: Task<[VocabularyBias.Term], Never>?
+    /// Set when the take starts in a listed app; the paste waits on it so a just-enabled Electron app can be read back.
+    var sendReadiness: SendTargetReadiness?
 }
 
 struct TranscribedDictation: Sendable {

@@ -548,7 +548,8 @@ private struct Rig {
         limits: DictationController.Limits = .standard, partials: Bool = false, archive: (any DictationArchiving)? = nil,
         quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false,
         audioRetention: AudioRetentionPolicy = AudioRetentionPolicy(), storeWriter: (any DictationStoring)? = nil,
-        smart: (any SmartCleaning)? = nil, languageRequest: @escaping @Sendable () -> DictationLanguageRequest = { .english }
+        smart: (any SmartCleaning)? = nil, languageRequest: @escaping @Sendable () -> DictationLanguageRequest = { .english },
+        listedElectron: Bool = false, readinessGate: DispatchSemaphore? = nil
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -572,12 +573,27 @@ private struct Rig {
         pipeline.audioRetention = { audioRetention }
         let opened = soundSettingsOpened
         let prepared = preparedTargets
+        let log = log
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
             cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil,
             preview: LivePreviewSession(pause: { try await clock.sleep(forSeconds: 2) }), previewEnabled: { previewEnabled },
             openSoundSettings: { opened.count += 1 },
-            prepareSendTarget: { prepared.focuses.append($0) }
+            prepareSendTarget: { focus in
+                prepared.focuses.append(focus)
+                guard listedElectron else { return nil }
+                let now = ContinuousClock.now
+                let log = log
+                return SendTargetReadiness(
+                    pid: 5, enable: Task {}, enabledAt: { _ in now },
+                    probe: { _, _ in
+                        log.add("readiness.probe")
+                        readinessGate?.wait()
+                        return true
+                    },
+                    now: { now }
+                )
+            }
         )
         let counter = Counter()
         finishedAttempts = counter
@@ -1523,6 +1539,45 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.preparedTargets.focuses.count == 1)
         #expect(rig.preparedTargets.focuses.first?.pid == 4242)
         #expect(rig.preparedTargets.focuses.first?.bundleID == "com.anthropic.claudefordesktop")
+    }
+
+    @Test func aListedTakeAwaitsReadinessBeforeDeliver() async throws {
+        let rig = Rig(listedElectron: true)
+        await rig.dictate()
+        let probe = try #require(rig.log.index(of: "readiness.probe"))
+        let deliver = try #require(rig.log.index(of: "inserter.deliver"))
+        #expect(probe < deliver)
+    }
+
+    @Test func anUnlistedTakeDoesNotWait() async {
+        let rig = Rig()
+        await rig.dictate()
+        #expect(!rig.log.contains("readiness.probe"))
+        #expect(rig.log.contains("inserter.deliver"))
+    }
+
+    @Test func quitStartingDuringTheReadinessWaitStopsTheTakeBeforeDeliver() async {
+        let gate = DispatchSemaphore(value: 0)
+        let rig = Rig(listedElectron: true, readinessGate: gate)
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.until { rig.log.contains("readiness.probe") }
+        #expect(rig.log.contains("readiness.probe"))
+        let quit = Task { @MainActor in await rig.controller.prepareForTermination() }
+        await rig.settle()
+        gate.signal()
+        await rig.controller.waitForProcessing()
+        _ = await quit.value
+        #expect(!rig.log.contains("inserter.deliver"))
+    }
+
+    @Test func aCancelledTakeDoesNotWait() async {
+        let rig = Rig(listedElectron: true)
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.cancelled(reason: .escape))
+        await rig.controller.waitForProcessing()
+        #expect(!rig.log.contains("readiness.probe"))
+        #expect(!rig.log.contains("inserter.deliver"))
     }
 
     @Test func aTakeThatFailsToStartDoesNotPrepareTheSendTarget() async {

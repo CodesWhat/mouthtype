@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-10-29
+
+### Changed
+
+- Updated Sparkle, the updater, from 2.10.0 to 2.10.1. It fixes an update that could install before the app quit when Mouthtype sits in a folder with an NFC Unicode name, and it improves update feed parsing and translations.
+
+### Fixed
+
+- The first dictation after opening a listed Electron app like the Claude desktop app can now press Return too, because Mouthtype waits briefly for the app's accessibility to come up.
+
 ## [0.9.0] - 2026-10-28
 
 ### Changed
@@ -170,7 +180,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/CodesWhat/mouthtype/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/CodesWhat/mouthtype/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/CodesWhat/mouthtype/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/CodesWhat/mouthtype/compare/v0.6.0...v0.7.0

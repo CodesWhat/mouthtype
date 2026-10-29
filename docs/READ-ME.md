@@ -1,4 +1,4 @@
-# Mouthtype 0.9.0
+# Mouthtype 0.9.1
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,16 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.9.1
+
+The first Press Return after inserting in a listed Electron app now works.
+
+- Fixed: The first dictation after opening a listed Electron app like the Claude desktop app can now press Return too, because Mouthtype waits briefly for the app's accessibility to come up.
+- Changed: Updated Sparkle, the updater, from 2.10.0 to 2.10.1. It fixes an update that could install before the app quit when Mouthtype sits in a folder with an NFC Unicode name, and it improves update feed parsing and translations.
+
+> [!NOTE]
+> Press Return after inserting, in terminals and Electron apps too, was checked with unit tests and offscreen renders only, never in a live app. Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release. Japanese, Hindi and Tamil, their 1.6 GB model download and every other non-English language were checked with renders and synthetic speech only. See the known limits.
 
 ## What changed in 0.9.0
 

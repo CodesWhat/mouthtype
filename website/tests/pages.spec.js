@@ -1,5 +1,16 @@
 import { test, expect } from "@playwright/test";
 
+const footerPaths = [
+  "/",
+  "/download/",
+  "/start/",
+  "/why-mouthtype/",
+  "/linux/",
+  "/compare/",
+  "/compare/apple-dictation/",
+  "/compare/wispr-flow/",
+];
+
 const pages = [
   ["/start/", "Your first words."],
   ["/linux/", "Mouthtype for Linux."],
@@ -59,7 +70,7 @@ for (const [path, heading] of pages) {
 
 test("start describes the current release features", async ({ page }) => {
   await page.goto("/start/");
-  await expect(page.locator("main")).toContainText("0.9.0");
+  await expect(page.locator("main")).toContainText("0.9.1");
   await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
@@ -229,5 +240,19 @@ for (const width of [1440, 320]) {
       const response = await request.get(href);
       expect(response.status(), href).toBe(200);
     }
+  });
+}
+
+for (const path of footerPaths) {
+  test(`${path} footer links to codeswhat.com`, async ({ page }) => {
+    await page.goto(path);
+    const note = page.locator("footer .footer-note", { hasText: "CodesWhat" });
+    await expect(note).toHaveText(
+      "CodesWhat: small, sharp tools from one developer and a lot of agents.",
+    );
+    await expect(note.getByRole("link", { name: "CodesWhat" })).toHaveAttribute(
+      "href",
+      "https://codeswhat.com",
+    );
   });
 }
