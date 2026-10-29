@@ -218,7 +218,7 @@ the upstream repository linked below, and Apache License 2.0 is at https://www.a
 
 | Package | Version | License | Copyright | Source |
 | --- | --- | --- | --- | --- |
-| Sparkle | 2.10.0 | MIT, plus the bundled-component notices in its `LICENSE` | Andy Matuschak, Elgato Systems GmbH, Kornel Lesiński and others, as listed in that file | https://github.com/sparkle-project/Sparkle |
+| Sparkle | 2.10.1 | MIT, plus the bundled-component notices in its `LICENSE` | Andy Matuschak, Elgato Systems GmbH, Kornel Lesiński and others, as listed in that file | https://github.com/sparkle-project/Sparkle |
 | FluidAudio | 0.17.7 | Apache License 2.0 | per upstream `LICENSE` and `NOTICE` | https://github.com/FluidInference/FluidAudio |
 | WhisperKit | 1.1.1 | MIT | Copyright (c) 2024 argmax, inc. | https://github.com/argmaxinc/WhisperKit |
 | mlx-swift-lm | 3.32.3 | MIT | Copyright (c) 2024 ml-explore | https://github.com/ml-explore/mlx-swift-lm |

@@ -13,7 +13,7 @@ Mouthtype is a single-user, local macOS 26 menu bar dictation app written in Swi
 | `mouthtype-fn-guard` | executable | A small helper the app launches with its parent pid. When the parent exits, it removes the Fn remap so a crash can't leave the keyboard remapped. |
 | `mouthtype-bench` | executable | Developer benchmark for engines and cleaners, built on `MouthtypeCore` and swift-argument-parser. Not shipped in the app. |
 
-Tests live in `Tests/` as `MouthtypeCoreTests`, `FnRemapKitTests`, `MouthtypeMacTests` and `MouthtypeSettingsUITests`. Third-party dependencies are FluidAudio, WhisperKit, mlx-swift-lm, swift-huggingface, swift-transformers, GRDB and Sparkle (pinned `exact: "2.10.0"`).
+Tests live in `Tests/` as `MouthtypeCoreTests`, `FnRemapKitTests`, `MouthtypeMacTests` and `MouthtypeSettingsUITests`. Third-party dependencies are FluidAudio, WhisperKit, mlx-swift-lm, swift-huggingface, swift-transformers, GRDB and Sparkle (pinned `exact: "2.10.1"`).
 
 ## Dictation pipeline
 
