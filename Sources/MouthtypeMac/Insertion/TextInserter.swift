@@ -598,14 +598,16 @@ public final class TextInserter {
         guard armed.generation == deliveryGeneration, !closing, !deliveryActive, !Task.isCancelled else {
             return "the take was cancelled or replaced"
         }
-        guard now() <= armed.pastedAt.advanced(by: .seconds(Self.returnWindow)) else { return "the send window passed" }
-        // Matching text in the field doesn't show the user left it alone; a key or click since the paste does.
-        guard inputGeneration() == armed.input else { return "the user typed or clicked after the paste" }
+        // The Accessibility reads can stall on another app, so the deadline and the input count come after them.
         let fresh = focus.snapshot()
         guard !fresh.isSecure, !focus.isSecureInputEnabled else { return "a secure field or secure input is active" }
         guard fresh.pid == armed.pid, fresh.bundleID == armed.bundleID, fresh.element == armed.element,
             !fresh.focusOwnerDiffersFromFrontmost
         else { return "focus moved after the paste" }
+        guard now() <= armed.pastedAt.advanced(by: .seconds(Self.returnWindow)) else { return "the send window passed" }
+        // Matching text in the field doesn't show the user left it alone; a key or click since the paste does.
+        // The very last read, so a key pressed during any read above counts.
+        guard inputGeneration() == armed.input else { return "the user typed or clicked after the paste" }
         return nil
     }
 

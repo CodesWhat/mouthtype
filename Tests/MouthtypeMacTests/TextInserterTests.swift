@@ -106,7 +106,12 @@ private final class FakeFocus: FocusReading {
     var contexts = 0
     var context: InsertionContext? = InsertionContext(before: "Hello", after: "")
 
-    func snapshot() -> FocusSnapshot { snapshots += 1; return current }
+    var onSnapshot: (() -> Void)?
+    func snapshot() -> FocusSnapshot {
+        snapshots += 1
+        onSnapshot?()
+        return current
+    }
 
     func recheck() -> FocusSnapshot { rechecks += 1; return recheckResult ?? current }
 
@@ -2182,6 +2187,22 @@ private struct Rig {
         let rig = rig()
         let task = await arm(rig)
         rig.focus.current.element = element(101)
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aFocusReadThatOutlastsTheSendWindowSendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.onSnapshot = { rig.clock.advance(TextInserter.returnWindow + 1) }
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aKeyPressedDuringTheFocusReadSendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.onSnapshot = { rig.input.value = 1 }
         await release(rig, task)
         #expect(rig.poster.returns.isEmpty)
     }
