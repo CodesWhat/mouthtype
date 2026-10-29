@@ -1,13 +1,13 @@
-# Known limits for 0.9.0
+# Known limits for 0.9.1
 
 > [!NOTE]
-> This page covers what 0.9.0 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
+> This page covers what 0.9.1 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Not verified
 
 | Area | What isn't verified | Safe assumption |
 | --- | --- | --- |
-| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.9.0. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
+| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.9.1. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
 | Non-English speech | Dictation in languages other than English was checked with fixtures and synthetic voices, not by people speaking those languages on a Mac. Auto-detect's language picks weren't measured on real speech. | Expect more corrections outside English, most of all in the Beta languages. Pick the language yourself if Auto-detect guesses wrong. |
 | Japanese, Hindi and Tamil (Beta) | These languages were checked with synthetic speech only, never a fluent speaker or a physical microphone. The Whisper Turbo model is a separate 1.6 GB download, and live words are unavailable while it is in use, including English takes in an Auto-detect set that contains these languages. | Expect more corrections than in the Parakeet languages. Cleanup is Basic only, and the download path hasn't been run on a fresh machine. |
 | Press Return after inserting | The list in Settings > Advanced was checked with unit tests and offscreen renders only, never in a live app. | Try it in a throwaway chat before relying on it. Terminals can't confirm a paste, so when you add one Mouthtype presses Return a moment after the paste without checking. Other apps send only when Mouthtype can confirm the text landed. Neither has been tried in live apps yet. |

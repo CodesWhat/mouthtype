@@ -563,6 +563,10 @@ footer {
   color: var(--muted);
   margin: 0;
 }
+.footer-note a {
+  color: inherit;
+  text-decoration: underline;
+}
 @media (min-width: 1450px) {
   .hero {
     min-height: 690px;
