@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-10-28
+
 ### Changed
 
 - Press Return after inserting now works in terminals you add (Terminal, iTerm2, Ghostty, WezTerm, Warp, kitty, Alacritty, Hyper and Orca). They can't confirm a paste, so Mouthtype presses Return a moment after it without checking, never in password fields, after a recovered take, or if you typed or clicked first. Settings shows a note on those rows.
@@ -168,7 +170,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/CodesWhat/mouthtype/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/CodesWhat/mouthtype/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/CodesWhat/mouthtype/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/CodesWhat/mouthtype/compare/v0.5.0...v0.6.0
