@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- The first dictation after opening a listed Electron app like the Claude desktop app can now press Return too, because Mouthtype waits briefly for the app's accessibility to come up.
+
 ## [0.9.0] - 2026-10-28
 
 ### Changed

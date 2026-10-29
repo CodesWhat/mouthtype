@@ -24,16 +24,20 @@ final class ElectronAccessibility: @unchecked Sendable {
 
     private let lock = NSLock()
     private var handled = Set<pid_t>()
+    private var enabledInstants: [pid_t: ContinuousClock.Instant] = [:]
+    private let now: @Sendable () -> ContinuousClock.Instant
     private let isElectron: @Sendable (pid_t) -> Bool
     /// Sets the flag; true when the app answered (accepted or unsupported), false when it timed out and should be retried.
     private let setFlag: @Sendable (pid_t) -> Bool
 
     init(
         isElectron: @escaping @Sendable (pid_t) -> Bool = ElectronAccessibility.systemIsElectron,
-        setFlag: @escaping @Sendable (pid_t) -> Bool = ElectronAccessibility.systemSetFlag
+        setFlag: @escaping @Sendable (pid_t) -> Bool = ElectronAccessibility.systemSetFlag,
+        now: @escaping @Sendable () -> ContinuousClock.Instant = { .now }
     ) {
         self.isElectron = isElectron
         self.setFlag = setFlag
+        self.now = now
     }
 
     /// Sets the flag when `pid` is an Electron app not handled yet. Returns whether it set it on this call.
@@ -43,8 +47,19 @@ final class ElectronAccessibility: @unchecked Sendable {
         guard lock.withLock({ !handled.contains(pid) }) else { return false }
         let electron = isElectron(pid)
         let done = electron ? setFlag(pid) : true
-        guard done, lock.withLock({ handled.insert(pid).inserted }) else { return false }
-        return electron
+        let setAt = now()
+        guard done else { return false }
+        let inserted = lock.withLock {
+            let inserted = handled.insert(pid).inserted
+            if inserted, electron { enabledInstants[pid] = setAt }
+            return inserted
+        }
+        return inserted && electron
+    }
+
+    /// When the flag was set for `pid`, or nil when it never was (not Electron, failed, or not tried yet).
+    func enabledAt(pid: pid_t) -> ContinuousClock.Instant? {
+        lock.withLock { enabledInstants[pid] }
     }
 
     static func systemIsElectron(_ pid: pid_t) -> Bool {
