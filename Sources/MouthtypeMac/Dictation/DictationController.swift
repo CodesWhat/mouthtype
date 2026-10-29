@@ -86,7 +86,7 @@ final class DictationController {
     /// Fired when an automation start has become a hands-free recording, so the hotkey side can adopt the lock.
     @ObservationIgnored var onAutomationLock: (@MainActor () -> Void)?
     /// Called with the focus a recording starts in, so a press-Return app can be readied while the user talks.
-    @ObservationIgnored private let prepareSendTarget: @MainActor (FocusSnapshot) -> Void
+    @ObservationIgnored private let prepareSendTarget: @MainActor (FocusSnapshot) -> SendTargetReadiness?
     @ObservationIgnored private var shuttingDown = false
     @ObservationIgnored private var termination: Task<Bool, Never>?
     @ObservationIgnored private var captureFinalizations = 0
@@ -140,7 +140,7 @@ final class DictationController {
         cards: any DictationCards, limits: Limits = .standard, audioQuiet: (any RecordingAudioQuieting)? = nil,
         preview: LivePreviewSession = LivePreviewSession(), previewEnabled: @escaping @MainActor () -> Bool = { false },
         openSoundSettings: @escaping @MainActor () -> Void = DictationController.openSystemSoundSettings,
-        prepareSendTarget: @escaping @MainActor (FocusSnapshot) -> Void = SendTargetPreparation.prepareSystem
+        prepareSendTarget: @escaping @MainActor (FocusSnapshot) -> SendTargetReadiness? = SendTargetPreparation.prepareSystem
     ) {
         self.prepareSendTarget = prepareSendTarget
         self.openSoundSettings = openSoundSettings
@@ -357,7 +357,7 @@ final class DictationController {
             }
         }
         if startError == nil {
-            prepareSendTarget(startFocus)
+            current.sendReadiness = prepareSendTarget(startFocus)
             let editorNames = EditorHintsGatherer.start(
                 enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
                 readers: .system, readGate: .shared
@@ -692,6 +692,7 @@ final class DictationController {
         }
 
         guard await continueProcessing(session) else { return }
+        await session.sendReadiness?.waitUntilReady()
         let result = await inserter.deliver(cleaned.text, startFocus: session.startFocus)
         // Before anything suspends: the read-back can end while the row is still being written.
         verifying = result.verificationID.map { PendingVerification(id: $0, session: session, text: result.finalText) }
