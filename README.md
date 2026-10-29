@@ -11,7 +11,7 @@ Natural speech in, clean text out.
 </div>
 
 <p align="center">
-  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.8.0-2ea44f" alt="Version 0.8.0"></a>
+  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.9.0-2ea44f" alt="Version 0.9.0"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-000000?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
   <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
@@ -24,7 +24,7 @@ Natural speech in, clean text out.
 <hr>
 
 > [!IMPORTANT]
-> **Not verified on a device for 0.8.0:** fresh installation, VoiceOver, Bluetooth and USB microphones, press Return after inserting in a live app, and the Japanese, Hindi and Tamil Beta paths with their 1.6 GB model download. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
+> **Not verified on a device for 0.9.0:** fresh installation, VoiceOver, Bluetooth and USB microphones, press Return after inserting in a live app, and the Japanese, Hindi and Tamil Beta paths with their 1.6 GB model download. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 
 <h2 align="center">Contents</h2>
 
@@ -64,7 +64,7 @@ Natural speech in, clean text out.
 | Saved audio and retention | [docs.mouthtype.app/privacy-and-data/saved-audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/) |
 | Automation (`mouthtype://` and the command-line script) | [docs.mouthtype.app/automation/url-scheme-and-cli](https://docs.mouthtype.app/automation/url-scheme-and-cli/) |
 | Troubleshooting | [docs.mouthtype.app/troubleshooting](https://docs.mouthtype.app/troubleshooting/) |
-| Known limits for 0.8.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
+| Known limits for 0.9.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
 | Release notes | [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) |
 | Roadmap | See [Roadmap](#roadmap) below |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -84,7 +84,7 @@ Natural speech in, clean text out.
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.8.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
+The Mac app is at 0.9.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
 
 1. Download the signed, notarized DMG from [mouthtype.app/download](https://mouthtype.app/download).
 2. Open the DMG, drag Mouthtype to Applications and open it.
@@ -153,7 +153,7 @@ It's early days. App compatibility, clipboard behavior and fresh-install setup s
 | 🤖 | **Automation** | `mouthtype://` URLs and a `mouthtype` command-line script can start, stop, toggle, cancel, copy and paste the last take, and open a page. Dictation commands are off until you turn on the automation switch. |
 | 🔄 | **Built-in Updates** | Signed update checks through Sparkle, with optional automatic checking. |
 
-See [the usage reference](https://docs.mouthtype.app/reference/usage-overview/) for cleanup behavior, delivery limits and current caveats. **Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Split pastes preserve text. Splitting adds no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste once it is confirmed.
+See [the usage reference](https://docs.mouthtype.app/reference/usage-overview/) for cleanup behavior, delivery limits and current caveats. **Quiet other audio** is on by default from 0.4.0 (it stays off if you turned it off before), and **Live words** is optional and off by default. Check the destination before retrying an interrupted paste, since some text may already have arrived. Split pastes preserve text. Splitting adds no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste. Mouthtype confirms it first, except in terminals, where it presses Return a moment after the paste without checking.
 
 <hr>
 
@@ -220,6 +220,7 @@ High-level themes only, with no dates. [`CHANGELOG.md`](CHANGELOG.md) has per-re
 | **0.6.0** ✅ | Languages and names | Dictation in 25 languages with Auto-detect, a mouse-button trigger, dictionary export and Wispr Flow and VoiceInk import, names on screen and a Models page in Setup, a silent-microphone warning, per-app cleanup instructions, an Excited tone, repeatable release builds, a Homebrew cask |
 | **0.7.0** ✅ | Beta languages and fixes | Japanese, Hindi and Tamil dictation in Beta through a separate 1.6 GB Whisper model, selected-text cleanup tone precedence, dictionary and cleanup fixes, a website typing speed test with a countdown |
 | **0.8.0** ✅ | Press Return after inserting | An opt-in list of apps where Mouthtype presses Return after a confirmed paste, and a Formal cleanup fix that keeps a real verb |
+| **0.9.0** ✅ | Press Return in terminals | Press Return after inserting now works in terminals you add and in Electron apps like the Claude desktop app |
 | **Planned** | Next | Linux desktop client acceptance and a supported release, a Ring pill style |
 
 **Still open:** fresh-install, VoiceOver, and Bluetooth and USB microphone verification, and wider app-compatibility testing. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
