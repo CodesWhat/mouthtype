@@ -6,7 +6,7 @@ Click a text field, hold <kbd>Fn</kbd> and speak, then release to paste. Double-
 
 ## Mac release
 
-The latest published release, 0.8.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
+The latest published release, 0.9.0, supports Apple Silicon Macs on macOS 26 or later. Download the signed, notarized DMG from [mouthtype.app](https://mouthtype.app/download) and follow [the install notes](READ-ME.md). Repository access is not required. [Corresponding release source](https://mouthtype.app/source) is available separately.
 
 > [!NOTE]
 > Existing alpha.1–3 users need this download once to get the built-in updater.
@@ -96,7 +96,7 @@ Replacements expand after cleanup, so their spelling, capitalization, spaces, an
 
 ## Press Return after inserting
 
-To send a message as soon as you stop talking, open **Settings > Advanced > Press Return after inserting** and add the app. After a normal dictation pastes there, Mouthtype presses Return once. It does that only when it can confirm the text landed in a text field, and not if you typed or clicked first, started another recording, or the take was recovered. It never sends in password fields. Apple Terminal can't confirm a paste, so it never sends there. Other apps send only when Mouthtype can confirm the text landed; this hasn't been tried in live apps yet. The list starts empty, so nothing is sent until you add an app.
+To send a message as soon as you stop talking, open **Settings > Advanced > Press Return after inserting** and add the app. After a normal dictation pastes there, Mouthtype presses Return once. It does that when it can confirm the text landed in a text field, and not if you typed or clicked first, started another recording, or the take was recovered. It never sends in password fields. Terminals (Terminal, iTerm2, Ghostty, WezTerm, Warp, kitty, Alacritty, Hyper and Orca) can't confirm a paste, so when you add one Mouthtype presses Return a moment after the paste without checking. That's still never in password fields, after a recovered take, or if you typed or clicked first. Other apps send only when Mouthtype can confirm the text landed; this hasn't been tried in live apps yet. Mouthtype turns on Electron apps' accessibility for listed apps when a recording starts, so it can confirm the paste. The list starts empty, so nothing is sent until you add an app.
 
 ## Pasting into terminals
 

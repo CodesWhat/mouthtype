@@ -85,6 +85,8 @@ final class DictationController {
     @ObservationIgnored var automationWaitLimit: @MainActor () async throws -> Void = { try await Task.sleep(for: .seconds(10)) }
     /// Fired when an automation start has become a hands-free recording, so the hotkey side can adopt the lock.
     @ObservationIgnored var onAutomationLock: (@MainActor () -> Void)?
+    /// Called with the focus a recording starts in, so a press-Return app can be readied while the user talks.
+    @ObservationIgnored private let prepareSendTarget: @MainActor (FocusSnapshot) -> Void
     @ObservationIgnored private var shuttingDown = false
     @ObservationIgnored private var termination: Task<Bool, Never>?
     @ObservationIgnored private var captureFinalizations = 0
@@ -137,8 +139,10 @@ final class DictationController {
         inserter: any DictationInserting, pill: any DictationPill, sounds: any SoundPlayer, clock: any DictationClock,
         cards: any DictationCards, limits: Limits = .standard, audioQuiet: (any RecordingAudioQuieting)? = nil,
         preview: LivePreviewSession = LivePreviewSession(), previewEnabled: @escaping @MainActor () -> Bool = { false },
-        openSoundSettings: @escaping @MainActor () -> Void = DictationController.openSystemSoundSettings
+        openSoundSettings: @escaping @MainActor () -> Void = DictationController.openSystemSoundSettings,
+        prepareSendTarget: @escaping @MainActor (FocusSnapshot) -> Void = SendTargetPreparation.prepareSystem
     ) {
+        self.prepareSendTarget = prepareSendTarget
         self.openSoundSettings = openSoundSettings
         self.preview = preview
         self.previewEnabled = previewEnabled
@@ -353,6 +357,7 @@ final class DictationController {
             }
         }
         if startError == nil {
+            prepareSendTarget(startFocus)
             let editorNames = EditorHintsGatherer.start(
                 enabled: pipeline.editorHints(), boostEnabled: pipeline.boostSavedWords(), focus: startFocus,
                 readers: .system, readGate: .shared
