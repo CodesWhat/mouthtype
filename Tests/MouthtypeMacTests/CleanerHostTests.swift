@@ -402,6 +402,8 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     @Test func aGenerationInFlightIsNeverUnloadedUnderneath() async {
         let gate = DownloadGate()
         let (host, model) = idleHost(.milliseconds(100))
+        // As in real use, a recording hold precedes cleanup, so the idle countdown can't expire before the run begins.
+        host.beginRecordingHold()
         host.start()
         await settle(host) { if case .ready = $0 { true } else { false } }
         model.cleanGate = gate
@@ -410,6 +412,8 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         // Wait until the generation has actually started, then well past the 100 ms idle delay.
         for _ in 0..<500 where model.cleanCalls == 0 { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(model.cleanCalls == 1)
+        // The in-flight run is itself a use, so releasing the hold starts no countdown.
+        host.endRecordingHold()
         try? await Task.sleep(for: .milliseconds(500))
         if case .ready = host.state {} else { Issue.record("unloaded mid-generation: \(host.state)") }
         #expect(model.unloads == 0)
