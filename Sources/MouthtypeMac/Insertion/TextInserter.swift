@@ -33,13 +33,18 @@ public final class TextInserter {
         var generation: Int
         var pid: pid_t
         var bundleID: String
-        var element: FocusedElement
+        /// Nil only for an app whose paste is never confirmed, which may report no focused element.
+        var element: FocusedElement?
         /// The real key and click count right after the paste, and when the paste went out.
         var input: UInt64
         var pastedAt: ContinuousClock.Instant
     }
     /// How long after the paste chord a Return may still go out.
     static let returnWindow: TimeInterval = 2
+    /// How long after the paste an unconfirmed send (a terminal) waits before its Return.
+    static let unconfirmedSendDelay: TimeInterval = 0.25
+    /// The pending unconfirmed send, so a new recording or delivery can cancel it. Tests await it.
+    private(set) var unconfirmedSend: Task<Void, Never>?
     private var pasteStamp: (generation: Int, input: UInt64?, at: ContinuousClock.Instant)?
     private var armedReturn: ArmedReturn?
     /// The newest read-back verdict, so a send armed after it arrived still sees it.
@@ -111,6 +116,7 @@ public final class TextInserter {
     func cancelVerification() {
         batchGeneration += 1
         armedReturn = nil
+        cancelUnconfirmedSend()
         verification?.cancel()
         verification = nil
     }
@@ -522,7 +528,9 @@ public final class TextInserter {
             return skipReturn("the paste target is unknown")
         }
         guard sendsReturn(bundleID) else { return skipReturn("the app is not opted in") }
-        guard let element = target.element else { return skipReturn("the paste target has no focused element") }
+        let confirms = PasteTargetPolicy.confirmsPaste(bundleID: bundleID)
+        // Only an app that can't confirm a paste may go without a focused element; the rest need one to compare.
+        if confirms, target.element == nil { return skipReturn("the paste target has no focused element") }
         guard let generation = result.verificationID, generation == deliveryGeneration, !closing else {
             return skipReturn("a newer delivery replaced this paste")
         }
@@ -530,13 +538,46 @@ public final class TextInserter {
         guard let stamp = pasteStamp, stamp.generation == generation, let input = stamp.input else {
             return skipReturn("user input can't be tracked")
         }
-        armedReturn = ArmedReturn(
-            generation: generation, pid: pid, bundleID: bundleID, element: element, input: input, pastedAt: stamp.at)
+        let armed = ArmedReturn(
+            generation: generation, pid: pid, bundleID: bundleID, element: target.element, input: input, pastedAt: stamp.at)
+        guard confirms else { return armUnconfirmedSend(armed) }
+        armedReturn = armed
         if let verdict = lastVerdict, verdict.id == generation { returnAfterVerdict(verdict) }
     }
 
     /// A new recording drops any Return still waiting on a verdict.
-    func cancelPendingReturn() { armedReturn = nil }
+    func cancelPendingReturn() {
+        armedReturn = nil
+        cancelUnconfirmedSend()
+    }
+
+    private func cancelUnconfirmedSend() {
+        unconfirmedSend?.cancel()
+        unconfirmedSend = nil
+    }
+
+    /// A terminal can't confirm the paste, so its Return goes out a beat after the paste instead of after a verdict.
+    /// Never stored in `armedReturn`, so a verdict can't send it a second time.
+    private func armUnconfirmedSend(_ armed: ArmedReturn) {
+        cancelUnconfirmedSend()
+        unconfirmedSend = Task { [weak self] in
+            guard let self else { return }
+            let remaining = Self.unconfirmedSendDelay - Self.seconds(self.now() - armed.pastedAt)
+            if remaining > 0 { do { try await self.sleep(remaining) } catch { return } }
+            guard !Task.isCancelled, self.deliveryGeneration == armed.generation else {
+                return self.skipReturn("the take was cancelled or replaced")
+            }
+            self.unconfirmedSend = nil
+            if let reason = self.returnBlocker(armed) { return self.skipReturn(reason) }
+            guard self.clipboard.pressReturn(targetPID: armed.pid) else { return self.skipReturn("the Return event could not be posted") }
+            Log.app.info("send after insert: pressed Return without confirmation")
+        }
+    }
+
+    private static func seconds(_ duration: Duration) -> TimeInterval {
+        let parts = duration.components
+        return TimeInterval(parts.seconds) + TimeInterval(parts.attoseconds) / 1e18
+    }
 
     private func skipReturn(_ reason: String) {
         Log.app.info("send after insert skipped: \(reason, privacy: .public)")
@@ -549,19 +590,28 @@ public final class TextInserter {
         guard verification.verdict == .confirmed else {
             return skipReturn("the read-back said \(verification.verdict.storeOutcome)")
         }
-        guard armed.generation == deliveryGeneration, !closing, !deliveryActive, !Task.isCancelled else {
-            return skipReturn("the take was cancelled or replaced")
-        }
-        guard now() <= armed.pastedAt.advanced(by: .seconds(Self.returnWindow)) else { return skipReturn("the send window passed") }
-        // Matching text in the field doesn't show the user left it alone; a key or click since the paste does.
-        guard inputGeneration() == armed.input else { return skipReturn("the user typed or clicked after the paste") }
-        let fresh = focus.snapshot()
-        guard !fresh.isSecure, !focus.isSecureInputEnabled else { return skipReturn("a secure field or secure input is active") }
-        guard fresh.pid == armed.pid, fresh.bundleID == armed.bundleID, let element = fresh.element, element == armed.element,
-            !fresh.focusOwnerDiffersFromFrontmost
-        else { return skipReturn("focus moved after the paste") }
+        if let reason = returnBlocker(armed) { return skipReturn(reason) }
         guard clipboard.pressReturn(targetPID: armed.pid) else { return skipReturn("the Return event could not be posted") }
         Log.app.info("send after insert: pressed Return")
+    }
+
+    /// Why a Return must not go out now, or nil when every guard holds. Shared by the confirmed and unconfirmed paths
+    /// so they can't drift; the verdict check is the confirmed path's own.
+    private func returnBlocker(_ armed: ArmedReturn) -> String? {
+        guard armed.generation == deliveryGeneration, !closing, !deliveryActive, !Task.isCancelled else {
+            return "the take was cancelled or replaced"
+        }
+        guard now() <= armed.pastedAt.advanced(by: .seconds(Self.returnWindow)) else { return "the send window passed" }
+        // Matching text in the field doesn't show the user left it alone; a key or click since the paste does.
+        guard inputGeneration() == armed.input else { return "the user typed or clicked after the paste" }
+        let fresh = focus.snapshot()
+        guard !fresh.isSecure, !focus.isSecureInputEnabled else { return "a secure field or secure input is active" }
+        guard fresh.pid == armed.pid, fresh.bundleID == armed.bundleID, !fresh.focusOwnerDiffersFromFrontmost else {
+            return "focus moved after the paste"
+        }
+        // A known element must still be focused; the confirmed path always has one.
+        if let element = armed.element, fresh.element != element { return "focus moved after the paste" }
+        return nil
     }
 
     /// Puts the last delivered transcript on the clipboard to stay. False when nothing was delivered yet.

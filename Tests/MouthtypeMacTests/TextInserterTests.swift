@@ -168,7 +168,7 @@ private final class VerifyGate {
     }()
 
     func pass(_ delay: TimeInterval) async {
-        guard closed, Self.delays.contains(delay) else { return }
+        guard closed, Self.delays.contains(delay) || delay == TextInserter.unconfirmedSendDelay else { return }
         await withCheckedContinuation { waiters.append($0) }
     }
 
@@ -2028,6 +2028,178 @@ private struct Rig {
         #expect(target.windowTitle == "Shopping")
         #expect(target.fieldRole == "AXTextArea")
         #expect(target.isSecure == false)
+    }
+}
+
+@MainActor
+@Suite struct UnconfirmedSendPolicyTests {
+    @Test func terminalsCantConfirmAPasteAndOtherAppsCan() {
+        for id in [
+            "com.apple.Terminal", "com.stablyai.orca", "com.googlecode.iterm2", "com.mitchellh.ghostty", "com.github.wez.wezterm",
+            "dev.warp.Warp-Stable", "net.kovidgoyal.kitty", "org.alacritty", "co.zeit.hyper",
+        ] {
+            #expect(!PasteTargetPolicy.confirmsPaste(bundleID: id))
+        }
+        #expect(PasteTargetPolicy.confirmsPaste(bundleID: "com.example.app"))
+        #expect(PasteTargetPolicy.confirmsPaste(bundleID: nil))
+    }
+}
+
+@MainActor
+@Suite struct UnconfirmedSendTests {
+    private let terminal = "com.apple.Terminal"
+    private static let before = FieldReading(value: "Hello", length: 5, selection: NSRange(location: 5, length: 0))
+    private static let grown = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+
+    private func rig(optedIn: Bool = true, bundleID: String? = nil, elementKnown: Bool = true) -> Rig {
+        let id = bundleID ?? terminal
+        let rig = Rig(sendsReturn: { optedIn && $0 == id }, gated: true)
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: id, role: "AXTextArea", element: elementKnown ? element(100) : nil)
+        rig.focus.readings = [Self.before, Self.grown]
+        rig.inserter.observeVerification { _ in }
+        return rig
+    }
+
+    /// Delivers and arms; returns the pending send so a test can await it after changing the world.
+    private func arm(_ rig: Rig) async -> Task<Void, Never>? {
+        let result = await rig.inserter.deliver("world", startFocus: nil)
+        rig.inserter.armReturn(after: result)
+        return rig.inserter.unconfirmedSend
+    }
+
+    private func release(_ rig: Rig, _ task: Task<Void, Never>?) async {
+        rig.gate.open()
+        await task?.value
+        await rig.inserter.waitForVerification()
+    }
+
+    @Test func sendsOnceAfterTheDelayWithNoVerdict() async {
+        let rig = rig()
+        let task = await arm(rig)
+        #expect(task != nil && rig.poster.returns.isEmpty)
+        await release(rig, task)
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func aLateVerdictDoesNotSendASecondReturn() async {
+        let rig = rig()
+        let task = await arm(rig)
+        await release(rig, task)
+        #expect(rig.poster.returns == [100])
+        #expect(rig.inserter.unconfirmedSend == nil)
+    }
+
+    @Test func aVerdictThatArrivedFirstDoesNotSendAnUnconfirmedArm() async {
+        let rig = rig()
+        let result = await rig.inserter.deliver("world", startFocus: nil)
+        rig.gate.open()
+        await rig.inserter.waitForVerification()
+        rig.gate.closed = true
+        rig.inserter.armReturn(after: result)
+        #expect(rig.poster.returns.isEmpty)
+        let task = rig.inserter.unconfirmedSend
+        await release(rig, task)
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func aNilElementStillSendsWhenPidAndBundleMatch() async {
+        let rig = rig(elementKnown: false)
+        let task = await arm(rig)
+        await release(rig, task)
+        #expect(rig.poster.returns == [100])
+    }
+
+    @Test func userInputAfterThePasteSendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.input.value = 1
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func focusMovingToAnotherAppSendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.current = FocusSnapshot(pid: 200, bundleID: "com.example.other", role: "AXTextArea", element: element(200))
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func sameProcessWithAnotherBundleSendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.current.bundleID = "com.example.other"
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func focusMovingToAnotherElementSendsNothingWhenOneWasKnown() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.current.element = element(101)
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aSecureFieldSendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.current.isSecure = true
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func secureInputSendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.focus.isSecureInputEnabled = true
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func cancellingBeforeTheDelaySendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.inserter.cancelPendingReturn()
+        #expect(rig.inserter.unconfirmedSend == nil)
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aNewerDeliverySendsNothingForTheOlderPaste() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.pasteboard.read()
+        _ = await rig.inserter.deliver("two", startFocus: nil)
+        #expect(rig.inserter.unconfirmedSend == nil)
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func pastTheSendWindowSendsNothing() async {
+        let rig = rig()
+        let task = await arm(rig)
+        rig.clock.advance(TextInserter.returnWindow + 1)
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func anAppThatIsNotOptedInGetsNoUnconfirmedSend() async {
+        let rig = rig(optedIn: false)
+        let task = await arm(rig)
+        #expect(task == nil)
+        await release(rig, task)
+        #expect(rig.poster.returns.isEmpty)
+    }
+
+    @Test func aConfirmableAppWithNoVerdictSendsNothing() async {
+        let rig = rig(bundleID: "com.example.app")
+        let task = await arm(rig)
+        #expect(task == nil)
+        rig.inserter.cancelVerification()
+        rig.gate.open()
+        await rig.inserter.waitForVerification()
+        #expect(rig.poster.returns.isEmpty)
     }
 }
 
