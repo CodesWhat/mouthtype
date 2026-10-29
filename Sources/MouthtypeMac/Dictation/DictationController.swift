@@ -693,6 +693,8 @@ final class DictationController {
 
         guard await continueProcessing(session) else { return }
         await session.sendReadiness?.waitUntilReady()
+        // Quit may have begun while the wait was suspended.
+        guard await continueProcessing(session) else { return }
         let result = await inserter.deliver(cleaned.text, startFocus: session.startFocus)
         // Before anything suspends: the read-back can end while the row is still being written.
         verifying = result.verificationID.map { PendingVerification(id: $0, session: session, text: result.finalText) }

@@ -549,7 +549,7 @@ private struct Rig {
         quietAudio: Bool = false, appStyles: @escaping @Sendable () -> AppCleanupStyles = { AppCleanupStyles() }, previewEnabled: Bool = false,
         audioRetention: AudioRetentionPolicy = AudioRetentionPolicy(), storeWriter: (any DictationStoring)? = nil,
         smart: (any SmartCleaning)? = nil, languageRequest: @escaping @Sendable () -> DictationLanguageRequest = { .english },
-        listedElectron: Bool = false
+        listedElectron: Bool = false, readinessGate: DispatchSemaphore? = nil
     ) {
         capture = FakeCapture(log: log, audio: audio)
         engine = FakeEngine(log: log)
@@ -586,7 +586,11 @@ private struct Rig {
                 let log = log
                 return SendTargetReadiness(
                     pid: 5, enable: Task {}, enabledAt: { _ in now },
-                    probe: { _ in log.add("readiness.probe"); return true }
+                    probe: { _, _ in
+                        log.add("readiness.probe")
+                        readinessGate?.wait()
+                        return true
+                    }
                 )
             }
         )
@@ -1549,6 +1553,21 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.dictate()
         #expect(!rig.log.contains("readiness.probe"))
         #expect(rig.log.contains("inserter.deliver"))
+    }
+
+    @Test func quitStartingDuringTheReadinessWaitStopsTheTakeBeforeDeliver() async {
+        let gate = DispatchSemaphore(value: 0)
+        let rig = Rig(listedElectron: true, readinessGate: gate)
+        await rig.controller.handle(.pressed(at: keyDown))
+        await rig.controller.handle(.released(at: keyUp))
+        await rig.until { rig.log.contains("readiness.probe") }
+        #expect(rig.log.contains("readiness.probe"))
+        let quit = Task { @MainActor in await rig.controller.prepareForTermination() }
+        await rig.settle()
+        gate.signal()
+        await rig.controller.waitForProcessing()
+        _ = await quit.value
+        #expect(!rig.log.contains("inserter.deliver"))
     }
 
     @Test func aCancelledTakeDoesNotWait() async {

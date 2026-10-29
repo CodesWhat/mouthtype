@@ -24,7 +24,7 @@ enum SendTargetPreparation {
         return SendTargetReadiness(
             pid: pid, enable: enable,
             enabledAt: { ElectronAccessibility.shared.enabledAt(pid: $0) },
-            probe: SendTargetReadiness.systemProbe
+            probe: { SendTargetReadiness.systemProbe($0, timeout: $1) }
         )
     }
 }
@@ -40,14 +40,15 @@ struct SendTargetReadiness: Sendable {
     let pid: pid_t
     private let enable: Task<Void, Never>
     private let enabledAt: @Sendable (pid_t) -> ContinuousClock.Instant?
-    private let probe: @Sendable (pid_t) -> Bool
+    /// Reads the focused element, giving up after the timeout it's handed.
+    private let probe: @Sendable (pid_t, Duration) -> Bool
     private let now: @Sendable () -> ContinuousClock.Instant
     private let sleep: @Sendable (Duration) async throws -> Void
 
     init(
         pid: pid_t, enable: Task<Void, Never>,
         enabledAt: @escaping @Sendable (pid_t) -> ContinuousClock.Instant?,
-        probe: @escaping @Sendable (pid_t) -> Bool,
+        probe: @escaping @Sendable (pid_t, Duration) -> Bool,
         now: @escaping @Sendable () -> ContinuousClock.Instant = { .now },
         sleep: @escaping @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     ) {
@@ -74,16 +75,22 @@ struct SendTargetReadiness: Sendable {
         await enable.value
         guard let setAt = enabledAt(pid) else { return }
         let deadline = setAt + Self.settleLimit
-        while !Task.isCancelled, now() < deadline {
-            if probe(pid) { return }
-            do { try await sleep(Self.pollInterval) } catch { return }
+        while !Task.isCancelled {
+            let remaining = deadline - now()
+            guard remaining > .zero else { return }
+            if probe(pid, min(Self.pollInterval, remaining)) { return }
+            // The probe may have used up the budget, so the sleep is measured from now.
+            let left = deadline - now()
+            guard left > .zero, !Task.isCancelled else { return }
+            do { try await sleep(min(Self.pollInterval, left)) } catch { return }
         }
     }
 
     /// True when the app answers for its focused element, which an Electron app does only once its tree exists.
-    static func systemProbe(_ pid: pid_t) -> Bool {
+    static func systemProbe(_ pid: pid_t, timeout: Duration) -> Bool {
         let app = AXUIElementCreateApplication(pid)
-        AXUIElementSetMessagingTimeout(app, 0.1)
+        let seconds = Double(timeout.components.seconds) + Double(timeout.components.attoseconds) / 1e18
+        AXUIElementSetMessagingTimeout(app, Float(max(seconds, 0.001)))
         var value: CFTypeRef?
         return AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &value) == .success
     }

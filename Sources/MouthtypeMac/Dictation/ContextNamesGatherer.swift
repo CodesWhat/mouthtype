@@ -48,7 +48,8 @@ final class ElectronAccessibility: @unchecked Sendable {
         let electron = isElectron(pid)
         let done = electron ? setFlag(pid) : true
         let setAt = now()
-        let inserted = done && lock.withLock {
+        guard done else { return false }
+        let inserted = lock.withLock {
             let inserted = handled.insert(pid).inserted
             if inserted, electron { enabledInstants[pid] = setAt }
             return inserted
