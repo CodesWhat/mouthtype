@@ -18,7 +18,7 @@ let package = Package(
         .package(url: "https://github.com/huggingface/swift-huggingface", from: "1.0.0"),
         .package(url: "https://github.com/huggingface/swift-transformers", from: "1.3.5"),
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0"),
-        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.0"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.10.1"),
     ],
     targets: [
         .target(

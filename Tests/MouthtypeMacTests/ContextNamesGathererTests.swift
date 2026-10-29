@@ -171,6 +171,40 @@ private final class Calls: @unchecked Sendable {
     }
 }
 
+extension ElectronAccessibilityTests {
+    @Test func enabledAtIsRecordedOnASuccessfulSet() {
+        let clock = TestInstants()
+        let enabler = ElectronAccessibility(isElectron: { _ in true }, setFlag: { _ in true }, now: { clock.now })
+        #expect(enabler.enabledAt(pid: 10) == nil)
+        let start = clock.now
+        #expect(enabler.enableIfNeeded(pid: 10))
+        clock.advance(.seconds(5))
+        #expect(!enabler.enableIfNeeded(pid: 10))
+        #expect(enabler.enabledAt(pid: 10) == start)
+    }
+
+    @Test func enabledAtIsNotRecordedForAFailedSet() {
+        let clock = TestInstants()
+        let enabler = ElectronAccessibility(isElectron: { _ in true }, setFlag: { _ in false }, now: { clock.now })
+        #expect(!enabler.enableIfNeeded(pid: 10))
+        #expect(enabler.enabledAt(pid: 10) == nil)
+    }
+
+    @Test func enabledAtIsNotRecordedForANonElectronApp() {
+        let enabler = ElectronAccessibility(isElectron: { _ in false }, setFlag: { _ in true })
+        #expect(!enabler.enableIfNeeded(pid: 10))
+        #expect(enabler.enabledAt(pid: 10) == nil)
+    }
+}
+
+/// A hand-moved clock for the wait tests.
+final class TestInstants: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current = ContinuousClock.now
+    var now: ContinuousClock.Instant { lock.withLock { current } }
+    func advance(_ duration: Duration) { lock.withLock { current = current + duration } }
+}
+
 private final class Counter: @unchecked Sendable {
     private let lock = NSLock()
     private var count = 0
