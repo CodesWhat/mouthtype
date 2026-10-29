@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Press Return after inserting now works in terminals you add (Terminal, iTerm2, Ghostty, WezTerm, Warp, kitty, Alacritty, Hyper and Orca). They can't confirm a paste, so Mouthtype presses Return a moment after it without checking, never in password fields, after a recovered take, or if you typed or clicked first. Settings shows a note on those rows.
+
 ## [0.8.0] - 2026-10-27
 
 ### Added
