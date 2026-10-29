@@ -1,4 +1,4 @@
-# Mouthtype 0.8.0
+# Mouthtype 0.9.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,16 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.9.0
+
+Press Return after inserting now works in more apps.
+
+- Changed: Press Return after inserting now works in terminals you add (Terminal, iTerm2, Ghostty, WezTerm, Warp, kitty, Alacritty, Hyper and Orca). They can't confirm a paste, so Mouthtype presses Return a moment after it without checking, never in password fields, after a recovered take, or if you typed or clicked after the paste. Settings shows a note on those rows.
+- Changed: Press Return after inserting now works in Electron apps like the Claude desktop app even with context names off. Mouthtype turns on their accessibility when a recording starts in a listed app, so it can confirm the paste.
+
+> [!NOTE]
+> Press Return after inserting, in terminals and Electron apps too, was checked with unit tests and offscreen renders only, never in a live app. Fresh installation, VoiceOver, and Bluetooth and USB microphones weren't verified on a device for this release. Japanese, Hindi and Tamil, their 1.6 GB model download and every other non-English language were checked with renders and synthetic speech only. See the known limits.
 
 ## What changed in 0.8.0
 

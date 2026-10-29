@@ -4,7 +4,7 @@ Install Mouthtype, give it the two permissions it needs, and dictate your first 
 
 ## What you need
 
-An Apple Silicon Mac running macOS 26 or later. That's the only supported setup for the current release, 0.8.0.
+An Apple Silicon Mac running macOS 26 or later. That's the only supported setup for the current release, 0.9.0.
 
 ## Install
 
@@ -72,4 +72,4 @@ If Fn opens the emoji picker or nothing happens, see [Troubleshooting](../TROUBL
 
 - [Dictating](dictating.md) covers hands-free mode, shortcuts and recovery.
 - [Dictionary](dictionary.md) teaches Mouthtype the names it gets wrong.
-- The [install notes](../READ-ME.md) have the full release notes for 0.8.0 and earlier.
+- The [install notes](../READ-ME.md) have the full release notes for 0.9.0 and earlier.

@@ -532,6 +532,11 @@ private struct Rig {
     var finishedAttempts: Counter
     let handsFreeChanges = Counter()
     let soundSettingsOpened = Counter()
+    let preparedTargets = PreparedTargets()
+
+    final class PreparedTargets {
+        var focuses: [FocusSnapshot] = []
+    }
 
     final class Counter {
         var count = 0
@@ -566,11 +571,13 @@ private struct Rig {
         pipeline.textPipeline = textPipeline
         pipeline.audioRetention = { audioRetention }
         let opened = soundSettingsOpened
+        let prepared = preparedTargets
         controller = DictationController(
             capture: capture, engine: engine, pipeline: pipeline, inserter: inserter, pill: pill, sounds: sounds, clock: clock,
             cards: cards, limits: limits, audioQuiet: quietAudio ? audioQuiet : nil,
             preview: LivePreviewSession(pause: { try await clock.sleep(forSeconds: 2) }), previewEnabled: { previewEnabled },
-            openSoundSettings: { opened.count += 1 }
+            openSoundSettings: { opened.count += 1 },
+            prepareSendTarget: { prepared.focuses.append($0) }
         )
         let counter = Counter()
         finishedAttempts = counter
@@ -1507,6 +1514,25 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.log.all.count == 1)
     }
 
+    @Test func recordingStartPreparesTheSendTargetOnceWithTheStartFocus() async {
+        let rig = Rig()
+        rig.inserter.focus = FocusSnapshot(pid: 4242, bundleID: "com.anthropic.claudefordesktop", appName: "Claude", role: "AXTextArea")
+        await rig.controller.handle(.pressed(at: keyDown))
+
+        #expect(rig.controller.phase == .recording)
+        #expect(rig.preparedTargets.focuses.count == 1)
+        #expect(rig.preparedTargets.focuses.first?.pid == 4242)
+        #expect(rig.preparedTargets.focuses.first?.bundleID == "com.anthropic.claudefordesktop")
+    }
+
+    @Test func aTakeThatFailsToStartDoesNotPrepareTheSendTarget() async {
+        let rig = Rig()
+        rig.capture.startError = CaptureError.microphoneDenied
+        await rig.controller.handle(.pressed(at: keyDown))
+
+        #expect(rig.preparedTargets.focuses.isEmpty)
+    }
+
     @Test(arguments: [CaptureError.microphoneDenied, .microphonePending])
     func unpreparedCaptureReportsItsActualPermissionFailure(error: CaptureError) async {
         let rig = Rig()
@@ -2190,7 +2216,7 @@ private final class FakeCorrections: CorrectionObserving {
         rig.controller.enqueueAutomation(.stop)
         rig.controller.enqueueAutomation(.start)
         limit.open()
-        await rig.settle()
+        await rig.until { rig.controller.automationStartPending }
         #expect(rig.controller.automationStartPending)
         // A's lock write finishes while B is pending, which used to wipe B's flags.
         lockGate.open()
@@ -2198,7 +2224,7 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.controller.automationStartPending)
         rig.controller.enqueueAutomation(.stop)
         let stopB = rig.controller.automationTail
-        await rig.settle()
+        await rig.until { rig.controller.pendingAutomationEnd == .stop }
         #expect(rig.controller.pendingAutomationEnd == .stop)
         startB.open()
         await stopB?.value

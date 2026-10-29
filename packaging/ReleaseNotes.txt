@@ -1,5 +1,10 @@
-Mouthtype 0.8.0
+Mouthtype 0.9.0
 
+Press Return after inserting now works in more apps. In terminals you add (Terminal, iTerm2, Ghostty, WezTerm, Warp, kitty, Alacritty, Hyper and Orca), Mouthtype can't confirm a paste, so it presses Return a moment after the paste without checking. It still never presses Return in password fields or secure input, after a recovered take, or if you typed or clicked after the paste. Settings shows a note on those rows. It also works in Electron apps like the Claude desktop app even with context names off: Mouthtype turns on their accessibility when a recording starts in a listed app, so it can confirm the paste.
+
+Not verified on a device for this release: press Return after inserting, in terminals and Electron apps too, was checked with unit tests and offscreen renders only, never in a live app. Fresh installation, VoiceOver, and Bluetooth and USB microphones were not checked either. Speech in languages other than English was checked with renders and synthetic voices only, never by someone speaking those languages on a Mac. That includes the Japanese, Hindi and Tamil Beta paths and their 1.6 GB model download.
+
+Earlier in 0.8.0:
 Press Return after inserting. Settings > Advanced has a new list of apps. Add an app and Mouthtype presses Return once after a dictation lands there, so a chat message sends when you stop talking. The list starts empty, which means it is off everywhere. Mouthtype presses Return only when it can confirm through accessibility that the text landed in the same field, within about two seconds, with no typing or clicking since and no new recording started. It never presses Return in password fields or secure input, and never for a recovered or interrupted take or Paste Last. Apple Terminal can't confirm a paste, so it never sends there. Other apps send only when Mouthtype can confirm the text landed; this hasn't been tried in live apps yet.
 
 Formal cleanup no longer drops a swear word used as a verb in one narrow case: after he, she or I with a form of "be" (including he's, she's and I'm) and before a word for people such as women, men or guys. It now becomes "sleeping with". "He was sleeping with women." is the example.
