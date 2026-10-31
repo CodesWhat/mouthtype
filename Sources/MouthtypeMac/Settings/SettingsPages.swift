@@ -42,7 +42,7 @@ enum SettingsPage: String, CaseIterable, Identifiable {
     }
     var summary: String {
         switch self {
-        case .home: "Everything you dictated lately, newest first. Copy it or recover it."
+        case .home: "Find a saved take. Copy the text, play the audio or recover it."
         case .stats: "Words, speed, streaks and time saved, worked out on this Mac from your log."
         case .dictionary: "Keep names and terms spelled the way you want."
         case .transforms: "A short phrase you say, and the exact text Mouthtype types instead. Plus what it can do to text you\u{2019}ve selected."

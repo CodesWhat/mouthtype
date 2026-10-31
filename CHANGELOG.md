@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Search retained transcripts and app names from Home, and play or stop a take's retained audio. Search finds older takes beyond the recent list; audio retention settings stay the same.
+
 ### Fixed
 
 - Profanity cleanup preserves clear verbs after forms of “be”, including plural person subjects, split phrasal verbs and standalone frequency phrases, while retaining noun-predicate emphasis.

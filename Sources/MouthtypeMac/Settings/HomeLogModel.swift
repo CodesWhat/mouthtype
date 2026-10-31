@@ -22,6 +22,7 @@ struct HomeTake: Identifiable, Equatable {
     var query = "" {
         didSet {
             guard query != oldValue else { return }
+            stopPlayback()
             lifecycleGeneration += 1
             savedGeneration += 1
             reloadTask?.cancel()
@@ -40,6 +41,9 @@ struct HomeTake: Identifiable, Equatable {
     @ObservationIgnored var saved: @MainActor () async throws -> [RecoverableDictation]
     /// Whether Recover may run right now. Read through `recoverEnabled`, which the page watches.
     @ObservationIgnored var canRecover: @MainActor () -> Bool {
+        didSet { refreshRecoverability() }
+    }
+    @ObservationIgnored var canPlay: @MainActor () -> Bool = { true } {
         didSet { refreshRecoverability() }
     }
     /// Kept audio behind finished takes, from each row's own audio path. Runs off the main thread.
@@ -65,6 +69,11 @@ struct HomeTake: Identifiable, Equatable {
     private(set) var takes: [HomeTake] = []
     private(set) var error: String?
     private(set) var lastCopiedID: String?
+    private(set) var playingID: String?
+    private(set) var playbackError: String?
+    @ObservationIgnored var audioPlayer: (any HistoryAudioPlaying)?
+    @ObservationIgnored private var playbackGeneration = 0
+    private(set) var playbackEnabled = true
     /// Observable copy of `canRecover()`. Recomputed under observation tracking, so changes to any observable state the
     /// closure reads (dictation phase, engine state, file transcription) redraw the buttons, and `refreshRecoverability()`
     /// covers the state that is not observable.
@@ -91,6 +100,7 @@ struct HomeTake: Identifiable, Equatable {
     }
 
     isolated deinit {
+        audioPlayer?.stop()
         observation?.cancel()
         savedTask?.cancel()
         reloadTask?.cancel()
@@ -110,6 +120,7 @@ struct HomeTake: Identifiable, Equatable {
 
     /// Stops watching the store and drops any audio scan in flight.
     func deactivate() {
+        stopPlayback()
         guard isActive else { return }
         isActive = false
         observation?.cancel()
@@ -135,14 +146,16 @@ struct HomeTake: Identifiable, Equatable {
         trackingGeneration += 1
         let generation = trackingGeneration
         let enabled = withObservationTracking {
-            canRecover()
+            (canRecover(), canPlay())
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, self.trackingGeneration == generation else { return }
                 self.refreshRecoverability()
             }
         }
-        if recoverEnabled != enabled { recoverEnabled = enabled }
+        if recoverEnabled != enabled.0 { recoverEnabled = enabled.0 }
+        if playbackEnabled != enabled.1 { playbackEnabled = enabled.1 }
+        if !playbackEnabled { stopPlayback() }
     }
 
     /// Reloads the text, then attaches saved audio. The text shows first so a slow audio scan never blanks the page.
@@ -244,6 +257,7 @@ struct HomeTake: Identifiable, Equatable {
         }
         let next = Array(merged.sorted { $0.startedAt > $1.startedAt }.prefix(Self.limit))
         if next != takes { takes = next }
+        if let playingID, !next.contains(where: { $0.id == playingID && $0.recoverable != nil }) { stopPlayback() }
     }
 
     func copy(_ take: HomeTake) {
@@ -254,6 +268,33 @@ struct HomeTake: Identifiable, Equatable {
 
     func recover(_ take: HomeTake) {
         guard let recording = take.recoverable, canRecover() else { return }
+        stopPlayback()
         recoverTake(recording)
+    }
+
+    func togglePlayback(_ take: HomeTake) {
+        if playingID == take.id { stopPlayback(); return }
+        stopPlayback()
+        guard canPlay(), let recording = take.recoverable else { return }
+        playbackError = nil
+        if audioPlayer == nil { audioPlayer = HistoryAudioPlayer() }
+        let generation = playbackGeneration
+        playingID = take.id
+        do {
+            try audioPlayer?.play(recording.audioURL) { [weak self] success in
+                guard let self, self.playbackGeneration == generation else { return }
+                self.playingID = nil
+                if !success { self.playbackError = "Couldn’t play this recording. Its audio may have expired or become unavailable." }
+            }
+        } catch {
+            stopPlayback()
+            playbackError = "Couldn’t play this recording. Its audio may have expired or become unavailable."
+        }
+    }
+
+    func stopPlayback() {
+        playbackGeneration += 1
+        audioPlayer?.stop()
+        playingID = nil
     }
 }
