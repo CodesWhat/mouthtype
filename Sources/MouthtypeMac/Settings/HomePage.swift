@@ -38,15 +38,22 @@ struct HomePage: View {
     var model: HomeLogModel
 
     var body: some View {
-        content
-            .onAppear { model.activate() }
-            .onDisappear { model.deactivate() }
+        VStack(alignment: .leading, spacing: 20) {
+            @Bindable var model = model
+            TextField("Search saved takes", text: $model.query)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Search saved takes")
+                .accessibilityIdentifier("home-search")
+            content
+        }
+        .onAppear { model.activate() }
+        .onDisappear { model.deactivate() }
     }
 
     @ViewBuilder private var content: some View {
         if model.takes.isEmpty {
             DesignSection(eyebrow: "Recent takes") {
-                Text(model.error ?? "No takes yet. Hold your shortcut and talk, and they land here.")
+                Text(model.error ?? (model.query.isEmpty ? "No takes yet. Hold your shortcut and talk, and they land here." : "No matching takes."))
                     .font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: .infinity, alignment: .leading).padding(14)

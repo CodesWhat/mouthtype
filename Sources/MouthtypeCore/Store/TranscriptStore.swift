@@ -108,6 +108,29 @@ public final class TranscriptStore: Sendable {
                     WHERE words_final > 0 AND COALESCE(is_secure, 0) = 0;
                     """)
         }
+        migrator.registerMigration("v4-history-search") { db in
+            try db.execute(
+                sql: """
+                    CREATE VIRTUAL TABLE take_search USING fts5(final_text, app_name);
+                    INSERT INTO take_search(rowid, final_text, app_name)
+                        SELECT rowid, final_text, app_name FROM dictation
+                        WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0;
+                    CREATE TRIGGER take_search_insert AFTER INSERT ON dictation BEGIN
+                        INSERT INTO take_search(rowid, final_text, app_name)
+                            SELECT new.rowid, new.final_text, new.app_name
+                            WHERE new.final_text IS NOT NULL AND TRIM(new.final_text) != '' AND COALESCE(new.is_secure, 0) = 0;
+                    END;
+                    CREATE TRIGGER take_search_update AFTER UPDATE OF final_text, app_name, is_secure ON dictation BEGIN
+                        DELETE FROM take_search WHERE rowid = old.rowid;
+                        INSERT INTO take_search(rowid, final_text, app_name)
+                            SELECT new.rowid, new.final_text, new.app_name
+                            WHERE new.final_text IS NOT NULL AND TRIM(new.final_text) != '' AND COALESCE(new.is_secure, 0) = 0;
+                    END;
+                    CREATE TRIGGER take_search_delete AFTER DELETE ON dictation BEGIN
+                        DELETE FROM take_search WHERE rowid = old.rowid;
+                    END;
+                    """)
+        }
         return migrator
     }
 
@@ -367,27 +390,37 @@ public final class TranscriptStore: Sendable {
     }
 
     /// The newest takes with usable text, secure-field rows excluded, filtered in SQL so the limit is the row count.
-    public func recentTakes(limit: Int) throws -> [TakeRecord] {
-        try pool.read { db in try Self.fetchRecentTakes(db, limit: limit) }
+    public func recentTakes(limit: Int, query: String = "") throws -> [TakeRecord] {
+        try pool.read { db in try Self.fetchRecentTakes(db, limit: limit, query: query) }
     }
 
-    private static func fetchRecentTakes(_ db: Database, limit: Int) throws -> [TakeRecord] {
-        try TakeRecord.fetchAll(
+    private static func fetchRecentTakes(_ db: Database, limit: Int, query: String = "") throws -> [TakeRecord] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        var search = ""
+        var arguments: StatementArguments = []
+        if !trimmed.isEmpty {
+            guard let pattern = FTS5Pattern(matchingAllPrefixesIn: trimmed) else { return [] }
+            search = " AND rowid IN (SELECT rowid FROM take_search WHERE take_search MATCH ?)"
+            arguments += [pattern.rawPattern]
+        }
+        arguments += [limit]
+        return try TakeRecord.fetchAll(
             db,
             sql: """
                 SELECT \(TakeRecord.columns) FROM dictation
                 WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0
-                ORDER BY started_at DESC LIMIT ?
-                """, arguments: [limit])
+                \(search)
+                ORDER BY started_at DESC, id DESC LIMIT ?
+                """, arguments: arguments)
     }
 
     /// Calls `onChange` on the main queue now and again whenever the dictation table changes: a new take, a status
     /// change, or audio saved, expired or purged. Reads happen off the main thread.
     public func observeRecentTakes(
-        limit: Int, onError: @escaping @Sendable (Error) -> Void,
+        limit: Int, query: String = "", onError: @escaping @Sendable (Error) -> Void,
         onChange: @escaping @Sendable ([TakeRecord]) -> Void
     ) -> TakesObservation {
-        let observation = ValueObservation.tracking { db in try Self.fetchRecentTakes(db, limit: limit) }
+        let observation = ValueObservation.tracking { db in try Self.fetchRecentTakes(db, limit: limit, query: query) }
         let cancellable = observation.start(in: pool, scheduling: .async(onQueue: .main), onError: onError, onChange: onChange)
         return TakesObservation(cancellable)
     }

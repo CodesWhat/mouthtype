@@ -19,6 +19,20 @@ struct HomeTake: Identifiable, Equatable {
 /// Reads run off the main thread and only `limit` rows are ever fetched.
 @MainActor @Observable final class HomeLogModel {
     static let limit = 50
+    var query = "" {
+        didSet {
+            guard query != oldValue else { return }
+            lifecycleGeneration += 1
+            savedGeneration += 1
+            reloadTask?.cancel()
+            savedTask?.cancel()
+            records = []
+            textTakes = []
+            recordings = []
+            takes = []
+            if isActive { observe() }
+        }
+    }
 
     @ObservationIgnored var store: TranscriptStore? {
         didSet { if store !== oldValue, isActive { observe() } }
@@ -42,6 +56,7 @@ struct HomeTake: Identifiable, Equatable {
     @ObservationIgnored private var trackingGeneration = 0
     /// Bumped on every deactivate. A reload that started under an older value is dropped when it finishes.
     @ObservationIgnored private var lifecycleGeneration = 0
+    @ObservationIgnored private var observationGeneration = 0
     @ObservationIgnored private var reloadTask: Task<Void, Never>?
     /// The off-main read behind `loadText()`. Replaceable so a test can make it slow.
     @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [TakeRecord] = { store, limit in
@@ -105,6 +120,7 @@ struct HomeTake: Identifiable, Equatable {
         reloadTask?.cancel()
         reloadTask = nil
         lifecycleGeneration += 1
+        observationGeneration += 1
     }
 
     /// Starts a tracked reload, only while active. Deactivating cancels it and drops whatever it was about to apply.
@@ -142,9 +158,13 @@ struct HomeTake: Identifiable, Equatable {
         guard let store else { apply(nil, failure: "Recent takes are unavailable."); return }
         let limit = Self.limit
         let fetch = fetchRecent
+        let query = query
         let generation = lifecycleGeneration
         do {
-            let records = try await OffPool.run { try fetch(store, limit) }
+            let records = try await OffPool.run {
+                try query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? fetch(store, limit) : store.recentTakes(limit: limit, query: query)
+            }
             guard generation == lifecycleGeneration, !Task.isCancelled else { return }
             apply(records, failure: nil)
         } catch {
@@ -156,17 +176,20 @@ struct HomeTake: Identifiable, Equatable {
     private func observe() {
         observation?.cancel()
         observation = nil
+        observationGeneration += 1
+        let generation = observationGeneration
         guard let store else { return }
         observation = store.observeRecentTakes(
-            limit: Self.limit,
+            limit: Self.limit, query: query,
             onError: { error in
                 Log.app.error("home log observation failed: \(error.localizedDescription, privacy: .public)")
             },
             onChange: { [weak self] records in
                 MainActor.assumeIsolated {
-                    self?.apply(records, failure: nil)
-                    self?.savedTask?.cancel()
-                    self?.savedTask = Task { @MainActor [weak self] in await self?.refreshSaved() }
+                    guard let self, self.isActive, generation == self.observationGeneration else { return }
+                    self.apply(records, failure: nil)
+                    self.savedTask?.cancel()
+                    self.savedTask = Task { @MainActor [weak self] in await self?.refreshSaved() }
                 }
             })
     }
@@ -216,7 +239,7 @@ struct HomeTake: Identifiable, Equatable {
             take.recoverable = byID.removeValue(forKey: take.id)
             return take
         }
-        for recording in byID.values {
+        for recording in byID.values where query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             merged.append(HomeTake(id: recording.id, startedAt: recording.startedAt, text: nil, appName: nil, recoverable: recording))
         }
         let next = Array(merged.sorted { $0.startedAt > $1.startedAt }.prefix(Self.limit))
