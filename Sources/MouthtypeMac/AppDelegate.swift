@@ -129,6 +129,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         model.home.store = settingsStore
         model.stats.store = settingsStore
         model.spellingSuggestions?.store = settingsStore
+        model.home.canPlay = { [weak self] in
+            guard let self else { return false }
+            return self.dictation?.phase == .idle && self.recovery?.isRecovering != true
+                && !self.fileTranscriptionModel.isBusy && !self.isTerminating && !self.appUpdater.blocksNewWork
+        }
         if let recovery {
             let home = model.home
             home.saved = { [weak recovery] in try await recovery?.loadSavedRecordings() ?? [] }
@@ -395,7 +400,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
         dictation.canStartRecording = { [weak self] in
-            self?.isTerminating != true && self?.recovery?.isRecovering != true && self?.appUpdater.blocksNewWork != true && self?.fileTranscriptionModel.isBusy != true
+            guard self?.isTerminating != true, self?.recovery?.isRecovering != true,
+                self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true
+            else { return false }
+            self?.builtSettingsWindow?.model.home.stopPlayback()
+            return true
         }
         menuBar.add(section: UpdateMenuSection(updater: appUpdater), isFooter: true)
         menuBar.add(section: HelpMenuSection(), isFooter: true)

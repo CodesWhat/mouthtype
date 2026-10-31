@@ -4,8 +4,8 @@ import MouthtypeCore
 @testable import MouthtypeMac
 
 @MainActor @Suite struct SavedSpellingTests {
-    @Test(arguments: [("", "Mouthtype"), ("  \n", "Mouthtype"), ("mouth type", ""), ("mouth type", "  \n")])
-    func blankRulesNeverModifyTheLibrary(pair: (String, String)) throws {
+    @Test(.timeLimit(.minutes(1)), arguments: [("", "Mouthtype"), ("  \n", "Mouthtype"), ("mouth type", ""), ("mouth type", "  \n")])
+    func blankRulesNeverModifyTheLibrary(pair: (String, String)) async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: dir) }
         let url = dir.appendingPathComponent("dictionary.json")

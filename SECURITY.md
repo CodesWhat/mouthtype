@@ -4,19 +4,20 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.9.x | Supported. Security fixes ship in 0.9.x patch releases or the next minor release |
-| 0.8.x | Unsupported. Upgrade to 0.9.1 |
-| 0.7.x | Unsupported. Upgrade to 0.9.1 |
-| 0.6.x | Unsupported. Upgrade to 0.9.1 |
-| 0.5.x | Unsupported. Upgrade to 0.9.1 |
-| 0.4.x | Unsupported. Upgrade to 0.9.1 |
-| 0.3.x | Unsupported. Upgrade to 0.9.1 |
-| 0.2.x | Unsupported. Upgrade to 0.9.1 |
-| 0.1.x | Unsupported. Upgrade to 0.9.1 |
-| 0.1.0-rc.x, 0.1.0-beta.x and 0.1.0-alpha.x | Unsupported. Upgrade to 0.9.1 |
+| 0.10.x | Supported once the signed and notarized 0.10.0 release is published on the download page |
+| 0.9.x | Supported until 0.10.0 is published; unsupported afterward |
+| 0.8.x | Unsupported. Upgrade to the current published release |
+| 0.7.x | Unsupported. Upgrade to the current published release |
+| 0.6.x | Unsupported. Upgrade to the current published release |
+| 0.5.x | Unsupported. Upgrade to the current published release |
+| 0.4.x | Unsupported. Upgrade to the current published release |
+| 0.3.x | Unsupported. Upgrade to the current published release |
+| 0.2.x | Unsupported. Upgrade to the current published release |
+| 0.1.x | Unsupported. Upgrade to the current published release |
+| 0.1.0-rc.x, 0.1.0-beta.x and 0.1.0-alpha.x | Unsupported. Upgrade to the current published release |
 | Experimental Linux source | Development only; no supported desktop release |
 
-Fixes land on the active development branch and ship in a 0.9.x patch release or the next minor release. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current version.
+Support changes take effect when the signed and notarized release is published, not when its version is prepared in the repository. Fixes land on the active development branch and ship in the current supported minor or the next minor release. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current published version.
 
 ## Report a vulnerability
 
@@ -29,3 +30,5 @@ Include the affected version or source revision, macOS version, reproduction ste
 Relevant reports include unintended disclosure of recordings or text, delivery into an unintended destination, unsafe handling of imported files or downloaded models, compromised update verification, and build or release credential exposure. Mouthtype is a single-user local application with broad macOS Accessibility access. A person already controlling the user's account can read its local data and operate the same permissions; it isn't a sandbox or a defense against a compromised Mac.
 
 See [security controls and limits](docs/SECURITY.md) for implemented safeguards, evidence and remaining gaps. To check a download's signature and build provenance, see [Verify a download](docs/SECURITY.md#verify-a-download). A security score or notarization alone doesn't establish that an app is safe.
+
+The [release source inventory](docs/RELEASE-INVENTORY.md) records exact resolved Swift source revisions and verified artifact hashes within its stated scope. It does not establish complete binary composition. No SLSA level or independent third-party security audit is claimed.

@@ -18,13 +18,13 @@ Use plain Conventional Commits: `feat`, `fix`, `docs`, `style`, `refactor`, `per
 
 ## Code style
 
-- Swift: follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/). The package builds in Swift 6 language mode (`swift-tools-version:6.2`), so strict concurrency checking is on and data-race errors fail the build. Don't silence them with `@unchecked Sendable` or `nonisolated(unsafe)` without a comment saying why it's safe. There's no swift-format configuration in the repo yet. Once a `.swift-format` file lands, format changed Swift files with it.
+- Swift: follow the [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/). The package builds in Swift 6 language mode (`swift-tools-version:6.2`), so strict concurrency checking is on and data-race errors fail the build. Don't silence them with `@unchecked Sendable` or `nonisolated(unsafe)` without a comment saying why it's safe. The root `.swift-format` config is enforced in CI. Format changed Swift files with `swift format format --in-place`, then run the pre-push check below.
 - Docs site TypeScript: [Biome](https://biomejs.dev/) with the config in `apps/docs/biome.json`, run through `npm --prefix apps/docs run check`.
 - Commits: plain Conventional Commits, as described above.
 
 ## Checks
 
-- Mac code: Xcode with Swift 6.2 on Apple Silicon and macOS 26 or later, then `scripts/swift-test.sh` (`swift test` that also fails on any reported failure, so a piped or truncated run can't pass). Add meaningful regression coverage for changed behavior. Physical microphone and destination-app checks are separate from logic tests. You don't need a Developer ID or notarization to contribute.
+- Mac code: Xcode 27 with its Swift toolchain on Apple Silicon and macOS 26 or later, then `scripts/swift-test.sh` (`swift test` that also fails on any reported failure, so a piped or truncated run can't pass). Add meaningful regression coverage for changed behavior. Physical microphone and destination-app checks are separate from logic tests. You don't need a Developer ID or notarization to contribute.
 - Swift coverage: the CI test run includes logic tests and safe offscreen Settings renders. After a coverage-enabled run, `scripts/swift-coverage.sh` reports all test binaries, adds the run-summary badge and enforces 80% overall line coverage using exact covered/total counts. Tests that activate real windows still run locally on a free Mac.
 - Pre-push hook (optional): `git config core.hooksPath .githooks` runs `scripts/pre-push.sh` before each push. It runs `swift-format lint --strict` on the Swift files your push changes, and `swift build -Xswiftc -warnings-as-errors` only when Swift files changed. Run `scripts/pre-push.sh [base-ref]` directly to check without pushing. Fix what it reports rather than skipping it.
 - Release helpers: `python3 -m unittest discover -s Tests/ReleaseTests -p 'test_*.py'`. The real archive integration test requires macOS `ditto`; Linux explicitly skips that one test.

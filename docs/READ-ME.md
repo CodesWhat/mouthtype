@@ -1,4 +1,4 @@
-# Mouthtype 0.9.1
+# Mouthtype 0.10.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,14 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.10.0
+
+- Added: Search retained transcripts and app names from Home, including older takes. Play or stop retained audio without changing retention settings. Playback stops before a new recording starts.
+- Fixed: Delivery-card accessibility labels and actions for Copy, Undo and Dismiss, and clear verb meanings in Formal cleanup.
+
+> [!NOTE]
+> Speaker playback, VoiceOver, fresh installation, Bluetooth/USB microphones, live-app Press Return and fluent non-English speech remain unverified on a device. Automated tests and offscreen renders are the available evidence.
 
 ## What changed in 0.9.1
 

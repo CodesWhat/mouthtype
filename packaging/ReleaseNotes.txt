@@ -1,5 +1,12 @@
-Mouthtype 0.9.1
+Mouthtype 0.10.0
 
+Home can now search retained transcripts and app names, including takes older than the recent list. Play or stop a take's retained audio from Home. Playback stays local and stops before a new recording starts. Audio retention settings stay the same.
+
+Delivery cards expose the current Copy, Undo and Dismiss labels and actions to accessibility tools. Formal cleanup also preserves more clear verb meanings, including phrases about location and time.
+
+Not verified on a device for this release: history speaker playback, VoiceOver, fresh installation, Bluetooth and USB microphones, press Return in live apps, and fluent non-English speech. Automated tests and offscreen renders do not replace those checks.
+
+Earlier in 0.9.1:
 Press Return after inserting now works on the first dictation after you open a listed Electron app like the Claude desktop app. Mouthtype waits briefly for the app's accessibility to come up, so it can confirm the paste and press Return that first time too.
 
 Mouthtype also updated Sparkle, the updater, to 2.10.1. It fixes an update that could install before the app quit when Mouthtype sits in a folder with an NFC Unicode name, and it improves update feed parsing and translations.
