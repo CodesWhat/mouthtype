@@ -164,9 +164,11 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     private(set) var capture: CaptureRecord?
     private(set) var transcription: TranscriptionRecord?
     private(set) var insertion: InsertionRecord?
-    private(set) var verdicts: [(outcome: String, receiptMs: Int?)] = []
+    private var storedVerdicts: [(outcome: String, receiptMs: Int?)] = []
+    var verdicts: [(outcome: String, receiptMs: Int?)] { lock.withLock { storedVerdicts } }
     private(set) var handsFreeLock: (DictationMode, DictationTrigger)?
-    private(set) var finishes: [(DictationStatus, String?)] = []
+    private var storedFinishes: [(DictationStatus, String?)] = []
+    var finishes: [(DictationStatus, String?)] { lock.withLock { storedFinishes } }
     private(set) var reopens = 0
     private(set) var edits: [EditOp] = []
 
@@ -190,7 +192,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     }
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws { try run("recordInsertion") { insertion = record } }
     func recordInsertVerdict(_ id: String, outcome: String, pasteReceiptMs: Int?) async throws {
-        try run("recordInsertVerdict") { verdicts.append((outcome, pasteReceiptMs)) }
+        try run("recordInsertVerdict") { storedVerdicts.append((outcome, pasteReceiptMs)) }
     }
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
         try run("recordLock") { handsFreeLock = (mode, trigger) }
@@ -199,7 +201,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     func reopen(_ id: String) async throws { try run("reopen") { reopens += 1 } }
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try run("appendEdits") { self.edits += edits } }
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {
-        try run("finish") { finishes.append((status, errorMessage)) }
+        try run("finish") { storedFinishes.append((status, errorMessage)) }
     }
 }
 
@@ -2642,8 +2644,8 @@ private final class SlowCapture: DictationCapturing {
         await rig.until { rig.clock.sleeperCount >= 2 }
         rig.capture.available = 16_000
         rig.clock.advance(by: 2)
-        await rig.until { rig.log.contains("archive.partial:16000") }
-        #expect(rig.log.contains("archive.partial:16000"))
+        await rig.until { rig.log.contains("archive.partial:16000") && rig.clock.sleeperCount >= 2 }
+        #expect(rig.log.contains("archive.partial:16000") && rig.clock.sleeperCount >= 2)
 
         rig.capture.available = 40_000
         rig.clock.advance(by: 2)
