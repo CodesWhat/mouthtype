@@ -29,3 +29,5 @@ Include the affected version or source revision, macOS version, reproduction ste
 Relevant reports include unintended disclosure of recordings or text, delivery into an unintended destination, unsafe handling of imported files or downloaded models, compromised update verification, and build or release credential exposure. Mouthtype is a single-user local application with broad macOS Accessibility access. A person already controlling the user's account can read its local data and operate the same permissions; it isn't a sandbox or a defense against a compromised Mac.
 
 See [security controls and limits](docs/SECURITY.md) for implemented safeguards, evidence and remaining gaps. To check a download's signature and build provenance, see [Verify a download](docs/SECURITY.md#verify-a-download). A security score or notarization alone doesn't establish that an app is safe.
+
+The [release source inventory](docs/RELEASE-INVENTORY.md) records exact resolved Swift source revisions and verified artifact hashes within its stated scope. It does not establish complete binary composition. No SLSA level or independent third-party security audit is claimed.
