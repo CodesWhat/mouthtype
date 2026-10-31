@@ -231,7 +231,7 @@ High-level themes only, with no dates. [`CHANGELOG.md`](CHANGELOG.md) has per-re
 
 <h2 align="center" id="build-and-contribute">Build and Contribute</h2>
 
-Install Xcode with Swift 6.2 on a supported Mac. Run `bash scripts/run-app.sh` to build and open a signed app bundle. Without a Developer ID identity, the script uses ad-hoc signing; permission grants and distribution guarantees differ from the released app.
+Install Xcode 27 with its Swift toolchain on Apple Silicon and macOS 26 or later. Run `bash scripts/run-app.sh` to build and open a signed app bundle. Without a Developer ID identity, the script uses ad-hoc signing; permission grants and distribution guarantees differ from the released app.
 
 Run `swift test` for core, macOS integration logic, Settings rendering and Fn guardian tests. Desktop self-tests take focus and require a free desktop. Tests don't replace physical microphone or third-party app acceptance.
 
