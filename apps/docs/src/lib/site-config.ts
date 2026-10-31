@@ -3,6 +3,7 @@ export const SITE_CONFIG = {
   tagline: "Local dictation for Mac",
   description:
     "Documentation for Mouthtype, local dictation for Apple Silicon Macs running macOS 26 or later.",
+  socialImage: "https://mouthtype.app/social/docs.png",
   github: "https://github.com/CodesWhat/mouthtype",
 } as const;
 

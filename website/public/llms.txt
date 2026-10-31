@@ -1,0 +1,26 @@
+# Mouthtype
+
+> Free, open-source local dictation for Apple Silicon Macs running macOS 26 or later.
+
+Hold the shortcut, speak, and release to insert text. Speech recognition runs on the Mac. Models download on first use; dictation can then work offline. No account or cloud transcription service is required. Source is licensed under GPL-3.0. The Linux client is experimental source, not a supported packaged release.
+
+## Product and installation
+
+- [Mouthtype](https://mouthtype.app/): product overview and local dictation workflow.
+- [Download](https://mouthtype.app/download/): current stable Mac app and matching source.
+- [Get started](https://mouthtype.app/start/): installation, permissions, and first dictation.
+- [Why Mouthtype](https://mouthtype.app/why-mouthtype/): product choices and tradeoffs.
+
+## Comparisons and Linux
+
+- [Compare](https://mouthtype.app/compare/): product comparisons.
+- [Apple Dictation comparison](https://mouthtype.app/compare/apple-dictation/).
+- [Wispr Flow comparison](https://mouthtype.app/compare/wispr-flow/).
+- [Experimental Linux client](https://mouthtype.app/linux/): source setup and current limits.
+
+## Documentation and source
+
+- [Documentation](https://docs.mouthtype.app/): features, privacy, supported languages, and known limits.
+- [Documentation index for agents](https://docs.mouthtype.app/llms.txt).
+- [Full documentation text](https://docs.mouthtype.app/llms-full.txt).
+- [Source and issue tracker](https://github.com/CodesWhat/mouthtype).

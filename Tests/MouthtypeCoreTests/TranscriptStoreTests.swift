@@ -4,6 +4,92 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct TranscriptStoreTests {
+    @Test func historySearchIncludesRawTextAndTracksRawOnlyChanges() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try store.begin(DictationStart(startedAt: Self.noon))
+        try store.pool.write { db in
+            try db.execute(sql: "UPDATE dictation SET raw_text = ? WHERE id = ?", arguments: ["original wording", id])
+        }
+        try store.recordInsertion(id, InsertionRecord(finalText: "Cleaned text"))
+        #expect(try store.recentTakes(limit: 5, query: "original").map(\.finalText) == ["Cleaned text"])
+        try store.pool.write { db in
+            try db.execute(sql: "UPDATE dictation SET raw_text = ? WHERE id = ?", arguments: ["revised wording", id])
+        }
+        #expect(try store.recentTakes(limit: 5, query: "original").isEmpty)
+        #expect(try store.recentTakes(limit: 5, query: "revised").map(\.id) == [id])
+        try store.recordInsertion(id, InsertionRecord(finalText: "Cleaned text", target: DictationTarget(isSecure: true)))
+        #expect(try store.recentTakes(limit: 5, query: "revised").isEmpty)
+        try store.pool.read { db in
+            let count = try Int.fetchOne(db, sql: "SELECT count(*) FROM take_search WHERE take_search MATCH ?", arguments: ["revised"])
+            #expect(count == 0)
+        }
+    }
+
+    @Test func historySearchBackfillsAnExistingDatabase() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-search-upgrade-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let url = dir.appendingPathComponent("history.sqlite")
+        do {
+            let queue = try DatabaseQueue(path: url.path)
+            try TranscriptStore.migrator.migrate(queue, upTo: "v3")
+            try queue.write { db in
+                try db.execute(
+                    sql: """
+                        INSERT INTO dictation(id, started_at, utc_offset_s, local_day, mode, trigger, status, raw_text, final_text, is_secure)
+                        VALUES ('old', 100, 0, '2026-10-31', 'dictation', 'hotkey', 'inserted', 'original phrase', 'older agenda', 0),
+                               ('secret', 101, 0, '2026-10-31', 'dictation', 'hotkey', 'inserted', 'private phrase', 'private agenda', 1)
+                        """)
+            }
+        }
+        let store = try TranscriptStore(url: url)
+        #expect(try store.recentTakes(limit: 5, query: "agenda").map(\.id) == ["old"])
+        #expect(try store.recentTakes(limit: 5, query: "phrase").map(\.id) == ["old"])
+        #expect(try store.dictation(id: "old")?.finalText == "older agenda")
+        try store.pool.read { db in
+            let count = try Int.fetchOne(db, sql: "SELECT count(*) FROM take_search")
+            #expect(count == 1)
+        }
+    }
+
+    @Test func historySearchFindsOlderTakesAndTreatsInputAsWords() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let old = try store.begin(DictationStart(startedAt: Self.noon, target: DictationTarget(appName: "Notes")))
+        try store.recordInsertion(old, InsertionRecord(finalText: "Café planning agenda"))
+        for n in 1...55 {
+            let id = try store.begin(DictationStart(startedAt: Self.noon.addingTimeInterval(Double(n))))
+            try store.recordInsertion(id, InsertionRecord(finalText: "new take"))
+        }
+        #expect(try store.recentTakes(limit: 50, query: "CAFE plan").map(\.id) == [old])
+        #expect(try store.recentTakes(limit: 50, query: "Notes agenda").map(\.id) == [old])
+        #expect(try store.recentTakes(limit: 50, query: "\" OR *").isEmpty)
+        #expect(try store.recentTakes(limit: 50, query: "***").isEmpty)
+        #expect(try store.recentTakes(limit: 2, query: "  ").count == 2)
+    }
+
+    @Test func historySearchTracksEditsSecureRowsAndDeletion() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try store.begin(DictationStart(startedAt: Self.noon))
+        try store.recordInsertion(id, InsertionRecord(finalText: "oldword"))
+        #expect(try store.recentTakes(limit: 5, query: "oldword").map(\.id) == [id])
+        try store.recordInsertion(id, InsertionRecord(finalText: "newword"))
+        #expect(try store.recentTakes(limit: 5, query: "oldword").isEmpty)
+        #expect(try store.recentTakes(limit: 5, query: "newword").map(\.id) == [id])
+        try store.recordInsertion(id, InsertionRecord(finalText: "secretword", target: DictationTarget(isSecure: true)))
+        #expect(try store.recentTakes(limit: 5, query: "secretword").isEmpty)
+        try store.pool.read { db in
+            let count = try Int.fetchOne(db, sql: "SELECT count(*) FROM take_search")
+            #expect(count == 0)
+        }
+        let publicID = try store.begin(DictationStart(startedAt: Self.noon))
+        try store.recordInsertion(publicID, InsertionRecord(finalText: "deleteword"))
+        try store.delete(publicID)
+        #expect(try store.recentTakes(limit: 5, query: "deleteword").isEmpty)
+    }
+
     @Test func lastTranscriptSkipsEmptyAndSecureRowsEvenAfterManyAttempts() throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -68,7 +154,7 @@ import Testing
         }
         #expect(tables.contains("dictation") && tables.contains("edit_op"))
         #expect(indexes.contains("dictation_local_day") && indexes.contains("dictation_started_at") && indexes.contains("dictation_status"))
-        #expect(migrations == ["v1", "v2", "v3"])
+        #expect(migrations == ["v1", "v2", "v3", "v4-history-search"])
         #expect(indexes.contains("dictation_stats"))
         #expect(tables.contains("correction"))
         for column in [
@@ -156,7 +242,7 @@ import Testing
         let reopened = try TranscriptStore(url: dir.appendingPathComponent("nested/mouthtype.sqlite"))
         #expect(try reopened.dictation(id: id) == before)
         let migrations = try reopened.pool.read { try String.fetchAll($0, sql: "SELECT identifier FROM grdb_migrations") }
-        #expect(migrations == ["v1", "v2", "v3"])
+        #expect(migrations == ["v1", "v2", "v3", "v4-history-search"])
     }
 
     @Test func stagedLifecycleRoundTrips() throws {

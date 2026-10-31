@@ -42,6 +42,8 @@ Notarization uses the App Store Connect API key by default. The helper reads `AS
 
 Attach the final DMG, ZIP, their SHA-256 files and release manifest to the GitHub release for provenance. The website provides the public downloads. Read the uploaded release back and compare a downloaded artifact’s checksum. Keep first-install, third-party-app and recognition limitations visible in release notes; do not describe unperformed checks as passed.
 
+Generate and validate the [release source inventory](RELEASE-INVENTORY.md) against the same tag and checked artifacts. Attach it as an additional release asset and include it in the signing and download verification step. Its scope is the resolved Swift sources and verified artifact identities, not complete binary composition.
+
 ### 4. Stage the public release
 
 After the tagged release is packaged and checked, run `scripts/stage-public-release.py` with the release directory and `--public-dir` pointing at a retained artifact directory outside disposable worktrees, such as the root checkout’s `build/public-release-assets`. It requires the DMG and checks the exact tag/source, archive and DMG digests, DMG notarization evidence, extracted signature/staple/Gatekeeper result and matching public key. It generates a corresponding source tarball and uses the pinned Sparkle tools to generate and verify the signed appcast.

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Search retained raw and final transcripts and app names from Home, and play or stop a take's retained audio. Search finds older takes beyond the recent list; audio retention settings stay the same.
+
+### Fixed
+
+- Profanity cleanup preserves clear verbs after forms of “be”, including plural person subjects, split phrasal verbs and standalone frequency phrases, while retaining noun-predicate emphasis.
+- Delivery card buttons in Classic, Glass, Matrix and Minimal now expose their labels and actions to accessibility tools, including Copy, Undo and Dismiss. Completed actions report their updated label and stay disabled.
+
 ## [0.9.1] - 2026-10-29
 
 ### Changed

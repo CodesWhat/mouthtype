@@ -144,6 +144,18 @@ import Testing
 
     static let copulaVerbs: [(input: String, expected: String)] = [
         ("He was fucking women.", "He was sleeping with women."),
+        ("They were fucking women.", "They were sleeping with women."),
+        ("We're fucking people.", "We're sleeping with people."),
+        ("You were fucking people over.", "You were cheating people."),
+        ("They were fucking people over the weekend.", "They were sleeping with people over the weekend."),
+        ("They were fucking people over there.", "They were sleeping with people over there."),
+        ("He fucked her over there.", "He slept with her over there."),
+        ("He was fucking constantly.", "He was having sex constantly."),
+        ("They were fucking frequently.", "They were having sex frequently."),
+        ("He was fucking constantly late.", "He was constantly late."),
+        ("They were fucking constantly running.", "They were constantly running."),
+        ("The fucking people over there left.", "The people over there left."),
+        ("I was fucking great up there.", "I was great up there."),
         ("She's fucking guys from work.", "She's sleeping with guys from work."),
         ("I was fucking people I barely knew.", "I was sleeping with people I barely knew."),
         ("It was fucking shit, honestly.", "It was stuff, honestly."),
@@ -158,15 +170,23 @@ import Testing
         ("She was fucking hours late.", "She was hours late."),
         ("I am fucking days behind.", "I am days behind."),
         ("He was fucking miles away.", "He was miles away."),
-        ("He was fucking things up.", "He was things up."),
-        ("He was fucking people over.", "He was people over."),
-        ("She was fucking guys around.", "She was guys around."),
+        ("He was fucking things up.", "He was messing things up."),
+        ("He was fucking people over.", "He was cheating people."),
+        ("She was fucking guys around.", "She was messing guys around."),
+        ("He was fucking people around here.", "He was sleeping with people around here."),
+        ("They were fucking people around there.", "They were sleeping with people around there."),
+        ("She was fucking guys around town.", "She was sleeping with guys around town."),
+        ("He was fucking people around the office.", "He was sleeping with people around the office."),
+        ("She was fucking guys around London.", "She was sleeping with guys around London."),
+        ("They were fucking people around Christmas.", "They were sleeping with people around Christmas."),
+        ("There were fucking people around here.", "There were people around here."),
+        ("She was fucking guys around a lot.", "She was messing guys around a lot."),
         ("I'm fucking people-watching.", "I'm people-watching."),
         ("She was fucking guys-only trip planning.", "She was guys-only trip planning."),
     ]
 
     @Test(arguments: copulaVerbs)
-    func keepsFuckingAsAVerbBeforeAPluralObjectAfterHeSheI(_ pair: (input: String, expected: String)) {
+    func keepsFuckingAsAVerbInClearCopulaUses(_ pair: (input: String, expected: String)) {
         #expect(strip(pair.input) == pair.expected, "\(pair.input.debugDescription)")
     }
 

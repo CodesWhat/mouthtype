@@ -13,6 +13,15 @@ class CardControlView: NSView {
     /// The pill size's multiple, for the drawn glyph and corners.
     var k: CGFloat = 1 { didSet { needsDisplay = true } }
 
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func isAccessibilityEnabled() -> Bool { isActive }
+    override func accessibilityPerformPress() -> Bool {
+        guard isActive, let onClick else { return false }
+        onClick()
+        return true
+    }
+
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { false }
     override var mouseDownCanMoveWindow: Bool { false }
@@ -71,6 +80,8 @@ class CardControlView: NSView {
 /// The 24 pt dismiss control: a disc, or a squircle on the squircle cards.
 @MainActor
 final class CardDismissView: CardControlView {
+    override func accessibilityLabel() -> String? { "Dismiss" }
+
     override func draw(_ dirtyRect: NSRect) {
         fillShape(in: bounds, radius: 9 * k, round: true, color: palette.dismiss.fill(hovered: isHovered, pressed: isPressed))
         let c = CGPoint(x: bounds.midX, y: bounds.midY), h: CGFloat = 3.2 * k
@@ -90,6 +101,7 @@ final class CardDismissView: CardControlView {
 @MainActor
 final class CardButtonView: CardControlView {
     var label = NSAttributedString()
+    override func accessibilityLabel() -> String? { label.string }
     var isPrimary = true
 
     override func draw(_ dirtyRect: NSRect) {
@@ -455,19 +467,22 @@ final class DeliveryCardView: NSView {
             scroll.isHidden = true
         }
 
-        for entry in buttons { entry.view.removeFromSuperview() }
-        buttons = []
+        let previousButtons = isNewCard ? [] : buttons
+        var nextButtons: [(action: CardAction, view: CardButtonView)] = []
         for (index, action) in card.actions.enumerated() where index < layout.buttons.count {
-            let view = CardButtonView(frame: layout.buttons[index])
+            let view = previousButtons.first(where: { $0.action == action })?.view ?? CardButtonView(frame: .zero)
+            view.frame = layout.buttons[index]
             view.palette = palette
             view.k = k
             view.isPrimary = index == 0
             view.isActive = !new.copied
             view.label = Self.labels(for: action, in: new, primary: index == 0, palette: palette, buttonFont: buttonFont, numericFont: numericFont, remaining: remaining)[0]
             view.onClick = { [weak self] in self?.onAction?(action) }
-            content.addSubview(view)
-            buttons.append((action, view))
+            if view.superview !== content { content.addSubview(view) }
+            nextButtons.append((action, view))
         }
+        for entry in buttons where !nextButtons.contains(where: { $0.view === entry.view }) { entry.view.removeFromSuperview() }
+        buttons = nextButtons
 
         withoutActions {
             barClip.isHidden = layout.bar == nil
