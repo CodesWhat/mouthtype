@@ -405,7 +405,7 @@ private struct FakeSource: BoundedTextSource {
         #expect(record.boostTerms == ["Maya"])
     }
 
-    @Test func historyIsNilWhenOnlyEditorTermsWereApplied() async throws {
+    @Test(.timeLimit(.minutes(1))) func historyIsNilWhenOnlyEditorTermsWereApplied() async throws {
         let store = CapturingStore()
         var pipeline = DictationPipeline(store: store, archive: nil, engine: EditorEngine(applied: ["applyTheme"]), clock: SystemDictationClock())
         pipeline.boostSavedWords = { true }

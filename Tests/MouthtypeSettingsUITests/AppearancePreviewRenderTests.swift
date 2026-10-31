@@ -45,7 +45,7 @@ import Testing
         for readout in PillReadoutColour.allCases {
             let canvas = PreviewFit.canvas
             let height = PillSkinKind.hifi.pillHeight + 2 * PillGeometry.verticalMargin
-            let view = try #require(try PillSkinFactory.make(.hifi, frame: NSRect(x: 0, y: 0, width: canvas.width, height: height), scale: .standard, readout: readout))
+            let view = try PillSkinFactory.make(.hifi, frame: NSRect(x: 0, y: 0, width: canvas.width, height: height), scale: .standard, readout: readout)
             view.appear(reduceMotion: true)
             view.showMessage(PillMessage("Mic unavailable", isError: true), overRecording: false)
             let context = try #require(
