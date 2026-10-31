@@ -61,6 +61,22 @@ private let visualPassDirectory = ProcessInfo.processInfo.environment["MOUTHTYPE
         }
     }
 
+    @Test func microphonePriorityPage() throws {
+        try throwaway { defaults in
+            let devices = [
+                MicrophoneDevice(uid: "desk", name: "Desk microphone", input: .init(sampleRate: 48_000, channels: 1, id: 1)),
+                MicrophoneDevice(uid: "builtin", name: "Built-in microphone", input: .init(sampleRate: 48_000, channels: 1, id: 2)),
+            ]
+            try MicrophonePriority(enabled: true, devices: devices.map { .init(uid: $0.uid, name: $0.name) }).save(in: defaults)
+            let microphone = MicrophoneSettingsModel(defaults: defaults, devices: { devices }, defaultInput: { 2 })
+            let model = SettingsModel(defaults: defaults, microphone: microphone)
+            model.modalPage = .microphone
+            try both("b2-microphone-priority") { dark in
+                try SettingsRender.renderModal(model: model, actions: SettingsActions(), dark: dark)
+            }
+        }
+    }
+
     // MARK: c. Dictionary
 
     @Test func dictionaryPageAndWisprImportSheet() throws {
