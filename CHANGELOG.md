@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Profanity cleanup preserves clear verbs after forms of “be”, including plural person subjects, split phrasal verbs and standalone frequency phrases, while retaining noun-predicate emphasis.
 - Delivery card buttons in Classic, Glass, Matrix and Minimal now expose their labels and actions to accessibility tools, including Copy, Undo and Dismiss. Completed actions report their updated label and stay disabled.
 
 ## [0.9.1] - 2026-10-29
