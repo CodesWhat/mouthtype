@@ -2,7 +2,7 @@
   "name": "mouthtype-docs",
   "version": "0.1.0",
   "engines": {
-    "node": "24.x"
+    "node": "26.x"
   },
   "description": "Mouthtype documentation site",
   "private": true,
@@ -39,7 +39,7 @@
   "devDependencies": {
     "@biomejs/biome": "2.6.3",
     "@tailwindcss/postcss": "4.3.3",
-    "@types/node": "24.19.2",
+    "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "fast-check": "4.10.2",
