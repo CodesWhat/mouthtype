@@ -1,12 +1,12 @@
 # Mouthtype website
 
-The product website lives here, independently of the Swift app. Static HTML, CSS and a small browser module, built with Vite. Node 24 and npm are required.
+The product website lives here, independently of the Swift app. Static HTML, CSS and a small browser module, built with Vite. Node 26 and npm are required.
 
 From the repo root, install with `npm --prefix website ci`. Run `npm --prefix website run dev` for local development, `npm --prefix website run build` for production, and `npm --prefix website run preview` to inspect the build. Output is `website/dist/`.
 
 ## Vercel
 
-Import this repository with **Root Directory** set to `website`, **Framework Preset** set to Vite and Node set to 24.x. The checked-in `vercel.json` provides the build command, `dist` output and response headers. The site needs no environment variables, backend or native app build. Use preview deployments for website branches; choose the production branch in Vercel when ready to publish. No Vercel project ID or deployment is assumed here.
+Import this repository with **Root Directory** set to `website`, **Framework Preset** set to Vite and Node set to 26.x. The checked-in `vercel.json` provides the build command, `dist` output and response headers. The site needs no environment variables, backend or native app build. Use preview deployments for website branches; choose the production branch in Vercel when ready to publish. No Vercel project ID or deployment is assumed here.
 
 ## Design and behavior
 
