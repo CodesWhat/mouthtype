@@ -5,6 +5,26 @@ import Testing
 @MainActor
 @Suite struct CardAccessibilityTests {
     @Test(arguments: [CardStyle.classic, .glass, .matrix, .minimal])
+    func renderedUndoExposesItsCurrentCountdownAndPressAction(style: CardStyle) throws {
+        _ = NSApplication.shared
+        let view = DeliveryCardView(frame: .zero)
+        view.configure(style: style, scale: .standard, embedded: false)
+        var undone = 0
+        view.onAction = { if $0 == .undo { undone += 1 } }
+        view.render(CardViewState(card: .cancelled()), typography: Typography.current())
+        func buttons(_ root: NSView) -> [CardButtonView] {
+            root.subviews.flatMap { child in (child as? CardButtonView).map { [$0] } ?? buttons(child) }
+        }
+        let undo = try #require(buttons(view).first)
+        #expect(undo.accessibilityRole() == .button)
+        #expect(undo.accessibilityLabel()?.hasPrefix("Undo ") == true)
+        #expect(undo.accessibilityLabel() == undo.label.string)
+        #expect(undo.isAccessibilityEnabled())
+        #expect(undo.accessibilityPerformPress())
+        #expect(undone == 1)
+    }
+
+    @Test(arguments: [CardStyle.classic, .glass, .matrix, .minimal])
     func completedSpellingButtonsKeepTheirAccessibleIdentity(style: CardStyle) throws {
         _ = NSApplication.shared
         let pair = SpellingPair(heard: "name", corrected: "Name")
