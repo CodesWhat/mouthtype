@@ -107,7 +107,7 @@ import Testing
             "Appearance: \(pageStops.count) page Tab stops")
     }
 
-    /// Home's Copy and Recover buttons are plain buttons, so they are proxies in the loop. Tab must walk the sidebar rows (Home included)
+    /// Home's Copy, Play and Recover buttons are plain buttons, so they are proxies in the loop. Tab must walk the sidebar rows (Home included)
     /// and then reach every row button in order, and `previousKeyView` must mirror it so Shift-Tab steps back through the same stops.
     @Test func tabReachesHomeRowButtonsAfterTheSidebarAndShiftTabMirrorsIt() async throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-home-keys-\(UUID().uuidString)")
@@ -128,7 +128,7 @@ import Testing
         let sidebar = stops.prefix { $0.isProxy && $0.x < SettingsTheme.sidebarWidth }
         #expect(sidebar.count == SettingsPage.allCases.count + 1)
         let pageStops = stops.dropFirst(sidebar.count).filter { $0.isProxy && $0.x >= SettingsTheme.sidebarWidth }
-        #expect(pageStops.count == 4, "Home: \(pageStops.count) button stops, expected Transcribe a file, Copy, Recover, Copy")
+        #expect(pageStops.count == 5, "Home: \(pageStops.count) button stops, expected Transcribe a file, Copy, Play, Recover, Copy")
         let chain = try keyViewChain(window)
         for (current, next) in zip(chain, chain.dropFirst()) {
             #expect(next.previousKeyView === current, "previousKeyView of \(type(of: next)) does not mirror nextKeyView")
