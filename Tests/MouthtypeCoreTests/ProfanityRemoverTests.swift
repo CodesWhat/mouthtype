@@ -180,6 +180,8 @@ import Testing
         ("She was fucking guys around London.", "She was sleeping with guys around London."),
         ("They were fucking people around Christmas.", "They were sleeping with people around Christmas."),
         ("There were fucking people around here.", "There were people around here."),
+        ("There are fucking people around.", "There are people around."),
+        ("There were fucking guys around.", "There were guys around."),
         ("She was fucking guys around a lot.", "She was messing guys around a lot."),
         ("I'm fucking people-watching.", "I'm people-watching."),
         ("She was fucking guys-only trip planning.", "She was guys-only trip planning."),

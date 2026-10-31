@@ -540,6 +540,7 @@ public struct ProfanityRemover: Sendable {
                 let object = tags.lexicalClass(at: words[k + 1].start), object == .noun || object == .pronoun,
                 !ProfanityRemover.words.contains(words[k + 1].lower)
             else { return false }
+            if ProfanityRemover.beForms.contains(before), k > 1, adjacent(k - 2), words[k - 2].lower == "there" { return false }
             let noun = words[k + 1]
             if noun.end < n, "-'\u{2010}\u{2011}\u{2019}".contains(chars[noun.end]) { return false }
             if hasSplitUp(k) { return true }
