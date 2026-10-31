@@ -148,10 +148,9 @@ import Testing
             let process = sleeper()
             let handle = ProjectFiles.ProcessHandle(process)
             let group = DispatchGroup()
-            var launched = false
             group.enter()
             DispatchQueue.global().async {
-                launched = handle.launch(); group.leave()
+                _ = handle.launch(); group.leave()
             }
             group.enter()
             DispatchQueue.global().async {
@@ -161,7 +160,7 @@ import Testing
             // A launched process must be gone within the grace period plus the kill; one cancelled first never started.
             let deadline = Date().addingTimeInterval(5)
             while process.isRunning, Date() < deadline { usleep(5_000) }
-            #expect(!process.isRunning, "launched=\(launched)")
+            #expect(!process.isRunning)
         }
     }
 
