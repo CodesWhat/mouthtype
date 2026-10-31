@@ -4,20 +4,20 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.10.x | Supported. Security fixes ship in 0.10.x patch releases or the next minor release |
-| 0.9.x | Unsupported. Upgrade to 0.10.0 |
-| 0.8.x | Unsupported. Upgrade to 0.10.0 |
-| 0.7.x | Unsupported. Upgrade to 0.10.0 |
-| 0.6.x | Unsupported. Upgrade to 0.10.0 |
-| 0.5.x | Unsupported. Upgrade to 0.10.0 |
-| 0.4.x | Unsupported. Upgrade to 0.10.0 |
-| 0.3.x | Unsupported. Upgrade to 0.10.0 |
-| 0.2.x | Unsupported. Upgrade to 0.10.0 |
-| 0.1.x | Unsupported. Upgrade to 0.10.0 |
-| 0.1.0-rc.x, 0.1.0-beta.x and 0.1.0-alpha.x | Unsupported. Upgrade to 0.10.0 |
+| 0.10.x | Supported once the signed and notarized 0.10.0 release is published on the download page |
+| 0.9.x | Supported until 0.10.0 is published; unsupported afterward |
+| 0.8.x | Unsupported. Upgrade to the current published release |
+| 0.7.x | Unsupported. Upgrade to the current published release |
+| 0.6.x | Unsupported. Upgrade to the current published release |
+| 0.5.x | Unsupported. Upgrade to the current published release |
+| 0.4.x | Unsupported. Upgrade to the current published release |
+| 0.3.x | Unsupported. Upgrade to the current published release |
+| 0.2.x | Unsupported. Upgrade to the current published release |
+| 0.1.x | Unsupported. Upgrade to the current published release |
+| 0.1.0-rc.x, 0.1.0-beta.x and 0.1.0-alpha.x | Unsupported. Upgrade to the current published release |
 | Experimental Linux source | Development only; no supported desktop release |
 
-Fixes land on the active development branch and ship in a 0.10.x patch release or the next minor release. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current version.
+Support changes take effect when the signed and notarized release is published, not when its version is prepared in the repository. Fixes land on the active development branch and ship in the current supported minor or the next minor release. Older builds aren't patched separately. Check [the download page](https://mouthtype.app/download) for the current published version.
 
 ## Report a vulnerability
 
