@@ -467,19 +467,22 @@ final class DeliveryCardView: NSView {
             scroll.isHidden = true
         }
 
-        for entry in buttons { entry.view.removeFromSuperview() }
-        buttons = []
+        let previousButtons = isNewCard ? [] : buttons
+        var nextButtons: [(action: CardAction, view: CardButtonView)] = []
         for (index, action) in card.actions.enumerated() where index < layout.buttons.count {
-            let view = CardButtonView(frame: layout.buttons[index])
+            let view = previousButtons.first(where: { $0.action == action })?.view ?? CardButtonView(frame: .zero)
+            view.frame = layout.buttons[index]
             view.palette = palette
             view.k = k
             view.isPrimary = index == 0
             view.isActive = !new.copied
             view.label = Self.labels(for: action, in: new, primary: index == 0, palette: palette, buttonFont: buttonFont, numericFont: numericFont, remaining: remaining)[0]
             view.onClick = { [weak self] in self?.onAction?(action) }
-            content.addSubview(view)
-            buttons.append((action, view))
+            if view.superview !== content { content.addSubview(view) }
+            nextButtons.append((action, view))
         }
+        for entry in buttons where !nextButtons.contains(where: { $0.view === entry.view }) { entry.view.removeFromSuperview() }
+        buttons = nextButtons
 
         withoutActions {
             barClip.isHidden = layout.bar == nil

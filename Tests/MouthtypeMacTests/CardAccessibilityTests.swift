@@ -5,6 +5,32 @@ import Testing
 @MainActor
 @Suite struct CardAccessibilityTests {
     @Test(arguments: [CardStyle.classic, .glass, .matrix, .minimal])
+    func completedSpellingButtonsKeepTheirAccessibleIdentity(style: CardStyle) throws {
+        _ = NSApplication.shared
+        let pair = SpellingPair(heard: "name", corrected: "Name")
+        for (card, label) in [(DeliveryCard.rememberSpelling(pair), "Saved"), (.forgetSpelling(pair), "Forgotten")] {
+            let view = DeliveryCardView(frame: .zero)
+            view.configure(style: style, scale: .standard, embedded: false)
+            func buttons(_ root: NSView) -> [CardButtonView] {
+                root.subviews.flatMap { child in (child as? CardButtonView).map { [$0] } ?? buttons(child) }
+            }
+            view.render(CardViewState(card: card), typography: Typography.current())
+            let original = try #require(buttons(view).first)
+            var completed = CardViewState(card: card)
+            completed.copied = true
+            view.render(completed, typography: Typography.current())
+            let finished = try #require(buttons(view).first)
+            #expect(finished === original)
+            #expect(original.accessibilityLabel() == label)
+            #expect(!original.isAccessibilityEnabled())
+            #expect(!original.accessibilityPerformPress())
+            view.render(CardViewState(card: .secure("Another take")), typography: Typography.current())
+            #expect(try #require(buttons(view).first) !== original)
+            #expect(original.superview == nil)
+        }
+    }
+
+    @Test(arguments: [CardStyle.classic, .glass, .matrix, .minimal])
     func renderedControlsExposeLabelsAndPressActions(style: CardStyle) throws {
         _ = NSApplication.shared
         let view = DeliveryCardView(frame: .zero)
@@ -32,6 +58,7 @@ import Testing
         completed.copied = true
         view.render(completed, typography: Typography.current())
         let finishedCopy = try #require(descendants(view).compactMap { $0 as? CardButtonView }.first)
+        #expect(finishedCopy === copy)
         #expect(finishedCopy.accessibilityLabel() == "Copied")
         #expect(!finishedCopy.isAccessibilityEnabled())
         #expect(!finishedCopy.accessibilityPerformPress())

@@ -28,6 +28,18 @@ test("exported docs include the existing documentation social card", { skip }, (
 
 test("sitemap avoids presenting deployment dates as content modifications", { skip }, () => {
   const xml = fs.readFileSync(path.join(out, "sitemap.xml"), "utf8");
-  assert.match(xml, /<loc>https:\/\/docs.mouthtype.app/);
+  const canonicals = new Set();
+  for (const file of htmlFiles(out)) {
+    const html = fs.readFileSync(file, "utf8");
+    for (const match of html.matchAll(/<link rel="canonical" href="([^"]+)"/g))
+      canonicals.add(new URL(match[1]).href);
+  }
+  const locations = Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/g), (match) => match[1]);
+  assert.ok(locations.length > 0);
+  for (const location of locations)
+    assert.ok(
+      canonicals.has(new URL(location).href),
+      `Sitemap URL lacks an exported canonical: ${location}`,
+    );
   assert.doesNotMatch(xml, /<lastmod>/);
 });
