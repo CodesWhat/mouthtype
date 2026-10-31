@@ -540,13 +540,23 @@ public struct ProfanityRemover: Sendable {
                 let object = tags.lexicalClass(at: words[k + 1].start), object == .noun || object == .pronoun,
                 !ProfanityRemover.words.contains(words[k + 1].lower)
             else { return false }
-            if ProfanityRemover.beForms.contains(before), k > 1, adjacent(k - 2), words[k - 2].lower == "there" { return false }
+            if ProfanityRemover.beForms.contains(before), hasExistentialThere(k) { return false }
             let noun = words[k + 1]
             if noun.end < n, "-'\u{2010}\u{2011}\u{2019}".contains(chars[noun.end]) { return false }
             if hasSplitUp(k) { return true }
             guard ProfanityRemover.overObjects.contains(noun.lower) else { return false }
             if let around = splitParticle(k, "around") { return !isAroundPreposition(around) }
             return splitParticle(k, "over").map { isCheatingOver(k, $0) } ?? false
+        }
+
+        func hasExistentialThere(_ k: Int) -> Bool {
+            var at = k - 2
+            while at >= 0, adjacent(at) {
+                if words[at].lower == "there" { return true }
+                guard ProfanityRemover.auxiliaries.contains(words[at].lower) else { return false }
+                at -= 1
+            }
+            return false
         }
 
         // MARK: Swapping
