@@ -37,6 +37,9 @@ export const metadata: Metadata = {
     title: `${SITE_CONFIG.name} docs`,
     description: SITE_CONFIG.description,
     siteName: SITE_CONFIG.name,
+    images: [
+      { url: SITE_CONFIG.socialImage, width: 1200, height: 630, alt: "Mouthtype documentation" },
+    ],
     type: "website",
   },
   icons: {
