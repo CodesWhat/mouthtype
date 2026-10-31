@@ -111,19 +111,19 @@ public final class TranscriptStore: Sendable {
         migrator.registerMigration("v4-history-search") { db in
             try db.execute(
                 sql: """
-                    CREATE VIRTUAL TABLE take_search USING fts5(final_text, app_name);
-                    INSERT INTO take_search(rowid, final_text, app_name)
-                        SELECT rowid, final_text, app_name FROM dictation
+                    CREATE VIRTUAL TABLE take_search USING fts5(raw_text, final_text, app_name);
+                    INSERT INTO take_search(rowid, raw_text, final_text, app_name)
+                        SELECT rowid, raw_text, final_text, app_name FROM dictation
                         WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0;
                     CREATE TRIGGER take_search_insert AFTER INSERT ON dictation BEGIN
-                        INSERT INTO take_search(rowid, final_text, app_name)
-                            SELECT new.rowid, new.final_text, new.app_name
+                        INSERT INTO take_search(rowid, raw_text, final_text, app_name)
+                            SELECT new.rowid, new.raw_text, new.final_text, new.app_name
                             WHERE new.final_text IS NOT NULL AND TRIM(new.final_text) != '' AND COALESCE(new.is_secure, 0) = 0;
                     END;
-                    CREATE TRIGGER take_search_update AFTER UPDATE OF final_text, app_name, is_secure ON dictation BEGIN
+                    CREATE TRIGGER take_search_update AFTER UPDATE OF raw_text, final_text, app_name, is_secure ON dictation BEGIN
                         DELETE FROM take_search WHERE rowid = old.rowid;
-                        INSERT INTO take_search(rowid, final_text, app_name)
-                            SELECT new.rowid, new.final_text, new.app_name
+                        INSERT INTO take_search(rowid, raw_text, final_text, app_name)
+                            SELECT new.rowid, new.raw_text, new.final_text, new.app_name
                             WHERE new.final_text IS NOT NULL AND TRIM(new.final_text) != '' AND COALESCE(new.is_secure, 0) = 0;
                     END;
                     CREATE TRIGGER take_search_delete AFTER DELETE ON dictation BEGIN

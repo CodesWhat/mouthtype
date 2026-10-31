@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Search retained transcripts and app names from Home, and play or stop a take's retained audio. Search finds older takes beyond the recent list; audio retention settings stay the same.
+- Search retained raw and final transcripts and app names from Home, and play or stop a take's retained audio. Search finds older takes beyond the recent list; audio retention settings stay the same.
 
 ### Fixed
 

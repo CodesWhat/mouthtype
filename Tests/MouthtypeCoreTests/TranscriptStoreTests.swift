@@ -4,6 +4,28 @@ import Testing
 @testable import MouthtypeCore
 
 @Suite struct TranscriptStoreTests {
+    @Test func historySearchIncludesRawTextAndTracksRawOnlyChanges() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try store.begin(DictationStart(startedAt: Self.noon))
+        try store.pool.write { db in
+            try db.execute(sql: "UPDATE dictation SET raw_text = ? WHERE id = ?", arguments: ["original wording", id])
+        }
+        try store.recordInsertion(id, InsertionRecord(finalText: "Cleaned text"))
+        #expect(try store.recentTakes(limit: 5, query: "original").map(\.finalText) == ["Cleaned text"])
+        try store.pool.write { db in
+            try db.execute(sql: "UPDATE dictation SET raw_text = ? WHERE id = ?", arguments: ["revised wording", id])
+        }
+        #expect(try store.recentTakes(limit: 5, query: "original").isEmpty)
+        #expect(try store.recentTakes(limit: 5, query: "revised").map(\.id) == [id])
+        try store.recordInsertion(id, InsertionRecord(finalText: "Cleaned text", target: DictationTarget(isSecure: true)))
+        #expect(try store.recentTakes(limit: 5, query: "revised").isEmpty)
+        try store.pool.read { db in
+            let count = try Int.fetchOne(db, sql: "SELECT count(*) FROM take_search WHERE take_search MATCH ?", arguments: ["revised"])
+            #expect(count == 0)
+        }
+    }
+
     @Test func historySearchBackfillsAnExistingDatabase() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-search-upgrade-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
@@ -15,14 +37,15 @@ import Testing
             try queue.write { db in
                 try db.execute(
                     sql: """
-                        INSERT INTO dictation(id, started_at, utc_offset_s, local_day, mode, trigger, status, final_text, is_secure)
-                        VALUES ('old', 100, 0, '2026-10-31', 'dictation', 'hotkey', 'inserted', 'older agenda', 0),
-                               ('secret', 101, 0, '2026-10-31', 'dictation', 'hotkey', 'inserted', 'private agenda', 1)
+                        INSERT INTO dictation(id, started_at, utc_offset_s, local_day, mode, trigger, status, raw_text, final_text, is_secure)
+                        VALUES ('old', 100, 0, '2026-10-31', 'dictation', 'hotkey', 'inserted', 'original phrase', 'older agenda', 0),
+                               ('secret', 101, 0, '2026-10-31', 'dictation', 'hotkey', 'inserted', 'private phrase', 'private agenda', 1)
                         """)
             }
         }
         let store = try TranscriptStore(url: url)
         #expect(try store.recentTakes(limit: 5, query: "agenda").map(\.id) == ["old"])
+        #expect(try store.recentTakes(limit: 5, query: "phrase").map(\.id) == ["old"])
         #expect(try store.dictation(id: "old")?.finalText == "older agenda")
         try store.pool.read { db in
             let count = try Int.fetchOne(db, sql: "SELECT count(*) FROM take_search")
