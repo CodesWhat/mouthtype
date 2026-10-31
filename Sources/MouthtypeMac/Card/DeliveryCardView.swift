@@ -13,6 +13,15 @@ class CardControlView: NSView {
     /// The pill size's multiple, for the drawn glyph and corners.
     var k: CGFloat = 1 { didSet { needsDisplay = true } }
 
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .button }
+    override func isAccessibilityEnabled() -> Bool { isActive }
+    override func accessibilityPerformPress() -> Bool {
+        guard isActive, let onClick else { return false }
+        onClick()
+        return true
+    }
+
     override var isFlipped: Bool { true }
     override var acceptsFirstResponder: Bool { false }
     override var mouseDownCanMoveWindow: Bool { false }
@@ -71,6 +80,8 @@ class CardControlView: NSView {
 /// The 24 pt dismiss control: a disc, or a squircle on the squircle cards.
 @MainActor
 final class CardDismissView: CardControlView {
+    override func accessibilityLabel() -> String? { "Dismiss" }
+
     override func draw(_ dirtyRect: NSRect) {
         fillShape(in: bounds, radius: 9 * k, round: true, color: palette.dismiss.fill(hovered: isHovered, pressed: isPressed))
         let c = CGPoint(x: bounds.midX, y: bounds.midY), h: CGFloat = 3.2 * k
@@ -90,6 +101,7 @@ final class CardDismissView: CardControlView {
 @MainActor
 final class CardButtonView: CardControlView {
     var label = NSAttributedString()
+    override func accessibilityLabel() -> String? { label.string }
     var isPrimary = true
 
     override func draw(_ dirtyRect: NSRect) {
