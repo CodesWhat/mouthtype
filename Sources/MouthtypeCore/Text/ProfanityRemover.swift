@@ -181,6 +181,10 @@ public struct ProfanityRemover: Sendable {
         "decades", "decade", "century", "time", "hour", "hours", "minute", "minutes", "here", "there",
     ]
     private static let overDeterminers: Set<String> = ["the", "a", "an", "this", "that", "my", "our", "last", "next", "every", "one", "two", "three"]
+    private static let aroundPlaces: Set<String> = [
+        "here", "there", "nearby", "home", "town", "city", "village", "office", "work", "school", "campus", "house", "room",
+        "block", "park", "world", "country", "area", "neighborhood", "neighbourhood",
+    ]
     /// Acronyms said as a word, so "a" or "an" follows how the word sounds, not the first letter's name.
     private static let spokenAcronyms: [String: String] = [
         "nasa": "a", "nato": "a", "nafta": "a", "opec": "an", "unesco": "a", "unicef": "a", "fifa": "a", "scuba": "a",
@@ -500,7 +504,8 @@ public struct ProfanityRemover: Sendable {
             if noun.end < n, "'\u{2019}".contains(chars[noun.end]) { return false }
             if noun.end < n, "-\u{2010}\u{2011}".contains(chars[noun.end]) { return false }
             if adjacent(k + 1), k + 2 < words.count {
-                if ["around", "about", "up", "off", "with"].contains(words[k + 2].lower) { return false }
+                if ["about", "up", "off", "with"].contains(words[k + 2].lower) { return false }
+                if words[k + 2].lower == "around", !isAroundPreposition(k + 2) { return false }
                 if words[k + 2].lower == "over", isCheatingOver(k, k + 2) { return false }
                 let after = tags.lexicalClass(at: words[k + 2].start)
                 if after == .noun || after == .adjective { return false }
@@ -539,7 +544,7 @@ public struct ProfanityRemover: Sendable {
             if noun.end < n, "-'\u{2010}\u{2011}\u{2019}".contains(chars[noun.end]) { return false }
             if hasSplitUp(k) { return true }
             guard ProfanityRemover.overObjects.contains(noun.lower) else { return false }
-            if splitParticle(k, "around") != nil { return true }
+            if let around = splitParticle(k, "around") { return !isAroundPreposition(around) }
             return splitParticle(k, "over").map { isCheatingOver(k, $0) } ?? false
         }
 
@@ -597,6 +602,14 @@ public struct ProfanityRemover: Sendable {
             while after < words.count, adjacent(after - 1), ProfanityRemover.overDeterminers.contains(words[after].lower) { after += 1 }
             guard after < words.count, adjacent(after - 1) else { return true }
             return !ProfanityRemover.overPrepositionWords.contains(words[after].lower)
+        }
+
+        func isAroundPreposition(_ around: Int) -> Bool {
+            var after = around + 1
+            while after < words.count, adjacent(after - 1), ProfanityRemover.overDeterminers.contains(words[after].lower) { after += 1 }
+            guard after < words.count, adjacent(after - 1) else { return false }
+            return ProfanityRemover.aroundPlaces.contains(words[after].lower)
+                || ProfanityRemover.overPrepositionWords.contains(words[after].lower) || isName(after)
         }
 
         func isAcronym(_ w: ScanWord) -> Bool {
