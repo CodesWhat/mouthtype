@@ -20,20 +20,26 @@ public struct AchievementToastContext: Equatable, Sendable {
     public var now: Date
     /// The Mouthtype window is visible and key.
     public var windowIsKey: Bool
-    /// A recording, a voice edit or a take being processed is in flight.
+    /// A recording or a take being processed is in flight.
     public var dictationBusy: Bool
+    /// A voice edit is active, or its panel or a Transform Selection preview is open.
+    public var editingSelection: Bool
+    /// A typing calibration run is in progress.
+    public var calibrating: Bool
     /// The Stats page is the one showing.
     public var statsOpen: Bool
     public var reduceMotion: Bool
     public var soundsEnabled: Bool
 
     public init(
-        now: Date, windowIsKey: Bool, dictationBusy: Bool = false, statsOpen: Bool = false, reduceMotion: Bool = false,
-        soundsEnabled: Bool = true
+        now: Date, windowIsKey: Bool, dictationBusy: Bool = false, editingSelection: Bool = false, calibrating: Bool = false,
+        statsOpen: Bool = false, reduceMotion: Bool = false, soundsEnabled: Bool = true
     ) {
         self.now = now
         self.windowIsKey = windowIsKey
         self.dictationBusy = dictationBusy
+        self.editingSelection = editingSelection
+        self.calibrating = calibrating
         self.statsOpen = statsOpen
         self.reduceMotion = reduceMotion
         self.soundsEnabled = soundsEnabled
@@ -111,7 +117,7 @@ public struct AchievementToastScheduler: Equatable, Sendable {
 
     public func readiness(_ context: AchievementToastContext) -> Readiness {
         guard context.windowIsKey else { return .windowNotKey }
-        guard !context.dictationBusy else { return .busy }
+        guard !context.dictationBusy, !context.editingSelection, !context.calibrating else { return .busy }
         if let lastShown {
             let until = lastShown.addingTimeInterval(Self.cooldown)
             if context.now < until { return .cooldown(until: until) }

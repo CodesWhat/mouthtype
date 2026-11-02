@@ -15,6 +15,8 @@ import Observation
     var windowIsKey = false { didSet { if windowIsKey != oldValue { poll() } } }
     var statsOpen = false { didSet { if statsOpen != oldValue { poll() } } }
     @ObservationIgnored var isDictationBusy: @MainActor () -> Bool = { false }
+    @ObservationIgnored var isEditingSelection: @MainActor () -> Bool = { false }
+    @ObservationIgnored var isCalibrating: @MainActor () -> Bool = { false }
     @ObservationIgnored var reduceMotion: @MainActor () -> Bool = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
     @ObservationIgnored var playCue: @MainActor () -> Void = {}
     @ObservationIgnored var announce: @MainActor (String) -> Void = AchievementToastCenter.postAnnouncement
@@ -71,7 +73,8 @@ import Observation
 
     var context: AchievementToastContext {
         AchievementToastContext(
-            now: clock(), windowIsKey: windowIsKey, dictationBusy: isDictationBusy(), statsOpen: statsOpen,
+            now: clock(), windowIsKey: windowIsKey, dictationBusy: isDictationBusy(), editingSelection: isEditingSelection(),
+            calibrating: isCalibrating(), statsOpen: statsOpen,
             reduceMotion: reduceMotion(), soundsEnabled: SoundPreference.isEnabled(store.defaults))
     }
 

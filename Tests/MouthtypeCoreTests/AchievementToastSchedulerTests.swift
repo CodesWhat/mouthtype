@@ -12,11 +12,12 @@ import Testing
     }
 
     private func context(
-        _ offset: TimeInterval = 0, key: Bool = true, busy: Bool = false, stats: Bool = false, reduceMotion: Bool = false,
+        _ offset: TimeInterval = 0, key: Bool = true, busy: Bool = false, editing: Bool = false, calibrating: Bool = false,
+        stats: Bool = false, reduceMotion: Bool = false,
         sounds: Bool = true
     ) -> AchievementToastContext {
         AchievementToastContext(
-            now: t0.addingTimeInterval(offset), windowIsKey: key, dictationBusy: busy, statsOpen: stats, reduceMotion: reduceMotion,
+            now: t0.addingTimeInterval(offset), windowIsKey: key, dictationBusy: busy, editingSelection: editing, calibrating: calibrating, statsOpen: stats, reduceMotion: reduceMotion,
             soundsEnabled: sounds)
     }
 
@@ -52,6 +53,23 @@ import Testing
         #expect(scheduler.hasQueued)
         // Idle again: the queued earn surfaces.
         #expect(scheduler.poll(context(5, busy: false))?.title == "Alpha")
+    }
+
+    @Test func aVoiceEditOrTransformPreviewHoldsItBack() {
+        var scheduler = AchievementToastScheduler()
+        scheduler.enqueue([earn("a", "Alpha")])
+        #expect(scheduler.readiness(context(editing: true)) == .busy)
+        #expect(scheduler.poll(context(editing: true)) == nil)
+        #expect(scheduler.hasQueued)
+        #expect(scheduler.poll(context(5, editing: false))?.title == "Alpha")
+    }
+
+    @Test func aTypingCalibrationRunHoldsItBack() {
+        var scheduler = AchievementToastScheduler()
+        scheduler.enqueue([earn("a", "Alpha")])
+        #expect(scheduler.readiness(context(calibrating: true)) == .busy)
+        #expect(scheduler.poll(context(calibrating: true)) == nil)
+        #expect(scheduler.poll(context(5, calibrating: false))?.title == "Alpha")
     }
 
     @Test func tenMinuteGapBetweenToasts() {

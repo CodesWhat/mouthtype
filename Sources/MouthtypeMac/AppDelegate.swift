@@ -109,6 +109,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 onDictationLanguageChanged: { [weak self] choice in self?.engineHost.select(language: choice.request()) },
                 isRecording: { [weak self] in self?.dictation?.phase == .recording },
                 isDictationBusy: { [weak self] in (self?.dictation?.phase ?? .idle) != .idle },
+                isEditingSelection: { [weak self] in
+                    self?.voiceEditModel.phase.isActive == true || (self?.voiceEditWindow.isWindowLoaded == true && self?.voiceEditWindow.window?.isVisible == true)
+                        || self?.selectionCleanupModel.hasPreview == true
+                },
                 playAchievementCue: { [weak self] in self?.cueSounds?.playQuietStop() },
                 onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
                 onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },

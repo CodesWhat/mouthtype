@@ -84,6 +84,7 @@ import UniformTypeIdentifiers
         onDictationLanguageChanged: @escaping @MainActor (DictationLanguageSetting) -> Void = { _ in },
         isRecording: @escaping @MainActor () -> Bool = { false },
         isDictationBusy: @escaping @MainActor () -> Bool = { false },
+        isEditingSelection: @escaping @MainActor () -> Bool = { false },
         playAchievementCue: @escaping @MainActor () -> Void = {},
         microphone: MicrophoneSettingsModel? = nil, onMicrophoneChanged: @escaping @MainActor () -> Void = {},
         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
@@ -117,6 +118,13 @@ import UniformTypeIdentifiers
         self.onDictationLanguageChanged = onDictationLanguageChanged
         self.isRecording = isRecording
         stats.achievements.toasts.isDictationBusy = isDictationBusy
+        stats.achievements.toasts.isEditingSelection = isEditingSelection
+        stats.achievements.toasts.isCalibrating = { [weak stats] in
+            switch stats?.calibration.phase {
+            case .ready, .running: true
+            default: false
+            }
+        }
         stats.achievements.toasts.playCue = playAchievementCue
         self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
         self.onBoostSavedWordsChanged = onBoostSavedWordsChanged

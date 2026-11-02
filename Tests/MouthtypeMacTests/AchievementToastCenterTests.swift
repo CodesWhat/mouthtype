@@ -6,6 +6,8 @@ import MouthtypeCore
 @MainActor private final class Box {
     var now = Date(timeIntervalSince1970: 1_800_000_000)
     var busy = false
+    var editing = false
+    var calibrating = false
     var reduceMotion = false
     var cues = 0
     var announcements: [String] = []
@@ -30,6 +32,8 @@ import MouthtypeCore
     private func center(_ box: Box, _ defaults: UserDefaults) -> AchievementToastCenter {
         let center = AchievementToastCenter(store: AchievementStore(defaults: defaults), clock: { box.now }, autoSchedule: false)
         center.isDictationBusy = { box.busy }
+        center.isEditingSelection = { box.editing }
+        center.isCalibrating = { box.calibrating }
         center.reduceMotion = { box.reduceMotion }
         center.playCue = { box.cues += 1 }
         center.announce = { box.announcements.append($0) }
@@ -74,6 +78,24 @@ import MouthtypeCore
         center.ingest([entry("four_figures")])
         #expect(center.current == nil && center.hasQueued && box.cues == 0)
         box.busy = false
+        center.poll()
+        #expect(center.current != nil && box.cues == 1)
+    }
+
+    @Test func voiceEditAndCalibrationHoldItBackWithNoCue() {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let box = Box()
+        let center = center(box, defaults)
+        center.windowIsKey = true
+        box.editing = true
+        center.ingest([entry("four_figures")])
+        #expect(center.current == nil && center.hasQueued && box.cues == 0)
+        box.editing = false
+        box.calibrating = true
+        center.poll()
+        #expect(center.current == nil && box.cues == 0)
+        box.calibrating = false
         center.poll()
         #expect(center.current != nil && box.cues == 1)
     }
