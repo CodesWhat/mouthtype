@@ -258,22 +258,33 @@ for (const path of footerPaths) {
 }
 
 for (const path of footerPaths) {
-  test(`${path} footer has the support links`, async ({ page }) => {
+  test(`${path} footer link row has a Support link`, async ({ page }) => {
     await page.goto(path);
-    const note = page.locator("footer .support-note");
-    await expect(note).toHaveText(
-      "Mouthtype is free and open source. If it saves you time, you can support it on GitHub Sponsors or donate directly.",
-    );
-    await expect(note.getByRole("link", { name: "GitHub Sponsors" })).toHaveAttribute(
-      "href",
-      "https://github.com/sponsors/CodesWhat",
-    );
-    await expect(note.getByRole("link", { name: "donate directly" })).toHaveAttribute(
-      "href",
-      "https://codeswhat.com/support",
-    );
+    const link = page.locator("footer nav").getByRole("link", { name: "Support", exact: true });
+    await expect(link).toHaveAttribute("href", "https://codeswhat.com/support");
+    await expect(page.locator("footer .support-note")).toHaveCount(0);
   });
 }
+
+test("home footer puts Support after Status and before Back to the top", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("footer .footer-top nav a")).toHaveText([
+    "How it works",
+    "Status",
+    "Support",
+    "Back to the top ↑",
+  ]);
+});
+
+test("home footer link row wraps on a phone without clipping", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto("/");
+  const edges = await page.locator("footer .footer-top a").evaluateAll((links) =>
+    links.map((link) => link.getBoundingClientRect().right),
+  );
+  expect(edges).toHaveLength(4);
+  for (const edge of edges) expect(edge).toBeLessThanOrEqual(390);
+});
 
 test("/download/ also carries a support line beside the install steps", async ({ page }) => {
   await page.goto("/download/");
