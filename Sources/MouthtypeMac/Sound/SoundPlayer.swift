@@ -80,14 +80,14 @@ final class ClickSoundPlayer: SoundPlayer {
 
     /// The stop click at a lower volume, for the trophy toast. Plays only with the sounds toggle on.
     func playQuietStop() {
-        stop?.volume = Self.volume * 0.5
-        play(stop, name: Self.stopName)
-        stop?.volume = Self.volume
+        play(stop, name: Self.stopName, volume: Self.volume * 0.5)
     }
 
-    private func play(_ sound: AVAudioPlayer?, name: String) {
+    /// Every play sets its own volume first, so a quiet play never leaves the next normal one quiet.
+    private func play(_ sound: AVAudioPlayer?, name: String, volume: Float = ClickSoundPlayer.volume) {
         guard SoundPreference.isEnabled(defaults), let sound else { return }
         sound.stop()
+        sound.volume = volume
         sound.currentTime = 0
         if sound.play() { Log.app.info("Click cue \(name, privacy: .public)") } else { Log.app.error("Click cue \(name, privacy: .public) could not play") }
     }
