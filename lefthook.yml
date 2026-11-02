@@ -1,0 +1,35 @@
+---
+# Lefthook configuration. Install once per clone with `lefthook install`.
+#
+# pre-commit: quick checks on staged files only (no build, no tests).
+# pre-push:   scripts/pre-push.sh, which swift-format lints the Swift files the
+#             push changes and runs `swift build -Xswiftc -warnings-as-errors`.
+#             The build can take a few minutes; let it finish.
+
+pre-commit:
+  parallel: true
+  commands:
+    whitespace:
+      run: git diff --cached --check
+      fail_text: "Whitespace errors in staged changes (trailing space, conflict markers)"
+    swift-format:
+      glob: "*.swift"
+      # tools/ is excluded: tools/linux-desktop belongs to the Linux owner and has existing lint failures.
+      exclude: "tools/**/*"
+      run: xcrun swift-format lint --strict -- {staged_files}
+      fail_text: "swift-format lint --strict failed. Fix with: swift format format --in-place <file>"
+    shellcheck:
+      glob: "*.sh"
+      run: shellcheck {staged_files}
+      fail_text: "shellcheck failed. Install with: brew install shellcheck"
+    actionlint:
+      glob: ".github/workflows/*.{yml,yaml}"
+      run: actionlint {staged_files}
+      fail_text: "actionlint failed. Install with: brew install actionlint"
+
+pre-push:
+  commands:
+    swift-format-and-build:
+      run: scripts/pre-push.sh --stdin
+      use_stdin: true
+      fail_text: "pre-push checks failed (swift-format lint --strict or warnings-as-errors build)"
