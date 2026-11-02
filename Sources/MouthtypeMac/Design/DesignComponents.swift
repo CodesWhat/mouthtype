@@ -353,6 +353,8 @@ struct DesignNavRow: View {
     let symbol: String
     var selected = false
     var height: CGFloat = 34
+    /// A small accent dot at the trailing edge: something new is waiting on this page.
+    var badge: String?
     let action: () -> Void
 
     var body: some View {
@@ -363,13 +365,14 @@ struct DesignNavRow: View {
                 Text(title).font(DesignFont.sans(DesignFont.body, .medium)).foregroundStyle(DesignPalette.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
+                if badge != nil { Circle().fill(DesignPalette.accentMark).frame(width: 8, height: 8).accessibilityHidden(true) }
             }
             .padding(.horizontal, 10).frame(minHeight: height)
             .background { if selected { RoundedRectangle(cornerRadius: 8).fill(DesignPalette.sel) } }
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(title).accessibilityAddTraits(selected ? .isSelected : [])
+        .accessibilityLabel(badge.map { "\(title), \($0)" } ?? title).accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
 

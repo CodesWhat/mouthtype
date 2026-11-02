@@ -11,11 +11,14 @@ import Observation
     private(set) var isEnabled: Bool
     private(set) var isShelfHidden: Bool
     @ObservationIgnored private let store: AchievementStore
+    /// The in-window toast for new earns. Present always; it does nothing while Achievements is off.
+    @ObservationIgnored let toasts: AchievementToastCenter
     /// Bumped on every refresh, so a slower earlier result never overwrites a newer one.
     @ObservationIgnored private var generation = 0
 
     init(defaults: UserDefaults = .standard) {
         store = AchievementStore(defaults: defaults)
+        toasts = AchievementToastCenter(store: store)
         isEnabled = store.isEnabled
         isShelfHidden = store.isShelfHidden
     }
@@ -30,6 +33,7 @@ import Observation
         if !value {
             generation += 1
             entries = []
+            toasts.reset()
         }
     }
 
@@ -42,6 +46,7 @@ import Observation
     func shelfSeen() {
         guard isEnabled else { return }
         store.markAllSeen()
+        toasts.shelfSeen(entries.filter(\.isNew).map(\.id))
         entries = entries.map {
             var entry = $0; entry.isNew = false; return entry
         }
@@ -62,6 +67,7 @@ import Observation
             let statuses = AchievementEngine.evaluate(AchievementInput(snapshot: snapshot, extras: extras))
             store.apply(statuses, today: StatsTimeline.localDay(for: now, in: timeZone))
             entries = AchievementEngine.shelf(statuses, store: store)
+            toasts.ingest(entries)
         } catch {
             Log.app.error("achievements read failed: \(error.localizedDescription, privacy: .public)")
         }
