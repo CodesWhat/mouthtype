@@ -66,7 +66,7 @@ Two behaviors worth knowing:
 
 The tray icon shows state and has Start or Stop dictation, Open Mouthtype, Settings and Quit.
 
-- **GNOME** has no tray of its own. The icon needs the AppIndicator extension. Ubuntu ships it and enables it by default, and `mouthtype-linux-desktop` recommends `gnome-shell-extension-appindicator`. That wasn't confirmed against Ubuntu 26.04's archive, so if the icon is missing, check the extension is installed and on. The tray also appears if the extension starts after Mouthtype does.
+- **GNOME** has no tray of its own. The icon needs the AppIndicator extension. Ubuntu ships it and enables it by default, and `mouthtype-linux-desktop` recommends `gnome-shell-extension-appindicator`. On Ubuntu 26.04 the extension is `ubuntu-appindicators@ubuntu.com` from `gnome-shell-ubuntu-extensions`, which `ubuntu-session` depends on and which provides the `gnome-shell-extension-appindicator` name, so the recommendation resolves there (checked against the 26.04 archive, 2026-11-02). If the icon is missing, check the extension is on. The tray also appears if the extension starts after Mouthtype does.
 - **KDE Plasma** shows the icon natively, and also the floating recording pill. The pill needs the layer-shell module (`qml6-module-org-kde-layershell` on Ubuntu, `layer-shell-qt` on Fedora). Without it you get the tray and settings window only. GNOME has no pill.
 
 Open the settings window from the tray, or run `mouthtype-desktop`. `mouthtype-desktop --background` starts tray only, which is what the autostart entry does.
