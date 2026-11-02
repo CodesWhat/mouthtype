@@ -49,7 +49,7 @@ jobs:
   website:
     needs: changes
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: website
@@ -72,7 +72,7 @@ jobs:
         if: needs.changes.outputs.run == 'true'
       - run: npm run build
         if: needs.changes.outputs.run == 'true'
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit firefox
         if: needs.changes.outputs.run == 'true'
       - run: npm test
         if: needs.changes.outputs.run == 'true'

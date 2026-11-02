@@ -1,5 +1,5 @@
 {
   "$schema": "https://unpkg.com/knip@6/schema.json",
-  "entry": ["scripts/serve-export.mjs", "scripts/*.test.mjs"],
+  "entry": ["scripts/*.test.mjs", "e2e/*.spec.mjs"],
   "ignoreDependencies": ["postcss-load-config"]
 }
