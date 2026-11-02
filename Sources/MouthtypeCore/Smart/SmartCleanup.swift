@@ -176,6 +176,16 @@ public actor SmartCleanup {
     /// earlier generation (including a cancelled one still settling) and holds the model until its own generation has
     /// finished, so unload and the next request wait for it. A transform in progress is never cut short by dictation.
     public func transform(_ kind: TextTransform, text: String) async throws -> String {
+        try await generate(text, context: CleanupContext(transform: kind))
+    }
+
+    /// Runs one voice-directed edit under the same one-generation-at-a-time rule as `transform`. The prompt carries
+    /// the selection and the instruction; the output is raw model text for `VoiceEditGuard` to judge.
+    public func voiceEdit(_ prompt: VoiceEditPrompt) async throws -> String {
+        try await generate(prompt.user, context: CleanupContext(voiceEdit: prompt))
+    }
+
+    private func generate(_ text: String, context: CleanupContext) async throws -> String {
         func unloading() -> CleanerError {
             .unavailable(reason: "The cleanup model is unloading. Try again in a moment.")
         }
@@ -195,7 +205,7 @@ public actor SmartCleanup {
         try Task.checkCancellation()
         let cleaner = cleaner
         let work = Task { () -> Result<String, Error> in
-            do { return .success(try await cleaner.clean(text, context: CleanupContext(transform: kind))) } catch { return .failure(error) }
+            do { return .success(try await cleaner.clean(text, context: context)) } catch { return .failure(error) }
         }
         transforming = work
         let outcome = await withTaskCancellationHandler {
