@@ -21,12 +21,18 @@ test("crawl discovery lists canonical indexable pages and docs text", async ({ r
   expect(await llms.text()).toContain("https://docs.mouthtype.app/llms-full.txt");
 });
 
-test("security.txt is served as plain text with its canonical URL", async ({ request }) => {
+test("security.txt is served as UTF-8 plain text with one future Expires", async ({ request }) => {
   const response = await request.get("/.well-known/security.txt");
   expect(response.status()).toBe(200);
-  expect(response.headers()["content-type"]).toContain("text/plain");
+  expect(response.headers()["content-type"]).toBe("text/plain; charset=utf-8");
   const body = await response.text();
   expect(body).toContain("Contact: mailto:security@codeswhat.com");
   expect(body).toContain("Canonical: https://mouthtype.app/.well-known/security.txt");
-  expect(body).toMatch(/^Expires: \d{4}-\d{2}-\d{2}T[\d:.]+Z$/m);
+  const expires = body.split(/\r?\n/).filter((line) => /^Expires:/i.test(line));
+  expect(expires).toHaveLength(1);
+  const value = expires[0].replace(/^Expires:\s*/i, "");
+  expect(value).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/);
+  const time = Date.parse(value);
+  expect(Number.isNaN(time)).toBe(false);
+  expect(time).toBeGreaterThan(Date.now());
 });
