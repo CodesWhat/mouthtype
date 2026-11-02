@@ -560,12 +560,21 @@ public struct ProfanityRemover: Sendable {
             var at = k - 2
             while at >= 0, adjacent(at) {
                 if words[at].lower == "there" {
-                    return !(at > 0 && adjacent(at - 1) && ProfanityRemover.locativeLeaders.contains(words[at - 1].lower))
+                    return !leadsClause(at - 1)
                 }
                 guard ProfanityRemover.auxiliaries.contains(words[at].lower) else { return false }
                 at -= 1
             }
             return false
+        }
+
+        /// Whether the locative leader at `k` opens its clause ("Being there is hard"), so the "there" after it is the
+        /// subject. A leader that follows a subject or subordinator ("When I'm working there are people") ends a clause,
+        /// and the "there" is existential.
+        func leadsClause(_ k: Int) -> Bool {
+            guard k >= 0, ProfanityRemover.locativeLeaders.contains(words[k].lower) else { return false }
+            guard k > 0, adjacent(k - 1) else { return true }
+            return ["and", "but", "or", "so"].contains(words[k - 1].lower)
         }
 
         // MARK: Swapping

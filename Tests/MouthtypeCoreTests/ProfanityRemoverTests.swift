@@ -190,6 +190,8 @@ import Testing
         ("Being there is fucking people up.", "Being there is messing people up."),
         ("Getting there is fucking people up.", "Getting there is messing people up."),
         ("Out there is fucking people up.", "Out there is messing people up."),
+        ("When I'm working there are fucking people around.", "When I'm working there are people around."),
+        ("And being there is fucking people up.", "And being there is messing people up."),
         ("There is fucking nothing here.", "There is nothing here."),
         ("I know there is fucking nothing here.", "I know there is nothing here."),
         ("She was fucking guys around a lot.", "She was messing guys around a lot."),
