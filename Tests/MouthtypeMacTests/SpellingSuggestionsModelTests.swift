@@ -276,16 +276,23 @@ import Testing
         try seed(f.store)
         let model = model(f)
         let calls = Calls()
+        let stale = FetchProbe()
+        defer { stale.release() }
         model.fetchRecent = { store, limit in
             let first = calls.next()
             let rows = try store.recentTakes(limit: limit)
-            if first { Thread.sleep(forTimeInterval: 0.4); return [] }
+            if first { stale.hold(); return [] }
             return rows
         }
         model.activate()
-        try await Task.sleep(for: .milliseconds(100))
+        // The newer reload starts only once the older one is really in flight.
+        try #require(await stale.waitUntilStarted(), "the older fetch never started")
         await model.reload()
-        try await Task.sleep(for: .milliseconds(700))
+        #expect(!model.suggestions.isEmpty)
+        stale.release()
+        try #require(await stale.waitUntilFinished(), "the older fetch never finished")
+        // Let the finished fetch's empty result reach the model, which must drop it.
+        try await Task.sleep(for: .milliseconds(300))
         #expect(!model.suggestions.isEmpty)
     }
 

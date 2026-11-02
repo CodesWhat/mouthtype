@@ -2007,7 +2007,8 @@ private struct Rig {
         rig.inserter.observeVerification { seen.append($0) }
         _ = await rig.inserter.deliver("world", startFocus: nil)
         rig.pasteboard.read()
-        await hop()
+        await hop { rig.pending.delays.contains(PasteboardSession.receiptSettle) }
+        #expect(rig.pending.delays.contains(PasteboardSession.receiptSettle))
         await rig.inserter.waitForVerification()
         #expect((seen.first?.receiptMs ?? -1) >= 0)
     }
