@@ -58,6 +58,8 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     var progressSteps: [Double] = [0.25, 0.5, 1]
     var downloadGate: DownloadGate?
     var cleanGate: DownloadGate?
+    /// What a voice edit's generation returns; set it to stand in for the model's edited text.
+    var voiceEditOutput: String?
     var unloadGate: DownloadGate?
     var loadGate: DownloadGate?
     private(set) var loadsStarted = 0
@@ -75,6 +77,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     func clean(_ transcript: String, context: CleanupContext) async throws -> String {
         lock.withLock { cleanCalls += 1 }
         await cleanGate?.wait()
+        if context.voiceEdit != nil, let output = lock.withLock({ voiceEditOutput }) { return output }
         return transcript
     }
 

@@ -43,6 +43,16 @@ extension SettingsView {
                 )
                 .accessibilityIdentifier("settings-mouse-trigger")
             }
+            DesignRow(title: "Edit by voice shortcut", detail: "Optional. Edits the selected text from a spoken instruction. Also in the menu.") {
+                DesignPopup(
+                    title: "Edit by voice shortcut",
+                    selection: Binding(
+                        get: { model.voiceEditShortcut.rawValue },
+                        set: { if let value = VoiceEditShortcut(rawValue: $0) { model.setVoiceEditShortcut(value) } }),
+                    choices: VoiceEditShortcut.allCases.map { DesignChoice($0.displayName, $0.rawValue) }
+                )
+                .accessibilityIdentifier("settings-voice-edit-shortcut")
+            }
             if let error = model.mouseTriggerError { ModalCardNote(text: error, tone: .red) }
             if let notice = model.mouseTriggerNotice { ModalCardNote(text: notice) }
         }
