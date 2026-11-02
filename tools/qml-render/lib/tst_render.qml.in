@@ -1,0 +1,56 @@
+import QtQuick
+import QtTest
+import RenderHarness
+@DESIGN_IMPORT@
+
+// Generated per case and theme by run.sh (placeholders in @AT@ form). Not meant to be edited or run by hand.
+TestCase {
+  id: tc
+  name: "@CASE@-@THEME@"
+  width: 1200
+  height: 1400
+  visible: true
+  when: windowShown
+
+  Item { id: host; anchors.fill: parent }
+  Loader { id: loader; parent: host; active: false }
+
+  property bool grabbed: false
+
+  function grab(item, file) {
+    grabbed = false
+    var ok = item.grabToImage(function(result) {
+      if (result.saveToFile(file)) tc.grabbed = true
+    })
+    verify(ok, "grabToImage refused " + file)
+    tryVerify(function() { return tc.grabbed }, 5000, "no image written to " + file)
+  }
+
+  function test_render() {
+    RenderRegistry.home = "@HOME@"
+    RenderRegistry.dark = @DARK@
+    RenderRegistry.host = host
+    RenderRegistry.surfaces = ({})
+    @DESIGN_SET@
+    RenderRegistry.replies = {}
+    var component = Qt.createComponent("file://@CASEFILE@")
+    tryVerify(function() { return component.status !== Component.Loading }, 5000, "case component stuck loading")
+    verify(component.status === Component.Ready, "case failed to load: " + component.errorString())
+    loader.sourceComponent = component
+    loader.active = true
+    tryVerify(function() { return loader.status === Loader.Ready }, 5000, "case failed to instantiate")
+    var scene = loader.item
+    wait(150)
+    if (scene.setup) scene.setup()
+    wait(scene.settleMs !== undefined ? scene.settleMs : 250)
+    if (scene.verifyScene) scene.verifyScene(tc)
+
+    var targets = scene.targets !== undefined ? scene.targets : [{ name: "", surface: "" }]
+    for (var i = 0; i < targets.length; i++) {
+      var item = targets[i].surface === "" ? scene : RenderRegistry.surfaces[targets[i].surface]
+      verify(item, "no surface named " + targets[i].surface)
+      var suffix = targets[i].name === "" ? "" : "__" + targets[i].name
+      grab(item, "@OUT@/@CASE@" + suffix + "-@THEME@.png")
+    }
+  }
+}

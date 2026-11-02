@@ -1,0 +1,3 @@
+#!/bin/sh
+# First-run and removal helper for the per-user pieces of the mouthtype-linux package.
+exec /usr/bin/python3 /usr/lib/mouthtype-linux/tools/linux-desktop/setup.py "$@"

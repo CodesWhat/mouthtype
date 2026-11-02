@@ -1,0 +1,33 @@
+{
+  "problem": null,
+  "rows": [
+    {
+      "row": 2,
+      "heard": "Sean",
+      "written": "Sean",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 3,
+      "heard": "Priya",
+      "written": "Priya",
+      "result": "existing",
+      "label": "Already saved",
+      "warning": null
+    }
+  ],
+  "counts": {
+    "add": 1,
+    "existing": 1,
+    "duplicate": 0,
+    "invalid": 0
+  },
+  "can_import": true,
+  "file": "names1.csv",
+  "digest": "d354f25fd9710e744bbecbdb7160228c38961811eea9c523912c770a18866a2b",
+  "csv_digest": "89aca2b02bcddd8543be07742fb40c094ccdb9c6aa125b36a163539511425f9c",
+  "kind": "spellings",
+  "configured": true
+}

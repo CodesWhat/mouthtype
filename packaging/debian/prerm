@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+case "$1" in
+    remove|upgrade|deconfigure|failed-upgrade)
+        # Bytecode from postinst is not in the package file list, so dpkg would leave it and its directories behind.
+        find /usr/lib/mouthtype-linux -depth -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+        ;;
+esac
+case "$1" in
+    remove)
+        cat <<'MSG'
+Removing Mouthtype. Per-user pieces (bar widget, login service link, shortcut block) live in your home
+directory, so apt leaves them. If you installed the Omarchy widget, it shows a removal card with a button
+that cleans them up. To do it by hand as your normal user while the package is still installed:
+    mouthtype-linux-setup --uninstall          (add --purge to also delete models and recordings)
+MSG
+        ;;
+esac
+exit 0
