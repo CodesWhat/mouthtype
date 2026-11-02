@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Opt-in pre-push checks: swift-format lint --strict on changed Swift files,
+# Pre-push checks (run by lefthook, see lefthook.yml): swift-format lint --strict on changed Swift files,
 # then a warnings-as-errors build when any Swift file changed.
 #
 # Usage:
 #   scripts/pre-push.sh [base-ref]   compare HEAD against base-ref (default origin/dev/v0.8.0,
 #                                    falling back to origin/main)
-#   scripts/pre-push.sh --stdin      read git's pre-push ref lines from stdin (used by the hook)
+#   scripts/pre-push.sh --stdin      read git's pre-push ref lines from stdin (used by lefthook)
 set -euo pipefail
 
 root="$(git rev-parse --show-toplevel)"
