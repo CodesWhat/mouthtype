@@ -52,6 +52,7 @@ enum VoiceEditFlowRefusal: Equatable {
 enum VoiceEditEnd: Equatable {
     case refused(VoiceEditFlowRefusal)
     case recordingFailed
+    case speechNotReady
     case noInstruction
     case engineRefused(VoiceEditRefusal)
     case timedOut
@@ -65,6 +66,7 @@ enum VoiceEditEnd: Equatable {
         switch self {
         case let .refused(refusal): refusal.message
         case .recordingFailed: "Couldn’t record the instruction. Check the microphone and try again."
+        case .speechNotReady: "The speech engine isn’t ready yet. Try again in a moment."
         case .noInstruction: "Didn’t hear an instruction. Try again."
         case let .engineRefused(refusal): Self.message(for: refusal)
         case .timedOut: "The local model took too long. The text is unchanged."
@@ -200,7 +202,7 @@ enum VoiceEditPhase: Equatable {
             try await recorder.start()
         } catch {
             guard id == generation else { return }
-            return end(.recordingFailed)
+            return end((error as? VoiceInstructionRecorder.Failure) == .engineNotReady ? .speechNotReady : .recordingFailed)
         }
         // `end()` and `cancel()` bump the generation, so a flow that finished while `start()` was still pending lands here.
         guard id == generation, phase == .recording else {
