@@ -31,7 +31,7 @@ import SwiftUI
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite"))
         try seed(store, now: Date())
-        let stats = StatsModel(store: store, observing: false)
+        let stats = StatsModel(store: store, observing: false, defaults: defaults)
         await stats.load()
         #expect(stats.snapshot?.report.wordsAllTime ?? 0 < 5_000, "the secure take must not be counted")
         let model = SettingsModel(defaults: defaults, stats: stats)
@@ -45,7 +45,7 @@ import SwiftUI
             }
         }
         // Empty history shows a plain empty state.
-        let empty = StatsModel(store: try TranscriptStore(url: dir.appendingPathComponent("empty.sqlite")), observing: false)
+        let empty = StatsModel(store: try TranscriptStore(url: dir.appendingPathComponent("empty.sqlite")), observing: false, defaults: defaults)
         await empty.load()
         #expect(empty.snapshot?.hasHistory == false)
         let emptyModel = SettingsModel(defaults: defaults, stats: empty)
