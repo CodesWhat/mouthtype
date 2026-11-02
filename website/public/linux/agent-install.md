@@ -34,7 +34,7 @@ Check: `tools/linux-desktop/install.py`, `tools/linux-desktop/setup_speech.py` a
 python3 tools/linux-desktop/install.py --prefix "$HOME/.local"
 ```
 
-Installs `~/.local/bin/mouthtype-linux` and its payload under `~/.local/lib/mouthtype-linux`. It refuses to overwrite an existing installation; to upgrade, move the old `~/.local/lib/mouthtype-linux` and `~/.local/bin/mouthtype-linux` aside first. Nothing else on the system changes.
+Installs `~/.local/bin/mouthtype-linux` and its payload under `~/.local/lib/mouthtype-linux`. It refuses to overwrite an existing installation and says so; to upgrade, re-run with `--update`. `--uninstall` removes both again. Nothing else on the system changes.
 
 Check: `mouthtype-linux capabilities` prints JSON with `"interface": 1` and a `file_transcription` entry.
 
@@ -46,7 +46,7 @@ python3 tools/linux-desktop/setup.py
 
 Checks the required helpers and the Omarchy shell config before downloading anything, then downloads the pinned Parakeet model (about 465 MiB), verifies its SHA-256, creates a dedicated Python environment, writes `linux.json` and `engines.json`, runs `doctor`, installs the Omarchy plugin with its login service and binds Super+Alt+M (dictate) and Super+Shift+T (Transform Selection). Basic cleanup is on by default. Allow up to an hour on a slow connection. On a terminal it then offers Fast or Thorough cleanup; pass `--cleanup skip` to never offer it. `--shortcut toggle|hold`, `--no-autostart`, `--skip-plugin` and `--no-transform-shortcut` adjust it. `setup_speech.py --destination ...` does the speech step alone.
 
-Check:
+The command prints four numbered stages and, on a terminal, a download progress bar. Unpacking the model takes a few minutes on a slow CPU. Check:
 
 ```bash
 mouthtype-linux doctor
@@ -62,7 +62,7 @@ Step 4 already installs the plugin. To install or refresh it alone:
 python3 tools/omarchy-plugin/install.py
 ```
 
-Copies the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype`, adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with the graphical session and is restarted if it stops, starts it now, and restarts the Omarchy shell. Desktop notifications are set to errors-only, since the pill already shows recording and transcribing. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
+Installs the plugin to `~/.config/omarchy/plugins/dstahl.mouthtype` through Omarchy's `omarchy plugin add` when it exists (otherwise by copying the files; `--copy` forces that), adds the Mouthtype widget to the right side of the bar in `~/.config/omarchy/shell.json` (after backing it up), enables the `mouthtype-linux` systemd user service so dictation starts with the graphical session and is restarted if it stops, starts it now, and restarts the Omarchy shell. Desktop notifications are set to errors-only, since the pill already shows recording and transcribing. Use `--no-autostart` to skip the login service and `--update` to refresh an existing installation.
 
 If a `mouthtype-linux.service` user unit already exists that the installer didn't create, it stops with "An existing Mouthtype user service was not changed"; remove or rename that unit and run it again.
 

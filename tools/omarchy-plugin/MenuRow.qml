@@ -1,38 +1,38 @@
 import QtQuick
-import qs.Commons
 
 Rectangle {
   id: root
+  property var style: MenuStyle {}
   property string label: ""
   property string detail: ""
   property bool checked: false
   property bool chevron: false
-  property string fontFamily: Style.font.family
+  property string fontFamily: style.font.family
   signal activated()
 
-  implicitWidth: Style.space(320)
-  implicitHeight: Style.space(28)
+  implicitWidth: root.style.space(320)
+  implicitHeight: root.style.space(28)
   color: pointer.containsMouse && enabled ? "#4F78C3" : "transparent"
 
   Text {
     id: tick
-    x: Style.space(9)
+    x: root.style.space(9)
     anchors.verticalCenter: parent.verticalCenter
     text: root.checked ? "✓" : ""
     color: pointer.containsMouse ? "#FFFFFF" : "#242424"
-    font.pixelSize: Style.font.body
+    font.pixelSize: root.style.font.body
     font.family: root.fontFamily
   }
 
   Text {
     id: caption
-    x: Style.space(30)
+    x: root.style.space(30)
     anchors.verticalCenter: parent.verticalCenter
-    width: parent.width - x - (root.detail !== "" ? Style.space(100) : Style.space(34))
+    width: parent.width - x - (root.detail !== "" ? root.style.space(100) : root.style.space(34))
     text: root.label
     elide: Text.ElideRight
     color: !root.enabled ? "#8B8B89" : pointer.containsMouse ? "#FFFFFF" : "#252525"
-    font.pixelSize: Style.font.body
+    font.pixelSize: root.style.font.body
     font.family: root.fontFamily
     renderType: Text.NativeRendering
   }
@@ -40,11 +40,11 @@ Rectangle {
   Text {
     visible: root.detail !== ""
     anchors.right: chevron.left
-    anchors.rightMargin: Style.space(5)
+    anchors.rightMargin: root.style.space(5)
     anchors.verticalCenter: parent.verticalCenter
     text: root.detail
     color: !root.enabled ? "#969694" : pointer.containsMouse ? "#FFFFFF" : "#777775"
-    font.pixelSize: Style.font.bodySmall
+    font.pixelSize: root.style.font.bodySmall
     font.family: root.fontFamily
   }
 
@@ -52,11 +52,11 @@ Rectangle {
     id: chevron
     visible: root.chevron
     anchors.right: parent.right
-    anchors.rightMargin: Style.space(12)
+    anchors.rightMargin: root.style.space(12)
     anchors.verticalCenter: parent.verticalCenter
     text: "›"
     color: pointer.containsMouse ? "#FFFFFF" : "#777775"
-    font.pixelSize: Style.font.title
+    font.pixelSize: root.style.font.title
     font.family: root.fontFamily
   }
 

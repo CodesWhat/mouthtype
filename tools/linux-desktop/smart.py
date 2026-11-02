@@ -25,6 +25,12 @@ for _index, _tens in enumerate(['thirty', 'forty', 'fifty', 'sixty', 'seventy', 
 ORDINAL_WORDS = {'first': 1, 'second': 2, 'third': 3, 'fourth': 4, 'fifth': 5, 'sixth': 6, 'seventh': 7,
                  'eighth': 8, 'ninth': 9, 'tenth': 10}
 
+SCALE_WORDS = {'hundred': 100, 'thousand': 1000, 'million': 1000000, 'billion': 1000000000}
+MONTHS = {'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november',
+          'december'}
+DIGIT_WORDS = {'zero': '0', 'oh': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5', 'six': '6',
+               'seven': '7', 'eight': '8', 'nine': '9'}
+
 STOP_WORDS = set('''the and but for nor yet are was were been being have has had does did doing will would shall should
 can could may might must not its his her hers him she they them their theirs you your yours our ours that this these
 those there here then than with without from into onto about over under out off just also very really kind sort like
@@ -77,6 +83,104 @@ def sanitize(output):
     return text.strip()
 
 
+MERIDIEM_TIME = re.compile(r'(?i)(?<![^\W_]|:)(\d{1,2})(?::(\d{2}))?[ \t]*([ap])[. \t]*m\b')
+QUOTE_MARKS = {'\u201c': '"', '\u201d': '"', '\u2018': "'", '\u2019': "'"}
+
+PREAMBLE = re.compile(
+    r"^(?:(?:sure|certainly|of course|okay|ok)[,!.]?\s+)?(?:here(?:'s|\u2019s| is| are)[ \t]+(?:(?:the|a|an|your)[ \t]+)?"
+    r"(?:[a-z-]+[ \t]+){0,3}(?:text|version|rewrite|result|output|translation|transcript|transcription|dictation|summary|"
+    r"draft|revision|edit)(?:[ \t]+(?:(?:of|for)[ \t]+(?:your|the)[ \t]+(?:selected[ \t]+)?(?:text|selection)|"
+    r"(?:in|with)[ \t]+(?:an?[ \t]+)?[a-z-]+[ \t]+tone))?|(?:the )?(?:corrected|edited|revised|rewritten|updated) "
+    r"(?:text|version)):[ \t]*(?:\n\s*|\s+)", re.I)
+
+
+def quote_key(char):
+    return QUOTE_MARKS.get(char, char)
+
+
+def quote_like(char):
+    return char == '"' or char in QUOTE_MARKS
+
+
+def starts_with_quote(source, opening):
+    if not source or not opening:
+        return False
+    return source.startswith(opening) or (quote_like(opening[0]) and quote_key(source[0]) == quote_key(opening[0]))
+
+
+def ends_with_quote(source, closing):
+    if not source or not closing:
+        return False
+    return source.endswith(closing) or (quote_like(closing[-1]) and quote_key(source[-1]) == quote_key(closing[-1]))
+
+
+def enclosed(text, source, opening, closing):
+    """The text between opening and closing when they wrap all of it and the source didn't start or end with them."""
+    if len(text) < len(opening) + len(closing) or not text.startswith(opening) or not text.endswith(closing):
+        return None
+    if starts_with_quote(source, opening) or ends_with_quote(source, closing):
+        return None
+    inner = text[len(opening):len(text) - len(closing)]
+    return None if opening in inner or closing in inner else inner
+
+
+def unfenced(text, source):
+    if not (text.startswith('```') and text.endswith('```')) or source.startswith('```') or source.endswith('```'):
+        return None
+    lines = text.split('\n')
+    if len(lines) < 3 or lines[-1].strip(' \t') != '```' or not re.fullmatch(r'```[A-Za-z0-9_+.-]*', lines[0]):
+        return None
+    inner = '\n'.join(lines[1:-1])
+    return None if '```' in inner else inner
+
+
+def spoken_words(text):
+    return [word.replace('\u2019', "'") for word in re.split(r"[^0-9A-Za-z\u00c0-\uffff'\u2019]+", text.lower()) if word]
+
+
+def contains_run(haystack, needle):
+    return len(needle) <= len(haystack) and any(
+        haystack[index:index + len(needle)] == needle for index in range(len(haystack) - len(needle) + 1))
+
+
+def without_preamble(text, source):
+    """Only framing that names the output. A lead-in the source already said (even after a self-correction) stays."""
+    match = PREAMBLE.match(text)
+    if not match or match.end() >= len(text):
+        return text
+    lead = spoken_words(match.group(0).strip())
+    if not lead or contains_run(spoken_words(source), lead):
+        return text
+    return text[match.end():]
+
+
+def unwrap_once(text, source):
+    inner = unfenced(text, source)
+    if inner is not None:
+        return inner
+    for tag in ('text', 'transcript'):
+        inner = enclosed(text, source, '<%s>' % tag, '</%s>' % tag)
+        if inner is not None:
+            return inner
+    for opening, closing in (('"', '"'), ('\u201c', '\u201d')):
+        inner = enclosed(text, source, opening, closing)
+        if inner is not None:
+            return inner
+    return without_preamble(text, source)
+
+
+def unwrap(output, source):
+    """Peel framing the model added around the whole output: fence, tag, quotes, preamble (up to four layers)."""
+    source = source.strip()
+    text = output.strip()
+    for _ in range(4):
+        following = unwrap_once(text, source).strip()
+        if following == text:
+            break
+        text = following
+    return text
+
+
 def restoring_terminal(source, output):
     """A dictation that ended in . ? or ! keeps that mark; the model may not turn a statement into a question."""
     wanted = next((char for char in reversed(source) if not char.isspace()), None)
@@ -86,6 +190,14 @@ def restoring_terminal(source, output):
     if not body or body[-1] == wanted or body[-1] not in '.?!':
         return output
     return body[:-1] + wanted
+
+
+def restoring_meridiem(source, output):
+    """The model's text with "3:15pm" written back as "3:15 PM" when the source spelled its times that way. The guard
+    would otherwise throw out a correct output over the casing of its AM or PM."""
+    if not re.search(r'(?<![^\W\d_])[AP]M(?![^\W\d_])', source):
+        return output
+    return re.sub(r'(?<=\d)[ \t]?([apAP])[mM](?![^\W_])', lambda m: ' ' + m.group(1).upper() + 'M', output)
 
 
 def later_cue(tokens, position):
@@ -137,6 +249,8 @@ def changed_intent(source, output):
         return values
     if not time_of_day(output) <= time_of_day(source):
         return 'time of day added or changed'
+    if not meridiem_pairs(output) <= meridiem_pairs(source) | spoken_meridiem_pairs(source):
+        return 'time of day added or changed'
     first_source = normalized_words(source)[:1]
     first_output = normalized_words(output)[:1]
     if first_source and first_source[0] in QUESTIONS and first_output and first_output[0] not in QUESTIONS:
@@ -144,20 +258,97 @@ def changed_intent(source, output):
     return None
 
 
+def meridiem_pairs(text):
+    """Each clock time that carries its own AM or PM, as "9:00a" or "5:30p", so a meridiem can't move to another time."""
+    return {'%d:%s%s' % (int(m.group(1)), m.group(2) or '00', m.group(3).lower()) for m in MERIDIEM_TIME.finditer(text)}
+
+
+def spoken_meridiem_pairs(text):
+    """Times spoken in words ("nine a m", "three thirty p m", "three oh five p m") as the same "H:MMl" pairs. The hour
+    and minutes come from the number words right before the AM or PM, so the letter belongs to that time only."""
+    found = set()
+    for match in re.finditer(r'(?i)(?<![^\W\d_])([ap])[. \t]*m\b', text):
+        before = [stripped(token).lower() for token in text[:match.start()].split()[-3:]]
+
+        def value(back):
+            return NUMBER_WORDS.get(before[-back]) if back <= len(before) else None
+
+        def is_hour(number):
+            return number is not None and 1 <= number <= 12
+        hour = None
+        minutes = 0
+        if len(before) >= 3 and before[-2] == 'oh' and value(1) is not None and 1 <= value(1) <= 9 and is_hour(value(3)):
+            hour, minutes = value(3), value(1)
+        elif value(1) is not None and 1 <= value(1) <= 9 and value(2) is not None and value(2) >= 20 and is_hour(value(3)):
+            hour, minutes = value(3), value(2) + value(1)
+        elif value(1) is not None and value(1) >= 10 and is_hour(value(2)):
+            hour, minutes = value(2), value(1)
+        elif is_hour(value(1)):
+            hour = value(1)
+        if hour is not None:
+            found.add('%d:%02d%s' % (hour, minutes, match.group(1).lower()))
+    return found
+
+
+def time_sequence(text):
+    """Each clock time that carries its own AM or PM, in reading order, as "9:00a"."""
+    return ['%d:%s%s' % (int(m.group(1)), m.group(2) or '00', m.group(3).lower()) for m in MERIDIEM_TIME.finditer(text)]
+
+
+def number_sequence(text):
+    """The numeric values a text states in reading order, one entry per digit spelling a quantity accepts."""
+    ordered = sorted(enumerate(quantities(text)), key=lambda item: (item[1][1], item[0]))
+    return [value for _, (accepted, _, _) in ordered for value in sorted(a for a in accepted if a[:1].isdigit())]
+
+
+def reordered(source, output):
+    """Whether two values both texts state swapped places: every occurrence of one came before every occurrence of the
+    other in the source, and after it in the output. A value repeated around another doesn't count as moved."""
+    def spans(values):
+        found = {}
+        for index, value in enumerate(values):
+            found[value] = (found[value][0] if value in found else index, index)
+        return found
+    before = spans(source)
+    after = spans(output)
+    shared = sorted(set(before) & set(after))
+    for offset, left in enumerate(shared):
+        for right in shared[offset + 1:]:
+            a, b, c, d = before[left], before[right], after[left], after[right]
+            if (a[1] < b[0] and d[1] < c[0]) or (b[1] < a[0] and c[1] < d[0]):
+                return True
+    return False
+
+
 def written_form(text):
-    digits = {'zero': '0', 'oh': '0', 'one': '1', 'two': '2', 'three': '3', 'four': '4', 'five': '5', 'six': '6',
-              'seven': '7', 'eight': '8', 'nine': '9'}
+    digits = DIGIT_WORDS
     digit_pattern = '(?:zero|oh|one|two|three|four|five|six|seven|eight|nine)'
     result = re.sub(r'(?<![^\W\d_])(?:[A-Z][ \t.-]+){1,}[A-Z](?![^\W\d_])', lambda m: ''.join(c for c in m.group(0) if c.isalpha()), text)
     result = re.sub(r'\b([A-Z]{2,})-([A-Z])\b', r'\1\2', result)
     result = re.sub(r'\bUSB[ \t]+([ABC])\b', r'USB\1', result)
+    # "at nine oh five" and "nine oh five p m" are the clock time 9:05. Without a time cue "nine oh five" stays the
+    # digit string 905, and the colon form never compares equal to the form without one.
+    hours = '(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)'
+
+    def clock_time(hour, digit):
+        return '%d:0%s' % (NUMBER_WORDS[hour.lower()], digits[digit.lower()])
+    result = re.sub(r'(?i)\b(at)\s+(%s)\s+oh\s+(%s)\b(?!\s+%s)' % (hours, digit_pattern, digit_pattern),
+                    lambda m: m.group(1) + ' ' + clock_time(m.group(2), m.group(3)), result)
+    result = re.sub(r'(?i)\b(%s)\s+oh\s+(%s)(?=\s+[ap][. \t]*m\b)' % (hours, digit_pattern),
+                    lambda m: clock_time(m.group(1), m.group(2)), result)
+    # Only the standard "A/B test" pair stands for the spoken letters "A B"; initials are left alone.
+    result = re.sub(r'(?<![^\W_/])A/B(?=[ \t]+tests?\b|[ \t]+testing\b)', 'AB', result)
 
     def spoken_digits(match):
-        words = match.group(0).lower().split()
+        words = [word for word in re.split(r'[\s,]+', match.group(0).lower()) if word]
         if 'oh' not in words and 'zero' not in words:
             return match.group(0)
         return ''.join(digits[w] for w in words)
-    result = re.sub(r'(?i)\b%s(?:\s+%s)+\b' % (digit_pattern, digit_pattern), spoken_digits, result)
+    # Spoken digit strings such as a phone number, with the speaker's pauses (commas) between groups.
+    result = re.sub(r'(?i)\b%s(?:,?\s+%s)+\b' % (digit_pattern, digit_pattern), spoken_digits, result)
+    # Written phone numbers: the hyphens are formatting.
+    result = re.sub(r'(?<![^\W_]|-)(\d{3})-(\d{3})-(\d{4})(?![^\W_]|-)', r'\1\2\3', result)
+    result = re.sub(r'(?<![^\W_]|-)(\d{3})-(\d{4})(?![^\W_]|-)', r'\1\2', result)
     for _ in range(4):
         result = re.sub(r'(?i)\b(\d+(?:\.\d+)*)\s+point\s+(%s|\d+)\b' % digit_pattern,
                         lambda m: m.group(1) + '.' + digits.get(m.group(2).lower(), m.group(2)), result)
@@ -179,7 +370,14 @@ def present(word, words):
     return any(other == word or (len(word) >= 5 and len(other) >= 5 and word[:4] == other[:4]) for other in words)
 
 
-def quantities(text):
+def ordinal_suffix(value):
+    if 11 <= value % 100 <= 13:
+        return 'th'
+    return {1: 'st', 2: 'nd', 3: 'rd'}.get(value % 10, 'th')
+
+
+def words_and_digits(text):
+    """Digit groups ("1,000" is 1000, "3:30" is 3 and 30) and small spoken numbers, each with its word position."""
     found = []
     for position, token in enumerate(text.split()):
         word = stripped(token).lower()
@@ -204,9 +402,172 @@ def quantities(text):
     return found
 
 
+def scale_phrases(text):
+    """The scale phrases a text states ("fifteen hundred", "five hundred thousand"): each one's value, its scale words
+    and the word positions it covers."""
+    phrases = []
+    state = {'total': 0, 'current': 0, 'scales': [], 'start': None, 'last': 0}
+
+    def finish():
+        if state['start'] is not None and state['scales']:
+            phrases.append((state['total'] + state['current'], state['scales'], range(state['start'], state['last'] + 1)))
+        state.update(total=0, current=0, scales=[], start=None)
+    tokens = text.split()
+    for position, token in enumerate(tokens):
+        word = stripped(token).lower()
+        digits = word.replace(',', '')
+        if word in SCALE_WORDS:
+            state['scales'].append(word)
+            if SCALE_WORDS[word] == 100:
+                state['current'] = max(state['current'], 1) * 100
+            else:
+                state['total'] += max(state['current'], 1) * SCALE_WORDS[word]
+                state['current'] = 0
+        elif word in NUMBER_WORDS or digits.isdigit():
+            state['current'] += NUMBER_WORDS[word] if word in NUMBER_WORDS else int(digits)
+        elif word == 'and' and state['start'] is not None:
+            # "five hundred and twelve" is one number; "five hundred and two thousand" is two.
+            def number(offset):
+                return NUMBER_WORDS.get(stripped(tokens[position + offset]).lower()) if position + offset < len(tokens) else None
+
+            def scale(offset):
+                return position + offset < len(tokens) and stripped(tokens[position + offset]).lower() in SCALE_WORDS
+            if number(1) is not None and (scale(2) or ((number(1) or 0) >= 20 and number(2) is not None and scale(3))):
+                finish()
+            continue
+        else:
+            finish()
+            continue
+        if state['start'] is None:
+            state['start'] = position
+        state['last'] = position
+        if not token[-1].isalnum():
+            finish()
+    finish()
+    return phrases
+
+
+def add_phrase_values(found, text):
+    """Spoken numbers that read as one value. Every word keeps its own spelling and digits, and the phrase adds one more
+    accepted spelling, so a wrong value for the phrase still fails.
+    "twenty four" also accepts 24, "twenty second" only "22nd", "fifteen hundred" 1500. A spoken year like "twenty
+    twenty six" is accepted as 2026 only next to a date cue. Scale words are checked separately by dropped_scale."""
+    tokens = text.split()
+    words = [stripped(token).lower() for token in tokens]
+
+    def breaks(index):
+        return not tokens[index][-1].isalnum()
+
+    def cardinal_ones(word):
+        value = NUMBER_WORDS.get(word)
+        return value if value is not None and 1 <= value <= 9 else None
+
+    def ordinal_ones(word):
+        value = ORDINAL_WORDS.get(word)
+        return value if value is not None and 1 <= value <= 9 else None
+
+    def is_tens(word):
+        return NUMBER_WORDS.get(word, 0) >= 20
+
+    def accept(spelling, positions):
+        for accepted, position, _ in found:
+            if position in positions:
+                accepted.add(spelling)
+
+    def is_month(index):
+        # "may" is a month only when written "May" in the middle of a sentence, never the verb.
+        if words[index] not in MONTHS:
+            return False
+        if words[index] != 'may':
+            return True
+        return tokens[index][:1].isupper() and index > 0 and tokens[index - 1][-1] not in '.!?'
+
+    def has_year_cue(start, end):
+        if any(is_month(index) for index in range(max(0, start - 3), start)):
+            return True
+        if start == 0 or words[start - 1] not in ('in', 'since', 'by', 'year'):
+            return False
+        return breaks(end) or end == len(words) - 1
+    index = 0
+    while index < len(words):
+        first = NUMBER_WORDS.get(words[index])
+        if first is None:
+            index += 1
+            continue
+        # A spoken year: "twenty twenty six", "nineteen eighty four", "twenty oh five".
+        if first in (19, 20) and not breaks(index) and index + 1 < len(words):
+            year = None
+            length = 0
+            following = words[index + 1]
+            second = NUMBER_WORDS.get(following)
+            if following == 'oh' and index + 2 < len(words) and cardinal_ones(words[index + 2]) is not None:
+                year = first * 100 + cardinal_ones(words[index + 2])
+                length = 3
+            elif second is not None and 10 <= second <= 99:
+                year = first * 100 + second
+                length = 2
+                if is_tens(following) and not breaks(index + 1) and index + 2 < len(words) \
+                        and cardinal_ones(words[index + 2]) is not None:
+                    year += cardinal_ones(words[index + 2])
+                    length = 3
+            if year is not None and has_year_cue(index, index + length - 1):
+                accept(str(year), range(index, index + length))
+                index += length
+                continue
+        value = first
+        length = 1
+        if is_tens(words[index]) and not breaks(index) and index + 1 < len(words):
+            if cardinal_ones(words[index + 1]) is not None:
+                value += cardinal_ones(words[index + 1])
+                length = 2
+            elif ordinal_ones(words[index + 1]) is not None:
+                total = value + ordinal_ones(words[index + 1])
+                accept(str(total) + ordinal_suffix(total), range(index, index + 2))
+                index += 2
+                continue
+        if length > 1:
+            accept(str(value), range(index, index + length))
+        index += length
+    for value, _, positions in scale_phrases(text):
+        accept(str(value), positions)
+
+
+def quantities(text):
+    """Digit groups and spoken numbers with their phrase values, each with its word position."""
+    found = words_and_digits(text)
+    add_phrase_values(found, text)
+    return found
+
+
+def dropped_scale(source, output):
+    """A scale word ("hundred", "thousand", "million", "billion") the output neither keeps nor folds into the value of
+    the number it scales, such as "five hundred thousand dollars" written "$500"."""
+    words = {}
+    for token in output.split():
+        word = stripped(token).lower()
+        words[word] = words.get(word, 0) + 1
+    values = {}
+    for accepted, _, _ in words_and_digits(output):
+        for spelling in accepted:
+            if spelling.isdigit():
+                values[int(spelling)] = values.get(int(spelling), 0) + 1
+    # Each scale phrase in the source needs its own written value or its own scale words in the output. One "thousand"
+    # elsewhere in the text can't stand in for a second dropped one.
+    for value, scales, _ in scale_phrases(source):
+        if values.get(value, 0) > 0:
+            values[value] -= 1
+        elif all(words.get(scale, 0) > 0 for scale in scales):
+            for scale in scales:
+                words[scale] -= 1
+        else:
+            return next(scale for scale in scales if words.get(scale, 0) <= 0)
+    return None
+
+
 def missing_number(source, output):
     spellings = set()
-    for accepted, _, _ in quantities(output):
+    # The output's own phrase values are left out, or "500 thousand" would vouch for "five hundred thousand".
+    for accepted, _, _ in words_and_digits(output):
         spellings |= accepted
     spellings |= {stripped(token).lower() for token in output.split()}
     tokens = source.split()
@@ -290,6 +651,13 @@ def rejection(source, output):
     number = missing_number(comparable_source, comparable_output)
     if number is not None:
         return 'number %s missing or changed' % number
+    scale = dropped_scale(comparable_source, comparable_output)
+    if scale is not None:
+        return 'scale word %s missing or changed' % scale
+    if reordered(number_sequence(comparable_source), number_sequence(comparable_output)):
+        return 'number order changed'
+    if reordered(time_sequence(comparable_source), time_sequence(comparable_output)):
+        return 'time order changed'
     name = missing_name(comparable_source, comparable_output)
     if name is not None:
         return 'name "%s" missing' % name
@@ -313,6 +681,6 @@ def eligible(text):
 
 def check(source, output):
     """The accepted text or None, with the rejection reason."""
-    cleaned = restoring_terminal(source, sanitize(output))
+    cleaned = restoring_meridiem(source, restoring_terminal(source, unwrap(sanitize(output), source)))
     reason = rejection(source, cleaned)
     return (None, reason) if reason else (cleaned, None)

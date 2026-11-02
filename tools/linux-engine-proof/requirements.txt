@@ -1,2 +1,8 @@
-sherpa-onnx==1.13.8
-sherpa-onnx-core==1.13.8
+sherpa-onnx==1.13.8 \
+    --hash=sha256:e4dc9c672a089c94c7bcb2439c2413928de58b98418907dc639c07dd557eacd7 \
+    --hash=sha256:94fd1476b56ed36b851da8db9bd5144e92f669007ad54e0d8094913e4fbf1418 \
+    --hash=sha256:6949773017647febc0c3696dffb2c67dd3febd4737b87e3dd135a42773704a06 \
+    --hash=sha256:0e5d870fb0648befb94e260c11de4cf4b293b2a90a63e3a6a2869be698927bc4 \
+    --hash=sha256:97309e4b5d9850490085da61e35b0fca002a39ec9da93cd9e21d2d0dcc1cc62a
+sherpa-onnx-core==1.13.8 \
+    --hash=sha256:4da90acf435373d7b2ba9cc0be806e7e274d28f63f5780880b5dea6721626e36

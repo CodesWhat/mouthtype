@@ -29,7 +29,9 @@ class DoctorTests(unittest.TestCase):
     def diagnose(self, **kwargs):
         from doctor import diagnose
         defaults = dict(system='Linux', machine='x86_64', which=lambda command: '/usr/bin/' + command,
-                        runtime_check=lambda python: True, service_check=lambda path: {'state': 'idle'})
+                        runtime_check=lambda python: True, service_check=lambda path: {'state': 'idle'},
+                        source_lookup=lambda: [dict(name='built-in', description='Built-in', default=True)],
+                        mute_check=lambda: False)
         return diagnose(self.config, self.runtime, **(defaults | kwargs))
 
     def check(self, report, name):
@@ -43,6 +45,90 @@ class DoctorTests(unittest.TestCase):
         self.assertEqual(self.check(report, 'models')['status'], 'ok')
         self.assertFalse(self.runtime.exists())
         self.assertEqual(before, {str(p): p.read_bytes() for p in self.root.iterdir() if p.is_file()})
+
+    SOURCES = [dict(name='built-in', description='Built-in', default=True), dict(name='usb', description='USB', default=False)]
+
+    def test_microphone_ok_names_the_default_source(self):
+        item = self.check(self.diagnose(source_lookup=lambda: self.SOURCES, mute_check=lambda: False), 'microphone')
+        self.assertEqual(item['status'], 'ok')
+        self.assertIn('Built-in', item['detail'])
+
+    def test_no_source_is_an_error(self):
+        report = self.diagnose(source_lookup=lambda: [])
+        self.assertEqual(self.check(report, 'microphone')['status'], 'error')
+        self.assertFalse(report['ready'])
+
+    def test_pipewire_not_answering_is_a_warning(self):
+        def fail():
+            raise OSError('pw-dump failed')
+        report = self.diagnose(source_lookup=fail)
+        self.assertEqual(self.check(report, 'microphone')['status'], 'warning')
+        self.assertTrue(report['ready'])
+
+    def test_missing_configured_target_warns_and_still_ready(self):
+        self.config.write_text(json.dumps({'engine_config': 'engines.json', 'python': sys.executable, 'capture_target': 'gone'}))
+        report = self.diagnose(source_lookup=lambda: self.SOURCES)
+        item = self.check(report, 'microphone')
+        self.assertEqual(item['status'], 'warning')
+        self.assertIn('default', item['detail'])
+        self.assertTrue(report['ready'])
+
+    def test_present_configured_target_is_ok(self):
+        self.config.write_text(json.dumps({'engine_config': 'engines.json', 'python': sys.executable, 'capture_target': 'usb'}))
+        self.assertEqual(self.check(self.diagnose(source_lookup=lambda: self.SOURCES), 'microphone')['status'], 'ok')
+
+    def test_muted_default_is_a_warning(self):
+        item = self.check(self.diagnose(source_lookup=lambda: self.SOURCES, mute_check=lambda: True), 'microphone')
+        self.assertEqual(item['status'], 'warning')
+        self.assertIn('muted', item['detail'])
+
+    def test_llama_server_missing_is_a_warning_with_the_build_command(self):
+        report = self.diagnose(which=lambda command: None if command == 'llama-server' else '/usr/bin/' + command)
+        item = self.check(report, 'llama_server')
+        self.assertEqual(item['status'], 'warning')
+        self.assertIn('setup_cleanup.py', item['action'])
+        self.assertTrue(report['ready'])
+
+    def test_llama_server_reports_version_and_backend(self):
+        from setup_cleanup import PINS
+        version = 'version: 1 (commit ' + PINS['llama']['revision'][:9] + ')'
+        report = self.diagnose(llama_probe=lambda server: (version, [], ''))
+        item = self.check(report, 'llama_server')
+        self.assertEqual(item['status'], 'ok')
+        self.assertIn('backend: CPU', item['detail'])
+
+    def test_llama_server_other_revision_is_a_warning(self):
+        report = self.diagnose(llama_probe=lambda server: ('version: 0.6.0-dev (build 11429, commit d812350493)', [], ''))
+        item = self.check(report, 'llama_server')
+        self.assertEqual(item['status'], 'warning')
+        self.assertIn('not the pinned revision', item['detail'])
+
+    def test_llama_server_without_a_backend_is_not_usable(self):
+        report = self.diagnose(llama_probe=lambda server: ('v', [], 'no compute backend loaded'))
+        self.assertEqual(self.check(report, 'llama_server')['status'], 'warning')
+
+    def test_probe_reads_version_and_flags_missing_backends(self):
+        from doctor import probe_llama_server
+        from unittest.mock import Mock
+
+        def fake(output):
+            def run(command, **kwargs):
+                if '--version' in command:
+                    return Mock(returncode=0, stdout='version: 1 (commit abcdef1)\n', stderr='')
+                return output
+            return run
+        ok = probe_llama_server('/x', run=fake(Mock(returncode=0, stdout='Available devices:\n  Vulkan0: GPU (8000 MiB)\n', stderr='')))
+        self.assertEqual(ok, ('version: 1 (commit abcdef1)', ['Vulkan0: GPU (8000 MiB)'], ''))
+        none = probe_llama_server('/x', run=fake(Mock(returncode=0, stdout='Available devices:\n  (none)\n', stderr='')))
+        self.assertEqual(none[1:], ([], ''))
+        broken = probe_llama_server('/x', run=fake(Mock(returncode=1, stdout='', stderr='load_backend: no backends are loaded')))
+        self.assertIn('no compute backend', broken[2])
+
+    def test_missing_hyprctl_is_a_warning_in_recovery_mode_not_an_error(self):
+        report = self.diagnose(which=lambda command: None if command == 'hyprctl' else '/usr/bin/' + command)
+        self.assertTrue(report['ready'])
+        self.assertEqual(self.check(report, 'hyprland')['status'], 'warning')
+        self.assertEqual(self.check(self.diagnose(), 'python')['status'], 'ok')
 
     def test_missing_configuration_explains_setup(self):
         self.config.unlink()
@@ -73,6 +159,14 @@ class DoctorTests(unittest.TestCase):
         report = self.diagnose(which=lambda command: None)
         self.assertFalse(report['ready'])
         self.assertIn('pipewire', self.check(report, 'capture')['action'].lower())
+
+    def test_errors_only_notifications_are_checked_like_true_and_off_is_skipped(self):
+        for value, present in (('errors', True), (True, True), (False, False)):
+            with self.subTest(value=value):
+                self.config.write_text(json.dumps({'engine_config': 'engines.json', 'python': sys.executable, 'notifications': value}))
+                report = self.diagnose(which=lambda command: None if command == 'notify-send' else '/bin/' + command)
+                names = [item['name'] for item in report['checks']]
+                self.assertEqual('notifications' in names, present)
 
     def test_unavailable_runtime_and_wrong_platform_block(self):
         self.assertFalse(self.diagnose(runtime_check=lambda _: False)['ready'])
