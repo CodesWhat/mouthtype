@@ -41,6 +41,10 @@ jobs:
 
   # Headless tests and offscreen Settings renders run on PRs and after merge. Desktop tests run locally.
   test:
+    # id-token lets the Codecov upload authenticate with OIDC, so there is no repo secret. Fork PRs get no id-token.
+    permissions:
+      contents: read
+      id-token: write
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
     runs-on: xcode-27
     timeout-minutes: 60
@@ -80,3 +84,14 @@ jobs:
           name: swift-coverage
           path: coverage-report.txt
           if-no-files-found: ignore
+
+      # Non-gating: the 80% floor in scripts/swift-coverage.sh is the gate, so a Codecov outage never fails this job.
+      - name: Upload coverage to Codecov
+        if: ${{ !cancelled() && hashFiles('coverage.lcov') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
+        with:
+          files: coverage.lcov
+          disable_search: true
+          use_oidc: true
+          fail_ci_if_error: false
+        continue-on-error: true
