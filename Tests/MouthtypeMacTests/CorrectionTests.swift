@@ -537,7 +537,7 @@ private struct Rig {
 }
 
 @MainActor
-@Suite struct SpellingCardTests {
+@Suite(.timeLimit(.minutes(1))) struct SpellingCardTests {
     private final class Surface: CardSurface {
         var states: [CardViewState?] = []
         func render(_ state: CardViewState?) { states.append(state) }
@@ -566,6 +566,14 @@ private struct Rig {
         for _ in 0..<20 { await Task.yield() }
     }
 
+    /// Waits, up to two seconds, for work on other tasks to reach `condition`.
+    private func until(_ condition: () -> Bool) async {
+        for _ in 0..<400 where !condition() {
+            try? await Task.sleep(for: .milliseconds(5))
+            await settle()
+        }
+    }
+
     @Test func theRememberCardHasItsHeaderBodyAndButtons() {
         let card = DeliveryCard.rememberSpelling(pair)
         #expect(card.header == "Remember this spelling?" && card.pair == pair && card.transcript == nil)
@@ -582,11 +590,12 @@ private struct Rig {
         }
         presenter.present(.rememberSpelling(pair))
         presenter.perform(.save)
-        await settle()
+        // The offer's own timer and the confirmation hold are both sleeping.
+        await until { clock.sleeperCount == 2 }
         #expect(log.accepted == [.rememberSpelling] && log.resolutions == [.accepted])
         #expect(surface.visible?.copied == true)
         clock.advance(by: 0.95)
-        await settle()
+        await until { surface.visible == nil }
         #expect(surface.visible == nil && log.resolutions == [.accepted])
     }
 
@@ -617,28 +626,29 @@ private struct Rig {
     @Test func theCardDismissesItselfAfterEightSecondsAsNotNow() async {
         let (presenter, surface, clock, log) = rig()
         presenter.present(.rememberSpelling(pair))
-        await settle()
+        await until { clock.sleeperCount == 1 }
         clock.advance(by: 7.9)
         await settle()
         #expect(surface.visible != nil && log.resolutions.isEmpty)
         clock.advance(by: 0.2)
-        await settle()
+        await until { surface.visible == nil }
         #expect(surface.visible == nil && log.resolutions == [.timedOut])
     }
 
     @Test func aStaleTimerCannotDismissALaterCard() async {
         let (presenter, surface, clock, log) = rig()
         presenter.present(.rememberSpelling(pair))
-        await settle()
+        await until { clock.sleeperCount == 1 }
         clock.advance(by: 5)
         presenter.present(.rememberSpelling(SpellingPair(heard: "praya", corrected: "Priya")))
-        await settle()
+        // The stale timer is still sleeping and the new card's timer joins it.
+        await until { clock.sleeperCount == 2 }
         #expect(log.resolutions == [.replaced])
         clock.advance(by: 4)
         await settle()
         #expect(surface.visible?.card.pair?.heard == "praya")
         clock.advance(by: 4.1)
-        await settle()
+        await until { surface.visible == nil }
         #expect(surface.visible == nil && log.resolutions == [.replaced, .timedOut])
     }
 
