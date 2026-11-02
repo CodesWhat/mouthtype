@@ -1,0 +1,257 @@
+{
+  "problem": null,
+  "rows": [
+    {
+      "row": 2,
+      "heard": "word 1 spoken",
+      "written": "Word1",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 3,
+      "heard": "word 2 spoken",
+      "written": "Word2",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 4,
+      "heard": "word 3 spoken",
+      "written": "Word3",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 5,
+      "heard": "word 4 spoken",
+      "written": "Word4",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 6,
+      "heard": "word 5 spoken",
+      "written": "Word5",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 7,
+      "heard": "word 6 spoken",
+      "written": "Word6",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 8,
+      "heard": "word 7 spoken",
+      "written": "Word7",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 9,
+      "heard": "word 8 spoken",
+      "written": "Word8",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 10,
+      "heard": "word 9 spoken",
+      "written": "Word9",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 11,
+      "heard": "word 10 spoken",
+      "written": "Word10",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 12,
+      "heard": "word 11 spoken",
+      "written": "Word11",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 13,
+      "heard": "word 12 spoken",
+      "written": "Word12",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 14,
+      "heard": "word 13 spoken",
+      "written": "Word13",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 15,
+      "heard": "word 14 spoken",
+      "written": "Word14",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 16,
+      "heard": "word 15 spoken",
+      "written": "Word15",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 17,
+      "heard": "word 16 spoken",
+      "written": "Word16",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 18,
+      "heard": "word 17 spoken",
+      "written": "Word17",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 19,
+      "heard": "word 18 spoken",
+      "written": "Word18",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 20,
+      "heard": "word 19 spoken",
+      "written": "Word19",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 21,
+      "heard": "word 20 spoken",
+      "written": "Word20",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 22,
+      "heard": "word 21 spoken",
+      "written": "Word21",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 23,
+      "heard": "word 22 spoken",
+      "written": "Word22",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 24,
+      "heard": "word 23 spoken",
+      "written": "Word23",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 25,
+      "heard": "word 24 spoken",
+      "written": "Word24",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 26,
+      "heard": "word 25 spoken",
+      "written": "Word25",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 27,
+      "heard": "word 26 spoken",
+      "written": "Word26",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 28,
+      "heard": "word 27 spoken",
+      "written": "Word27",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 29,
+      "heard": "word 28 spoken",
+      "written": "Word28",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 30,
+      "heard": "word 29 spoken",
+      "written": "Word29",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 31,
+      "heard": "word 30 spoken",
+      "written": "Word30",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    }
+  ],
+  "counts": {
+    "add": 30,
+    "existing": 0,
+    "duplicate": 0,
+    "invalid": 0
+  },
+  "can_import": true,
+  "file": "many.csv",
+  "digest": "d354f25fd9710e744bbecbdb7160228c38961811eea9c523912c770a18866a2b",
+  "csv_digest": "53b6859d4ab6eca0c11ca2238aa1f3bb76b80d721abfa6bfb7df0cf70de64cdd",
+  "kind": "spellings",
+  "configured": true
+}

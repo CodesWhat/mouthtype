@@ -1,0 +1,17 @@
+module MouthtypeDesign
+singleton Theme 1.0 Theme.qml
+singleton Type 1.0 Type.qml
+Icon 1.0 Icon.qml
+DesignCard 1.0 DesignCard.qml
+DesignRow 1.0 DesignRow.qml
+DesignSwitch 1.0 DesignSwitch.qml
+DesignPopup 1.0 DesignPopup.qml
+DesignSegmented 1.0 DesignSegmented.qml
+DesignKbd 1.0 DesignKbd.qml
+DesignButton 1.0 DesignButton.qml
+DesignPrimaryButton 1.0 DesignPrimaryButton.qml
+DesignSecondaryButton 1.0 DesignSecondaryButton.qml
+DesignEyebrow 1.0 DesignEyebrow.qml
+DesignPageHeader 1.0 DesignPageHeader.qml
+DesignNavRow 1.0 DesignNavRow.qml
+DesignProgress 1.0 DesignProgress.qml
