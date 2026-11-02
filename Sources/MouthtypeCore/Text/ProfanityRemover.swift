@@ -70,6 +70,13 @@ public struct ProfanityRemover: Sendable {
         "should", "might", "must", "did", "does", "do", "'s", "'re", "'m",
     ]
 
+    /// Words that put a locative "there" in the subject ("Being there is hard"), where an existential "there" would
+    /// follow a sentence break or a clause opener instead.
+    private static let locativeLeaders: Set<String> = [
+        "being", "getting", "going", "living", "staying", "working", "standing", "sitting", "waiting", "coming", "out", "over",
+        "back",
+    ]
+
     /// Loads the tagger's language model off the dictation path, so the first intensifier doesn't spend the cleanup
     /// time budget on it.
     public static func prewarm() {
@@ -552,7 +559,9 @@ public struct ProfanityRemover: Sendable {
         func hasExistentialThere(_ k: Int) -> Bool {
             var at = k - 2
             while at >= 0, adjacent(at) {
-                if words[at].lower == "there" { return true }
+                if words[at].lower == "there" {
+                    return !(at > 0 && adjacent(at - 1) && ProfanityRemover.locativeLeaders.contains(words[at - 1].lower))
+                }
                 guard ProfanityRemover.auxiliaries.contains(words[at].lower) else { return false }
                 at -= 1
             }

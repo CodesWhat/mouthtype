@@ -82,6 +82,7 @@ Verify each of these:
 - The downloaded DMG’s signature/staple/Gatekeeper result, and the app inside it after mounting.
 - The hosted feed signature.
 - The visible website.
+- `docs/USAGE.md` and `docs/guides/getting-started.md` name the version just published as the latest release. The docs site syncs both at build, so republish it in step 5b after changing them.
 
 > [!NOTE]
 > A unit test, HTTP 200, signed feed or updater-state test does not prove installation over an older live app. Coordinate an actual update-install/relaunch test separately; never use Scott’s running app for an uncoordinated update. Existing alpha.1–3 users must manually install the first updater-enabled build once.

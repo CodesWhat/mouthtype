@@ -20,3 +20,13 @@ test("crawl discovery lists canonical indexable pages and docs text", async ({ r
   expect(llms.status()).toBe(200);
   expect(await llms.text()).toContain("https://docs.mouthtype.app/llms-full.txt");
 });
+
+test("security.txt is served as plain text with its canonical URL", async ({ request }) => {
+  const response = await request.get("/.well-known/security.txt");
+  expect(response.status()).toBe(200);
+  expect(response.headers()["content-type"]).toContain("text/plain");
+  const body = await response.text();
+  expect(body).toContain("Contact: mailto:security@codeswhat.com");
+  expect(body).toContain("Canonical: https://mouthtype.app/.well-known/security.txt");
+  expect(body).toMatch(/^Expires: \d{4}-\d{2}-\d{2}T[\d:.]+Z$/m);
+});
