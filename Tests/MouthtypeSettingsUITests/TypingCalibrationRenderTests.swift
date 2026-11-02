@@ -12,6 +12,15 @@ import Testing
         func advance(_ seconds: TimeInterval) { lock.withLock { value += seconds } }
     }
 
+    @Test func onlyTheHostWindowResigningKeyCancels() {
+        let host = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: false)
+        let other = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: false)
+        #expect(TypingCalibrationCard.shouldCancel(onResign: host, host: host))
+        #expect(!TypingCalibrationCard.shouldCancel(onResign: other, host: host))
+        #expect(!TypingCalibrationCard.shouldCancel(onResign: host, host: nil))
+        #expect(!TypingCalibrationCard.shouldCancel(onResign: nil, host: host))
+    }
+
     @Test func calibrationCardRendersInEveryStateLightAndDark() throws {
         FontRegistry.registerBundledFonts()
         let name = "TypingCalibrationRenderTests-\(UUID().uuidString)"

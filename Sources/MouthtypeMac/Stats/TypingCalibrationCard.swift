@@ -7,6 +7,14 @@ import SwiftUI
 struct TypingCalibrationCard: View {
     var model: TypingCalibrationModel
     @FocusState private var fieldFocused: Bool
+    /// The window hosting this card, so only its losing key status cancels a run.
+    @State private var hostWindow: NSWindow?
+
+    /// Another window (the menu bar menu, a panel) resigning key must not cancel a run in this one.
+    static func shouldCancel(onResign resigning: AnyObject?, host: NSWindow?) -> Bool {
+        guard let host, let resigning else { return false }
+        return resigning === host
+    }
 
     private var baselineText: String {
         let wpm = Int(model.baseline)
@@ -39,7 +47,14 @@ struct TypingCalibrationCard: View {
         }
         .onDisappear { model.close() }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in model.cancel() }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { _ in model.cancel() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { note in
+            if Self.shouldCancel(onResign: note.object as AnyObject?, host: hostWindow) { model.cancel() }
+        }
+        .background(HostWindowReader(window: $hostWindow))
+        // The field is disabled until the run is armed, so focus it once it has been enabled.
+        .onChange(of: model.phase) { _, phase in
+            if phase == .ready { DispatchQueue.main.async { fieldFocused = true } }
+        }
     }
 
     private var exercise: some View {
@@ -107,15 +122,14 @@ struct TypingCalibrationCard: View {
     @ViewBuilder private var buttons: some View {
         switch model.phase {
         case .idle, .cancelled, .tooShort, .pasted:
-            Button("Start") {
-                model.start()
-                fieldFocused = true
-            }
-            .buttonStyle(.designPrimary).fixedSize()
-            .accessibilityLabel("Start the one minute typing test")
-            .accessibilityIdentifier("typing-start")
+            Button("Start") { model.start() }
+                .buttonStyle(.designPrimary).fixedSize()
+                .accessibilityLabel("Start the one minute typing test")
+                .accessibilityIdentifier("typing-start")
             if model.phase != .idle {
-                Button("Retry") { model.retry() }.buttonStyle(.designSecondary).fixedSize()
+                Button("Retry") {
+                    model.retry(); model.start()
+                }.buttonStyle(.designSecondary).fixedSize()
                     .accessibilityLabel("Retry the typing test").accessibilityIdentifier("typing-retry")
             }
         case .ready, .running:
@@ -127,8 +141,32 @@ struct TypingCalibrationCard: View {
         case .finished:
             Button("Use this result") { model.accept() }.buttonStyle(.designPrimary).fixedSize()
                 .accessibilityLabel("Use this result as your typing speed").accessibilityIdentifier("typing-accept")
-            Button("Retry") { model.retry() }.buttonStyle(.designSecondary).fixedSize()
+            Button("Retry") {
+                model.retry(); model.start()
+            }.buttonStyle(.designSecondary).fixedSize()
                 .accessibilityLabel("Retry the typing test").accessibilityIdentifier("typing-retry")
+        }
+    }
+}
+
+/// Reports the window that hosts the view it sits behind.
+private struct HostWindowReader: NSViewRepresentable {
+    @Binding var window: NSWindow?
+
+    func makeNSView(context: Context) -> NSView { WindowProbe { window = $0 } }
+    func updateNSView(_ view: NSView, context: Context) {}
+
+    final class WindowProbe: NSView {
+        let onWindow: (NSWindow?) -> Void
+        init(onWindow: @escaping (NSWindow?) -> Void) {
+            self.onWindow = onWindow
+            super.init(frame: .zero)
+        }
+        required init?(coder: NSCoder) { nil }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            let found = window
+            DispatchQueue.main.async { [onWindow] in onWindow(found) }
         }
     }
 }
