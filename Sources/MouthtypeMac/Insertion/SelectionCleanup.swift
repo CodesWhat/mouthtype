@@ -161,13 +161,69 @@ private final class OnceResume: @unchecked Sendable {
     }
 
     func replace(_ original: SelectedText, with replacement: String) -> Bool {
-        guard !replacement.isEmpty, replacement.utf16.count <= 16_000,
-            (try? capture()) == original, let element = original.element
-        else { return false }
+        guard !replacement.isEmpty, replacement.utf16.count <= 16_000, let element = original.element else {
+            Log.capture.info(
+                "selection replace refused: replacement length \(replacement.utf16.count, privacy: .public), element \(original.element == nil ? "nil" : "present", privacy: .public)"
+            )
+            return false
+        }
+        let current: SelectedText?
+        do {
+            current = try capture()
+        } catch {
+            current = nil
+            let facts = captureDiagnosis()
+            Log.capture.info(
+                "selection replace refused: capture threw \(String(describing: error), privacy: .public); \(facts, privacy: .public)"
+            )
+        }
+        guard let current else { return false }
+        guard current == original else {
+            Log.capture.info(
+                "selection replace refused: capture differed from original in \(Self.differences(original, current), privacy: .public)"
+            )
+            return false
+        }
         // The captured reference kept the capture's shortened timeout. 0 restores the system default the insertion path uses.
         setTimeout(element, 0)
         // The user explicitly accepts this edit. No clipboard paste, keyboard events or retry.
-        return writeText(element, replacement)
+        let wrote = writeText(element, replacement)
+        Log.capture.info(
+            "selection replace \(wrote ? "wrote" : "refused: writeText returned false", privacy: .public); pid \(original.pid, privacy: .public), range \(original.range.location, privacy: .public)+\(original.range.length, privacy: .public), replacement length \(replacement.utf16.count, privacy: .public)"
+        )
+        return wrote
+    }
+
+    /// Field names only, never text.
+    private static func differences(_ original: SelectedText, _ current: SelectedText) -> String {
+        var fields: [String] = []
+        if original.pid != current.pid { fields.append("pid \(original.pid) vs \(current.pid)") }
+        if original.element != current.element { fields.append("element") }
+        if original.range != current.range {
+            fields.append(
+                "range \(original.range.location)+\(original.range.length) vs \(current.range.location)+\(current.range.length)")
+        }
+        if original.text != current.text {
+            fields.append("text (length \(original.text.utf16.count) vs \(current.text.utf16.count))")
+        }
+        return fields.isEmpty ? "nothing" : fields.joined(separator: ", ")
+    }
+
+    /// Re-reads the focus and reports which `capture()` guard fails. Facts only: pids, roles and lengths.
+    private func captureDiagnosis() -> String {
+        let snapshot = focus.selectionSnapshot()
+        var facts = [
+            "isSecure \(snapshot.isSecure)", "secureInput \(focus.isSecureInputEnabled)",
+            "pid \(snapshot.pid.map(String.init) ?? "nil")",
+            "focusedOwnerPID \(snapshot.focusedOwnerPID.map(String.init) ?? "nil")",
+            "element \(snapshot.element == nil ? "nil" : "present")", "role \(snapshot.role ?? "nil")",
+        ]
+        if let element = snapshot.element {
+            let range = readRange(element)
+            facts.append("range \(range.map { "\($0.location)+\($0.length)" } ?? "nil")")
+            facts.append("textLength \(readText(element).map { String($0.utf16.count) } ?? "nil")")
+        }
+        return facts.joined(separator: ", ")
     }
 
     private static func selectedRange(_ element: FocusedElement) -> NSRange? {
