@@ -181,6 +181,16 @@ private let paragraph =
         #expect(judge(String(repeating: "b", count: 8001), selection: long) == .refused(.tooLong))
     }
 
+    @Test func replacementIsCappedAtWhatTheEditorWillWrite() {
+        #expect(VoiceEditGuard.maximumLength(forSelectionLength: 8000) == 16_000)
+        let selection = String(repeating: "word ", count: 1600)
+        #expect(judge(String(repeating: "c", count: 16_000), selection: selection) == .accepted(String(repeating: "c", count: 16_000)))
+        #expect(judge(String(repeating: "c", count: 16_001), selection: selection) == .refused(.tooLong))
+        // Under the character cap but over it in UTF-16 units.
+        let astral = String(repeating: "😀", count: 8_001)
+        #expect(judge(astral, selection: selection) == .refused(.tooLong))
+    }
+
     @Test func shortenRequiresAShorterOutput() {
         #expect(judge(paragraph + " Really.", instruction: "make this shorter") == .refused(.notShorter))
         #expect(judge("We met Tuesday; the schedule was too tight.", instruction: "make this shorter") == .accepted("We met Tuesday; the schedule was too tight."))

@@ -27,8 +27,14 @@ public enum VoiceEditVerdict: Sendable, Equatable {
 /// a requested rephrase can differ heavily from the selection, so there is no similarity or kept-words threshold here.
 /// The checks are about the output being a plausible edit and not a reply, an echo or a runaway.
 public enum VoiceEditGuard {
-    /// Characters allowed for the output: four times the selection, or 500 more than it, whichever is larger.
-    public static func maximumLength(forSelectionLength length: Int) -> Int { max(4 * length, length + 500) }
+    /// The most UTF-16 units a replacement may have. The editor refuses to write more, so the guard refuses first.
+    public static let maximumReplacementUnits = 16_000
+
+    /// Characters allowed for the output: four times the selection, or 500 more than it, whichever is larger, and never
+    /// more than `maximumReplacementUnits`.
+    public static func maximumLength(forSelectionLength length: Int) -> Int {
+        min(max(4 * length, length + 500), maximumReplacementUnits)
+    }
 
     public static func judge(selection: String, instruction: String, output: String) -> VoiceEditVerdict {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -40,7 +46,9 @@ public enum VoiceEditGuard {
             return .refused(.echoesPromptFraming)
         }
         if echoes(instruction: instruction, in: trimmed, selection: selection) { return .refused(.echoesInstruction) }
-        if output.count > maximumLength(forSelectionLength: selection.count) { return .refused(.tooLong) }
+        if output.count > maximumLength(forSelectionLength: selection.count) || trimmed.utf16.count > maximumReplacementUnits {
+            return .refused(.tooLong)
+        }
         let source = selection.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed == source { return .refused(.unchanged) }
         if asksToShorten(instruction), trimmed.count >= source.count { return .refused(.notShorter) }

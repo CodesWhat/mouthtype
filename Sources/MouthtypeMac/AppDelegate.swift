@@ -421,7 +421,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         dictation.canStartRecording = { [weak self] in
             guard self?.isTerminating != true, self?.recovery?.isRecovering != true,
-                self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true
+                self?.appUpdater.blocksNewWork != true, self?.fileTranscriptionModel.isBusy != true,
+                self?.voiceEditModel.phase.holdsMicrophone != true
             else { return false }
             self?.builtSettingsWindow?.model.home.stopPlayback()
             return true

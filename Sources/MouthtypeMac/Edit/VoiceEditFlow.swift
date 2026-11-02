@@ -107,6 +107,14 @@ enum VoiceEditPhase: Equatable {
         default: true
         }
     }
+
+    /// True while the flow owns, or is about to take, the shared microphone. Dictation must not start in these phases.
+    var holdsMicrophone: Bool {
+        switch self {
+        case .readingSelection, .recording, .transcribing: true
+        default: false
+        }
+    }
 }
 
 /// The Edit Selection by Voice flow: read the selection, record one instruction, run the engine, preview, then Accept
@@ -194,7 +202,8 @@ enum VoiceEditPhase: Equatable {
             guard id == generation else { return }
             return end(.recordingFailed)
         }
-        guard id == generation else {
+        // `end()` and `cancel()` bump the generation, so a flow that finished while `start()` was still pending lands here.
+        guard id == generation, phase == .recording else {
             await recorder.cancel()
             return
         }
@@ -268,6 +277,7 @@ enum VoiceEditPhase: Equatable {
     }
 
     private func end(_ outcome: VoiceEditEnd) {
+        generation += 1
         limitTask?.cancel()
         limitTask = nil
         pipeline = nil

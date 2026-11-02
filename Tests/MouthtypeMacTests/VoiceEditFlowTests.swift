@@ -29,9 +29,17 @@ import Testing
     private(set) var starts = 0
     private(set) var finishes = 0
     private(set) var cancels = 0
+    /// When set, `start()` suspends until `releaseStart()`, like a microphone that is slow to open.
+    var holdStart = false
+    private var startGate: CheckedContinuation<Void, Never>?
     func start() async throws {
         starts += 1
+        if holdStart { await withCheckedContinuation { startGate = $0 } }
         if let startError { throw startError }
+    }
+    func releaseStart() {
+        startGate?.resume()
+        startGate = nil
     }
     func finish() async throws -> String {
         finishes += 1
@@ -62,6 +70,13 @@ private final class FakeEngine: VoiceEditing, @unchecked Sendable {
         }
         return result
     }
+}
+
+private final class Counter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+    var value: Int { lock.withLock { count } }
+    func increment() { lock.withLock { count += 1 } }
 }
 
 @MainActor private struct Rig {
@@ -261,6 +276,48 @@ private final class FakeEngine: VoiceEditing, @unchecked Sendable {
         #expect(!expected.message.isEmpty && expected.isFailure)
         #expect(flow.replacement.isEmpty)
         #expect(rig.editor.replaceCalls.isEmpty)
+    }
+
+    @Test func doneDuringSlowMicStartDoesNotLeaveTheMicOpen() async {
+        var rig = Rig()
+        rig.recorder.holdStart = true
+        rig.recorder.heard = ""
+        rig.recordingLimit = .milliseconds(1)
+        let slept = Counter()
+        rig.sleep = { _ in slept.increment() }
+        let flow = rig.coordinator()
+        let beginning = Task { await flow.begin() }
+        await wait(for: flow, .recording)
+        for _ in 0..<400 where rig.recorder.starts == 0 { try? await Task.sleep(for: .milliseconds(5)) }
+        await flow.stopRecording()
+        #expect(flow.phase == .ended(.noInstruction))
+        rig.recorder.releaseStart()
+        await beginning.value
+        #expect(rig.recorder.cancels == 1)
+        #expect(flow.phase == .ended(.noInstruction))
+        #expect(slept.value == 0)
+        #expect(rig.engine.releases == rig.engine.holds)
+    }
+
+    @Test func microphoneIsHeldOnlyWhileReadingRecordingOrTranscribing() async {
+        let rig = Rig()
+        let flow = rig.coordinator()
+        #expect(!flow.phase.holdsMicrophone)
+        await flow.begin()
+        #expect(flow.phase == .recording)
+        #expect(flow.phase.holdsMicrophone)
+        await flow.stopRecording()
+        #expect(flow.phase == .preview)
+        #expect(!flow.phase.holdsMicrophone)
+        await flow.cancel()
+        #expect(!flow.phase.holdsMicrophone)
+        rig.editor.captureError = SelectionCleanupError.unavailable
+        await flow.begin()
+        #expect(!flow.phase.holdsMicrophone)
+        for phase in [VoiceEditPhase.idle, .generating, .preview, .ended(.accepted), .ended(.stale)] {
+            #expect(!phase.holdsMicrophone)
+        }
+        for phase in [VoiceEditPhase.readingSelection, .recording, .transcribing] { #expect(phase.holdsMicrophone) }
     }
 
     @Test func silenceEndsWithoutRunningTheEngine() async {
