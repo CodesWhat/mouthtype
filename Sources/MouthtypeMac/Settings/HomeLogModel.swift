@@ -61,7 +61,8 @@ struct HomeTake: Identifiable, Equatable {
     /// Bumped on every deactivate. A reload that started under an older value is dropped when it finishes.
     @ObservationIgnored private var lifecycleGeneration = 0
     @ObservationIgnored private var observationGeneration = 0
-    @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    /// Readable so a test can await the reload it started after `deactivate()` drops its reference.
+    @ObservationIgnored private(set) var reloadTask: Task<Void, Never>?
     /// The off-main read behind `loadText()`. Replaceable so a test can make it slow.
     @ObservationIgnored var fetchRecent: @Sendable (TranscriptStore, Int) throws -> [TakeRecord] = { store, limit in
         try store.recentTakes(limit: limit)

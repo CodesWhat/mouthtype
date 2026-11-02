@@ -1,5 +1,14 @@
-Mouthtype 0.10.0
+Mouthtype 0.11.0
 
+Edit Selection by Voice is new. Select text, speak one instruction, and review the result in a preview before it replaces your selection. Start it from the Edit Selection by Voice menu item, or set an optional shortcut on the Transforms page (the shortcut is off by default). It won't run in password fields, with nothing selected, or on selections over 8,000 characters. Mouthtype doesn't save the audio or the text. When you accept, it logs only the app's process ID, the selection range and the length of the replacement, never the text.
+
+The Stats page can now measure your typing speed. Type a short passage in the app and Mouthtype uses your own speed to work out the time you save.
+
+Transform Selection now checks the target app's own focus before Accept replaces your text. Profanity cleanup also no longer mistakes a "there" about a place for the subject of a verb. Speech recognition now uses FluidAudio 0.18.0.
+
+Not verified on a device for this release: voice edit after its final review fixes, and voice edit and typing calibration with VoiceOver; FluidAudio 0.18 on real speech, including long takes; history speaker playback, fresh installation, Bluetooth and USB microphones, press Return in live apps, and fluent non-English speech. Automated tests and offscreen renders do not replace those checks.
+
+Earlier in 0.10.0:
 Home can now search retained transcripts and app names, including takes older than the recent list. Play or stop a take's retained audio from Home. Playback stays local and stops before a new recording starts. Audio retention settings stay the same.
 
 Delivery cards expose the current Copy, Undo and Dismiss labels and actions to accessibility tools. Formal cleanup also preserves more clear verb meanings, including phrases about location and time.

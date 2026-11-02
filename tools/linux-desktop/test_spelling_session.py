@@ -77,6 +77,16 @@ class SpellingSessionTests(unittest.TestCase):
         self.assertEqual(list(self.session.recovery.iterdir()), [])
         self.assertEqual(self.session.take_count(), 0)
 
+    def test_watcher_snapshot_does_not_walk_the_take_directory(self):
+        self.session.command('start')
+        self.finish()
+        with patch.object(desktop.Session, 'take_count', side_effect=AssertionError('walked takes')):
+            snapshot = desktop.state_snapshot(self.session)
+        self.assertEqual(snapshot['event'], 'state')
+        self.assertEqual(snapshot['state'], self.session.state)
+        self.assertEqual(snapshot['recovery'], self.session.status()['recovery'])
+        self.assertEqual(snapshot['delivery'], self.session.status()['delivery'])
+
     def test_forget_removes_take_json_with_the_take(self):
         self.session.command('start')
         self.finish()

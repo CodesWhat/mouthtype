@@ -1,0 +1,15 @@
+[Unit]
+Description=Mouthtype Linux dictation service
+PartOf=graphical-session.target
+After=graphical-session.target pipewire.service
+# Wait for `mouthtype-linux-setup` to prepare the speech model instead of crash-looping before it exists.
+ConditionPathExists=%h/.local/share/mouthtype/speech-candidate/linux.json
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/mouthtype-linux --config %h/.local/share/mouthtype/speech-candidate/linux.json serve --lifetime-seconds 86400
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

@@ -133,6 +133,31 @@ private let paragraph =
         #expect(judge("As an AI, I don't edit that.") == .refused(.modelDeclined))
     }
 
+    @Test func anEditOfASelectionThatOpensWithAnApologyOrRefusalIsNotADecline() {
+        #expect(
+            judge(
+                "I'm sorry for missing the call. Could we reschedule?", selection: "I'm sorry I missed the call, can we move it?",
+                instruction: "make it more formal") == .accepted("I'm sorry for missing the call. Could we reschedule?"))
+        #expect(
+            judge("I can't attend on Tuesday.", selection: "I can't make it on Tuesday.", instruction: "rephrase it")
+                == .accepted("I can't attend on Tuesday."))
+        #expect(
+            judge("Unfortunately, the launch slipped.", selection: "Sadly the launch slipped.", instruction: "more formal")
+                == .accepted("Unfortunately, the launch slipped."))
+        #expect(
+            judge("I'm sorry, but I can't help with that.", selection: "We met Tuesday.", instruction: "shorten this")
+                == .refused(.modelDeclined))
+        #expect(
+            judge("As an AI, I can't help with that.", selection: "I can't make it on Tuesday.", instruction: "rephrase it")
+                == .refused(.modelDeclined))
+        #expect(
+            judge("I can't help with that.", selection: "I can't make it on Tuesday.", instruction: "rephrase it")
+                == .refused(.modelDeclined))
+        #expect(
+            judge(VoiceEditPrompt.unsupportedSentinel, selection: "I'm sorry I missed it.", instruction: "what's the weather")
+                == .refused(.modelDeclined))
+    }
+
     @Test func chatterAndPreambleAreRefused() {
         #expect(judge("Here is the rewritten text:\nWe had a good chat.") == .refused(.chatter))
         #expect(judge("Here's a friendlier version: We chatted.") == .refused(.chatter))

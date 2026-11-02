@@ -11,7 +11,7 @@ Natural speech in, clean text out.
 </div>
 
 <p align="center">
-  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.10.0-2ea44f" alt="Version 0.10.0"></a>
+  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.11.0-2ea44f" alt="Version 0.11.0"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-000000?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
   <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
@@ -25,7 +25,7 @@ Natural speech in, clean text out.
 <hr>
 
 > [!IMPORTANT]
-> **Not verified on a device for 0.10.0:** fresh installation, VoiceOver, Bluetooth and USB microphones, press Return after inserting in a live app, and the Japanese, Hindi and Tamil Beta paths with their 1.6 GB model download. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
+> **Not verified on a device for 0.11.0:** fresh installation, VoiceOver (including voice edit and typing calibration), voice edit after its final review fixes, FluidAudio 0.18 on real speech and long takes, Bluetooth and USB microphones, press Return after inserting in a live app, and the Japanese, Hindi and Tamil Beta paths with their 1.6 GB model download. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 
 <h2 align="center">Contents</h2>
 
@@ -66,7 +66,7 @@ Natural speech in, clean text out.
 | Saved audio and retention | [docs.mouthtype.app/privacy-and-data/saved-audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/) |
 | Automation (`mouthtype://` and the command-line script) | [docs.mouthtype.app/automation/url-scheme-and-cli](https://docs.mouthtype.app/automation/url-scheme-and-cli/) |
 | Troubleshooting | [docs.mouthtype.app/troubleshooting](https://docs.mouthtype.app/troubleshooting/) |
-| Known limits for 0.10.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
+| Known limits for 0.11.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
 | Release notes | [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) |
 | Roadmap | See [Roadmap](#roadmap) below |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -86,7 +86,7 @@ Natural speech in, clean text out.
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.10.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
+The Mac app is at 0.11.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
 
 1. Download the signed, notarized DMG from [mouthtype.app/download](https://mouthtype.app/download).
 2. Open the DMG, drag Mouthtype to Applications and open it.
@@ -243,7 +243,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks, dependency maintenance and t
 
 <h2 align="center" id="experimental-linux-source">Experimental Linux Source</h2>
 
-Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI, setup diagnostics, an Omarchy bar plugin with a floating pill, single-file audio transcription, optional paste or typing delivery and optional local Fast and Thorough cleanup models. Delivery is recovery-only and cleanup is off by default. **There is no supported Linux desktop release.** Physical acceptance remains open, and the Linux cleanup models differ from the Mac ones (Thorough is Qwen3 4B, not Gemma). Follow the [Linux setup and testing guide](https://docs.mouthtype.app/linux/linux-desktop-setup/) or the [Omarchy plugin guide](https://docs.mouthtype.app/linux/linux-omarchy-plugin/).
+Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI, setup diagnostics, an Omarchy bar plugin with a floating pill, single-file audio transcription, optional paste or typing delivery and optional local Fast and Thorough cleanup models. Basic cleanup is on by default, and delivery starts recovery-only until you choose to paste on first open. **There is no supported Linux desktop release**, and the only install today is from source. The full flow has run on one Arch/Omarchy desk; HiDPI, multi-monitor and other distros are untried. The Linux cleanup models differ from the Mac ones (Thorough is Qwen3 4B, not Gemma). Follow the [Linux setup and testing guide](https://docs.mouthtype.app/linux/linux-desktop-setup/) or the [Omarchy plugin guide](https://docs.mouthtype.app/linux/linux-omarchy-plugin/).
 
 <hr>
 

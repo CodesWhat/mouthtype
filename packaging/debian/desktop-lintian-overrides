@@ -1,0 +1,2 @@
+# Not packaged for Debian's archive, so there is no ITP bug for the first changelog entry to close.
+mouthtype-linux-desktop: initial-upload-closes-no-bugs [usr/share/doc/mouthtype-linux-desktop/changelog.Debian.gz:1]

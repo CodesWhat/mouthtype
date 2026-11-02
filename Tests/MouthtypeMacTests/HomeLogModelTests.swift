@@ -312,14 +312,15 @@ import Testing
         model.activate()
         await waitUntil { model.takes.count == 1 }
         model.startReload()
+        let reload = model.reloadTask
         // Deactivate only once the reload's read is really in flight.
         try #require(await stale.waitUntilStarted(), "the reload's read never started")
         model.deactivate()
         let scansAfterDeactivate = scans
         stale.release()
         try #require(await stale.waitUntilFinished(), "the reload's read never finished")
-        // Let the finished read's empty result reach the model, which must drop it.
-        try await Task.sleep(for: .milliseconds(300))
+        // The reload has applied or dropped its empty result once its own task completes.
+        await reload?.value
         #expect(model.takes.map(\.text) == ["first"])
         #expect(scans == scansAfterDeactivate)
     }
@@ -338,6 +339,7 @@ import Testing
         }
         model.activate()
         model.startReload()
+        let reload = model.reloadTask
         try #require(await stale.waitUntilStarted(), "the reload's read never started")
         model.deactivate()
         try dictate(store, minutes: 2, text: "new")
@@ -345,8 +347,8 @@ import Testing
         await waitUntil { model.takes.map(\.text) == ["new", "old"] }
         stale.release()
         try #require(await stale.waitUntilFinished(), "the reload's read never finished")
-        // Let the finished read's stale rows reach the model, which must drop them.
-        try await Task.sleep(for: .milliseconds(300))
+        // The reload has applied or dropped its stale rows once its own task completes.
+        await reload?.value
         #expect(model.takes.map(\.text) == ["new", "old"])
     }
 

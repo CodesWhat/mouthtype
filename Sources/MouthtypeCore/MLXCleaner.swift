@@ -147,7 +147,12 @@ public actor MLXCleaner: MeasuredCleaner {
         let start = clock.now
         try Task.checkCancellation()
         let input = try await container.prepare(input: promptInput(transcript, context: context))
-        let stableTokens = try await container.prepare(input: promptInput("", context: stableContext)).text.tokens.asArray(Int.self)
+        // A voice edit's prompt carries a per-run nonce and ignores the transcript, so no part of it is shared with a later
+        // take. An empty stable prefix keeps it from building a cache that would only push out a dictation one.
+        let stableTokens =
+            context.voiceEdit != nil
+            ? []
+            : try await container.prepare(input: promptInput("", context: stableContext)).text.tokens.asArray(Int.self)
         let prefixCaches = prefixCaches
         let (stream, generation) = try await container.perform(nonSendable: input) { model, prepared in
             try Task.checkCancellation()

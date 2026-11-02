@@ -1,0 +1,17 @@
+.TH MOUTHTYPE-LINUX 1 "" "mouthtype-linux" "User Commands"
+.SH NAME
+mouthtype-linux \- local voice dictation client
+.SH SYNOPSIS
+.B mouthtype-linux
+[\fB\-\-config\fR \fIFILE\fR] \fIcommand\fR [\fIoptions\fR]
+.SH DESCRIPTION
+Records only after an explicit start, transcribes on this machine and delivers the text to the focused window.
+Common commands are \fBserve\fR, \fBstart\fR, \fBstop\fR, \fBtoggle\fR, \fBcancel\fR, \fBstatus\fR, \fBdoctor\fR and \fBrecover\fR.
+Run \fBmouthtype-linux \-\-help\fR for the full list.
+.SH FILES
+.TP
+.I ~/.local/share/mouthtype/speech-candidate/linux.json
+Client configuration written by \fBmouthtype-linux-setup\fR.
+.SH SEE ALSO
+.BR mouthtype-linux-setup (1),
+.I /usr/lib/mouthtype-linux/tools/linux-desktop/README.md

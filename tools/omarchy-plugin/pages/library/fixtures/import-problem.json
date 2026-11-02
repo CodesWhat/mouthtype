@@ -1,0 +1,16 @@
+{
+  "problem": "Use a name column, or heard,written columns with a header row.",
+  "rows": [],
+  "counts": {
+    "add": 0,
+    "existing": 0,
+    "duplicate": 0,
+    "invalid": 0
+  },
+  "can_import": false,
+  "file": "wrong.csv",
+  "digest": "d354f25fd9710e744bbecbdb7160228c38961811eea9c523912c770a18866a2b",
+  "csv_digest": "73879ed4a45ce7ec5b1cd1830e7966ff7120ab3b8b60c7ef151b73fdae7e2ac7",
+  "kind": "spellings",
+  "configured": true
+}
