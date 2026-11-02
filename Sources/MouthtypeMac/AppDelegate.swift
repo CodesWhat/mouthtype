@@ -55,20 +55,30 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 styles: styles, fallback: CleanupSettings.load().style, focus: AccessibilityFocusReader())
         })
     private lazy var selectionCleanupWindow = SelectionCleanupWindow(model: selectionCleanupModel)
-    private lazy var voiceEditModel = VoiceEditCoordinator(
-        editor: AccessibilitySelectionEditor(),
-        recorder: VoiceInstructionRecorder(capture: micCapture, engine: HostEngine(host: engineHost)),
-        engine: cleanerHost,
-        busy: { [weak self] in
-            guard let self else { return true }
-            return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true
-                || self.appUpdater.blocksNewWork || self.selectionCleanupModel.hasPreview
-        },
-        secureContext: { AccessibilityFocusReader().isSecureInputEnabled || AccessibilityFocusReader().snapshotApplication().isSecure },
-        modelUnavailableReason: { [weak self] in self?.cleanerHost.transformUnavailableReason },
-        appName: { NSRunningApplication(processIdentifier: $0)?.localizedName },
-        changed: { [weak self] in self?.appUpdater.refreshActivity() })
-    private lazy var voiceEditWindow = VoiceEditWindow(model: voiceEditModel)
+    private lazy var voiceEditModel = remember(
+        \.builtVoiceEditModel,
+        VoiceEditCoordinator(
+            editor: AccessibilitySelectionEditor(),
+            recorder: VoiceInstructionRecorder(capture: micCapture, engine: HostEngine(host: engineHost)),
+            engine: cleanerHost,
+            busy: { [weak self] in
+                guard let self else { return true }
+                return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true
+                    || self.appUpdater.blocksNewWork || self.selectionCleanupModel.hasPreview
+            },
+            secureContext: { AccessibilityFocusReader().isSecureInputEnabled || AccessibilityFocusReader().snapshotApplication().isSecure },
+            modelUnavailableReason: { [weak self] in self?.cleanerHost.transformUnavailableReason },
+            appName: { NSRunningApplication(processIdentifier: $0)?.localizedName },
+            changed: { [weak self] in self?.appUpdater.refreshActivity() }))
+    private lazy var voiceEditWindow = remember(\.builtVoiceEditWindow, VoiceEditWindow(model: voiceEditModel))
+    /// Set by the lazy accessors above, so a check for "is a voice edit up" reads these and never builds the panel.
+    private var builtVoiceEditModel: VoiceEditCoordinator?
+    private var builtVoiceEditWindow: VoiceEditWindow?
+
+    private func remember<T>(_ slot: ReferenceWritableKeyPath<AppDelegate, T?>, _ value: T) -> T {
+        self[keyPath: slot] = value
+        return value
+    }
     private lazy var fileTranscriptionModel: FileTranscriptionModel = FileTranscriptionModel(
         makeJob: { [weak self] in
             guard let self, case .ready = self.engineHost.state, let engine = self.engineHost.engine else {
@@ -108,6 +118,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 onMouseTriggerChanged: { [weak self] trigger in self?.activateMouseTrigger(trigger) },
                 onDictationLanguageChanged: { [weak self] choice in self?.engineHost.select(language: choice.request()) },
                 isRecording: { [weak self] in self?.dictation?.phase == .recording },
+                isDictationBusy: { [weak self] in (self?.dictation?.phase ?? .idle) != .idle },
+                isEditingSelection: { [weak self] in
+                    self?.builtVoiceEditModel?.phase.isActive == true || self?.builtVoiceEditWindow?.window?.isVisible == true
+                        || self?.selectionCleanupModel.hasPreview == true
+                },
+                playAchievementCue: { [weak self] in self?.cueSounds?.playQuietStop() },
                 onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
                 onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
                 onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
@@ -241,6 +257,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inserter: TextInserter?
     private var correctionWatcher: CorrectionWatcher?
     private var dictation: DictationController?
+    /// The same Click cues the dictation path plays, kept for the trophy toast.
+    private var cueSounds: ClickSoundPlayer?
     private var recovery: CrashRecovery?
     private var recoveryChecked = false
     private var draftOffer: DraftOffer?
@@ -321,6 +339,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let engine = HostEngine(host: engineHost)
         let sounds = ClickSoundPlayer()
+        cueSounds = sounds
         let cards = DeliveryCardController()
         cards.anchor = { [weak pill] in pill?.cardAnchor() }
         let presenter = DeliveryCardPresenter(surface: cards, clipboard: SystemClipboard(), clock: SystemDictationClock())
