@@ -91,7 +91,7 @@ import Testing
         #expect(hifi.artScale == 2)
         model.setSkin(.matrix)
         view.layoutSubtreeIfNeeded()
-        try? await Task.sleep(for: .milliseconds(100))
+        await awaitCondition { stage.kind == .matrix }
         #expect(stage.kind == .matrix)
     }
 
@@ -118,7 +118,7 @@ import Testing
             weak var weakStage = stage
             model.page = .home
             view.layoutSubtreeIfNeeded()
-            try? await Task.sleep(for: .milliseconds(100))
+            await awaitCondition { weakStage?.isAnimating != true }
             #expect(weakStage?.isAnimating != true)
         }
     }

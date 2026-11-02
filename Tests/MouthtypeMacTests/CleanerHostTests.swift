@@ -51,6 +51,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     private var _loaded = false
     private(set) var loads = 0
     private(set) var unloads = 0
+    private(set) var unloadsStarted = 0
     private(set) var downloads = 0
     private(set) var cleanCalls = 0
     var loadDelay: Duration = .zero
@@ -100,6 +101,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     }
 
     func unload() async {
+        lock.withLock { unloadsStarted += 1 }
         await unloadGate?.wait()
         lock.withLock {
             unloads += 1
@@ -119,7 +121,9 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         model.unloadGate = gate
         level.value = .basic
         host.levelChanged()
-        try? await Task.sleep(for: .milliseconds(40))
+        // The unload is really under way, held at its gate.
+        _ = await FetchProbe.wait(timeout: .seconds(10)) { model.unloadsStarted >= 1 }
+        #expect(model.unloadsStarted == 1)
         let request = SmartCleanupRequest(text: "keep this take", level: .light)
         let during = await host.run(request)
         #expect(during.text == request.text && during.outcome == .skipped)
