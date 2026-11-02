@@ -55,18 +55,40 @@ public enum VoiceEditGuard {
         return .accepted(trimmed)
     }
 
-    /// Not matched when the selection itself opens with an apology or refusal, since a faithful edit of it opens the same way.
+    /// Opening phrases of a refusal or apology, grouped by what they say. A faithful edit of a selection that opens one way
+    /// opens in the same group.
+    private static let declineFamilies: [[String]] = [
+        ["i'm sorry", "i am sorry", "sorry,"],
+        ["i can't", "i cannot", "i can not", "i'm unable", "i am unable", "i won't", "i'm not able"],
+        ["as an ai"],
+        ["unfortunately", "sadly", "regrettably"],
+    ]
+
+    /// Phrases only a model refusing the request says, wherever they fall in the output.
+    private static let refusalMarkers =
+        #"as an ai|language model|(?:can't|cannot|can not|unable to|won't) (?:help|assist|comply|fulfill|do that|do this)|help with that|assist with that"#
+
+    /// The opening group of `text`, with typographic apostrophes straightened.
+    private static func declineFamily(of text: String) -> Int? {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased().replacingOccurrences(of: "\u{2019}", with: "'")
+        return declineFamilies.firstIndex { $0.contains { lower.hasPrefix($0) } }
+    }
+
+    /// An output that opens with an apology or refusal is a decline, unless the selection opens the same way and the output
+    /// carries no refusal marker the selection lacks, which makes it a faithful edit of that selection.
     private static func declines(_ text: String, selection: String) -> Bool {
         if text.contains(VoiceEditPrompt.unsupportedSentinel) { return true }
-        let lower = text.lowercased()
-        let openers = [
-            "i'm sorry", "i’m sorry", "i am sorry", "sorry,", "i can't", "i can’t", "i cannot", "i can not", "i'm unable",
-            "i’m unable", "i am unable", "i won't", "i’m not able", "i'm not able", "as an ai", "unfortunately",
-        ]
-        guard openers.contains(where: { lower.hasPrefix($0) }) else { return false }
-        let source = selection.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let regretLeads = ["sadly", "regrettably"]
-        return !(openers + regretLeads).contains { source.hasPrefix($0) }
+        guard let family = declineFamily(of: text) else { return false }
+        guard declineFamily(of: selection) == family else { return true }
+        let normalized = { (value: String) in value.lowercased().replacingOccurrences(of: "\u{2019}", with: "'") }
+        let markers = try? NSRegularExpression(pattern: refusalMarkers)
+        let outputText = normalized(text)
+        let sourceText = normalized(selection)
+        let found = markers?.matches(in: outputText, range: NSRange(outputText.startIndex..., in: outputText)) ?? []
+        return found.contains { match in
+            guard let range = Range(match.range, in: outputText) else { return true }
+            return !sourceText.contains(outputText[range])
+        }
     }
 
     /// Framing that talks about the edit. Matched only at the start, so "Here is" inside a rewritten sentence passes, and
