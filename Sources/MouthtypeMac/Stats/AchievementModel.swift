@@ -15,6 +15,17 @@ import Observation
     @ObservationIgnored let toasts: AchievementToastCenter
     /// Bumped on every refresh, so a slower earlier result never overwrites a newer one.
     @ObservationIgnored private var generation = 0
+    /// The last SQL read and what it was read for. The extras only move when a take, a voice edit or a transform does, so the
+    /// same key means the same answer and the queries are skipped.
+    @ObservationIgnored private var cache: (key: ExtrasKey, extras: AchievementExtras)?
+
+    private struct ExtrasKey: Equatable {
+        var dictationCount: Int
+        var voiceEdits: Int
+        var transforms: Int
+        /// The store's write revision, for changes that leave the take count alone (a remembered correction accepted, a snippet).
+        var revision: Int
+    }
 
     init(defaults: UserDefaults = .standard) {
         store = AchievementStore(defaults: defaults)
@@ -25,6 +36,8 @@ import Observation
 
     var defaults: UserDefaults { store.defaults }
 
+    var hasNew: Bool { entries.contains(where: \.isNew) }
+
     var earnedCount: Int { entries.filter { if case .earned = $0.state { true } else { false } }.count }
 
     func setEnabled(_ value: Bool) {
@@ -32,6 +45,7 @@ import Observation
         isEnabled = value
         if !value {
             generation += 1
+            cache = nil
             entries = []
             toasts.reset()
         }
@@ -40,31 +54,57 @@ import Observation
     func setShelfHidden(_ value: Bool) {
         store.setShelfHidden(value)
         isShelfHidden = value
+        if value { clearSeenFlags() } else { shelfShown() }
     }
 
-    /// New earns stop being new once the shelf has been on screen.
-    func shelfSeen() {
-        guard isEnabled else { return }
+    /// The expanded shelf is on screen, so what it shows is recorded as seen and needs no toast. The tiles keep their NEW tag until
+    /// the shelf is collapsed or leaves the screen. A collapsed shelf has not shown anything.
+    func shelfShown() {
+        guard isEnabled, !isShelfHidden else { return }
         store.markAllSeen()
         toasts.shelfSeen(entries.filter(\.isNew).map(\.id))
+    }
+
+    /// The shelf left the screen: whatever it showed expanded stops being new.
+    func shelfSeen() {
+        shelfShown()
+        clearSeenFlags()
+    }
+
+    private func clearSeenFlags() {
+        guard isEnabled else { return }
+        let seen = store.seen
         entries = entries.map {
-            var entry = $0; entry.isNew = false; return entry
+            var entry = $0
+            if seen.contains(entry.id) { entry.isNew = false }
+            return entry
         }
     }
 
     /// Evaluates against `snapshot` and records what is newly earned. `loadExtras` runs off the main thread and is not called at
     /// all while Achievements is off. A failed read keeps the shelf as it was.
     func refresh(
-        snapshot: StatsSnapshot, now: Date, timeZone: TimeZone, loadExtras: @escaping @Sendable (Bool) throws -> AchievementExtras
+        snapshot: StatsSnapshot, now: Date, timeZone: TimeZone, revision: Int = 0, loadExtras: @escaping @Sendable (Bool) throws -> AchievementExtras
     ) async {
         guard isEnabled else { return }
         generation += 1
         let ticket = generation
         let calibrated = TypingBaselinePreference.isAccepted(store.defaults)
         do {
-            var extras = try await OffPool.run { try loadExtras(calibrated) }
-            extras.counters = store.counters
+            let counters = store.counters
+            let key = ExtrasKey(
+                dictationCount: snapshot.report.dictationCount, voiceEdits: counters.voiceEdits, transforms: counters.transforms,
+                revision: revision)
+            var extras: AchievementExtras
+            if let cache, cache.key == key {
+                extras = cache.extras
+                extras.calibrated = calibrated
+            } else {
+                extras = try await OffPool.run { try loadExtras(calibrated) }
+            }
             guard ticket == generation, isEnabled, !Task.isCancelled else { return }
+            cache = (key, extras)
+            extras.counters = counters
             let statuses = AchievementEngine.evaluate(AchievementInput(snapshot: snapshot, extras: extras))
             store.apply(statuses, today: StatsTimeline.localDay(for: now, in: timeZone))
             entries = AchievementEngine.shelf(statuses, store: store)

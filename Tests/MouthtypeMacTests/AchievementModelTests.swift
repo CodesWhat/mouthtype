@@ -29,8 +29,8 @@ private final class CallCounter: @unchecked Sendable {
             records: ArcadeRecords(), daily: [])
     }
 
-    private func refresh(_ model: AchievementModel, _ snapshot: StatsSnapshot, counter: CallCounter) async {
-        await model.refresh(snapshot: snapshot, now: now, timeZone: zone) { _ in
+    private func refresh(_ model: AchievementModel, _ snapshot: StatsSnapshot, counter: CallCounter, revision: Int = 0) async {
+        await model.refresh(snapshot: snapshot, now: now, timeZone: zone, revision: revision) { _ in
             counter.hit()
             return AchievementExtras(days: [.init(day: "2026-10-01", takes: 4, words: 1_200)])
         }
@@ -49,7 +49,108 @@ private final class CallCounter: @unchecked Sendable {
         let stored = AchievementStore(defaults: defaults).earned
         await refresh(model, snapshot(), counter: counter)
         #expect(AchievementStore(defaults: defaults).earned == stored)
+        // Same take count, same counters: the second read is skipped.
+        #expect(counter.count == 1)
+    }
+
+    @Test func extrasAreReReadWhenTheTakeCountOrACounterChanges() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(takes: 4), counter: counter)
+        await refresh(model, snapshot(takes: 4), counter: counter)
+        #expect(counter.count == 1)
+        await refresh(model, snapshot(takes: 5), counter: counter)
         #expect(counter.count == 2)
+        AchievementStore(defaults: defaults).increment(.voiceEdits, day: "2026-10-01")
+        await refresh(model, snapshot(takes: 5), counter: counter)
+        #expect(counter.count == 3)
+        AchievementStore(defaults: defaults).increment(.transforms, day: "2026-10-01")
+        await refresh(model, snapshot(takes: 5), counter: counter)
+        #expect(counter.count == 4)
+        // Switching off and on drops the cache.
+        model.setEnabled(false)
+        model.setEnabled(true)
+        await refresh(model, snapshot(takes: 5), counter: counter)
+        #expect(counter.count == 5)
+    }
+
+    @Test func aStoreWriteWithTheSameTakeCountInvalidatesTheCache() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(), counter: counter, revision: 3)
+        await refresh(model, snapshot(), counter: counter, revision: 3)
+        #expect(counter.count == 1)
+        await refresh(model, snapshot(), counter: counter, revision: 4)
+        #expect(counter.count == 2)
+    }
+
+    @Test func aCachedReadStillPicksUpTheCurrentCounters() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(), counter: counter)
+        let store = AchievementStore(defaults: defaults)
+        #expect(store.counters.voiceEdits == 0)
+        store.increment(.voiceEdits, day: "2026-10-01")
+        await refresh(model, snapshot(), counter: counter)
+        #expect(model.entries.first { $0.id == "four_figures" }?.state == .earned(day: "2026-10-01"))
+    }
+
+    @Test func expandingThenCollapsingClearsNewWithoutLeavingTheScreen() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(words: 0, takes: 0), counter: counter)
+        await refresh(model, snapshot(), counter: counter)
+        model.setShelfHidden(true)
+        #expect(model.hasNew)
+        model.setShelfHidden(false)
+        // Seen on expand, and the tiles still wear NEW while they are on screen.
+        #expect(AchievementStore(defaults: defaults).seen.contains("four_figures"))
+        #expect(model.hasNew)
+        model.setShelfHidden(true)
+        #expect(!model.hasNew)
+        model.shelfSeen()
+        #expect(!model.hasNew)
+    }
+
+    @Test func shelfShownOnAnExpandedShelfRecordsSeenAndAHiddenOneDoesNot() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(words: 0, takes: 0), counter: counter)
+        await refresh(model, snapshot(), counter: counter)
+        model.setShelfHidden(true)
+        model.shelfShown()
+        #expect(!AchievementStore(defaults: defaults).seen.contains("four_figures"))
+        model.setShelfHidden(false)
+        model.shelfShown()
+        #expect(AchievementStore(defaults: defaults).seen.contains("four_figures") && model.hasNew)
+    }
+
+    @Test func newStaysOnACollapsedShelfUntilSeenExpanded() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(words: 0, takes: 0), counter: counter)
+        await refresh(model, snapshot(), counter: counter)
+        #expect(model.hasNew)
+        model.setShelfHidden(true)
+        model.shelfSeen()
+        #expect(model.hasNew)
+        #expect(!AchievementStore(defaults: defaults).seen.contains("four_figures"))
+        model.setShelfHidden(false)
+        model.shelfSeen()
+        #expect(!model.hasNew)
+        #expect(AchievementStore(defaults: defaults).seen.contains("four_figures"))
     }
 
     @Test func switchedOffMeansNoWorkAndNoShelf() async {

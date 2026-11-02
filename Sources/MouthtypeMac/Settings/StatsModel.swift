@@ -14,7 +14,11 @@ import Observation
 /// midnight and on a day, clock, time zone or wake change.
 @MainActor @Observable final class StatsModel {
     @ObservationIgnored var store: TranscriptStore? {
-        didSet { if store !== oldValue, isActive { observe() } }
+        didSet {
+            guard store !== oldValue else { return }
+            watchInputs()
+            if isActive { observe() }
+        }
     }
     @ObservationIgnored private(set) var isActive: Bool
     @ObservationIgnored private var observation: TakesObservation?
@@ -50,6 +54,7 @@ import Observation
     @ObservationIgnored let achievements: AchievementModel
     @ObservationIgnored private var achievementTask: Task<Void, Never>?
     @ObservationIgnored private nonisolated(unsafe) var counterObserver: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var inputsObserver: NSObjectProtocol?
     /// Nil until the first load finishes.
     private(set) var snapshot: StatsSnapshot?
     private(set) var error: String?
@@ -74,7 +79,19 @@ import Observation
         counterObserver = NotificationCenter.default.addObserver(
             forName: .achievementCounterChanged, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.countersChanged() } }
+        watchInputs()
         if observing { observe() }
+    }
+
+    /// Listens for store writes that change what the achievements read. The store can arrive after init, so this re-points the
+    /// listener at whichever store is current.
+    private func watchInputs() {
+        if let inputsObserver { NotificationCenter.default.removeObserver(inputsObserver) }
+        inputsObserver = nil
+        guard let store else { return }
+        inputsObserver = NotificationCenter.default.addObserver(
+            forName: TranscriptStore.achievementInputsChanged, object: store, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.countersChanged() } }
     }
 
     isolated deinit {
@@ -82,6 +99,7 @@ import Observation
         rolloverTask?.cancel()
         achievementTask?.cancel()
         if let counterObserver { NotificationCenter.default.removeObserver(counterObserver) }
+        if let inputsObserver { NotificationCenter.default.removeObserver(inputsObserver) }
         removeRolloverObservers()
     }
 
@@ -183,7 +201,7 @@ import Observation
         if value, let snapshot { refreshAchievements(snapshot) }
     }
 
-    /// A local action counter went up (a voice edit or a transform). Looks again at the snapshot already loaded; with none
+    /// A local action counter went up (a voice edit or a transform), or a write changed what the achievements read. Looks again at the snapshot already loaded; with none
     /// loaded yet, the first load will.
     func countersChanged() {
         if let snapshot { refreshAchievements(snapshot) }
@@ -193,8 +211,9 @@ import Observation
         guard achievements.isEnabled, let store else { return }
         achievementTask?.cancel()
         let (instant, zone) = (now(), timeZoneProvider())
+        let revision = store.inputsRevision
         achievementTask = Task { [achievements] in
-            await achievements.refresh(snapshot: snapshot, now: instant, timeZone: zone) { calibrated in
+            await achievements.refresh(snapshot: snapshot, now: instant, timeZone: zone, revision: revision) { calibrated in
                 try store.achievementExtras(calibrated: calibrated)
             }
         }

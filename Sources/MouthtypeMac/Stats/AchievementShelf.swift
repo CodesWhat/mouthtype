@@ -111,12 +111,7 @@ struct AchievementTile: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(title).font(DesignFont.sans(13, .semibold)).foregroundStyle(isEarned ? DesignPalette.ink : DesignPalette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
-            if entry.isNew {
-                Text("NEW").font(DesignFont.mono(DesignFont.eyebrow).weight(.bold)).tracking(1)
-                    .foregroundStyle(DesignPalette.onAccent)
-                    .padding(.horizontal, 5).padding(.vertical, 1)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(DesignPalette.accent))
-            }
+            if entry.isNew { NewTag() }
         }
     }
 
@@ -170,6 +165,17 @@ struct AchievementTile: View {
     }
 }
 
+/// The small NEW pill, on a tile and on the collapsed shelf header.
+private struct NewTag: View {
+    var body: some View {
+        Text("NEW").font(DesignFont.mono(DesignFont.eyebrow).weight(.bold)).tracking(1)
+            .foregroundStyle(DesignPalette.onAccent)
+            .padding(.horizontal, 5).padding(.vertical, 1)
+            .background(RoundedRectangle(cornerRadius: 4).fill(DesignPalette.accent))
+            .accessibilityLabel("New trophies")
+    }
+}
+
 /// The trophy shelf: a card at the bottom of Stats, grouped tiles, with a control to hide it.
 struct AchievementShelfCard: View {
     let model: AchievementModel
@@ -185,6 +191,7 @@ struct AchievementShelfCard: View {
                     if !model.isShelfHidden { shelf }
                 }
             }
+            .onAppear { model.shelfShown() }
             .onDisappear { model.shelfSeen() }
         }
     }
@@ -194,6 +201,7 @@ struct AchievementShelfCard: View {
             TrophyImage(spriteID: "", face: .earned(.gold), scale: 1)
             if model.isShelfHidden {
                 Text("Trophies hidden.").font(DesignFont.sans(DesignFont.detail)).foregroundStyle(DesignPalette.ink2)
+                if model.hasNew { NewTag() }
                 Button("Show") { model.setShelfHidden(false) }.buttonStyle(.designSecondary).fixedSize()
                     .accessibilityLabel("Show trophies").accessibilityIdentifier("stats-show-trophies")
             } else {

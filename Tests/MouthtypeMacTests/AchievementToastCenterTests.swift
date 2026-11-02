@@ -1,4 +1,5 @@
 import Foundation
+import Observation
 import Testing
 import MouthtypeCore
 @testable import MouthtypeMac
@@ -219,4 +220,38 @@ import MouthtypeCore
         center.windowIsKey = true
         #expect(center.current == nil && !center.hasQueued)
     }
+
+    @Test func calibrationHoldsTheGateWithoutPollingAndWakesWhenItEnds() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let phase = CalibrationFlag()
+        phase.active = true
+        let box = Box()
+        let center = center(box, defaults)
+        center.isCalibrating = { phase.active }
+        center.observeCalibration()
+        center.windowIsKey = true
+        center.ingest([entry("four_figures")])
+        #expect(center.current == nil && center.hasQueued)
+        // Held by calibration alone: no retry timer is asked for.
+        #expect(center.lastWake == nil)
+        phase.active = false
+        for _ in 0..<20 where center.current == nil { await Task.yield() }
+        #expect(center.current != nil && box.cues == 1)
+    }
+
+    @Test func dictationBusyStillRetriesOnATimer() {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let box = Box()
+        let center = center(box, defaults)
+        center.windowIsKey = true
+        box.busy = true
+        center.ingest([entry("four_figures")])
+        #expect(center.current == nil && center.lastWake == 2)
+    }
+}
+
+@MainActor @Observable private final class CalibrationFlag {
+    var active = false
 }
