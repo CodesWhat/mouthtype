@@ -145,6 +145,11 @@ public struct AchievementStatus: Equatable, Sendable, Identifiable {
     public var id: String
     public var state: AchievementState
 
+    public init(id: String, state: AchievementState) {
+        self.id = id
+        self.state = state
+    }
+
     public var isEarned: Bool {
         if case .earned = state { return true }
         return false

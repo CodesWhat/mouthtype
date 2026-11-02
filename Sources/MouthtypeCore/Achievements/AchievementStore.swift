@@ -9,6 +9,9 @@ public struct AchievementStore {
     public static let approximateKey = "achievements.approximate"
     public static let seenKey = "achievements.seen"
     public static let backfilledKey = "achievements.backfilled"
+    public static let toastedKey = "achievements.toasted"
+    public static let lastToastKey = "achievements.lastToast"
+    public static let backfillSummaryKey = "achievements.backfillSummary"
 
     public let defaults: UserDefaults
 
@@ -50,7 +53,11 @@ public struct AchievementStore {
             defaults.set(approximate.sorted(), forKey: Self.approximateKey)
             defaults.set(seen.sorted(), forKey: Self.seenKey)
         }
-        if backfill { defaults.set(true, forKey: Self.backfilledKey) }
+        if backfill {
+            defaults.set(true, forKey: Self.backfilledKey)
+            // One summary toast, the first time Stats is open after the upgrade.
+            if !added.isEmpty { defaults.set(added.count, forKey: Self.backfillSummaryKey) }
+        }
         return added
     }
 
@@ -60,4 +67,22 @@ public struct AchievementStore {
         guard !ids.isSubset(of: seen) else { return }
         defaults.set(ids.union(seen).sorted(), forKey: Self.seenKey)
     }
+
+    // MARK: Toast bookkeeping
+
+    /// Earned ids the in-window toast has already announced, so a relaunch never announces one twice.
+    public var toasted: Set<String> { Set(defaults.stringArray(forKey: Self.toastedKey) ?? []) }
+    public func markToasted(_ ids: [String]) {
+        defaults.set(toasted.union(ids).sorted(), forKey: Self.toastedKey)
+    }
+
+    /// When the last toast was shown, for the ten minute gap between toasts.
+    public var lastToast: Date? {
+        defaults.object(forKey: Self.lastToastKey) is Double ? Date(timeIntervalSince1970: defaults.double(forKey: Self.lastToastKey)) : nil
+    }
+    public func setLastToast(_ date: Date) { defaults.set(date.timeIntervalSince1970, forKey: Self.lastToastKey) }
+
+    /// How many trophies the backfill found, until the one summary toast has been shown. Zero when there is nothing to show.
+    public var pendingBackfillSummary: Int { defaults.integer(forKey: Self.backfillSummaryKey) }
+    public func clearBackfillSummary() { defaults.removeObject(forKey: Self.backfillSummaryKey) }
 }

@@ -108,6 +108,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 onMouseTriggerChanged: { [weak self] trigger in self?.activateMouseTrigger(trigger) },
                 onDictationLanguageChanged: { [weak self] choice in self?.engineHost.select(language: choice.request()) },
                 isRecording: { [weak self] in self?.dictation?.phase == .recording },
+                isDictationBusy: { [weak self] in (self?.dictation?.phase ?? .idle) != .idle },
+                playAchievementCue: { [weak self] in self?.cueSounds?.playQuietStop() },
                 onMicrophoneChanged: { [weak self] in self?.microphoneSelectionChanged() },
                 onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
                 onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
@@ -241,6 +243,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private var inserter: TextInserter?
     private var correctionWatcher: CorrectionWatcher?
     private var dictation: DictationController?
+    /// The same Click cues the dictation path plays, kept for the trophy toast.
+    private var cueSounds: ClickSoundPlayer?
     private var recovery: CrashRecovery?
     private var recoveryChecked = false
     private var draftOffer: DraftOffer?
@@ -321,6 +325,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let engine = HostEngine(host: engineHost)
         let sounds = ClickSoundPlayer()
+        cueSounds = sounds
         let cards = DeliveryCardController()
         cards.anchor = { [weak pill] in pill?.cardAnchor() }
         let presenter = DeliveryCardPresenter(surface: cards, clipboard: SystemClipboard(), clock: SystemDictationClock())
