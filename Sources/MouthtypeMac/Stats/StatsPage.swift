@@ -10,6 +10,13 @@ struct StatsHostPage: View {
     static func showsTape(_ snapshot: StatsSnapshot) -> Bool { !snapshot.todayTakes.isEmpty }
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            content
+            TypingCalibrationCard(model: model.calibration)
+        }
+    }
+
+    @ViewBuilder private var content: some View {
         if let snapshot = model.snapshot, snapshot.hasHistory {
             // Once a minute, so the NOW marker on the tape keeps up without a reload.
             TimelineView(.periodic(from: .now, by: 60)) { context in
