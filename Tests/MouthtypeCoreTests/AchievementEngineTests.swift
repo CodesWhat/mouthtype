@@ -58,6 +58,11 @@ import Testing
         ("hour_back", 60, { $0.saved = Double($1) }),
         ("workday_back", 480, { $0.saved = Double($1) }),
         ("proper_noun", 1, { $0.extras.rememberedCount = $1 }),
+        ("second_draft", 1, { $0.extras.counters.voiceEdits = $1 }),
+        ("editor", 25, { $0.extras.counters.voiceEdits = $1 }),
+        ("reworded", 1, { $0.extras.counters.transforms = $1 }),
+        ("tongue_out", 1, { $0.extras.counters.mouthTricks = $1 }),
+        ("read_credits", 1, { $0.extras.counters.creditsViews = $1 }),
         ("shortcut", 10, { $0.extras.snippetCount = $1 }),
         ("filibuster", 300_000, { $0.extras.longestDurationMs = $1 }),
     ]
@@ -99,12 +104,12 @@ import Testing
     @Test func tiersMatchTheDesign() {
         let tiers = Dictionary(uniqueKeysWithValues: AchievementCatalog.all.map { ($0.id, $0.tier) })
         let gold: Set = ["six_figures", "month", "century", "workday_back"]
-        let silver: Set = ["five_figures", "thousand_takes", "monologue", "no_days_off", "auctioneer", "triple_speed", "shortcut", "filibuster"]
+        let silver: Set = ["five_figures", "thousand_takes", "monologue", "no_days_off", "auctioneer", "triple_speed", "shortcut", "filibuster", "editor"]
         for (id, tier) in tiers {
             #expect(tier == (gold.contains(id) ? .gold : silver.contains(id) ? .silver : .bronze), "\(id)")
         }
-        #expect(AchievementCatalog.all.count == 24)
-        #expect(Set(AchievementCatalog.all.map(\.id)).count == 24)
+        #expect(AchievementCatalog.all.count == 29)
+        #expect(Set(AchievementCatalog.all.map(\.id)).count == 29)
     }
 
     @Test func hiddenOnesSayNothingUntilEarned() {
@@ -112,7 +117,7 @@ import Testing
         for definition in AchievementCatalog.all where definition.isHidden {
             #expect(fixture.status(definition.id).state == .hidden)
         }
-        #expect(Set(AchievementCatalog.all.filter(\.isHidden).map(\.id)) == ["night_owl", "filibuster", "welcome_back"])
+        #expect(Set(AchievementCatalog.all.filter(\.isHidden).map(\.id)) == ["night_owl", "filibuster", "welcome_back", "tongue_out", "read_credits"])
         var earned = Fixture()
         earned.extras.longestDurationMs = 300_000
         earned.extras.days = [.init(day: "2026-08-01", takes: 1, words: 5), .init(day: "2026-09-01", takes: 1, words: 5)]

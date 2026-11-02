@@ -18,7 +18,7 @@ sys.dont_write_bytecode = True
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 from canvas import Canvas, mix, rgba
-from glyphs import GLYPHS
+from glyphs import GLYPHS, TRICK_GLYPHS
 from sprites import LIPS16, LIPS32, LIPS64, PALETTE, mono
 
 ROOT = os.path.join(HERE, "..", "..")
@@ -157,7 +157,7 @@ def main():
         subprocess.run(["iconutil", "-c", "icns", ICONSET, "-o", ICNS], check=True)
 
     os.makedirs(GLYPH_DIR, exist_ok=True)
-    for state, rows in GLYPHS.items():
+    for state, rows in {**GLYPHS, **TRICK_GLYPHS}.items():
         glyph(rows, 1).png(os.path.join(GLYPH_DIR, "glyph-%s.png" % state))
         glyph(rows, 2).png(os.path.join(GLYPH_DIR, "glyph-%s@2x.png" % state))
 

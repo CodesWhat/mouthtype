@@ -19,6 +19,26 @@ public enum AchievementGroup: Int, Sendable, Equatable, CaseIterable {
     }
 }
 
+/// How many times each local action has completed, and the day the counts a trophy waits on were reached. Integers only.
+public struct AchievementCounters: Equatable, Sendable {
+    public var voiceEdits: Int
+    public var transforms: Int
+    public var mouthTricks: Int
+    public var creditsViews: Int
+    /// `voiceEdits:25` to a local day.
+    public var days: [String: String]
+
+    public init(voiceEdits: Int = 0, transforms: Int = 0, mouthTricks: Int = 0, creditsViews: Int = 0, days: [String: String] = [:]) {
+        self.voiceEdits = voiceEdits
+        self.transforms = transforms
+        self.mouthTricks = mouthTricks
+        self.creditsViews = creditsViews
+        self.days = days
+    }
+
+    public func day(_ counter: AchievementStore.Counter, reaching count: Int) -> String? { days["\(counter.rawValue):\(count)"] }
+}
+
 /// What the engine needs beyond the stats snapshot: a few small facts read from the log by SQL. No text is ever carried, and
 /// takes from secure fields are left out of every figure.
 public struct AchievementExtras: Equatable, Sendable {
@@ -58,12 +78,15 @@ public struct AchievementExtras: Equatable, Sendable {
     public var longestDurationDay: String?
     /// An accepted typing calibration exists.
     public var calibrated: Bool
+    /// Local action counts. Not in the log, so they start at install and are never backfilled.
+    public var counters: AchievementCounters
 
     public init(
         days: [Day] = [], distinctApps: Int = 0, thirdAppDay: String? = nil, handsFreeCount: Int = 0,
         handsFreeFirstDay: String? = nil, snippetCount: Int = 0, snippetTenthDay: String? = nil, rememberedCount: Int = 0,
         firstRememberedDay: String? = nil, nightOwlDay: String? = nil, longestDurationMs: Int? = nil,
-        longestDurationDay: String? = nil, calibrated: Bool = false
+        longestDurationDay: String? = nil, calibrated: Bool = false,
+        counters: AchievementCounters = AchievementCounters()
     ) {
         self.days = days
         self.distinctApps = distinctApps
@@ -78,6 +101,7 @@ public struct AchievementExtras: Equatable, Sendable {
         self.longestDurationMs = longestDurationMs
         self.longestDurationDay = longestDurationDay
         self.calibrated = calibrated
+        self.counters = counters
     }
 }
 

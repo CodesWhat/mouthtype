@@ -89,3 +89,51 @@ GLYPHS = {
     "processing": PROCESSING,
     "unavailable": UNAVAILABLE,
 }
+
+# Mouth tricks, played on the idle glyph when the menu is opened with Option held. Each is 16 x 15 like the rest.
+# tongue out, in two frames so it wiggles
+TRICK_TONGUE_0 = IDLE[:10] + [
+    "...####..####...",
+    "......####......",
+    "......####......",
+    ".......##.......",
+    "................",
+]
+TRICK_TONGUE_1 = IDLE[:10] + [
+    "...####..####...",
+    ".......####.....",
+    ".......####.....",
+    "........##......",
+    "................",
+]
+# a puckered whistle, then the same with a note
+TRICK_WHISTLE_0 = [
+    "................",
+    "................",
+    "................",
+    "....########....",
+    "...##########...",
+    "..####....####..",
+    "..###......###..",
+    "..###......###..",
+    "..###......###..",
+    "..####....####..",
+    "...##########...",
+    "....########....",
+    "................",
+    "................",
+    "................",
+]
+TRICK_WHISTLE_1 = [
+    "..............##",
+    "..............#.",
+    ".............##.",
+    "....########.##.",
+] + TRICK_WHISTLE_0[4:]
+
+TRICK_GLYPHS = {
+    "trick-tongue0": TRICK_TONGUE_0,
+    "trick-tongue1": TRICK_TONGUE_1,
+    "trick-whistle0": TRICK_WHISTLE_0,
+    "trick-whistle1": TRICK_WHISTLE_1,
+}

@@ -127,6 +127,26 @@ enum AchievementSprites {
             "......yyyy..", ".....yyy....", "....yyy.....", "...yyy......", "..yyyyyyy...", ".....yyy....", "....yyy.....", "...yy.......",
             "..yy........", "..y.........",
         ]
+        raw["second_draft"] = [
+            "........kk..", ".......kttk.", "......kttkk.", ".....kyykk..", "....kyyyk...", "...kyyyk....", "..kyyyk.....", ".kyyyk......",
+            ".kpykk......", "kppk........", "kkk.........",
+        ]
+        raw["editor"] = [
+            "..kk....kk..", "..ksk..ksk..", "...ksk.ksk..", "....ksksk...", ".....kSk....", "....ksksk...", "...ksk.ksk..", "..krk...krk.",
+            ".krrk...krrk", ".krrk...krrk", "..kk.....kk.",
+        ]
+        raw["reworded"] = [
+            ".......k....", ".......kk...", ".kbbbbbbbk..", ".......kk...", ".......k....", "............", "....k.......",
+            "...kk.......", "..kbbbbbbbk.", "...kk.......", "....k.......",
+        ]
+        raw["tongue_out"] = [
+            "", "...kkkkkk...", ".kkrrrrrrkk.", "krrrrrrrrrrk", "kkkkkkkkkkkk", "krrrrrrrrrrk", ".kkrrrrrrkk.", "..kkkttkkk..",
+            "....kttttk..", "....kttttk..", ".....kttk...", "......kk....",
+        ]
+        raw["read_credits"] = [
+            "..kkkkkkkk..", ".kccccyccck.", ".kcccyyycck.", ".kccccyccck.", ".kcckkkkcck.", ".kcckkkkcck.", ".kcckkkkcck.",
+            ".kcccccccck.", "..kkkkkkkk..",
+        ]
         raw["night_owl"] = [
             ".kk......kk.", ".knkkkkkknk.", "knnnnnnnnnnk", "knwwwnnwwwnk", "knwkwnnwkwnk", "knwwwnnwwwnk", "knnnnyynnnnk", "knppppppppnk",
             "knpnpnpnpnnk", ".knnnnnnnnk.", "..yk....ky..",

@@ -29,6 +29,13 @@ extension MenuSection {
     var onStopDictation: (@MainActor () -> Void)?
     var onCancelDictation: (@MainActor () -> Void)?
     var onRefresh: (@MainActor () -> Void)?
+    /// Called once the menu has been refreshed for opening, with whether Option is held.
+    var onWillOpen: (@MainActor (_ optionHeld: Bool) -> Void)?
+    /// Called when About is opened with Option held and the credits are shown.
+    var onCreditsShown: (@MainActor () -> Void)?
+    /// The modifier keys at the moment of the click or the open. Replaceable so tests need no keyboard.
+    var modifierFlags: @MainActor () -> NSEvent.ModifierFlags = { NSApp.currentEvent?.modifierFlags ?? NSEvent.modifierFlags }
+    private var creditsWereShown = false
     var dictationControlItems: [NSMenuItem] { [stopItem, cancelItem] }
 
     override init() {
@@ -56,6 +63,7 @@ extension MenuSection {
     func menuNeedsUpdate(_ menu: NSMenu) {
         sections.forEach { $0.section.prepareForMenuOpen() }
         refresh()
+        onWillOpen?(modifierFlags().contains(.option))
     }
 
     func menuDidClose(_ menu: NSMenu) {
@@ -83,7 +91,20 @@ extension MenuSection {
     @objc private func stop() { onStopDictation?() }
     @objc private func cancel() { onCancelDictation?() }
     @objc private func quit() { NSApp.terminate(nil) }
-    @objc private func about() { NSApp.activate(); NSApp.orderFrontStandardAboutPanel(nil) }
+    @objc private func about() {
+        NSApp.activate()
+        if modifierFlags().contains(.option) {
+            // Option-click: the credits, from the real attributions. About itself is unchanged for a plain click.
+            creditsWereShown = true
+            NSApp.orderFrontStandardAboutPanel(options: [.credits: AboutCredits.attributed()])
+            onCreditsShown?()
+        } else if creditsWereShown {
+            creditsWereShown = false
+            NSApp.orderFrontStandardAboutPanel(options: [.credits: NSAttributedString()])
+        } else {
+            NSApp.orderFrontStandardAboutPanel(nil)
+        }
+    }
 }
 
 @MainActor public final class MenuBarController: NSObject {
@@ -101,6 +122,12 @@ extension MenuSection {
         get { daily.onRefresh }
         set { daily.onRefresh = newValue }
     }
+    var onCreditsShown: (@MainActor () -> Void)? {
+        get { daily.onCreditsShown }
+        set { daily.onCreditsShown = newValue }
+    }
+    /// A mouth trick started. Counts as a play, even if a state change cuts it short.
+    var onMouthTrick: (@MainActor () -> Void)?
     var dictationControlItems: [NSMenuItem] { daily.dictationControlItems }
 
     public override init() {
@@ -113,11 +140,16 @@ extension MenuSection {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.reduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+                self.trick.cancel()
                 self.applyGlyph()
             }
         }
         setIcon(.idle)
         statusItem.menu = daily.menu
+        daily.onWillOpen = { [weak self] optionHeld in
+            guard let self, optionHeld, !self.isPinned, self.trick.start(icon: self.icon) else { return }
+            self.onMouthTrick?()
+        }
     }
 
     deinit {
@@ -133,6 +165,26 @@ extension MenuSection {
         uniqueKeysWithValues: (StatusIcon.allCases.filter { $0 != .recording }.map(\.glyphName) + StatusIcon.recordingFiles)
             .compactMap { name in StatusIcon.loadImage(named: name).map { (name, $0) } })
 
+    private let trickImages: [String: NSImage] = Dictionary(
+        uniqueKeysWithValues: MouthTrick.glyphFiles.compactMap { name in StatusIcon.loadImage(named: name).map { (name, $0) } })
+    /// Plays the Option-open mouth trick. Any state change other than idle cancels it and puts the true glyph back.
+    private lazy var trick = MouthTrickPlayer(
+        schedule: { seconds, fire in
+            // Common modes, so a step still fires while the menu is tracking.
+            let timer = Timer(timeInterval: seconds, repeats: false) { _ in MainActor.assumeIsolated { fire() } }
+            RunLoop.main.add(timer, forMode: .common)
+            return { timer.invalidate() }
+        },
+        show: { [weak self] file in
+            guard let self, let image = self.images[file] ?? self.trickImages[file] else { return }
+            self.statusItem.button?.image = image
+        },
+        restore: { [weak self] in
+            guard let self, let file = self.gate.file, let image = self.images[file] else { return }
+            self.statusItem.button?.image = image
+        },
+        reduceMotion: { [weak self] in self?.reduceMotion ?? false })
+
     /// `--status-icon recording` pins a static recording glyph for screenshots, so the level doesn't animate it.
     var isPinned = false
 
@@ -141,6 +193,8 @@ extension MenuSection {
 
     func setIcon(_ icon: StatusIcon) {
         if icon != .recording { level = 0 }
+        // Any state other than idle ends a trick before the real glyph is chosen. A repeat of idle is not a state change.
+        if icon != .idle { trick.cancel() }
         self.icon = icon
         applyGlyph()
     }
