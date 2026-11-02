@@ -70,6 +70,13 @@ public struct ProfanityRemover: Sendable {
         "should", "might", "must", "did", "does", "do", "'s", "'re", "'m",
     ]
 
+    /// Words that put a locative "there" in the subject ("Being there is hard"), where an existential "there" would
+    /// follow a sentence break or a clause opener instead.
+    private static let locativeLeaders: Set<String> = [
+        "being", "getting", "going", "living", "staying", "working", "standing", "sitting", "waiting", "coming", "out", "over",
+        "back",
+    ]
+
     /// Loads the tagger's language model off the dictation path, so the first intensifier doesn't spend the cleanup
     /// time budget on it.
     public static func prewarm() {
@@ -552,11 +559,22 @@ public struct ProfanityRemover: Sendable {
         func hasExistentialThere(_ k: Int) -> Bool {
             var at = k - 2
             while at >= 0, adjacent(at) {
-                if words[at].lower == "there" { return true }
+                if words[at].lower == "there" {
+                    return !leadsClause(at - 1)
+                }
                 guard ProfanityRemover.auxiliaries.contains(words[at].lower) else { return false }
                 at -= 1
             }
             return false
+        }
+
+        /// Whether the locative leader at `k` opens its clause ("Being there is hard"), so the "there" after it is the
+        /// subject. A leader that follows a subject or subordinator ("When I'm working there are people") ends a clause,
+        /// and the "there" is existential.
+        func leadsClause(_ k: Int) -> Bool {
+            guard k >= 0, ProfanityRemover.locativeLeaders.contains(words[k].lower), adjacent(k) else { return false }
+            guard k > 0, adjacent(k - 1) else { return true }
+            return ["and", "but", "or", "so"].contains(words[k - 1].lower)
         }
 
         // MARK: Swapping

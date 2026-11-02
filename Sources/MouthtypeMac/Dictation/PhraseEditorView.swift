@@ -10,6 +10,8 @@ struct PhraseEditorView: View {
     @Bindable var editor: PhraseEditor
     /// The Thorough model's state, for the status on each AI transform. Nil where the page is built without a model, as in most tests.
     var transformModel: CleanupSelection?
+    /// Where the optional Edit Selection by Voice shortcut lives. Nil where the page is built without settings, as in most tests.
+    var settings: SettingsModel?
     @State private var sheetOpen = false
 
     private static let triggerColumn: CGFloat = 150
@@ -178,6 +180,23 @@ struct PhraseEditorView: View {
                 .accessibilityElement(children: .combine)
                 .accessibilityIdentifier("transform-" + transform.id)
             }
+            if let settings { voiceEditShortcutRow(settings) }
+        }
+    }
+
+    private func voiceEditShortcutRow(_ settings: SettingsModel) -> some View {
+        DesignRow(
+            title: "Edit by voice shortcut",
+            detail: "Optional. Edits the selected text from a spoken instruction. Also in the menu bar."
+        ) {
+            DesignPopup(
+                title: "Edit by voice shortcut",
+                selection: Binding(
+                    get: { settings.voiceEditShortcut.rawValue },
+                    set: { if let value = VoiceEditShortcut(rawValue: $0) { settings.setVoiceEditShortcut(value) } }),
+                choices: VoiceEditShortcut.allCases.map { DesignChoice($0.displayName, $0.rawValue) }
+            )
+            .accessibilityIdentifier("settings-voice-edit-shortcut")
         }
     }
 

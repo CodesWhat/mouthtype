@@ -19,6 +19,12 @@ for binary in "${objects[@]:1}"; do
 done
 xcrun llvm-cov report "${arguments[@]}" -instr-profile="$profdata" \
     -ignore-filename-regex='(\.build|Tests)/' > coverage-report.txt
+# lcov for Codecov, from the same profile and binaries. Best effort: the floor below measures the report, not this file.
+if ! xcrun llvm-cov export -format=lcov "${arguments[@]}" -instr-profile="$profdata" \
+    -ignore-filename-regex='(\.build|Tests)/' > coverage.lcov; then
+    echo "lcov export failed; skipping Codecov upload file" >&2
+    rm -f coverage.lcov
+fi
 cat coverage-report.txt
 total="$(awk '/^TOTAL/ {print $(NF-3)}' coverage-report.txt)"
 [[ "$total" =~ ^[0-9]+\.[0-9]+%$ ]] || { echo "missing total line coverage" >&2; exit 1; }
@@ -29,6 +35,7 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 
 read -r lines missed < <(awk '/^TOTAL/ {print $(NF-5), $(NF-4)}' coverage-report.txt)
+# shellcheck disable=SC2015  # intentional: any failed check falls through to the error exit
 [[ "$lines" =~ ^[0-9]+$ && "$missed" =~ ^[0-9]+$ ]] && (( lines > 0 && missed <= lines )) || {
     echo "invalid total line counts" >&2
     exit 1

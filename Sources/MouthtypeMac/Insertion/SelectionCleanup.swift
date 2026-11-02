@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import MouthtypeCore
 import Observation
 
@@ -93,6 +94,52 @@ private final class OnceResume: @unchecked Sendable {
     }
 }
 
+/// What Accept re-reads about the target before writing. It asks the target app for its own focus rather than the
+/// system-wide element, which becomes ours when the user clicks our nonactivating panel. Each read is lazy, so a
+/// check that fails early stops the later ones from touching the app.
+struct AcceptRecheck {
+    var frontmostPID: @MainActor () -> pid_t?
+    var secureInputEnabled: @MainActor () -> Bool
+    var focusedElement: @MainActor (pid_t) -> FocusedElement?
+    var role: @MainActor (FocusedElement) -> String?
+    var subrole: @MainActor (FocusedElement) -> String?
+
+    static let live = AcceptRecheck(
+        frontmostPID: { NSWorkspace.shared.frontmostApplication?.processIdentifier },
+        secureInputEnabled: { IsSecureEventInputEnabled() },
+        focusedElement: { pid in
+            let app = AXUIElementCreateApplication(pid)
+            AXUIElementSetMessagingTimeout(app, AccessibilityFocusReader.callTimeout())
+            var value: CFTypeRef?
+            guard AXUIElementCopyAttributeValue(app, kAXFocusedUIElementAttribute as CFString, &value) == .success,
+                let value, CFGetTypeID(value) == AXUIElementGetTypeID()
+            else { return nil }
+            return FocusedElement(value as! AXUIElement)
+        },
+        role: { string($0, kAXRoleAttribute) },
+        subrole: { string($0, kAXSubroleAttribute) })
+
+    /// The same reads over a `FocusReading`, for fakes that model one focus.
+    @MainActor static func reading(_ focus: any FocusReading) -> AcceptRecheck {
+        AcceptRecheck(
+            frontmostPID: { focus.snapshotApplication().pid },
+            secureInputEnabled: { focus.isSecureInputEnabled },
+            focusedElement: { pid in
+                let snapshot = focus.selectionSnapshot()
+                return snapshot.focusedOwnerPID == pid ? snapshot.element : nil
+            },
+            role: { _ in focus.selectionSnapshot().role },
+            subrole: { _ in focus.selectionSnapshot().isSecure ? kAXSecureTextFieldSubrole as String : nil })
+    }
+
+    @MainActor private static func string(_ element: FocusedElement, _ attribute: String) -> String? {
+        AXUIElementSetMessagingTimeout(element.ref, AccessibilityFocusReader.callTimeout())
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element.ref, attribute as CFString, &value) == .success else { return nil }
+        return value as? String
+    }
+}
+
 @MainActor final class AccessibilitySelectionEditor: SelectionEditing {
     private let focus: any FocusReading
     private let readRange: (FocusedElement) -> NSRange?
@@ -100,19 +147,22 @@ private final class OnceResume: @unchecked Sendable {
     private let writeText: (FocusedElement, String) -> Bool
     private let setTimeout: (FocusedElement, Float) -> Void
     private let offMainRead: @Sendable (pid_t, Bool, TimeInterval) -> Result<SelectedText, SelectionCleanupError>
+    private let recheck: AcceptRecheck
 
     convenience init() {
         self.init(
             focus: AccessibilityFocusReader(), readRange: Self.selectedRange,
-            readText: Self.selectedText, writeText: Self.setSelectedText)
+            readText: Self.selectedText, writeText: Self.setSelectedText, recheck: .live)
     }
 
     init(
         focus: any FocusReading, readRange: @escaping (FocusedElement) -> NSRange?,
         readText: @escaping (FocusedElement) -> String?, writeText: @escaping (FocusedElement, String) -> Bool,
         setTimeout: @escaping (FocusedElement, Float) -> Void = { AXUIElementSetMessagingTimeout($0.ref, $1) },
-        offMainRead: @escaping @Sendable (pid_t, Bool, TimeInterval) -> Result<SelectedText, SelectionCleanupError> = MenuSelectionRead.read
+        offMainRead: @escaping @Sendable (pid_t, Bool, TimeInterval) -> Result<SelectedText, SelectionCleanupError> = MenuSelectionRead.read,
+        recheck: AcceptRecheck? = nil
     ) {
+        self.recheck = recheck ?? .reading(focus)
         self.setTimeout = setTimeout
         self.offMainRead = offMainRead
         self.focus = focus
@@ -161,13 +211,50 @@ private final class OnceResume: @unchecked Sendable {
     }
 
     func replace(_ original: SelectedText, with replacement: String) -> Bool {
-        guard !replacement.isEmpty, replacement.utf16.count <= 16_000,
-            (try? capture()) == original, let element = original.element
-        else { return false }
+        guard !replacement.isEmpty, replacement.utf16.count <= 16_000, let element = original.element else {
+            Log.capture.info(
+                "selection replace refused: replacement length \(replacement.utf16.count, privacy: .public), element \(original.element == nil ? "nil" : "present", privacy: .public)"
+            )
+            return false
+        }
+        if let failed = recheckFailure(original, element: element) {
+            Log.capture.info("selection replace refused: \(failed, privacy: .public)")
+            return false
+        }
         // The captured reference kept the capture's shortened timeout. 0 restores the system default the insertion path uses.
         setTimeout(element, 0)
         // The user explicitly accepts this edit. No clipboard paste, keyboard events or retry.
-        return writeText(element, replacement)
+        let wrote = writeText(element, replacement)
+        Log.capture.info(
+            "selection replace \(wrote ? "wrote" : "refused: writeText returned false", privacy: .public); pid \(original.pid, privacy: .public), range \(original.range.location, privacy: .public)+\(original.range.length, privacy: .public), replacement length \(replacement.utf16.count, privacy: .public)"
+        )
+        return wrote
+    }
+
+    /// Which Accept check failed, or nil when the target still matches. Names, pids, roles and numbers only, never text.
+    private func recheckFailure(_ original: SelectedText, element: FocusedElement) -> String? {
+        let front = recheck.frontmostPID()
+        guard front == original.pid else {
+            return "frontmost app changed (pid \(original.pid) vs \(front.map(String.init) ?? "nil"))"
+        }
+        guard !recheck.secureInputEnabled() else { return "secure input is on" }
+        guard let focused = recheck.focusedElement(original.pid) else { return "target app has no focused element" }
+        guard focused == element else { return "target app's focused element changed" }
+        let role = recheck.role(focused)
+        guard ["AXTextField", "AXTextArea", "AXComboBox"].contains(role ?? "") else {
+            return "role is \(role ?? "nil")"
+        }
+        let subrole = recheck.subrole(focused)
+        guard subrole != kAXSecureTextFieldSubrole as String else { return "subrole is secure" }
+        let range = readRange(focused)
+        guard range == original.range else {
+            return "range changed (\(original.range.location)+\(original.range.length) vs \(range.map { "\($0.location)+\($0.length)" } ?? "nil"))"
+        }
+        let text = readText(focused)
+        guard text == original.text else {
+            return "text changed (length \(original.text.utf16.count) vs \(text.map { String($0.utf16.count) } ?? "nil"))"
+        }
+        return nil
     }
 
     private static func selectedRange(_ element: FocusedElement) -> NSRange? {

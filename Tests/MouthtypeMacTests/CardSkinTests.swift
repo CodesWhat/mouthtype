@@ -26,6 +26,7 @@ private final class CardRig {
         defaults.set(size, forKey: "pillSize")
         pill = PillController(level: { .silence }, defaults: defaults)
         pill.cardSettle = 0
+        pill.primaryButtonDown = { false }
         presenter = DeliveryCardPresenter(surface: cards, clipboard: StubClipboard(), clock: clock)
         cards.anchor = { [weak pill] in pill?.cardAnchor() }
         cards.onAction = { [weak presenter] in presenter?.perform($0) }
@@ -299,9 +300,17 @@ private final class CardRig {
 }
 
 @MainActor
-@Suite struct CardGrowTests {
+@Suite(.timeLimit(.minutes(1))) struct CardGrowTests {
     private func settle() async {
         for _ in 0..<20 { await Task.yield() }
+    }
+
+    /// Waits, up to two seconds, for work on other tasks to reach `condition`.
+    private func until(_ condition: () -> Bool) async {
+        for _ in 0..<400 where !condition() {
+            try? await Task.sleep(for: .milliseconds(5))
+            await settle()
+        }
     }
 
     @Test func eachSkinPicksItsCardStyleAndSizeFromTheAnchor() throws {
@@ -393,6 +402,21 @@ private final class CardRig {
         rig.finish()
     }
 
+    @Test func aPressThatStartedOnTheCardKeepsThePanelLiveUntilTheButtonComesUp() throws {
+        let rig = CardRig(skin: "matrix")
+        rig.presenter.present(.pasteFailed("Send the notes."))
+        let grown = try #require(rig.squircle?.grownFrame)
+        rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.midX, y: grown.midY)))
+        #expect(!rig.pill.panel.ignoresMouseEvents)
+        rig.pill.primaryButtonDown = { true }
+        rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.maxX + 6, y: grown.midY)))
+        #expect(!rig.pill.panel.ignoresMouseEvents)
+        rig.pill.primaryButtonDown = { false }
+        rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.maxX + 6, y: grown.midY)))
+        #expect(rig.pill.panel.ignoresMouseEvents)
+        rig.finish()
+    }
+
     @Test func dismissShrinksTheCardBackToAPillAndTheMessageGoes() async throws {
         let rig = CardRig(skin: "minimal")
         let standard = rig.pill.panelSize
@@ -451,10 +475,10 @@ private final class CardRig {
     @Test func aTimeoutShrinksTheCard() async throws {
         let rig = CardRig(skin: "matrix")
         rig.presenter.present(.rememberSpelling(SpellingPair(heard: "Shawn", corrected: "Sean")))
-        await settle()
+        await until { rig.clock.sleeperCount == 1 }
         #expect(rig.pill.isGrown)
         rig.clock.advance(by: DeliveryCard.offerWindow + 0.1)
-        await settle()
+        await until { rig.presenter.state == nil }
         #expect(rig.presenter.state == nil && !rig.pill.isGrown && !rig.cards.isMerged)
         #expect(rig.pill.panel.ignoresMouseEvents)
         rig.finish()

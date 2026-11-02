@@ -51,6 +51,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     private var _loaded = false
     private(set) var loads = 0
     private(set) var unloads = 0
+    private(set) var unloadsStarted = 0
     private(set) var downloads = 0
     private(set) var cleanCalls = 0
     var loadDelay: Duration = .zero
@@ -58,6 +59,8 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     var progressSteps: [Double] = [0.25, 0.5, 1]
     var downloadGate: DownloadGate?
     var cleanGate: DownloadGate?
+    /// What a voice edit's generation returns; set it to stand in for the model's edited text.
+    var voiceEditOutput: String?
     var unloadGate: DownloadGate?
     var loadGate: DownloadGate?
     private(set) var loadsStarted = 0
@@ -75,6 +78,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     func clean(_ transcript: String, context: CleanupContext) async throws -> String {
         lock.withLock { cleanCalls += 1 }
         await cleanGate?.wait()
+        if context.voiceEdit != nil, let output = lock.withLock({ voiceEditOutput }) { return output }
         return transcript
     }
 
@@ -97,6 +101,7 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
     }
 
     func unload() async {
+        lock.withLock { unloadsStarted += 1 }
         await unloadGate?.wait()
         lock.withLock {
             unloads += 1
@@ -116,7 +121,9 @@ final class FakeSmartModel: SmartModel, @unchecked Sendable {
         model.unloadGate = gate
         level.value = .basic
         host.levelChanged()
-        try? await Task.sleep(for: .milliseconds(40))
+        // The unload is really under way, held at its gate.
+        _ = await FetchProbe.wait(timeout: .seconds(10)) { model.unloadsStarted >= 1 }
+        #expect(model.unloadsStarted == 1)
         let request = SmartCleanupRequest(text: "keep this take", level: .light)
         let during = await host.run(request)
         #expect(during.text == request.text && during.outcome == .skipped)

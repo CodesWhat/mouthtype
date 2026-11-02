@@ -18,10 +18,11 @@ import Testing
                 .padding().frame(width: 480, height: 200))
         window.contentView = host
         host.layoutSubtreeIfNeeded()
-        try await Task.sleep(for: .milliseconds(100))
         func fields(_ view: NSView) -> [NSTextField] {
             (view as? NSTextField).map { [$0] } ?? view.subviews.flatMap(fields)
         }
+        // SwiftUI builds the hosted text field after layout; wait for it instead of a fixed settle.
+        await awaitCondition { !fields(host).isEmpty }
         let field = try #require(fields(host).first)
         #expect(window.makeFirstResponder(field))
         let editor = try #require(field.currentEditor())

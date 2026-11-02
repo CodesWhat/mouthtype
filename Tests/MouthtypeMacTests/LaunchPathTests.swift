@@ -4,7 +4,7 @@ import MouthtypeCore
 import Testing
 @testable import MouthtypeMac
 
-@MainActor @Suite struct LaunchPathTests {
+@MainActor @Suite(.timeLimit(.minutes(1))) struct LaunchPathTests {
     private func defaults() -> (UserDefaults, () -> Void) {
         let name = "LaunchPathTests-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -28,7 +28,7 @@ import Testing
         // Straight after the status item: nothing has registered on main, and the rest of launch hasn't started.
         #expect(!FontRegistry.registeredOnMain)
         #expect(!finished)
-        try? await Task.sleep(for: .milliseconds(300))
+        for _ in 0..<1000 where !finished { try? await Task.sleep(for: .milliseconds(10)) }
         #expect(finished)
         #expect(FontRegistry.registered == FontRegistry.families)
     }
@@ -144,6 +144,8 @@ import Testing
         let before = model.refreshCount
         for _ in 0..<20 { model.scheduleRefresh() }
         #expect(model.refreshCount == before)
+        for _ in 0..<1000 where model.refreshCount == before { try? await Task.sleep(for: .milliseconds(10)) }
+        // The burst is one refresh: give any extra one the same chance to land.
         try? await Task.sleep(for: .milliseconds(50))
         #expect(model.refreshCount == before + 1)
     }

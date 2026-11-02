@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-02
+
+### Added
+
+- Edit Selection by Voice: select text, speak one instruction and review the result in a preview before it replaces the selection. It is off until you set its shortcut on the Transforms page. It refuses secure fields, an empty selection and selections over 8,000 characters, and nothing is retained.
+- Typing calibration on the Stats page: type a short passage in the app to measure your typing speed, so time saved reflects your own baseline.
+
+### Changed
+
+- Updated FluidAudio, the speech recognition library, from 0.17.7 to 0.18.0.
+
+### Fixed
+
+- Profanity cleanup no longer treats a locative "there" as the subject of a verb.
+- Transform Selection now checks the target app's own focus before Accept replaces the selection.
+
 ## [0.10.0] - 2026-10-31
 
 ### Added
@@ -191,7 +207,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/CodesWhat/mouthtype/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/CodesWhat/mouthtype/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/CodesWhat/mouthtype/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/CodesWhat/mouthtype/compare/v0.8.0...v0.9.0
