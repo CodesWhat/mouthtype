@@ -437,6 +437,19 @@ class HoldToTalkTests(unittest.TestCase):
         self.release(25)
         self.assertFalse(self.recording)
 
+    def test_press_delivered_after_its_fast_release_leaves_no_take_recording(self):
+        # Hyprland launches press and release as separate clients; the release (t=11) wins the race to the lock.
+        self.release(11)
+        self.press(10)
+        self.assertFalse(self.recording)
+        self.assertNotIn("start", self.service_calls())
+        self.assertNotIn("cue-start", self.calls)
+        # A press that does start, then a release that outruns nothing, still pairs start with stop in order.
+        self.press(20)
+        self.release(21)
+        self.assertEqual([c for c in self.service_calls() if c in ("start", "stop")][-2:], ["start", "stop"])
+        self.assertFalse(self.recording)
+
     def test_rapid_taps_end_with_nothing_recording_in_every_arrival_order(self):
         import itertools
         taps = [(10, 11), (12, 13), (14, 15)]
