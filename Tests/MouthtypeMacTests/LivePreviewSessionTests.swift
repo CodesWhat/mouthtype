@@ -37,8 +37,17 @@ private actor PreviewRecognizer {
 private final class PreviewCount { var value = 16_000 }
 
 @MainActor
-@Suite struct LivePreviewSessionTests {
+@Suite(.timeLimit(.minutes(1))) struct LivePreviewSessionTests {
     private func settle() async { for _ in 0..<100 { await Task.yield() } }
+
+    /// Waits, up to five seconds, for work on other tasks and actors to reach `condition`.
+    private func until(_ condition: () async -> Bool) async {
+        let deadline = ContinuousClock.now + .seconds(5)
+        while ContinuousClock.now < deadline {
+            if await condition() { return }
+            try? await Task.sleep(for: .milliseconds(5))
+        }
+    }
 
     @Test func previewWaitsForCadenceThenUsesBoundedAudio() async {
         let cadence = PreviewGate()
@@ -54,7 +63,7 @@ private final class PreviewCount { var value = 16_000 }
         await settle()
         #expect(requested.isEmpty)
         await cadence.release()
-        await settle()
+        await until { !texts.isEmpty }
         #expect(requested == [128_000])
         #expect(await recognizer.counts == [128_000])
         #expect(texts == ["These are provisional words."])
@@ -78,7 +87,7 @@ private final class PreviewCount { var value = 16_000 }
         await cadence.release()
         await settle()
         await cadence.release()
-        await settle()
+        await until { await recognizer.counts.count >= 1 }
         #expect(await recognizer.counts == [48_000])
         preview.stop()
         await cadence.release()
@@ -95,7 +104,7 @@ private final class PreviewCount { var value = 16_000 }
         preview.start(source: source, recognize: { try await recognizer.run($0) }, update: { texts.append("old: \($0)") })
         await settle()
         await cadence.release()
-        await settle()
+        await until { await recognizer.counts.count >= 1 }
         #expect(await recognizer.counts.count == 1)
         preview.stop()
         preview.start(source: source, recognize: { try await recognizer.run($0) }, update: { texts.append("new: \($0)") })
@@ -107,7 +116,7 @@ private final class PreviewCount { var value = 16_000 }
         await cadence.release()
         await settle()
         await inference.release()
-        await settle()
+        await until { !texts.isEmpty }
         #expect(texts == ["new: These are provisional words."])
         #expect(await recognizer.maximumConcurrent == 1)
         preview.stop()
@@ -126,7 +135,7 @@ private final class PreviewCount { var value = 16_000 }
             }, recognize: { _ in throw CocoaError(.fileReadUnknown) }, update: { texts.append($0) })
         await settle()
         await cadence.release()
-        await settle()
+        await until { calls >= 1 }
         await cadence.release()
         await settle()
         #expect(calls == 1)
@@ -142,7 +151,7 @@ private final class PreviewCount { var value = 16_000 }
         preview.start(source: { maximum in PreviewAudio(samples: Array(repeating: 0.1, count: maximum), capturedSampleCount: maximum) }, recognize: { _ in source }, update: { visible = $0 })
         await settle()
         await cadence.release()
-        await settle()
+        await until { !visible.isEmpty }
         #expect(visible.count == 160)
         #expect(visible == String(source.suffix(160)))
         preview.stop()
@@ -159,7 +168,7 @@ private final class PreviewCount { var value = 16_000 }
                 snapshots += 1
                 return PreviewAudio(samples: [], capturedSampleCount: 0)
             }, recognize: { _ in "" }, update: { _ in inferences += 1 })
-        for _ in 0..<2_000 where snapshots < 600 { await Task.yield() }
+        await until { snapshots >= 600 }
         await settle()
         #expect(snapshots == 600)
         #expect(inferences == 0)
