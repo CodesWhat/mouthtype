@@ -117,7 +117,7 @@ private final class FakeClipboard: ClipboardWriting {
 }
 
 @MainActor
-@Suite struct CardPresenterTests {
+@Suite(.timeLimit(.minutes(1))) struct CardPresenterTests {
     private func rig() -> (DeliveryCardPresenter, FakeSurface, FakeClipboard, FakeClock) {
         let surface = FakeSurface(), clipboard = FakeClipboard(), clock = FakeClock(start: 0)
         return (DeliveryCardPresenter(surface: surface, clipboard: clipboard, clock: clock), surface, clipboard, clock)
@@ -125,6 +125,14 @@ private final class FakeClipboard: ClipboardWriting {
 
     private func settle() async {
         for _ in 0..<20 { await Task.yield() }
+    }
+
+    /// Waits, up to two seconds, for work on other tasks to reach `condition`.
+    private func until(_ condition: () -> Bool) async {
+        for _ in 0..<400 where !condition() {
+            try? await Task.sleep(for: .milliseconds(5))
+            await settle()
+        }
     }
 
     @Test func theListenerHearsEachCardAndWhenItGoes() {
@@ -145,7 +153,7 @@ private final class FakeClipboard: ClipboardWriting {
         let (presenter, surface, clipboard, clock) = rig()
         presenter.present(.pasteFailed("hello there"))
         presenter.perform(.copy)
-        await settle()
+        await until { clock.sleeperCount == 1 }
 
         #expect(clipboard.written == ["hello there"])
         #expect(surface.visible?.copied == true && surface.visible?.card.kind == .pasteFailed)
@@ -153,7 +161,7 @@ private final class FakeClipboard: ClipboardWriting {
         await settle()
         #expect(surface.visible != nil)
         clock.advance(by: 0.02)
-        await settle()
+        await until { surface.visible == nil }
         #expect(surface.visible == nil && presenter.state == nil)
     }
 
@@ -169,7 +177,7 @@ private final class FakeClipboard: ClipboardWriting {
         let (presenter, surface, _, clock) = rig()
         presenter.present(.nowhere("first"))
         presenter.perform(.copy)
-        await settle()
+        await until { clock.sleeperCount == 1 }
         presenter.present(.pasteFailed("second"))
         clock.advance(by: 5)
         await settle()

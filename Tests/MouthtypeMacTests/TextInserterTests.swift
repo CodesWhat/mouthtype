@@ -280,7 +280,7 @@ private struct Rig {
 }
 
 @MainActor
-@Suite struct TextInserterTests {
+@Suite(.timeLimit(.minutes(1))) struct TextInserterTests {
     /// A delivery after the cleanup's context read: one full snapshot, two cheap rechecks, a fresh text-before-cursor read.
     private func primed(_ rig: Rig, bundleID: String = "com.example.app") {
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: bundleID, element: element(100))
@@ -1683,13 +1683,21 @@ private struct Rig {
         for _ in 0..<20 { await Task.yield() }
     }
 
+    /// Waits, up to two seconds, for the hop to land `condition`.
+    private func hop(until condition: () -> Bool) async {
+        for _ in 0..<400 where !condition() {
+            try? await Task.sleep(for: .milliseconds(5))
+            await hop()
+        }
+    }
+
     @Test func aReceiptRestoresTheClipboard200msLater() async {
         let rig = Rig()
         rig.pasteboard.contents = original
         _ = await rig.inserter.deliver("hello", startFocus: nil)
         #expect(rig.pending.delays == [PasteboardSession.receiptCap])
         rig.pasteboard.read()
-        await hop()
+        await hop { rig.pending.delays.count >= 2 }
         #expect(rig.pending.delays == [PasteboardSession.receiptCap, 0.2])
         #expect(rig.pasteboard.contents != original)
         rig.pending.run(0.2)
@@ -1728,9 +1736,9 @@ private struct Rig {
         rig.pasteboard.contents = original
         _ = await rig.inserter.deliver("hello", startFocus: nil)
         rig.pasteboard.read()
-        await hop()
+        await hop { rig.pending.delays.count >= 2 }
         rig.pasteboard.read()
-        await hop()
+        await hop { rig.pending.delays.count >= 3 }
         #expect(rig.pending.delays == [PasteboardSession.receiptCap, 0.2, 0.2])
         // The first receipt's timer fires, but a later receipt moved the deadline.
         rig.pending.runFirst(0.2) {}
@@ -1753,7 +1761,7 @@ private struct Rig {
         rig.pasteboard.contents = original
         _ = await rig.inserter.deliver("hello", startFocus: nil)
         rig.pasteboard.read()
-        await hop()
+        await hop { rig.pending.delays.contains(0.2) }
         rig.pasteboard.externalCopy("user copied this")
         rig.pending.run(0.2)
         #expect(rig.pasteboard.contents.items == [[text("user copied this")]])
@@ -1788,7 +1796,7 @@ private struct Rig {
         await hop()
         #expect(rig.pending.delays.filter { $0 == 0.2 }.count == settledTimers)
         rig.pasteboard.read()
-        await hop()
+        await hop { rig.pending.delays.filter { $0 == 0.2 }.count > settledTimers }
         #expect(rig.pending.delays.filter { $0 == 0.2 }.count == settledTimers + 1)
         rig.pending.run(0.2)
         #expect(rig.pasteboard.contents == original)
