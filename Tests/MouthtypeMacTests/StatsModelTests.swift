@@ -6,6 +6,11 @@ import Testing
 @MainActor @Suite struct StatsModelTests {
     private let base = Date()
 
+    /// A fresh suite per model, so a typing speed accepted on this Mac never changes what these tests compute. Nothing is written to it.
+    private static func isolatedDefaults() -> UserDefaults {
+        UserDefaults(suiteName: "StatsModelTests-\(UUID().uuidString)")!
+    }
+
     private func makeStore() throws -> (TranscriptStore, URL) {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-stats-\(UUID().uuidString)")
         return (try TranscriptStore(url: dir.appendingPathComponent("mouthtype.sqlite")), dir)
@@ -29,7 +34,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "one two three")
         try dictate(store, minutes: 2, text: "a very long secret passphrase that must never be counted anywhere", secure: true)
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         await model.load()
         let snapshot = try #require(model.snapshot)
         #expect(snapshot.report.wordsAllTime == 3)
@@ -41,11 +46,11 @@ import Testing
     @Test func noHistoryHasNoSnapshotData() async throws {
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         await model.load()
         #expect(model.snapshot?.hasHistory == false)
         #expect(model.snapshot?.daily.isEmpty == true)
-        let missing = StatsModel(store: nil, observing: false)
+        let missing = StatsModel(store: nil, observing: false, defaults: Self.isolatedDefaults())
         await missing.load()
         #expect(missing.snapshot == nil && missing.error == "Stats are unavailable.")
     }
@@ -54,7 +59,7 @@ import Testing
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "one two")
-        let model = StatsModel(store: store)
+        let model = StatsModel(store: store, defaults: Self.isolatedDefaults())
         await waitUntil { model.snapshot?.report.wordsAllTime == 2 }
         #expect(model.snapshot?.report.wordsAllTime == 2)
         try dictate(store, minutes: 2, text: "three four five")
@@ -67,7 +72,7 @@ import Testing
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "one two")
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         model.fetch = { store, now, zone in
             Thread.sleep(forTimeInterval: 0.3)
             return try store.statsSnapshot(now: now, timeZone: zone)
@@ -89,7 +94,7 @@ import Testing
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "one two")
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         let stale = try store.statsSnapshot(now: base)
         model.fetch = { _, _, _ in
             Thread.sleep(forTimeInterval: 0.4)
@@ -120,7 +125,7 @@ import Testing
         try dictate(store, minutes: 1, text: "one two")
         let second = try store.statsSnapshot(now: base)
         let deliveries = Deliveries()
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         model.startObservation = { _, _, _, _, onChange in
             deliveries.add(onChange)
             return nil
@@ -165,7 +170,7 @@ import Testing
         try store.recordInsertion(id, InsertionRecord(finalText: "one two three"))
 
         let clock = Clock(evening)
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         model.now = { clock.current }
         model.timeZoneProvider = { zone }
         model.sleep = { duration in
@@ -190,7 +195,7 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "one two")
         let clock = Clock(base)
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         model.now = { clock.current }
         model.sleep = { _ in try await Task.sleep(for: .seconds(3_600)) }
         model.activate()
@@ -222,7 +227,7 @@ import Testing
         let id = try store.begin(DictationStart(startedAt: instant.addingTimeInterval(-60)))
         try store.recordInsertion(id, InsertionRecord(finalText: "one two three"))
         let zone = Zone(tokyo)
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         model.now = { instant }
         model.timeZoneProvider = { zone.current }
         model.sleep = { _ in try await Task.sleep(for: .seconds(3_600)) }
@@ -237,7 +242,7 @@ import Testing
     }
 
     @Test func aMissingStoreWhileActiveShowsTheUnavailableState() async throws {
-        let model = StatsModel(store: nil, observing: false)
+        let model = StatsModel(store: nil, observing: false, defaults: Self.isolatedDefaults())
         model.activate()
         #expect(model.snapshot == nil && model.error == "Stats are unavailable.")
         let (store, dir) = try makeStore()
@@ -254,7 +259,7 @@ import Testing
         let (store, dir) = try makeStore()
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "one two")
-        let model = StatsModel(store: store, observing: false)
+        let model = StatsModel(store: store, observing: false, defaults: Self.isolatedDefaults())
         model.activate()
         await waitUntil { model.snapshot != nil }
         model.startObservation = { _, _, _, onError, _ in
