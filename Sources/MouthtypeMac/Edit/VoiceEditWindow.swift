@@ -92,7 +92,7 @@ struct VoiceEditView: View {
             status("Transcribing your instruction.", detail: nil)
             buttons(cancelTitle: "Cancel")
         case .generating:
-            status("Editing on the local model.", detail: "Nothing leaves this Mac.")
+            status("Editing on the local model.", detail: "The first edit can take a minute while the model loads. Nothing leaves this Mac.")
             buttons(cancelTitle: "Cancel")
         case .preview:
             preview

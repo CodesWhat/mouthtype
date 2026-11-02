@@ -47,6 +47,12 @@ private final class FakeEngine: VoiceEditing, @unchecked Sendable {
     /// When set, the engine suspends until its task is cancelled, then reports cancellation like the real one.
     var blocks = false
     var requests: [VoiceEditRequest] { lock.withLock { _requests } }
+    private var _holds = 0
+    private var _releases = 0
+    var holds: Int { lock.withLock { _holds } }
+    var releases: Int { lock.withLock { _releases } }
+    func holdModel() { lock.withLock { _holds += 1 } }
+    func releaseModel() { lock.withLock { _releases += 1 } }
 
     func run(_ request: VoiceEditRequest) async -> VoiceEditResult {
         lock.withLock { _requests.append(request) }
@@ -290,6 +296,56 @@ private final class FakeEngine: VoiceEditing, @unchecked Sendable {
         await flow.cancel()
     }
 
+    @Test func modelDemandStartsWithRecordingAndIsReleasedOnEveryExit() async {
+        // Refused before recording: never held.
+        var rig = Rig()
+        rig.secure = true
+        var flow = rig.coordinator()
+        await flow.begin()
+        #expect(rig.engine.holds == 0 && rig.engine.releases == 0)
+
+        // Held while recording, released on cancel.
+        rig = Rig()
+        flow = rig.coordinator()
+        await flow.begin()
+        #expect(rig.engine.holds == 1 && rig.engine.releases == 0)
+        await flow.cancel()
+        #expect(rig.engine.releases == 1)
+
+        // Cancel during generation.
+        rig = Rig()
+        rig.engine.blocks = true
+        flow = rig.coordinator()
+        await flow.begin()
+        let run = Task { await flow.stopRecording() }
+        await wait(for: flow, .generating)
+        await flow.cancel()
+        await run.value
+        #expect(rig.engine.holds == 1 && rig.engine.releases == 1)
+
+        // Held through the preview, released on accept; and on a model refusal.
+        rig = Rig()
+        flow = rig.coordinator()
+        await flow.begin()
+        await flow.stopRecording()
+        #expect(rig.engine.releases == 0)
+        flow.accept()
+        #expect(rig.engine.holds == 1 && rig.engine.releases == 1)
+        rig = Rig()
+        rig.engine.result = .modelFailed
+        flow = rig.coordinator()
+        await flow.begin()
+        await flow.stopRecording()
+        #expect(rig.engine.holds == 1 && rig.engine.releases == 1)
+
+        // A recording failure after the hold.
+        rig = Rig()
+        rig.recorder.startError = CocoaError(.fileReadUnknown)
+        flow = rig.coordinator()
+        await flow.begin()
+        #expect(rig.engine.holds == 1 && rig.engine.releases == 1)
+    }
+
     @Test func nothingIsKeptOrWrittenToDefaultsAfterAnyEnding() async {
         let suiteName = "voice-edit-flow-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -345,6 +401,34 @@ private final class FakeEngine: VoiceEditing, @unchecked Sendable {
         let result = await VoiceEditEngine(model: host, readinessWait: .milliseconds(50))
             .run(VoiceEditRequest(selection: "hello world", instruction: "make it shorter"))
         #expect(result == .modelUnavailable)
+    }
+
+    @Test func engineWaitsMatchTheMinuteTransformsWait() {
+        #expect(VoiceEditEngine.defaultReadinessWait >= .seconds(60))
+        #expect(VoiceEditEngine.defaultTimeout >= .seconds(60))
+    }
+
+    @Test func aSlowLoadStillPreviewsWithinTheWaitAndFailsOutsideIt() async {
+        for (wait, expectPreview) in [(Duration.seconds(5), true), (Duration.milliseconds(20), false)] {
+            let gate = DownloadGate()
+            let model = FakeSmartModel(downloaded: true)
+            model.voiceEditOutput = "hi"
+            model.loadGate = gate
+            let host = CleanerHost(model: model, level: { .medium })
+            host.start()
+            let run = Task {
+                await VoiceEditEngine(model: host, readinessWait: wait)
+                    .run(VoiceEditRequest(selection: "hello world", instruction: "make it shorter"))
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+            await gate.release()
+            let result = await run.value
+            if expectPreview {
+                #expect(result == .preview(replacement: "hi", instruction: "make it shorter"))
+            } else {
+                #expect(result == .modelUnavailable)
+            }
+        }
     }
 
     @Test func readyHostGeneratesAPreviewThroughTheEngine() async {

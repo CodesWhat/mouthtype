@@ -24,6 +24,7 @@ final class CleanupSelection: CleanupModelManaging, CleanupModelListing {
     private let demand: CleanupDemand
     /// The level each take is holding a model for, from its recording start until its cleanup ends.
     private var holds: [String: CleanupLevel] = [:]
+    fileprivate var thoroughHolds = 0
 
     init(
         fast: any SmartModel, thorough: any SmartModel, level: @escaping @MainActor () -> CleanupLevel,
@@ -143,6 +144,19 @@ extension CleanupSelection: SelectionTransforming {
 
 /// Explicit voice edits run on the Thorough model, like the transforms.
 extension CleanupSelection: VoiceEditing {
+    func holdModel() {
+        thoroughHolds += 1
+        demand.thoroughRequests += 1
+        thorough.levelChanged()
+    }
+
+    func releaseModel() {
+        guard thoroughHolds > 0 else { return }
+        thoroughHolds -= 1
+        demand.thoroughRequests -= 1
+        levelChanged()
+    }
+
     func run(_ request: VoiceEditRequest) async -> VoiceEditResult {
         demand.thoroughRequests += 1
         defer {

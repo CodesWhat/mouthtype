@@ -22,8 +22,10 @@ public enum VoiceEditResult: Sendable, Equatable {
 /// Request to prompt to local model to guard to result. It never touches the selection and keeps nothing: the request,
 /// prompt and output live in this call's locals, and nothing here logs or writes.
 public actor VoiceEditEngine {
-    public static let defaultTimeout = Duration.seconds(30)
-    public static let defaultReadinessWait = Duration.seconds(5)
+    /// Transforms put no cap on generation; this bounds a voice edit at the same minute they wait for a load.
+    public static let defaultTimeout = Duration.seconds(60)
+    /// A cold Thorough load takes longer than a few seconds. Matches the wait selected-text transforms use.
+    public static let defaultReadinessWait = Duration.seconds(60)
 
     private let model: any VoiceEditModel
     private let timeout: Duration

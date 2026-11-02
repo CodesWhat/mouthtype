@@ -5,6 +5,15 @@ import Observation
 /// What the flow needs from the engine, so the state machine is tested with a fake.
 protocol VoiceEditing: Sendable {
     func run(_ request: VoiceEditRequest) async -> VoiceEditResult
+    /// Starts loading the model and keeps it demanded until `releaseModel()`, so it is usually ready by the time the
+    /// instruction is spoken. Calls are paired by the coordinator.
+    @MainActor func holdModel()
+    @MainActor func releaseModel()
+}
+
+extension VoiceEditing {
+    @MainActor func holdModel() {}
+    @MainActor func releaseModel() {}
 }
 
 extension VoiceEditEngine: VoiceEditing {}
@@ -126,6 +135,7 @@ enum VoiceEditPhase: Equatable {
     @ObservationIgnored private let recordingLimit: Duration
     @ObservationIgnored private let sleep: @Sendable (Duration) async throws -> Void
     @ObservationIgnored private var selection: SelectedText?
+    @ObservationIgnored private var holdingModel = false
     @ObservationIgnored private var generation = 0
     @ObservationIgnored private var pipeline: Task<Void, Never>?
     @ObservationIgnored private var limitTask: Task<Void, Never>?
@@ -176,6 +186,7 @@ enum VoiceEditPhase: Equatable {
         if captured.text.count > Self.selectionLimit { return end(.refused(.selectionTooLong)) }
         selection = captured
         sourceApp = appName(captured.pid)
+        holdModel()
         setPhase(.recording)
         do {
             try await recorder.start()
@@ -264,7 +275,18 @@ enum VoiceEditPhase: Equatable {
         setPhase(.ended(outcome))
     }
 
+    private func holdModel() {
+        guard !holdingModel else { return }
+        holdingModel = true
+        engine.holdModel()
+    }
+
+    /// Every exit path (end, cancel, an engine that reports cancelled) comes through `reset`, so the demand is paired.
     private func reset() {
+        if holdingModel {
+            holdingModel = false
+            engine.releaseModel()
+        }
         selection = nil
         instruction = ""
         replacement = ""
