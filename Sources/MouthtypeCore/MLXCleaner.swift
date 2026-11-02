@@ -147,7 +147,12 @@ public actor MLXCleaner: MeasuredCleaner {
         let start = clock.now
         try Task.checkCancellation()
         let input = try await container.prepare(input: promptInput(transcript, context: context))
-        let stableTokens = try await container.prepare(input: promptInput("", context: stableContext)).text.tokens.asArray(Int.self)
+        // A voice edit's prompt carries a per-run nonce and ignores the transcript, so no part of it is shared with a later
+        // take. An empty stable prefix keeps it from building a cache that would only push out a dictation one.
+        let stableTokens =
+            context.voiceEdit != nil
+            ? []
+            : try await container.prepare(input: promptInput("", context: stableContext)).text.tokens.asArray(Int.self)
         let prefixCaches = prefixCaches
         let (stream, generation) = try await container.perform(nonSendable: input) { model, prepared in
             try Task.checkCancellation()
@@ -189,7 +194,9 @@ public actor MLXCleaner: MeasuredCleaner {
             generation.cancel()
         }
         let total = (clock.now - start).seconds
-        let cleaned = try Self.finalize(text, input: transcript, transform: context.transform, truncated: truncated)
+        let cleaned = try Self.finalize(
+            text, input: transcript, transform: context.transform, truncated: truncated,
+            voiceEdit: context.voiceEdit != nil)
         return CleanupResult(
             text: cleaned,
             firstOutputSeconds: firstOutput ?? total,
@@ -201,6 +208,10 @@ public actor MLXCleaner: MeasuredCleaner {
 
     private nonisolated func promptInput(_ transcript: String, context: CleanupContext) throws -> UserInput {
         switch spec.promptFormat {
+        case .shared where context.voiceEdit != nil:
+            return UserInput(chat: [.system(context.voiceEdit!.system), .user(context.voiceEdit!.user)])
+        case .s1Mini where context.voiceEdit != nil:
+            throw CleanerError.unavailable(reason: "\(displayName) can't run voice edits.")
         case .shared where context.transform != nil:
             return UserInput(chat: [.system(context.transform!.systemPrompt()), .user(TextTransform.userMessage(transcript))])
         case .s1Mini where context.transform != nil:
@@ -259,8 +270,10 @@ public actor MLXCleaner: MeasuredCleaner {
     /// Turns raw generation into the result, or throws when the output can't be trusted. A generation that stopped at
     /// its length limit is a fragment, so dictation cleanup (which falls back to the uncleaned text on any error) and
     /// transforms (which keep Accept disabled) both refuse it.
-    static func finalize(_ text: String, input: String, transform: TextTransform?, truncated: Bool) throws -> String {
+    static func finalize(_ text: String, input: String, transform: TextTransform?, truncated: Bool, voiceEdit: Bool = false) throws -> String {
         if truncated { throw CleanerError.outputTruncated }
+        // A voice edit's output is judged raw by VoiceEditGuard, which refuses chatter instead of peeling it.
+        if voiceEdit { return text }
         guard transform != nil else { return CleanupPrompt.sanitize(text) }
         let cleaned = TextTransform.sanitize(text, input: input)
         if CleanupLimits.isImplausiblyLong(output: cleaned, input: input) { throw CleanerError.outputTooLong }

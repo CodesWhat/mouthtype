@@ -19,6 +19,15 @@ for binary in "${objects[@]:1}"; do
 done
 xcrun llvm-cov report "${arguments[@]}" -instr-profile="$profdata" \
     -ignore-filename-regex='(\.build|Tests)/' > coverage-report.txt
+# lcov for Codecov, from the same profile and binaries. Best effort: the floor below measures the report, not this file.
+# It is written aside and only renamed to coverage.lcov once every check below passes, so a failed run uploads nothing.
+rm -f coverage.lcov coverage.lcov.tmp
+trap 'rm -f coverage.lcov.tmp' EXIT
+if ! xcrun llvm-cov export -format=lcov "${arguments[@]}" -instr-profile="$profdata" \
+    -ignore-filename-regex='(\.build|Tests)/' > coverage.lcov.tmp; then
+    echo "lcov export failed; skipping Codecov upload file" >&2
+    rm -f coverage.lcov.tmp
+fi
 cat coverage-report.txt
 total="$(awk '/^TOTAL/ {print $(NF-3)}' coverage-report.txt)"
 [[ "$total" =~ ^[0-9]+\.[0-9]+%$ ]] || { echo "missing total line coverage" >&2; exit 1; }
@@ -29,6 +38,7 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 
 read -r lines missed < <(awk '/^TOTAL/ {print $(NF-5), $(NF-4)}' coverage-report.txt)
+# shellcheck disable=SC2015  # intentional: any failed check falls through to the error exit
 [[ "$lines" =~ ^[0-9]+$ && "$missed" =~ ^[0-9]+$ ]] && (( lines > 0 && missed <= lines )) || {
     echo "invalid total line counts" >&2
     exit 1
@@ -36,4 +46,7 @@ read -r lines missed < <(awk '/^TOTAL/ {print $(NF-5), $(NF-4)}' coverage-report
 if ! awk -v lines="$lines" -v missed="$missed" 'BEGIN {exit (100 * (lines - missed) < 80 * lines)}'; then
     echo "Swift line coverage is below the 80% floor ($((lines - missed))/$lines lines)." >&2
     exit 1
+fi
+if [ -f coverage.lcov.tmp ]; then
+    mv coverage.lcov.tmp coverage.lcov
 fi

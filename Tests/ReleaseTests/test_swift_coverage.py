@@ -50,6 +50,7 @@ class SwiftCoverageTests(unittest.TestCase):
             report = (directory / 'coverage-report.txt').read_text()
             self.assertIn('First.c', report)
             self.assertIn('Second.c', report)
+            self.assertIn('SF:', (directory / 'coverage.lcov').read_text())
             self.assertIn('Total line coverage: 100.00%', (directory / 'summary.md').read_text())
             self.assertIn('Swift_line_coverage-100.00%25-blue', (directory / 'summary.md').read_text())
 
@@ -92,3 +93,5 @@ class CoverageFloorTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode == 0, passes, result.stdout + result.stderr)
                     self.assertIn('Swift_line_coverage', (directory / 'summary.md').read_text())
+                    self.assertEqual((directory / 'coverage.lcov').exists(), passes)
+                    self.assertFalse((directory / 'coverage.lcov.tmp').exists())

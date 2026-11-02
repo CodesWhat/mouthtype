@@ -129,6 +129,7 @@ watchdog() {
   done
 }
 
+# shellcheck disable=SC2329  # invoked via the EXIT/INT/TERM handler
 cleanup() {
   trap - EXIT INT TERM
   if [ -n "$watchdog_pid" ]; then

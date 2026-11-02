@@ -1,4 +1,4 @@
-# Mouthtype 0.10.0
+# Mouthtype 0.11.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,16 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.11.0
+
+- Added: Edit Selection by Voice. Select text, speak one instruction and review the result before it replaces the selection. Start it from the Edit Selection by Voice menu item, or set an optional shortcut on the Transforms page (the shortcut is off by default). The audio and text aren't saved; Accept logs only the process ID, selection range and replacement length at info level, never the text.
+- Added: Typing calibration on the Stats page, so time saved uses your own typing speed.
+- Changed: Speech recognition uses FluidAudio 0.18.0.
+- Fixed: Transform Selection checks the target app's own focus before Accept, and profanity cleanup no longer treats a locative "there" as a subject.
+
+> [!NOTE]
+> Voice edit after its final review fixes, voice edit and typing calibration with VoiceOver, and FluidAudio 0.18 on real speech, including long takes, are unverified on a device. The 0.10.0 gaps below also remain.
 
 ## What changed in 0.10.0
 

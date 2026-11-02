@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-# Opt-in: enable with `git config core.hooksPath .githooks`.
-exec "$(git rev-parse --show-toplevel)/scripts/pre-push.sh" --stdin

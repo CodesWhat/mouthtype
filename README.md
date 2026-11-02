@@ -11,11 +11,12 @@ Natural speech in, clean text out.
 </div>
 
 <p align="center">
-  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.10.0-2ea44f" alt="Version 0.10.0"></a>
+  <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/version-0.11.0-2ea44f" alt="Version 0.11.0"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/macOS-26%2B-000000?logo=apple&amp;logoColor=white" alt="macOS 26 or later"></a>
   <a href="https://mouthtype.app/download"><img src="https://img.shields.io/badge/Apple_Silicon-arm64-000000?logo=apple&amp;logoColor=white" alt="Apple Silicon"></a>
   <a href="https://github.com/CodesWhat/mouthtype/releases"><img src="https://img.shields.io/github/v/release/CodesWhat/mouthtype" alt="Latest release"></a>
   <a href="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml"><img src="https://github.com/CodesWhat/mouthtype/actions/workflows/security.yml/badge.svg" alt="Security CI"></a>
+  <a href="https://app.codecov.io/gh/CodesWhat/mouthtype/tree/dev%2Fv0.8.0"><img src="https://codecov.io/gh/CodesWhat/mouthtype/branch/dev%2Fv0.8.0/graph/badge.svg" alt="Coverage"></a>
   <a href="https://securityscorecards.dev/viewer/?uri=github.com/CodesWhat/mouthtype"><img src="https://img.shields.io/ossf-scorecard/github.com/CodesWhat/mouthtype?label=openssf+scorecard&amp;style=flat" alt="OpenSSF Scorecard"></a>
   <a href="https://www.bestpractices.dev/projects/15781"><img src="https://www.bestpractices.dev/projects/15781/badge" alt="OpenSSF Best Practices"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="License GPL-3.0"></a>
@@ -24,7 +25,7 @@ Natural speech in, clean text out.
 <hr>
 
 > [!IMPORTANT]
-> **Not verified on a device for 0.10.0:** fresh installation, VoiceOver, Bluetooth and USB microphones, press Return after inserting in a live app, and the Japanese, Hindi and Tamil Beta paths with their 1.6 GB model download. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
+> **Not verified on a device for 0.11.0:** fresh installation, VoiceOver (including voice edit and typing calibration), voice edit after its final review fixes, FluidAudio 0.18 on real speech and long takes, Bluetooth and USB microphones, press Return after inserting in a live app, and the Japanese, Hindi and Tamil Beta paths with their 1.6 GB model download. See [known limits](https://docs.mouthtype.app/reference/known-limits/).
 
 <h2 align="center">Contents</h2>
 
@@ -40,6 +41,7 @@ Natural speech in, clean text out.
 - [Experimental Linux Source](#experimental-linux-source)
 - [Built With](#built-with)
 - [Community and Support](#community-and-support)
+- [Star History](#star-history)
 - [CodesWhat Ecosystem](#codeswhat-ecosystem)
 - [License](#license)
 
@@ -64,7 +66,7 @@ Natural speech in, clean text out.
 | Saved audio and retention | [docs.mouthtype.app/privacy-and-data/saved-audio](https://docs.mouthtype.app/privacy-and-data/saved-audio/) |
 | Automation (`mouthtype://` and the command-line script) | [docs.mouthtype.app/automation/url-scheme-and-cli](https://docs.mouthtype.app/automation/url-scheme-and-cli/) |
 | Troubleshooting | [docs.mouthtype.app/troubleshooting](https://docs.mouthtype.app/troubleshooting/) |
-| Known limits for 0.10.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
+| Known limits for 0.11.0 | [docs.mouthtype.app/reference/known-limits](https://docs.mouthtype.app/reference/known-limits/) |
 | Release notes | [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt) |
 | Roadmap | See [Roadmap](#roadmap) below |
 | Changelog | [`CHANGELOG.md`](CHANGELOG.md) |
@@ -84,7 +86,7 @@ Natural speech in, clean text out.
 
 Mouthtype runs speech recognition and cleanup on your Mac. It puts the result in the text field you're already using, with local history and recovery when delivery fails. No account or transcription subscription is required.
 
-The Mac app is at 0.10.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
+The Mac app is at 0.11.0, a stable release. It supports **Apple Silicon and macOS 26 or later**. The signed app and corresponding release source are at [mouthtype.app/download](https://mouthtype.app/download) and [mouthtype.app/source](https://mouthtype.app/source).
 
 1. Download the signed, notarized DMG from [mouthtype.app/download](https://mouthtype.app/download).
 2. Open the DMG, drag Mouthtype to Applications and open it.
@@ -288,6 +290,18 @@ Speech recognition uses NVIDIA's Parakeet models, converted to Core ML by FluidI
 <h2 align="center" id="community-and-support">Community and Support</h2>
 
 Open an [issue](https://github.com/CodesWhat/mouthtype/issues) for bugs, or ask in [Discussions](https://github.com/CodesWhat/mouthtype/discussions). Include the app version, macOS version, destination app and reproduction steps; omit personal transcripts and recordings. Report vulnerabilities through [SECURITY.md](SECURITY.md), not in an issue. The [troubleshooting guide](https://docs.mouthtype.app/troubleshooting/) covers the problems you can hit today.
+
+<h2 align="center" id="star-history">Star History</h2>
+
+<div align="center">
+  <a href="https://www.star-history.com/?repos=codeswhat%2Fmouthtype&type=date&legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=codeswhat/mouthtype&type=date&legend=top-left&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=codeswhat/mouthtype&type=date&legend=top-left" />
+      <img src="https://api.star-history.com/chart?repos=codeswhat/mouthtype&type=date&legend=top-left" alt="Star history chart for CodesWhat/mouthtype" width="600" />
+    </picture>
+  </a>
+</div>
 
 <h2 align="center" id="codeswhat-ecosystem">CodesWhat Ecosystem</h2>
 

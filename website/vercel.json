@@ -17,6 +17,13 @@
       "continue": true
     },
     {
+      "src": "/\\.well-known/security\\.txt",
+      "headers": {
+        "Content-Type": "text/plain; charset=utf-8"
+      },
+      "continue": true
+    },
+    {
       "src": "/updates/appcast.xml",
       "headers": {
         "Cache-Control": "no-store"
@@ -40,7 +47,7 @@
     {
       "src": "/download/file",
       "headers": {
-        "Location": "/releases/0.10.0/Mouthtype-0.10.0-macos-arm64.dmg",
+        "Location": "/releases/0.11.0/Mouthtype-0.11.0-macos-arm64.dmg",
         "Cache-Control": "no-store"
       },
       "status": 302
@@ -48,7 +55,7 @@
     {
       "src": "/source",
       "headers": {
-        "Location": "/releases/0.10.0/Mouthtype-0.10.0-source.tar.gz",
+        "Location": "/releases/0.11.0/Mouthtype-0.11.0-source.tar.gz",
         "Cache-Control": "no-store"
       },
       "status": 302

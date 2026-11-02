@@ -267,19 +267,29 @@ import Testing
         let id = try dictate(store, minutes: 1, text: "kept")
         let audio = recording(id, minutes: 1)
         var calls = 0
+        let stale = FetchProbe()
+        let hold = DownloadGate()
         let model = HomeLogModel(
             store: store,
             saved: {
                 calls += 1
-                if calls == 1 { try await Task.sleep(for: .milliseconds(400)); return [] }
+                if calls == 1 {
+                    stale.markStarted()
+                    await hold.wait()
+                    stale.markFinished()
+                    return []
+                }
                 return [audio]
             }, observing: false)
         await model.loadText()
         async let slow: Void = model.reload()
-        try await Task.sleep(for: .milliseconds(100))
+        try #require(await stale.waitUntilStarted(), "the older scan never started")
         await model.reload()
         #expect(model.takes.first?.recoverable == audio)
+        await hold.release()
+        // Awaiting the older reload waits for its empty scan to come back and be applied or dropped.
         await slow
+        #expect(stale.finished)
         #expect(model.takes.first?.recoverable == audio)
     }
 
@@ -294,16 +304,23 @@ import Testing
                 scans += 1; return []
             }, observing: false)
         // The reload's read comes back empty, so applying it would blank the rows the observation delivered.
+        let stale = FetchProbe()
+        defer { stale.release() }
         model.fetchRecent = { _, _ in
-            Thread.sleep(forTimeInterval: 0.4); return []
+            stale.hold(); return []
         }
         model.activate()
         await waitUntil { model.takes.count == 1 }
         model.startReload()
-        try await Task.sleep(for: .milliseconds(100))
+        let reload = model.reloadTask
+        // Deactivate only once the reload's read is really in flight.
+        try #require(await stale.waitUntilStarted(), "the reload's read never started")
         model.deactivate()
         let scansAfterDeactivate = scans
-        try await Task.sleep(for: .milliseconds(700))
+        stale.release()
+        try #require(await stale.waitUntilFinished(), "the reload's read never finished")
+        // The reload has applied or dropped its empty result once its own task completes.
+        await reload?.value
         #expect(model.takes.map(\.text) == ["first"])
         #expect(scans == scansAfterDeactivate)
     }
@@ -313,19 +330,25 @@ import Testing
         defer { try? FileManager.default.removeItem(at: dir) }
         try dictate(store, minutes: 1, text: "old")
         let model = HomeLogModel(store: store, observing: false)
+        let stale = FetchProbe()
+        defer { stale.release() }
         model.fetchRecent = { store, limit in
             let rows = try store.recentTakes(limit: limit)
-            Thread.sleep(forTimeInterval: 0.5)
+            stale.hold()
             return rows
         }
         model.activate()
         model.startReload()
-        try await Task.sleep(for: .milliseconds(100))
+        let reload = model.reloadTask
+        try #require(await stale.waitUntilStarted(), "the reload's read never started")
         model.deactivate()
         try dictate(store, minutes: 2, text: "new")
         model.activate()
         await waitUntil { model.takes.map(\.text) == ["new", "old"] }
-        try await Task.sleep(for: .milliseconds(700))
+        stale.release()
+        try #require(await stale.waitUntilFinished(), "the reload's read never finished")
+        // The reload has applied or dropped its stale rows once its own task completes.
+        await reload?.value
         #expect(model.takes.map(\.text) == ["new", "old"])
     }
 
