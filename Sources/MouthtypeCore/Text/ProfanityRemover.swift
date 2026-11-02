@@ -568,7 +568,7 @@ public struct ProfanityRemover: Sendable {
                     // chain after it ("will be", "have been", "used to be") counts when it ends in a plural-agreeing form.
                     // A singular verb stays ambiguous ("Out there is hard"), so it keeps the locative reading.
                     if at >= 1, adjacent(at - 1), ProfanityRemover.frontedPlaces.contains(words[at - 1].lower), at + 1 < k,
-                        ["are", "were", "be", "been"].contains(words[k - 1].lower)
+                        isPluralExistentialChain(at + 1..<k)
                     {
                         return true
                     }
@@ -582,6 +582,27 @@ public struct ProfanityRemover: Sendable {
                 at -= 1
             }
             return false
+        }
+
+        /// Whether the words in `range` form a complete plural-agreeing chain: "are", "were", "will be", "have been",
+        /// "used to be". A bare "to be" is an infinitive, not an existential verb.
+        func isPluralExistentialChain(_ range: Range<Int>) -> Bool {
+            let chain = range.map { words[$0].lower }
+            guard let last = chain.last else { return false }
+            let modals: Set<String> = ["will", "would", "can", "could", "should", "might", "may", "must", "shall"]
+            switch last {
+            case "are", "were":
+                return true
+            case "been":
+                return chain.count >= 2 && ["have", "had"].contains(chain[chain.count - 2])
+            case "be":
+                guard chain.count >= 2 else { return false }
+                let before = chain[chain.count - 2]
+                if before == "to" { return chain.count >= 3 && chain[chain.count - 3] == "used" }
+                return modals.contains(before)
+            default:
+                return false
+            }
         }
 
         /// Whether the locative leader at `k` opens its clause ("Being there is hard"), so the "there" after it is the
