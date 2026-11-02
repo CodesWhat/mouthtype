@@ -95,14 +95,6 @@ public enum AchievementCatalog {
         entry("filibuster", .hidden, .silver, "Filibuster", "Five minutes in one take. Senate material.", hidden: true) { input in
             reading(Double(input.extras.longestDurationMs ?? 0), 300_000, "", day: input.extras.longestDurationDay)
         },
-        entry("tongue_out", .hidden, .bronze, "Tongue Out", "You found the secret. It's sticking its tongue out at you.", hidden: true) { input in
-            let counters = input.extras.counters
-            return reading(Double(counters.mouthTricks), 1, "", day: counters.day(.mouthTricks, reaching: 1))
-        },
-        entry("read_credits", .hidden, .bronze, "Read the Credits", "You read the credits. Nobody reads the credits.", hidden: true) { input in
-            let counters = input.extras.counters
-            return reading(Double(counters.creditsViews), 1, "", day: counters.day(.creditsViews, reaching: 1))
-        },
         entry("welcome_back", .hidden, .bronze, "Welcome Back", "A month away and you're back. We kept your seat warm.", hidden: true) { input in
             let day = returnDay(input.extras.days, gapDays: 30)
             return reading(day == nil ? 0 : 1, 1, "", day: day)

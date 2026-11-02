@@ -13,10 +13,10 @@ public struct AchievementStore {
     public static let lastToastKey = "achievements.lastToast"
     public static let backfillSummaryKey = "achievements.backfillSummary"
 
-    /// The local counters behind the craft trophies and the two eggs. Each is one integer that only goes up. They hold no
+    /// The local counters behind the craft trophies. Each is one integer that only goes up. They hold no
     /// text, and they start counting from install: nothing in the log says how many voice edits happened before.
     public enum Counter: String, CaseIterable, Sendable {
-        case voiceEdits, transforms, mouthTricks, creditsViews
+        case voiceEdits, transforms
 
         public var key: String { "achievements.count.\(rawValue)" }
         /// The counts a trophy is waiting on, so the day each was reached is kept.
@@ -69,8 +69,7 @@ public struct AchievementStore {
     /// The counters as the engine reads them.
     public var counters: AchievementCounters {
         AchievementCounters(
-            voiceEdits: count(.voiceEdits), transforms: count(.transforms), mouthTricks: count(.mouthTricks),
-            creditsViews: count(.creditsViews), days: counterDays)
+            voiceEdits: count(.voiceEdits), transforms: count(.transforms), days: counterDays)
     }
 
     /// Records what `statuses` says is earned and was not before, and returns those ids. The first run is the backfill: whatever

@@ -183,7 +183,7 @@ import Observation
         if value, let snapshot { refreshAchievements(snapshot) }
     }
 
-    /// A local action counter went up (a voice edit, a transform, an egg). Looks again at the snapshot already loaded; with none
+    /// A local action counter went up (a voice edit or a transform). Looks again at the snapshot already loaded; with none
     /// loaded yet, the first load will.
     func countersChanged() {
         if let snapshot { refreshAchievements(snapshot) }

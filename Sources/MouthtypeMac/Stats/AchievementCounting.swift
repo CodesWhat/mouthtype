@@ -7,7 +7,7 @@ extension Notification.Name {
 }
 
 /// Adds to the local achievement counters. One integer per action, no text. Nothing here is on the dictation, paste or
-/// hotkey path: callers are the voice edit and transform Accept buttons, the menu bar trick and the About credits.
+/// hotkey path: callers are the voice edit and transform Accept buttons.
 @MainActor struct AchievementCounting {
     let store: AchievementStore
     let now: () -> Date

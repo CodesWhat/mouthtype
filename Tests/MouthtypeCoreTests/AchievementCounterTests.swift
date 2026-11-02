@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import MouthtypeCore
 
-/// The local action counters behind the craft trophies and the two eggs: increment-only integers in isolated defaults.
+/// The local action counters behind the craft trophies: increment-only integers in isolated defaults.
 @Suite struct AchievementCounterTests {
     private func isolatedDefaults() -> (UserDefaults, () -> Void) {
         let name = "mouthtype-achievement-counters-\(UUID().uuidString)"
@@ -35,10 +35,10 @@ import Testing
         defer { cleanup() }
         let store = AchievementStore(defaults: defaults)
         store.setEnabled(false)
-        #expect(!store.increment(.mouthTricks, day: "2026-11-02"))
-        #expect(store.count(.mouthTricks) == 0)
+        #expect(!store.increment(.voiceEdits, day: "2026-11-02"))
+        #expect(store.count(.voiceEdits) == 0)
         store.setEnabled(true)
-        #expect(store.increment(.mouthTricks, day: "2026-11-02"))
+        #expect(store.increment(.voiceEdits, day: "2026-11-02"))
     }
 
     @Test func keepsTheDayTheTrophyCountWasReached() {
@@ -78,9 +78,7 @@ import Testing
         #expect(!store.approximate.contains("second_draft"))
         #expect(earned().isEmpty)
         store.increment(.transforms, day: "2026-11-02")
-        store.increment(.mouthTricks, day: "2026-11-02")
-        store.increment(.creditsViews, day: "2026-11-02")
-        #expect(Set(earned()) == ["reworded", "tongue_out", "read_credits"])
+        #expect(earned() == ["reworded"])
         for _ in 2...25 { store.increment(.voiceEdits, day: "2026-11-02") }
         #expect(earned() == ["editor"])
     }
@@ -91,7 +89,7 @@ import Testing
             currentStreakDays: 0, longestStreakDays: 30, biggestDay: nil, longestDictation: nil, minutesSaved: 0,
             typingWPM: 40, firstDay: "2026-01-01")
         let statuses = AchievementEngine.evaluate(AchievementInput(report: report, records: ArcadeRecords(), extras: AchievementExtras()))
-        for id in ["second_draft", "editor", "reworded", "tongue_out", "read_credits"] {
+        for id in ["second_draft", "editor", "reworded"] {
             #expect(!statuses.first { $0.id == id }!.isEarned, "\(id)")
         }
     }

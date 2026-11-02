@@ -387,9 +387,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         correctionWatcher = watcher
 
         pill.onLevel = { [weak menuBar] level in menuBar?.setLevel(level) }
-        // The two easter eggs count a local action each. They live on the menu and About, never on the dictation path.
-        menuBar.onMouthTrick = { [weak self] in self?.achievementCounting.record(.mouthTricks) }
-        menuBar.onCreditsShown = { [weak self] in self?.achievementCounting.record(.creditsViews) }
         let history = HistoryMenuSection(store: store, onError: { [weak self] error in self?.diagnostics.historyError = error })
         settingsStore = store
         let settingsSection = SettingsMenuSection(

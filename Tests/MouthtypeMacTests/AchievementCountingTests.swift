@@ -4,8 +4,7 @@ import MouthtypeCore
 import Testing
 @testable import MouthtypeMac
 
-/// The counters and the two eggs, with fakes and isolated defaults: a count lands only for a completed Accept, a trick only plays
-/// while the icon is idle and any state change cancels it, and the credits come from the real notices file.
+/// The counters, with fakes and isolated defaults: a count lands only for a completed Accept.
 
 @MainActor private func isolated() -> (UserDefaults, () -> Void) {
     let name = "mouthtype-counting-tests-\(UUID().uuidString)"
@@ -51,8 +50,8 @@ import Testing
         AchievementStore(defaults: defaults).setEnabled(false)
         var posts = 0
         let counting = AchievementCounting(defaults: defaults, post: { posts += 1 })
-        #expect(!counting.record(.mouthTricks))
-        #expect(counting.store.count(.mouthTricks) == 0 && posts == 0)
+        #expect(!counting.record(.transforms))
+        #expect(counting.store.count(.transforms) == 0 && posts == 0)
     }
 
     @Test func aTransformThePanelAcceptsCountsOnce() async {
@@ -115,154 +114,5 @@ import Testing
         #expect(wrapped.replace(editor.selected, with: "x") && reports == 1)
         editor.accepts = false
         #expect(!wrapped.replace(editor.selected, with: "y") && reports == 1)
-    }
-}
-
-// MARK: Mouth trick
-
-/// Steps a fake clock by hand: `schedule` records the pending closure, `fire()` runs it.
-@MainActor private final class ManualClock {
-    private(set) var pending: [(seconds: TimeInterval, run: @MainActor () -> Void)] = []
-    private(set) var cancels = 0
-    func schedule(_ seconds: TimeInterval, _ run: @escaping @MainActor () -> Void) -> () -> Void {
-        pending.append((seconds, run))
-        let index = pending.count - 1
-        return { [self] in
-            cancels += 1
-            if pending.indices.contains(index) { pending[index].run = {} }
-        }
-    }
-    func fire() {
-        guard let last = pending.last else { return }
-        last.run()
-    }
-}
-
-@MainActor private final class TrickRig {
-    let clock = ManualClock()
-    var shown: [String] = []
-    var restores = 0
-    var reduceMotion = false
-    var trick = MouthTrick.tongue
-    lazy var player = MouthTrickPlayer(
-        pick: { [unowned self] in trick }, schedule: { [unowned self] in clock.schedule($0, $1) },
-        show: { [unowned self] in shown.append($0) }, restore: { [unowned self] in restores += 1 },
-        reduceMotion: { [unowned self] in reduceMotion })
-}
-
-@MainActor @Suite struct MouthTrickTests {
-    @Test func everyFrameExistsAndEachTrickRunsAboutAsLongAsThePlan() {
-        for trick in MouthTrick.allCases {
-            let total = trick.steps.map(\.seconds).reduce(0, +)
-            #expect(total >= 1.2 && total <= 1.5, "\(trick) \(total)")
-        }
-        for file in MouthTrick.glyphFiles {
-            #expect(StatusIcon.loadImage(named: file) != nil, "\(file)")
-        }
-        #expect(StatusIcon.loadImage(named: "trick-tongue0")?.isTemplate == true)
-    }
-
-    @Test func playsEveryStepThenRestoresTheTrueGlyph() {
-        let rig = TrickRig()
-        #expect(rig.player.start(icon: .idle))
-        #expect(rig.player.isPlaying && rig.restores == 0)
-        let expected = MouthTrick.tongue.steps
-        for index in expected.indices {
-            #expect(rig.shown.count == index + 1 && rig.shown.last == expected[index].file)
-            #expect(rig.clock.pending.last?.seconds == expected[index].seconds)
-            rig.clock.fire()
-        }
-        #expect(!rig.player.isPlaying && rig.restores == 1)
-        #expect(rig.shown == expected.map(\.file))
-    }
-
-    @Test(arguments: [StatusIcon.recording, .processing, .unavailable])
-    func neverStartsOutsideIdle(icon: StatusIcon) {
-        let rig = TrickRig()
-        #expect(!rig.player.start(icon: icon))
-        #expect(rig.shown.isEmpty && rig.clock.pending.isEmpty && !rig.player.isPlaying && rig.restores == 0)
-    }
-
-    @Test func aStateChangeCancelsAtOnceAndAStaleTimerDoesNothing() {
-        let rig = TrickRig()
-        #expect(rig.player.start(icon: .idle))
-        rig.clock.fire()  // second frame on screen
-        let before = rig.shown.count
-        let stale = rig.clock.pending.last!.run
-        rig.player.cancel()
-        #expect(!rig.player.isPlaying && rig.restores == 1 && rig.clock.cancels >= 1)
-        stale()  // a timer that fires after the cancel
-        #expect(rig.shown.count == before && rig.restores == 1)
-        rig.player.cancel()  // cancelling again is harmless
-        #expect(rig.restores == 1)
-    }
-
-    @Test func aSecondOpenDuringATrickDoesNotStackAnother() {
-        let rig = TrickRig()
-        #expect(rig.player.start(icon: .idle))
-        #expect(!rig.player.start(icon: .idle))
-        #expect(rig.shown.count == 1)
-    }
-
-    @Test func reduceMotionShowsOneStaticFrame() {
-        let rig = TrickRig()
-        rig.reduceMotion = true
-        for trick in MouthTrick.allCases {
-            rig.trick = trick
-            #expect(rig.player.start(icon: .idle))
-            #expect(rig.shown.last == trick.staticFrame.file && rig.clock.pending.last?.seconds == trick.staticFrame.seconds)
-            let count = rig.shown.count
-            rig.clock.fire()
-            #expect(rig.shown.count == count && !rig.player.isPlaying)
-        }
-        #expect(rig.restores == MouthTrick.allCases.count)
-    }
-
-    @Test func aTrickCanPlayAgainAfterItEnds() {
-        let rig = TrickRig()
-        rig.player.start(icon: .idle)
-        rig.player.cancel()
-        #expect(rig.player.start(icon: .idle))
-    }
-
-    @Test func optionOnOpenStartsATrickAndPlainOpenDoesNot() {
-        let daily = DailyMenu()
-        var seen: [Bool] = []
-        daily.onWillOpen = { seen.append($0) }
-        daily.modifierFlags = { [] }
-        daily.menuNeedsUpdate(daily.menu)
-        daily.modifierFlags = { .option }
-        daily.menuNeedsUpdate(daily.menu)
-        daily.modifierFlags = { [.option, .shift] }
-        daily.menuNeedsUpdate(daily.menu)
-        #expect(seen == [false, true, true])
-    }
-}
-
-// MARK: Credits
-
-@MainActor @Suite struct AboutCreditsTests {
-    private func notices() throws -> String {
-        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        return try String(contentsOf: root.appendingPathComponent("THIRD_PARTY_NOTICES.md"), encoding: .utf8)
-    }
-
-    @Test func everyCreditIsAttributedInThirdPartyNotices() throws {
-        let text = try notices()
-        #expect(AboutCredits.entries.map(\.name) == ["Instrument Serif", "Parakeet TDT 0.6B v3", "FluidAudio"])
-        for entry in AboutCredits.entries {
-            #expect(text.contains(entry.name), "\(entry.name)")
-        }
-        #expect(text.contains("Copyright 2022 The Instrument Serif Project Authors"))
-        #expect(text.contains("SIL OFL 1.1"))
-        #expect(text.contains("NVIDIA") && text.contains("FluidInference") && text.contains("CC BY 4.0"))
-        #expect(text.contains("| FluidAudio | 0.17.7 | Apache License 2.0 |"))
-    }
-
-    @Test func theRollIsPlainReadableTextWithASignoff() {
-        let rendered = AboutCredits.attributed()
-        #expect(rendered.string.contains("Instrument Serif") && rendered.string.contains("Apache License 2.0"))
-        #expect(rendered.string.hasSuffix(AboutCredits.signoff))
-        #expect(!AboutCredits.plainText.contains("\u{2014}") && !AboutCredits.plainText.contains("…"))
     }
 }

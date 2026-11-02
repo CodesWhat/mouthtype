@@ -23,16 +23,12 @@ public enum AchievementGroup: Int, Sendable, Equatable, CaseIterable {
 public struct AchievementCounters: Equatable, Sendable {
     public var voiceEdits: Int
     public var transforms: Int
-    public var mouthTricks: Int
-    public var creditsViews: Int
     /// `voiceEdits:25` to a local day.
     public var days: [String: String]
 
-    public init(voiceEdits: Int = 0, transforms: Int = 0, mouthTricks: Int = 0, creditsViews: Int = 0, days: [String: String] = [:]) {
+    public init(voiceEdits: Int = 0, transforms: Int = 0, days: [String: String] = [:]) {
         self.voiceEdits = voiceEdits
         self.transforms = transforms
-        self.mouthTricks = mouthTricks
-        self.creditsViews = creditsViews
         self.days = days
     }
 

@@ -139,14 +139,6 @@ enum AchievementSprites {
             ".......k....", ".......kk...", ".kbbbbbbbk..", ".......kk...", ".......k....", "............", "....k.......",
             "...kk.......", "..kbbbbbbbk.", "...kk.......", "....k.......",
         ]
-        raw["tongue_out"] = [
-            "", "...kkkkkk...", ".kkrrrrrrkk.", "krrrrrrrrrrk", "kkkkkkkkkkkk", "krrrrrrrrrrk", ".kkrrrrrrkk.", "..kkkttkkk..",
-            "....kttttk..", "....kttttk..", ".....kttk...", "......kk....",
-        ]
-        raw["read_credits"] = [
-            "..kkkkkkkk..", ".kccccyccck.", ".kcccyyycck.", ".kccccyccck.", ".kcckkkkcck.", ".kcckkkkcck.", ".kcckkkkcck.",
-            ".kcccccccck.", "..kkkkkkkk..",
-        ]
         raw["night_owl"] = [
             ".kk......kk.", ".knkkkkkknk.", "knnnnnnnnnnk", "knwwwnnwwwnk", "knwkwnnwkwnk", "knwwwnnwwwnk", "knnnnyynnnnk", "knppppppppnk",
             "knpnpnpnpnnk", ".knnnnnnnnk.", "..yk....ky..",
