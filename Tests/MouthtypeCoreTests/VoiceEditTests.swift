@@ -148,6 +148,12 @@ private let paragraph =
             judge("I'm sorry, but I can't help with that.", selection: "We met Tuesday.", instruction: "shorten this")
                 == .refused(.modelDeclined))
         #expect(
+            judge("As an AI, I can't help with that.", selection: "I can't make it on Tuesday.", instruction: "rephrase it")
+                == .refused(.modelDeclined))
+        #expect(
+            judge("I can't help with that.", selection: "I can't make it on Tuesday.", instruction: "rephrase it")
+                == .refused(.modelDeclined))
+        #expect(
             judge(VoiceEditPrompt.unsupportedSentinel, selection: "I'm sorry I missed it.", instruction: "what's the weather")
                 == .refused(.modelDeclined))
     }

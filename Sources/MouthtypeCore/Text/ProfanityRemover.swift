@@ -561,18 +561,24 @@ public struct ProfanityRemover: Sendable {
 
         func hasExistentialThere(_ k: Int) -> Bool {
             var at = k - 2
+            var sawUsedTo = false
             while at >= 0, adjacent(at) {
                 if words[at].lower == "there" {
-                    // "Back there are people": a fronted place agrees with a plural verb, so "there" is existential.
+                    // "Back there are people": a fronted place agrees with a plural verb, so "there" is existential. The
+                    // chain after it ("will be", "have been", "used to be") counts when it ends in a plural-agreeing form.
                     // A singular verb stays ambiguous ("Out there is hard"), so it keeps the locative reading.
-                    if at >= 1, adjacent(at - 1), ProfanityRemover.frontedPlaces.contains(words[at - 1].lower), at + 1 < words.count,
-                        ["are", "were"].contains(words[at + 1].lower)
+                    if at >= 1, adjacent(at - 1), ProfanityRemover.frontedPlaces.contains(words[at - 1].lower), at + 1 < k,
+                        ["are", "were", "be", "been"].contains(words[k - 1].lower)
                     {
                         return true
                     }
-                    return !leadsClause(at - 1)
+                    return !sawUsedTo && !leadsClause(at - 1)
                 }
-                guard ProfanityRemover.auxiliaries.contains(words[at].lower) else { return false }
+                if ["used", "to"].contains(words[at].lower) {
+                    sawUsedTo = true
+                } else {
+                    guard ProfanityRemover.auxiliaries.contains(words[at].lower) else { return false }
+                }
                 at -= 1
             }
             return false
