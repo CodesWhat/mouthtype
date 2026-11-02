@@ -39,6 +39,7 @@ Natural speech in, clean text out.
 - [Roadmap](#roadmap)
 - [Build and Contribute](#build-and-contribute)
 - [Experimental Linux Source](#experimental-linux-source)
+- [Support](#support)
 - [Built With](#built-with)
 - [Community and Support](#community-and-support)
 - [Star History](#star-history)
@@ -244,6 +245,12 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for checks, dependency maintenance and t
 <h2 align="center" id="experimental-linux-source">Experimental Linux Source</h2>
 
 Linux work targets x86_64 Arch/Omarchy, Hyprland and PipeWire. The source includes a daemon/CLI, setup diagnostics, an Omarchy bar plugin with a floating pill, single-file audio transcription, optional paste or typing delivery and optional local Fast and Thorough cleanup models. Basic cleanup is on by default, and delivery starts recovery-only until you choose to paste on first open. **There is no supported Linux desktop release**, and the only install today is from source. The full flow has run on one Arch/Omarchy desk; HiDPI, multi-monitor and other distros are untried. The Linux cleanup models differ from the Mac ones (Thorough is Qwen3 4B, not Gemma). Follow the [Linux setup and testing guide](https://docs.mouthtype.app/linux/linux-desktop-setup/) or the [Omarchy plugin guide](https://docs.mouthtype.app/linux/linux-omarchy-plugin/).
+
+<hr>
+
+<h2 align="center" id="support">Support</h2>
+
+Mouthtype is free and open source. If it saves you time, you can support it on [GitHub Sponsors](https://github.com/sponsors/CodesWhat) or [donate directly](https://codeswhat.com/support).
 
 <hr>
 

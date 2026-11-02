@@ -23,6 +23,7 @@ extension MenuSection {
     private let stopItem = NSMenuItem(title: "Stop Dictation", action: nil, keyEquivalent: "")
     private let cancelItem = NSMenuItem(title: "Cancel Dictation", action: nil, keyEquivalent: "")
     private let aboutItem = NSMenuItem(title: "About Mouthtype", action: nil, keyEquivalent: "")
+    private let supportItem = NSMenuItem(title: SupportLinks.menuTitle, action: nil, keyEquivalent: "")
     /// A custom action rather than `terminate:`, since macOS 26 gives standard-action items a system icon and this menu is plain text.
     private let quitItem = NSMenuItem(title: "Quit", action: nil, keyEquivalent: "q")
     private var handsFree = false
@@ -39,7 +40,19 @@ extension MenuSection {
             item.target = self
             item.action = action
         }
+        supportItem.submenu = Self.supportSubmenu(target: self)
         rebuild()
+    }
+
+    private static func supportSubmenu(target: DailyMenu) -> NSMenu {
+        let submenu = NSMenu(title: SupportLinks.menuTitle)
+        for destination in SupportLinks.all {
+            let item = NSMenuItem(title: destination.title, action: #selector(openSupportLink(_:)), keyEquivalent: "")
+            item.target = target
+            item.representedObject = destination.url
+            submenu.addItem(item)
+        }
+        return submenu
     }
 
     func add(section: any MenuSection, startsGroup: Bool = true, isFooter: Bool = false) {
@@ -72,7 +85,7 @@ extension MenuSection {
             guard !visible.isEmpty else { continue }
             if entry.startsGroup || groups.isEmpty { groups.append(visible) } else { groups[groups.count - 1].append(contentsOf: visible) }
         }
-        let footer = sections.filter(\.isFooter).flatMap { $0.section.items.filter { !$0.isHidden && !$0.isSeparatorItem } } + [aboutItem, quitItem]
+        let footer = sections.filter(\.isFooter).flatMap { $0.section.items.filter { !$0.isHidden && !$0.isSeparatorItem } } + [aboutItem, supportItem, quitItem]
         groups.append(footer)
         for (index, group) in groups.enumerated() {
             if index > 0 { menu.addItem(.separator()) }
@@ -83,7 +96,14 @@ extension MenuSection {
     @objc private func stop() { onStopDictation?() }
     @objc private func cancel() { onCancelDictation?() }
     @objc private func quit() { NSApp.terminate(nil) }
-    @objc private func about() { NSApp.activate(); NSApp.orderFrontStandardAboutPanel(nil) }
+    @objc private func about() {
+        NSApp.activate()
+        NSApp.orderFrontStandardAboutPanel(options: [.credits: SupportLinks.credits()])
+    }
+    @objc private func openSupportLink(_ sender: NSMenuItem) {
+        guard let url = sender.representedObject as? URL else { return }
+        NSWorkspace.shared.open(url)
+    }
 }
 
 @MainActor public final class MenuBarController: NSObject {

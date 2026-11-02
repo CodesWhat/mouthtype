@@ -256,3 +256,41 @@ for (const path of footerPaths) {
     );
   });
 }
+
+for (const path of footerPaths) {
+  test(`${path} footer has the support links`, async ({ page }) => {
+    await page.goto(path);
+    const note = page.locator("footer .support-note");
+    await expect(note).toHaveText(
+      "Mouthtype is free and open source. If it saves you time, you can support it on GitHub Sponsors or donate directly.",
+    );
+    await expect(note.getByRole("link", { name: "GitHub Sponsors" })).toHaveAttribute(
+      "href",
+      "https://github.com/sponsors/CodesWhat",
+    );
+    await expect(note.getByRole("link", { name: "donate directly" })).toHaveAttribute(
+      "href",
+      "https://codeswhat.com/support",
+    );
+  });
+}
+
+test("/download/ also carries a support line beside the install steps", async ({ page }) => {
+  await page.goto("/download/");
+  const aside = page.locator("aside.start-aside");
+  await expect(aside.getByRole("link", { name: "GitHub Sponsors" })).toHaveAttribute(
+    "href",
+    "https://github.com/sponsors/CodesWhat",
+  );
+  await expect(aside.getByRole("link", { name: "donate directly" })).toHaveAttribute(
+    "href",
+    "https://codeswhat.com/support",
+  );
+});
+
+test("support links add no third-party images or scripts", async ({ page }) => {
+  for (const path of footerPaths) {
+    await page.goto(path);
+    expect(await page.locator("script[src^='http'], img[src^='http']").count(), path).toBe(0);
+  }
+});

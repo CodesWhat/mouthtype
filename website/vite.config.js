@@ -1,6 +1,7 @@
 import { defineConfig } from "vite";
 import deployment from "./vercel.json" with { type: "json" };
 import { fileURLToPath } from "node:url";
+import { support } from "./support.config.js";
 
 // vite preview ignores vercel.json routes, so mirror the ones that set a Content-Type for the page tests.
 const contentTypes = {
@@ -17,8 +18,17 @@ const contentTypes = {
   },
 };
 
+// Fills the %SUPPORT_*% placeholders in every page from support.config.js, so each link has one source.
+const supportLinks = {
+  name: "support-links",
+  transformIndexHtml: (html) =>
+    html
+      .replaceAll("%SUPPORT_SPONSORS_URL%", support.sponsorsUrl)
+      .replaceAll("%SUPPORT_DONATE_URL%", support.donateUrl),
+};
+
 export default defineConfig({
-  plugins: [contentTypes],
+  plugins: [contentTypes, supportLinks],
   build: {
     rolldownOptions: {
       input: Object.fromEntries(
