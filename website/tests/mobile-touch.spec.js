@@ -35,7 +35,7 @@ for (const path of paths) {
     await page.goto(path);
     await page.evaluate(() => document.fonts.ready);
     const misses = await page.evaluate((min) => {
-      const half = min / 2 - 1.5;
+      const half = min / 2 - 1; // 1px of pixel-snapping slack; a 40px area still fails
       const selector =
         'a[href], button, input, select, textarea, summary, [role="button"], [tabindex]:not([tabindex="-1"])';
       const misses = [];
@@ -127,7 +127,9 @@ test("the typing box placeholder reads as a clean instruction", async ({
   );
 });
 
-test("the principles strip pauses on hover and focus", async ({ page }) => {
+test("the principles strip pauses on hover and keyboard focus", async ({
+  page,
+}) => {
   await page.goto("/");
   const strip = page.locator(".principles");
   const track = page.locator(".principles-track");
@@ -140,6 +142,38 @@ test("the principles strip pauses on hover and focus", async ({ page }) => {
   expect(await state()).toBe("running");
   await strip.focus();
   expect(await state()).toBe("paused");
+});
+
+test("clicking the principles strip does not leave it paused", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const strip = page.locator(".principles");
+  await strip.scrollIntoViewIfNeeded();
+  await strip.click();
+  await page.mouse.move(0, 0);
+  expect(await strip.evaluate((el) => el === document.activeElement)).toBe(true);
+  expect(
+    await page
+      .locator(".principles-track")
+      .evaluate((el) => getComputedStyle(el).animationPlayState),
+  ).toBe("running");
+});
+
+test("the principles strip is a tab stop only while motion is allowed", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  const strip = page.locator(".principles");
+  await expect(strip).toHaveAttribute("tabindex", "0");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(strip).not.toHaveAttribute("tabindex", /.*/);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await expect(strip).toHaveAttribute("tabindex", "0");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.reload();
+  await expect(strip).not.toHaveAttribute("tabindex", /.*/);
 });
 
 test("the principles strip stops under reduced motion", async ({ browser }) => {

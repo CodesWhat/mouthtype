@@ -1170,8 +1170,8 @@ footer {
 }
 
 .principles:hover .principles-track,
-.principles:focus .principles-track,
-.principles:focus-within .principles-track {
+.principles:focus-visible .principles-track,
+.principles:has(:focus-visible) .principles-track {
   animation-play-state: paused;
 }
 .principles:focus-visible {
@@ -1237,7 +1237,7 @@ footer {
   .compare-switch button::after {
     content: "";
     position: absolute;
-    inset: -6px 0;
+    inset: -7px 0;
   }
   .footer-top nav {
     row-gap: 0;
