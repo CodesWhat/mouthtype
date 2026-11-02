@@ -159,4 +159,34 @@ import Testing
         try insert(store, day: "2026-09-01", at: Self.origin - 30 * 86_400)
         #expect(state(try evaluate(store), "welcome_back") == .earned(day: "2026-09-01"))
     }
+
+    @Test func acceptingARememberedCorrectionWithTheSameTakeCountShowsInTheNextRead() throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try insert(store, day: "2026-10-01", at: Self.origin)
+        let offer = try store.recordCorrectionOffer(dictationID: id, heard: "a", corrected: "b")
+        let before = store.inputsRevision
+        let countBefore = try store.statsSnapshot(now: now, timeZone: zone).report.dictationCount
+        #expect(try store.achievementExtras(calibrated: false).rememberedCount == 0)
+
+        let posts = PostCounter()
+        let observer = NotificationCenter.default.addObserver(
+            forName: TranscriptStore.achievementInputsChanged, object: store, queue: nil
+        ) { _ in posts.hit() }
+        defer { NotificationCenter.default.removeObserver(observer) }
+        try store.recordCorrectionOutcome(offer, accepted: true)
+
+        #expect(try store.statsSnapshot(now: now, timeZone: zone).report.dictationCount == countBefore)
+        #expect(store.inputsRevision > before)
+        #expect(posts.count == 1)
+        let extras = try store.achievementExtras(calibrated: false)
+        #expect(extras.rememberedCount == 1 && extras.firstRememberedDay == "2026-10-01")
+    }
+}
+
+private final class PostCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+    var count: Int { lock.lock(); defer { lock.unlock() }; return value }
+    func hit() { lock.lock(); value += 1; lock.unlock() }
 }

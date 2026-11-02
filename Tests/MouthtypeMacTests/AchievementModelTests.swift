@@ -29,8 +29,8 @@ private final class CallCounter: @unchecked Sendable {
             records: ArcadeRecords(), daily: [])
     }
 
-    private func refresh(_ model: AchievementModel, _ snapshot: StatsSnapshot, counter: CallCounter) async {
-        await model.refresh(snapshot: snapshot, now: now, timeZone: zone) { _ in
+    private func refresh(_ model: AchievementModel, _ snapshot: StatsSnapshot, counter: CallCounter, revision: Int = 0) async {
+        await model.refresh(snapshot: snapshot, now: now, timeZone: zone, revision: revision) { _ in
             counter.hit()
             return AchievementExtras(days: [.init(day: "2026-10-01", takes: 4, words: 1_200)])
         }
@@ -74,6 +74,18 @@ private final class CallCounter: @unchecked Sendable {
         model.setEnabled(true)
         await refresh(model, snapshot(takes: 5), counter: counter)
         #expect(counter.count == 5)
+    }
+
+    @Test func aStoreWriteWithTheSameTakeCountInvalidatesTheCache() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(), counter: counter, revision: 3)
+        await refresh(model, snapshot(), counter: counter, revision: 3)
+        #expect(counter.count == 1)
+        await refresh(model, snapshot(), counter: counter, revision: 4)
+        #expect(counter.count == 2)
     }
 
     @Test func aCachedReadStillPicksUpTheCurrentCounters() async {

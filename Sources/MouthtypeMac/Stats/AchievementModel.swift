@@ -23,6 +23,8 @@ import Observation
         var dictationCount: Int
         var voiceEdits: Int
         var transforms: Int
+        /// The store's write revision, for changes that leave the take count alone (a remembered correction accepted, a snippet).
+        var revision: Int
     }
 
     init(defaults: UserDefaults = .standard) {
@@ -68,7 +70,7 @@ import Observation
     /// Evaluates against `snapshot` and records what is newly earned. `loadExtras` runs off the main thread and is not called at
     /// all while Achievements is off. A failed read keeps the shelf as it was.
     func refresh(
-        snapshot: StatsSnapshot, now: Date, timeZone: TimeZone, loadExtras: @escaping @Sendable (Bool) throws -> AchievementExtras
+        snapshot: StatsSnapshot, now: Date, timeZone: TimeZone, revision: Int = 0, loadExtras: @escaping @Sendable (Bool) throws -> AchievementExtras
     ) async {
         guard isEnabled else { return }
         generation += 1
@@ -77,7 +79,8 @@ import Observation
         do {
             let counters = store.counters
             let key = ExtrasKey(
-                dictationCount: snapshot.report.dictationCount, voiceEdits: counters.voiceEdits, transforms: counters.transforms)
+                dictationCount: snapshot.report.dictationCount, voiceEdits: counters.voiceEdits, transforms: counters.transforms,
+                revision: revision)
             var extras: AchievementExtras
             if let cache, cache.key == key {
                 extras = cache.extras
