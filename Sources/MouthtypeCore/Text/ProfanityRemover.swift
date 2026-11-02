@@ -77,6 +77,9 @@ public struct ProfanityRemover: Sendable {
         "back",
     ]
 
+    /// Fronted places ("Back there are people"), which a plural verb after "there" shows are not clause-opening subjects.
+    private static let frontedPlaces: Set<String> = ["back", "out", "over", "up", "down", "in"]
+
     /// Loads the tagger's language model off the dictation path, so the first intensifier doesn't spend the cleanup
     /// time budget on it.
     public static func prewarm() {
@@ -560,6 +563,13 @@ public struct ProfanityRemover: Sendable {
             var at = k - 2
             while at >= 0, adjacent(at) {
                 if words[at].lower == "there" {
+                    // "Back there are people": a fronted place agrees with a plural verb, so "there" is existential.
+                    // A singular verb stays ambiguous ("Out there is hard"), so it keeps the locative reading.
+                    if at >= 1, adjacent(at - 1), ProfanityRemover.frontedPlaces.contains(words[at - 1].lower), at + 1 < words.count,
+                        ["are", "were"].contains(words[at + 1].lower)
+                    {
+                        return true
+                    }
                     return !leadsClause(at - 1)
                 }
                 guard ProfanityRemover.auxiliaries.contains(words[at].lower) else { return false }
