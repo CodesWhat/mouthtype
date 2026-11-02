@@ -2262,7 +2262,17 @@ private final class FakeCorrections: CorrectionObserving {
         rig.store.duringLock = {
             locks += 1; if locks == 1 { await lockGate.wait() }
         }
-        rig.controller.automationWaitLimit = { await limit.wait() }
+        // The first stop gives up on A. The start behind it waits for that stop to finish, so it never fires its own limit,
+        // and the last stop gives up on B at once.
+        var limitCalls = 0
+        rig.controller.automationWaitLimit = {
+            limitCalls += 1
+            switch limitCalls {
+            case 1: await limit.wait()
+            case 2: try await Task.sleep(for: .seconds(3600))
+            default: break
+            }
+        }
         // A comes up hands-free, then suspends writing its lock.
         rig.controller.enqueueAutomation(.start)
         await rig.until { locks != 0 }
