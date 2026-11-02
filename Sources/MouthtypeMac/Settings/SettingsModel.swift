@@ -125,6 +125,7 @@ import UniformTypeIdentifiers
             default: false
             }
         }
+        stats.achievements.toasts.observeCalibration()
         stats.achievements.toasts.playCue = playAchievementCue
         self.onQuietOtherAudioChanged = onQuietOtherAudioChanged
         self.onBoostSavedWordsChanged = onBoostSavedWordsChanged

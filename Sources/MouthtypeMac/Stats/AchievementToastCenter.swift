@@ -31,6 +31,8 @@ import Observation
     @ObservationIgnored private var pollTask: Task<Void, Never>?
     @ObservationIgnored private(set) var deadline: Date?
     @ObservationIgnored private(set) var pausedRemaining: TimeInterval?
+    /// The delay of the last timed wake that was asked for, kept even with timers off so tests can see it.
+    @ObservationIgnored private(set) var lastWake: TimeInterval?
 
     init(store: AchievementStore, clock: @escaping @MainActor () -> Date = { Date() }, autoSchedule: Bool = true) {
         self.store = store
@@ -91,7 +93,8 @@ import Observation
         case .windowNotKey:
             break
         case .busy:
-            wake(after: 2)
+            // A calibration run wakes the gate itself when its phase changes; only the states with nothing to observe retry.
+            if context.dictationBusy || context.editingSelection { wake(after: 2) }
         case .cooldown(let until):
             wake(after: max(1, until.timeIntervalSince(context.now)))
         }
@@ -164,7 +167,22 @@ import Observation
         }
     }
 
+    /// Wakes the gate whenever what `isCalibrating` reads changes, so a toast held back by a calibration run shows as soon as
+    /// the run ends, without polling. Call once after `isCalibrating` is set.
+    func observeCalibration() {
+        withObservationTracking {
+            _ = isCalibrating()
+        } onChange: { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                poll()
+                observeCalibration()
+            }
+        }
+    }
+
     private func wake(after seconds: TimeInterval) {
+        lastWake = seconds
         guard autoSchedule else { return }
         pollTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds))

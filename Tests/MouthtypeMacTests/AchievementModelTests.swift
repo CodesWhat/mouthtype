@@ -49,7 +49,62 @@ private final class CallCounter: @unchecked Sendable {
         let stored = AchievementStore(defaults: defaults).earned
         await refresh(model, snapshot(), counter: counter)
         #expect(AchievementStore(defaults: defaults).earned == stored)
+        // Same take count, same counters: the second read is skipped.
+        #expect(counter.count == 1)
+    }
+
+    @Test func extrasAreReReadWhenTheTakeCountOrACounterChanges() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(takes: 4), counter: counter)
+        await refresh(model, snapshot(takes: 4), counter: counter)
+        #expect(counter.count == 1)
+        await refresh(model, snapshot(takes: 5), counter: counter)
         #expect(counter.count == 2)
+        AchievementStore(defaults: defaults).increment(.voiceEdits, day: "2026-10-01")
+        await refresh(model, snapshot(takes: 5), counter: counter)
+        #expect(counter.count == 3)
+        AchievementStore(defaults: defaults).increment(.transforms, day: "2026-10-01")
+        await refresh(model, snapshot(takes: 5), counter: counter)
+        #expect(counter.count == 4)
+        // Switching off and on drops the cache.
+        model.setEnabled(false)
+        model.setEnabled(true)
+        await refresh(model, snapshot(takes: 5), counter: counter)
+        #expect(counter.count == 5)
+    }
+
+    @Test func aCachedReadStillPicksUpTheCurrentCounters() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(), counter: counter)
+        let store = AchievementStore(defaults: defaults)
+        #expect(store.counters.voiceEdits == 0)
+        store.increment(.voiceEdits, day: "2026-10-01")
+        await refresh(model, snapshot(), counter: counter)
+        #expect(model.entries.first { $0.id == "four_figures" }?.state == .earned(day: "2026-10-01"))
+    }
+
+    @Test func newStaysOnACollapsedShelfUntilSeenExpanded() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(words: 0, takes: 0), counter: counter)
+        await refresh(model, snapshot(), counter: counter)
+        #expect(model.hasNew)
+        model.setShelfHidden(true)
+        model.shelfSeen()
+        #expect(model.hasNew)
+        #expect(!AchievementStore(defaults: defaults).seen.contains("four_figures"))
+        model.setShelfHidden(false)
+        model.shelfSeen()
+        #expect(!model.hasNew)
+        #expect(AchievementStore(defaults: defaults).seen.contains("four_figures"))
     }
 
     @Test func switchedOffMeansNoWorkAndNoShelf() async {
