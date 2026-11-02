@@ -175,6 +175,11 @@ public enum TypingBaselinePreference {
         return TypingCalibration.plausibleWPM.contains(stored) ? stored : defaultWPM
     }
 
+    /// True once a calibration was accepted, as opposed to the documented default.
+    public static func isAccepted(_ defaults: UserDefaults = .standard) -> Bool {
+        TypingCalibration.plausibleWPM.contains(defaults.double(forKey: key))
+    }
+
     /// Stores a calibration result as a whole number of words per minute.
     public static func accept(_ result: TypingCalibrationResult, in defaults: UserDefaults = .standard) {
         let value = Double(result.roundedWPM)

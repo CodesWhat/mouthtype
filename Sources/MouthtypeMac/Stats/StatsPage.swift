@@ -20,7 +20,7 @@ struct StatsHostPage: View {
         if let snapshot = model.snapshot, snapshot.hasHistory {
             // Once a minute, so the NOW marker on the tape keeps up without a reload.
             TimelineView(.periodic(from: .now, by: 60)) { context in
-                StatsPage(snapshot: snapshot, now: context.date)
+                StatsPage(snapshot: snapshot, now: context.date, achievements: model.achievements)
             }
         } else {
             VStack(alignment: .leading, spacing: 16) {
@@ -36,6 +36,8 @@ struct StatsHostPage: View {
                         .font(DesignFont.sans(DesignFont.body)).foregroundStyle(DesignPalette.ink2)
                         .fixedSize(horizontal: false, vertical: true).padding(16)
                 }
+                AchievementShelfCard(
+                    model: model.achievements, today: StatsTimeline.localDay(for: Date(), in: .autoupdatingCurrent), isEmptyState: true)
             }
         }
     }
@@ -46,6 +48,8 @@ struct StatsPage: View {
     let snapshot: StatsSnapshot
     var now: Date = Date()
     var timeZone: TimeZone = .autoupdatingCurrent
+    /// The trophy shelf's model. Nil draws no shelf.
+    var achievements: AchievementModel?
 
     private var report: StatsReport { snapshot.report }
     private var today: String { StatsTimeline.localDay(for: now, in: timeZone) }
@@ -60,6 +64,7 @@ struct StatsPage: View {
             pair(
                 left: { StatsDayCard(hourly: snapshot.hourlyWords) },
                 right: { StatsHighScoresCard(records: snapshot.records, today: today) })
+            if let achievements { AchievementShelfCard(model: achievements, today: today) }
             Text("Worked out on this Mac. Nothing is sent anywhere.")
                 .font(DesignFont.sans(11)).foregroundStyle(DesignPalette.ink3)
                 .fixedSize(horizontal: false, vertical: true).padding(.leading, 4)
