@@ -62,7 +62,8 @@ import Observation
         let ticket = generation
         let calibrated = TypingBaselinePreference.isAccepted(store.defaults)
         do {
-            let extras = try await OffPool.run { try loadExtras(calibrated) }
+            var extras = try await OffPool.run { try loadExtras(calibrated) }
+            extras.counters = store.counters
             guard ticket == generation, isEnabled, !Task.isCancelled else { return }
             let statuses = AchievementEngine.evaluate(AchievementInput(snapshot: snapshot, extras: extras))
             store.apply(statuses, today: StatsTimeline.localDay(for: now, in: timeZone))

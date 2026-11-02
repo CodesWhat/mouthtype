@@ -42,8 +42,13 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true,
                 transcribingFile: self?.fileTranscriptionModel.isBusy == true, editingSelection: self?.selectionCleanupModel.hasPreview == true || self?.voiceEditModel.phase.isActive == true)
         })
-    private lazy var selectionCleanupModel = SelectionCleanupModel(
-        editor: AccessibilitySelectionEditor(), transformer: cleanerHost,
+    /// Local trophy counters: one integer each, no text.
+    private lazy var achievementCounting = AchievementCounting()
+    private lazy var selectionCleanupModel: SelectionCleanupModel = SelectionCleanupModel(
+        // Only an AI transform the app took counts. Basic cleanup is not a rewrite.
+        editor: achievementCounting.counting(AccessibilitySelectionEditor(), as: .transforms) { [weak self] in
+            self?.selectionCleanupModel.transform != nil
+        }, transformer: cleanerHost,
         busy: { [weak self] in
             guard let self else { return true }
             return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true || self.appUpdater.blocksNewWork
@@ -58,7 +63,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var voiceEditModel = remember(
         \.builtVoiceEditModel,
         VoiceEditCoordinator(
-            editor: AccessibilitySelectionEditor(),
+            editor: achievementCounting.counting(AccessibilitySelectionEditor(), as: .voiceEdits),
             recorder: VoiceInstructionRecorder(capture: micCapture, engine: HostEngine(host: engineHost)),
             engine: cleanerHost,
             busy: { [weak self] in

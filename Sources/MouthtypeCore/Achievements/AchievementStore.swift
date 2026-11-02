@@ -13,6 +13,18 @@ public struct AchievementStore {
     public static let lastToastKey = "achievements.lastToast"
     public static let backfillSummaryKey = "achievements.backfillSummary"
 
+    /// The local counters behind the craft trophies. Each is one integer that only goes up. They hold no
+    /// text, and they start counting from install: nothing in the log says how many voice edits happened before.
+    public enum Counter: String, CaseIterable, Sendable {
+        case voiceEdits, transforms
+
+        public var key: String { "achievements.count.\(rawValue)" }
+        /// The counts a trophy is waiting on, so the day each was reached is kept.
+        var milestones: Set<Int> { self == .voiceEdits ? [1, 25] : [1] }
+    }
+
+    public static let counterDaysKey = "achievements.countDays"
+
     public let defaults: UserDefaults
 
     public init(defaults: UserDefaults = .standard) { self.defaults = defaults }
@@ -30,6 +42,35 @@ public struct AchievementStore {
     public var approximate: Set<String> { Set(defaults.stringArray(forKey: Self.approximateKey) ?? []) }
     public var seen: Set<String> { Set(defaults.stringArray(forKey: Self.seenKey) ?? []) }
     public var isBackfilled: Bool { defaults.bool(forKey: Self.backfilledKey) }
+
+    // MARK: Counters
+
+    public func count(_ counter: Counter) -> Int { max(0, defaults.integer(forKey: counter.key)) }
+
+    /// Adds one and returns true. Does nothing while Achievements is off, so the engine stays idle. `day` is the local day,
+    /// kept for the counts a trophy waits on.
+    @discardableResult
+    public func increment(_ counter: Counter, day: String) -> Bool {
+        guard isEnabled else { return false }
+        let next = count(counter) &+ 1
+        guard next > 0 else { return false }
+        defaults.set(next, forKey: counter.key)
+        if counter.milestones.contains(next) {
+            var days = counterDays
+            days["\(counter.rawValue):\(next)"] = day
+            defaults.set(days, forKey: Self.counterDaysKey)
+        }
+        return true
+    }
+
+    /// `voiceEdits:25` to the local day that count was reached.
+    public var counterDays: [String: String] { defaults.dictionary(forKey: Self.counterDaysKey) as? [String: String] ?? [:] }
+
+    /// The counters as the engine reads them.
+    public var counters: AchievementCounters {
+        AchievementCounters(
+            voiceEdits: count(.voiceEdits), transforms: count(.transforms), days: counterDays)
+    }
 
     /// Records what `statuses` says is earned and was not before, and returns those ids. The first run is the backfill: whatever
     /// the history already earned is written as seen, with its real day when the data gives one and `today` (flagged

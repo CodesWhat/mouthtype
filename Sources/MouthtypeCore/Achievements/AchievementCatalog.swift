@@ -1,6 +1,6 @@
 import Foundation
 
-/// The slice 1 set: every achievement that can be worked out from data the app already keeps. Pure, so each entry is tested on
+/// The set: achievements worked out from data the app already keeps, plus the few that count a local action. Pure, so each entry is tested on
 /// fixtures. Copy is the approved deadpan wording from the design doc.
 public enum AchievementCatalog {
     public static let all: [AchievementDefinition] = firstSteps + volume + streaks + speed + craft + hidden
@@ -59,6 +59,24 @@ public enum AchievementCatalog {
     private static let craft: [AchievementDefinition] = [
         entry("honest_baseline", .craft, .bronze, "Honest Baseline", "You timed your typing. Now the comparison is fair.") { input in
             reading(input.extras.calibrated ? 1 : 0, 1, "Take the typing test at the bottom of this page", day: nil)
+        },
+        entry("second_draft", .craft, .bronze, "Second Draft", "You said what to fix and it got fixed. No cursor involved.") { input in
+            let counters = input.extras.counters
+            return reading(
+                Double(counters.voiceEdits), 1, "Edit a selection by voice. Counted from install.",
+                day: counters.day(.voiceEdits, reaching: 1))
+        },
+        entry("editor", .craft, .silver, "Editor", "25 voice edits. Your mouse is getting lonely.") { input in
+            let counters = input.extras.counters
+            return reading(
+                Double(counters.voiceEdits), 25, "\(min(counters.voiceEdits, 25)) of 25 voice edits, counted from install",
+                day: counters.day(.voiceEdits, reaching: 25))
+        },
+        entry("reworded", .craft, .bronze, "Reworded", "Same idea, new wording. You never touched a key.") { input in
+            let counters = input.extras.counters
+            return reading(
+                Double(counters.transforms), 1, "Run a transform on a selection. Counted from install.",
+                day: counters.day(.transforms, reaching: 1))
         },
         entry("proper_noun", .craft, .bronze, "Proper Noun", "Saved a spelling. It'll get that name right from now on.") { input in
             reading(Double(input.extras.rememberedCount), 1, "No spellings saved yet", day: input.extras.firstRememberedDay)

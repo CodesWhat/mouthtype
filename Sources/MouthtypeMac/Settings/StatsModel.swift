@@ -49,6 +49,7 @@ import Observation
     /// The trophy shelf's model. It re-evaluates whenever a new snapshot arrives, off the main thread.
     @ObservationIgnored let achievements: AchievementModel
     @ObservationIgnored private var achievementTask: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var counterObserver: NSObjectProtocol?
     /// Nil until the first load finishes.
     private(set) var snapshot: StatsSnapshot?
     private(set) var error: String?
@@ -70,6 +71,9 @@ import Observation
                 onChange: onChange)
         }
         calibration = TypingCalibrationModel(defaults: defaults, onAccepted: { [weak self] in self?.typingBaselineChanged() })
+        counterObserver = NotificationCenter.default.addObserver(
+            forName: .achievementCounterChanged, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.countersChanged() } }
         if observing { observe() }
     }
 
@@ -77,6 +81,7 @@ import Observation
         observation?.cancel()
         rolloverTask?.cancel()
         achievementTask?.cancel()
+        if let counterObserver { NotificationCenter.default.removeObserver(counterObserver) }
         removeRolloverObservers()
     }
 
@@ -176,6 +181,12 @@ import Observation
     func setAchievementsEnabled(_ value: Bool) {
         achievements.setEnabled(value)
         if value, let snapshot { refreshAchievements(snapshot) }
+    }
+
+    /// A local action counter went up (a voice edit or a transform). Looks again at the snapshot already loaded; with none
+    /// loaded yet, the first load will.
+    func countersChanged() {
+        if let snapshot { refreshAchievements(snapshot) }
     }
 
     private func refreshAchievements(_ snapshot: StatsSnapshot) {

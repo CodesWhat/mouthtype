@@ -58,6 +58,9 @@ import Testing
         ("hour_back", 60, { $0.saved = Double($1) }),
         ("workday_back", 480, { $0.saved = Double($1) }),
         ("proper_noun", 1, { $0.extras.rememberedCount = $1 }),
+        ("second_draft", 1, { $0.extras.counters.voiceEdits = $1 }),
+        ("editor", 25, { $0.extras.counters.voiceEdits = $1 }),
+        ("reworded", 1, { $0.extras.counters.transforms = $1 }),
         ("shortcut", 10, { $0.extras.snippetCount = $1 }),
         ("filibuster", 300_000, { $0.extras.longestDurationMs = $1 }),
     ]
@@ -99,12 +102,12 @@ import Testing
     @Test func tiersMatchTheDesign() {
         let tiers = Dictionary(uniqueKeysWithValues: AchievementCatalog.all.map { ($0.id, $0.tier) })
         let gold: Set = ["six_figures", "month", "century", "workday_back"]
-        let silver: Set = ["five_figures", "thousand_takes", "monologue", "no_days_off", "auctioneer", "triple_speed", "shortcut", "filibuster"]
+        let silver: Set = ["five_figures", "thousand_takes", "monologue", "no_days_off", "auctioneer", "triple_speed", "shortcut", "filibuster", "editor"]
         for (id, tier) in tiers {
             #expect(tier == (gold.contains(id) ? .gold : silver.contains(id) ? .silver : .bronze), "\(id)")
         }
-        #expect(AchievementCatalog.all.count == 24)
-        #expect(Set(AchievementCatalog.all.map(\.id)).count == 24)
+        #expect(AchievementCatalog.all.count == 27)
+        #expect(Set(AchievementCatalog.all.map(\.id)).count == 27)
     }
 
     @Test func hiddenOnesSayNothingUntilEarned() {
