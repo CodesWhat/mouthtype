@@ -130,7 +130,7 @@ import Testing
         #expect(refreshes == 1)
         controller.windowDidBecomeKey(key)
         #expect(controller.isPolling)
-        try await Task.sleep(for: .milliseconds(200))
+        await awaitCondition { polls > 0 }
         #expect(polls > 0)
         controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
         #expect(!controller.isPolling)

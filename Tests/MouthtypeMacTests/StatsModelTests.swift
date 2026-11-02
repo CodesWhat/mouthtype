@@ -91,18 +91,23 @@ import Testing
         try dictate(store, minutes: 1, text: "one two")
         let model = StatsModel(store: store, observing: false)
         let stale = try store.statsSnapshot(now: base)
+        let slowFetch = FetchProbe()
+        defer { slowFetch.release() }
         model.fetch = { _, _, _ in
-            Thread.sleep(forTimeInterval: 0.4)
+            slowFetch.hold()
             var old = stale
             old.report.wordsAllTime = 999
             return old
         }
         let slow = Task { await model.load() }
-        try await Task.sleep(for: .milliseconds(50))
+        try #require(await slowFetch.waitUntilStarted(), "the slow fetch never started")
         model.activate()
         await waitUntil { model.snapshot?.report.wordsAllTime == 2 }
         #expect(model.snapshot?.report.wordsAllTime == 2)
+        slowFetch.release()
+        // The slow load has returned its 999 snapshot and applied or dropped it by the time its task completes.
         await slow.value
+        #expect(slowFetch.finished)
         #expect(model.snapshot?.report.wordsAllTime == 2)
     }
 
