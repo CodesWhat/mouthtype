@@ -154,8 +154,9 @@ import Testing
         #expect(recovered == ["a", "c"])
     }
 
-    private func waitUntil(_ condition: @MainActor () -> Bool) async {
+    private func waitUntil(_ condition: @MainActor () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
         for _ in 0..<200 where !condition() { try? await Task.sleep(for: .milliseconds(25)) }
+        if !condition() { Issue.record("waitUntil: condition never held within 5s", sourceLocation: sourceLocation) }
     }
 
     @Test func finishedTakesAppearWithoutReloading() async throws {

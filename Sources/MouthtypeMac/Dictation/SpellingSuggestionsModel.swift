@@ -67,7 +67,7 @@ struct DismissedSuggestions: Codable, Equatable {
     @ObservationIgnored private var all: [SpellingSuggestion] = []
     @ObservationIgnored private(set) var isActive = false
     @ObservationIgnored private var generation = 0
-    @ObservationIgnored private var reloadTask: Task<Void, Never>?
+    @ObservationIgnored private(set) var reloadTask: Task<Void, Never>?
     @ObservationIgnored private var computeTask: Task<Computed?, Never>?
     /// The inputs the last finished run saw. An identical read (same take count, newest take and rules) reuses its result.
     @ObservationIgnored private var lastRun: Computed?

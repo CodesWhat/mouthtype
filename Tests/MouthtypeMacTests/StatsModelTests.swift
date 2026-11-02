@@ -25,8 +25,9 @@ import Testing
         return id
     }
 
-    private func waitUntil(_ condition: @MainActor () -> Bool) async {
+    private func waitUntil(_ condition: @MainActor () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
         for _ in 0..<2400 where !condition() { try? await Task.sleep(for: .milliseconds(25)) }
+        if !condition() { Issue.record("waitUntil: condition never held within 60s", sourceLocation: sourceLocation) }
     }
 
     @Test func secureTakesAreExcludedFromEveryNumber() async throws {

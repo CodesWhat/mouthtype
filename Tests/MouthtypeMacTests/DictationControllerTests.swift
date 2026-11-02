@@ -620,11 +620,12 @@ private struct Rig {
     }
 
     /// Waits, up to two seconds, for work on other tasks to reach `condition`.
-    func until(_ condition: () -> Bool) async {
+    func until(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
         for _ in 0..<400 where !condition() {
             try? await Task.sleep(for: .milliseconds(5))
             await settle()
         }
+        if !condition() { Issue.record("until: condition never held after 400 polls", sourceLocation: sourceLocation) }
     }
 
     func dictate() async {
@@ -3062,7 +3063,8 @@ private final class SlowCapture: DictationCapturing {
         rig.capture.interrupt()
         await rig.until { rig.controller.phase == .idle }
         rig.cards.click(.insert)
-        await rig.until { rig.controller.phase == .processing }
+        // Processing can finish before the poll sees it, so delivery counts too.
+        await rig.until { rig.controller.phase == .processing || !rig.inserter.delivered.isEmpty }
         await rig.controller.waitForProcessing()
         #expect(rig.inserter.delivered == ["Hello world."])
         #expect(rig.store.insertion?.finalText == "Hello world.")

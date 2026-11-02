@@ -30,11 +30,12 @@ private actor InferenceProbe {
 private enum InferenceFailure: Error { case failed }
 
 @Suite struct ParakeetInferenceGateTests {
-    private func until(_ condition: () async -> Bool) async {
+    private func until(_ condition: () async -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
         for _ in 0..<4_000 {
             if await condition() { return }
             await Task.yield()
         }
+        Issue.record("until: condition never held after 4000 yields", sourceLocation: sourceLocation)
     }
 
     @Test func alreadyActivePreviewFinishesBeforeFinalAndNewPreviewIsDropped() async throws {

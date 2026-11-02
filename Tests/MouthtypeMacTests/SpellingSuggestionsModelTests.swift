@@ -256,13 +256,14 @@ import Testing
             return rows
         }
         model.activate()
+        let reload = model.reloadTask
         // Deactivate only once the fetch is really in flight.
         for _ in 0..<1000 where !started.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(10)) }
         model.deactivate()
         release.signal()
         for _ in 0..<1000 where !finished.withLock({ $0 }) { try await Task.sleep(for: .milliseconds(10)) }
-        // Let the finished fetch's result reach the model, which must drop it.
-        try await Task.sleep(for: .milliseconds(300))
+        // The reload has applied or dropped its result once its own task completes.
+        await reload?.value
         #expect(model.suggestions.isEmpty)
         model.fetchRecent = { store, limit in try store.recentTakes(limit: limit) }
         model.activate()
@@ -285,14 +286,15 @@ import Testing
             return rows
         }
         model.activate()
+        let olderReload = model.reloadTask
         // The newer reload starts only once the older one is really in flight.
         try #require(await stale.waitUntilStarted(), "the older fetch never started")
         await model.reload()
         #expect(!model.suggestions.isEmpty)
         stale.release()
         try #require(await stale.waitUntilFinished(), "the older fetch never finished")
-        // Let the finished fetch's empty result reach the model, which must drop it.
-        try await Task.sleep(for: .milliseconds(300))
+        // The older reload has applied or dropped its empty result once its own task completes.
+        await olderReload?.value
         #expect(!model.suggestions.isEmpty)
     }
 
