@@ -70,8 +70,9 @@ private actor ScriptedEngine: PreparationReporting {
 
 @MainActor
 @Suite struct SetupDownloadProgressTests {
-    private func waitUntil(_ condition: () -> Bool) async {
+    private func waitUntil(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
         for _ in 0..<300 where !condition() { try? await Task.sleep(for: .milliseconds(10)) }
+        if !condition() { Issue.record("waitUntil: condition never held within 3s", sourceLocation: sourceLocation) }
     }
 
     private func progress(_ fraction: Double) -> EnginePreparation {
