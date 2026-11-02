@@ -40,6 +40,7 @@ Natural speech in, clean text out.
 - [Experimental Linux Source](#experimental-linux-source)
 - [Built With](#built-with)
 - [Community and Support](#community-and-support)
+- [Star History](#star-history)
 - [CodesWhat Ecosystem](#codeswhat-ecosystem)
 - [License](#license)
 
@@ -288,6 +289,18 @@ Speech recognition uses NVIDIA's Parakeet models, converted to Core ML by FluidI
 <h2 align="center" id="community-and-support">Community and Support</h2>
 
 Open an [issue](https://github.com/CodesWhat/mouthtype/issues) for bugs, or ask in [Discussions](https://github.com/CodesWhat/mouthtype/discussions). Include the app version, macOS version, destination app and reproduction steps; omit personal transcripts and recordings. Report vulnerabilities through [SECURITY.md](SECURITY.md), not in an issue. The [troubleshooting guide](https://docs.mouthtype.app/troubleshooting/) covers the problems you can hit today.
+
+<h2 align="center" id="star-history">Star History</h2>
+
+<div align="center">
+  <a href="https://www.star-history.com/?repos=codeswhat%2Fmouthtype&type=date&legend=top-left">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=codeswhat/mouthtype&type=date&legend=top-left&theme=dark" />
+      <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=codeswhat/mouthtype&type=date&legend=top-left" />
+      <img src="https://api.star-history.com/chart?repos=codeswhat/mouthtype&type=date&legend=top-left" alt="Star history chart for CodesWhat/mouthtype" width="600" />
+    </picture>
+  </a>
+</div>
 
 <h2 align="center" id="codeswhat-ecosystem">CodesWhat Ecosystem</h2>
 
