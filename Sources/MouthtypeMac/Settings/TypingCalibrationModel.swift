@@ -60,9 +60,9 @@ import Observation
     /// Opens the calibration area. Nothing runs until Start.
     func open() { isOpen = true }
 
-    /// Closes the area and throws away any run in progress.
+    /// Closes the area and throws away any run, finished or not, along with the typed text. The baseline stands.
     func close() {
-        cancel()
+        retry()
         isOpen = false
     }
 

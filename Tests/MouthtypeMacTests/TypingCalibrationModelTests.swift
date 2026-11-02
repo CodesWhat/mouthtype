@@ -118,6 +118,27 @@ import Testing
         #expect(model.phase == .idle)
     }
 
+    @Test func closingClearsTypedTextAndFinishedRunsButKeepsTheBaseline() throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let clock = Clock()
+        let model = makeModel(defaults, clock: clock)
+        model.open()
+        run(model, clock: clock, characters: 40, seconds: 10)
+        #expect(!model.text.isEmpty && model.phase != .idle)
+        model.close()
+        #expect(model.text.isEmpty && model.phase == .idle && !model.isOpen && model.baseline == 40)
+        model.open()
+        model.start()
+        model.text = String(TypingCalibrationModel.passage.prefix(1))
+        clock.advance(30)
+        model.text = TypingCalibrationModel.passage  // pasted whole
+        model.stop()
+        #expect(model.phase == .pasted)
+        model.close()
+        #expect(model.text.isEmpty && model.phase == .idle && model.baseline == 40)
+    }
+
     @Test func tickingPastTheMinuteFinishesTheRun() throws {
         let (defaults, name) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }
