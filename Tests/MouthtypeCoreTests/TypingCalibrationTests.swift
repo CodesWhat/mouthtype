@@ -22,6 +22,15 @@ final class FakeMonotonicClock: @unchecked Sendable {
         return right + String(repeating: "#", count: wrong)
     }
 
+    /// Types `text` the way a keyboard would: a few characters per change, never a paste-sized jump.
+    private func feed(_ test: inout TypingCalibration, _ text: String) {
+        var end = 0
+        while end < text.count {
+            end = min(text.count, end + 5)
+            test.input(String(text.prefix(end)))
+        }
+    }
+
     @Test func clockWaitsForTheFirstTypedCharacter() {
         let clock = FakeMonotonicClock()
         var test = make(clock)
@@ -40,8 +49,8 @@ final class FakeMonotonicClock: @unchecked Sendable {
         var test = make(clock)
         test.start()
         test.input("a")
-        clock.advance(30)
-        test.input(typed(150))  // 150 chars = 30 words in half a minute = 60 WPM
+        feed(&test, typed(150))
+        clock.advance(30)  // 150 chars = 30 words in half a minute = 60 WPM
         test.stop()
         guard case .finished(let result) = test.phase else { Issue.record("no result: \(test.phase)"); return }
         #expect(result.wpm == 60)
@@ -56,8 +65,9 @@ final class FakeMonotonicClock: @unchecked Sendable {
         var test = make(clock)
         test.start()
         test.input("a")
+        feed(&test, typed(200, wrong: 10))
         clock.advance(60)
-        test.input(typed(200, wrong: 10))  // 190 right in a full minute = 38 WPM
+        test.tick()  // 190 right in a full minute = 38 WPM
         guard case .finished(let result) = test.phase else { Issue.record("no result: \(test.phase)"); return }
         #expect(result.correctCharacters == 190)
         #expect(result.errorCharacters == 10)
@@ -79,7 +89,7 @@ final class FakeMonotonicClock: @unchecked Sendable {
         let clock = FakeMonotonicClock()
         var test = make(clock)
         test.start()
-        test.input(typed(120))
+        feed(&test, typed(120))
         clock.advance(59.9)
         test.tick()
         #expect(test.isActive)
@@ -95,6 +105,7 @@ final class FakeMonotonicClock: @unchecked Sendable {
         var test = make(clock)
         test.start()
         test.input("a")
+        feed(&test, typed(499))
         clock.advance(30)
         test.input(typed(500))  // 100 words in half a minute
         guard case .finished(let result) = test.phase else { Issue.record("no result: \(test.phase)"); return }
@@ -125,7 +136,7 @@ final class FakeMonotonicClock: @unchecked Sendable {
         let clock = FakeMonotonicClock()
         var test = make(clock)
         test.start()
-        test.input(typed(100))
+        feed(&test, typed(100))
         clock.advance(40)
         test.cancel()
         #expect(test.phase == .cancelled)
@@ -144,12 +155,54 @@ final class FakeMonotonicClock: @unchecked Sendable {
         #expect(test.phase == .idle)
         test.start()
         test.input("a")
+        feed(&test, typed(100))
         clock.advance(20)
-        test.input(typed(100))
         test.stop()
         #expect(test.phase != .idle)
         test.retry()
         #expect(test.phase == .idle && test.correctCharacters == 0)
+    }
+
+    @Test func pastingThePassageInvalidatesTheRun() {
+        let clock = FakeMonotonicClock()
+        var test = make(clock)
+        test.start()
+        test.input("a")
+        clock.advance(30)
+        test.input(typed(400))  // 399 characters in one change
+        #expect(test.phase == .pasted)
+        #expect(test.correctCharacters == 0 && test.errorCharacters == 0)
+        clock.advance(30)
+        test.tick()
+        test.stop()
+        #expect(test.phase == .pasted, "no result can follow a paste")
+    }
+
+    @Test func pastingAsTheFirstInputInvalidatesTheRun() {
+        let clock = FakeMonotonicClock()
+        var test = make(clock)
+        test.start()
+        test.input(typed(300))
+        #expect(test.phase == .pasted)
+        test.retry()
+        #expect(test.phase == .idle)
+    }
+
+    @Test func fastTypingStillScores() {
+        let clock = FakeMonotonicClock()
+        var test = make(clock)
+        test.start()
+        // 200 WPM: 1000 characters a minute is about 17 a second, observed in 4 character bursts.
+        var count = 0
+        for _ in 0..<75 {
+            count += 4
+            clock.advance(0.24)
+            test.input(typed(count))
+        }
+        test.stop()
+        guard case .finished(let result) = test.phase else { Issue.record("no result: \(test.phase)"); return }
+        #expect(result.correctCharacters == 300)
+        #expect(result.wpm > 150)
     }
 
     @Test func baselinePreferencePersistsAcrossRelaunchAndResets() throws {

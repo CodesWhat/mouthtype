@@ -35,18 +35,24 @@ public struct TypingCalibration: Sendable {
         /// Stopped or timed out without enough typing to score.
         case tooShort
         case cancelled
+        /// A change added too many characters at once to be typing, so there is no result.
+        case pasted
     }
 
     public static let duration: TimeInterval = 60
     /// Stopping before this many seconds is not a result.
     public static let minimumElapsed: TimeInterval = 10
     /// Outside this range the run was a fumble, not a measurement.
+    /// More characters than this arriving in one change is a paste, a dictation or a drop, not typing. Autocorrect and fast
+    /// typing between two observed changes stay well under it.
+    public static let maximumInsertion = 8
     public static let plausibleWPM: ClosedRange<Double> = 1...400
 
     public let passage: [Character]
     public private(set) var phase: Phase = .idle
     public private(set) var correctCharacters = 0
     public private(set) var errorCharacters = 0
+    private var typedCount = 0
     private let now: @Sendable () -> TimeInterval
 
     public init(passage: String, now: @escaping @Sendable () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
@@ -83,12 +89,15 @@ public struct TypingCalibration: Sendable {
         switch phase {
         case .ready:
             guard !typed.isEmpty else { return }
+            guard typed.count <= Self.maximumInsertion else { markPasted(); return }
             phase = .running(startedAt: time)
         case .running:
             break
         default:
             return
         }
+        guard typed.count - typedCount <= Self.maximumInsertion else { markPasted(); return }
+        typedCount = typed.count
         score(typed)
         guard case .running(let startedAt) = phase else { return }
         if time - startedAt >= Self.duration {
@@ -123,7 +132,13 @@ public struct TypingCalibration: Sendable {
         phase = .idle
     }
 
+    private mutating func markPasted() {
+        reset()
+        phase = .pasted
+    }
+
     private mutating func reset() {
+        typedCount = 0
         correctCharacters = 0
         errorCharacters = 0
     }

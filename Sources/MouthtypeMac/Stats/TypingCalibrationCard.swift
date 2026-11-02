@@ -57,6 +57,7 @@ struct TypingCalibrationCard: View {
                 .accessibilityHint("The clock starts on your first key.")
                 .accessibilityIdentifier("typing-field")
                 .onExitCommand { model.cancel() }
+                .onPasteCommand(of: [.text]) { _ in }
             Text(hint).font(DesignFont.sans(DesignFont.caption)).foregroundStyle(DesignPalette.ink2)
                 .fixedSize(horizontal: false, vertical: true)
             readout
@@ -78,6 +79,7 @@ struct TypingCalibrationCard: View {
         case .running: "Keep typing. Press Stop to score what you have, or Escape to throw the run away."
         case .finished: "Use this result to make it your typing speed, or Retry. Your current speed stays until you do."
         case .tooShort: "Too short to score. Retry and keep going for at least ten seconds."
+        case .pasted: "That looked like pasted text, not typing, so there is no result. Retry and type it yourself."
         case .cancelled: "Stopped, with no result. Your current speed is unchanged."
         }
     }
@@ -104,7 +106,7 @@ struct TypingCalibrationCard: View {
 
     @ViewBuilder private var buttons: some View {
         switch model.phase {
-        case .idle, .cancelled, .tooShort:
+        case .idle, .cancelled, .tooShort, .pasted:
             Button("Start") {
                 model.start()
                 fieldFocused = true

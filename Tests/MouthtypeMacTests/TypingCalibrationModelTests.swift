@@ -24,11 +24,20 @@ import Testing
             onAccepted: accepted)
     }
 
+    /// Types like a keyboard: a few characters per change.
+    private func feed(_ model: TypingCalibrationModel, characters: Int) {
+        var end = model.text.count
+        while end < characters {
+            end = min(characters, end + 5)
+            model.text = String(TypingCalibrationModel.passage.prefix(end))
+        }
+    }
+
     private func run(_ model: TypingCalibrationModel, clock: Clock, characters: Int, seconds: TimeInterval) {
         model.start()
         model.text = String(TypingCalibrationModel.passage.prefix(1))
+        feed(model, characters: characters)
         clock.advance(seconds)
-        model.text = String(TypingCalibrationModel.passage.prefix(characters))
         model.stop()
     }
 
@@ -92,13 +101,30 @@ import Testing
         #expect(model.snapshot?.report.typingWPM == 40)
     }
 
+    @Test func pastedPassageOffersNoResultAndNothingToAccept() throws {
+        let (defaults, name) = try isolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: name) }
+        let clock = Clock()
+        let model = makeModel(defaults, clock: clock)
+        model.start()
+        model.text = String(TypingCalibrationModel.passage.prefix(1))
+        clock.advance(30)
+        model.text = TypingCalibrationModel.passage  // pasted whole
+        model.stop()
+        #expect(model.phase == .pasted && model.result == nil)
+        model.accept()
+        #expect(model.baseline == 40)
+        model.retry()
+        #expect(model.phase == .idle)
+    }
+
     @Test func tickingPastTheMinuteFinishesTheRun() throws {
         let (defaults, name) = try isolatedDefaults()
         defer { defaults.removePersistentDomain(forName: name) }
         let clock = Clock()
         let model = makeModel(defaults, clock: clock)
         model.start()
-        model.text = String(TypingCalibrationModel.passage.prefix(100))
+        feed(model, characters: 100)
         clock.advance(61)
         model.tick()
         #expect(model.result?.elapsed == 60)

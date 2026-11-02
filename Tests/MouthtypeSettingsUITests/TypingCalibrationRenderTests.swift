@@ -37,8 +37,9 @@ import Testing
         try snap("idle")
         model.start()
         model.text = String(TypingCalibrationModel.passage.prefix(1))
-        clock.advance(24)
+        for end in stride(from: 5, through: 70, by: 5) { model.text = String(TypingCalibrationModel.passage.prefix(end)) }
         model.text = String(TypingCalibrationModel.passage.prefix(70)) + "xx"
+        clock.advance(24)
         try snap("running")
         clock.advance(36)
         model.tick()
