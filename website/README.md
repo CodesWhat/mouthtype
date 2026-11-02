@@ -30,6 +30,10 @@ Alpha.1–3 users need one manual download and replacement to get the updater. A
 
 The browser download tests intercept the two endpoints with clearly labelled attachment fixtures. They verify the UI and download behavior without fetching a large release or claiming that hosted artifacts have been published. Deployment verification owns the real downloads. The static internal-page checks exclude these two artifact endpoints.
 
+## Download hosting
+
+The publisher verifies retained installer and source bytes against their GitHub Releases assets, then generates exact redirects for the existing `/releases/<version>/<filename>` URLs. Vercel retains the website, small manifests/checksums and the unchanged signed feed, rather than a copy of every ZIP, DMG and source archive per deployment. Keep the local release archive for validation and recovery. Publish through `scripts/publish-website.py`; see `docs/RELEASING.md` for release ordering and the reviewed website-ref option.
+
 ## Sharing
 
 The production domain is `https://mouthtype.app`. Every page includes a canonical URL, page-specific Open Graph and large-image Twitter card metadata in its static HTML. The seven committed PNG cards in `public/social/` are 1200×630 and use the existing fonts, icon and recording-pill asset. Sharing crawlers need no JavaScript or authenticated access.
