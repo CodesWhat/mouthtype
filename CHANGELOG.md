@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Edit Selection by Voice: select text, speak one instruction and review the result in a preview before it replaces the selection. It is off until you set its shortcut on the Transforms page. It refuses secure fields, an empty selection and selections over 8,000 characters, and nothing is retained.
+- Edit Selection by Voice: select text, speak one instruction and review the result in a preview before it replaces the selection. Start it from the Edit Selection by Voice menu item, or set an optional shortcut on the Transforms page (the shortcut is off by default). It refuses secure fields, an empty selection and selections over 8,000 characters. The audio and text aren't saved; Accept logs only the process ID, selection range and replacement length at info level, never the text.
 - Typing calibration on the Stats page: type a short passage in the app to measure your typing speed, so time saved reflects your own baseline.
 
 ### Changed

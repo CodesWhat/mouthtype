@@ -1,6 +1,6 @@
 Mouthtype 0.11.0
 
-Edit Selection by Voice is new. Select text, speak one instruction, and review the result in a preview before it replaces your selection. It is off until you set its shortcut on the Transforms page. It won't run in password fields, with nothing selected, or on selections over 8,000 characters, and Mouthtype keeps nothing from it.
+Edit Selection by Voice is new. Select text, speak one instruction, and review the result in a preview before it replaces your selection. Start it from the Edit Selection by Voice menu item, or set an optional shortcut on the Transforms page (the shortcut is off by default). It won't run in password fields, with nothing selected, or on selections over 8,000 characters. Mouthtype doesn't save the audio or the text. When you accept, it logs only the app's process ID, the selection range and the length of the replacement, never the text.
 
 The Stats page can now measure your typing speed. Type a short passage in the app and Mouthtype uses your own speed to work out the time you save.
 
