@@ -572,7 +572,7 @@ public struct ProfanityRemover: Sendable {
         /// subject. A leader that follows a subject or subordinator ("When I'm working there are people") ends a clause,
         /// and the "there" is existential.
         func leadsClause(_ k: Int) -> Bool {
-            guard k >= 0, ProfanityRemover.locativeLeaders.contains(words[k].lower) else { return false }
+            guard k >= 0, ProfanityRemover.locativeLeaders.contains(words[k].lower), adjacent(k) else { return false }
             guard k > 0, adjacent(k - 1) else { return true }
             return ["and", "but", "or", "so"].contains(words[k - 1].lower)
         }

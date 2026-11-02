@@ -193,6 +193,8 @@ import Testing
         ("When I'm working there are fucking people around.", "When I'm working there are people around."),
         ("And being there is fucking people up.", "And being there is messing people up."),
         ("There is fucking nothing here.", "There is nothing here."),
+        ("Back. There are fucking people around.", "Back. There are people around."),
+        ("Waiting. There is fucking nothing here.", "Waiting. There is nothing here."),
         ("I know there is fucking nothing here.", "I know there is nothing here."),
         ("She was fucking guys around a lot.", "She was messing guys around a lot."),
         ("I'm fucking people-watching.", "I'm people-watching."),
