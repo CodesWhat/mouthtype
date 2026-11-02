@@ -16,6 +16,7 @@ import UniformTypeIdentifiers
     private let onQuietOtherAudioChanged: @MainActor (Bool) -> Void
     private let onBoostSavedWordsChanged: @MainActor (Bool) -> Void
     private let onDockIconModeChanged: @MainActor (DockIconMode) -> Void
+    private let onVoiceEditShortcutChanged: @MainActor (VoiceEditShortcut) -> Void
     private var capsLockShortcut = false
     private var escapeShortcut = false
     let microphone: MicrophoneSettingsModel
@@ -41,6 +42,7 @@ import UniformTypeIdentifiers
     private(set) var cleanup: CleanupSettings
     private(set) var livePreview = false
     private(set) var dockIconMode = DockIconMode.fallback
+    private(set) var voiceEditShortcut = VoiceEditShortcut.off
     private(set) var audioRetention = AudioRetentionPolicy()
     /// The Settings modal's footer switch. Adds the Advanced page to its nav.
     private(set) var advancedOptions = false
@@ -85,6 +87,7 @@ import UniformTypeIdentifiers
         onQuietOtherAudioChanged: @escaping @MainActor (Bool) -> Void = { _ in },
         onBoostSavedWordsChanged: @escaping @MainActor (Bool) -> Void = { _ in },
         onDockIconModeChanged: @escaping @MainActor (DockIconMode) -> Void = { _ in },
+        onVoiceEditShortcutChanged: @escaping @MainActor (VoiceEditShortcut) -> Void = { _ in },
         home: HomeLogModel = HomeLogModel(observing: false),
         stats: StatsModel = StatsModel(observing: false),
         spellings: SpellingEditor? = nil, spellingSuggestions: SpellingSuggestionsModel? = nil, phrases: PhraseEditor? = nil,
@@ -92,6 +95,7 @@ import UniformTypeIdentifiers
     ) {
         self.openTranscribeWindow = openTranscribeWindow
         self.onDockIconModeChanged = onDockIconModeChanged
+        self.onVoiceEditShortcutChanged = onVoiceEditShortcutChanged
         self.home = home
         self.stats = stats
         self.spellings = spellings
@@ -237,6 +241,12 @@ import UniformTypeIdentifiers
         onDockIconModeChanged(mode)
     }
 
+    func setVoiceEditShortcut(_ value: VoiceEditShortcut) {
+        VoiceEditShortcut.set(value, in: defaults)
+        voiceEditShortcut = value
+        onVoiceEditShortcutChanged(value)
+    }
+
     func setLivePreview(_ enabled: Bool) {
         LivePreviewPreference.set(enabled, in: defaults)
         livePreview = enabled
@@ -267,6 +277,7 @@ import UniformTypeIdentifiers
         audioRetention = AudioRetentionPreference.load(defaults)
         livePreview = LivePreviewPreference.isEnabled(defaults)
         dockIconMode = DockIconMode.current(defaults)
+        voiceEditShortcut = VoiceEditShortcut.current(defaults)
         cleanup = CleanupSettings.load(defaults)
         sounds = SoundPreference.isEnabled(defaults)
         quietOtherAudio = QuietAudioPreference.isEnabled(defaults)

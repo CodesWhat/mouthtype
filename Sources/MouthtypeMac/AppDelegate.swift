@@ -40,7 +40,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         activity: { [weak self] in
             .resolve(
                 phase: self?.dictation?.phase, recovering: self?.recovery?.isRecovering == true,
-                transcribingFile: self?.fileTranscriptionModel.isBusy == true, editingSelection: self?.selectionCleanupModel.hasPreview == true)
+                transcribingFile: self?.fileTranscriptionModel.isBusy == true, editingSelection: self?.selectionCleanupModel.hasPreview == true || self?.voiceEditModel.phase.isActive == true)
         })
     private lazy var selectionCleanupModel = SelectionCleanupModel(
         editor: AccessibilitySelectionEditor(), transformer: cleanerHost,
@@ -55,6 +55,20 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 styles: styles, fallback: CleanupSettings.load().style, focus: AccessibilityFocusReader())
         })
     private lazy var selectionCleanupWindow = SelectionCleanupWindow(model: selectionCleanupModel)
+    private lazy var voiceEditModel = VoiceEditCoordinator(
+        editor: AccessibilitySelectionEditor(),
+        recorder: VoiceInstructionRecorder(capture: micCapture, engine: HostEngine(host: engineHost)),
+        engine: cleanerHost,
+        busy: { [weak self] in
+            guard let self else { return true }
+            return self.isTerminating || self.dictation?.phase != .idle || self.fileTranscriptionModel.isBusy || self.recovery?.isRecovering == true
+                || self.appUpdater.blocksNewWork || self.selectionCleanupModel.hasPreview
+        },
+        secureContext: { AccessibilityFocusReader().isSecureInputEnabled || AccessibilityFocusReader().snapshotApplication().isSecure },
+        modelUnavailableReason: { [weak self] in self?.cleanerHost.transformUnavailableReason },
+        appName: { NSRunningApplication(processIdentifier: $0)?.localizedName },
+        changed: { [weak self] in self?.appUpdater.refreshActivity() })
+    private lazy var voiceEditWindow = VoiceEditWindow(model: voiceEditModel)
     private lazy var fileTranscriptionModel: FileTranscriptionModel = FileTranscriptionModel(
         makeJob: { [weak self] in
             guard let self, case .ready = self.engineHost.state, let engine = self.engineHost.engine else {
@@ -98,6 +112,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 onQuietOtherAudioChanged: { [weak self] enabled in if !enabled { self?.audioQuiet.end() } },
                 onBoostSavedWordsChanged: { [weak self] _ in self?.refreshVocabularyBias() },
                 onDockIconModeChanged: { [weak self] _ in self?.dockPresence.refresh() },
+                onVoiceEditShortcutChanged: { [weak self] _ in self?.registerGlobalShortcuts() },
                 spellings: spellingEditor, spellingSuggestions: spellingSuggestions, phrases: PhraseEditor(store: phrases),
                 openTranscribeWindow: { [weak self] in self?.fileTranscriptionWindow.present() }),
             actions: SettingsActions(
@@ -382,6 +397,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                     guard let self, AXIsProcessTrusted() else { return .unavailable }
                     return await self.selectionCleanupModel.captureForMenuOffMain()
                 }))
+        menuBar.add(
+            section: VoiceEditMenuSection { [weak self] in
+                guard AXIsProcessTrusted() else { return }
+                self?.voiceEditWindow.present()
+            }, startsGroup: false)
         menuBar.add(section: FileTranscriptionMenuSection { [weak self] in self?.settingsWindow.present(destination: .transcribeFile) }, startsGroup: false)
         if let recovery {
             recovery.canRecover = { [weak self, weak dictation, weak engineHost, weak recovery] in
@@ -836,6 +856,12 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if shortcut?.claimsLastAction(keyCode: GlobalShortcuts.Shortcut.copyLast.keyCode) != true {
             shortcuts.register(.copyLast) { [weak self] in self?.copyLast() }
+        }
+        if let voiceEdit = VoiceEditShortcut.current().shortcut {
+            shortcuts.register(voiceEdit) { [weak self] in
+                guard AXIsProcessTrusted() else { return }
+                self?.voiceEditWindow.present()
+            }
         }
     }
 

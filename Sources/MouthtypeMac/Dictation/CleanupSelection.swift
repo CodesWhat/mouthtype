@@ -140,3 +140,16 @@ extension CleanupSelection: SelectionTransforming {
         return try await thorough.transform(transform, text: text, waitingUpTo: .seconds(60))
     }
 }
+
+/// Explicit voice edits run on the Thorough model, like the transforms.
+extension CleanupSelection: VoiceEditing {
+    func run(_ request: VoiceEditRequest) async -> VoiceEditResult {
+        demand.thoroughRequests += 1
+        defer {
+            demand.thoroughRequests -= 1
+            levelChanged()
+        }
+        thorough.levelChanged()
+        return await VoiceEditEngine(model: thorough).run(request)
+    }
+}
