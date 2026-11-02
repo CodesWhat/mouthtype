@@ -93,3 +93,5 @@ class CoverageFloorTests(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode == 0, passes, result.stdout + result.stderr)
                     self.assertIn('Swift_line_coverage', (directory / 'summary.md').read_text())
+                    self.assertEqual((directory / 'coverage.lcov').exists(), passes)
+                    self.assertFalse((directory / 'coverage.lcov.tmp').exists())

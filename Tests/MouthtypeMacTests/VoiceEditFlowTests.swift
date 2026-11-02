@@ -178,6 +178,16 @@ private final class Counter: @unchecked Sendable {
         #expect(rig.editor.replaceCalls.isEmpty)
     }
 
+    @Test func aSpeechEngineThatIsNotReadyEndsWithItsOwnReason() async {
+        let rig = Rig()
+        rig.recorder.startError = VoiceInstructionRecorder.Failure.engineNotReady
+        let flow = rig.coordinator()
+        await flow.begin()
+        #expect(flow.phase == .ended(.speechNotReady))
+        #expect(VoiceEditEnd.speechNotReady.message == "The speech engine isn’t ready yet. Try again in a moment.")
+        #expect(rig.editor.replaceCalls.isEmpty)
+    }
+
     @Test func cancelDuringRecordingStopsTheRecorderAndNeverGenerates() async {
         let rig = Rig()
         let flow = rig.coordinator()

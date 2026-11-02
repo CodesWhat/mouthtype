@@ -18,7 +18,7 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 ## What changed in 0.11.0
 
-- Added: Edit Selection by Voice. Select text, speak one instruction and review the result before it replaces the selection. It is off until you set its shortcut on the Transforms page.
+- Added: Edit Selection by Voice. Select text, speak one instruction and review the result before it replaces the selection. Start it from the Edit Selection by Voice menu item, or set an optional shortcut on the Transforms page (the shortcut is off by default). The audio and text aren't saved; Accept logs only the process ID, selection range and replacement length at info level, never the text.
 - Added: Typing calibration on the Stats page, so time saved uses your own typing speed.
 - Changed: Speech recognition uses FluidAudio 0.18.0.
 - Fixed: Transform Selection checks the target app's own focus before Accept, and profanity cleanup no longer treats a locative "there" as a subject.
