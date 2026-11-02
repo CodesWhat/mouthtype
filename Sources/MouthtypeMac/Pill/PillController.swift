@@ -61,6 +61,8 @@ public final class PillController {
     /// Bumped by every state change, so a message timer or a hide completion only acts on its own state.
     private var generation = 0
     private var pressedControl: PillControl?
+    /// Whether the primary mouse button is down. Tests replace it so a real held button can't change the result.
+    var primaryButtonDown: () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 }
     /// True while the message on screen is the one held under a card, which stays until the card goes.
     private(set) var cardHeld = false
     /// The delivery card folded into the pill (Matrix and Minimal), nil while the pill is a plain pill.
@@ -541,7 +543,7 @@ public final class PillController {
         if let card = skin.grownFrame, isGrown {
             let control = state == .handsFree ? PillHit.control(at: local, frames: skin.controlFrames) : nil
             // A press that started on the card keeps the panel live until the button comes up.
-            let dragging = !panel.ignoresMouseEvents && NSEvent.pressedMouseButtons & 1 != 0
+            let dragging = !panel.ignoresMouseEvents && primaryButtonDown()
             panel.ignoresMouseEvents = !card.contains(local) && pressedControl == nil && !dragging
             skin.setHovered(pressedControl == nil ? control : nil)
             return

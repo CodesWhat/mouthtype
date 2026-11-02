@@ -26,6 +26,7 @@ private final class CardRig {
         defaults.set(size, forKey: "pillSize")
         pill = PillController(level: { .silence }, defaults: defaults)
         pill.cardSettle = 0
+        pill.primaryButtonDown = { false }
         presenter = DeliveryCardPresenter(surface: cards, clipboard: StubClipboard(), clock: clock)
         cards.anchor = { [weak pill] in pill?.cardAnchor() }
         cards.onAction = { [weak presenter] in presenter?.perform($0) }
@@ -397,6 +398,21 @@ private final class CardRig {
         rig.presenter.dismiss()
         #expect(rig.pill.panel.ignoresMouseEvents)
         rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.midX, y: grown.midY)))
+        #expect(rig.pill.panel.ignoresMouseEvents)
+        rig.finish()
+    }
+
+    @Test func aPressThatStartedOnTheCardKeepsThePanelLiveUntilTheButtonComesUp() throws {
+        let rig = CardRig(skin: "matrix")
+        rig.presenter.present(.pasteFailed("Send the notes."))
+        let grown = try #require(rig.squircle?.grownFrame)
+        rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.midX, y: grown.midY)))
+        #expect(!rig.pill.panel.ignoresMouseEvents)
+        rig.pill.primaryButtonDown = { true }
+        rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.maxX + 6, y: grown.midY)))
+        #expect(!rig.pill.panel.ignoresMouseEvents)
+        rig.pill.primaryButtonDown = { false }
+        rig.pill.updateInteractivity(pointer: rig.screen(CGPoint(x: grown.maxX + 6, y: grown.midY)))
         #expect(rig.pill.panel.ignoresMouseEvents)
         rig.finish()
     }
