@@ -25,7 +25,8 @@ files=()
 add_range() {
   local range="$1"
   while IFS= read -r -d '' f; do
-    if [[ "$f" == *.swift && -f "$f" ]]; then
+    # tools/ is excluded here as in lefthook.yml's pre-commit swift-format: tools/linux-desktop belongs to the Linux owner.
+    if [[ "$f" == *.swift && "$f" != tools/* && -f "$f" ]]; then
       files+=("$f")
     fi
   done < <(git diff --name-only --diff-filter=ACMR -z "$range" --)
