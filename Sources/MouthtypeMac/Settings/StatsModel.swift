@@ -46,6 +46,9 @@ import Observation
     @ObservationIgnored let defaults: UserDefaults
     /// The typing calibration card's model. Accepting or resetting a result re-reads the numbers at the new speed.
     @ObservationIgnored private(set) var calibration: TypingCalibrationModel!
+    /// The trophy shelf's model. It re-evaluates whenever a new snapshot arrives, off the main thread.
+    @ObservationIgnored let achievements: AchievementModel
+    @ObservationIgnored private var achievementTask: Task<Void, Never>?
     /// Nil until the first load finishes.
     private(set) var snapshot: StatsSnapshot?
     private(set) var error: String?
@@ -54,6 +57,7 @@ import Observation
         self.isActive = observing
         self.store = store
         self.defaults = defaults
+        achievements = AchievementModel(defaults: defaults)
         // The speed is read for every query, so an accepted result reaches the next read without rebuilding the closures.
         // UserDefaults reads are thread-safe, but the class isn't marked Sendable.
         nonisolated(unsafe) let shared = defaults
@@ -72,6 +76,7 @@ import Observation
     isolated deinit {
         observation?.cancel()
         rolloverTask?.cancel()
+        achievementTask?.cancel()
         removeRolloverObservers()
     }
 
@@ -164,6 +169,24 @@ import Observation
     private func apply(_ snapshot: StatsSnapshot?, failure: String?) {
         self.snapshot = snapshot
         error = failure
+        if let snapshot { refreshAchievements(snapshot) }
+    }
+
+    /// Turns trophies on or off. Turning them on evaluates the snapshot already on screen.
+    func setAchievementsEnabled(_ value: Bool) {
+        achievements.setEnabled(value)
+        if value, let snapshot { refreshAchievements(snapshot) }
+    }
+
+    private func refreshAchievements(_ snapshot: StatsSnapshot) {
+        guard achievements.isEnabled, let store else { return }
+        achievementTask?.cancel()
+        let (instant, zone) = (now(), timeZoneProvider())
+        achievementTask = Task { [achievements] in
+            await achievements.refresh(snapshot: snapshot, now: instant, timeZone: zone) { calibrated in
+                try store.achievementExtras(calibrated: calibrated)
+            }
+        }
     }
 
     // MARK: Day rollover
