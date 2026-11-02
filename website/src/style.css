@@ -151,10 +151,10 @@ p {
   position: relative;
   display: grid;
   grid-template-columns: 1.05fr 1fr;
-  min-height: 630px;
+  min-height: 600px;
   align-items: center;
   gap: 15px;
-  padding: 45px 0 70px;
+  padding: 45px 0 40px;
 }
 .hero > * {
   min-width: 0;
@@ -223,10 +223,10 @@ h1 em {
   text-underline-offset: 4px;
 }
 .availability {
-  font: 9px/1.8 var(--mono);
+  font: 11px/1.8 var(--mono);
   letter-spacing: 0.5px;
   margin: 19px 0 0;
-  color: var(--muted);
+  color: #3f4753;
 }
 .object-stage {
   height: 470px;
@@ -577,7 +577,7 @@ footer {
 }
 @media (min-width: 1450px) {
   .hero {
-    min-height: 690px;
+    min-height: 640px;
   }
 }
 @media (max-width: 1100px) {
@@ -641,7 +641,7 @@ footer {
     font-size: 16px;
   }
   .availability {
-    font-size: 8px;
+    font-size: 11px;
   }
   .object-stage {
     max-width: 530px;
@@ -737,8 +737,8 @@ footer {
     font-size: 12px;
   }
   .availability {
-    font-size: 6px;
-    letter-spacing: 0.25px;
+    font-size: 11px;
+    letter-spacing: 0.3px;
     margin-top: 16px;
   }
   .object-stage {
@@ -1167,4 +1167,82 @@ footer {
   .menubar { padding: 0 8px; }
   .menubar-items { gap: 8px; }
   .menubar-clock { display: none; }
+}
+
+.principles:hover .principles-track,
+.principles:focus .principles-track,
+.principles:focus-within .principles-track {
+  animation-play-state: paused;
+}
+.principles:focus-visible {
+  outline-offset: -4px;
+}
+
+/* Phone scale: a 10px type floor and 44px hit areas. Hit areas grow with offsetting insets, so nothing moves. */
+@media (max-width: 600px) {
+  .headline-label .eyebrow,
+  .alpha-section .eyebrow,
+  .skin-controls legend,
+  .pace-label,
+  .shortcut-hint > span,
+  .asset-caption,
+  .principle-number,
+  .example-top > .mono,
+  .example-bottom {
+    font-size: 10px;
+  }
+  .masthead {
+    gap: 22px;
+  }
+  .alpha-section {
+    padding-bottom: 24px;
+  }
+  .alpha-stamp {
+    margin: 24px auto 0;
+  }
+  .alpha-stamp strong {
+    font-size: 12px;
+  }
+  .download-source {
+    margin-top: 15px;
+  }
+  .brand,
+  .masthead nav a,
+  .download-source a,
+  .compare-switch button {
+    position: relative;
+  }
+  .brand::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  .masthead nav a::after {
+    content: "";
+    position: absolute;
+    inset: -14px -9px;
+  }
+  .masthead nav .nav-alpha::after {
+    inset: -8px -1px;
+  }
+  .download-source a::after {
+    content: "";
+    position: absolute;
+    inset: -15px -2px;
+  }
+  .skin-controls label {
+    padding: 15px 6px;
+    margin: -15px -6px;
+  }
+  .compare-switch button::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  .footer-top nav {
+    row-gap: 0;
+  }
+  .footer-top nav a {
+    padding-block: 14px;
+  }
 }
