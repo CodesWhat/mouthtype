@@ -2,22 +2,28 @@
 """Password gate in front of wayvnc.
 
 macOS Screen Sharing only authenticates against classic VNC password auth (RFB security type 2), which
-wayvnc does not offer. This listens on the public port, runs that handshake against the password in
+wayvnc does not offer. This listens on TESTBED_VNC_BIND (default 127.0.0.1), runs that handshake against the password in
 TESTBED_VNC_PASSWORD_FILE, then hands the connection to wayvnc on loopback, where it speaks no auth.
+Loopback is the default so a bare run never exposes the gate. The container sets TESTBED_VNC_BIND=0.0.0.0
+because Docker forwards the published port to the container's own interface; compose.yaml pins the host
+side of that port to 127.0.0.1.
 RFB passwords are truncated to eight characters, so the generated password is exactly eight.
 """
 import asyncio, hmac, os, sys
 from Crypto.Cipher import DES
 
-LISTEN = ("0.0.0.0", int(os.environ.get("TESTBED_VNC_LISTEN_PORT", "5900")))
+LISTEN = (os.environ.get("TESTBED_VNC_BIND", "127.0.0.1"), int(os.environ.get("TESTBED_VNC_LISTEN_PORT", "5900")))
 UPSTREAM = ("127.0.0.1", int(os.environ.get("TESTBED_WAYVNC_PORT", "5901")))
-PASSWORD = open(os.environ["TESTBED_VNC_PASSWORD_FILE"]).read().strip().encode()[:8].ljust(8, b"\0")
+with open(os.environ["TESTBED_VNC_PASSWORD_FILE"]) as password_file:
+    PASSWORD = password_file.read().strip().encode()[:8].ljust(8, b"\0")
 # RFB uses DES with each key byte bit-reversed.
 KEY = bytes(int(f"{b:08b}"[::-1], 2) for b in PASSWORD)
 failures = {}
 
 
 def expected(challenge):
+    # DES/ECB is not a choice here: it is what RFB security type 2 (VNC authentication) specifies, and
+    # macOS Screen Sharing speaks nothing else. Exposure is limited by the bind address, not the cipher.
     return DES.new(KEY, DES.MODE_ECB).encrypt(challenge)
 
 

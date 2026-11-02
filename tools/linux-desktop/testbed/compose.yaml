@@ -11,9 +11,13 @@ services:
     restart: unless-stopped
     shm_size: 1gb
     ports:
-      # RFB behind the password gate. 20000-20031 is the NAS testbed's published range.
-      - "${TESTBED_PORT:-20010}:5900"
+      # RFB behind the password gate. 20000-20031 is the NAS testbed's published range. The host side is
+      # loopback only; reach it through an SSH or Tailscale tunnel (see README).
+      - "127.0.0.1:${TESTBED_PORT:-20010}:5900"
     environment:
+      # Docker forwards the published port to the container's own interface, so the gate binds all of
+      # it in here. The exposure limit is the 127.0.0.1 host mapping above.
+      TESTBED_VNC_BIND: 0.0.0.0
       TESTBED_RENDER: ${TESTBED_RENDER:-auto}
       # Optional. Left unset, a random 8-character password is generated at start. RFB allows 8 at most.
       TESTBED_VNC_PASSWORD: ${TESTBED_VNC_PASSWORD:-}
