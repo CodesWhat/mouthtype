@@ -39,7 +39,7 @@ case "${1:-}" in
     as_user 'test -e $STATE/ready' || { echo "Session did not come up; see: testbed.sh logs" >&2; exit 1; }
     as_user 'for _ in $(seq 120); do omarchy-shell shell ping >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1' || echo "warning: Omarchy shell did not answer within 2 minutes" >&2
     echo "render mode: $(as_user 'cat $STATE/render-mode')"
-    echo "VNC: vnc://$HOST:$TESTBED_PORT   (password: testbed.sh password)"
+    echo "VNC: loopback-only on the NAS. Tunnel first: ssh -N -L $TESTBED_PORT:127.0.0.1:$TESTBED_PORT <nas-user>@$HOST, then open vnc://127.0.0.1:$TESTBED_PORT   (password: testbed.sh password)"
     ;;
   resync)
     "${NAS[@]}" --sync "$ROOT" >/dev/null && echo "checkout restaged"

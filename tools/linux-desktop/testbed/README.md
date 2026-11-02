@@ -20,11 +20,18 @@ Settings, all optional environment variables: `TESTBED_PORT` (default 20010, ins
 
 ## Connect from a Mac
 
-Open Screen Sharing, or run `open vnc://100.79.136.28:20010`, and enter the password. There is no username; Screen Sharing asks for a password only.
+The VNC port is published on the NAS's loopback only (`127.0.0.1:${TESTBED_PORT:-20010}`), so it isn't reachable straight over the LAN or Tailscale. Open a tunnel from the Mac to the NAS (over its Tailscale address, `TESTBED_HOST`) and point Screen Sharing at the local end:
+
+```bash
+ssh -N -L 20010:127.0.0.1:20010 <nas-user>@100.79.136.28   # leave running
+open vnc://127.0.0.1:20010
+```
+
+Use your own NAS login for `<nas-user>`, and a different local port on the left if 20010 is taken. `tailscale serve --tcp 20010 tcp://127.0.0.1:20010` on the NAS also works, but it puts the port back on your tailnet, so SSH is the default. Enter the password when Screen Sharing asks. There is no username; it asks for a password only.
 
 The password is never committed. At container start the entrypoint uses `TESTBED_VNC_PASSWORD` if you set one, and otherwise generates a random one. It is stored at `~/.config/testbed/vnc-password` inside the container (mode 0600) and is not printed or logged. `testbed.sh password` copies it to `~/.config/mouthtype-testbed/vnc-password` on the Mac (mode 0600); add `--copy` to put it on the clipboard or `--show` to print it. RFB password auth only reads the first 8 characters, so the generated one is exactly 8 and a longer `TESTBED_VNC_PASSWORD` is refused. Recreating the container (`down`, then `up`) generates a new password.
 
-macOS Screen Sharing only speaks classic VNC password auth, which wayvnc does not offer. So wayvnc listens on container loopback with no auth, and `vnc-auth-proxy.py` owns the published port: it runs the VNC password handshake (five wrong attempts from one address and it starts stalling), then hands the connection to wayvnc. The handshake was checked from the Mac with a scripted RFB client (right password gets the 1920x1080 screen, a wrong one is refused). It has not been driven from the real Screen Sharing app.
+macOS Screen Sharing only speaks classic VNC password auth, which wayvnc does not offer. So wayvnc listens on container loopback with no auth, and `vnc-auth-proxy.py` owns the published port: it binds `TESTBED_VNC_BIND` (default `127.0.0.1`; the container sets `0.0.0.0` so Docker can forward to it, with the host side pinned to loopback in `compose.yaml`), runs the VNC password handshake (five wrong attempts from one address and it starts stalling), then hands the connection to wayvnc. The handshake was checked from the Mac with a scripted RFB client (right password gets the 1920x1080 screen, a wrong one is refused). It has not been driven from the real Screen Sharing app.
 
 ## Run the smoke test
 
@@ -64,7 +71,7 @@ The first take loads the Parakeet model and is slow on the NAS's J4125. Later ta
 - **`up` says the session did not come up.** Run `testbed.sh logs`. `session.log` names the stage that failed (mutter, Hyprland, the output, wayvnc).
 - **The bar is empty or has no wallpaper right after `up`.** The Omarchy shell takes about a minute to load on this CPU. `up` waits up to two minutes for it to answer.
 - **VNC refuses the password.** Run `testbed.sh password` for the current one. It changes when the container is recreated. Check the port with `testbed.sh status`.
-- **Can't reach the VNC address.** Ports 20000-20031 are published on the NAS and proxied over Tailscale. Check that Tailscale is up on the Mac and that nothing else holds `TESTBED_PORT`.
+- **Can't reach the VNC address.** The port is loopback-only on the NAS, so connect through the SSH tunnel above, not the NAS address directly. Check that Tailscale is up on the Mac, the tunnel is running, and nothing else holds `TESTBED_PORT` on either end.
 - **The smoke test fails at "take finished".** The first take loads the model, up to 180 seconds is allowed. Check `mouthtype-linux status` and the service log at `~/.local/state/testbed/units/mouthtype-linux.service.log` in the container (`testbed.sh shell`).
 - **Smoke passes but the text is wrong.** `mouthtype-linux list` and `mouthtype-linux recover ID` show what the recognizer heard. `sample.wav` is macOS `say` output at 16 kHz mono.
 - **The NAS is busy.** The NAS shares disk and CPU with other work. Build one image at a time and check `nas-docker.sh system df`.
