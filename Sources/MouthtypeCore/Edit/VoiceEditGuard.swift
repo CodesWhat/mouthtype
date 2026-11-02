@@ -39,7 +39,7 @@ public enum VoiceEditGuard {
     public static func judge(selection: String, instruction: String, output: String) -> VoiceEditVerdict {
         let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .refused(.emptyOutput) }
-        if declines(trimmed) { return .refused(.modelDeclined) }
+        if declines(trimmed, selection: selection) { return .refused(.modelDeclined) }
         if hasPreamble(trimmed, selection: selection) { return .refused(.chatter) }
         if hasDisallowedControl(output) { return .refused(.controlCharacters) }
         if trimmed.contains(VoiceEditPrompt.delimiterPrefix), !selection.contains(VoiceEditPrompt.delimiterPrefix) {
@@ -55,14 +55,18 @@ public enum VoiceEditGuard {
         return .accepted(trimmed)
     }
 
-    private static func declines(_ text: String) -> Bool {
+    /// Not matched when the selection itself opens with an apology or refusal, since a faithful edit of it opens the same way.
+    private static func declines(_ text: String, selection: String) -> Bool {
         if text.contains(VoiceEditPrompt.unsupportedSentinel) { return true }
         let lower = text.lowercased()
         let openers = [
             "i'm sorry", "i’m sorry", "i am sorry", "sorry,", "i can't", "i can’t", "i cannot", "i can not", "i'm unable",
             "i’m unable", "i am unable", "i won't", "i’m not able", "i'm not able", "as an ai", "unfortunately",
         ]
-        return openers.contains { lower.hasPrefix($0) }
+        guard openers.contains(where: { lower.hasPrefix($0) }) else { return false }
+        let source = selection.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let regretLeads = ["sadly", "regrettably"]
+        return !(openers + regretLeads).contains { source.hasPrefix($0) }
     }
 
     /// Framing that talks about the edit. Matched only at the start, so "Here is" inside a rewritten sentence passes, and
