@@ -1188,7 +1188,7 @@ private final class FakeCorrections: CorrectionObserving {
 }
 
 @MainActor
-@Suite struct DictationControllerTests {
+@Suite(.timeLimit(.minutes(1))) struct DictationControllerTests {
     @Test @MainActor func provisionalWordsNeverInsertAndFinalDeliversOnce() async {
         let rig = Rig(previewEnabled: true)
         rig.capture.available = 48_000
@@ -1209,9 +1209,9 @@ private final class FakeCorrections: CorrectionObserving {
             let rig = Rig(previewEnabled: enabled)
             rig.capture.available = 48_000
             await rig.controller.handle(.pressed(at: keyDown))
-            for _ in 0..<100 { await Task.yield() }
+            if enabled { await rig.until { rig.clock.sleeperCount >= 2 } } else { for _ in 0..<100 { await Task.yield() } }
             rig.clock.advance(by: 2)
-            for _ in 0..<100 { await Task.yield() }
+            if enabled { await rig.until { rig.engine.previewCalls == 1 } } else { for _ in 0..<100 { await Task.yield() } }
             #expect(rig.engine.previewCalls == (enabled ? 1 : 0))
             await rig.controller.handle(.cancelled(reason: .escape))
             await rig.settle()
@@ -2145,7 +2145,7 @@ private final class FakeCorrections: CorrectionObserving {
         rig.capture.duringStart = { await gate.wait() }
         rig.controller.enqueueAutomation(.start)
         rig.controller.enqueueAutomation(.stop)
-        await rig.settle()
+        await rig.until { rig.controller.phase == .recording }
         // The capture is still coming up, so the stop has not run and has not been dropped.
         #expect(rig.controller.phase == .recording && !rig.controller.isHandsFree)
         gate.open()
@@ -2234,7 +2234,7 @@ private final class FakeCorrections: CorrectionObserving {
         let gate = StartGate()
         rig.capture.duringStart = { await gate.wait() }
         let start = Task { @MainActor in await rig.controller.startHandsFree() }
-        await rig.settle()
+        await rig.until { rig.controller.isStartReserved }
         if cancelFirst {
             await rig.controller.cancelHandsFree()
             rig.controller.stopHandsFree()
@@ -2265,7 +2265,7 @@ private final class FakeCorrections: CorrectionObserving {
         rig.controller.automationWaitLimit = { await limit.wait() }
         // A comes up hands-free, then suspends writing its lock.
         rig.controller.enqueueAutomation(.start)
-        while locks == 0 { await Task.yield() }
+        await rig.until { locks != 0 }
         #expect(rig.controller.isHandsFree && !rig.controller.automationStartPending)
         // Stop A and start B go through once the wait limit fires, and B hangs coming up.
         rig.capture.duringStart = { await startB.wait() }
@@ -2285,7 +2285,7 @@ private final class FakeCorrections: CorrectionObserving {
         startB.open()
         await stopB?.value
         await rig.controller.waitForProcessing()
-        while rig.controller.phase != .idle { await Task.yield() }
+        await rig.until { rig.controller.phase == .idle }
         #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
         #expect(rig.controller.pendingAutomationEnd == nil && !rig.controller.automationStartPending)
         #expect(rig.log.all.filter { $0 == "capture.stop" }.count == 2)
@@ -2297,7 +2297,7 @@ private final class FakeCorrections: CorrectionObserving {
         rig.capture.duringStart = { await gate.wait() }
         rig.capture.startError = CaptureError.noInputDevice
         let start = Task { @MainActor in await rig.controller.startHandsFree() }
-        await rig.settle()
+        await rig.until { rig.controller.isStartReserved }
         rig.controller.stopHandsFree()
         #expect(rig.controller.pendingAutomationEnd == .stop)
         gate.open()
@@ -2342,7 +2342,7 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.settle()
         gate.open()
         await url.value
-        await rig.settle()
+        await rig.until { rig.controller.isHandsFree && rig.controller.phase == .recording }
         #expect(rig.controller.isHandsFree && rig.controller.phase == .recording)
 
         // The release lands inside the minimum hold, which used to read as a discard.
@@ -3112,7 +3112,7 @@ private final class SlowCapture: DictationCapturing {
     }
 }
 
-@MainActor @Suite struct QuietRecordingLifecycleTests {
+@MainActor @Suite(.timeLimit(.minutes(1))) struct QuietRecordingLifecycleTests {
     @Test func startCueFinishesBeforeMuteWithoutDelayingCapture() async throws {
         let rig = Rig(quietAudio: true)
         rig.sounds.startCueDuration = 0.2
@@ -3241,15 +3241,15 @@ private final class SlowCapture: DictationCapturing {
         let rig = Rig(quietAudio: true)
         await rig.controller.handle(.pressed(at: keyDown))
         rig.capture.interrupt()
-        for _ in 0..<100 where !rig.log.contains("audio.restore") { await Task.yield() }
+        await rig.until { rig.log.contains("audio.restore") }
         #expect(rig.log.all.filter { $0 == "audio.restore" }.count == 1)
         let limited = Rig(limits: .init(warningAfter: 1, stopAfter: 2, partialFlushEvery: 5), quietAudio: true)
         await limited.controller.handle(.pressed(at: keyDown))
-        for _ in 0..<100 where limited.clock.sleeperCount == 0 { await Task.yield() }
+        await limited.until { limited.clock.sleeperCount > 0 }
         limited.clock.advance(by: 1)
-        for _ in 0..<100 where limited.clock.sleeperCount == 0 { await Task.yield() }
+        await limited.until { limited.clock.sleeperCount > 0 }
         limited.clock.advance(by: 1)
-        for _ in 0..<100 where !limited.log.contains("audio.restore") { await Task.yield() }
+        await limited.until { limited.log.contains("audio.restore") }
         await limited.controller.waitForProcessing()
         #expect(limited.log.all.filter { $0 == "audio.restore" }.count == 1)
     }
