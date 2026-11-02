@@ -164,9 +164,11 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     private(set) var capture: CaptureRecord?
     private(set) var transcription: TranscriptionRecord?
     private(set) var insertion: InsertionRecord?
-    private(set) var verdicts: [(outcome: String, receiptMs: Int?)] = []
+    private var storedVerdicts: [(outcome: String, receiptMs: Int?)] = []
+    var verdicts: [(outcome: String, receiptMs: Int?)] { lock.withLock { storedVerdicts } }
     private(set) var handsFreeLock: (DictationMode, DictationTrigger)?
-    private(set) var finishes: [(DictationStatus, String?)] = []
+    private var storedFinishes: [(DictationStatus, String?)] = []
+    var finishes: [(DictationStatus, String?)] { lock.withLock { storedFinishes } }
     private(set) var reopens = 0
     private(set) var edits: [EditOp] = []
 
@@ -190,7 +192,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     }
     func recordInsertion(_ id: String, _ record: InsertionRecord) async throws { try run("recordInsertion") { insertion = record } }
     func recordInsertVerdict(_ id: String, outcome: String, pasteReceiptMs: Int?) async throws {
-        try run("recordInsertVerdict") { verdicts.append((outcome, pasteReceiptMs)) }
+        try run("recordInsertVerdict") { storedVerdicts.append((outcome, pasteReceiptMs)) }
     }
     func recordLock(_ id: String, mode: DictationMode, trigger: DictationTrigger) async throws {
         try run("recordLock") { handsFreeLock = (mode, trigger) }
@@ -199,7 +201,7 @@ private final class FakeStore: DictationStoring, @unchecked Sendable {
     func reopen(_ id: String) async throws { try run("reopen") { reopens += 1 } }
     func appendEdits(_ id: String, _ edits: [EditOp]) async throws { try run("appendEdits") { self.edits += edits } }
     func finish(_ id: String, status: DictationStatus, errorMessage: String?) async throws {
-        try run("finish") { finishes.append((status, errorMessage)) }
+        try run("finish") { storedFinishes.append((status, errorMessage)) }
     }
 }
 
@@ -1191,10 +1193,9 @@ private final class FakeCorrections: CorrectionObserving {
         let rig = Rig(previewEnabled: true)
         rig.capture.available = 48_000
         await rig.controller.handle(.pressed(at: keyDown))
-        for _ in 0..<200 where rig.clock.sleeperCount < 2 { await Task.yield() }
+        await rig.until { rig.clock.sleeperCount >= 2 }
         rig.clock.advance(by: 2)
-        for _ in 0..<200 where rig.engine.previewCalls == 0 { await Task.yield() }
-        await rig.settle()
+        await rig.until { rig.pill.previews.contains("Provisional words that must not be inserted.") }
         #expect(rig.pill.previews.contains("Provisional words that must not be inserted."))
         #expect(rig.inserter.delivered.isEmpty)
         await rig.controller.handle(.released(at: keyUp))
@@ -1387,7 +1388,7 @@ private final class FakeCorrections: CorrectionObserving {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
         await rig.controller.handle(.cancelled(reason: .escape))
-        await rig.settle()
+        await rig.until { rig.clock.sleeperCount == 1 }
         #expect(rig.clock.sleeperCount == 1)
 
         rig.clock.advance(by: 4.9)
@@ -1470,9 +1471,9 @@ private final class FakeCorrections: CorrectionObserving {
         let rig = Rig()
         await rig.controller.handle(.pressed(at: keyDown))
         await rig.controller.handle(.cancelled(reason: .escape))
-        await rig.settle()
+        await rig.until { rig.clock.sleeperCount == 1 }
         rig.clock.advance(by: 5)
-        await rig.settle()
+        await rig.until { rig.log.all.last == "card.dismiss" }
 
         #expect(rig.log.all.last == "card.dismiss")
         await rig.controller.undoCancel()
@@ -1867,7 +1868,7 @@ private final class FakeCorrections: CorrectionObserving {
         await rig.dictate()
         #expect(rig.cards.presented.isEmpty)
         rig.inserter.verify(PasteVerification(id: 1, verdict: .notLanded, receiptMs: nil))
-        await rig.settle()
+        await rig.until { rig.store.verdicts.map(\.outcome) == ["not landed"] && rig.cards.presented == [.notLanded(" Hello world.")] }
         #expect(rig.store.verdicts.map(\.outcome) == ["not landed"])
         #expect(rig.cards.presented == [.notLanded(" Hello world.")])
         #expect(rig.cards.presented.first?.header == "Paste didn't land\nThe field didn't change")
@@ -1882,7 +1883,7 @@ private final class FakeCorrections: CorrectionObserving {
         rig.inserter.result = pastedResult()
         await rig.dictate()
         rig.inserter.verify(PasteVerification(id: 1, verdict: .confirmed, receiptMs: 37))
-        await rig.settle()
+        await rig.until { rig.store.verdicts.count == 1 }
         #expect(rig.store.verdicts.count == 1 && rig.store.verdicts.first?.outcome == "confirmed" && rig.store.verdicts.first?.receiptMs == 37)
         #expect(rig.cards.presented.isEmpty && corrections.notLanded.isEmpty)
     }
@@ -1892,7 +1893,7 @@ private final class FakeCorrections: CorrectionObserving {
         rig.inserter.result = pastedResult()
         await rig.dictate()
         rig.inserter.verify(PasteVerification(id: 1, verdict: .unknown, receiptMs: nil))
-        await rig.settle()
+        await rig.until { rig.store.verdicts.map(\.outcome) == ["unknown"] }
         #expect(rig.store.verdicts.map(\.outcome) == ["unknown"])
         #expect(rig.cards.presented.isEmpty)
     }
@@ -1906,7 +1907,7 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.store.verdicts.isEmpty && rig.cards.presented.isEmpty)
         rig.inserter.verify(PasteVerification(id: 2, verdict: .confirmed, receiptMs: nil))
         rig.inserter.verify(PasteVerification(id: 2, verdict: .notLanded, receiptMs: nil))
-        await rig.settle()
+        await rig.until { rig.store.verdicts.count == 1 }
         #expect(rig.store.verdicts.map(\.outcome) == ["confirmed"] && rig.cards.presented.isEmpty)
     }
 
@@ -2176,7 +2177,7 @@ private final class FakeCorrections: CorrectionObserving {
         let gate = StartGate()
         rig.capture.duringStart = { await gate.wait() }
         rig.controller.enqueueAutomation(.start)
-        await rig.settle()
+        await rig.until { rig.controller.isStartReserved }
         #expect(rig.controller.isStartReserved)
         await rig.controller.startHandsFree()
         #expect(rig.pill.messages.map(\.headline) == ["Already starting"])
@@ -2449,6 +2450,7 @@ private final class FakeCorrections: CorrectionObserving {
     @Test func aLockedRecordingWarnsAtNineteenMinutesAndStopsAtTwenty() async {
         let rig = Rig()
         await rig.lockIn()
+        await rig.until { rig.clock.sleeperCount == 1 }
         #expect(rig.clock.sleeperCount == 1)
 
         rig.clock.advance(by: 19 * 60 - 1)
@@ -2456,7 +2458,7 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.pill.notices.isEmpty && rig.controller.phase == .recording)
 
         rig.clock.advance(by: 1)
-        await rig.settle()
+        await rig.until { rig.cards.presented == [.limitWarning(stopsAfter: 20 * 60)] }
         #expect(rig.cards.presented == [.limitWarning(stopsAfter: 20 * 60)])
         #expect(rig.controller.phase == .recording && rig.controller.isHandsFree)
 
@@ -2465,7 +2467,7 @@ private final class FakeCorrections: CorrectionObserving {
         #expect(rig.controller.phase == .recording)
 
         rig.clock.advance(by: 1)
-        await rig.settle()
+        await rig.until { rig.controller.phase != .recording }
         await rig.controller.waitForProcessing()
         #expect(rig.inserter.delivered == ["Hello world."])
         #expect(rig.controller.phase == .idle && !rig.controller.isHandsFree)
@@ -2592,7 +2594,7 @@ private final class SlowCapture: DictationCapturing {
     @Test func aHeldRecordingWarnsThenStopsAtTheInjectedLimit() async {
         let rig = Rig(limits: shortLimits)
         await rig.controller.handle(.pressed(at: keyDown))
-        await rig.settle()
+        await rig.until { rig.clock.sleeperCount == 1 }
         #expect(rig.clock.sleeperCount == 1)
 
         rig.clock.advance(by: 2.9)
@@ -2600,7 +2602,7 @@ private final class SlowCapture: DictationCapturing {
         #expect(rig.cards.presented.isEmpty && rig.controller.phase == .recording)
 
         rig.clock.advance(by: 0.1)
-        await rig.settle()
+        await rig.until { rig.cards.presented == [.limitWarning(stopsAfter: 5)] }
         #expect(rig.cards.presented == [.limitWarning(stopsAfter: 5)])
         #expect(rig.cards.presented.first?.header == "One minute left\nRecording stops at 5 seconds")
         #expect(rig.controller.phase == .recording)
@@ -2610,7 +2612,7 @@ private final class SlowCapture: DictationCapturing {
         #expect(rig.controller.phase == .recording)
 
         rig.clock.advance(by: 0.1)
-        await rig.settle()
+        await rig.until { rig.controller.phase != .recording }
         await rig.controller.waitForProcessing()
         await rig.until { rig.controller.phase == .idle }
         #expect(rig.inserter.delivered == ["Hello world."])
@@ -2639,16 +2641,15 @@ private final class SlowCapture: DictationCapturing {
     @Test func aRecordingInProgressIsSavedInPiecesAndTheCopyGoesWhenItEnds() async {
         let rig = Rig(limits: shortLimits, partials: true)
         await rig.controller.handle(.pressed(at: keyDown))
-        await rig.settle()
+        await rig.until { rig.clock.sleeperCount >= 2 }
         rig.capture.available = 16_000
         rig.clock.advance(by: 2)
-        await rig.settle()
-        for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(5)); await rig.settle() }
-        #expect(rig.log.contains("archive.partial:16000"))
+        await rig.until { rig.log.contains("archive.partial:16000") && rig.clock.sleeperCount >= 2 }
+        #expect(rig.log.contains("archive.partial:16000") && rig.clock.sleeperCount >= 2)
 
         rig.capture.available = 40_000
         rig.clock.advance(by: 2)
-        for _ in 0..<20 { try? await Task.sleep(for: .milliseconds(5)); await rig.settle() }
+        await rig.until { rig.log.contains("archive.partial:24000") }
         // Only what the first piece didn't have.
         #expect(rig.log.contains("archive.partial:24000"))
 
@@ -2694,7 +2695,7 @@ private final class SlowCapture: DictationCapturing {
         if duringCaptureStart { rig.capture.duringStart = interrupt } else { rig.store.duringBegin = interrupt }
 
         await rig.controller.handle(.pressed(at: keyDown))
-        await rig.settle()
+        await rig.until { rig.cards.presented == [.micDisconnected(seconds: 2)] }
 
         #expect(rig.cards.presented == [.micDisconnected(seconds: 2)])
         #expect(rig.controller.phase == .idle)
@@ -3065,7 +3066,7 @@ private final class SlowCapture: DictationCapturing {
         rig.capture.interrupt()
         await rig.until { rig.controller.phase == .idle }
         rig.cards.click(.discard)
-        await rig.settle()
+        await rig.until { rig.store.finishes.map(\.0) == [.failed, .cancelled] }
         #expect(rig.store.finishes.map(\.0) == [.failed, .cancelled])
         #expect(rig.inserter.delivered.isEmpty && !rig.log.contains("engine.transcribe"))
         // A second click on a card that's gone does nothing.

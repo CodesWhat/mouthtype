@@ -28,6 +28,8 @@ Changes are made on branches and merged through pull requests into the active `d
 
 The repository belongs to the CodesWhat GitHub organization, which has two owner accounts: `@scttbnsn` and `@biggest-littlest`. Either owner can administer the repository, restore maintainer access, manage Actions and secrets, merge approved work and keep the issue and pull-request process going. Canonical source, issues, CI and release assets live on GitHub, and the release assets are signed in CI with keyless cosign and attested through GitHub Actions OIDC, so that part doesn't depend on a key on anyone's workstation.
 
+These account roles do not establish tested person-level continuity. Release continuity needs a second maintainer who can use the required access and credentials when the release owner is unavailable; that has not been demonstrated.
+
 The macOS signing pipeline is the exception. Developer ID signing, notarization and Sparkle update signing run on the release owner's Mac. The Developer ID certificate, the App Store Connect API key used for notarization and the Sparkle EdDSA signing key are held there, not in GitHub, and `@biggest-littlest` doesn't hold copies. If `@scttbnsn` becomes unavailable, this is what the other owner can and can't do:
 
 - Can: keep the project running, merge reviewed work, cut source releases from a tagged revision (unsigned, built from source by users, with the cosign signature and attestation from `release-sign.yml`), revoke stale access, and rotate or revoke GitHub and App Store Connect credentials.

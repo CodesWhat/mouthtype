@@ -4,6 +4,11 @@ import SwiftUI
 @testable import MouthtypeCore
 @testable import MouthtypeMac
 
+@MainActor private final class RenderHistoryPlayer: HistoryAudioPlaying {
+    func play(_ url: URL, finished: @escaping @MainActor (Bool) -> Void) throws {}
+    func stop() {}
+}
+
 @MainActor @Suite(.serialized) struct HomeRenderTests {
     @Test func homeRendersSampleTakesWithoutTruncatingText() async throws {
         let name = "HomeRenderTests-\(UUID().uuidString)"
@@ -22,19 +27,26 @@ import SwiftUI
             ),
             (26, "Pick up oat milk, the good bread, and those batteries.", "Notes"),
         ]
+        var finishedID = ""
         for (minutesAgo, text, app) in samples {
             let id = try store.begin(DictationStart(startedAt: now.addingTimeInterval(-minutesAgo * 60), target: DictationTarget(appName: app)))
             try store.recordInsertion(id, InsertionRecord(finalText: text))
+            if app == "Mail" { finishedID = id }
         }
         let home = HomeLogModel(store: store)
         await home.loadText()
         home.attach([
             RecoverableDictation(
+                id: finishedID, startedAt: now.addingTimeInterval(-9 * 60),
+                audioURL: URL(fileURLWithPath: "/tmp/finished.wav"), seconds: 30, isPartial: false, isCompleted: true),
+            RecoverableDictation(
                 id: "sample-lost", startedAt: now.addingTimeInterval(-14 * 60),
-                audioURL: URL(fileURLWithPath: "/tmp/sample.wav"), seconds: 7, isPartial: false)
+                audioURL: URL(fileURLWithPath: "/tmp/sample.wav"), seconds: 7, isPartial: false),
         ])
         #expect(home.takes.count == 4)
         #expect(home.takes.compactMap(\.text).contains(samples[1].1))
+        home.audioPlayer = RenderHistoryPlayer()
+        home.togglePlayback(try #require(home.takes.first(where: { $0.id == finishedID })))
         let model = SettingsModel(defaults: defaults, home: home)
         let actions = SettingsActions()
         model.page = .home
@@ -43,5 +55,15 @@ import SwiftUI
         try SettingsRender.save(bitmap, name: "home-light")
         try SettingsRender.save(try SettingsRender.render(model: model, actions: actions, dark: true), name: "home-dark")
         try SettingsRender.save(try SettingsRender.renderModal(model: model, actions: actions, dark: false), name: "general-light")
+        home.deactivate()
+        let search = HomeLogModel(store: store, observing: false)
+        search.query = "review"
+        await search.loadText()
+        #expect(search.takes.count == 1)
+        let searchModel = SettingsModel(defaults: defaults, home: search)
+        searchModel.page = .home
+        try SettingsRender.save(try SettingsRender.render(model: searchModel, actions: actions, dark: false), name: "home-search-light")
+        try SettingsRender.save(try SettingsRender.render(model: searchModel, actions: actions, dark: true), name: "home-search-dark")
+        search.deactivate()
     }
 }

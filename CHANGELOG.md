@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-10-31
+
+### Added
+
+- Search retained raw and final transcripts and app names from Home, and play or stop a take's retained audio. Search finds older takes beyond the recent list; audio retention settings stay the same.
+
+### Fixed
+
+- Profanity cleanup preserves clear verbs after forms of “be”, including plural person subjects, split phrasal verbs and standalone frequency phrases, while retaining noun-predicate emphasis.
+- Delivery card buttons in Classic, Glass, Matrix and Minimal now expose their labels and actions to accessibility tools, including Copy, Undo and Dismiss. Completed actions report their updated label and stay disabled.
+
 ## [0.9.1] - 2026-10-29
 
 ### Changed
@@ -180,7 +191,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.9.1...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/CodesWhat/mouthtype/compare/v0.9.1...v0.10.0
 [0.9.1]: https://github.com/CodesWhat/mouthtype/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/CodesWhat/mouthtype/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/CodesWhat/mouthtype/compare/v0.7.0...v0.8.0

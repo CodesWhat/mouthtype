@@ -42,6 +42,8 @@ Notarization uses the App Store Connect API key by default. The helper reads `AS
 
 Attach the final DMG, ZIP, their SHA-256 files and release manifest to the GitHub release for provenance. The website provides the public downloads. Read the uploaded release back and compare a downloaded artifact’s checksum. Keep first-install, third-party-app and recognition limitations visible in release notes; do not describe unperformed checks as passed.
 
+Generate and validate the [release source inventory](RELEASE-INVENTORY.md) against the same tag and checked artifacts. Attach it as an additional release asset and include it in the signing and download verification step. Its scope is the resolved Swift sources and verified artifact identities, not complete binary composition.
+
 ### 4. Stage the public release
 
 After the tagged release is packaged and checked, run `scripts/stage-public-release.py` with the release directory and `--public-dir` pointing at a retained artifact directory outside disposable worktrees, such as the root checkout’s `build/public-release-assets`. It requires the DMG and checks the exact tag/source, archive and DMG digests, DMG notarization evidence, extracted signature/staple/Gatekeeper result and matching public key. It generates a corresponding source tarball and uses the pinned Sparkle tools to generate and verify the signed appcast.
@@ -54,10 +56,14 @@ Keep `build/public-release-assets` across releases. Staging preserves older vers
 
 ### 5. Publish the website
 
-Publish with `scripts/publish-website.py --public-dir` pointing at those retained artifacts. Without `--production` this validates only. With `--production` it exports only committed `website/` files plus the checked public artifacts and deploys them to the existing Mouthtype Vercel project. It never uploads the app repository, local plans or signing credentials.
+Publish with `scripts/publish-website.py --public-dir` pointing at those retained artifacts. Without `--production` this validates only. The publisher requires every retained ZIP, DMG and source archive to exist in its published GitHub release, with matching SHA-256, size and public URL. Upload missing release assets before publishing; never overwrite a mismatched asset.
+
+With `--production`, it exports committed `website/` files, small release manifests/checksums and the byte-identical signed feed. Exact versioned download URLs redirect to the verified GitHub assets. Large downloads are excluded from the Vercel deployment, so website deployment history does not duplicate the release archive. Local retained artifacts still provide the verification baseline. The publisher never uploads the app repository, local plans or signing credentials.
+
+`--website-ref` can pin an already-reviewed website revision when changing delivery for the currently published app while a newer native candidate is pending. Its download/source routes must match the newest build in the retained signed feed. Deployment metadata records both the website revision and publisher revision; the default exports this checkout's `HEAD`.
 
 > [!WARNING]
-> Do not replace this with a bare site deployment that omits older release artifacts.
+> Do not replace this with a bare site deployment that omits older release routes or changes the signed feed. Verify the complete redirected bodies anonymously after publication, not just GitHub's asset metadata.
 
 Vercel preview/deployment authentication remains enabled; the public custom domain serves the download. Versioned release URLs are immutable, while `/download`, `/source` and the feed must not be cached as immutable.
 

@@ -17,7 +17,14 @@ KEEP=0
 REPO="$PWD"
 HEAD_SHA="$(git rev-parse HEAD)"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/mouthtype-repeatable.XXXXXX")"
-cleanup() { rm -rf "$SCRATCH"; [ "$KEEP" = 1 ] && echo "kept: $WORK" || rm -rf "$WORK"; }
+cleanup() {
+    rm -rf "$SCRATCH"
+    if [ "$KEEP" = 1 ]; then
+        echo "kept: $WORK"
+    else
+        rm -rf "$WORK"
+    fi
+}
 trap cleanup EXIT
 
 # The release path (RELEASE_SCRATCH_PATH in scripts/package-release.py), so the unsigned output is

@@ -170,6 +170,12 @@ export const pages = [
     description: "How a Mac prerelease is built, signed, notarized and staged.",
   },
   {
+    src: "docs/RELEASE-INVENTORY.md",
+    dest: "maintainers/release-inventory",
+    title: "Release source inventory",
+    description: "Exact Swift source revisions, verified release hashes and inventory limits.",
+  },
+  {
     src: "docs/MAC-EVALUATIONS.md",
     dest: "maintainers/mac-evaluations",
     title: "Mac daily-use evaluations",
@@ -213,7 +219,10 @@ export const folders = {
       "release-readiness",
     ],
   },
-  maintainers: { title: "Maintainers", pages: ["releasing", "mac-evaluations"] },
+  maintainers: {
+    title: "Maintainers",
+    pages: ["releasing", "release-inventory", "mac-evaluations"],
+  },
 };
 
 /** Page URL for a dest path ("a/index" -> "/a", "index" -> "/"). */

@@ -82,7 +82,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24
+          node-version: 26
       - name: Audit locked direct and transitive website dependencies
         working-directory: website
         run: ../scripts/npm-audit-retry.sh --package-lock-only --audit-level=high

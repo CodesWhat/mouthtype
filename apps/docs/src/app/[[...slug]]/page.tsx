@@ -44,6 +44,9 @@ export async function generateMetadata(props: { params: Promise<{ slug?: string[
       url,
       type: "article",
       siteName: SITE_CONFIG.name,
+      images: [
+        { url: SITE_CONFIG.socialImage, width: 1200, height: 630, alt: "Mouthtype documentation" },
+      ],
     },
   };
 }

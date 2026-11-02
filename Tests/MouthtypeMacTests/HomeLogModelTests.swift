@@ -8,6 +8,43 @@ import Testing
 @MainActor @Observable final class RecoverGate { var open = true }
 
 @MainActor @Suite struct HomeLogModelTests {
+    @Test func searchReachesBeyondRecentTakesAndDoesNotAttachUnrelatedAudio() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let old = try dictate(store, minutes: 0, text: "older café agenda", app: "Notes")
+        for n in 1...55 { try dictate(store, minutes: Double(n), text: "recent take") }
+        let model = HomeLogModel(store: store, observing: false)
+        model.query = "cafe age"
+        await model.reload()
+        model.attach([recording("unrelated", minutes: 60), recording(old, minutes: 0)])
+        #expect(model.takes.map(\.id) == [old])
+        #expect(model.takes.first?.recoverable?.id == old)
+        model.query = "no matches"
+        await model.reload()
+        #expect(model.takes.isEmpty)
+        model.query = ""
+        await model.reload()
+        #expect(model.takes.count == HomeLogModel.limit)
+    }
+
+    @Test func searchObservationFollowsTheCurrentQuery() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try dictate(store, minutes: 1, text: "planning agenda")
+        try dictate(store, minutes: 2, text: "shopping list")
+        let model = HomeLogModel(store: store)
+        model.query = "agenda"
+        await waitUntil { model.takes.map(\.text) == ["planning agenda"] }
+        #expect(model.takes.map(\.text) == ["planning agenda"])
+        model.query = "shopping"
+        await waitUntil { model.takes.map(\.text) == ["shopping list"] }
+        #expect(model.takes.map(\.text) == ["shopping list"])
+        try dictate(store, minutes: 3, text: "shopping tomorrow")
+        await waitUntil { model.takes.count == 2 }
+        #expect(model.takes.map(\.text) == ["shopping tomorrow", "shopping list"])
+        model.deactivate()
+    }
+
     private let base = Date(timeIntervalSince1970: 1_791_806_400)
 
     private func makeStore() throws -> (TranscriptStore, URL) {
