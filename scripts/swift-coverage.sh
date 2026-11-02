@@ -35,6 +35,7 @@ if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 
 read -r lines missed < <(awk '/^TOTAL/ {print $(NF-5), $(NF-4)}' coverage-report.txt)
+# shellcheck disable=SC2015  # intentional: any failed check falls through to the error exit
 [[ "$lines" =~ ^[0-9]+$ && "$missed" =~ ^[0-9]+$ ]] && (( lines > 0 && missed <= lines )) || {
     echo "invalid total line counts" >&2
     exit 1

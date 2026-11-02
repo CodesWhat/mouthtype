@@ -14,6 +14,8 @@ pre-commit:
       fail_text: "Whitespace errors in staged changes (trailing space, conflict markers)"
     swift-format:
       glob: "*.swift"
+      # tools/ is excluded: tools/linux-desktop belongs to the Linux owner and has existing lint failures.
+      exclude: "tools/**/*"
       run: xcrun swift-format lint --strict -- {staged_files}
       fail_text: "swift-format lint --strict failed. Fix with: swift format format --in-place <file>"
     shellcheck:

@@ -34,7 +34,8 @@ add_range() {
 if [[ "${1:-}" == "--stdin" ]]; then
   while read -r _ local_sha _ remote_sha; do
     [[ "$local_sha" == "$zero" ]] && continue
-    if [[ "$remote_sha" == "$zero" ]]; then
+    if [[ "$remote_sha" == "$zero" ]] || ! git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+      # New branch, or the remote sha isn't in the local object store: diff from the merge-base instead.
       base="$(default_base)"
       [[ -n "$base" ]] || { echo "pre-push: no base ref to diff against, skipping" >&2; exit 0; }
       remote_sha="$(git merge-base "$base" "$local_sha")"
