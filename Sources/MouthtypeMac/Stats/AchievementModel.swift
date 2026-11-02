@@ -54,16 +54,30 @@ import Observation
     func setShelfHidden(_ value: Bool) {
         store.setShelfHidden(value)
         isShelfHidden = value
+        if value { clearSeenFlags() } else { shelfShown() }
     }
 
-    /// New earns stop being new once the shelf has been on screen.
-    /// A collapsed shelf has not shown them, so they stay new until it has been seen expanded.
-    func shelfSeen() {
+    /// The expanded shelf is on screen, so what it shows is recorded as seen and needs no toast. The tiles keep their NEW tag until
+    /// the shelf is collapsed or leaves the screen. A collapsed shelf has not shown anything.
+    func shelfShown() {
         guard isEnabled, !isShelfHidden else { return }
         store.markAllSeen()
         toasts.shelfSeen(entries.filter(\.isNew).map(\.id))
+    }
+
+    /// The shelf left the screen: whatever it showed expanded stops being new.
+    func shelfSeen() {
+        shelfShown()
+        clearSeenFlags()
+    }
+
+    private func clearSeenFlags() {
+        guard isEnabled else { return }
+        let seen = store.seen
         entries = entries.map {
-            var entry = $0; entry.isNew = false; return entry
+            var entry = $0
+            if seen.contains(entry.id) { entry.isNew = false }
+            return entry
         }
     }
 

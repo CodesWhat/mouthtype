@@ -101,6 +101,40 @@ private final class CallCounter: @unchecked Sendable {
         #expect(model.entries.first { $0.id == "four_figures" }?.state == .earned(day: "2026-10-01"))
     }
 
+    @Test func expandingThenCollapsingClearsNewWithoutLeavingTheScreen() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(words: 0, takes: 0), counter: counter)
+        await refresh(model, snapshot(), counter: counter)
+        model.setShelfHidden(true)
+        #expect(model.hasNew)
+        model.setShelfHidden(false)
+        // Seen on expand, and the tiles still wear NEW while they are on screen.
+        #expect(AchievementStore(defaults: defaults).seen.contains("four_figures"))
+        #expect(model.hasNew)
+        model.setShelfHidden(true)
+        #expect(!model.hasNew)
+        model.shelfSeen()
+        #expect(!model.hasNew)
+    }
+
+    @Test func shelfShownOnAnExpandedShelfRecordsSeenAndAHiddenOneDoesNot() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let model = AchievementModel(defaults: defaults)
+        let counter = CallCounter()
+        await refresh(model, snapshot(words: 0, takes: 0), counter: counter)
+        await refresh(model, snapshot(), counter: counter)
+        model.setShelfHidden(true)
+        model.shelfShown()
+        #expect(!AchievementStore(defaults: defaults).seen.contains("four_figures"))
+        model.setShelfHidden(false)
+        model.shelfShown()
+        #expect(AchievementStore(defaults: defaults).seen.contains("four_figures") && model.hasNew)
+    }
+
     @Test func newStaysOnACollapsedShelfUntilSeenExpanded() async {
         let (defaults, cleanup) = isolated()
         defer { cleanup() }

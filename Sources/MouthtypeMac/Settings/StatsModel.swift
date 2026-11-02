@@ -14,7 +14,11 @@ import Observation
 /// midnight and on a day, clock, time zone or wake change.
 @MainActor @Observable final class StatsModel {
     @ObservationIgnored var store: TranscriptStore? {
-        didSet { if store !== oldValue, isActive { observe() } }
+        didSet {
+            guard store !== oldValue else { return }
+            watchInputs()
+            if isActive { observe() }
+        }
     }
     @ObservationIgnored private(set) var isActive: Bool
     @ObservationIgnored private var observation: TakesObservation?
@@ -75,12 +79,19 @@ import Observation
         counterObserver = NotificationCenter.default.addObserver(
             forName: .achievementCounterChanged, object: nil, queue: .main
         ) { [weak self] _ in MainActor.assumeIsolated { self?.countersChanged() } }
-        if let store {
-            inputsObserver = NotificationCenter.default.addObserver(
-                forName: TranscriptStore.achievementInputsChanged, object: store, queue: .main
-            ) { [weak self] _ in MainActor.assumeIsolated { self?.countersChanged() } }
-        }
+        watchInputs()
         if observing { observe() }
+    }
+
+    /// Listens for store writes that change what the achievements read. The store can arrive after init, so this re-points the
+    /// listener at whichever store is current.
+    private func watchInputs() {
+        if let inputsObserver { NotificationCenter.default.removeObserver(inputsObserver) }
+        inputsObserver = nil
+        guard let store else { return }
+        inputsObserver = NotificationCenter.default.addObserver(
+            forName: TranscriptStore.achievementInputsChanged, object: store, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.countersChanged() } }
     }
 
     isolated deinit {

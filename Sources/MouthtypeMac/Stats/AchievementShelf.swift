@@ -191,6 +191,7 @@ struct AchievementShelfCard: View {
                     if !model.isShelfHidden { shelf }
                 }
             }
+            .onAppear { model.shelfShown() }
             .onDisappear { model.shelfSeen() }
         }
     }
