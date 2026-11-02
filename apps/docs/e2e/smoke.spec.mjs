@@ -72,11 +72,18 @@ test.describe("phone viewport", () => {
 
     await drawer.getByRole("button", { name: "Close Sidebar" }).click();
     await expect(drawer).toHaveAttribute("data-state", "closed");
-    await expect(link).not.toBeInViewport();
+    // The drawer stays visible through its exit animation, then gets visibility:hidden in place
+    // (it is not moved off-screen), so toBeInViewport can't tell closed from open. Hidden is the
+    // real end state, and toBeHidden retries until the animation finishes.
+    await expect(drawer).toBeHidden();
+    await expect(link).toBeHidden();
 
     await open.click();
+    await expect(drawer).toHaveAttribute("data-state", "open");
+    await expect(link).toBeVisible();
     await link.click();
     await expect(page).toHaveURL(new RegExp(`${GUIDE}$`));
+    await expect(drawer).toBeHidden();
     await expect(page.getByRole("heading", { level: 1 }).first()).toBeVisible();
     await expect(open).toBeVisible();
   });
