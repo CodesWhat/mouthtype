@@ -87,11 +87,12 @@ jobs:
 
       # Non-gating: the 80% floor in scripts/swift-coverage.sh is the gate, so a Codecov outage never fails this job.
       - name: Upload coverage to Codecov
-        if: ${{ !cancelled() && hashFiles('coverage.lcov') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+        if: ${{ !cancelled() && hashFiles('coverage.lcov') != '' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage.lcov
           disable_search: true
-          use_oidc: true
+          # OIDC only for same-repo runs; fork PRs get no id-token and upload tokenless.
+          use_oidc: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
           fail_ci_if_error: false
         continue-on-error: true
