@@ -226,7 +226,7 @@ struct AchievementShelfCard: View {
                     }
                 }
             }
-            Text("Worked out on this Mac. Nothing is sent anywhere. Turn trophies off in Settings, General. Cup colour is the tier: bronze, silver, gold.")
+            Text("Turn trophies off in Settings, Mac. Cup colour is the tier: bronze, silver, gold.")
                 .font(DesignFont.sans(11)).foregroundStyle(DesignPalette.ink3).fixedSize(horizontal: false, vertical: true)
         }
     }
