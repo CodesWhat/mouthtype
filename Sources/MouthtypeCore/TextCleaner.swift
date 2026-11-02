@@ -22,12 +22,14 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
     /// The user's own instructions for tone and formatting, already normalized. Only the shared prompt carries them, so Fast
     /// (S1-mini, which takes fixed controls) ignores them.
     public var instructions: String?
+    /// A voice-directed edit of selected text. Carries its own prompt; only the shared-prompt models run it.
+    public var voiceEdit: VoiceEditPrompt?
 
     public init(
         vocabulary: [String] = [], appName: String? = nil, s1Controls: S1MiniControls = .benchmark,
         level: CleanupLevel = .light, before: String? = nil, after: String? = nil, correctionsOnly: Bool = false,
         transform: TextTransform? = nil, omitProfanity: Bool = false, language: DictationLanguage? = nil,
-        excited: Bool = false, instructions: String? = nil
+        excited: Bool = false, instructions: String? = nil, voiceEdit: VoiceEditPrompt? = nil
     ) {
         self.vocabulary = vocabulary
         self.appName = appName
@@ -47,6 +49,7 @@ public struct CleanupContext: Sendable, Equatable, Hashable {
         self.language = language
         self.excited = excited
         self.instructions = CleanupInstructions.normalize(instructions)
+        self.voiceEdit = voiceEdit
     }
 }
 

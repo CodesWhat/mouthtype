@@ -274,13 +274,13 @@ final class CleanerHost: CleanupModelManaging {
         unload(reason: "idle \(idleUnloadDelay)")
     }
 
-    private func beginUse() {
+    fileprivate func beginUse() {
         activeUses += 1
         idleTask?.cancel()
         idleTask = nil
     }
 
-    private func endUse() {
+    fileprivate func endUse() {
         activeUses = max(0, activeUses - 1)
         if activeUses == 0 { scheduleIdleUnload() }
     }
@@ -411,6 +411,25 @@ final class CleanerHost: CleanupModelManaging {
             self.ensureLoaded()
             // A key-down is use: don't unload under a take that is about to need the model.
             if case .ready = self.state { self.scheduleIdleUnload() }
+        }
+    }
+}
+
+extension CleanerHost: VoiceEditModel {
+    nonisolated func isAvailable(waitingUpTo limit: Duration) async -> Bool {
+        await readiness(waitingUpTo: limit) != nil
+    }
+
+    /// Through `SmartCleanup`, so a voice edit waits for dictation cleanup and holds the model like a transform does.
+    nonisolated func generate(_ prompt: VoiceEditPrompt) async throws -> String {
+        await beginUse()
+        do {
+            let output = try await smart.voiceEdit(prompt)
+            await endUse()
+            return output
+        } catch {
+            await endUse()
+            throw error
         }
     }
 }
