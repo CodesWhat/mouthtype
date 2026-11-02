@@ -34,26 +34,38 @@ import Observation
     /// Waits out a delay. Replaceable so a test doesn't wait for real midnight.
     @ObservationIgnored var sleep: @Sendable (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
     /// The off-main read behind `load()`. Replaceable so a test can make it slow.
-    @ObservationIgnored var fetch: @Sendable (TranscriptStore, Date, TimeZone) throws -> StatsSnapshot = { store, now, zone in
-        try store.statsSnapshot(now: now, timeZone: zone)
-    }
+    @ObservationIgnored var fetch: @Sendable (TranscriptStore, Date, TimeZone) throws -> StatsSnapshot
     /// Starts the store observation. Replaceable so a test can make it fail.
     @ObservationIgnored var startObservation:
         (
             TranscriptStore, TimeZone, @escaping @Sendable () -> Date,
             @escaping @Sendable (Error) -> Void,
             @escaping @Sendable (StatsSnapshot) -> Void
-        ) -> TakesObservation? = {
-            store, zone, clock, onError, onChange in
-            store.observeStats(timeZone: zone, now: clock, onError: onError, onChange: onChange)
-        }
+        ) -> TakesObservation?
+    /// Where the accepted typing speed lives. The time-saved numbers compare against it.
+    @ObservationIgnored let defaults: UserDefaults
+    /// The typing calibration card's model. Accepting or resetting a result re-reads the numbers at the new speed.
+    @ObservationIgnored private(set) var calibration: TypingCalibrationModel!
     /// Nil until the first load finishes.
     private(set) var snapshot: StatsSnapshot?
     private(set) var error: String?
 
-    init(store: TranscriptStore? = nil, observing: Bool = true) {
+    init(store: TranscriptStore? = nil, observing: Bool = true, defaults: UserDefaults = .standard) {
         self.isActive = observing
         self.store = store
+        self.defaults = defaults
+        // The speed is read for every query, so an accepted result reaches the next read without rebuilding the closures.
+        // UserDefaults reads are thread-safe, but the class isn't marked Sendable.
+        nonisolated(unsafe) let shared = defaults
+        fetch = { store, now, zone in
+            try store.statsSnapshot(now: now, timeZone: zone, typingWPM: TypingBaselinePreference.current(shared))
+        }
+        startObservation = { store, zone, clock, onError, onChange in
+            store.observeStats(
+                typingWPM: TypingBaselinePreference.current(shared), timeZone: zone, now: clock, onError: onError,
+                onChange: onChange)
+        }
+        calibration = TypingCalibrationModel(defaults: defaults, onAccepted: { [weak self] in self?.typingBaselineChanged() })
         if observing { observe() }
     }
 
@@ -100,6 +112,13 @@ import Observation
             applied = ticket
             apply(nil, failure: error.localizedDescription)
         }
+    }
+
+    /// The accepted typing speed changed: re-read at the new speed. An observing model restarts its observation, which reads
+    /// at once. One that isn't observing (the page is closed) just loads when it has a store, so the next open is current.
+    func typingBaselineChanged() {
+        guard store != nil else { return }
+        if isActive { observe() } else { Task { await load() } }
     }
 
     private func observe() {
