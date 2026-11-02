@@ -49,7 +49,7 @@ jobs:
   docs-site:
     needs: changes
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: apps/docs
@@ -89,3 +89,8 @@ jobs:
         if: needs.changes.outputs.run == 'true'
         env:
           REQUIRE_OUT: "1"
+      # Smoke tests on the built export (out/) in all three engines. A failure here fails docs-site.
+      - run: npx playwright install --with-deps chromium webkit firefox
+        if: needs.changes.outputs.run == 'true'
+      - run: npm run test:e2e
+        if: needs.changes.outputs.run == 'true'
