@@ -350,7 +350,15 @@ public struct CountedLists: Sendable {
             var j = m.start - 1
             while j >= 0, TextScan.isSpace(chars[j]) { j -= 1 }
             if k > 0 {
-                if j >= 0, chars[j] == "," || chars[j] == ";" { rangeStart = j }
+                if j >= 0, chars[j] == "," || chars[j] == ";" {
+                    rangeStart = j
+                } else if let connective = connectiveStart(before: m, after: run[k - 1], chars, words) {
+                    // "... thank you and second ...": the joining word belongs to the marker, not the item.
+                    rangeStart = connective
+                    var b = connective - 1
+                    while b >= 0, TextScan.isSpace(chars[b]) { b -= 1 }
+                    if b >= 0, chars[b] == "," || chars[b] == ";" { rangeStart = b }
+                }
                 prefix = j >= 0 && chars[j].isNewline && rangeStart == m.start ? "" : "\n"
             } else if j >= 0, !chars[j].isNewline {
                 if chars[j] == ",", m.kind == .comma {
@@ -396,6 +404,26 @@ public struct CountedLists: Sendable {
             }
         }
         return spans
+    }
+
+    private static let connectives: Set<String> = ["and", "then", "but", "also", "next"]
+
+    /// Start of one joining word ("and", "then", "and then", "but", "also", "next") sitting directly before a
+    /// non-first marker, when it is not the first word of the item it would trail.
+    private func connectiveStart(
+        before marker: Candidate, after previous: Candidate, _ chars: [Character], _ words: [ScanWord]
+    ) -> Int? {
+        let itemFirst = previous.lastWord + 1
+        let c = marker.firstWord - 1
+        guard c > itemFirst, Self.connectives.contains(words[c].lower),
+            TextScan.onlySpaces(chars, words[c].end, marker.start)
+        else { return nil }
+        if words[c].lower == "then", c - 1 > itemFirst, words[c - 1].lower == "and",
+            TextScan.onlySpaces(chars, words[c - 1].end, words[c].start)
+        {
+            return words[c - 1].start
+        }
+        return words[c].start
     }
 
     /// Whether the sentence ending at the full stop `dot` announces a count ("three things", "the following").

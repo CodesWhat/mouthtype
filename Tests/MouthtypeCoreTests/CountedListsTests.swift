@@ -92,6 +92,15 @@ import Testing
         TextCase("First, iPhone repairs. Second, what's next?", "1. iPhone repairs.\n2. What's next?"),
         // Keeps other text before the list.
         TextCase("Hey Sam. First, a. Second, b.", "Hey Sam.\n1. A.\n2. B."),
+        // A joining word before a later marker belongs to the marker, not the item.
+        TextCase(
+            "first of all I want to thank you and second I want to apologize",
+            "1. I want to thank you\n2. I want to apologize"
+        ),
+        TextCase("first I opened the file then second I saved it", "1. I opened the file\n2. I saved it"),
+        TextCase("first I opened the file and then second I saved it", "1. I opened the file\n2. I saved it"),
+        // A word that is part of the item stays.
+        TextCase("first salt and pepper second eggs", "1. Salt and pepper\n2. Eggs"),
     ]
 
     @Test(arguments: positives)
