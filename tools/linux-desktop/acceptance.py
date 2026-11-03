@@ -512,14 +512,8 @@ def mapped_windows(portal):
     return json.loads(json.loads(shell_windows(portal) or '[null, []]'))[1]
 
 
-# Cause, traced 2026-11-02 on the GNOME 50 testbed (shell state after each MutterDriver.wake_stage call): the
-# -4000,-4000 pointer park puts the pointer in the top-left hot corner, the next motion opens the Overview
-# (actionMode 2, modalCount 1), and the wake click then lands in the Overview and opens the date menu
-# (actionMode 128, modalCount 2). With `gsettings set org.gnome.desktop.interface enable-hot-corners false`
-# the same sequence stays at actionMode 1, modalCount 0. Keep CLOSE_SCRIPT until the driver parks the pointer
-# somewhere other than the hot corner (or the testbed session turns hot corners off) and a run proves it.
-CLOSE_SCRIPT = ("Main.overview.hide(); Main.panel.statusArea.dateMenu.menu.close();"
-                " Main.panel.closeQuickSettings && Main.panel.closeQuickSettings(); 'closed'")
+# The testbed session turns GNOME hot corners off (testbed/gnome/acceptance.sh). Without that, MutterDriver.wake_stage's
+# -4000,-4000 pointer park hits the top-left hot corner and the wake click opens the date menu, which blocks the chord.
 MODE_SCRIPT = "JSON.stringify([Main.actionMode, Main.modalCount])"
 
 
@@ -580,9 +574,7 @@ def shortcut_hold_take(root, portal, delivery, atspi):
         if shortcuts_portal.HOLD not in status['triggers']:
             raise ValueError('dictate-hold was not granted: ' + json.dumps(status))
         driver.open()  # one click and a Shift_L tap wake the stage, as T2b found
-        # The wake click can leave the shell in popup or overview mode (modalCount > 0), and GlobalShortcuts
-        # accelerators only fire in normal mode. Put it back before the chord.
-        shell_eval(portal, CLOSE_SCRIPT)
+        # GlobalShortcuts accelerators only fire in normal mode (actionMode 1, modalCount 0).
         wait_for(lambda: shell_mode(portal) == [1, 0], 10)
         for keysym in portal_probe.CHORD_KEYSYMS:
             driver.key(keysym, True)
