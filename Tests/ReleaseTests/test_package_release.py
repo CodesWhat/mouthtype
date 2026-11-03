@@ -227,6 +227,14 @@ class VerifyDiskImageTests(unittest.TestCase):
     def test_good_image_verifies_the_app_inside(self):
         with unittest.mock.patch.object(release, 'run', self.fake_run('/Applications')):
             release.verify_disk_image(pathlib.Path('/m.dmg'), self.output, 'dmg')
+        image_calls = [
+            ['codesign', '--verify', '--strict', '/m.dmg'],
+            ['xcrun', 'stapler', 'validate', '/m.dmg'],
+            ['spctl', '--assess', '--type', 'open', '--context', 'context:primary-signature',
+             '--verbose=2', '/m.dmg'],
+        ]
+        attach = next(i for i, c in enumerate(self.calls) if c[:2] == ['hdiutil', 'attach'])
+        self.assertEqual(self.calls[:attach], image_calls)
         app = f'{self.mount}/Mouthtype.app'
         self.assertIn(['codesign', '--verify', '--deep', '--strict', app], self.calls)
         self.assertIn(['xcrun', 'stapler', 'validate', app], self.calls)
