@@ -1,19 +1,21 @@
-# Known limits for 0.11.0
+# Known limits for 0.12.0
 
 > [!NOTE]
-> This page covers what 0.11.0 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
+> This page covers what 0.12.0 doesn't promise. Most of it is evidence the maintainer didn't collect, not behavior known to be broken. For fixes to problems you can hit today, see [troubleshooting](TROUBLESHOOTING.md).
 
 ## Not verified
 
 | Area | What isn't verified | Safe assumption |
 | --- | --- | --- |
-| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.11.0. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
+| Fresh install | Installing on a Mac that has never run Mouthtype wasn't verified for 0.12.0. That was a maintainer scope decision. | The first-run permission prompts and model downloads were tested only on machines that already had grants and caches, so they may behave differently on yours. |
 | Non-English speech | Dictation in languages other than English was checked with fixtures and synthetic voices, not by people speaking those languages on a Mac. Auto-detect's language picks weren't measured on real speech. | Expect more corrections outside English, most of all in the Beta languages. Pick the language yourself if Auto-detect guesses wrong. |
 | Japanese, Hindi and Tamil (Beta) | These languages were checked with synthetic speech only, never a fluent speaker or a physical microphone. The Whisper Turbo model is a separate 1.6 GB download, and live words are unavailable while it is in use, including English takes in an Auto-detect set that contains these languages. | Expect more corrections than in the Parakeet languages. Cleanup is Basic only, and the download path hasn't been run on a fresh machine. |
 | Press Return after inserting | The list in Settings > Advanced was checked with unit tests and offscreen renders only, never in a live app. | Try it in a throwaway chat before relying on it. Terminals can't confirm a paste, so when you add one Mouthtype presses Return a moment after the paste without checking. Other apps send only when Mouthtype can confirm the text landed. Neither has been tried in live apps yet. |
 | New screens | The Models page, the name accuracy card, the test take, the Microphone page and the cleanup instructions were checked by renders and tests, not by using them on a device. | They should work as described, but nobody has run through them on a Mac for this release. |
 | Bluetooth and USB microphones | Not physically verified. Microphone removal, reconnection and sleep are only lightly covered. | Built-in microphones are the tested path. Setup's microphone status can lag a recovered input until you return to the app and refresh it. |
 | History playback | Play/Stop and capture/lifecycle behavior have automated coverage, but speaker output has not been verified on a device. | Missing or expired audio cannot be recreated by playback; text remains available. |
+| Achievements | Trophy rules, the backfill and the toast are covered by tests and renders, and nobody has used the shelf or toast with VoiceOver on a Mac. | Trophies only count what is already on this Mac. Turn Achievements off in Settings > General if the toast gets in the way. |
+| Support links | The menu bar and About panel links were checked in tests, not opened in a live default browser. | They should open GitHub Sponsors and the Donate page in your default browser. |
 | Edit Selection by Voice | Automated tests cover the flow, but it was not run on a device after its final review fixes. | Check the preview before you accept. Nothing changes until you do. |
 | Typing calibration | Scoring is covered by tests, and the Stats card has not been used with VoiceOver. | Your measured speed only affects the time-saved figure. |
 | Speech recognition engine | FluidAudio 0.18.0 was not checked on real speech, including long takes. | Expect the same accuracy as before, but report any change in long takes. |

@@ -1,4 +1,4 @@
-# Mouthtype 0.11.0
+# Mouthtype 0.12.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,15 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.12.0
+
+- Added: Achievements. The Stats page has a shelf of 27 trophies, and a small toast shows in the app window when you earn one. Earlier trophies are filled in silently. Settings > General has an Achievements switch.
+- Added: Support Mouthtype links in the menu bar menu and the About panel.
+- Fixed: Profanity cleanup no longer reads "back there to be" as a "there is" sentence.
+
+> [!NOTE]
+> The trophy shelf and toast with VoiceOver, and the support links in a live default browser, are unverified on a device. The 0.11.0 gaps below also remain.
 
 ## What changed in 0.11.0
 
