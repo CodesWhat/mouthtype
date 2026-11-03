@@ -163,6 +163,10 @@ private final class VerifyGate {
     var closed = false
     /// Holds the unconfirmed-send delay, apart from the read-back's sleeps.
     var delayClosed = false
+    /// Parks the next read-back sleep only, then opens. The receipt settle (0.2s) is also one of the read-back's gaps,
+    /// so a gate that stays closed would stall a delivery waiting on the previous paste as well.
+    var parksOneSleep = false
+    var parkedCount: Int { waiters.count }
     private var waiters: [CheckedContinuation<Void, Never>] = []
     private var delayWaiters: [CheckedContinuation<Void, Never>] = []
     private static let delays: Set<TimeInterval> = {
@@ -182,6 +186,7 @@ private final class VerifyGate {
             return
         }
         guard closed, Self.delays.contains(delay) else { return }
+        if parksOneSleep { closed = false; parksOneSleep = false }
         await withCheckedContinuation { waiters.append($0) }
     }
 
@@ -2269,9 +2274,16 @@ private struct Rig {
         rig.focus.readings = [Self.before]
         var seen: [PasteVerification] = []
         rig.inserter.observeVerification { seen.append($0) }
+        // The older read-back is parked at its first sleep. Delivery waits on the previous paste's field hold, which a
+        // read-back left running would lift and report from, so without the park the order depends on the scheduler.
+        rig.gate.closed = true
+        rig.gate.parksOneSleep = true
         let first = await rig.inserter.deliver("one", startFocus: nil)
+        await hop(until: { rig.gate.parkedCount == 1 })
+        #expect(rig.gate.parkedCount == 1)
         rig.pasteboard.read()
         let second = await rig.inserter.deliver("two", startFocus: nil)
+        rig.gate.open()
         await rig.inserter.waitForVerification()
         #expect(seen.map(\.id) == [second.verificationID])
         #expect(first.verificationID != second.verificationID)
