@@ -1182,12 +1182,14 @@ def reference_recent_dictations(root, limit=5):
 
 class TakeScanTests(unittest.TestCase):
     COUNT = 2000
+    # Local noon on a fixed day: "today" holds the newest takes whatever the wall clock says.
+    NOW = time.mktime((2026, 6, 15, 12, 0, 0, 0, 0, -1))
 
     @classmethod
     def setUpClass(cls):
         cls.directory = tempfile.TemporaryDirectory()
         cls.root = Path(cls.directory.name)
-        cls.build(cls.root, cls.COUNT)
+        cls.build(cls.root, cls.COUNT, cls.NOW)
 
     @classmethod
     def tearDownClass(cls):
@@ -1196,14 +1198,17 @@ class TakeScanTests(unittest.TestCase):
     def setUp(self):
         cache = tempfile.TemporaryDirectory()
         self.addCleanup(cache.cleanup)
+        real_time = time
+        clock = mock.Mock(wraps=real_time, localtime=lambda seconds=None: real_time.localtime(self.NOW if seconds is None else seconds))
         for patcher in (mock.patch.object(control, "RECOVERY", self.root),
+                        mock.patch.object(control, "time", clock),
                         mock.patch.object(control, "created_cache_path", lambda: Path(cache.name) / "take-created.json")):
             patcher.start()
             self.addCleanup(patcher.stop)
 
     @staticmethod
-    def build(root, count):
-        now = time.time()
+    def build(root, count, now=None):
+        now = time.time() if now is None else now
         for index in range(count):
             path = root / ("%032x" % index)
             path.mkdir()
@@ -1272,7 +1277,7 @@ class TakeScanTests(unittest.TestCase):
         self.assertEqual(report["words_today"], control.words_today(old))
         previews = [p for p in reads if p.parent.parent == self.root and p.name == "transcript.txt"]
         # Five previews, plus the transcripts of takes made today for the word count.
-        self.assertLessEqual(len(previews), 5 + sum(1 for e in old if e["transcript"] and time.localtime(e["mtime"]).tm_yday == time.localtime().tm_yday))
+        self.assertLessEqual(len(previews), 5 + sum(1 for e in old if e["transcript"] and time.localtime(e["mtime"]).tm_yday == time.localtime(self.NOW).tm_yday))
 
     def test_latest_transcript_stops_at_the_newest_take_with_text(self):
         newest = next(e for e in reference_recent_dictations(self.root, None) if e["transcript"])
