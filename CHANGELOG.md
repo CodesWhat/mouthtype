@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Achievements: 27 trophies on a shelf on the Stats page, with a quiet in-window toast when you earn one. Trophies you'd already earned are filled in silently. Settings > General has an Achievements switch; off hides the shelf and stops the work.
+- Achievements: 27 trophies on a shelf on the Stats page, with a quiet in-window toast when you earn one. Trophies you'd already earned are filled in silently. Settings > Mac has an Achievements switch; off hides the shelf and stops the work.
 - Support Mouthtype links: a menu bar submenu after About with GitHub Sponsors and Donate, the same links in the About panel, a footer line on the website and a Support section in the README. Nothing prompts and nothing shows at launch.
 - Linux client: Debian, RPM and AUR packaging, a desktop settings app and a NAS-hosted package test. Still experimental source, not a supported release.
 
