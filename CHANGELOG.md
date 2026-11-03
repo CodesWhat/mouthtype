@@ -24,7 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Bench: `ProcessMemory.vmInfo()` and `BenchDate.today()` are shared helpers, and cleanup shares one `shortSHA` helper.
-- Docs search index holds titles, descriptions and headings only (2.7 MB to 281 KB raw).
 
 ### Tests and CI
 
