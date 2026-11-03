@@ -1,0 +1,3 @@
+#!/bin/sh
+# Launcher for the Qt settings window and tray icon of the mouthtype-linux-desktop package.
+exec /usr/bin/python3 /usr/lib/mouthtype-linux/tools/linux-qt/mouthtype_desktop.py "$@"

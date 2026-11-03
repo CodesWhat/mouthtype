@@ -14,7 +14,11 @@ import Observation
 /// midnight and on a day, clock, time zone or wake change.
 @MainActor @Observable final class StatsModel {
     @ObservationIgnored var store: TranscriptStore? {
-        didSet { if store !== oldValue, isActive { observe() } }
+        didSet {
+            guard store !== oldValue else { return }
+            watchInputs()
+            if isActive { observe() }
+        }
     }
     @ObservationIgnored private(set) var isActive: Bool
     @ObservationIgnored private var observation: TakesObservation?
@@ -46,6 +50,11 @@ import Observation
     @ObservationIgnored let defaults: UserDefaults
     /// The typing calibration card's model. Accepting or resetting a result re-reads the numbers at the new speed.
     @ObservationIgnored private(set) var calibration: TypingCalibrationModel!
+    /// The trophy shelf's model. It re-evaluates whenever a new snapshot arrives, off the main thread.
+    @ObservationIgnored let achievements: AchievementModel
+    @ObservationIgnored private var achievementTask: Task<Void, Never>?
+    @ObservationIgnored private nonisolated(unsafe) var counterObserver: NSObjectProtocol?
+    @ObservationIgnored private nonisolated(unsafe) var inputsObserver: NSObjectProtocol?
     /// Nil until the first load finishes.
     private(set) var snapshot: StatsSnapshot?
     private(set) var error: String?
@@ -54,6 +63,7 @@ import Observation
         self.isActive = observing
         self.store = store
         self.defaults = defaults
+        achievements = AchievementModel(defaults: defaults)
         // The speed is read for every query, so an accepted result reaches the next read without rebuilding the closures.
         // UserDefaults reads are thread-safe, but the class isn't marked Sendable.
         nonisolated(unsafe) let shared = defaults
@@ -66,12 +76,30 @@ import Observation
                 onChange: onChange)
         }
         calibration = TypingCalibrationModel(defaults: defaults, onAccepted: { [weak self] in self?.typingBaselineChanged() })
+        counterObserver = NotificationCenter.default.addObserver(
+            forName: .achievementCounterChanged, object: nil, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.countersChanged() } }
+        watchInputs()
         if observing { observe() }
+    }
+
+    /// Listens for store writes that change what the achievements read. The store can arrive after init, so this re-points the
+    /// listener at whichever store is current.
+    private func watchInputs() {
+        if let inputsObserver { NotificationCenter.default.removeObserver(inputsObserver) }
+        inputsObserver = nil
+        guard let store else { return }
+        inputsObserver = NotificationCenter.default.addObserver(
+            forName: TranscriptStore.achievementInputsChanged, object: store, queue: .main
+        ) { [weak self] _ in MainActor.assumeIsolated { self?.countersChanged() } }
     }
 
     isolated deinit {
         observation?.cancel()
         rolloverTask?.cancel()
+        achievementTask?.cancel()
+        if let counterObserver { NotificationCenter.default.removeObserver(counterObserver) }
+        if let inputsObserver { NotificationCenter.default.removeObserver(inputsObserver) }
         removeRolloverObservers()
     }
 
@@ -164,6 +192,31 @@ import Observation
     private func apply(_ snapshot: StatsSnapshot?, failure: String?) {
         self.snapshot = snapshot
         error = failure
+        if let snapshot { refreshAchievements(snapshot) }
+    }
+
+    /// Turns trophies on or off. Turning them on evaluates the snapshot already on screen.
+    func setAchievementsEnabled(_ value: Bool) {
+        achievements.setEnabled(value)
+        if value, let snapshot { refreshAchievements(snapshot) }
+    }
+
+    /// A local action counter went up (a voice edit or a transform), or a write changed what the achievements read. Looks again at the snapshot already loaded; with none
+    /// loaded yet, the first load will.
+    func countersChanged() {
+        if let snapshot { refreshAchievements(snapshot) }
+    }
+
+    private func refreshAchievements(_ snapshot: StatsSnapshot) {
+        guard achievements.isEnabled, let store else { return }
+        achievementTask?.cancel()
+        let (instant, zone) = (now(), timeZoneProvider())
+        let revision = store.inputsRevision
+        achievementTask = Task { [achievements] in
+            await achievements.refresh(snapshot: snapshot, now: instant, timeZone: zone, revision: revision) { calibrated in
+                try store.achievementExtras(calibrated: calibrated)
+            }
+        }
     }
 
     // MARK: Day rollover

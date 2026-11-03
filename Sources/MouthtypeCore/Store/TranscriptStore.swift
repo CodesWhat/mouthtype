@@ -1,5 +1,6 @@
 import Foundation
 import GRDB
+import Synchronization
 
 public enum TranscriptStoreError: Error, Equatable {
     case unknownDictation(String)
@@ -16,6 +17,20 @@ public final class TakesObservation: @unchecked Sendable {
 
 public final class TranscriptStore: Sendable {
     let pool: DatabasePool
+    private let revision = Mutex(0)
+
+    /// Posted (with the store as the object) after a write that can change what the achievements read without changing the
+    /// take count: edits appended, a correction answered, a take deleted.
+    public static let achievementInputsChanged = Notification.Name("com.codeswhat.mouthtype.achievementInputsChanged")
+
+    /// Goes up on every write that feeds the achievement queries (edits, correction answers, deletes, column updates). A cached
+    /// read made at the same revision is still good.
+    public var inputsRevision: Int { revision.withLock { $0 } }
+
+    private func inputsChanged(notify: Bool) {
+        revision.withLock { $0 &+= 1 }
+        if notify { NotificationCenter.default.post(name: Self.achievementInputsChanged, object: self) }
+    }
 
     public static func defaultURL() -> URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -269,6 +284,7 @@ public final class TranscriptStore: Sendable {
                         """, arguments: [id, edit.stage, edit.kind.rawValue, edit.fromText, edit.toText, edit.wordDelta, edit.position])
             }
         }
+        inputsChanged(notify: !edits.isEmpty)
     }
 
     /// Records that a spelling was offered, with no answer yet. Returns the row to settle with `recordCorrectionOutcome`.
@@ -291,6 +307,7 @@ public final class TranscriptStore: Sendable {
         try pool.write { db in
             try db.execute(sql: "UPDATE correction SET accepted = ? WHERE id = ?", arguments: [accepted, id])
         }
+        inputsChanged(notify: true)
     }
 
     public func corrections(dictationID: String) throws -> [CorrectionRecord] {
@@ -306,6 +323,7 @@ public final class TranscriptStore: Sendable {
 
     public func delete(_ id: String) throws {
         try pool.write { db in try db.execute(sql: "DELETE FROM dictation WHERE id = ?", arguments: [id]) }
+        inputsChanged(notify: true)
     }
 
     /// Clears `audio_path` and `audio_expires_at` for rows whose audio was purged.
@@ -502,5 +520,6 @@ public final class TranscriptStore: Sendable {
             try db.execute(sql: "UPDATE dictation SET \(assignments) WHERE id = ?", arguments: arguments)
             if db.changesCount == 0 { throw TranscriptStoreError.unknownDictation(id) }
         }
+        inputsChanged(notify: false)
     }
 }

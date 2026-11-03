@@ -70,7 +70,7 @@ for (const [path, heading] of pages) {
 
 test("start describes the current release features", async ({ page }) => {
   await page.goto("/start/");
-  await expect(page.locator("main")).toContainText("0.11.0");
+  await expect(page.locator("main")).toContainText("0.12.0");
   await expect(page.locator("#install")).toContainText("Download");
   await expect(page.locator("#permissions")).toContainText("Microphone");
   await expect(page.locator("#permissions")).toContainText("Accessibility");
@@ -256,3 +256,52 @@ for (const path of footerPaths) {
     );
   });
 }
+
+for (const path of footerPaths) {
+  test(`${path} footer link row has a Support link`, async ({ page }) => {
+    await page.goto(path);
+    const link = page.locator("footer nav").getByRole("link", { name: "Support", exact: true });
+    await expect(link).toHaveAttribute("href", "https://codeswhat.com/support");
+    await expect(page.locator("footer .support-note")).toHaveCount(0);
+  });
+}
+
+test("home footer puts Support after Status and before Back to the top", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator("footer .footer-top nav a")).toHaveText([
+    "How it works",
+    "Status",
+    "Support",
+    "Back to the top ↑",
+  ]);
+});
+
+test("home footer link row wraps on a phone without clipping", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto("/");
+  const edges = await page.locator("footer .footer-top a").evaluateAll((links) =>
+    links.map((link) => link.getBoundingClientRect().right),
+  );
+  expect(edges).toHaveLength(4);
+  for (const edge of edges) expect(edge).toBeLessThanOrEqual(390);
+});
+
+test("/download/ also carries a support line beside the install steps", async ({ page }) => {
+  await page.goto("/download/");
+  const aside = page.locator("aside.start-aside");
+  await expect(aside.getByRole("link", { name: "GitHub Sponsors" })).toHaveAttribute(
+    "href",
+    "https://github.com/sponsors/CodesWhat",
+  );
+  await expect(aside.getByRole("link", { name: "donate directly" })).toHaveAttribute(
+    "href",
+    "https://codeswhat.com/support",
+  );
+});
+
+test("support links add no third-party images or scripts", async ({ page }) => {
+  for (const path of footerPaths) {
+    await page.goto(path);
+    expect(await page.locator("script[src^='http'], img[src^='http']").count(), path).toBe(0);
+  }
+});

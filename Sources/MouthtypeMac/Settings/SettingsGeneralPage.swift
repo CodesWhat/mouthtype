@@ -69,6 +69,16 @@ extension SettingsView {
         }
     }
 
+    /// Settings modal, Mac: the trophy shelf on Stats.
+    @ViewBuilder var generalTrophies: some View {
+        DesignSection(eyebrow: "TROPHIES") {
+            ModalToggleRow(
+                title: "Achievements", detail: "Trophies on the Stats page, worked out on this Mac. Off hides them and stops the work.",
+                isOn: Binding(get: { model.stats.achievements.isEnabled }, set: { model.stats.setAchievementsEnabled($0) }),
+                identifier: "settings-achievements")
+        }
+    }
+
     /// Settings modal, Mac: launch at login and updates.
     @ViewBuilder var generalMac: some View {
         DesignSection(eyebrow: "STARTUP") {

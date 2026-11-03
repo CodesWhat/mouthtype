@@ -1,0 +1,15 @@
+#!/bin/sh
+set -e
+case "$1" in
+    configure)
+        python3 -m compileall -q /usr/lib/mouthtype-linux/tools/linux-qt >/dev/null 2>&1 || true
+        if [ -z "$2" ]; then
+            cat <<'MSG'
+Mouthtype settings window installed. Run "mouthtype-linux-setup" as your normal user (not root) to enable the
+service, grant typing through the desktop portal and start the tray icon at login. Open the window with
+"mouthtype-desktop" or from the application menu.
+MSG
+        fi
+        ;;
+esac
+exit 0

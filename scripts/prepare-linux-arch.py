@@ -31,7 +31,7 @@ def prepare(source, destination, *, version, revision):
     shutil.copyfile(source / 'packaging/arch/README.md', destination / 'README.md')
     receipt = {'version': version, 'revision': revision, 'source_sha256': digest,
                'payload_sha256': {name: hashlib.sha256((source / name).read_bytes()).hexdigest()
-                                  for name in installer.FILES},
+                                  for name in installer.payload_files(source)},
                'physical_desktop_tested': False, 'model_weights_included': False}
     (destination / 'BUILD-SOURCE.json').write_text(json.dumps(receipt, indent=2) + '\n')
     names = ('mouthtype-linux-source.tar.gz', 'PKGBUILD', 'README.md', 'BUILD-SOURCE.json')
@@ -45,7 +45,7 @@ def main():
     parser.add_argument('--destination', required=True, type=Path)
     args = parser.parse_args()
     try:
-        inputs = installer.FILES + ['scripts/prepare-linux-arch.py', 'packaging/Version.plist',
+        inputs = installer.payload_files(ROOT) + ['scripts/prepare-linux-arch.py', 'packaging/Version.plist',
                                     'packaging/arch/PKGBUILD.in', 'packaging/arch/README.md']
         def git(*arguments):
             return subprocess.check_output(['git', *arguments], cwd=ROOT, text=True, timeout=5).strip()

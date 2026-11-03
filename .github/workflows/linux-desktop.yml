@@ -5,16 +5,24 @@ on:
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"
+      - "tools/omarchy-plugin/**"
+      - "tools/qml-render/**"
+      - "tools/linux-qt/**"
       - "scripts/prepare-linux-arch.py"
       - "packaging/arch/**"
+      - "packaging/debian/**"
       - ".github/workflows/linux-desktop.yml"
   push:
-    branches: [main, 'dev/**']
+    branches: [main, 'dev/**', feat/linux-parity]
     paths:
       - "tools/linux-desktop/**"
       - "tools/linux-engine-proof/**"
+      - "tools/omarchy-plugin/**"
+      - "tools/qml-render/**"
+      - "tools/linux-qt/**"
       - "scripts/prepare-linux-arch.py"
       - "packaging/arch/**"
+      - "packaging/debian/**"
       - ".github/workflows/linux-desktop.yml"
   workflow_dispatch:
 
@@ -35,7 +43,7 @@ jobs:
           DEBIAN_FRONTEND: noninteractive
         run: |
           apt-get update
-          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus dbus-x11 procps sway wtype wl-clipboard
+          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-coverage python3-jeepney python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus dbus-x11 procps sway wtype wl-clipboard
           useradd --create-home --shell /bin/bash mouthtype-ci
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -49,7 +57,7 @@ jobs:
             uname -srm
             python3 --version
             getconf GNU_LIBC_VERSION
-            dpkg-query -W python3 python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus sway wtype wl-clipboard
+            dpkg-query -W python3 python3-jeepney python3-gi gir1.2-gtk-3.0 pipewire pipewire-bin wireplumber dbus sway wtype wl-clipboard
           } > linux-desktop-evidence/environment.txt
       - name: Run ordinary-user synthetic components and no-model checks
         run: runuser -u mouthtype-ci -- bash tools/linux-desktop/run-ci.sh "$GITHUB_WORKSPACE/linux-desktop-evidence"
@@ -81,7 +89,7 @@ jobs:
     steps:
       - name: Install signed Arch component prerequisites
         run: |
-          pacman -Syu --noconfirm --needed git python python-pip curl pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols namcap
+          pacman -Syu --noconfirm --needed git python python-coverage python-pip python-jeepney curl pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject base-devel meson ninja wayland-protocols namcap
           useradd --create-home --shell /bin/bash mouthtype-ci
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -95,7 +103,7 @@ jobs:
             uname -srm
             python --version
             getconf GNU_LIBC_VERSION
-            pacman -Q python pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject glibc pacman archlinux-keyring gcc meson ninja wayland-protocols wlroots0.20
+            pacman -Q python python-jeepney pipewire-audio wireplumber dbus procps-ng sway wtype wl-clipboard gtk3 python-gobject glibc pacman archlinux-keyring gcc meson ninja wayland-protocols wlroots0.20
             pacman-conf SigLevel
           } > linux-desktop-evidence/environment.txt
       - name: Build separately labeled upstream Sway component without privileges
@@ -115,6 +123,8 @@ jobs:
             cp "/home/mouthtype-ci/arch-bundle/$name" linux-desktop-evidence/arch-package/
           done
           timeout --kill-after=5s 180s runuser -u mouthtype-ci -- bash -c 'cd /home/mouthtype-ci/arch-bundle && makepkg --cleanbuild --check' > linux-desktop-evidence/arch-package/build.log 2>&1
+      - name: Check AUR .SRCINFO is current as ordinary user
+        run: timeout --kill-after=5s 60s runuser -u mouthtype-ci -- bash /home/mouthtype-ci/package-source/packaging/arch/aur/check-srcinfo.sh
       - name: Install and check the actual test package without policy changes
         run: |
           set -- /home/mouthtype-ci/arch-bundle/mouthtype-linux-*.pkg.tar.zst
@@ -188,5 +198,188 @@ jobs:
         with:
           name: linux-desktop-arch-components
           path: linux-desktop-evidence/
+          retention-days: 14
+          if-no-files-found: warn
+
+  debian-package:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    container:
+      # Official Ubuntu 24.04 index, resolved 2026-10-21.
+      image: ubuntu:24.04@sha256:68ee22004a9109b44973313b02ff7b1de250f1de0f5ecb628d73f579aaff33ac
+      options: --init
+    steps:
+      - name: Install build and lint prerequisites
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates python3 dpkg-dev lintian
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the .deb
+        run: bash packaging/debian/build-deb.sh --output "$RUNNER_TEMP/debs" --version 0.0.0~ci-1
+      - name: Lint the .deb
+        run: lintian --pedantic --fail-on error,warning "$RUNNER_TEMP"/debs/mouthtype-linux_*.deb "$RUNNER_TEMP"/debs/mouthtype-linux-desktop_*.deb
+      - name: Install, check, remove and purge on Ubuntu 24.04
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: bash packaging/debian/test-install.sh "$RUNNER_TEMP"/debs/mouthtype-linux_0.0.0~ci-1_amd64.deb
+      - name: Signed apt repository flow with a throwaway key
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: bash packaging/debian/test-apt-repo.sh "$GITHUB_WORKSPACE"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-debian-package
+          path: ${{ runner.temp }}/debs/*.deb
+          retention-days: 14
+          if-no-files-found: error
+
+  debian-desktop-package:
+    # The desktop package needs xdg-desktop-portal 1.19 or newer, which Ubuntu 24.04 does not have.
+    needs: debian-package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          # Official index digests, resolved 2026-10-22.
+          - debian:13@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308
+          - ubuntu:26.04@sha256:c098726dd9b9733f3e885f8de0ef375206a311b0a317eadc40d347b1115fb944
+    container:
+      image: ${{ matrix.image }}
+      options: --init
+    steps:
+      - name: Install prerequisites
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends ca-certificates util-linux
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: linux-debian-package
+          path: ${{ runner.temp }}/debs
+      - name: Install both packages, render the settings window offscreen, remove and purge
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: bash packaging/debian/test-install.sh "$RUNNER_TEMP"/debs/mouthtype-linux_0.0.0~ci-1_amd64.deb "$RUNNER_TEMP"/debs/mouthtype-linux-desktop_0.0.0~ci-1_all.deb
+
+  qml-render:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      image: archlinux:base-20261011.0.609700@sha256:3c64b538588416593f69a1aebd2f2ec0f2541b29159f32556fa7def2167147a0
+      options: --init
+    steps:
+      - name: Install signed Arch render prerequisites
+        run: |
+          pacman -Syu --noconfirm --needed git qt6-declarative qt6-svg ttf-dejavu perl
+          useradd --create-home --shell /bin/bash mouthtype-ci
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record actual Arch package and host versions
+        run: |
+          mkdir qml-render-evidence
+          chown mouthtype-ci:mouthtype-ci qml-render-evidence
+          {
+            cat /etc/os-release
+            uname -srm
+            pacman -Q qt6-base qt6-declarative qt6-svg ttf-dejavu perl
+          } > qml-render-evidence/environment.txt
+      - name: Render QML cases offscreen in light and dark
+        run: timeout --kill-after=5s 600s runuser -u mouthtype-ci -- bash tools/qml-render/run.sh "$GITHUB_WORKSPACE/qml-render-evidence"
+      - name: Verify and clean remaining owned test processes
+        if: always()
+        run: |
+          if id mouthtype-ci >/dev/null 2>&1; then
+            if pgrep -a -u mouthtype-ci; then
+              pkill -TERM -u mouthtype-ci || true
+              sleep 1
+              pkill -KILL -u mouthtype-ci || true
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: linux-qml-renders
+          path: qml-render-evidence/
+          retention-days: 14
+          if-no-files-found: warn
+
+  qt-host:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    container:
+      # Official Debian trixie index, resolved 2026-10-21. Same package set as tools/linux-qt/nas-run.sh.
+      image: debian:trixie@sha256:4c25275446ca371766b8b093c696782eabce06263fccacb8d5d813b3dc44b308
+      options: --init
+    steps:
+      - name: Install Debian Qt host prerequisites
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt-get update
+          apt-get install --yes --no-install-recommends git ca-certificates python3 python3-coverage python3-pyside6.qtquick python3-pyside6.qtqml python3-pyside6.qtnetwork python3-pyside6.qtwidgets qml6-module-qtquick qml6-module-qtquick-controls qml6-module-qtquick-templates qml6-module-qtquick-window qml6-module-qtquick-effects qml6-module-qtquick-layouts qml6-module-qtqml-workerscript qml6-module-org-kde-layershell qt6-svg-plugins fonts-dejavu-core procps
+          useradd --create-home --shell /bin/bash mouthtype-ci
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record actual Debian package versions
+        run: |
+          mkdir qt-host-evidence
+          chown mouthtype-ci:mouthtype-ci qt-host-evidence
+          {
+            cat /etc/os-release
+            dpkg-query -W python3 python3-pyside6.qtquick libqt6quick6 qt6-svg-plugins
+          } > qt-host-evidence/environment.txt
+      - name: Run the Qt host tests and render the settings window offscreen
+        run: runuser -u mouthtype-ci -- bash tools/linux-qt/run-tests.sh "$GITHUB_WORKSPACE/qt-host-evidence"
+      - name: Verify and clean remaining owned test processes
+        if: always()
+        run: |
+          if id mouthtype-ci >/dev/null 2>&1; then
+            if pgrep -a -u mouthtype-ci; then
+              pkill -TERM -u mouthtype-ci || true
+              sleep 1
+              pkill -KILL -u mouthtype-ci || true
+              exit 1
+            fi
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: linux-qt-host
+          path: qt-host-evidence/
+          retention-days: 14
+          if-no-files-found: warn
+
+  desktop-acceptance:
+    # gnome: T1 headless GNOME 50 image and acceptance.py gnome-portal. kde: T3 Fedora 44 image (kwin_wayland --virtual, xdg-desktop-portal-kde) and acceptance.py kde-portal.
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        desktop: [gnome, kde]
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build the ${{ matrix.desktop }} acceptance image and run ${{ matrix.desktop }}-portal
+        run: bash tools/linux-desktop/testbed/ci-acceptance.sh "$RUNNER_TEMP/${{ matrix.desktop }}-acceptance-evidence" ${{ matrix.desktop }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: linux-desktop-${{ matrix.desktop }}-acceptance
+          path: ${{ runner.temp }}/${{ matrix.desktop }}-acceptance-evidence/
           retention-days: 14
           if-no-files-found: warn

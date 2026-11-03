@@ -567,11 +567,12 @@ private struct Rig {
     }
 
     /// Waits, up to two seconds, for work on other tasks to reach `condition`.
-    private func until(_ condition: () -> Bool) async {
+    private func until(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
         for _ in 0..<400 where !condition() {
             try? await Task.sleep(for: .milliseconds(5))
             await settle()
         }
+        if !condition() { Issue.record("until: condition never held after 400 polls", sourceLocation: sourceLocation) }
     }
 
     @Test func theRememberCardHasItsHeaderBodyAndButtons() {

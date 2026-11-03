@@ -31,6 +31,11 @@ struct SettingsView: View {
         .foregroundStyle(DesignPalette.ink)
         .tint(SettingsTheme.control)
         .environment(\.siteFavicons, favicons)
+        .overlay(alignment: .bottomTrailing) {
+            AchievementToastHost(
+                center: model.stats.achievements.toasts, skin: model.skin, readout: model.readoutColour,
+                scale: model.pillSize == .large ? .large : .standard)
+        }
         .ignoresSafeArea()
         .frame(minWidth: SettingsTheme.minimumSize.width, minHeight: SettingsTheme.minimumSize.height)
         .sheet(isPresented: $model.settingsOpen) {
@@ -39,6 +44,7 @@ struct SettingsView: View {
         .onChange(of: model.page) { _, page in
             // The stats are watched only on their own page.
             if page == .stats { model.stats.activate() } else { model.stats.deactivate() }
+            model.stats.achievements.toasts.statsOpen = page == .stats
             model.syncWords()
             // A page change from outside the sidebar (URL route, menu) shows no ring: SettingsWindow.present clears sidebar focus.
             // Arrows and clicks move sidebarFocus themselves, so nothing here may pull focus onto a row.
@@ -51,7 +57,17 @@ struct SettingsView: View {
                 if let window = SettingsView.settingsWindow { SettingsView.clearStaleSidebarRing(in: window, selected: page) }
             }
         }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+        .onAppear {
+            let toasts = model.stats.achievements.toasts
+            toasts.openShelf = { _ = model.select(.stats) }
+            toasts.statsOpen = model.page == .stats
+            toasts.windowIsKey = SettingsView.settingsWindow?.isKeyWindow ?? false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didResignKeyNotification)) { note in
+            if note.object is SettingsNSWindow { model.stats.achievements.toasts.windowIsKey = false }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            if note.object is SettingsNSWindow { model.stats.achievements.toasts.windowIsKey = true }
             keyboardNavigation = fullKeyboardAccess()
             // AppKit hands the first row focus when the window first becomes key, after any default focus; move it to the selected page.
             // Only the first time, so a row the user Tabbed to isn't pulled back on every return to the window.
@@ -96,7 +112,10 @@ struct SettingsView: View {
     }
 
     private func sidebarPageRow(_ page: SettingsPage) -> some View {
-        DesignNavRow(title: page.title, symbol: page.symbol, selected: model.page == page) {
+        DesignNavRow(
+            title: page.title, symbol: page.symbol, selected: model.page == page,
+            badge: page == .stats && model.stats.achievements.toasts.hasQueued ? "new trophy" : nil
+        ) {
             model.select(page)
             // A mouse click selects without a keyboard ring; Space or Return on a focused row keeps it.
             if SettingsView.isMouseEvent(NSApp.currentEvent) {

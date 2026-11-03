@@ -28,7 +28,113 @@ def digest(path):
     return result.hexdigest()
 
 
-def verify_artifacts(config):
+class VerifiedHashes:
+    """Remembers which files already passed a full SHA-256 check, so a reload can skip rehashing gigabytes.
+
+    An entry is trusted only while every stat field still matches exactly and the entry is under `interval` seconds
+    old. Anything else, and any problem reading or writing the cache, falls back to hashing. With `force` nothing is
+    trusted. Someone who can rewrite a file and restore its size, mtime, inode and ctime is outside the threat
+    model; the daily full pass bounds how long any other drift could go unnoticed."""
+
+    VERSION = 1
+    INTERVAL_SECONDS = 24 * 60 * 60
+
+    def __init__(self, path, *, force=False, clock=time.time, interval=INTERVAL_SECONDS):
+        self.path, self.force, self.clock, self.interval = Path(path), force, clock, interval
+        self.lock = threading.Lock()
+
+    @staticmethod
+    def fingerprint(path):
+        real = os.path.realpath(path)
+        info = os.stat(real)
+        return real, {"size": info.st_size, "mtime_ns": info.st_mtime_ns, "ino": info.st_ino,
+                      "dev": info.st_dev, "ctime_ns": info.st_ctime_ns}
+
+    def load(self):
+        try:
+            with open(self.path, "rb") as source:
+                data = json.loads(source.read(16 * 1024 * 1024))
+            entries = data["entries"]
+            if data["version"] != self.VERSION or not isinstance(entries, dict):
+                return {}
+            return entries
+        except (OSError, ValueError, KeyError, TypeError):
+            return {}
+
+    def save(self, updates, removals=()):
+        """Merge into whatever another process wrote, then replace the file atomically with mode 0600."""
+        entries = self.load()
+        entries.update(updates)
+        for key in removals:
+            entries.pop(key, None)
+        directory = self.path.parent
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temporary = directory / (self.path.name + "." + str(os.getpid()) + "." + str(threading.get_ident()) + ".tmp")
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        try:
+            with os.fdopen(descriptor, "w", encoding="utf-8") as output:
+                json.dump({"version": self.VERSION, "entries": entries}, output)
+                output.flush()
+                os.fsync(output.fileno())
+            os.replace(temporary, self.path)
+        except BaseException:
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+            raise
+
+    def trusted(self, entries, real, fingerprint, expected):
+        entry = entries.get(real)
+        if self.force or not isinstance(entry, dict) or entry.get("sha256") != expected:
+            return False
+        verified = entry.get("verified_at")
+        if type(verified) not in (int, float) or not 0 <= self.clock() - verified < self.interval:
+            return False
+        return all(entry.get(key) == value for key, value in fingerprint.items())
+
+    def verify(self, config):
+        with self.lock:
+            entries = self.load()
+            updates, removals, result = {}, [], {}
+            for name, artifact in config["artifacts"].items():
+                try:
+                    real, fingerprint = self.fingerprint(artifact["path"])
+                except OSError:
+                    real, fingerprint = None, None
+                if real is not None and self.trusted(entries, real, fingerprint, artifact["sha256"]):
+                    result[name] = artifact["sha256"]
+                    continue
+                actual = digest(artifact["path"])
+                if actual != artifact["sha256"]:
+                    if real is not None:
+                        removals.append(real)
+                    self._write(updates, removals)
+                    raise ValueError(f"SHA-256 mismatch for {name}")
+                result[name] = actual
+                if real is not None:
+                    try:
+                        # Fingerprint again after hashing: a file that changed mid-read is not recorded.
+                        again_real, again = self.fingerprint(artifact["path"])
+                        if again_real == real and again == fingerprint:
+                            updates[real] = {**fingerprint, "sha256": actual, "verified_at": self.clock()}
+                    except OSError:
+                        pass
+            self._write(updates, removals)
+            return result
+
+    def _write(self, updates, removals):
+        if not updates and not removals:
+            return
+        try:
+            self.save(updates, removals)
+        except (OSError, ValueError, TypeError):
+            pass
+
+
+def verify_artifacts(config, cache=None):
+    if cache is not None:
+        return cache.verify(config)
     result = {}
     for name, artifact in config["artifacts"].items():
         actual = digest(artifact["path"])

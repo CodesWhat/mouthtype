@@ -1,4 +1,4 @@
-# Mouthtype 0.11.0
+# Mouthtype 0.12.0
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,15 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.12.0
+
+- Added: Achievements. The Stats page has a shelf of 27 trophies, and a small toast shows in the app window when you earn one. Earlier trophies are filled in silently. Settings > Mac has an Achievements switch.
+- Added: Support Mouthtype links in the menu bar menu and the About panel.
+- Fixed: Profanity cleanup no longer reads "back there to be" as a "there is" sentence.
+
+> [!NOTE]
+> The trophy shelf and toast with VoiceOver, and the support links in a live default browser, are unverified on a device. The 0.11.0 gaps below also remain.
 
 ## What changed in 0.11.0
 
@@ -296,7 +305,7 @@ For fixes to common problems and the full list of what this release doesn't cove
 - Long terminal paste splitting is off by default. Splitting adds no Return between parts. If the app is on the Press Return after inserting list, one Return can follow the whole paste once it is confirmed.
 - Setup’s microphone status can lag a recovered input until you return to the app and refresh it. Device transitions still need live coverage.
 - First installation and model downloads on another Mac need confirmation. Existing developer-machine grants and caches do not verify that path.
-- Linux has an experimental source-only daemon/CLI candidate. Arch/Omarchy is an active acceptance target. Container and headless component checks do not establish physical microphone or Hyprland support. See Linux source testing below.
+- Linux has an experimental source-only daemon/CLI candidate. The full flow has run on one Arch/Omarchy desk; HiDPI, multi-monitor and other distros are untried. Container and headless component checks do not establish physical microphone or Hyprland support. See Linux source testing below.
 
 > [!WARNING]
 > An interrupted split paste may already have inserted text. Inspect the field before copying the full recovery text.
@@ -306,14 +315,14 @@ For fixes to common problems and the full list of what this release doesn't cove
 The source archive at https://mouthtype.app/source includes `tools/linux-desktop/README.md`, an experimental daemon/CLI, an explicit speech-preparation helper and an Omarchy bar plugin (`tools/omarchy-plugin`) with a floating pill. The initial target is Linux x86_64, Arch/Omarchy, Hyprland and PipeWire. There is no supported Linux desktop release.
 
 - The source includes a local Arch test-package builder, optional saved spellings, phrase replacements, single-file audio transcription, optional paste or typing delivery and cleanup (Basic, plus local Fast and Thorough models that are prepared on request).
-- Delivery is recovery-only and cleanup is off by default.
+- Delivery is recovery-only until you choose to paste. A config written by `setup_speech.py` turns Basic cleanup on; the client's own default with no `cleanup` key is off.
 - The plugin installer enables a login service unless you pass `--no-autostart`.
 - Linux has no live word previews, and its Thorough model is Qwen3 4B, not the Mac model.
 - The install checklist is at https://mouthtype.app/linux/agent-install.md.
 
 Follow that README to install the launcher into a chosen prefix and run `tools/linux-desktop/setup_speech.py` with a new destination outside the checkout. Preparation downloads the pinned speech archive, verifies its hashes and installs pinned binary packages into a dedicated environment. It does not record, load models, register shortcuts, modify compositor configuration or start a service. Start the foreground service explicitly afterward. Recovery-only delivery is the default and makes no clipboard or key changes; automatic typing is an explicit opt-in with documented compositor/field limitations.
 
-Cleanup is off by default; it runs before literal saved-spelling/phrase expansion and keeps raw recognition recoverable. Automatic typing refuses multiline/control-bearing text rather than sending Return or Tab. Follow the source guide for phrase dates, explicit clipboard-context opt-in and formatting limitations.
+Cleanup is off when the config has no `cleanup` key (`setup_speech.py` writes `basic`); it runs before literal saved-spelling/phrase expansion and keeps raw recognition recoverable. Automatic typing refuses multiline/control-bearing text rather than sending Return or Tab. Follow the source guide for phrase dates, explicit clipboard-context opt-in and formatting limitations.
 
 > [!NOTE]
 > Synthetic audio, process/IPC, real headless Wayland components and remote speech-runtime checks are evidence for those components, not certification of a physical Arch/Omarchy desktop. Follow the source README for prerequisites and acceptance steps.
