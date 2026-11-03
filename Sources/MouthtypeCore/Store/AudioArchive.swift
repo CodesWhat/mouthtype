@@ -16,7 +16,7 @@ public struct AudioArchive: Sendable {
     public static let defaultMaxTotalBytes = 2 * 1024 * 1024 * 1024
     public static let sampleRate = 16_000
     /// How long a failed or never-finished take's audio, and any in-progress copy, is kept for recovery before
-    /// retention treats it like any other audio. Well past `DictationRecovery.window`, which is only how far back a
+    /// retention treats it like any other audio: after this grace it follows the age and size limit. Well past `DictationRecovery.window`, which is only how far back a
     /// launch offers a recovery.
     public static let recoveryGrace: TimeInterval = 30 * 24 * 3600
 

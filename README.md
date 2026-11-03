@@ -162,7 +162,7 @@ See [the usage reference](https://docs.mouthtype.app/reference/usage-overview/) 
 
 <h2 align="center" id="privacy-and-permissions">Privacy and Permissions</h2>
 
-Audio, transcripts, settings, spellings and phrases stay on this Mac. The default data directory is `~/Library/Application Support/Mouthtype/`. Text history is retained indefinitely. Completed audio defaults to 90 days and 2 GB; unfinished and recovery audio are protected from normal retention cleanup. The local database and recordings aren't encrypted by Mouthtype, so protect the Mac and its backups accordingly.
+Audio, transcripts, settings, spellings and phrases stay on this Mac. The default data directory is `~/Library/Application Support/Mouthtype/`. Text history is retained indefinitely. Completed audio defaults to 90 days and 2 GB; recovery audio is kept 30 days, then follows the same age and size limit. The local database and recordings aren't encrypted by Mouthtype, so protect the Mac and its backups accordingly.
 
 Microphone access records a take. Accessibility access handles the global shortcut, examines the destination and inserts text. Cleanup can read a small amount of nearby text for formatting and spelling hints, excluding secure fields. Phrase rules can explicitly insert the clipboard's text. These are powerful permissions; grant them only to a build you trust.
 

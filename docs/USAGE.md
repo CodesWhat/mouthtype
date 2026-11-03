@@ -171,7 +171,7 @@ Click is the default sound set: a bright key-down thunk to start, a duller key-u
 
 History, settings, dictionary and audio stay on this Mac. The default store is `~/Library/Application Support/Mouthtype/mouthtype.sqlite`; recordings are in its sibling `audio` directory. Text history is retained indefinitely.
 
-**Settings > Advanced > Storage** offers 14, 30 or 90 days, or No age limit, and a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. The next launch prunes only completed Mouthtype recordings; unfinished and recovery audio are protected, and text and timings stay. See [saved audio](AUDIO-RETENTION.md). Model downloads require network access.
+**Settings > Advanced > Storage** offers 14, 30 or 90 days, or No age limit, and a 2 GB or 10 GB size limit. Defaults stay 90 days and 2 GB. The next launch prunes only completed Mouthtype recordings; recovery audio (failed or interrupted takes and crash partials) is kept for 30 days, then follows your age and size limit, and text and timings stay. See [saved audio](AUDIO-RETENTION.md). Model downloads require network access.
 
 ## Website
 

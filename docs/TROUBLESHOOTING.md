@@ -80,7 +80,7 @@ Likely cause: the microphone disconnected, Mouthtype crashed or was force-quit, 
 - After a crash or force-quit, the next launch offers "Recover your last dictation?". Recovery pauses new recordings until it finishes.
 - Older interrupted or failed recordings are under **Saved Recordings** in the menu. Open it to load the list (20 per page), then choose one to recover. If it fails, the card says "Couldn't recover", the audio is kept, and you can try again. "Saved recordings unavailable" means the list couldn't be read.
 - <kbd>Esc</kbd> cancels a take and offers Undo for five seconds.
-- Saved audio follows the retention you chose (default 90 days and 2 GB). Unfinished and recovery audio isn't pruned.
+- Saved audio follows the retention you chose (default 90 days and 2 GB). Recovery audio (failed or interrupted takes and crash partials) is kept 30 days, then follows the same limit.
 
 ## Update checks
 
