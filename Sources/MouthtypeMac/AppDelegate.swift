@@ -651,7 +651,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 showNotice(PillMessage("Nothing to paste yet"))
                 return
             }
-            if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") { cardPresenter.present(card) }
+            if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") {
+                cardPresenter.present(card)
+            } else if result.transcriptStaysOnClipboard {
+                showNotice(DictationController.clipboardKeptNotice)
+            }
         }
     }
 

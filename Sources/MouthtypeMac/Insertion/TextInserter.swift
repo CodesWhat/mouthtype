@@ -9,8 +9,9 @@ import MouthtypeCore
 /// Call everything on the main actor. `snapshotFocus()` at dictation start, `deliver` when the text is ready.
 @MainActor
 public final class TextInserter {
-    /// When the paste is re-read, from the moment the chord was posted.
-    static let verifyOffsets: [TimeInterval] = [0.15, 0.35, 1.0]
+    /// When the paste is re-read, from the moment the chord was posted. The third read catches a slow target (an IDE, a
+    /// remote desktop) well inside the clipboard's field hold, so its clipboard goes back as soon as the text shows.
+    static let verifyOffsets: [TimeInterval] = [0.15, 0.35, 0.65, 1.0]
 
     /// How long after a paste its last character still stands in for an unreadable text-before-cursor.
     static let continuationWindow: TimeInterval = 5 * 60
@@ -295,6 +296,9 @@ public final class TextInserter {
                 onVerified != nil && PasteTargetPolicy.supportsReadBack(bundleID: now.bundleID)
                 ? now.element.map { element in focus.prePaste { focus.readField(of: element) } } : nil
             axReads = axReads || fieldBefore != nil
+            // With the field's text in hand the read-back can tell when the target has taken the paste, so the
+            // clipboard waits for that instead of trusting the first read of the promise, which may be a sync's.
+            let holdForField = fieldBefore?.value != nil
             let checkedSecureInput = focus.isSecureInputEnabled
             var checked = now
             if axReads {
@@ -356,7 +360,7 @@ public final class TextInserter {
                         method: .paste, outcome: .partialPaste,
                         focusMoved: moved, target: now, finalText: spaced)
                 }
-            } else if !clipboard.paste(spaced, keyCode: keyCode, targetPID: now.pid) {
+            } else if !clipboard.paste(spaced, keyCode: keyCode, targetPID: now.pid, holdForField: holdForField) {
                 clipboard.copy(spaced)
                 Log.app.error("could not post the paste event; transcript left on the clipboard")
                 return DeliveryResult(
@@ -373,7 +377,7 @@ public final class TextInserter {
                 )
             }
             startVerification(
-                generation: generation, pasted: spaced, target: now,
+                generation: generation, pasted: spaced, target: now, lease: clipboard.pasteGeneration,
                 baseline: fieldBefore.map {
                     PasteVerifier.Baseline(
                         reading: $0, input: afterInput,
@@ -382,7 +386,7 @@ public final class TextInserter {
             )
             return DeliveryResult(
                 method: .paste, outcome: .unknown, focusMoved: moved, target: now, finalText: spaced,
-                verificationID: generation
+                verificationID: generation, transcriptStaysOnClipboard: clipboard.transcriptStays
             )
         }
     }
@@ -470,7 +474,9 @@ public final class TextInserter {
     }
 
     /// Re-reads the field after the chord and reports. A task of its own so `deliver` doesn't wait for it.
-    private func startVerification(generation: Int, pasted: String, target: FocusSnapshot, baseline: PasteVerifier.Baseline?) {
+    private func startVerification(
+        generation: Int, pasted: String, target: FocusSnapshot, lease: Int, baseline: PasteVerifier.Baseline?
+    ) {
         let offsets = Self.verifyOffsets
         verification = Task { [weak self] in
             var observations: [PasteVerifier.Observation] = []
@@ -484,7 +490,10 @@ public final class TextInserter {
                 guard let baseline else { continue }
                 let observation = self.observe(target)
                 observations.append(observation)
-                if PasteVerifier.confirms(observation, baseline: baseline, pasted: pasted) { break }
+                if PasteVerifier.confirms(observation, baseline: baseline, pasted: pasted) {
+                    self.clipboard.fieldShowedPaste(generation: lease)
+                    break
+                }
             }
             guard let self, !Task.isCancelled, self.deliveryGeneration == generation else { return }
             let verdict = PasteVerifier.judge(baseline: baseline, pasted: pasted, observations: observations, expected: offsets.count)
@@ -707,6 +716,9 @@ struct PasteboardRepresentation: Equatable {
 /// Every representation of every item on a pasteboard, so text, images and copied Finder files all come back.
 struct PasteboardSnapshot: Equatable {
     var items: [[PasteboardRepresentation]]
+    /// The pasteboard also carried a file promise, which was left out: its provider lives in the app that copied, and
+    /// a copy of its metadata put back later would be a promise nothing can keep.
+    var droppedFilePromise = false
 }
 
 @MainActor
@@ -777,6 +789,12 @@ final class PasteReceipts: @unchecked Sendable {
 /// once the target has read it: 200 ms after the last read, or after a cap if nothing ever reads it. A second paste
 /// before that restore keeps the first snapshot, so the user's own clipboard comes back, not an earlier transcript.
 /// If anything else writes the clipboard during the window, that write wins and nothing is restored.
+///
+/// A read of the promise is evidence the target has the text, not proof: a clipboard sync (a VM's, Barrier's, an
+/// older clipboard manager's) can read within 50 ms while a slow target (an IDE, Excel, a remote desktop) reads at
+/// 300 ms or later, and a restore timed off the sync's read makes the target paste the user's previous clipboard. So
+/// a paste into a field whose text can be read back holds the restore until the read-back has seen the text in the
+/// field, for at most `fieldHoldCap` past the chord; a paste nobody could read back restores off the receipt alone.
 @MainActor
 final class PasteboardSession {
     /// nspasteboard.org markers: clipboard managers skip items carrying these.
@@ -792,6 +810,11 @@ final class PasteboardSession {
     static let receiptCap: TimeInterval = 8
     /// The restore delay when a read came before the chord and so no receipt can follow.
     static let unobservedDelay: TimeInterval = 0.25
+    /// How long past the chord a paste into a readable field may keep the clipboard while the field has not shown the
+    /// text. Covers the last read-back (`TextInserter.verifyOffsets`) with room for the read itself; after that no more
+    /// evidence is coming, and a field that rewrites the text beyond recognition must not cost the user their clipboard
+    /// for longer than it takes them to reach for Cmd+V.
+    static let fieldHoldCap: TimeInterval = 1.2
 
     typealias Schedule = @MainActor (TimeInterval, @escaping @MainActor () -> Void) -> Void
 
@@ -806,8 +829,11 @@ final class PasteboardSession {
     private let poster: PasteEventPosting
     private let schedule: Schedule
 
-    /// The user's clipboard while a restore is pending.
+    /// The user's clipboard while a restore is pending. Nil during a lease that has nothing to put back.
     private var saved: PasteboardSnapshot?
+    /// Our paste is on the clipboard and its lease has not ended. Kept apart from `saved`: a lease over a clipboard
+    /// that can't be put back still has to run its course before the next paste may replace the promise.
+    private var leased = false
     /// The change count right after our last write.
     private var ourChangeCount = 0
     /// Bumped on every write; only the latest scheduled restore runs.
@@ -817,6 +843,10 @@ final class PasteboardSession {
     private var receipts: PasteReceipts?
     private var holdingRestore = false
     private var restoredGeneration: Int?
+    /// The current paste keeps the clipboard until the field shows its text, or `fieldHoldCap`.
+    private var fieldHold = false
+    /// A restore came due while the field hold was on; it runs the moment the hold lifts.
+    private var restoreDeferred = false
 
     init(pasteboard: PasteboardAccess, poster: PasteEventPosting, schedule: @escaping Schedule = PasteboardSession.mainSchedule) {
         self.pasteboard = pasteboard
@@ -826,6 +856,9 @@ final class PasteboardSession {
 
     var isRestorePending: Bool { saved != nil }
 
+    /// The current lease leaves the transcript on the clipboard: what was there can't be put back.
+    var transcriptStays: Bool { leased && saved == nil }
+
     func pressReturn(targetPID: pid_t?) -> Bool { poster.postReturn(targetPID: targetPID) }
 
     var pasteGeneration: Int { generation }
@@ -833,7 +866,7 @@ final class PasteboardSession {
     var hadEarlyRead: Bool { receipts?.hadEarlyRead ?? false }
 
     func holdsPaste(_ expected: Int) -> Bool {
-        generation == expected && saved != nil && pasteboard.changeCount == ourChangeCount
+        generation == expected && leased && pasteboard.changeCount == ourChangeCount
     }
 
     func wasRestored(_ expected: Int) -> Bool {
@@ -865,13 +898,32 @@ final class PasteboardSession {
     }
 
     /// False when the paste event could not be posted; the clipboard then still holds `text` and no restore is scheduled.
-    func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?) -> Bool {
-        if saved == nil || pasteboard.changeCount != ourChangeCount {
-            saved = pasteboard.snapshot()
+    ///
+    /// `holdForField` is for a field whose text could be read before the paste: the restore then waits for
+    /// `fieldShowedPaste` (or `fieldHoldCap`) on top of the receipt, since the first read of the promise may be a
+    /// clipboard sync's and not the target's.
+    ///
+    /// A clipboard holding only a file promise (a copied Photos picture, a Mail attachment) has nothing that can be
+    /// put back; the paste goes ahead, the lease runs as usual, and the transcript stays on the clipboard after it.
+    func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?, holdForField: Bool = false) -> Bool {
+        // Snapshot what someone else put there, or what was left to stay. Never our own promise mid-lease: the parts
+        // of a long paste share the one snapshot taken before the first.
+        if pasteboard.changeCount != ourChangeCount || (!leased && saved == nil) {
+            let snapshot = pasteboard.snapshot()
+            if snapshot.items.isEmpty, snapshot.droppedFilePromise {
+                Log.app.info("clipboard holds only a file promise, which can't be put back; the transcript will stay")
+                saved = nil
+            } else {
+                if snapshot.droppedFilePromise { Log.app.info("clipboard carried a file promise; the rest of it comes back") }
+                saved = snapshot
+            }
         }
         generation += 1
         restoredGeneration = nil
         receiptCount = 0
+        leased = true
+        fieldHold = holdForField
+        restoreDeferred = false
         let current = generation
         let receipts = PasteReceipts()
         self.receipts = receipts
@@ -888,6 +940,11 @@ final class PasteboardSession {
                 self?.restore(ifGeneration: current)
             }
         }
+        if holdForField {
+            schedule(Self.fieldHoldCap) { [weak self] in
+                self?.liftFieldHold(generation: current, fieldShowedPaste: false)
+            }
+        }
         return true
     }
 
@@ -902,7 +959,7 @@ final class PasteboardSession {
     }
 
     private func receiptArrived(generation expected: Int) {
-        guard expected == generation, saved != nil else { return }
+        guard expected == generation, leased else { return }
         receiptCount += 1
         let count = receiptCount
         schedule(Self.receiptSettle) { [weak self] in
@@ -910,9 +967,32 @@ final class PasteboardSession {
         }
     }
 
+    /// The read-back saw the pasted text in the field: the target has it, and the clipboard can go back.
+    func fieldShowedPaste(generation expected: Int) {
+        liftFieldHold(generation: expected, fieldShowedPaste: true)
+    }
+
+    /// Ends the field hold. A restore that came due meanwhile runs now; otherwise the field showing the text is itself
+    /// a receipt, with the usual settle, for the rare target whose read never called back.
+    private func liftFieldHold(generation expected: Int, fieldShowedPaste: Bool) {
+        guard expected == generation, fieldHold else { return }
+        fieldHold = false
+        if restoreDeferred {
+            restoreDeferred = false
+            restore(ifGeneration: expected)
+        } else if fieldShowedPaste {
+            schedule(Self.receiptSettle) { [weak self] in
+                self?.restore(ifGeneration: expected)
+            }
+        }
+    }
+
     /// Puts `text` on the clipboard to stay. Drops any pending restore, which would otherwise overwrite it.
     func copy(_ text: String) {
         saved = nil
+        leased = false
+        fieldHold = false
+        restoreDeferred = false
         generation += 1
         restoredGeneration = nil
         receipts = nil
@@ -920,25 +1000,37 @@ final class PasteboardSession {
         ourChangeCount = pasteboard.changeCount
     }
 
+    /// The app is quitting: whatever the field has or hasn't shown, the clipboard goes back now.
     func restoreForTermination() {
         holdingRestore = false
+        fieldHold = false
+        restoreDeferred = false
         restore(ifGeneration: generation)
         saved = nil
+        leased = false
         generation += 1
         receipts = nil
         restoredGeneration = nil
     }
 
     private func restore(ifGeneration expected: Int, receiptCount expectedCount: Int? = nil) {
-        guard !holdingRestore, expected == generation, let snapshot = saved else { return }
+        guard !holdingRestore, expected == generation, leased else { return }
         if let expectedCount, expectedCount != receiptCount { return }
+        if fieldHold {
+            restoreDeferred = true
+            return
+        }
+        leased = false
+        let snapshot = saved
         saved = nil
         guard pasteboard.changeCount == ourChangeCount else {
             Log.app.info("clipboard changed during paste; not restoring")
             return
         }
-        pasteboard.restore(snapshot)
-        ourChangeCount = pasteboard.changeCount
+        if let snapshot {
+            pasteboard.restore(snapshot)
+            ourChangeCount = pasteboard.changeCount
+        }
         restoredGeneration = expected
     }
 }
@@ -992,13 +1084,30 @@ final class SystemPasteboard: PasteboardAccess {
 
     var changeCount: Int { pasteboard.changeCount }
 
+    /// The types `NSFilePromiseProvider` writes (Photos, Mail and Safari image copies carry them), the URL a receiver
+    /// adds once it has taken the files, and the pre-10.12 promise type. An ordinary Finder copy is `public.file-url`
+    /// and `NSFilenamesPboardType`; an image copy is `public.tiff` or `public.png`. Neither is here.
+    static let filePromiseTypes: Set<String> = [
+        "com.apple.pasteboard.promised-file-url", "com.apple.pasteboard.promised-file-content-type",
+        "com.apple.pasteboard.promised-file-name", "com.apple.pasteboard.promised-suggested-file-name",
+        "com.apple.pasteboard.NSFilePromiseID", "com.apple.NSFilePromiseItemMetaData",
+        "Apple files promise pasteboard type",
+    ]
+
+    /// Every type of every item, except a file promise's: its files are written by the copying app on demand, into a
+    /// folder the receiver names, so there is nothing to read now and nothing a restore could offer later. The other
+    /// representations riding with it (the image bytes, a URL) still come back.
     func snapshot() -> PasteboardSnapshot {
-        let items = (pasteboard.pasteboardItems ?? []).map { item in
-            item.types.compactMap { type in
+        var dropped = false
+        let items = (pasteboard.pasteboardItems ?? []).compactMap { item -> [PasteboardRepresentation]? in
+            let kept = item.types.filter { !Self.filePromiseTypes.contains($0.rawValue) }
+            if kept.count < item.types.count { dropped = true }
+            let representations = kept.compactMap { type in
                 item.data(forType: type).map { PasteboardRepresentation(type: type.rawValue, data: $0) }
             }
+            return representations.isEmpty && kept.count < item.types.count ? nil : representations
         }
-        return PasteboardSnapshot(items: items)
+        return PasteboardSnapshot(items: items, droppedFilePromise: dropped)
     }
 
     func currentString() -> String? {
