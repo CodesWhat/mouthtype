@@ -2,7 +2,7 @@
 # Build and check the AUR package in a disposable archlinux container. Run as root (the script makes a build
 # user), from anywhere:
 #
-#   bash ~/scripts/nas-docker.sh --exec ... archlinux:latest bash packaging/arch/aur/test-aur.sh
+#   bash packaging/arch/aur/nas-test.sh        (stages the checkout and runs this in a NAS testbed container)
 #
 # The repo checkout must be mounted or copied in; set MOUTHTYPE_REPO to its path (default: this script's repo).
 # It changes the container it runs in, so do not run it on a machine you care about.
@@ -24,7 +24,7 @@ echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
 step "stage sources"
 work=/home/builder/aur
 rm -rf "$work"; mkdir -p "$work"
-cp "$repo"/packaging/arch/aur/{PKGBUILD,.SRCINFO,mouthtype-linux.install,mouthtype-linux.service,mouthtype-linux-setup} "$work"/
+cp "$repo"/packaging/arch/aur/{PKGBUILD,.SRCINFO,check-srcinfo.sh,mouthtype-linux.install,mouthtype-linux.service,mouthtype-linux-setup} "$work"/
 # Local checkout as the git source: copy the tree and commit it in a throwaway repo, so uncommitted work builds too.
 src=/home/builder/src.git
 rm -rf "$src"; mkdir -p "$src"
@@ -34,6 +34,7 @@ chown -R builder:builder /home/builder
 sudo -u builder bash -ec "
     cd '$src' && git init -q -b main && git add -A && git -c user.name=t -c user.email=t@t commit -qm test
     cd '$work'
+    bash check-srcinfo.sh
     # Same PKGBUILD, source swapped to the local checkout (the only edit).
     sed -i 's|git+https://github.com/CodesWhat/mouthtype.git|git+file://$src|' PKGBUILD
     makepkg -si --noconfirm

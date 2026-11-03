@@ -22,8 +22,16 @@ bundle. They are separate on purpose and do not carry the plugin.
 - `bash packaging/arch/aur/test-aur.sh` builds the package from the local checkout in a disposable
   `archlinux:latest` container (run as root there), installs it, asserts the client, the first-run unit link
   and the plugin are owned by the package, runs `namcap` (errors fail, warnings print), then removes it and
-  asserts nothing is left under `/usr/lib/mouthtype-linux`. On the NAS testbed:
-  `bash ~/scripts/nas-docker.sh run --rm -v "$(bash ~/scripts/nas-docker.sh --sync .)":/repo:ro -e MOUTHTYPE_REPO=/repo archlinux:latest bash /repo/packaging/arch/aur/test-aur.sh`
+  asserts nothing is left under `/usr/lib/mouthtype-linux`. On the NAS testbed, run
+  `bash packaging/arch/aur/nas-test.sh`: it stages the checkout with `nas-docker.sh --sync`, runs one uniquely
+  named `--rm` container from `archlinux:latest`, and removes it on exit. It never touches local Docker. A full run
+  installs about 150 MiB of build dependencies. The build runs as a normal user inside a throwaway container,
+  which is what `makepkg -si` needs. It isn't `devtools`' `extra-x86_64-build` (that needs nspawn and bind mounts
+  the NAS engine can't give), so "clean chroot" here means a fresh container per run.
+- `-git` against a release PKGBUILD: the `-git` package takes its version from the commit count and tracks a
+  branch, so every build differs and nothing is pinned. A release `mouthtype-linux` PKGBUILD would pin a tag and a
+  checksum, give AUR users a reproducible build and upgrades by version, and cost a `.SRCINFO` and checksum bump
+  per release. It needs a tagged public release first, so only `-git` exists for now.
 - `bash packaging/arch/aur/check-srcinfo.sh` regenerates `.SRCINFO` and fails on a diff. Run it as a normal
   user on Arch (makepkg refuses root). Regenerate with `makepkg --printsrcinfo > .SRCINFO` after any
   `PKGBUILD` change.
