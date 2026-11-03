@@ -321,9 +321,33 @@ public final class TranscriptStore: Sendable {
         }
     }
 
-    public func delete(_ id: String) throws {
+    /// Deletes the take. With an `archive`, its archived WAV and in-progress copy go too, so no audio outlives its row.
+    public func delete(_ id: String, archive: AudioArchive? = nil) throws {
         try pool.write { db in try db.execute(sql: "DELETE FROM dictation WHERE id = ?", arguments: [id]) }
+        archive?.remove(id: id)
         inputsChanged(notify: true)
+    }
+
+    /// Every id with a row. Audio whose id is not here is never removed.
+    public func dictationIDs() throws -> Set<String> {
+        try pool.read { db in Set(try String.fetchAll(db, sql: "SELECT id FROM dictation")) }
+    }
+
+    /// Failed and never-finished takes. Their audio is kept for recovery until the recovery grace passes.
+    public func recoveryAudioIDs() throws -> Set<String> {
+        try pool.read { db in
+            Set(
+                try String.fetchAll(
+                    db, sql: "SELECT id FROM dictation WHERE status IN (?, ?, ?, ?)",
+                    arguments: [DictationStatus.failed, DictationStatus.started, DictationStatus.recorded, DictationStatus.transcribed]))
+        }
+    }
+
+    /// Ids and stored paths of every row that still points at audio.
+    public func audioPaths() throws -> [(id: String, path: String)] {
+        try pool.read { db in
+            try Row.fetchAll(db, sql: "SELECT id, audio_path FROM dictation WHERE audio_path IS NOT NULL").map { ($0["id"], $0["audio_path"]) }
+        }
     }
 
     /// Clears `audio_path` and `audio_expires_at` for rows whose audio was purged.

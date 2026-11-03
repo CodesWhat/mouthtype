@@ -95,25 +95,150 @@ import Testing
     }
 
     @Test(arguments: [false, true])
-    func unfinishedAndFailedRecoveryAudioSurvivesMaintenanceBeforeOrAfterStartupScan(scanFirst: Bool) throws {
+    func recentUnfinishedAndFailedAudioSurvivesAndExpiredIsRemovedBeforeOrAfterStartupScan(scanFirst: Bool) throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
         let archive = AudioArchive(supportDirectory: dir)
         let now = Date()
-        for (id, status) in [("unfinished", DictationStatus.recorded), ("failed", .failed)] {
+        // Under a 14-day setting, a take inside the recovery grace survives and one past it goes.
+        let cases: [(id: String, status: DictationStatus, age: Double)] = [
+            ("unfinished-recent", .recorded, 20), ("failed-recent", .failed, 20),
+            ("unfinished-old", .recorded, 120), ("failed-old", .failed, 120),
+        ]
+        for (id, status, age) in cases {
             try store.begin(DictationStart(id: id, startedAt: now.addingTimeInterval(-60)))
             let audio = try archive.write(samples: [0.1, 0.2], id: id)
             try store.recordCapture(id, CaptureRecord(audioPath: audio.url.path))
-            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-120 * 86_400)], ofItemAtPath: audio.url.path)
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-age * 86_400)], ofItemAtPath: audio.url.path)
             if status == .failed { try store.finish(id, status: .failed) }
         }
         if scanFirst { _ = try DictationRecovery.scan(store: store, archive: archive, now: now, launchedAt: now) }
         let removed = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
-        #expect(removed.isEmpty)
-        for id in ["unfinished", "failed"] {
+        #expect(Set(removed) == ["unfinished-old", "failed-old"])
+        for id in ["unfinished-recent", "failed-recent"] {
             #expect(FileManager.default.fileExists(atPath: archive.url(for: id).path))
             #expect(try store.dictation(id: id)?.audioPath != nil)
         }
+        for id in ["unfinished-old", "failed-old"] {
+            #expect(!FileManager.default.fileExists(atPath: archive.url(for: id).path))
+            #expect(try store.dictation(id: id)?.audioPath == nil)
+        }
+    }
+
+    @Test func partialsSurviveInsideTheRecoveryGraceAndGoAfterIt() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        for (id, age) in [("fresh", 2.0), ("stale", 120.0)] {
+            try store.begin(DictationStart(id: id, startedAt: now.addingTimeInterval(-age * 86_400)))
+            try archive.appendPartial(samples: [0.1, 0.2], id: id)
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-age * 86_400)], ofItemAtPath: archive.partialURL(for: id).path)
+        }
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
+        #expect(FileManager.default.fileExists(atPath: archive.partialURL(for: "fresh").path))
+        #expect(!FileManager.default.fileExists(atPath: archive.partialURL(for: "stale").path))
+    }
+
+    @Test func deletingATakeWithTheArchiveRemovesItsAudioAndPartial() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        try store.begin(DictationStart(id: "gone"))
+        let audio = try archive.write(samples: [0.1, 0.2], id: "gone")
+        try archive.appendPartial(samples: [0.1], id: "gone")
+        try store.recordCapture("gone", CaptureRecord(audioPath: audio.url.path))
+        try store.delete("gone", archive: archive)
+        #expect(!FileManager.default.fileExists(atPath: archive.url(for: "gone").path))
+        #expect(!FileManager.default.fileExists(atPath: archive.partialURL(for: "gone").path))
+    }
+
+    @Test func pruneNeverRemovesAudioThatHasNoRow() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        var urls: [URL] = []
+        for id in ["a", "b"] { urls.append(try archive.write(samples: [0.1, 0.2], id: id).url) }
+        // An emptied or restored database has no rows for any of it.
+        for url in urls { try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-400 * 86_400)], ofItemAtPath: url.path) }
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
+        for url in urls { #expect(FileManager.default.fileExists(atPath: url.path)) }
+    }
+
+    @Test func prunePutsStalePartialsThroughTheRetentionPolicy() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        try store.begin(DictationStart(id: "p", startedAt: now.addingTimeInterval(-120 * 86_400)))
+        try archive.appendPartial(samples: [0.1, 0.2], id: "p")
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-120 * 86_400)], ofItemAtPath: archive.partialURL(for: "p").path)
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .noAgeLimit), now: now)
+        #expect(FileManager.default.fileExists(atPath: archive.partialURL(for: "p").path))
+    }
+
+    @Test func pruneLeavesPointersAloneWhenTheArchiveDirectoryIsMissing() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        try store.begin(DictationStart(id: "x"))
+        try store.recordCapture("x", CaptureRecord(audioPath: archive.url(for: "x").path))
+        try store.recordInsertion("x", InsertionRecord(finalText: "Hi."))
+        #expect(archive.listedFileNames() == nil)
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: Date())
+        #expect(try store.dictation(id: "x")?.audioPath != nil)
+    }
+
+    @Test func pruneKeepsAStalePartialWhoseRowIsGone() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        try archive.appendPartial(samples: [0.1, 0.2], id: "no-row")
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-400 * 86_400)], ofItemAtPath: archive.partialURL(for: "no-row").path)
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
+        #expect(FileManager.default.fileExists(atPath: archive.partialURL(for: "no-row").path))
+    }
+
+    @Test func pruneLeavesPointersAloneWhenTheArchiveDirectoryIsEmpty() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        try FileManager.default.createDirectory(at: archive.directory, withIntermediateDirectories: true)
+        try store.begin(DictationStart(id: "x"))
+        try store.recordCapture("x", CaptureRecord(audioPath: archive.url(for: "x").path))
+        try store.recordInsertion("x", InsertionRecord(finalText: "Hi."))
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: Date())
+        #expect(try store.dictation(id: "x")?.audioPath != nil)
+    }
+
+    @Test func pruneClearsPointersWhoseFileIsMissingButKeepsRelocatedOnes() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        try store.begin(DictationStart(id: "lost"))
+        let lost = try archive.write(samples: [0.1, 0.2], id: "lost")
+        try store.recordCapture("lost", CaptureRecord(audioPath: lost.url.path, audioExpiresAt: now))
+        try store.recordInsertion("lost", InsertionRecord(finalText: "Hi."))
+        try FileManager.default.removeItem(at: lost.url)  // a crash after the delete, before the pointer was cleared
+        try store.begin(DictationStart(id: "moved"))
+        _ = try archive.write(samples: [0.1, 0.2], id: "moved")
+        try store.recordCapture("moved", CaptureRecord(audioPath: "/Users/old-name/audio/moved.wav"))
+        try store.recordInsertion("moved", InsertionRecord(finalText: "Hi."))
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
+        let row = try #require(try store.dictation(id: "lost"))
+        #expect(row.audioPath == nil && row.audioExpiresAt == nil && row.finalText == "Hi.")
+        #expect(try store.dictation(id: "moved")?.audioPath != nil)
     }
 }
