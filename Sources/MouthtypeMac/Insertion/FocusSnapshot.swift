@@ -20,6 +20,9 @@ public struct FocusSnapshot: Sendable {
     /// alone says nothing about which app the field is in.
     var focusedApplicationPID: pid_t?
     public var isSecure: Bool
+    /// A role, subrole or protected-content read timed out or failed, as opposed to returning no value. Under Secure
+    /// Input an unreadable field can't be ruled out as a password field.
+    var readsFailed: Bool
     /// For static text only: whether its value or selection can be set. Nil for every other role, or when unread.
     var isTextSettable: Bool?
     /// The focused element, if the app exposes one over Accessibility.
@@ -27,7 +30,7 @@ public struct FocusSnapshot: Sendable {
 
     init(
         pid: pid_t? = nil, bundleID: String? = nil, appName: String? = nil, windowTitle: String? = nil,
-        role: String? = nil, subrole: String? = nil, isSecure: Bool = false, isTextSettable: Bool? = nil,
+        role: String? = nil, subrole: String? = nil, isSecure: Bool = false, readsFailed: Bool = false, isTextSettable: Bool? = nil,
         element: FocusedElement? = nil, focusedOwnerPID: pid_t? = nil, focusedApplicationPID: pid_t? = nil
     ) {
         self.pid = pid
@@ -37,10 +40,21 @@ public struct FocusSnapshot: Sendable {
         self.role = role
         self.subrole = subrole
         self.isSecure = isSecure
+        self.readsFailed = readsFailed
         self.isTextSettable = isTextSettable
         self.element = element
         self.focusedOwnerPID = focusedOwnerPID
         self.focusedApplicationPID = focusedApplicationPID
+    }
+
+    static let secureInputPasteRoles: Set<String> = ["AXTextField", "AXTextArea", "AXComboBox", "AXStaticText"]
+
+    /// Positive evidence that the focused element is an ordinary text field. Secure Input on means some field in the
+    /// system is a password field, so a paste needs this and not just the absence of a secure marker.
+    var isConfirmedNormalField: Bool {
+        guard element != nil, !readsFailed, !isSecure, let role, Self.secureInputPasteRoles.contains(role) else { return false }
+        if role == "AXStaticText", isTextSettable != true { return false }
+        return subrole != kAXSecureTextFieldSubrole as String
     }
 
     public var target: DictationTarget {
@@ -205,12 +219,17 @@ final class AccessibilityFocusReader: FocusReading {
         }
         // Each read below re-derives its timeout from what's left of the deadline, and none is issued once it has passed.
         // The caller sees the expired deadline and treats the whole capture as timed out.
+        snapshot.readsFailed = true
         if Self.deadlinePassed { return snapshot }
-        snapshot.role = stringValue(bounded(element), kAXRoleAttribute)
+        let role = readString(bounded(element), kAXRoleAttribute)
+        snapshot.role = role.value
         if Self.deadlinePassed { return snapshot }
-        snapshot.subrole = stringValue(bounded(element), kAXSubroleAttribute)
+        let subrole = readString(bounded(element), kAXSubroleAttribute)
+        snapshot.subrole = subrole.value
         if Self.deadlinePassed { return snapshot }
-        snapshot.isSecure = isSecure(bounded(element), subrole: snapshot.subrole)
+        let secure = secureStatus(bounded(element), subrole: snapshot.subrole)
+        snapshot.isSecure = secure.isSecure
+        snapshot.readsFailed = !(role.ok && subrole.ok && secure.readable)
         if Self.deadlinePassed { return snapshot }
         if snapshot.role == "AXStaticText" { snapshot.isTextSettable = isTextSettable(bounded(element)) }
         if Self.deadlinePassed { return snapshot }
@@ -370,6 +389,17 @@ final class AccessibilityFocusReader: FocusReading {
         return bounded(value as! AXUIElement)
     }
 
+    /// Like `stringValue`, but says whether the read worked. An app with no value or no such attribute answered; a timeout
+    /// or any other error did not.
+    private func readString(_ element: AXUIElement, _ attribute: String) -> (value: String?, ok: Bool) {
+        var value: CFTypeRef?
+        switch AXUIElementCopyAttributeValue(element, attribute as CFString, &value) {
+        case .success: return (value as? String, true)
+        case .noValue, .attributeUnsupported: return (nil, true)
+        default: return (nil, false)
+        }
+    }
+
     private func stringValue(_ element: AXUIElement, _ attribute: String) -> String? {
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
@@ -383,13 +413,19 @@ final class AccessibilityFocusReader: FocusReading {
     /// Secure only when the element says so. An element that cannot be read is not treated as secure, or every app
     /// without Accessibility support would lose its dictation.
     func isSecure(_ element: AXUIElement, subrole: String?) -> Bool {
-        if subrole == kAXSecureTextFieldSubrole as String { return true }
+        secureStatus(element, subrole: subrole).isSecure
+    }
+
+    /// `readable` is false when the protected-content read failed rather than answering.
+    func secureStatus(_ element: AXUIElement, subrole: String?) -> (isSecure: Bool, readable: Bool) {
+        if subrole == kAXSecureTextFieldSubrole as String { return (true, true) }
         var protected: CFTypeRef?
         let attribute = NSAccessibility.Attribute.containsProtectedContent.rawValue as CFString
-        if AXUIElementCopyAttributeValue(element, attribute, &protected) == .success, let protected = protected as? Bool {
-            return protected
+        switch AXUIElementCopyAttributeValue(element, attribute, &protected) {
+        case .success: return (protected as? Bool ?? false, true)
+        case .noValue, .attributeUnsupported: return (false, true)
+        default: return (false, false)
         }
-        return false
     }
 
     /// Whether the element's value or selected text can be set, which static text never can unless it is a field.

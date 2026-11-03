@@ -10,10 +10,11 @@ enum DeliveryDecision: Equatable {
     /// Nothing is frontmost to paste into: leave the transcript on the clipboard.
     case clipboardOnly
 
-    /// Only the field at delivery counts. Secure input on with a readable, non-secure field is paste: other apps
-    /// leave it on. With no readable field a password field can't be ruled out, so that discards.
+    /// Only the field at delivery counts. Other apps leave Secure Input on, so with it on a paste needs a field
+    /// confirmed as ordinary text: a readable text role and subrole, not secure or protected. Containers, unknown roles
+    /// and timed-out reads can't rule out a password field, so those discard.
     static func decide(now: FocusSnapshot, secureInput: Bool) -> DeliveryDecision {
-        if now.isSecure || (secureInput && now.element == nil) { return .discardSecure }
+        if now.isSecure || (secureInput && !now.isConfirmedNormalField) { return .discardSecure }
         if now.pid == nil { return .clipboardOnly }
         return .paste
     }
