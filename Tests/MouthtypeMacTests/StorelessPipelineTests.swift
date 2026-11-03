@@ -31,14 +31,14 @@ private final class StubEngine: DictationEngine {
             deviceTransport: "test", firstSampleMs: 0, firstNonzeroMs: 0, captureStartMs: 0, audioMs: 100)
     }
 
-    @Test func withoutAStoreNoWavIsWritten() async {
+    @Test func withoutAStoreTheWavIsStillArchived() async {
         let archive = SpyArchive()
         let clock = SystemDictationClock()
         let pipeline = DictationPipeline(store: nil, archive: archive, engine: StubEngine(text: "hi"), clock: clock)
         let session = DictationSession(id: "orphan", startedAt: clock.now(), keyDownAt: clock.nowNanos())
         let result = await pipeline.recordCaptureAndArchive(capture(), session: session, keyUpMs: 10)
-        #expect(archive.ids.isEmpty)
-        #expect(!result.durable)
+        #expect(archive.ids == ["orphan"])
+        #expect(result.durable)
     }
 
     @Test func withAStoreTheWavIsStillWritten() async throws {
