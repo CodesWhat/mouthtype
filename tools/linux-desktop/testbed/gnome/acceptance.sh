@@ -16,6 +16,9 @@ if [[ "${1:-}" != --inner ]]; then
 fi
 
 out=$2
+# mutter's wake_stage parks the pointer in the top-left corner; with hot corners on that opens the Overview.
+gsettings set org.gnome.desktop.interface enable-hot-corners false
+
 gnome-shell --headless --unsafe-mode --wayland --no-x11 --virtual-monitor 1280x800 > "$out/gnome-shell.log" 2>&1 &
 shell_pid=$!
 trap 'kill "$shell_pid" 2>/dev/null || true' EXIT
