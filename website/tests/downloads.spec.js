@@ -22,7 +22,7 @@ for (const width of [1440, 320]) {
     });
     await expect(download).toBeVisible();
     await expect(download).toHaveAttribute("href", "/download/");
-    await expect(page.locator(".availability")).toContainText("0.11.0");
+    await expect(page.locator(".availability")).toContainText("0.12.0");
     await expect(page.locator(".availability")).toContainText("macOS 26+");
     await expect(page.locator(".availability")).toContainText("APPLE SILICON");
     await expect(page.locator("#alpha")).toContainText("stable release");
@@ -32,12 +32,12 @@ for (const width of [1440, 320]) {
     await download.click();
     await expect(page).toHaveURL(/\/download\/?$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Mouthtype for Mac.");
-    await expect(page.locator("main")).toContainText("0.11.0");
+    await expect(page.locator("main")).toContainText("0.12.0");
     await expect(page.getByRole("link", { name: "Source code (GPL-3.0)", exact: false })).toHaveAttribute("href", "/source");
     const { starts, next, filenameOf } = watchDownloads(page, browserName);
     await page.route("**/download/file", (route) => route.fulfill({
       status: 200,
-      headers: { "content-type": "application/x-apple-diskimage", "content-disposition": 'attachment; filename="Mouthtype-0.11.0-macos-arm64.dmg"' },
+      headers: { "content-type": "application/x-apple-diskimage", "content-disposition": 'attachment; filename="Mouthtype-0.12.0-macos-arm64.dmg"' },
       body: "Download timing fixture, not a Mouthtype distribution.",
     }));
     await expect(page.getByRole("status")).toContainText("5 seconds");
@@ -46,7 +46,7 @@ for (const width of [1440, 320]) {
     const result = next();
     await page.clock.runFor(1);
     const item = await result;
-    if (filenameOf(item)) expect(filenameOf(item)).toBe("Mouthtype-0.11.0-macos-arm64.dmg");
+    if (filenameOf(item)) expect(filenameOf(item)).toBe("Mouthtype-0.12.0-macos-arm64.dmg");
     await page.clock.runFor(10000);
     expect(starts).toHaveLength(1);
     await expect(page.getByRole("status")).toContainText("requested");
@@ -59,7 +59,7 @@ for (const width of [1440, 320]) {
   });
 }
 
-test("installation and update help cover 0.11.0 and the manual first upgrade", async ({
+test("installation and update help cover 0.12.0 and the manual first upgrade", async ({
   page,
 }) => {
   await page.goto("/start/");
@@ -72,7 +72,7 @@ test("installation and update help cover 0.11.0 and the manual first upgrade", a
   await expect(page.locator("#install")).not.toContainText(
     "person who invited you",
   );
-  await expect(page.locator("#install")).toContainText("0.11.0");
+  await expect(page.locator("#install")).toContainText("0.12.0");
   await expect(page.locator("#your-build")).toContainText(
     "General, Mac, Health and an optional Advanced page",
   );
