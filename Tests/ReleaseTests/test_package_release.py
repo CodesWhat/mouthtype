@@ -1,10 +1,13 @@
 import importlib.util
+import json
+import os
 import pathlib
 import plistlib
 import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 import zipfile
 
 SCRIPT = pathlib.Path(__file__).resolve().parents[2] / 'scripts/package-release.py'
@@ -133,6 +136,112 @@ class NotaryAuthTests(unittest.TestCase):
         self.store('ASC_KEY_ID=FAKEKEY123\n', 'FAKEKEY123')
         with self.assertRaises(RuntimeError):
             release.notary_auth(None, self.directory)
+
+
+class DmgIdentityTests(unittest.TestCase):
+    def test_returns_the_developer_id_authority(self):
+        output = ('Executable=/x\nAuthority=Developer ID Application: CodesWhat (TEAM)\n'
+                  'Authority=Developer ID Certification Authority\nAuthority=Apple Root CA\n')
+        self.assertEqual(release.dmg_identity(output), 'Developer ID Application: CodesWhat (TEAM)')
+
+    def test_missing_developer_id_is_rejected(self):
+        for output in ['', 'Authority=Apple Root CA\n']:
+            with self.subTest(output=output):
+                with self.assertRaises(RuntimeError):
+                    release.dmg_identity(output)
+
+
+class NotarizeTests(unittest.TestCase):
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.output = pathlib.Path(self._temp.name)
+        self.calls = []
+        self.logs = []
+
+    def fake_run(self, wait):
+        def run(args, *, cwd=None, timeout=60, log=None):
+            self.calls.append(list(args))
+            verb = args[2]
+            if log:
+                self.logs.append((verb, pathlib.Path(log).name))
+            if verb == 'submit':
+                return '{"id":"abc"}'
+            if verb == 'wait':
+                if isinstance(wait, Exception):
+                    raise wait
+                return wait
+            return ''
+        return run
+
+    def verbs(self):
+        return [call[2] for call in self.calls]
+
+    def test_accepted_submission_returns_the_id_and_writes_the_result(self):
+        with unittest.mock.patch.object(release, 'run', self.fake_run('{"status":"Accepted"}')):
+            submission_id, status = release.notarize(pathlib.Path('/x.zip'), ['--key', 'k'], self.output)
+        self.assertEqual(submission_id, 'abc')
+        self.assertEqual(status, {'status': 'Accepted'})
+        result = json.loads((self.output / 'notarization-result.json').read_text())
+        self.assertEqual(result, {'status': 'Accepted'})
+        self.assertEqual(self.verbs(), ['submit', 'wait'])
+
+    def test_rejected_submission_fetches_the_log_and_raises(self):
+        with unittest.mock.patch.object(release, 'run', self.fake_run('{"status":"Invalid"}')):
+            with self.assertRaisesRegex(RuntimeError, 'Invalid'):
+                release.notarize(pathlib.Path('/x.zip'), ['--key', 'k'], self.output, 'dmg-')
+        self.assertEqual(self.verbs(), ['submit', 'wait', 'log'])
+        self.assertEqual(self.calls[-1][3], 'abc')
+        self.assertEqual(self.logs, [('log', 'dmg-notarization-rejection.json')])
+
+    def test_a_failed_wait_records_the_status_and_propagates(self):
+        with unittest.mock.patch.object(release, 'run', self.fake_run(RuntimeError('wait timed out'))):
+            with self.assertRaisesRegex(RuntimeError, 'wait timed out'):
+                release.notarize(pathlib.Path('/x.zip'), [], self.output)
+        self.assertEqual(self.verbs(), ['submit', 'wait', 'info'])
+        self.assertEqual(self.logs, [('info', 'notarization-last-status.json')])
+        self.assertFalse((self.output / 'notarization-result.json').exists())
+
+
+class VerifyDiskImageTests(unittest.TestCase):
+    def setUp(self):
+        self._temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._temp.cleanup)
+        self.output = pathlib.Path(self._temp.name)
+        self.calls = []
+        self.mount = None
+
+    def fake_run(self, link):
+        def run(args, *, cwd=None, timeout=60, log=None):
+            self.calls.append(list(args))
+            if args[0] == 'hdiutil' and args[1] == 'attach':
+                self.mount = args[args.index('-mountpoint') + 1]
+                if link is not None:
+                    os.symlink(link, pathlib.Path(self.mount) / 'Applications')
+            return ''
+        return run
+
+    def assessed_apps(self):
+        return [c[-1] for c in self.calls if c[:2] == ['spctl', '--assess'] and c[-1].endswith('Mouthtype.app')]
+
+    def test_good_image_verifies_the_app_inside(self):
+        with unittest.mock.patch.object(release, 'run', self.fake_run('/Applications')):
+            release.verify_disk_image(pathlib.Path('/m.dmg'), self.output, 'dmg')
+        app = f'{self.mount}/Mouthtype.app'
+        self.assertIn(['codesign', '--verify', '--deep', '--strict', app], self.calls)
+        self.assertIn(['xcrun', 'stapler', 'validate', app], self.calls)
+        self.assertEqual(self.assessed_apps(), [app])
+        self.assertEqual(self.calls[-1], ['hdiutil', 'detach', self.mount])
+
+    def test_missing_or_wrong_applications_link_raises_and_still_detaches(self):
+        for link in [None, '/elsewhere']:
+            with self.subTest(link=link):
+                self.calls.clear()
+                with unittest.mock.patch.object(release, 'run', self.fake_run(link)):
+                    with self.assertRaisesRegex(RuntimeError, 'Applications'):
+                        release.verify_disk_image(pathlib.Path('/m.dmg'), self.output, 'dmg')
+                self.assertEqual(self.calls[-1], ['hdiutil', 'detach', self.mount])
+                self.assertEqual(self.assessed_apps(), [])
 
 
 if __name__ == '__main__':
