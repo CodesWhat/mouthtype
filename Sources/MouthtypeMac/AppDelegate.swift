@@ -332,7 +332,9 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private func completeLaunch(arguments: [String], menuBar: MenuBarController) {
         // Undo a Fn remap a previous run died with before anything reads the keyboard.
         _ = fnRemap.restoreIfStale()
-        let store = openStore()
+        let opened = TranscriptStoreOpener.open()
+        let store = opened.store
+        reportStoreOpen(opened)
         let archive = AudioArchive(supportDirectory: TranscriptStore.defaultURL().deletingLastPathComponent())
         purgeAudio(archive: archive, store: store)
 
@@ -621,12 +623,14 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
         _ = fnRemap.restore()
     }
 
-    private func openStore() -> TranscriptStore? {
-        do {
-            return try TranscriptStore()
-        } catch {
-            Log.app.error("history unavailable: \(String(describing: error), privacy: .public)")
-            return nil
+    private func reportStoreOpen(_ outcome: StoreOpenOutcome) {
+        if let moved = outcome.quarantinedTo {
+            Log.app.error("history database was damaged; moved to \(moved.lastPathComponent, privacy: .public)")
+            diagnostics.historyNotice = outcome.quarantineNotice
+        }
+        if let failure = outcome.failure {
+            Log.app.error("history unavailable: \(failure, privacy: .public)")
+            diagnostics.historyOpenFailure = "History couldn't be opened: \(failure)"
         }
     }
 

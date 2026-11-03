@@ -154,9 +154,12 @@ struct DictationPipeline: Sendable {
         }
     }
 
+    /// The archive, but only while a store can give its WAVs a row. Without one a WAV would be an orphan nothing could find or expire.
+    var rowArchive: (any DictationArchiving)? { store == nil ? nil : archive }
+
     /// Adds the next stretch of a recording in progress to its in-progress copy. False when it couldn't be written.
     func appendPartial(_ samples: [Float], session: DictationSession) async -> Bool {
-        guard let archive, archive.writesPartials else { return false }
+        guard let archive = rowArchive, archive.writesPartials else { return false }
         return await Task.detached {
             do {
                 try archive.appendPartial(samples: samples, id: session.id)
@@ -230,7 +233,7 @@ struct DictationPipeline: Sendable {
     func recordCaptureAndArchive(_ audio: CapturedAudio, session: DictationSession, keyUpMs: Int) async -> (features: AudioFeatures, durable: Bool) {
         let features = AudioFeatures.compute(samples: audio.samples, sampleRate: Int(audio.sampleRate))
         var audioPath: String?
-        if let archive {
+        if let archive = rowArchive {
             do {
                 audioPath = try archive.archive(samples: audio.samples, id: session.id).path
             } catch {
