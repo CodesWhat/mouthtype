@@ -328,6 +328,11 @@ public final class TranscriptStore: Sendable {
         inputsChanged(notify: true)
     }
 
+    /// Every id with a row. Audio whose id is not here is never removed.
+    public func dictationIDs() throws -> Set<String> {
+        try pool.read { db in Set(try String.fetchAll(db, sql: "SELECT id FROM dictation")) }
+    }
+
     /// Failed and never-finished takes. Their audio is kept for recovery until the recovery grace passes.
     public func recoveryAudioIDs() throws -> Set<String> {
         try pool.read { db in

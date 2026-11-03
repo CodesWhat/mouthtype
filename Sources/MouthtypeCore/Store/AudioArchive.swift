@@ -90,12 +90,12 @@ public struct AudioArchive: Sendable {
     /// Deletes files older than `cutoff`, then the oldest of the rest until the total fits `maxTotalBytes`.
     /// When supplied, only `eligibleIDs` are counted or removed. `recoveryIDs` (failed and unfinished takes) and crash
     /// partials join them only once their file is older than `recoveryCutoff`. Files with no matching row are never
-    /// removed. A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids of rows
+    /// removed (a partial is checked against `knownIDs`, every id with a row, when supplied). A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids of rows
     /// whose WAV was actually removed so the caller can null `audio_path` (partials are not reported); throws only when a
     /// delete failed and none succeeded.
     public func purge(
         olderThan cutoff: Date, maxTotalBytes: Int = defaultMaxTotalBytes, eligibleIDs: Set<String>? = nil,
-        recoveryIDs: Set<String> = [], recoveryCutoff: Date? = nil
+        recoveryIDs: Set<String> = [], recoveryCutoff: Date? = nil, knownIDs: Set<String>? = nil
     ) throws -> [String] {
         let manager = FileManager.default
         guard manager.fileExists(atPath: directory.path) else { return [] }
@@ -105,9 +105,10 @@ public struct AudioArchive: Sendable {
             let values = try url.resourceValues(forKeys: Set(keys))
             let date = values.contentModificationDate ?? .distantPast
             let isPartial = url.lastPathComponent.hasSuffix(".partial.wav")
-            let id = url.deletingPathExtension().lastPathComponent
+            var id = url.deletingPathExtension().lastPathComponent
             if isPartial {
-                guard let recoveryCutoff, date < recoveryCutoff else { continue }
+                id = String(id.dropLast(".partial".count))
+                guard let recoveryCutoff, date < recoveryCutoff, knownIDs?.contains(id) != false else { continue }
             } else if let eligibleIDs, !eligibleIDs.contains(id) {
                 guard recoveryIDs.contains(id), let recoveryCutoff, date < recoveryCutoff else { continue }
             }

@@ -196,6 +196,31 @@ import Testing
         #expect(try store.dictation(id: "x")?.audioPath != nil)
     }
 
+    @Test func pruneKeepsAStalePartialWhoseRowIsGone() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        try archive.appendPartial(samples: [0.1, 0.2], id: "no-row")
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-400 * 86_400)], ofItemAtPath: archive.partialURL(for: "no-row").path)
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
+        #expect(FileManager.default.fileExists(atPath: archive.partialURL(for: "no-row").path))
+    }
+
+    @Test func pruneLeavesPointersAloneWhenTheArchiveDirectoryIsEmpty() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        try FileManager.default.createDirectory(at: archive.directory, withIntermediateDirectories: true)
+        try store.begin(DictationStart(id: "x"))
+        try store.recordCapture("x", CaptureRecord(audioPath: archive.url(for: "x").path))
+        try store.recordInsertion("x", InsertionRecord(finalText: "Hi."))
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: Date())
+        #expect(try store.dictation(id: "x")?.audioPath != nil)
+    }
+
     @Test func pruneClearsPointersWhoseFileIsMissingButKeepsRelocatedOnes() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
