@@ -15,6 +15,12 @@ public struct AudioArchive: Sendable {
     public static let defaultRetention: TimeInterval = 90 * 24 * 3600
     public static let defaultMaxTotalBytes = 2 * 1024 * 1024 * 1024
     public static let sampleRate = 16_000
+    /// How long a failed or never-finished take's audio, and any in-progress copy, is kept for recovery before
+    /// retention treats it like any other audio. Well past `DictationRecovery.window`, which is only how far back a
+    /// launch offers a recovery.
+    public static let recoveryGrace: TimeInterval = 30 * 24 * 3600
+    /// Audio with no database row is left alone this long, so a take that is just starting is never raced.
+    public static let orphanGrace: TimeInterval = DictationRecovery.window
 
     public let directory: URL
 
@@ -57,6 +63,12 @@ public struct AudioArchive: Sendable {
         try handle.write(contentsOf: Self.pcm(samples))
     }
 
+    /// Removes a take's archived WAV and in-progress copy.
+    public func remove(id: String) {
+        try? FileManager.default.removeItem(at: url(for: id))
+        discardPartial(id: id)
+    }
+
     public func discardPartial(id: String) {
         try? FileManager.default.removeItem(at: partialURL(for: id))
     }
@@ -71,21 +83,41 @@ public struct AudioArchive: Sendable {
     }
 
     /// Deletes files older than `cutoff`, then the oldest of the rest until the total fits `maxTotalBytes`.
-    /// When supplied, only `eligibleIDs` are counted or removed; crash partials are always excluded.
-    /// A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids actually removed
-    /// so the caller can null `audio_path`; throws only when a delete failed and none succeeded.
-    public func purge(olderThan cutoff: Date, maxTotalBytes: Int = defaultMaxTotalBytes, eligibleIDs: Set<String>? = nil) throws -> [String] {
+    /// When supplied, only `eligibleIDs` are counted or removed. `recoveryIDs` (failed and unfinished takes) join them
+    /// only once their file is older than `recoveryCutoff`. Past `recoveryCutoff`, crash partials are removed.
+    /// With `knownIDs` and `orphanCutoff`, WAVs whose id has no row and that are older than `orphanCutoff` are removed.
+    /// A delete that fails leaves its file for the next sweep, and the rest still run. Returns the ids of rows whose
+    /// WAV was actually removed so the caller can null `audio_path`; throws only when a delete failed and none succeeded.
+    public func purge(
+        olderThan cutoff: Date, maxTotalBytes: Int = defaultMaxTotalBytes, eligibleIDs: Set<String>? = nil,
+        recoveryIDs: Set<String> = [], recoveryCutoff: Date? = nil, knownIDs: Set<String>? = nil, orphanCutoff: Date? = nil
+    ) throws -> [String] {
         let manager = FileManager.default
         guard manager.fileExists(atPath: directory.path) else { return [] }
         let keys: [URLResourceKey] = [.contentModificationDateKey, .fileSizeKey]
         var files: [(id: String, url: URL, date: Date, size: Int)] = []
-        for url in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys)
-        where url.pathExtension == "wav" && !url.lastPathComponent.hasSuffix(".partial.wav") {
-            let id = url.deletingPathExtension().lastPathComponent
-            guard eligibleIDs?.contains(id) != false else { continue }
+        var stale: [URL] = []
+        for url in try manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: keys) where url.pathExtension == "wav" {
             let values = try url.resourceValues(forKeys: Set(keys))
-            files.append((id, url, values.contentModificationDate ?? .distantPast, values.fileSize ?? 0))
+            let date = values.contentModificationDate ?? .distantPast
+            if url.lastPathComponent.hasSuffix(".partial.wav") {
+                if let recoveryCutoff, date < recoveryCutoff { stale.append(url) }
+                continue
+            }
+            let id = url.deletingPathExtension().lastPathComponent
+            if let eligibleIDs, !eligibleIDs.contains(id) {
+                if recoveryIDs.contains(id) {
+                    guard let recoveryCutoff, date < recoveryCutoff else { continue }
+                } else if let knownIDs, !knownIDs.contains(id), let orphanCutoff, date < orphanCutoff {
+                    stale.append(url)
+                    continue
+                } else {
+                    continue
+                }
+            }
+            files.append((id, url, date, values.fileSize ?? 0))
         }
+        for url in stale { try? manager.removeItem(at: url) }
         files.sort { $0.date < $1.date }
 
         var removed: [String] = []
