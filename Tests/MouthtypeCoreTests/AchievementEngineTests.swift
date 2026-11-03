@@ -260,6 +260,26 @@ import Testing
         #expect(AchievementEngine.shelf(statuses, store: store).first { $0.id == "four_figures" }?.isNew == false)
     }
 
+    @Test func earnsWhileSwitchedOffAreSilentOnReEnable() {
+        let (defaults, cleanup) = isolatedDefaults()
+        defer { cleanup() }
+        let store = AchievementStore(defaults: defaults)
+        store.apply([], today: "2026-11-02")
+        store.setEnabled(true)
+        store.setEnabled(false)
+        let statuses = [AchievementStatus(id: "four_figures", state: .earned(day: "2026-11-05"))]
+        store.setEnabled(true)
+        #expect(store.apply(statuses, today: "2026-11-06") == ["four_figures"])
+        #expect(store.earned["four_figures"] == "2026-11-05")
+        #expect(store.seen.contains("four_figures"))
+        #expect(AchievementEngine.shelf(statuses, store: store).first { $0.id == "four_figures" }?.isNew == false)
+        #expect(store.pendingBackfillSummary == 0)
+        // The catch-up is one-shot: the next earn is New again.
+        let later = statuses + [AchievementStatus(id: "five_figures", state: .earned(day: "2026-11-07"))]
+        #expect(store.apply(later, today: "2026-11-07") == ["five_figures"])
+        #expect(AchievementEngine.shelf(later, store: store).first { $0.id == "five_figures" }?.isNew == true)
+    }
+
     @Test func nothingIsRevokedWhenHistoryGoesAway() {
         let (defaults, cleanup) = isolatedDefaults()
         defer { cleanup() }
