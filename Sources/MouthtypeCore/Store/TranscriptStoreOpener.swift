@@ -40,7 +40,8 @@ public enum TranscriptStoreOpener {
         retryDelay: TimeInterval = busyRetryDelay,
         now: () -> Date = Date.init,
         sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) },
-        opener: (URL) throws -> TranscriptStore = { try TranscriptStore(url: $0) }
+        opener: (URL) throws -> TranscriptStore = { try TranscriptStore(url: $0) },
+        mover: (URL, URL) throws -> Void = { try FileManager.default.moveItem(at: $0, to: $1) }
     ) -> StoreOpenOutcome {
         var lastError: Error
         do { return StoreOpenOutcome(store: try opener(url)) } catch { lastError = error }
@@ -51,19 +52,21 @@ public enum TranscriptStoreOpener {
         }
 
         if isDamaged(lastError) {
-            let moved: URL
-            var movedAudio: URL?
-            do {
-                let date = now()
-                moved = try quarantine(url, at: date)
-                movedAudio = try quarantineDirectory(audioDirectory ?? url.deletingLastPathComponent().appendingPathComponent("audio", isDirectory: true), at: date)
-            } catch {
-                return StoreOpenOutcome(failure: "the damaged file couldn't be set aside (\(describe(error)))")
+            let audio = audioDirectory ?? url.deletingLastPathComponent().appendingPathComponent("audio", isDirectory: true)
+            let moved: Quarantined
+            switch quarantine(url, audio: audio, at: now(), move: mover) {
+            case .success(let result): moved = result
+            case .failure(let failure):
+                var text = "the damaged file couldn't be set aside (\(describe(failure.error)))"
+                if !failure.leftover.isEmpty {
+                    text += ". Some files could not be moved back and are still named " + failure.leftover.map(\.lastPathComponent).joined(separator: ", ")
+                }
+                return StoreOpenOutcome(quarantinedTo: failure.leftover.first, failure: text)
             }
             do {
-                return StoreOpenOutcome(store: try opener(url), quarantinedTo: moved, quarantinedAudioTo: movedAudio)
+                return StoreOpenOutcome(store: try opener(url), quarantinedTo: moved.database, quarantinedAudioTo: moved.audio)
             } catch {
-                return StoreOpenOutcome(quarantinedTo: moved, quarantinedAudioTo: movedAudio, failure: describe(error))
+                return StoreOpenOutcome(quarantinedTo: moved.database, quarantinedAudioTo: moved.audio, failure: describe(error))
             }
         }
         return StoreOpenOutcome(failure: describe(lastError))
@@ -83,39 +86,48 @@ public enum TranscriptStoreOpener {
         (error as? DatabaseError)?.message ?? error.localizedDescription
     }
 
-    /// Renames the database and its -wal/-shm to `<name>.corrupt-<timestamp>`. Returns where the database itself went.
-    static func quarantine(_ url: URL, at date: Date) throws -> URL {
+    struct Quarantined {
+        var database: URL
+        var audio: URL?
+    }
+
+    struct QuarantineFailure: Error {
+        var error: Error
+        /// Files that were moved and could not be moved back, at their quarantine names. Empty when the rollback was complete.
+        var leftover: [URL]
+    }
+
+    /// Renames the audio folder, then -shm, -wal and the database last, to `<name>.corrupt-<timestamp>`. The database goes last so
+    /// a failure part way never leaves a moved database beside a -wal SQLite could discard. If any move fails the ones already
+    /// made are moved back (never deleted), so nothing is left half-quarantined unless a move back fails too.
+    static func quarantine(
+        _ url: URL, audio: URL, at date: Date,
+        move: (URL, URL) throws -> Void = { try FileManager.default.moveItem(at: $0, to: $1) }
+    ) -> Result<Quarantined, QuarantineFailure> {
         let stamp = Self.stamp(date)
         let fm = FileManager.default
-        var movedMain = url
-        for suffix in ["", "-wal", "-shm"] {
-            let source = URL(fileURLWithPath: url.path + suffix)
-            guard fm.fileExists(atPath: source.path) else { continue }
+        let sources = [audio, URL(fileURLWithPath: url.path + "-shm"), URL(fileURLWithPath: url.path + "-wal"), url]
+        var done: [(from: URL, to: URL)] = []
+        func rollBack(_ error: Error) -> Result<Quarantined, QuarantineFailure> {
+            var leftover: [URL] = []
+            for pair in done.reversed() {
+                do { try move(pair.to, pair.from) } catch { leftover.append(pair.to) }
+            }
+            return .failure(QuarantineFailure(error: error, leftover: leftover))
+        }
+        for source in sources where fm.fileExists(atPath: source.path) {
             var target = URL(fileURLWithPath: source.path + ".corrupt-" + stamp)
             var n = 1
             while fm.fileExists(atPath: target.path) {
                 n += 1
                 target = URL(fileURLWithPath: source.path + ".corrupt-" + stamp + "-\(n)")
             }
-            try fm.moveItem(at: source, to: target)
-            if suffix.isEmpty { movedMain = target }
+            do { try move(source, target) } catch { return rollBack(error) }
+            done.append((source, target))
         }
-        return movedMain
-    }
-
-    /// Renames a folder to `<name>.corrupt-<timestamp>`. Nil when there is no such folder.
-    static func quarantineDirectory(_ directory: URL, at date: Date) throws -> URL? {
-        let fm = FileManager.default
-        guard fm.fileExists(atPath: directory.path) else { return nil }
-        let stamp = Self.stamp(date)
-        var target = URL(fileURLWithPath: directory.path + ".corrupt-" + stamp, isDirectory: true)
-        var n = 1
-        while fm.fileExists(atPath: target.path) {
-            n += 1
-            target = URL(fileURLWithPath: directory.path + ".corrupt-" + stamp + "-\(n)", isDirectory: true)
-        }
-        try fm.moveItem(at: directory, to: target)
-        return target
+        let audioTarget = done.first { $0.from == audio }?.to
+        let dbTarget = done.first { $0.from == url }?.to ?? url
+        return .success(Quarantined(database: dbTarget, audio: audioTarget))
     }
 
     private static func stamp(_ date: Date) -> String {
