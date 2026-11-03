@@ -4,8 +4,8 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.12.x | Supported once the signed and notarized 0.12.1 release is published on the download page |
-| 0.11.x | Supported until 0.12.0 is published; unsupported afterward |
+| 0.12.x | Supported. 0.12.0 is published |
+| 0.11.x | Unsupported. Upgrade to the current published release |
 | 0.10.x | Unsupported. Upgrade to the current published release |
 | 0.9.x | Unsupported. Upgrade to the current published release |
 | 0.8.x | Unsupported. Upgrade to the current published release |

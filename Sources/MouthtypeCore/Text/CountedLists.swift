@@ -407,6 +407,8 @@ public struct CountedLists: Sendable {
     }
 
     private static let connectives: Set<String> = ["and", "then"]
+    /// "<preposition> then" is a phrase that belongs to the item ("wait until then"), not a joiner.
+    private static let thenPrepositions: Set<String> = ["until", "by", "till", "since", "before", "from"]
 
     /// Start of one joining word ("and", "then", "and then") sitting directly before a
     /// non-first marker, when it is not the first word of the item it would trail.
@@ -418,6 +420,9 @@ public struct CountedLists: Sendable {
         guard c > itemFirst, Self.connectives.contains(words[c].lower),
             TextScan.onlySpaces(chars, words[c].end, marker.start)
         else { return nil }
+        if words[c].lower == "then", c - 1 >= itemFirst, Self.thenPrepositions.contains(words[c - 1].lower) {
+            return nil
+        }
         if words[c].lower == "then", c - 1 > itemFirst, words[c - 1].lower == "and",
             TextScan.onlySpaces(chars, words[c - 1].end, words[c].start)
         {

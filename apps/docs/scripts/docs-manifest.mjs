@@ -95,7 +95,8 @@ export const pages = [
     src: "docs/AUDIO-RETENTION.md",
     dest: "privacy-and-data/saved-audio",
     title: "Saved audio",
-    description: "How long Mouthtype keeps completed recordings, and what is never pruned.",
+    description:
+      "How long Mouthtype keeps completed recordings, and what happens to recovery audio.",
   },
   {
     src: "docs/TROUBLESHOOTING.md",
