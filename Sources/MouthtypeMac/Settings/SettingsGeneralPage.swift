@@ -69,7 +69,7 @@ extension SettingsView {
         }
     }
 
-    /// Settings modal, General: the trophy shelf on Stats.
+    /// Settings modal, Mac: the trophy shelf on Stats.
     @ViewBuilder var generalTrophies: some View {
         DesignSection(eyebrow: "TROPHIES") {
             ModalToggleRow(

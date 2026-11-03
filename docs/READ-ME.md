@@ -18,7 +18,7 @@ The app’s Resources folder contains these notes and its license. Corresponding
 
 ## What changed in 0.12.0
 
-- Added: Achievements. The Stats page has a shelf of 27 trophies, and a small toast shows in the app window when you earn one. Earlier trophies are filled in silently. Settings > General has an Achievements switch.
+- Added: Achievements. The Stats page has a shelf of 27 trophies, and a small toast shows in the app window when you earn one. Earlier trophies are filled in silently. Settings > Mac has an Achievements switch.
 - Added: Support Mouthtype links in the menu bar menu and the About panel.
 - Fixed: Profanity cleanup no longer reads "back there to be" as a "there is" sentence.
 
