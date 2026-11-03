@@ -322,16 +322,10 @@ public final class TranscriptStore: Sendable {
     }
 
     /// Deletes the take. With an `archive`, its archived WAV and in-progress copy go too, so no audio outlives its row.
-    /// Files left without a row are also swept by `AudioRetentionMaintenance` once past the orphan grace.
     public func delete(_ id: String, archive: AudioArchive? = nil) throws {
         try pool.write { db in try db.execute(sql: "DELETE FROM dictation WHERE id = ?", arguments: [id]) }
         archive?.remove(id: id)
         inputsChanged(notify: true)
-    }
-
-    /// Every id with a row, for finding archived audio that no longer has one.
-    public func dictationIDs() throws -> Set<String> {
-        try pool.read { db in Set(try String.fetchAll(db, sql: "SELECT id FROM dictation")) }
     }
 
     /// Failed and never-finished takes. Their audio is kept for recovery until the recovery grace passes.

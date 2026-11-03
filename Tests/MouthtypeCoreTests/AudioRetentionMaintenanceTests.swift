@@ -156,25 +156,44 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: archive.partialURL(for: "gone").path))
     }
 
-    @Test func pruneRemovesOldOrphanAudioAndKeepsFreshOrphans() throws {
+    @Test func pruneNeverRemovesAudioThatHasNoRow() throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
         let archive = AudioArchive(supportDirectory: dir)
         let now = Date()
-        try store.begin(DictationStart(id: "deleted"))
-        let deleted = try archive.write(samples: [0.1, 0.2], id: "deleted")
-        try store.recordCapture("deleted", CaptureRecord(audioPath: deleted.url.path))
-        try store.delete("deleted")  // no archive hook: the file is orphaned
-        let old = try archive.write(samples: [0.1, 0.2], id: "old-orphan")
-        let fresh = try archive.write(samples: [0.1, 0.2], id: "fresh-orphan")
-        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-3 * 86_400)], ofItemAtPath: old.url.path)
-        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-3 * 86_400)], ofItemAtPath: deleted.url.path)
-        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-3600)], ofItemAtPath: fresh.url.path)
+        var urls: [URL] = []
+        for id in ["a", "b"] { urls.append(try archive.write(samples: [0.1, 0.2], id: id).url) }
+        // An emptied or restored database has no rows for any of it.
+        for url in urls { try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-400 * 86_400)], ofItemAtPath: url.path) }
         try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
-        #expect(!FileManager.default.fileExists(atPath: deleted.url.path))
-        #expect(!FileManager.default.fileExists(atPath: old.url.path))
-        #expect(FileManager.default.fileExists(atPath: fresh.url.path))
+        for url in urls { #expect(FileManager.default.fileExists(atPath: url.path)) }
+    }
+
+    @Test func prunePutsStalePartialsThroughTheRetentionPolicy() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        let now = Date()
+        try store.begin(DictationStart(id: "p", startedAt: now.addingTimeInterval(-120 * 86_400)))
+        try archive.appendPartial(samples: [0.1, 0.2], id: "p")
+        try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-120 * 86_400)], ofItemAtPath: archive.partialURL(for: "p").path)
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .noAgeLimit), now: now)
+        #expect(FileManager.default.fileExists(atPath: archive.partialURL(for: "p").path))
+    }
+
+    @Test func pruneLeavesPointersAloneWhenTheArchiveDirectoryIsMissing() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
+        let archive = AudioArchive(supportDirectory: dir)
+        try store.begin(DictationStart(id: "x"))
+        try store.recordCapture("x", CaptureRecord(audioPath: archive.url(for: "x").path))
+        try store.recordInsertion("x", InsertionRecord(finalText: "Hi."))
+        #expect(archive.listedFileNames() == nil)
+        try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: Date())
+        #expect(try store.dictation(id: "x")?.audioPath != nil)
     }
 
     @Test func pruneClearsPointersWhoseFileIsMissingButKeepsRelocatedOnes() throws {
