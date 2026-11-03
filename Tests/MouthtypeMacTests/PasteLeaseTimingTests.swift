@@ -11,6 +11,8 @@ private final class LeasePasteboard: PasteboardAccess {
     var changeCount = 0
     var contents = PasteboardSnapshot(items: [[plain("user clipboard")]])
     var snapshots = 0
+    var lastMarkers: [String] = []
+    var lastWasPromise = false
     var onRead: (@Sendable () -> Void)?
 
     var text: String? {
@@ -29,9 +31,12 @@ private final class LeasePasteboard: PasteboardAccess {
     func write(_ string: String, markers: [String]) {
         contents = PasteboardSnapshot(items: [[plain(string)]])
         changeCount += 1
+        lastMarkers = markers
+        lastWasPromise = false
     }
     func writePromise(_ string: String, markers: [String], onRead: @escaping @Sendable () -> Void) {
         write(string, markers: markers)
+        lastWasPromise = true
         self.onRead = onRead
     }
     func read() { onRead?() }
@@ -61,10 +66,11 @@ private final class ManualTime {
     }
 
     func advance(to ms: Int) async {
-        while let next = tasks.filter({ $0.at <= ms }).min(by: { $0.at < $1.at }) {
-            tasks.removeAll { $0.at == next.at && $0.at <= ms }
-            now = next.at
-            next.work()
+        while let at = tasks.filter({ $0.at <= ms }).map(\.at).min() {
+            let due = tasks.filter { $0.at == at }
+            tasks.removeAll { $0.at == at }
+            now = at
+            for task in due { task.work() }
             await settle()
         }
         now = ms
@@ -99,6 +105,33 @@ private struct Rig {
 @MainActor private let receiptCapMs = Int(PasteboardSession.receiptCap * 1000)
 
 @MainActor @Suite struct PasteLeaseTimingTests {
+    @Test func everyTaskDueAtTheSameMillisecondRuns() async {
+        let time = ManualTime()
+        var ran: [Int] = []
+        time.schedule(0.1) { ran.append(1) }
+        time.schedule(0.1) { ran.append(2) }
+        await time.advance(to: 100)
+        #expect(ran == [1, 2])
+    }
+
+    @Test func aReadAfterTheDeferredRestoreMakesALaterConfirmWaitForTheSettle() async {
+        let rig = Rig()
+        #expect(rig.session.paste("transcript", keyCode: 9, targetPID: 1, holdForField: true))
+        await rig.read(at: 50)
+        // The sync's settle came due at 250 with the field still unconfirmed: the restore is deferred.
+        await rig.time.advance(to: 300)
+        #expect(rig.board.text == "transcript")
+        // The target is still reading, so the deferred restore no longer stands.
+        await rig.read(at: 300)
+        await rig.time.advance(to: 350)
+        rig.session.fieldShowedPaste(generation: rig.session.pasteGeneration)
+        #expect(rig.board.text == "transcript")
+        await rig.time.advance(to: 450)
+        #expect(rig.board.text == "transcript")
+        await rig.time.advance(to: 550)
+        #expect(rig.board.text == "user clipboard")
+    }
+
     @Test func anEarlySyncReadDoesNotLetASlowTargetPasteTheOldClipboard() async {
         let rig = Rig()
         #expect(rig.session.paste("transcript", keyCode: 9, targetPID: 1, holdForField: true))
@@ -109,6 +142,9 @@ private struct Rig {
         await rig.read(at: 300)
         await rig.time.advance(to: 350)
         rig.session.fieldShowedPaste(generation: rig.session.pasteGeneration)
+        // The second read means the target is still taking the text, so the restore waits for that read's settle.
+        #expect(rig.board.text == "transcript")
+        await rig.time.advance(to: 500)
         #expect(rig.board.text == "user clipboard")
         #expect(!rig.session.isRestorePending)
         await rig.time.advance(to: receiptCapMs)
@@ -270,6 +306,9 @@ private struct Rig {
         #expect(!rig.session.transcriptStays)
         #expect(rig.board.text == "transcript")
         #expect(!rig.board.contents.droppedFilePromise)
+        // Real data, kept out of history, not the promise that dies with the app.
+        #expect(!rig.board.lastWasPromise)
+        #expect(rig.board.lastMarkers == PasteboardSession.concealedMarkers)
     }
 
     @Test func aLongPasteAdvancesOnEachReceiptAndLeavesTheLastPart() async {

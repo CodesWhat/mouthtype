@@ -170,6 +170,16 @@ import Testing
         #expect(!V.confirms(obs(rewritten), baseline: baseline, pasted: pasted))
     }
 
+    @Test func aShortTranscriptInsideAWronglyPastedLongerClipboardDoesNotConfirm() {
+        // The target pasted the user's previous clipboard, which happens to contain the transcript.
+        let wrong = FieldReading(
+            value: "Hellothe meeting notes say ok and nothing else", length: 46, selection: NSRange(location: 46, length: 0))
+        #expect(!V.confirms(obs(wrong), baseline: baseline, pasted: "ok"))
+        // The transcript itself, landing as a short gain, still confirms.
+        let landed = FieldReading(value: "Hello ok", length: 8, selection: NSRange(location: 8, length: 0))
+        #expect(V.confirms(obs(landed), baseline: baseline, pasted: " ok"))
+    }
+
     @Test func gainingSomethingElseOfTheSameLengthDoesNotConfirm() {
         let secret = FieldReading(value: "Hellosecret", length: 11, selection: NSRange(location: 11, length: 0))
         #expect(!V.confirms(obs(secret), baseline: baseline, pasted: "send it"))

@@ -354,7 +354,7 @@ public final class TextInserter {
                         method: .clipboardOnly, outcome: .failed("Long paste cannot be split safely"),
                         focusMoved: moved, target: now, finalText: spaced)
                 }
-                guard await pasteInParts(parts, keyCode: keyCode, target: now) else {
+                guard await pasteInParts(parts, transcript: spaced, keyCode: keyCode, target: now) else {
                     lastPaste = nil
                     return DeliveryResult(
                         method: .paste, outcome: .partialPaste,
@@ -405,12 +405,24 @@ public final class TextInserter {
             !Task.isCancelled && batchGeneration == generation && now() < deadline
                 && (clipboard.holdsPaste(lease) || clipboard.wasRestored(lease))
         }
+        // A paste into a readable field keeps the clipboard until the field shows its text; the receipts settling is not
+        // the end of the lease while that hold is on. Bounded by the same deadline.
+        func holdLifted() async throws -> Bool {
+            // The hold lifts by `fieldHoldCap` at the latest; the poll bound is that, with room, so a hold that never
+            // lifts can't keep this waiting.
+            let polls = Int(((PasteboardSession.fieldHoldCap + 0.5) / 0.02).rounded(.up))
+            for _ in 0..<polls where clipboard.fieldHeld {
+                guard mayContinue() else { return false }
+                try await sleep(0.02)
+            }
+            return mayContinue()
+        }
         do {
             let polls = Int((PasteboardSession.receiptCap / 0.02).rounded(.up))
             for _ in 0..<polls {
                 guard mayContinue() else { return false }
                 if clipboard.wasRestored(lease) {
-                    return clipboard.firstReceiptMs != nil || clipboard.hadEarlyRead
+                    return clipboard.firstReceiptMs != nil || clipboard.hadEarlyRead || clipboard.fieldConfirmed
                 }
                 if clipboard.firstReceiptMs != nil {
                     for _ in 0..<40 {
@@ -419,13 +431,13 @@ public final class TextInserter {
                         let reads = clipboard.readCount
                         try await sleep(PasteboardSession.receiptSettle)
                         guard mayContinue() else { return false }
-                        if clipboard.readCount == reads { return true }
+                        if clipboard.readCount == reads { return try await holdLifted() }
                     }
                     return false
                 }
                 if clipboard.hadEarlyRead {
                     try await sleep(PasteboardSession.unobservedDelay)
-                    return mayContinue()
+                    return try await holdLifted()
                 }
                 try await sleep(0.02)
             }
@@ -433,7 +445,7 @@ public final class TextInserter {
         return false
     }
 
-    private func pasteInParts(_ parts: [String], keyCode: CGKeyCode, target: FocusSnapshot) async -> Bool {
+    private func pasteInParts(_ parts: [String], transcript: String, keyCode: CGKeyCode, target: FocusSnapshot) async -> Bool {
         clipboard.beginBatch()
         defer {
             clipboard.finishBatch()
@@ -451,7 +463,7 @@ public final class TextInserter {
                 && current.windowTitle == target.windowTitle && current.element == target.element
         }
         for part in parts {
-            guard mayContinue(), clipboard.paste(part, keyCode: keyCode, targetPID: target.pid) else { return false }
+            guard mayContinue(), clipboard.paste(part, keyCode: keyCode, targetPID: target.pid, transcript: transcript) else { return false }
             let lease = clipboard.pasteGeneration
             // A receipt only permits advancing the clipboard. It never proves the text was inserted.
             var read = false
@@ -847,6 +859,11 @@ final class PasteboardSession {
     private var fieldHold = false
     /// A restore came due while the field hold was on; it runs the moment the hold lifts.
     private var restoreDeferred = false
+    /// The read-back saw the current paste in the field.
+    private var fieldShowed = false
+    /// What stays on the clipboard if the lease ends with nothing to put back: the whole transcript, not the part
+    /// last pasted.
+    private var leaseTranscript = ""
 
     init(pasteboard: PasteboardAccess, poster: PasteEventPosting, schedule: @escaping Schedule = PasteboardSession.mainSchedule) {
         self.pasteboard = pasteboard
@@ -858,6 +875,11 @@ final class PasteboardSession {
 
     /// The current lease leaves the transcript on the clipboard: what was there can't be put back.
     var transcriptStays: Bool { leased && saved == nil }
+
+    /// The field hold is still on: the clipboard stays until the field shows the text or `fieldHoldCap`.
+    var fieldHeld: Bool { fieldHold }
+    /// The field showed the current paste, whatever the target did or didn't read.
+    var fieldConfirmed: Bool { fieldShowed }
 
     func pressReturn(targetPID: pid_t?) -> Bool { poster.postReturn(targetPID: targetPID) }
 
@@ -905,7 +927,7 @@ final class PasteboardSession {
     ///
     /// A clipboard holding only a file promise (a copied Photos picture, a Mail attachment) has nothing that can be
     /// put back; the paste goes ahead, the lease runs as usual, and the transcript stays on the clipboard after it.
-    func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?, holdForField: Bool = false) -> Bool {
+    func paste(_ text: String, keyCode: CGKeyCode, targetPID: pid_t?, holdForField: Bool = false, transcript: String? = nil) -> Bool {
         // Snapshot what someone else put there, or what was left to stay. Never our own promise mid-lease: the parts
         // of a long paste share the one snapshot taken before the first.
         if pasteboard.changeCount != ourChangeCount || (!leased && saved == nil) {
@@ -924,6 +946,8 @@ final class PasteboardSession {
         leased = true
         fieldHold = holdForField
         restoreDeferred = false
+        fieldShowed = false
+        leaseTranscript = transcript ?? text
         let current = generation
         let receipts = PasteReceipts()
         self.receipts = receipts
@@ -960,6 +984,8 @@ final class PasteboardSession {
 
     private func receiptArrived(generation expected: Int) {
         guard expected == generation, leased else { return }
+        // A read after the restore came due means the target is still taking the text; the next confirm waits it out.
+        restoreDeferred = false
         receiptCount += 1
         let count = receiptCount
         schedule(Self.receiptSettle) { [weak self] in
@@ -975,7 +1001,9 @@ final class PasteboardSession {
     /// Ends the field hold. A restore that came due meanwhile runs now; otherwise the field showing the text is itself
     /// a receipt, with the usual settle, for the rare target whose read never called back.
     private func liftFieldHold(generation expected: Int, fieldShowedPaste: Bool) {
-        guard expected == generation, fieldHold else { return }
+        guard expected == generation else { return }
+        if fieldShowedPaste { fieldShowed = true }
+        guard fieldHold else { return }
         fieldHold = false
         if restoreDeferred {
             restoreDeferred = false
@@ -1029,6 +1057,11 @@ final class PasteboardSession {
         }
         if let snapshot {
             pasteboard.restore(snapshot)
+            ourChangeCount = pasteboard.changeCount
+        } else {
+            // Nothing to put back: the promise would die with the app or the next snapshot, so the transcript becomes
+            // real data (kept out of history) and the notice stays true.
+            pasteboard.write(leaseTranscript, markers: Self.concealedMarkers)
             ourChangeCount = pasteboard.changeCount
         }
         restoredGeneration = expected

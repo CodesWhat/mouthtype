@@ -2163,8 +2163,58 @@ private struct Rig {
         rig.pasteboard.read()
         rig.gate.open()
         await rig.inserter.waitForVerification()
+        // That read means the target is still taking the text; the clipboard goes back on its settle.
+        #expect(rig.pasteboard.contents != original)
+        await hop { rig.pending.delays.filter { $0 == PasteboardSession.receiptSettle }.count >= 2 }
+        rig.pending.run(PasteboardSession.receiptSettle)
         #expect(rig.pasteboard.contents == original)
         #expect(!rig.inserter.isRestorePending)
+    }
+
+    @Test func aNextPasteKeepsWaitingWhileTheFieldHoldIsOn() async {
+        let rig = Rig(chunks: true, gated: true)
+        defer { rig.gate.open(); rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = original
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        rig.focus.readings = [Self.before]
+        rig.inserter.observeVerification { _ in }
+        _ = await rig.inserter.deliver("first", startFocus: nil)
+        rig.pasteboard.read()
+        await hop { rig.pending.delays.contains(PasteboardSession.receiptSettle) }
+        var holdPolls = 0
+        rig.pauses.observe = { delay in
+            guard delay == 0.02 else { return }
+            holdPolls += 1
+            // The receipts have settled, but the field hasn't shown the text: the first paste is still the lease.
+            if holdPolls < 4 { #expect(rig.poster.posts == 1) }
+            if holdPolls == 4 { rig.pending.run(PasteboardSession.fieldHoldCap) }
+        }
+        _ = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(holdPolls >= 4)
+    }
+
+    @Test func aHoldConfirmedRestoreWithNoReceiptsStillSettlesTheNextPaste() async {
+        let rig = Rig(chunks: true, gated: true)
+        defer { rig.gate.open(); rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.pasteboard.contents = original
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        let grown = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
+        rig.focus.readings = [Self.before, Self.before, grown]
+        rig.inserter.observeVerification { _ in }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        var polls = 0
+        rig.pauses.observe = { delay in
+            guard delay == 0.02 else { return }
+            polls += 1
+            if rig.pending.delays.contains(PasteboardSession.receiptSettle) {
+                rig.pending.run(PasteboardSession.receiptSettle)
+            } else if polls == 3 {
+                rig.gate.openVerification()
+            }
+        }
+        let second = await rig.inserter.deliver("again", startFocus: nil)
+        #expect(second.method == .paste)
+        #expect(rig.poster.posts == 2)
     }
 
     @Test func anUnreadableFieldKeepsTheReceiptOnlyRestore() async {

@@ -72,7 +72,11 @@ enum PasteVerifier {
         }
         guard let value = now.value else { return false }
         let key = compact(pasted)
-        if !key.isEmpty, occurrences(of: key, in: compact(value)) > occurrences(of: key, in: compact(beforeValue)) { return true }
+        if !key.isEmpty, occurrences(of: key, in: compact(value)) > occurrences(of: key, in: compact(beforeValue)),
+            gainMatches(key: key, before: beforeValue, now: value, selection: before.selection)
+        {
+            return true
+        }
         // Pasting over a selection that already held the text gains nothing; the field reading exactly as the paste
         // would leave it is the evidence then.
         if let expected = replacing(before.selection, in: beforeValue, with: pasted) {
@@ -154,6 +158,21 @@ enum PasteVerifier {
         }
         guard new.substring(from: prefix + gained) == old.substring(from: prefix) else { return nil }
         return new.substring(with: NSRange(location: prefix, length: gained))
+    }
+
+    /// The field grew by about what was pasted (less the selection it replaced). A short transcript that sits inside a
+    /// wrongly pasted, longer previous clipboard raises the count too, but grows the field by far more.
+    private static func gainMatches(key: String, before: String, now: String, selection: NSRange?) -> Bool {
+        var replaced = 0
+        if let selection, selection.location != NSNotFound, selection.length > 0,
+            selection.location + selection.length <= (before as NSString).length
+        {
+            replaced = compact((before as NSString).substring(with: selection)).unicodeScalars.count
+        }
+        let gain = compact(now).unicodeScalars.count - compact(before).unicodeScalars.count
+        let expected = key.unicodeScalars.count - replaced
+        let tolerance = max(2, key.unicodeScalars.count / 5)
+        return abs(gain - expected) <= tolerance
     }
 
     /// Same length and at most one character in ten differs, as a field that swaps quotes or dashes leaves it.
