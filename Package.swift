@@ -57,7 +57,8 @@ let package = Package(
         ),
         .testTarget(
             name: "MouthtypeCoreTests",
-            dependencies: ["MouthtypeCore", "mouthtype-bench"]
+            dependencies: ["MouthtypeCore", "mouthtype-bench"],
+            exclude: ["Fixtures"]
         ),
         .testTarget(
             name: "FnRemapKitTests",
