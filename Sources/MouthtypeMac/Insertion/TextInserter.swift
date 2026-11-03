@@ -189,8 +189,11 @@ public final class TextInserter {
         var secureInput = focus.isSecureInputEnabled
         let moved = startFocus?.hasChanged(to: now) ?? false
         if DeliveryDecision.decide(now: now, secureInput: secureInput) == .discardSecure {
+            let blockedBySecureInput = secureInput && !now.isSecure
             now.isSecure = now.isSecure || secureInput
-            return DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: moved, target: now, finalText: "")
+            return DeliveryResult(
+                method: .none, outcome: .secureDiscard, focusMoved: moved, target: now, finalText: "",
+                secureInputBlocked: blockedBySecureInput)
         }
         guard !closing else {
             return DeliveryResult(
@@ -222,10 +225,12 @@ public final class TextInserter {
             var checked = focus.snapshot()
             let checkedSecureInput = focus.isSecureInputEnabled
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
+                let blockedBySecureInput = checkedSecureInput && !checked.isSecure
                 checked.isSecure = checked.isSecure || checkedSecureInput
                 return DeliveryResult(
                     method: .none, outcome: .secureDiscard,
-                    focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
+                    focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "",
+                    secureInputBlocked: blockedBySecureInput)
             }
             lastText = text
             guard checked.pid == now.pid, checked.bundleID == now.bundleID, checked.element == now.element else {
@@ -248,9 +253,12 @@ public final class TextInserter {
 
         switch DeliveryDecision.decide(now: now, secureInput: secureInput) {
         case .discardSecure:
+            let blockedBySecureInput = secureInput && !now.isSecure
             now.isSecure = now.isSecure || secureInput
             Log.app.info("secure field focused; transcript discarded")
-            return DeliveryResult(method: .none, outcome: .secureDiscard, focusMoved: moved, target: now, finalText: "")
+            return DeliveryResult(
+                method: .none, outcome: .secureDiscard, focusMoved: moved, target: now, finalText: "",
+                secureInputBlocked: blockedBySecureInput)
         case .clipboardOnly:
             lastText = text
             clipboard.copy(text)
@@ -307,10 +315,12 @@ public final class TextInserter {
                 }
             }
             if DeliveryDecision.decide(now: checked, secureInput: checkedSecureInput) == .discardSecure {
+                let blockedBySecureInput = checkedSecureInput && !checked.isSecure
                 checked.isSecure = checked.isSecure || checkedSecureInput
                 return DeliveryResult(
                     method: .none, outcome: .secureDiscard,
-                    focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "")
+                    focusMoved: moved || now.hasChanged(to: checked), target: checked, finalText: "",
+                    secureInputBlocked: blockedBySecureInput)
             }
             if checked.focusOwnerDiffersFromFrontmost {
                 return leaveOnClipboard(
