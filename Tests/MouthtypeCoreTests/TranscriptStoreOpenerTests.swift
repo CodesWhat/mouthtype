@@ -194,7 +194,8 @@ import Testing
             try FileManager.default.moveItem(at: from, to: to)
         }
         #expect(outcome.store == nil)
-        #expect(outcome.quarantinedTo?.lastPathComponent.hasPrefix("mouthtype.sqlite-wal.corrupt-") == true)
+        #expect(outcome.quarantinedTo == nil)
+        #expect(outcome.failure?.contains("mouthtype.sqlite-wal.corrupt-") == true)
         #expect(outcome.failure?.contains("could not be moved back") == true)
     }
 }

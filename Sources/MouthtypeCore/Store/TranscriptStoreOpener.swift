@@ -61,7 +61,7 @@ public enum TranscriptStoreOpener {
                 if !failure.leftover.isEmpty {
                     text += ". Some files could not be moved back and are still named " + failure.leftover.map(\.lastPathComponent).joined(separator: ", ")
                 }
-                return StoreOpenOutcome(quarantinedTo: failure.leftover.first, failure: text)
+                return StoreOpenOutcome(failure: text)
             }
             do {
                 return StoreOpenOutcome(store: try opener(url), quarantinedTo: moved.database, quarantinedAudioTo: moved.audio)
