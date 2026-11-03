@@ -1,4 +1,4 @@
-# Mouthtype 0.12.0
+# Mouthtype 0.12.1
 
 Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak, release, and clean text is pasted where you're typing. Recognition and cleanup run on your Mac.
 
@@ -15,6 +15,13 @@ Local dictation for Apple Silicon Macs running macOS 26 or later. Hold Fn, speak
 > This distribution is Developer ID signed and notarized. If macOS rejects it, record the exact message; do not disable Gatekeeper.
 
 The app’s Resources folder contains these notes and its license. Corresponding release source is available from https://mouthtype.app/source; the development repository is at https://github.com/CodesWhat/mouthtype.
+
+## What changed in 0.12.1
+
+- Fixed: with Secure Input on, Mouthtype could paste into a password field in some apps (web and Electron apps, or a slow native password field). It now only pastes when it can confirm a normal text field, and otherwise keeps your text on the card with a note.
+- Fixed: if the history database can't be opened, Mouthtype says so in the menu and Diagnostics. A damaged database is set aside with its recordings and a fresh one starts. Nothing is deleted.
+- Fixed: deleting a take removes its audio. Failed and interrupted recordings age out with your retention setting after a 30-day grace, and saved recordings stay listed after an account rename.
+- Fixed: counted lists no longer leave a stray "and" or "then" at the end of an item.
 
 ## What changed in 0.12.0
 

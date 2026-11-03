@@ -42,15 +42,22 @@ public enum DictationRecovery {
 
     /// The kept audio of finished takes, from each row's own `audio_path`: the file must exist and be a valid
     /// WAV. Retention maintenance owns expiry under the current policy, so the expiry stamped at record time is not
-    /// checked here. Rows without usable audio are skipped.
-    public static func completed(rows: [TakeRecord], now: Date) -> [RecoverableDictation] {
+    /// checked here. `audio_path` is stored absolute, so after an account rename or a migration it can point nowhere;
+    /// with an `archive`, the take's file in the current archive directory is used instead. Rows without usable audio
+    /// are skipped.
+    public static func completed(rows: [TakeRecord], now: Date, archive: AudioArchive? = nil) -> [RecoverableDictation] {
         rows.compactMap { row in
             guard let path = row.audioPath else { return nil }
-            guard let size = (try? FileManager.default.attributesOfItem(atPath: path))?[.size] as? Int, size > 44 else { return nil }
-            return RecoverableDictation(
-                id: row.id, startedAt: Date(timeIntervalSince1970: row.startedAt), audioURL: URL(fileURLWithPath: path),
-                seconds: Double(size - 44) / Double(AudioArchive.sampleRate * 2), isPartial: false, isCompleted: true
-            )
+            var candidates = [URL(fileURLWithPath: path)]
+            if let archive { candidates.append(archive.url(for: row.id)) }
+            for url in candidates {
+                guard let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? Int, size > 44 else { continue }
+                return RecoverableDictation(
+                    id: row.id, startedAt: Date(timeIntervalSince1970: row.startedAt), audioURL: url,
+                    seconds: Double(size - 44) / Double(AudioArchive.sampleRate * 2), isPartial: false, isCompleted: true
+                )
+            }
+            return nil
         }
     }
 

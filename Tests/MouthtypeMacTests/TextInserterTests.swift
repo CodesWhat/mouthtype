@@ -727,6 +727,7 @@ private struct Rig {
         let rig = Rig(chunks: true)
         defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
         rig.focus.current.element = element(100)
+        rig.focus.current.role = "AXTextArea"
         _ = await rig.inserter.deliver("first", startFocus: nil)
         var changed = false
         rig.pauses.observe = { delay in
@@ -739,6 +740,48 @@ private struct Rig {
         let second = await rig.inserter.deliver("second", startFocus: nil)
         #expect(changed && second.method == .paste && !second.finalText.isEmpty)
         #expect(rig.poster.posts == 2)
+    }
+
+    @Test func secureInputTurningOnMidDeliveryDiscardsAnUnconfirmedElement() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.focus.current.element = element(100)
+        rig.focus.current.role = "AXGroup"
+        let first = await rig.inserter.deliver("first", startFocus: nil)
+        #expect(first.method == .paste && !first.secureInputBlocked)
+        var changed = false
+        rig.pauses.observe = { delay in
+            if delay == 0.02, !changed {
+                changed = true
+                rig.focus.isSecureInputEnabled = true
+                rig.pasteboard.read()
+            }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(changed)
+        #expect(second.method == .none && second.outcome == .secureDiscard && second.finalText.isEmpty)
+        #expect(second.secureInputBlocked)
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(DeliveryCard.forDelivery(second, transcript: "second")?.header.contains("Secure Input is on") == true)
+    }
+
+    @Test func aRealSecureFieldKeepsTheSecureFieldCard() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", isSecure: true, element: element(100))
+        let result = await rig.inserter.deliver("x", startFocus: nil)
+        #expect(result.outcome == .secureDiscard && !result.secureInputBlocked)
+        #expect(DeliveryCard.forDelivery(result, transcript: "x") == .secure("x"))
+    }
+
+    @Test func secureInputWithAnUnconfirmedRoleShowsTheSecureInputCard() async {
+        let rig = Rig()
+        rig.focus.isSecureInputEnabled = true
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXWebArea", element: element(100))
+        let result = await rig.inserter.deliver("x", startFocus: nil)
+        let card = DeliveryCard.forDelivery(result, transcript: "x")
+        #expect(result.secureInputBlocked)
+        #expect(card == .secureInput("x"))
+        #expect(card?.actions == [.copy])
     }
 
     @Test(arguments: [false, true]) func preflightRecheckPrecedesMissingPasteKeyFallback(secureDestination: Bool) async {
@@ -1159,11 +1202,52 @@ private struct Rig {
     @Test func secureInputWithAReadableNormalFieldPastes() async {
         let rig = Rig()
         rig.focus.isSecureInputEnabled = true
-        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextArea", element: element(100))
         let result = await rig.inserter.deliver("x", startFocus: nil)
         #expect(result.method == .paste)
         #expect(result.outcome == .unknown)
         #expect(rig.poster.posts == 1)
+    }
+
+    @Test func secureInputWithAnUnconfirmedRoleDiscards() async {
+        let rig = Rig()
+        rig.pasteboard.contents = original
+        rig.focus.isSecureInputEnabled = true
+        rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
+        let result = await rig.inserter.deliver("x", startFocus: nil)
+        #expect(result.outcome == .secureDiscard)
+        #expect(rig.pasteboard.writes.isEmpty)
+        #expect(rig.poster.posts == 0)
+    }
+
+    @Test func deliveryDecisionUnderSecureInputNeedsAConfirmedField() {
+        let e = element(100)
+        func decide(_ snapshot: FocusSnapshot, secureInput: Bool = true) -> DeliveryDecision {
+            DeliveryDecision.decide(now: snapshot, secureInput: secureInput)
+        }
+        for role in ["AXGroup", "AXWebArea", "AXWindow", "AXScrollArea"] {
+            #expect(decide(FocusSnapshot(pid: 1, role: role, element: e)) == .discardSecure, "\(role)")
+        }
+        #expect(decide(FocusSnapshot(pid: 1, role: nil, element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXTextField", readsFailed: true, element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXTextField", subrole: "AXSecureTextField", element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXStaticText", element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXStaticText", isTextSettable: false, element: e)) == .discardSecure)
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXStaticText", isTextSettable: true, element: e)) == .paste)
+        for role in ["AXTextField", "AXTextArea", "AXComboBox"] {
+            #expect(decide(FocusSnapshot(pid: 1, role: role, element: e)) == .paste, "\(role)")
+        }
+        #expect(decide(FocusSnapshot(pid: 1, role: "AXTextArea", subrole: "AXStandardWindow", element: e)) == .paste)
+    }
+
+    @Test func deliveryDecisionIsUnchangedWithSecureInputOff() {
+        let e = element(100)
+        for role in [nil, "AXGroup", "AXWebArea", "AXTextArea"] {
+            #expect(DeliveryDecision.decide(now: FocusSnapshot(pid: 1, role: role, element: e), secureInput: false) == .paste)
+        }
+        #expect(DeliveryDecision.decide(now: FocusSnapshot(pid: 1, role: "AXGroup", readsFailed: true, element: e), secureInput: false) == .paste)
+        #expect(DeliveryDecision.decide(now: FocusSnapshot(pid: 1, role: "AXTextField", isSecure: true, element: e), secureInput: false) == .discardSecure)
+        #expect(DeliveryDecision.decide(now: FocusSnapshot(), secureInput: false) == .clipboardOnly)
     }
 
     @Test func aSecureFieldAtStartButANormalOneAtDeliveryPastes() async {
