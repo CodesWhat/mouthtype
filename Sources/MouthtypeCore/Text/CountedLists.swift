@@ -406,9 +406,9 @@ public struct CountedLists: Sendable {
         return spans
     }
 
-    private static let connectives: Set<String> = ["and", "then", "but", "also", "next"]
+    private static let connectives: Set<String> = ["and", "then"]
 
-    /// Start of one joining word ("and", "then", "and then", "but", "also", "next") sitting directly before a
+    /// Start of one joining word ("and", "then", "and then") sitting directly before a
     /// non-first marker, when it is not the first word of the item it would trail.
     private func connectiveStart(
         before marker: Candidate, after previous: Candidate, _ chars: [Character], _ words: [ScanWord]
