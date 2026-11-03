@@ -742,6 +742,48 @@ private struct Rig {
         #expect(rig.poster.posts == 2)
     }
 
+    @Test func secureInputTurningOnMidDeliveryDiscardsAnUnconfirmedElement() async {
+        let rig = Rig(chunks: true)
+        defer { rig.pauses.observe = nil; rig.inserter.cancelVerification() }
+        rig.focus.current.element = element(100)
+        rig.focus.current.role = "AXGroup"
+        let first = await rig.inserter.deliver("first", startFocus: nil)
+        #expect(first.method == .paste && !first.secureInputBlocked)
+        var changed = false
+        rig.pauses.observe = { delay in
+            if delay == 0.02, !changed {
+                changed = true
+                rig.focus.isSecureInputEnabled = true
+                rig.pasteboard.read()
+            }
+        }
+        let second = await rig.inserter.deliver("second", startFocus: nil)
+        #expect(changed)
+        #expect(second.method == .none && second.outcome == .secureDiscard && second.finalText.isEmpty)
+        #expect(second.secureInputBlocked)
+        #expect(rig.poster.posts == 1 && rig.pasteboard.writes.count == 1)
+        #expect(DeliveryCard.forDelivery(second, transcript: "second")?.header.contains("Secure Input is on") == true)
+    }
+
+    @Test func aRealSecureFieldKeepsTheSecureFieldCard() async {
+        let rig = Rig()
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXTextField", isSecure: true, element: element(100))
+        let result = await rig.inserter.deliver("x", startFocus: nil)
+        #expect(result.outcome == .secureDiscard && !result.secureInputBlocked)
+        #expect(DeliveryCard.forDelivery(result, transcript: "x") == .secure("x"))
+    }
+
+    @Test func secureInputWithAnUnconfirmedRoleShowsTheSecureInputCard() async {
+        let rig = Rig()
+        rig.focus.isSecureInputEnabled = true
+        rig.focus.current = FocusSnapshot(pid: 100, role: "AXWebArea", element: element(100))
+        let result = await rig.inserter.deliver("x", startFocus: nil)
+        let card = DeliveryCard.forDelivery(result, transcript: "x")
+        #expect(result.secureInputBlocked)
+        #expect(card == .secureInput("x"))
+        #expect(card?.actions == [.copy])
+    }
+
     @Test(arguments: [false, true]) func preflightRecheckPrecedesMissingPasteKeyFallback(secureDestination: Bool) async {
         let rig = Rig()
         rig.keys.code = nil

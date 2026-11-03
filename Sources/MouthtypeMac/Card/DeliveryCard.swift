@@ -79,6 +79,13 @@ struct DeliveryCard: Equatable, Sendable {
         DeliveryCard(kind: .secure, header: "Secure field, not pasted", transcript: text, actions: [.copy], countdown: nil)
     }
 
+    /// Secure Input is on and the field couldn't be confirmed as ordinary text, so nothing was pasted.
+    static func secureInput(_ text: String) -> DeliveryCard {
+        DeliveryCard(
+            kind: .secure, header: "Not pasted\nSecure Input is on, so Mouthtype didn't paste. Copy it from here.",
+            transcript: text, actions: [.copy], countdown: nil)
+    }
+
     static func nowhere(_ text: String) -> DeliveryCard {
         DeliveryCard(kind: .nowhere, header: "Nothing to paste into", transcript: text, actions: [.copy], countdown: nil)
     }
@@ -177,7 +184,7 @@ struct DeliveryCard: Equatable, Sendable {
     static func forDelivery(_ result: DeliveryResult, transcript: String) -> DeliveryCard? {
         let text = result.finalText.isEmpty ? transcript : result.finalText
         switch (result.method, result.outcome) {
-        case (_, .secureDiscard): return .secure(text)
+        case (_, .secureDiscard): return result.secureInputBlocked ? .secureInput(text) : .secure(text)
         case (_, .partialPaste):
             return DeliveryCard(
                 kind: .pasteFailed, header: "Paste stopped\nSome text may already be there", transcript: text,

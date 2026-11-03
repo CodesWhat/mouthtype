@@ -36,6 +36,9 @@ public struct DeliveryResult: Sendable {
     public var pasteReceiptMs: Int? = nil
     /// Names the read-back verification started for this paste, when one was.
     var verificationID: Int? = nil
+    /// A secure discard caused by system Secure Input being on while the field wasn't confirmed as ordinary text, not
+    /// by the field itself being secure.
+    public var secureInputBlocked: Bool = false
 
     /// The store's `insert_method` vocabulary.
     public var storeMethod: String {
