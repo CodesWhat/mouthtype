@@ -80,12 +80,9 @@ struct CleanupCommand: AsyncParsableCommand {
             }
         }
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
         let machine = Machine.collect()
         let report = CleanupBenchReport(
-            date: formatter.string(from: Date()),
+            date: BenchDate.today(),
             machine: machine,
             runsPerCase: runs,
             caseCount: cases.count,
