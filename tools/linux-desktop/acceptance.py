@@ -12,13 +12,17 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import traceback
 import time
 import wave
 
+import session_client
 from desktop import PipeWireCapture, stop_process, read_phrase_clipboard, HyprlandDelivery
 from phrases import load_phrases
 from cleanup import BasicCleanup
+import consent_atspi
+import kwin_pill
 
 
 def tone_metrics(path):
@@ -285,10 +289,696 @@ def sway_component(root, env, processes):
             'hyprland_adapter_tested': False, 'hyprland_acceptance': False, 'omarchy_acceptance': False}
 
 
+PORTAL_APPS = ('xdg-desktop-portal-gnome',)
+
+
+def consent_dialog(atspi):
+    """The portal's Remote Desktop dialog (the window offering Share), or None while it has not appeared."""
+    return consent_atspi.find_dialog(atspi, PORTAL_APPS)
+
+
+FOCUS_SCRIPT = (
+    "(() => { const w = global.get_window_actors().map(a => a.meta_window)"
+    ".find(m => m.get_gtk_application_id() === %r || m.get_wm_class() === %r);"
+    " if (!w) return 'none'; w.activate(global.get_current_time()); return 'activated'; })()")
+
+
+def focus_by_shell_eval(portal, app_id):
+    """Activate the target's MetaWindow through org.gnome.Shell.Eval. Needs gnome-shell --unsafe-mode, which the
+    testbed uses because a headless shell never focuses a new window by itself. Returns True once activated."""
+    body = portal.call('org.gnome.Shell', 'Eval', 's', (FOCUS_SCRIPT % (app_id, app_id),),
+                       path='/org/gnome/Shell', bus_name='org.gnome.Shell', timeout=5.0)
+    sys.stderr.write('shell eval focus: %r\n' % (body,))
+    return bool(body[0]) and 'activated' in str(body[1])
+
+
+WINDOWS_SCRIPT = (
+    "JSON.stringify([global.display.focus_window ? global.display.focus_window.get_title() : null,"
+    " global.get_window_actors().map(a => { const m = a.meta_window; return [m.get_title(), m.get_wm_class(),"
+    " m.get_gtk_application_id(), m.get_window_type(), m.minimized, m.has_focus(), m.get_frame_rect().x,"
+    " m.get_frame_rect().y, m.get_frame_rect().width]; })])")
+
+
+def shell_windows(portal):
+    """The shell's own view of its windows, for the failure message."""
+    try:
+        body = portal.call('org.gnome.Shell', 'Eval', 's', (WINDOWS_SCRIPT,), path='/org/gnome/Shell',
+                           bus_name='org.gnome.Shell', timeout=5.0)
+        return str(body[1])
+    except Exception as exc:
+        return 'unavailable: %s' % exc
+
+
+def focus_by_click(portal, x, y):
+    """Headless mutter gives a new window no focus, so click it through the direct mutter RemoteDesktop API
+    (no portal, no consent dialog): clamp the pointer to the corner, then move to the point and click."""
+    import portal_probe
+    bus, path, iface = portal_probe.MUTTER_BUS, portal_probe.MUTTER_PATH, portal_probe.MUTTER_SESSION_IFACE
+    session = portal.call(bus, 'CreateSession', '', (), path=path, bus_name=bus)[0]
+    try:
+        portal.call(iface, 'Start', '', (), path=session, bus_name=bus)
+        for dx, dy in ((-4000.0, -4000.0), (float(x), float(y))):
+            portal.call(iface, 'NotifyPointerMotionRelative', 'dd', (dx, dy), path=session, bus_name=bus)
+        for down in (True, False):
+            portal.call(iface, 'NotifyPointerButton', 'ib', (0x110, down), path=session, bus_name=bus)
+            time.sleep(.1)
+    finally:
+        portal.call(iface, 'Stop', '', (), path=session, bus_name=bus, timeout=2.0)
+
+
+def atspi_outline(atspi):
+    """Applications and their top-level windows with states, for the failure message."""
+    outline = []
+    desktop = atspi.get_desktop(0)
+    for index in range(desktop.get_child_count()):
+        app = desktop.get_child_at_index(index)
+        if app is None:
+            continue
+        windows = []
+        for frame in range(app.get_child_count()):
+            window = app.get_child_at_index(frame)
+            if window is not None:
+                states = window.get_state_set().get_states()
+                windows.append([window.get_name(), sorted(state.value_nick for state in states)])
+        outline.append([app.get_name(), windows])
+    return outline
+
+
+def gnome_portal_component(root, env, processes):
+    """Portal paste on a headless GNOME session: consent through AT-SPI, a persisted grant that restarts without a
+    prompt, then clipboard + Ctrl+V into the GTK target, with the earlier clipboard put back."""
+    import portal as portal_module
+    from atspi_target import AtspiTargets, load_atspi
+    from delivery_portal import GrantStore, PortalClipboard, PortalDelivery, PortalKeyboard, RemoteDesktopSession
+    atspi = load_atspi()
+    if atspi is None:
+        raise ValueError('AT-SPI is not available')
+    runtime = Path(env['XDG_RUNTIME_DIR'])
+    wayland = wait_for(lambda: next((p for p in runtime.glob('wayland-*') if not p.name.endswith('.lock')), None))
+    env.update(WAYLAND_DISPLAY=wayland.name, GDK_BACKEND='wayland', XDG_SESSION_TYPE='wayland',
+               XDG_CURRENT_DESKTOP='GNOME', LC_ALL='C.UTF-8')
+    previous_env = dict(os.environ)
+    os.environ.update(env)
+    text_path = root / 'target.json'
+    expected = 'Hello, 世界. Émilie 👋 from the portal.'
+    sentinel = 'Mouthtype existing clipboard'
+    store = GrantStore(root / 'state/mouthtype/portal.json')
+    portal = remote = clipboard = None
+    try:
+        targets = AtspiTargets()
+        portal = portal_module.Portal()
+        portal.connect()
+        portal.register()
+        remote = RemoteDesktopSession(portal, store, start_timeout=40)
+        outcome = {}
+        starter = threading.Thread(target=lambda: outcome.setdefault('status', remote.start(interactive=True)))
+        starter.start()
+        dialog = wait_for(lambda: consent_dialog(atspi), 20)
+        answered = consent_atspi.answer(dialog, atspi)
+        starter.join(30)
+        if outcome.get('status') != 'active':
+            raise ValueError('Grant did not become active: ' + json.dumps(remote.snapshot()))
+        if not store.load():
+            raise ValueError('No restore grant was stored')
+        remote.close()
+        started = time.monotonic()
+        restored = remote.start(interactive=False)
+        if restored != 'active' or consent_dialog(atspi) is not None:
+            raise ValueError('Stored grant did not restart silently: ' + json.dumps(remote.snapshot()))
+        restart_seconds = round(time.monotonic() - started, 2)
+        clicked = []
+        def focused_snapshot():
+            try:
+                focus_by_shell_eval(portal, 'app.mouthtype.Acceptance')
+            except Exception as exc:
+                sys.stderr.write('shell eval focus failed: %s\n' % exc)
+            try:
+                PortalKeyboard(remote).tap(0xffe1)  # Shift_L: mutter only hands the client keyboard focus on input
+            except Exception as exc:
+                sys.stderr.write('nudge failed: %s\n' % exc)
+            if not clicked:
+                clicked.append(1)
+                try:
+                    focus_by_click(portal, 640, 400)
+                except Exception as exc:
+                    sys.stderr.write('click failed: %s\n' % exc)
+            time.sleep(.3)
+            snap = targets.snapshot()
+            return snap if snap.get('class') not in (None, 'unknown') else None
+        # Headless mutter has no seat keyboard until a RemoteDesktop session adds a virtual one, so the target
+        # starts after the grant is active: a window created earlier never receives keyboard focus.
+        clipboard = PortalClipboard(remote).start()
+        env['MOUTHTYPE_TARGET_CLIPBOARD'] = sentinel
+        processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(text_path)])
+        wait_for(lambda: text_path.exists())
+        try:
+            target = wait_for(focused_snapshot, 20)
+        except TimeoutError:
+            raise ValueError('AT-SPI never reported the target as focused: ' + json.dumps(atspi_outline(atspi))
+                             + ' shell: ' + shell_windows(portal))
+        def earlier_clipboard():
+            PortalKeyboard(remote).tap(0xffe1)
+            time.sleep(.3)
+            return clipboard.read_current().get('text/plain;charset=utf-8')
+        try:
+            taken = wait_for(earlier_clipboard, 10)
+        except TimeoutError:
+            taken = None
+        if taken != sentinel.encode():
+            raise ValueError('Target did not take the earlier clipboard: ' + repr(clipboard._owner_mimes))
+        delivery = PortalDelivery({'mode': 'paste', 'allow_unknown_secure_field': True, 'restore_delay_seconds': .5,
+                                   'allowed_classes': [target['class']]}, remote, clipboard, targets=targets)
+        if delivery.paste(expected, delivery.snapshot()) != 'unknown':
+            raise ValueError('Portal paste did not complete')
+        def contents():
+            try:
+                value = json.loads(text_path.read_text())
+            except (ValueError, OSError):
+                return None
+            return value if value.get('text') else None
+        wait_for(contents, 10)
+        time.sleep(1)
+        actual = contents()
+        if actual is None or actual['text'] != expected:
+            raise ValueError('Target text differs: ' + json.dumps(actual, ensure_ascii=False))
+        if delivery.restore_thread is None:
+            raise ValueError('No clipboard restore was scheduled')
+        delivery.restore_thread.join(5)
+        def restored_clipboard():
+            # read_current is empty while this session owns the selection, which a restore makes true.
+            with clipboard._lock:
+                offers = dict(clipboard._offers)
+            return offers.get('text/plain;charset=utf-8')
+        if wait_for(restored_clipboard, 5) != sentinel.encode():
+            raise ValueError('Clipboard was not restored')
+        first_target = processes.items[-1][0]
+        secure_target = secure_refusal(processes, first_target, env, root, delivery, clipboard, targets, focused_snapshot)
+        secure = secure_target.pop('result')
+        # The chord goes last, with no client window open: a focused GTK window kept the grab from firing here.
+        stop_process(secure_target.pop('process'))
+        wait_for(lambda: not mapped_windows(portal), 10)
+        shortcut_take = os.environ.get('MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE') != '0'
+        shortcut = shortcut_hold_take(root, portal, delivery, atspi) if shortcut_take else None
+        return {'component': 'gnome-portal', 'compositor': 'GNOME Shell headless',
+                'native_target': 'GTK3 Wayland', 'target_class': target['class'],
+                'consent': answered, 'grant_persisted': True, 'silent_restart': True,
+                'restart_seconds': restart_seconds, 'unicode_exact': True, 'delivered_once': True,
+                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': shortcut if shortcut_take else {'checked': False, 'reason': 'skipped'},
+                'fake_engine_take': shortcut_take,
+                'hyprland_acceptance': False, 'omarchy_acceptance': False}
+    finally:
+        for closer in (getattr(clipboard, 'close', None), getattr(remote, 'close', None), getattr(portal, 'close', None)):
+            if closer:
+                try:
+                    closer()
+                except Exception:
+                    pass
+        os.environ.clear()
+        os.environ.update(previous_env)
+
+
+def hold_take_result(calls, state, granted):
+    """Check the commands a held chord sent the session: one start on Activated, then one stop on Deactivated, and
+    the take back at idle. Returns the evidence dict, raises ValueError otherwise."""
+    if calls != ['start', 'stop']:
+        raise ValueError('Held chord did not start then stop one take: ' + json.dumps(calls))
+    if state != 'idle':
+        raise ValueError('Take did not finish after release: ' + str(state))
+    return {'commands': list(calls), 'final_state': state, 'triggers': dict(granted)}
+
+
+def mapped_windows(portal):
+    """True while the shell still lists a client window."""
+    return json.loads(json.loads(shell_windows(portal) or '[null, []]'))[1]
+
+
+# The testbed session turns GNOME hot corners off (testbed/gnome/acceptance.sh). Without that, MutterDriver.wake_stage's
+# -4000,-4000 pointer park hits the top-left hot corner and the wake click opens the date menu, which blocks the chord.
+MODE_SCRIPT = "JSON.stringify([Main.actionMode, Main.modalCount])"
+
+
+def shell_eval(portal, script):
+    """Run script in GNOME Shell through org.gnome.Shell.Eval; returns the JSON-decoded result, or None on failure."""
+    try:
+        body = portal.call('org.gnome.Shell', 'Eval', 's', (script,), path='/org/gnome/Shell',
+                           bus_name='org.gnome.Shell', timeout=5.0)
+        return json.loads(body[1]) if body[0] else None
+    except Exception:
+        return None
+
+
+def shell_mode(portal):
+    raw = shell_eval(portal, MODE_SCRIPT)
+    return json.loads(raw) if isinstance(raw, str) else None
+
+
+def shortcut_hold_take(root, portal, delivery, atspi):
+    """Bind the dictate-hold chord through GlobalShortcuts (consent answered through AT-SPI), press and hold it with
+    the mutter RemoteDesktop driver, and check a fake-engine take starts on Activated and stops on Deactivated."""
+    import desktop
+    import portal_probe
+    import shortcuts_portal
+    session = desktop.Session(FixedCapture(), FixedEngine(), delivery, root / 'state/recovery-shortcut', maximum_seconds=10)
+    calls = []
+    real_command = session.command
+    def recording(action, **kwargs):
+        if action != 'status':
+            calls.append(action)
+        return real_command(action, **kwargs)
+    session.command = recording
+    shortcuts = shortcuts_portal.PortalShortcuts(session)
+    driver = portal_probe.MutterDriver(portal)
+    outcome = {}
+    def bind():
+        try:
+            shortcuts.start()
+            outcome['bound'] = True
+        except BaseException as exc:
+            outcome['error'] = exc
+    starter = threading.Thread(target=bind, name='acceptance-bind')
+    starter.start()
+    try:
+        answered = None
+        end = time.monotonic() + 40
+        while starter.is_alive() and time.monotonic() < end:
+            dialog = consent_atspi.find_dialog(atspi)
+            if dialog is not None:
+                answered = consent_atspi.answer(dialog, atspi)
+                break
+            time.sleep(.5)
+        starter.join(40)
+        if outcome.get('error') is not None or not outcome.get('bound'):
+            raise ValueError('GlobalShortcuts bind failed: ' + repr(outcome.get('error'))
+                             + ' outline: ' + json.dumps(atspi_outline(atspi)))
+        status = shortcuts.status()
+        if shortcuts_portal.HOLD not in status['triggers']:
+            raise ValueError('dictate-hold was not granted: ' + json.dumps(status))
+        driver.open()  # one click and a Shift_L tap wake the stage, as T2b found
+        # GlobalShortcuts accelerators only fire in normal mode (actionMode 1, modalCount 0).
+        wait_for(lambda: shell_mode(portal) == [1, 0], 10)
+        for keysym in portal_probe.CHORD_KEYSYMS:
+            driver.key(keysym, True)
+        try:
+            wait_for(lambda: session.state == 'recording', 10)
+        except TimeoutError:
+            raise ValueError('Held chord never started a take: ' + json.dumps({'shortcuts': shortcuts.status(), 'calls': calls}))
+        time.sleep(.5)
+        for keysym in reversed(portal_probe.CHORD_KEYSYMS):
+            driver.key(keysym, False)
+        wait_for(lambda: session.state == 'idle' and 'stop' in calls, 15)
+        time.sleep(1)
+        result = hold_take_result(calls, session.state, status['triggers'])
+        result['consent'] = answered
+        return result
+    finally:
+        driver.close()
+        shortcuts.stop()
+        session.close()
+
+
+def secure_refusal(processes, previous, env, root, delivery, clipboard, targets, focus):
+    """Swap the target for a password GtkEntry. AT-SPI must mark it secure, paste must answer recover_only, the
+    entry must stay empty and the clipboard must be untouched. Returns the evidence and the target's process."""
+    stop_process(previous)
+    secure_path = root / 'secure.json'
+    env['MOUTHTYPE_TARGET_SECURE'] = '1'
+    env.pop('MOUTHTYPE_TARGET_CLIPBOARD', None)
+    started = processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(secure_path)])
+    wait_for(lambda: secure_path.exists())
+    def secure_snapshot():
+        snap = focus()
+        return snap if snap and snap.get('secure') else None
+    try:
+        snapshot = wait_for(secure_snapshot, 20)
+    except TimeoutError:
+        raise ValueError('AT-SPI never marked the password entry secure: ' + json.dumps(targets.snapshot()))
+    delivery.config['allowed_classes'] = [snapshot['class']]
+    with clipboard._lock:
+        before = dict(clipboard._offers)
+    outcome = delivery.paste('Mouthtype secret', snapshot)
+    time.sleep(1)
+    with clipboard._lock:
+        after = dict(clipboard._offers)
+    text = json.loads(secure_path.read_text()).get('text') or ''
+    result = secure_field_result(snapshot, outcome, text)
+    if after != before:
+        raise ValueError('Secure refusal touched the clipboard')
+    result['clipboard_untouched'] = True
+    return {'result': result, 'process': started}
+
+
+KDE_TAKE_TEXT = 'Hello, 世界. Émilie 👋 from the portal.'
+
+
+class FixedCapture:
+    """Capture double for the daemon path: writes 0.1 s of silence, so the take is real but no microphone is used."""
+    def start(self, path):
+        with wave.open(str(path), 'wb') as audio:
+            audio.setparams((1, 2, 16000, 0, 'NONE', ''))
+            audio.writeframes(b'\0\0' * 1600)
+    def stop(self):
+        pass
+    def cancel(self):
+        pass
+    def running(self):
+        return True
+
+
+class FixedEngine:
+    """Speech engine double that returns one fixed transcript."""
+    def __init__(self, text=KDE_TAKE_TEXT):
+        self.text = text
+    def transcribe(self, _path, _cancelled):
+        return self.text
+    def warm(self):
+        pass
+    def stop(self):
+        pass
+    def close(self):
+        pass
+
+
+def wayland_display(env, runtime):
+    """The compositor socket name: WAYLAND_DISPLAY when that socket exists in runtime, else the first wayland-*."""
+    runtime = Path(runtime)
+    named = env.get('WAYLAND_DISPLAY')
+    if named and (runtime / named).exists():
+        return named
+    found = next((p for p in sorted(runtime.glob('wayland-*')) if not p.name.endswith('.lock')), None)
+    return found.name if found else None
+
+
+def enable_accessibility(call):
+    """Switch on toolkit accessibility on the session's AT-SPI bus, so GTK and Qt apps started afterwards export a
+    tree. call(argv) runs a command. Returns the argv used."""
+    argv = ['gdbus', 'call', '--session', '--dest', 'org.a11y.Bus', '--object-path', '/org/a11y/bus',
+            '--method', 'org.freedesktop.DBus.Properties.Set', 'org.a11y.Status', 'IsEnabled', '<true>']
+    call(argv)
+    return argv
+
+
+def toggle_take(socket_path, seconds=15, request=session_client.request, sleep=time.sleep, clock=time.monotonic):
+    """Run one take through the daemon's toggle command: toggle starts it, toggle stops it, then wait for the
+    session to go idle. Returns the final status. Raises ValueError when a toggle does not change state as expected."""
+    started = request(socket_path, 'toggle')
+    if started.get('state') != 'recording':
+        raise ValueError('Toggle did not start a take: ' + json.dumps({k: started.get(k) for k in ('state', 'error')}))
+    sleep(.3)
+    stopped = request(socket_path, 'toggle')
+    if stopped.get('state') not in ('transcribing', 'idle'):
+        raise ValueError('Second toggle did not stop the take: ' + json.dumps({k: stopped.get(k) for k in ('state', 'error')}))
+    end = clock() + seconds
+    while clock() < end:
+        status = request(socket_path, 'status')
+        if status.get('state') == 'idle':
+            return status
+        sleep(.1)
+    raise TimeoutError('Take did not finish')
+
+
+def secure_field_result(snapshot, delivery, text):
+    """Classify the secure-field check from the target snapshot AT-SPI gave, the take's delivery outcome and the
+    text that reached the target. An unreported or non-password focus is reported, not failed; a password field that
+    received text or was not refused raises."""
+    if snapshot.get('class') in (None, 'unknown'):
+        return {'checked': False, 'reason': 'atspi_reported_no_focus'}
+    if not snapshot.get('secure'):
+        return {'checked': False, 'reason': 'atspi_focus_without_password_role', 'target_class': snapshot.get('class')}
+    if text:
+        raise ValueError('Secure field received text')
+    if delivery != 'recover_only':
+        raise ValueError('Secure field was not refused: ' + str(delivery))
+    return {'checked': True, 'refused': True, 'delivery': delivery, 'target_class': snapshot['class']}
+
+
+KDE_SCREEN = (1280, 800)
+KDE_HOLD_SECONDS = 1.5
+
+
+class RemoteKeyboardDriver:
+    """Keyboard input through the daemon's own RemoteDesktop session (pre-authorized on KDE), shaped like the
+    portal_probe drivers: key(keysym, down)."""
+    def __init__(self, remote):
+        from delivery_portal import PortalKeyboard
+        self.keyboard = PortalKeyboard(remote)
+    def key(self, keysym, down):
+        self.keyboard.key(keysym, down)
+
+
+def kde_shortcut_pill_take(root, env, processes, session, atspi, driver, call):
+    """Bind the dictate-hold chord through GlobalShortcuts with the consent dialog answered over AT-SPI, start the
+    real Qt host (which draws the pill on a layer-shell surface), then press and hold the chord. A take must start
+    on Activated and stop on Deactivated, and KWin must report the pill's overlay surface mapped during the hold."""
+    import portal_probe
+    import shortcuts_portal
+    calls = []
+    real_command = session.command
+    def recording(action, **kwargs):
+        if action != 'status':
+            calls.append(action)
+        return real_command(action, **kwargs)
+    session.command = recording
+    shortcuts = shortcuts_portal.PortalShortcuts(session)
+    watcher = kwin_pill.KwinWatcher(root, lambda argv: run(argv, env).stdout)
+    outcome = {}
+    def bind():
+        try:
+            shortcuts.start()
+            outcome['bound'] = True
+        except BaseException as exc:
+            outcome['error'] = exc
+    starter = threading.Thread(target=bind, name='acceptance-bind')
+    try:
+        watcher.start()
+        starter.start()
+        answered = None
+        end = time.monotonic() + 40
+        while starter.is_alive() and time.monotonic() < end:
+            dialog = consent_atspi.find_dialog(atspi, consent_atspi.KDE_APPS)
+            if dialog is not None:
+                answered = consent_atspi.answer(dialog, atspi)
+                break
+            time.sleep(.5)
+        starter.join(40)
+        if outcome.get('error') is not None or not outcome.get('bound'):
+            raise ValueError('GlobalShortcuts bind failed: ' + repr(outcome.get('error'))
+                             + ' outline: ' + json.dumps(atspi_outline(atspi)))
+        status = shortcuts.status()
+        if shortcuts_portal.HOLD not in status['triggers']:
+            raise ValueError('dictate-hold was not granted: ' + json.dumps(status))
+        # The host starts in a launcher-fed mode: its `watch --retry` stream reads the daemon socket in root.
+        launcher = root / 'mouthtype-launcher'
+        launcher.write_text('#!/bin/sh\nexec %s %s --runtime %s "$@"\n' % (
+            sys.executable, Path(__file__).with_name('desktop.py'), root))
+        launcher.chmod(0o755)
+        host = Path(__file__).resolve().parent.parent / 'linux-qt' / 'mouthtype_desktop.py'
+        # Login autostart runs the host with --background (tray only, no settings window), so that is what the run
+        # exercises. MOUTHTYPE_ACCEPTANCE_FOREGROUND=1 opens the settings window as a normal launch does.
+        foreground = os.environ.get('MOUTHTYPE_ACCEPTANCE_FOREGROUND') == '1'
+        processes.start([sys.executable, str(host), '--launcher', str(launcher), '--config', str(root / 'linux.json'),
+                                        '--server-name', 'mouthtype-acceptance'] + ([] if foreground else ['--background']))
+        if foreground:
+            try:
+                wait_for(lambda: any(e['kind'] == 'added' and e.get('resourceClass') == 'app.mouthtype.Mouthtype'
+                                     for e in watcher.snapshot()), 30)
+            except TimeoutError:
+                raise ValueError('The Qt host never mapped its window: ' + json.dumps(watcher.snapshot()))
+        else:
+            time.sleep(3)  # no window to wait for in the tray-only mode
+            if any(e['kind'] == 'added' and e.get('resourceClass') == 'app.mouthtype.Mouthtype' for e in watcher.snapshot()):
+                raise ValueError('--background mapped a settings window: ' + json.dumps(watcher.snapshot()))
+        time.sleep(2)  # the watch stream connects a moment after the window
+        calls.clear()
+        pressed_at = time.monotonic()
+        for keysym in portal_probe.CHORD_KEYSYMS:
+            driver.key(keysym, True)
+        try:
+            wait_for(lambda: session.state == 'recording', 10)
+        except TimeoutError:
+            raise ValueError('Held chord never started a take: ' + json.dumps({'shortcuts': shortcuts.status(), 'calls': calls}))
+        time.sleep(KDE_HOLD_SECONDS)
+        released_at = time.monotonic()
+        for keysym in reversed(portal_probe.CHORD_KEYSYMS):
+            driver.key(keysym, False)
+        wait_for(lambda: session.state == 'idle' and 'stop' in calls, 15)
+        time.sleep(1)
+        result = hold_take_result(calls, session.state, status['triggers'])
+        result['consent'] = answered
+        try:
+            wait_for(lambda: any(kwin_pill.is_pill(e) and e['kind'] == 'removed' for e in watcher.snapshot()), 10)
+        except TimeoutError:
+            pass  # unmapped_after reports it
+        pill = kwin_pill.pill_result(watcher.snapshot(), pressed_at, released_at, KDE_SCREEN)
+        return result, pill
+    finally:
+        watcher.stop()
+        shortcuts.stop()
+        session.command = real_command
+
+
+def kde_portal_component(root, env, processes):
+    """Portal paste on a headless KDE session (kwin, no plasmashell), started through the daemon's toggle command.
+    The RemoteDesktop grant is pre-authorized in the permission store, so no dialog. Then a GlobalShortcuts bind
+    (consent answered over AT-SPI), a held chord that starts and stops a take, and the pill's layer-shell surface."""
+    import portal as portal_module
+    import desktop
+    from atspi_target import AtspiTargets, load_atspi
+    from delivery_portal import GrantStore, PortalClipboard, PortalKeyboard, RemoteDesktopSession, make_delivery
+    atspi = load_atspi()
+    if atspi is None:
+        raise ValueError('AT-SPI is not available')
+    runtime = Path(env['XDG_RUNTIME_DIR'])
+    display = wait_for(lambda: wayland_display(env, runtime))
+    env.update(WAYLAND_DISPLAY=display, GDK_BACKEND='wayland', XDG_SESSION_TYPE='wayland',
+               XDG_CURRENT_DESKTOP='KDE', LC_ALL='C.UTF-8', QT_LINUX_ACCESSIBILITY_ALWAYS_ON='1')
+    enable_accessibility(lambda argv: run(argv, env))
+    previous_env = dict(os.environ)
+    os.environ.update(env)
+    sentinel = 'Mouthtype existing clipboard'
+    store = GrantStore(root / 'state/mouthtype/portal.json')
+    portal = remote = None
+    delivery = session = None
+    stopped = threading.Event()
+    server = None
+    try:
+        # Grant first, the way setup does: an interactive start (pre-authorized, so no dialog) stores the restore value
+        # the daemon's silent start reuses.
+        portal = portal_module.Portal()
+        portal.connect()
+        portal.register()
+        remote = RemoteDesktopSession(portal, store, start_timeout=40)
+        status = remote.start(interactive=True)
+        if status != 'active':
+            raise ValueError('Pre-authorized RemoteDesktop did not become active: ' + json.dumps(remote.snapshot()))
+        grant_persisted = store.load() is not None
+        remote.close()
+        remote = None
+        portal.close()
+        portal = None
+        factory = None
+        if not grant_persisted:
+            class Interactive(RemoteDesktopSession):
+                def start(self, interactive=False):
+                    return super().start(interactive=True)
+            factory = Interactive
+        targets = AtspiTargets()
+        delivery = make_delivery({'mode': 'paste', 'allow_unknown_secure_field': True, 'restore_delay_seconds': .5},
+                                 session_factory=factory, store_factory=lambda: store, targets=targets)
+        if not delivery.remote.active:
+            raise ValueError('Daemon delivery has no active RemoteDesktop session: ' + json.dumps(delivery.remote.snapshot()))
+        text_path = root / 'target.json'
+        env['MOUTHTYPE_TARGET_CLIPBOARD'] = sentinel
+        first = processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(text_path)])
+        wait_for(lambda: text_path.exists())
+        def focused_snapshot():
+            PortalKeyboard(delivery.remote).tap(0xffe1)  # Shift_L: the target sets its sentinel selection on a key press
+            time.sleep(.3)
+            snap = targets.snapshot()
+            return snap if snap.get('class') not in (None, 'unknown') else None
+        try:
+            target = wait_for(focused_snapshot, 20)
+        except TimeoutError:
+            raise ValueError('AT-SPI never reported the target as focused under kwin: ' + json.dumps(atspi_outline(atspi)))
+        delivery.config['allowed_classes'] = [target['class']]
+        def earlier_clipboard():
+            PortalKeyboard(delivery.remote).tap(0xffe1)
+            time.sleep(.3)
+            return delivery.clipboard.read_current().get('text/plain;charset=utf-8')
+        try:
+            taken = wait_for(earlier_clipboard, 10)
+        except TimeoutError:
+            taken = None
+        if taken != sentinel.encode():
+            raise ValueError('Target did not take the earlier clipboard')
+        session = desktop.Session(FixedCapture(), FixedEngine(), delivery, root / 'state/recovery', maximum_seconds=10)
+        socket_path = root / 'session.sock'
+        server = threading.Thread(target=lambda: desktop.serve(socket_path, session, stopped, lifetime_seconds=100),
+                                  name='acceptance-daemon')
+        server.start()
+        wait_for(lambda: socket_path.exists())
+        final = toggle_take(socket_path)
+        if final.get('delivery') != 'unknown':
+            raise ValueError('Take was not delivered: ' + json.dumps({k: final.get(k) for k in ('state', 'error', 'delivery')}))
+        def contents(path):
+            try:
+                value = json.loads(path.read_text())
+            except (ValueError, OSError):
+                return None
+            return value if value.get('text') else None
+        wait_for(lambda: contents(text_path), 10)
+        time.sleep(1)
+        actual = contents(text_path)
+        if actual is None or actual['text'] != KDE_TAKE_TEXT:
+            raise ValueError('Target text differs: ' + json.dumps(actual, ensure_ascii=False))
+        if delivery.restore_thread is None:
+            raise ValueError('No clipboard restore was scheduled')
+        delivery.restore_thread.join(5)
+        def restored_clipboard():
+            with delivery.clipboard._lock:
+                offers = dict(delivery.clipboard._offers)
+            return offers.get('text/plain;charset=utf-8')
+        if wait_for(restored_clipboard, 5) != sentinel.encode():
+            raise ValueError('Clipboard was not restored')
+        # Secure field: swap in a password entry and take again. The text must not reach it.
+        stop_process(first)
+        secure_path = root / 'secure.json'
+        env['MOUTHTYPE_TARGET_SECURE'] = '1'
+        env.pop('MOUTHTYPE_TARGET_CLIPBOARD', None)
+        secure_target = processes.start([sys.executable, str(Path(__file__).with_name('wayland_target.py')), str(secure_path)])
+        wait_for(lambda: secure_path.exists())
+        try:
+            wait_for(lambda: (PortalKeyboard(delivery.remote).tap(0xffe1), time.sleep(.3),
+                              targets.snapshot().get('class') not in (None, 'unknown'))[2], 15)
+        except TimeoutError:
+            pass
+        secure_snapshot = targets.snapshot()
+        if secure_snapshot.get('class') in (None, 'unknown'):
+            secure = secure_field_result(secure_snapshot, None, '')
+            secure['atspi_outline'] = atspi_outline(atspi)
+        else:
+            delivery.config['allowed_classes'] = [secure_snapshot['class']]
+            secure_final = toggle_take(socket_path)
+            time.sleep(1)
+            secure = secure_field_result(secure_snapshot, secure_final.get('delivery'),
+                                         (json.loads(secure_path.read_text()).get('text') or ''))
+        # The chord goes last with no GTK target open, so the GlobalShortcuts grab is the only thing that sees it.
+        stop_process(secure_target)
+        shortcut, pill = kde_shortcut_pill_take(root, env, processes, session, atspi, RemoteKeyboardDriver(delivery.remote),
+                                                lambda argv: run(argv, env))
+        return {'component': 'kde-portal', 'compositor': 'kwin_wayland --virtual',
+                'native_target': 'GTK3 Wayland', 'target_class': target['class'],
+                'remote_desktop': 'pre-authorized', 'grant_persisted': grant_persisted,
+                'start_path': 'daemon toggle command', 'unicode_exact': True, 'delivered_once': True,
+                'clipboard_restored': True, 'secure_field': secure, 'shortcut_press': shortcut,
+                'fake_engine_take': True, 'pill_check': pill,
+                'hyprland_acceptance': False, 'omarchy_acceptance': False}
+    finally:
+        stopped.set()
+        if server is not None:
+            server.join(5)
+        for closer in (getattr(session, 'close', None), getattr(delivery, 'close', None),
+                       getattr(remote, 'close', None), getattr(portal, 'close', None)):
+            if closer:
+                try:
+                    closer()
+                except Exception:
+                    pass
+        os.environ.clear()
+        os.environ.update(previous_env)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('component', choices=('capabilities', 'pipewire', 'sway'))
+    parser.add_argument('component', choices=('capabilities', 'pipewire', 'sway', 'gnome-portal', 'kde-portal'))
+    parser.add_argument('--foreground', action='store_true',
+                        help='kde-portal only: launch the Qt host as a normal launch, not --background')
+    parser.add_argument('--skip-shortcut-take', action='store_true',
+                        help='gnome-portal only: skip the held-chord take (same as MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE=0)')
     args = parser.parse_args()
+    if args.foreground:
+        os.environ['MOUTHTYPE_ACCEPTANCE_FOREGROUND'] = '1'
+    if args.skip_shortcut_take:
+        os.environ['MOUTHTYPE_ACCEPTANCE_SHORTCUT_TAKE'] = '0'
     if sys.platform != 'linux':
         parser.error('Explicit Linux component acceptance only')
     if args.component == 'capabilities':
@@ -298,18 +988,24 @@ def main():
         raise TimeoutError('Acceptance lifetime limit')
     for event in (signal.SIGALRM, signal.SIGTERM, signal.SIGINT):
         signal.signal(event, deadline)
-    signal.alarm(45)
+    signal.alarm(180 if args.component in ('gnome-portal', 'kde-portal') else 45)
     try:
         with tempfile.TemporaryDirectory(prefix='mouthtype-acceptance-') as temp:
             root = Path(temp)
             env = {**os.environ, 'XDG_RUNTIME_DIR': str(root / 'runtime'),
                    'XDG_CONFIG_HOME': str(root / 'config'), 'XDG_STATE_HOME': str(root / 'state'),
                    'XDG_CACHE_HOME': str(root / 'cache')}
-            Path(env['XDG_RUNTIME_DIR']).mkdir(mode=0o700)
-            env.pop('WAYLAND_DISPLAY', None)
-            env.pop('WAYLAND_SOCKET', None)
-            env.pop('DISPLAY', None)
-            env.pop('SWAYSOCK', None)
+            if args.component in ('gnome-portal', 'kde-portal'):
+                # Runs inside the testbed's live GNOME or KDE session, so keep its runtime dir and bus.
+                env['XDG_RUNTIME_DIR'] = os.environ['XDG_RUNTIME_DIR']
+                env['XDG_STATE_HOME'] = str(root / 'state')
+                env.pop('DISPLAY', None)
+            else:
+                Path(env['XDG_RUNTIME_DIR']).mkdir(mode=0o700)
+                env.pop('WAYLAND_DISPLAY', None)
+                env.pop('WAYLAND_SOCKET', None)
+                env.pop('DISPLAY', None)
+                env.pop('SWAYSOCK', None)
             for name in ('PIPEWIRE_NODE', 'PIPEWIRE_CONFIG_DIR', 'PIPEWIRE_CONFIG_NAME',
                          'WIREPLUMBER_CONFIG_DIR', 'WIREPLUMBER_STATE_DIR'):
                 env.pop(name, None)
@@ -317,7 +1013,8 @@ def main():
             env['PIPEWIRE_REMOTE'] = 'pipewire-0'
             processes = Processes(root, env)
             try:
-                check = pipewire_component if args.component == 'pipewire' else sway_component
+                check = {'pipewire': pipewire_component, 'sway': sway_component,
+                         'gnome-portal': gnome_portal_component, 'kde-portal': kde_portal_component}[args.component]
                 result = check(root, env, processes)
             except BaseException:
                 traceback.print_exc(file=sys.stderr)

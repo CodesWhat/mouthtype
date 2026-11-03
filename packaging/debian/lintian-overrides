@@ -1,0 +1,5 @@
+# The Omarchy bar plugin loads its bundled copy of the font by relative path, which keeps it working on
+# desktops without fonts-jetbrains-mono.
+mouthtype-linux: duplicate-font-file *
+# Not packaged for Debian's archive, so there is no ITP bug for the first changelog entry to close.
+mouthtype-linux: initial-upload-closes-no-bugs [usr/share/doc/mouthtype-linux/changelog.Debian.gz:1]

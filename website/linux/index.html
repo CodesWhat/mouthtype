@@ -81,7 +81,7 @@
                 <h2>Install the client.</h2>
                 <p>The download is the GPL-3.0 source archive for the current Mac release. It includes the Linux client, the Omarchy plugin under <code>tools/omarchy-plugin</code> (in archives that contain that directory), the setup guides and license notices, with no models or personal data bundled. It is not a packaged desktop release.</p>
                 <p>Extract it and open a terminal in the extracted source directory. Read <code>tools/linux-desktop/README.md</code>, then run <code>python3 tools/linux-desktop/install.py --prefix "$HOME/.local"</code>.</p>
-                <p>This installs <code>~/.local/bin/mouthtype-linux</code> and its payload. The installer refuses to overwrite an existing installation; move an old one aside to upgrade. Check it with <code>mouthtype-linux capabilities</code>.</p>
+                <p>This installs <code>~/.local/bin/mouthtype-linux</code> and its payload. The installer refuses to overwrite an existing installation; add <code>--update</code> to replace it or <code>--uninstall</code> to remove it. Check it with <code>mouthtype-linux capabilities</code>.</p>
               </div>
             </li>
             <li id="speech">
@@ -132,6 +132,7 @@
           ><a href="/why-mouthtype/">Why Mouthtype</a
           ><a href="/compare/">Compare</a>
           <a href="https://docs.mouthtype.app/">Docs</a>
+          <a href="%SUPPORT_DONATE_URL%">Support</a>
         </nav>
         <p class="footer-note"><a href="https://codeswhat.com">CodesWhat</a>: small, sharp tools from one developer and a lot of agents.</p>
       </footer>

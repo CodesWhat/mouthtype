@@ -41,12 +41,13 @@ private final class PreviewCount { var value = 16_000 }
     private func settle() async { for _ in 0..<100 { await Task.yield() } }
 
     /// Waits, up to five seconds, for work on other tasks and actors to reach `condition`.
-    private func until(_ condition: () async -> Bool) async {
+    private func until(_ condition: () async -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
         let deadline = ContinuousClock.now + .seconds(5)
         while ContinuousClock.now < deadline {
             if await condition() { return }
             try? await Task.sleep(for: .milliseconds(5))
         }
+        Issue.record("until: condition never held within 5s", sourceLocation: sourceLocation)
     }
 
     @Test func previewWaitsForCadenceThenUsesBoundedAudio() async {

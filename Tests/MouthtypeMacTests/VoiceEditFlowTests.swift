@@ -516,3 +516,60 @@ private final class Counter: @unchecked Sendable {
         }
     }
 }
+
+@MainActor @Suite(.timeLimit(.minutes(1))) struct VoiceEditCountingTests {
+    private func counted(_ rig: Rig, defaults: UserDefaults) -> (VoiceEditCoordinator, AchievementCounting) {
+        let counting = AchievementCounting(defaults: defaults, post: {})
+        let flow = VoiceEditCoordinator(
+            editor: counting.counting(rig.editor, as: .voiceEdits), recorder: rig.recorder, engine: rig.engine,
+            recordingLimit: rig.recordingLimit, sleep: rig.sleep)
+        return (flow, counting)
+    }
+
+    private func isolated() -> (UserDefaults, () -> Void) {
+        let name = "mouthtype-voiceedit-counting-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        return (defaults, { defaults.removePersistentDomain(forName: name) })
+    }
+
+    @Test func anAcceptedVoiceEditCountsExactlyOnce() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let rig = Rig()
+        let (flow, counting) = counted(rig, defaults: defaults)
+        await flow.begin()
+        await flow.stopRecording()
+        #expect(counting.store.count(.voiceEdits) == 0)  // the preview alone is not a count
+        flow.accept()
+        flow.accept()
+        #expect(flow.phase == .ended(.accepted) && counting.store.count(.voiceEdits) == 1)
+        #expect(counting.store.count(.transforms) == 0)
+    }
+
+    @Test func staleAcceptCancelAndEngineRefusalNeverCount() async {
+        let (defaults, cleanup) = isolated()
+        defer { cleanup() }
+        let rig = Rig()
+        let (flow, counting) = counted(rig, defaults: defaults)
+
+        rig.editor.replaceAccepted = false
+        await flow.begin()
+        await flow.stopRecording()
+        flow.accept()
+        #expect(flow.phase == .ended(.stale))
+
+        rig.editor.replaceAccepted = true
+        await flow.begin()
+        await flow.stopRecording()
+        await flow.cancel()
+
+        rig.engine.result = .refused(.unchanged)
+        await flow.begin()
+        await flow.stopRecording()
+        #expect(flow.phase == .ended(.engineRefused(.unchanged)))
+
+        rig.editor.captureError = SelectionCleanupError.unavailable
+        await flow.begin()
+        #expect(counting.store.count(.voiceEdits) == 0)
+    }
+}

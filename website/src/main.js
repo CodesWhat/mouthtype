@@ -8,6 +8,16 @@ repeatedPrinciples.setAttribute("aria-hidden", "true");
 repeatedPrinciples.inert = true;
 principles.parentElement.append(repeatedPrinciples);
 
+// The strip only moves when motion is allowed, so only then is it worth a tab stop (it pauses on focus).
+const strip = document.querySelector(".principles");
+const stripMotion = matchMedia("(prefers-reduced-motion: reduce)");
+function syncStripTabStop() {
+  if (stripMotion.matches) strip.removeAttribute("tabindex");
+  else strip.setAttribute("tabindex", "0");
+}
+syncStripTabStop();
+stripMotion.addEventListener("change", syncStripTabStop);
+
 const stage = document.querySelector(".object-stage");
 const preview = document.querySelector("#pill-preview");
 const description = document.querySelector(".product-preview");

@@ -19,8 +19,8 @@
   display: flex;
   gap: 10px;
   align-items: center;
-  font: 9px/1.7 var(--mono);
-  letter-spacing: 0.6px;
+  font: 12px/1.7 var(--mono);
+  letter-spacing: 0.4px;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -509,5 +509,15 @@
   }
   .wpm-lab .example-text {
     padding: 22px 20px;
+  }
+}
+
+@media (max-width: 600px) {
+  .wpm-a .compare-switch button::before,
+  .wpm-a-stat .mono,
+  .wpm-a-stat em,
+  .wpm-a-pro,
+  .wpm-lab-heading .mono {
+    font-size: 10px;
   }
 }

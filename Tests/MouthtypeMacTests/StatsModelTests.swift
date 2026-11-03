@@ -25,8 +25,9 @@ import Testing
         return id
     }
 
-    private func waitUntil(_ condition: @MainActor () -> Bool) async {
+    private func waitUntil(_ condition: @MainActor () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
         for _ in 0..<2400 where !condition() { try? await Task.sleep(for: .milliseconds(25)) }
+        if !condition() { Issue.record("waitUntil: condition never held within 60s", sourceLocation: sourceLocation) }
     }
 
     @Test func secureTakesAreExcludedFromEveryNumber() async throws {
@@ -284,5 +285,28 @@ import Testing
         await waitUntil { model.error == nil && model.snapshot != nil }
         #expect(model.error == nil)
         model.deactivate()
+    }
+
+    @Test func aStoreAssignedAfterInitStillWakesTheAchievementsOnInputWrites() async throws {
+        let (store, dir) = try makeStore()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let id = try dictate(store, minutes: 1, text: "one two three")
+        let offer = try store.recordCorrectionOffer(dictationID: id, heard: "a", corrected: "b")
+        let model = StatsModel(store: nil, observing: false, defaults: Self.isolatedDefaults())
+        model.store = store
+        await model.load()
+        await waitUntil { !model.achievements.entries.isEmpty }
+        #expect(model.achievements.entries.first { $0.id == "proper_noun" }?.state != nil)
+        if case .earned = model.achievements.entries.first(where: { $0.id == "proper_noun" })?.state {
+            Issue.record("earned before the correction was accepted")
+        }
+        try store.recordCorrectionOutcome(offer, accepted: true)
+        await waitUntil {
+            if case .earned = model.achievements.entries.first(where: { $0.id == "proper_noun" })?.state { true } else { false }
+        }
+        guard case .earned = model.achievements.entries.first(where: { $0.id == "proper_noun" })?.state else {
+            Issue.record("the accepted correction never reached the shelf")
+            return
+        }
     }
 }

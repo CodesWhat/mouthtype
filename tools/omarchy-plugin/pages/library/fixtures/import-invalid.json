@@ -1,0 +1,81 @@
+{
+  "problem": null,
+  "rows": [
+    {
+      "row": 2,
+      "heard": "shawn",
+      "written": "Sean",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 3,
+      "heard": "priya",
+      "written": "Priya",
+      "result": "existing",
+      "label": "Already saved",
+      "warning": null
+    },
+    {
+      "row": 4,
+      "heard": "dry doc",
+      "written": "Drydock",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 5,
+      "heard": "",
+      "written": "Hyprland",
+      "result": "invalid",
+      "label": "Enter the word or phrase Mouthtype gets wrong.",
+      "warning": null
+    },
+    {
+      "row": 6,
+      "heard": "omar key",
+      "written": "Omarchy",
+      "result": "add",
+      "label": "Add",
+      "warning": null
+    },
+    {
+      "row": 7,
+      "heard": "win",
+      "written": "Winn",
+      "result": "add",
+      "label": "Add",
+      "warning": "‘win’ is an everyday word, so every ‘win’ you say becomes Winn."
+    },
+    {
+      "row": 8,
+      "heard": "the",
+      "written": "Thee",
+      "result": "add",
+      "label": "Add",
+      "warning": "‘the’ is an everyday word, so every ‘the’ you say becomes Thee."
+    },
+    {
+      "row": 9,
+      "heard": "two",
+      "written": "",
+      "result": "invalid",
+      "label": "Expected 2 columns.",
+      "warning": null
+    }
+  ],
+  "counts": {
+    "add": 5,
+    "existing": 1,
+    "duplicate": 0,
+    "invalid": 2
+  },
+  "can_import": false,
+  "file": "bad.csv",
+  "digest": "d354f25fd9710e744bbecbdb7160228c38961811eea9c523912c770a18866a2b",
+  "csv_digest": "99623386591671acf96eb71609b5f9d94bb65538b591efe74aabf8c049a84fd9",
+  "kind": "spellings",
+  "configured": true
+}

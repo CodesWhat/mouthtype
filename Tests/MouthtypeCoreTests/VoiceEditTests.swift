@@ -52,9 +52,10 @@ private final class FakeEditModel: VoiceEditModel, @unchecked Sendable {
     }
 }
 
-private func waitUntil(_ condition: () -> Bool) async {
+private func waitUntil(_ condition: () -> Bool, sourceLocation: SourceLocation = #_sourceLocation) async {
     let deadline = ContinuousClock.now + .seconds(5)
     while !condition(), ContinuousClock.now < deadline { try? await Task.sleep(for: .milliseconds(5)) }
+    if !condition() { Issue.record("waitUntil: condition never held within 5s", sourceLocation: sourceLocation) }
 }
 
 private struct Failure: Error {}

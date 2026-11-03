@@ -41,10 +41,8 @@ jobs:
 
   # Headless tests and offscreen Settings renders run on PRs and after merge. Desktop tests run locally.
   test:
-    # id-token lets the Codecov upload authenticate with OIDC, so there is no repo secret. Fork PRs get no id-token.
     permissions:
       contents: read
-      id-token: write
     # The code uses Xcode 27 SDK APIs (for example the FoundationModels samplingMode label), and macos-26 only ships Xcode 26.6.
     runs-on: xcode-27
     timeout-minutes: 60
@@ -85,9 +83,37 @@ jobs:
           path: coverage-report.txt
           if-no-files-found: ignore
 
-      # Non-gating: the 80% floor in scripts/swift-coverage.sh is the gate, so a Codecov outage never fails this job.
-      - name: Upload coverage to Codecov
+      # The Codecov job below uploads this. Keeping the upload out of this job keeps id-token off steps that run PR code.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !cancelled() && hashFiles('coverage.lcov') != '' }}
+        with:
+          name: swift-coverage-lcov
+          path: coverage.lcov
+          if-no-files-found: ignore
+
+  # Non-gating: the 80% floor in scripts/swift-coverage.sh is the gate, so a Codecov outage never fails the test job.
+  # This is the only job with id-token (Codecov OIDC, so there is no repo secret). It runs no PR code, only the uploader.
+  codecov:
+    needs: test
+    if: ${{ !cancelled() && needs.test.result != 'skipped' }}
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        id: lcov
+        continue-on-error: true
+        with:
+          name: swift-coverage-lcov
+
+      - name: Upload coverage to Codecov
+        if: ${{ steps.lcov.outcome == 'success' }}
         uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: coverage.lcov

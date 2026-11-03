@@ -499,7 +499,7 @@
   .page-footer nav {
     margin-left: 0;
     width: 100%;
-    gap: 20px;
+    gap: 10px 14px;
   }
 }
 
@@ -508,4 +508,55 @@
   max-width: 570px;
   margin: 22px 0 0;
   font-size: 18px;
+}
+
+/* Phone scale hit areas for the inner pages. Insets offset the padding so nothing moves. */
+@media (max-width: 760px) {
+  .content-page .masthead {
+    gap: 22px;
+  }
+  .content-page .masthead nav {
+    row-gap: 10px;
+  }
+  .content-page .masthead nav a,
+  .footer-brand,
+  :not(p) > .text-link {
+    position: relative;
+  }
+  .footer-brand::after {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
+  }
+  .content-page .masthead nav a::after {
+    content: "";
+    position: absolute;
+    inset: -14px -9px;
+  }
+  .content-page .masthead nav .nav-alpha::after {
+    inset: -8px -1px;
+  }
+  :not(p) > .text-link::after {
+    content: "";
+    position: absolute;
+    inset: -14px -4px;
+  }
+  .eyebrow a,
+  .link-block {
+    position: relative;
+  }
+  .eyebrow a::after,
+  .link-block::after {
+    content: "";
+    position: absolute;
+    inset: -16px -4px;
+  }
+  .page-footer nav {
+    gap: 0;
+    margin-inline: -8px;
+    width: calc(100% + 16px);
+  }
+  .page-footer nav a {
+    padding: 14px 8px;
+  }
 }

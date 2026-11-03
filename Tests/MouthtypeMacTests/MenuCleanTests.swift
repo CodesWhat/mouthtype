@@ -25,11 +25,11 @@ import MouthtypeCore
         daily.add(section: HelpMenuSection(onShow: {}), isFooter: true)
         #expect(
             daily.menu.items.filter { !$0.isSeparatorItem }.map(\.title) == [
-                "Open Mouthtype", "Settings…", "Paste Last Take", "Copy Last Take", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+                "Open Mouthtype", "Settings…", "Paste Last Take", "Copy Last Take", "How to Use Mouthtype…", "About Mouthtype", "Support Mouthtype", "Quit",
             ])
         #expect(
             daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
-                "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+                "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|", "How to Use Mouthtype…", "About Mouthtype", "Support Mouthtype", "Quit",
             ])
         #expect(daily.menu.items.first?.isSeparatorItem == false)
         #expect(daily.menu.items.last?.isSeparatorItem == false)
@@ -115,7 +115,7 @@ import MouthtypeCore
         daily.add(section: HistoryMenuSection(store: nil), startsGroup: false)
         #expect(
             daily.menu.items.map { $0.isSeparatorItem ? "|" : $0.title } == [
-                "Open Mouthtype", "Settings…", "|", "About Mouthtype", "Quit",
+                "Open Mouthtype", "Settings…", "|", "About Mouthtype", "Support Mouthtype", "Quit",
             ])
     }
 
@@ -186,7 +186,7 @@ import MouthtypeCore
         #expect(
             layout == [
                 "Open Mouthtype", "Settings…", "|", "Paste Last Take", "Copy Last Take", "|",
-                "Transform Selection", "Transcribe Audio File…", "|", "How to Use Mouthtype…", "About Mouthtype", "Quit",
+                "Transform Selection", "Transcribe Audio File…", "|", "How to Use Mouthtype…", "About Mouthtype", "Support Mouthtype", "Quit",
             ])
         #expect(daily.menu.items.filter { $0.image != nil }.map(\.title) == [])
         state.microphoneStatus = .denied

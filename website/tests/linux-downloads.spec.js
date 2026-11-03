@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { watchDownloads } from './download-watch.js';
 
 for (const [name, platform, hint, agent, touch] of [
   ['Linux desktop', 'Linux x86_64', 'Linux', 'Mozilla/5.0 (X11; Linux x86_64)', 0],
@@ -52,7 +53,7 @@ for (const width of [1440, 320]) {
   });
 }
 
-test('Linux visitors can explicitly choose the Mac download', async ({ page }) => {
+test('Linux visitors can explicitly choose the Mac download', async ({ page, browserName }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator,'platform',{value:'Linux x86_64'});
     Object.defineProperty(navigator,'userAgentData',{value:undefined});
@@ -61,14 +62,14 @@ test('Linux visitors can explicitly choose the Mac download', async ({ page }) =
   const requests=[];
   await page.route('**/download/file',route=>{requests.push(route.request().url());return route.fulfill({status:200,headers:{'content-type':'application/zip','content-disposition':'attachment; filename="Mouthtype.zip"'},body:'Explicit Mac fixture'});});
   await page.goto('/download/');
-  const received=page.waitForEvent('download');
+  const received=watchDownloads(page,browserName).next();
   await page.getByRole('link',{name:'Download now',exact:false}).click();
   await received;
   await page.clock.runFor(10000);
   expect(requests).toHaveLength(1);
 });
 
-test('Mac client hints keep one countdown when the page returns from cache', async ({ page }) => {
+test('Mac client hints keep one countdown when the page returns from cache', async ({ page, browserName }) => {
   await page.addInitScript(() => {
     Object.defineProperty(navigator,'platform',{value:'MacIntel'});
     Object.defineProperty(navigator,'userAgentData',{value:{platform:'macOS'}});
@@ -86,7 +87,7 @@ test('Mac client hints keep one countdown when the page returns from cache', asy
   });
   await page.clock.runFor(4999);
   expect(requests).toHaveLength(0);
-  const received=page.waitForEvent('download');
+  const received=watchDownloads(page,browserName).next();
   await page.clock.runFor(1);
   await received;
   await page.clock.runFor(10000);
