@@ -351,12 +351,12 @@ for line in sys.stdin:
             path = Path(temp) / 'session.sock'
             session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
             stopped = threading.Event()
-            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 2})
+            listening = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped),
+                                      kwargs={'lifetime_seconds': 2, 'bound': listening.set})
             thread.start()
             try:
-                deadline = time.monotonic() + 1
-                while not path.exists() and time.monotonic() < deadline:
-                    time.sleep(.005)
+                self.assertTrue(listening.wait(5))
                 # The test Delivery has no clipboard session, so the caller is told to copy the old way.
                 reply = request(path, 'copy', text='word ' * 5000, concealed=True)
                 self.assertEqual(reply, {'ok': False, 'error': 'copy_unsupported'})
@@ -1970,13 +1970,13 @@ class WatcherRaceTests(unittest.TestCase):
             path = Path(temp) / 'session.sock'
             session = self.StubSession()
             stopped = threading.Event()
-            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 10})
+            listening = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped),
+                                      kwargs={'lifetime_seconds': 10, 'bound': listening.set})
             thread.start()
             connections = []
             try:
-                deadline = time.monotonic() + 3
-                while not path.exists() and time.monotonic() < deadline:
-                    time.sleep(.005)
+                self.assertTrue(listening.wait(5))
                 def watch():
                     connection = socket.socket(socket.AF_UNIX)
                     connection.connect(str(path))
@@ -2042,12 +2042,13 @@ def run(args, context):
             path = Path(temp) / 'session.sock'
             session = Session(Capture(), Engine(), Delivery(), Path(temp) / 'recovery')
             stopped = threading.Event()
-            thread = threading.Thread(target=serve, args=(path, session, stopped), kwargs={'lifetime_seconds': 5})
+            listening = threading.Event()
+            thread = threading.Thread(target=serve, args=(path, session, stopped),
+                                      kwargs={'lifetime_seconds': 5, 'bound': listening.set})
             thread.start()
             try:
-                deadline = time.monotonic() + 3
-                while not path.exists() and time.monotonic() < deadline:
-                    time.sleep(.005)
+                # The socket file appears at bind(), before listen(); `bound` fires only once it is accepting.
+                self.assertTrue(listening.wait(5))
                 import desktop
                 context = CliContext(Path('c'), Path('r'), Path('i'), Path(temp), path,
                                      lambda action, identity=None, **fields: desktop.request(path, action, identity, **fields))
