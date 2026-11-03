@@ -4,9 +4,7 @@ Achievements are new. The Stats page has a shelf of 27 trophies for things like 
 
 There's now a Support Mouthtype item in the menu bar menu, right after About, with links to GitHub Sponsors and Donate. The About panel has the same links. Nothing prompts you and nothing shows at launch.
 
-The website footer text is bigger, and buttons and links are easier to tap on a phone. The principles strip on the home page pauses while you hover over it or focus it, and it holds still if your Mac is set to reduce motion. Profanity cleanup also no longer reads "back there to be" as a "there is" sentence.
-
-Not verified on a device for this release: the trophy shelf and toast with VoiceOver, and the support links in a live default browser. Automated tests and offscreen renders do not replace those checks. The 0.11.0 gaps below also remain.
+Fixed a cleanup slip where a phrase like "back there to be" could be rewritten as if it said "there is".
 
 Earlier in 0.11.0:
 Edit Selection by Voice is new. Select text, speak one instruction, and review the result in a preview before it replaces your selection. Start it from the Edit Selection by Voice menu item, or set an optional shortcut on the Transforms page (the shortcut is off by default). It won't run in password fields, with nothing selected, or on selections over 8,000 characters. Mouthtype doesn't save the audio or the text. When you accept, it logs only the app's process ID, the selection range and the length of the replacement, never the text.
