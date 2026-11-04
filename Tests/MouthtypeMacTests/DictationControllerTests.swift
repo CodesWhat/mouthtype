@@ -921,6 +921,15 @@ private struct Rig {
         #expect(editsAt > insertAt)
     }
 
+    @Test func aPasteThatLeavesTheTranscriptOnTheClipboardSaysSo() async {
+        let rig = Rig()
+        rig.inserter.result.transcriptStaysOnClipboard = true
+        await rig.dictate()
+        #expect(rig.inserter.delivered.count == 1)
+        #expect(rig.cards.presented.isEmpty)
+        #expect(rig.pill.messages == [DictationController.clipboardKeptNotice])
+    }
+
     @Test func listCommandsReachThePaste() async {
         let rig = Rig()
         rig.engine.result.text = "shopping list colon bullet milk bullet eggs"

@@ -39,6 +39,9 @@ public struct DeliveryResult: Sendable {
     /// A secure discard caused by system Secure Input being on while the field wasn't confirmed as ordinary text, not
     /// by the field itself being secure.
     public var secureInputBlocked: Bool = false
+    /// The clipboard held only a file promise (a copied Photos picture, a Mail attachment), which can't be put back
+    /// once borrowed, so the transcript stays on the clipboard after the paste.
+    public var transcriptStaysOnClipboard: Bool = false
 
     /// The store's `insert_method` vocabulary.
     public var storeMethod: String {
