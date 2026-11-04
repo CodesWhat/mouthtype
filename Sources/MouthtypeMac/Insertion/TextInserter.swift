@@ -493,11 +493,19 @@ public final class TextInserter {
         let startedAt = now()
         verification = Task { [weak self] in
             var observations: [PasteVerifier.Observation] = []
+            var missedChecks = false
             for offset in offsets {
                 guard let current = self?.now() else { return }
-                let remaining = current.duration(to: startedAt + .seconds(offset)).components
-                let delay = max(0, Double(remaining.seconds) + Double(remaining.attoseconds) / 1e18)
-                do { try await self?.sleep(delay) } catch { return }
+                let remaining = current.duration(to: startedAt + .seconds(offset))
+                if remaining > .zero {
+                    let parts = remaining.components
+                    let delay = Double(parts.seconds) + Double(parts.attoseconds) / 1e18
+                    do { try await self?.sleep(delay) } catch { return }
+                } else {
+                    missedChecks = true
+                    // One final read can still confirm the text, but missed checks cannot prove it never landed.
+                    guard offset == offsets.last else { continue }
+                }
                 guard let self, !Task.isCancelled, self.deliveryGeneration == generation else { return }
                 // Without a trustworthy field baseline there is nothing to compare with; wait the last read out
                 // so the receipt is in.
@@ -510,7 +518,8 @@ public final class TextInserter {
                 }
             }
             guard let self, !Task.isCancelled, self.deliveryGeneration == generation else { return }
-            let verdict = PasteVerifier.judge(baseline: baseline, pasted: pasted, observations: observations, expected: offsets.count)
+            let judged = PasteVerifier.judge(baseline: baseline, pasted: pasted, observations: observations, expected: offsets.count)
+            let verdict = missedChecks && judged == .notLanded ? .unknown : judged
             Log.app.info("paste read-back: \(verdict.storeOutcome, privacy: .public)")
             let verification = PasteVerification(id: generation, verdict: verdict, receiptMs: self.clipboard.firstReceiptMs)
             self.lastVerdict = verification

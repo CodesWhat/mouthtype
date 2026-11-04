@@ -2003,12 +2003,13 @@ private struct Rig {
 
     private static let before = FieldReading(value: "Hello", length: 5, selection: NSRange(location: 5, length: 0))
 
-    private func verified(_ rig: Rig, readings: [FieldReading], text: String = "world") async -> [PasteVerification] {
+    private func verified(_ rig: Rig, readings: [FieldReading], text: String = "world", armReturn: Bool = false) async -> [PasteVerification] {
         rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
         rig.focus.readings = readings
         var seen: [PasteVerification] = []
         rig.inserter.observeVerification { seen.append($0) }
-        _ = await rig.inserter.deliver(text, startFocus: nil)
+        let result = await rig.inserter.deliver(text, startFocus: nil)
+        if armReturn { rig.inserter.armReturn(after: result) }
         await rig.inserter.waitForVerification()
         return seen
     }
@@ -2099,12 +2100,42 @@ private struct Rig {
             rig.clock.advance(readDuration)
         }
         let seen = await verified(rig, readings: [Self.before])
-        let expected = readDuration == 0.1 ? [0.15, 0.35, 0.65, 1.0] : [0.15, 0.55, 0.95, 1.35]
-        #expect(seen.map(\.verdict) == [.notLanded])
+        let expected = readDuration == 0.1 ? [0.15, 0.35, 0.65, 1.0] : [0.15, 0.65, 1.05]
+        #expect(seen.map(\.verdict) == [readDuration == 0.1 ? .notLanded : .unknown])
         #expect(readTimes.count == expected.count)
         for (actual, wanted) in zip(readTimes, expected) {
             #expect(abs(actual - wanted) < 0.000_001)
         }
+    }
+
+    @Test func aStalledReadBackDoesNotCountMissedChecksAsNotLanded() async {
+        let rig = Rig(gated: true)
+        defer { rig.gate.open(); rig.inserter.cancelVerification() }
+        rig.focus.current = FocusSnapshot(pid: 100, bundleID: "com.example.app", role: "AXTextArea", element: element(100))
+        rig.focus.readings = [Self.before]
+        var seen: [PasteVerification] = []
+        rig.inserter.observeVerification { seen.append($0) }
+        _ = await rig.inserter.deliver("world", startFocus: nil)
+        await hop { rig.gate.parkedCount == 1 }
+        rig.clock.advance(1.1)
+        rig.gate.open()
+        await rig.inserter.waitForVerification()
+        #expect(seen.map(\.verdict) == [.unknown])
+    }
+
+    @Test func aLateFinalReadCannotProveNotLanded() async {
+        let rig = Rig(advancesSleepClock: true)
+        var posted = false
+        var reads = 0
+        rig.poster.onPost = { posted = true }
+        rig.focus.afterFieldRead = {
+            guard posted else { return }
+            reads += 1
+            if reads == 3 { rig.clock.advance(0.5) }
+        }
+        let seen = await verified(rig, readings: [Self.before])
+        #expect(reads == 4)
+        #expect(seen.map(\.verdict) == [.unknown])
     }
 
     @Test func inputInBetweenIsUnknown() async {
@@ -2123,7 +2154,7 @@ private struct Rig {
         let rig = Rig(sendsReturn: { _ in true })
         let before = FieldReading(value: nil, length: 5, selection: NSRange(location: 5, length: 0))
         let selected = FieldReading(value: nil, length: 11, selection: NSRange(location: 5, length: 6))
-        let seen = await verified(rig, readings: [before, selected])
+        let seen = await verified(rig, readings: [before, selected], armReturn: true)
         #expect(seen.map(\.verdict) == [.unknown])
         #expect(rig.poster.returns.isEmpty)
     }
