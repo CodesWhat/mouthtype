@@ -490,12 +490,14 @@ public final class TextInserter {
         generation: Int, pasted: String, target: FocusSnapshot, lease: Int, baseline: PasteVerifier.Baseline?
     ) {
         let offsets = Self.verifyOffsets
+        let startedAt = now()
         verification = Task { [weak self] in
             var observations: [PasteVerifier.Observation] = []
-            var elapsed: TimeInterval = 0
             for offset in offsets {
-                do { try await self?.sleep(offset - elapsed) } catch { return }
-                elapsed = offset
+                guard let current = self?.now() else { return }
+                let remaining = current.duration(to: startedAt + .seconds(offset)).components
+                let delay = max(0, Double(remaining.seconds) + Double(remaining.attoseconds) / 1e18)
+                do { try await self?.sleep(delay) } catch { return }
                 guard let self, !Task.isCancelled, self.deliveryGeneration == generation else { return }
                 // Without a trustworthy field baseline there is nothing to compare with; wait the last read out
                 // so the receipt is in.

@@ -262,7 +262,7 @@ private struct Rig {
 
     init(
         restrictedToPID: pid_t? = nil, chunks: Bool = false, sendsReturn: @escaping @MainActor (String) -> Bool = { _ in false }, gated: Bool = false,
-        observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { _ in }
+        observeBoundary: @escaping @MainActor (PasteBoundaryDiagnostic) -> Void = { _ in }, advancesSleepClock: Bool = false
     ) {
         let pauses = pauses
         let gate = gate
@@ -279,6 +279,7 @@ private struct Rig {
             sleep: { delay in
                 await gate.pass(delay)
                 if chunks { await pauses.pause(delay) }
+                if advancesSleepClock { await clock.advance(delay) }
             }, now: { clock.instant }, inputGeneration: { input.value },
             restrictedToPID: restrictedToPID, chunkedPaste: { _ in chunks }, sendsReturn: sendsReturn, observeBoundary: observeBoundary)
     }
@@ -2086,6 +2087,26 @@ private struct Rig {
         #expect(seen.map(\.verdict) == [.confirmed])
     }
 
+    @Test(arguments: [0.1, 0.4]) func readBackOffsetsIncludeAccessibilityReadTime(readDuration: TimeInterval) async {
+        let rig = Rig(advancesSleepClock: true)
+        var postedAt: ContinuousClock.Instant?
+        var readTimes: [TimeInterval] = []
+        rig.poster.onPost = { postedAt = rig.clock.instant }
+        rig.focus.afterFieldRead = {
+            guard let postedAt else { return }
+            let elapsed = postedAt.duration(to: rig.clock.instant).components
+            readTimes.append(Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18)
+            rig.clock.advance(readDuration)
+        }
+        let seen = await verified(rig, readings: [Self.before])
+        let expected = readDuration == 0.1 ? [0.15, 0.35, 0.65, 1.0] : [0.15, 0.55, 0.95, 1.35]
+        #expect(seen.map(\.verdict) == [.notLanded])
+        #expect(readTimes.count == expected.count)
+        for (actual, wanted) in zip(readTimes, expected) {
+            #expect(abs(actual - wanted) < 0.000_001)
+        }
+    }
+
     @Test func inputInBetweenIsUnknown() async {
         let rig = Rig()
         rig.focus.current = FocusSnapshot(pid: 100, element: element(100))
@@ -2096,6 +2117,15 @@ private struct Rig {
         rig.input.value = 3
         await rig.inserter.waitForVerification()
         #expect(seen.map(\.verdict) == [.unknown])
+    }
+
+    @Test func anExpandedSelectionInAnUnreadableFieldDoesNotSendReturn() async {
+        let rig = Rig(sendsReturn: { _ in true })
+        let before = FieldReading(value: nil, length: 5, selection: NSRange(location: 5, length: 0))
+        let selected = FieldReading(value: nil, length: 11, selection: NSRange(location: 5, length: 6))
+        let seen = await verified(rig, readings: [before, selected])
+        #expect(seen.map(\.verdict) == [.unknown])
+        #expect(rig.poster.returns.isEmpty)
     }
 
     @Test func anUnknownInputCountIsUnknown() async {

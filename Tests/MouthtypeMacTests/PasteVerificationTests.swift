@@ -116,6 +116,14 @@ import Testing
         #expect(judge([obs(valueOnly), obs(base), obs(base)]) == .unknown)
     }
 
+    @Test(arguments: [nil, NSRange(location: 3, length: 2), NSRange(location: NSNotFound, length: 0)])
+    func anUnreadableFieldNeedsAKnownCollapsedSelectionToConfirmAChange(selection: NSRange?) {
+        let blind = V.Baseline(reading: FieldReading(value: nil, length: 5, selection: base.selection), input: 7)
+        let changed = FieldReading(value: nil, length: 11, selection: selection)
+        #expect(!V.confirms(obs(changed), baseline: blind, pasted: " world"))
+        #expect(judge([obs(changed)], baseline: blind) == .unknown)
+    }
+
     @Test func aReadableFieldMustGainThePastedTextToConfirm() {
         let landed = FieldReading(value: "Hello world", length: 11, selection: NSRange(location: 11, length: 0))
         #expect(V.confirms(obs(landed), baseline: baseline, pasted: " world"))
@@ -178,6 +186,18 @@ import Testing
         // The transcript itself, landing as a short gain, still confirms.
         let landed = FieldReading(value: "Hello ok", length: 8, selection: NSRange(location: 8, length: 0))
         #expect(V.confirms(obs(landed), baseline: baseline, pasted: " ok"))
+    }
+
+    @Test func lengthChangingPunctuationRewritesStayUnconfirmed() {
+        let pasted = "wait... then... -- go -- now"
+        let rewrittenValue = "Hellowait… then… — go — now"
+        let rewritten = FieldReading(
+            value: rewrittenValue, length: rewrittenValue.utf16.count, selection: NSRange(location: rewrittenValue.utf16.count, length: 0))
+        #expect(judge([obs(rewritten)], pasted: pasted) == .unknown)
+        let exactValue = "Hello" + pasted
+        let exact = FieldReading(
+            value: exactValue, length: exactValue.utf16.count, selection: NSRange(location: exactValue.utf16.count, length: 0))
+        #expect(V.confirms(obs(exact), baseline: baseline, pasted: pasted))
     }
 
     @Test func gainingSomethingElseOfTheSameLengthDoesNotConfirm() {
