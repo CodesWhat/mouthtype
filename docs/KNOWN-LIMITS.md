@@ -34,7 +34,7 @@
 
 ## Secure Input
 
-- Secure Input safeguards depend on the destination's accessibility metadata. An allowed text role with no failed security reads and no subrole is accepted based on the app's report. Requiring a writable value or a caret range has not been validated as a stronger discriminator.
+- Secure Input safeguards depend on the destination's accessibility metadata. A missing subrole can still be accepted when the app reports an allowed text role without secure or protected markers and no lookup failed. Requiring a writable value or a caret range has not been validated as a stronger discriminator.
 
 ## Recognition and cleanup
 
