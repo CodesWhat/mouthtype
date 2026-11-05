@@ -42,6 +42,21 @@ public final class TranscriptStore: Sendable {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         pool = try DatabasePool(path: url.path)
         try Self.migrator.migrate(pool)
+        try pool.write { db in
+            do {
+                try db.execute(sql: "INSERT INTO take_search(take_search) VALUES ('integrity-check')")
+            } catch let error as DatabaseError where error.resultCode == .SQLITE_CORRUPT {
+                try db.execute(
+                    sql: """
+                        DROP TABLE take_search;
+                        CREATE VIRTUAL TABLE take_search USING fts5(raw_text, final_text, app_name);
+                        INSERT INTO take_search(rowid, raw_text, final_text, app_name)
+                            SELECT rowid, raw_text, final_text, app_name FROM dictation
+                            WHERE final_text IS NOT NULL AND TRIM(final_text) != '' AND COALESCE(is_secure, 0) = 0;
+                        """)
+                try db.execute(sql: "INSERT INTO take_search(take_search) VALUES ('integrity-check')")
+            }
+        }
     }
 
     static var migrator: DatabaseMigrator {
