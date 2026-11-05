@@ -4,7 +4,7 @@
 
 | Version | Security fixes |
 | --- | --- |
-| 0.12.x | Supported. 0.12.0 is published |
+| 0.12.x | Supported. Use the current published 0.12.x release |
 | 0.11.x | Unsupported. Upgrade to the current published release |
 | 0.10.x | Unsupported. Upgrade to the current published release |
 | 0.9.x | Unsupported. Upgrade to the current published release |
