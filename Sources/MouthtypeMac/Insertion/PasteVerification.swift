@@ -65,8 +65,9 @@ enum PasteVerifier {
         let before = baseline.reading
         let quiet = observation.input != nil && observation.input == baseline.input
         guard let beforeValue = before.value else {
-            // No text to compare with: the text showing up, or any change with no input in between, is the paste.
+            // Without text to compare, a quiet change needs a collapsed caret to show the paste finished.
             if let value = now.value, compact(value).contains(compact(pasted)) { return true }
+            guard let selection = now.selection, selection.location != NSNotFound, selection.length == 0 else { return false }
             let changed = differs(before.length, now.length) || differs(before.selection, now.selection)
             return changed && quiet
         }
