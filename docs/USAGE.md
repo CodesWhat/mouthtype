@@ -116,6 +116,8 @@ Per-app paste shortcut selection and typed delivery are deferred. Per-app cleanu
 
 Mouthtype also waits for the preceding ordinary paste’s clipboard read before replacing its text. A missing read leaves the next take recoverable instead of overwriting the unread clipboard. A newer user copy remains untouched. Normal Quit first preserves active and queued capture audio, then settles the clipboard change Mouthtype still owns. If preservation fails, the app stays open for a Quit retry. Shutdown blocks late transcription delivery. These checks do not prove that the destination inserted the text; inspect the field before retrying.
 
+For a readable field, clipboard restoration also waits for the transcript to appear, up to a 1.2-second field hold. Supported rich and multi-item clipboard data is restored. If the previous clipboard contains only a file promise that can't be restored, the transcript stays on the clipboard and the delivery card says so. Missed verification checks leave the result unknown rather than reporting a paste failure. When field text can't be read, a change needs a collapsed selection to confirm delivery and arm Return.
+
 ## Choose cleanup strength and writing style
 
 Open the **Cleanup** tab on the **Style** page to choose the cleanup path: Off keeps the recognized text, Basic applies local formatting rules, Fast adds S1-mini and Thorough uses Gemma. Both model modes preserve wording; they differ in speed and model capability, independently of Tone. Existing saved Light settings become Fast, and Medium becomes Thorough; Off, Basic and tone settings stay as saved.

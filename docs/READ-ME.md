@@ -19,7 +19,10 @@ The app’s Resources folder contains these notes and its license. Corresponding
 ## What changed in 0.12.1
 
 - Fixed: with Secure Input on, Mouthtype could paste into a password field in some apps (web and Electron apps, or a slow native password field). It now only pastes when it can confirm a normal text field, and otherwise keeps your text on the card with a note.
-- Fixed: if the history database can't be opened, Mouthtype says so in the menu and Diagnostics. A damaged database is set aside with its recordings and a fresh one starts. Nothing is deleted.
+- Fixed: damaged search indexes are rebuilt from saved history. If the database still can't be opened, Mouthtype says so in the menu and Diagnostics. A damaged database is set aside with its recordings and a fresh one starts. Nothing is deleted.
+- Fixed: a second copy defers to the running app before opening history or changing audio and Fn state.
+- Fixed: clipboard handling gives slow apps time to take the transcript and restores supported rich and multi-item data. An un-restorable file-promise clipboard leaves the transcript on the clipboard with a warning.
+- Fixed: missed field checks no longer report a paste failure, and an expanded selection in an unreadable field can't confirm delivery or trigger Return.
 - Fixed: deleting a take removes its audio. Failed and interrupted recordings age out with your retention setting after a 30-day grace, and saved recordings stay listed after an account rename.
 - Fixed: counted lists no longer leave a stray "and" or "then" at the end of an item.
 
