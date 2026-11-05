@@ -270,6 +270,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     private let launchedAt = Date()
     private var inputStarted = false
     private var isTerminating = false
+    private var instanceLease: AppInstanceLease?
+    private var launchRefused = false
     private let termination = AppTermination()
     private lazy var dockPresence = DockPresence()
 
@@ -317,8 +319,45 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // The status item goes up first and fonts start registering off the main thread. Everything that builds a pill or
         // card (and so draws with a bundled font) waits for the next run-loop turn, after the item has been committed.
-        dockPresence.start()
-        beginLaunch { [weak self] menuBar in self?.completeLaunch(arguments: arguments, menuBar: menuBar) }
+        do {
+            let lockURL = TranscriptStore.defaultURL().deletingLastPathComponent().appendingPathComponent("instance.lock")
+            let started = try beginOwnedLaunch(at: lockURL, anotherInstanceIsRunning: Self.otherRunningInstance() != nil) {
+                dockPresence.start()
+                beginLaunch { [weak self] menuBar in self?.completeLaunch(arguments: arguments, menuBar: menuBar) }
+            }
+            if !started {
+                Self.otherRunningInstance()?.activate()
+                NSApp.terminate(nil)
+            }
+        } catch {
+            Log.app.error("exclusive startup failed: \(error.localizedDescription, privacy: .public)")
+            let alert = NSAlert()
+            alert.messageText = "Mouthtype couldn't start"
+            alert.informativeText = "Mouthtype couldn't get exclusive access to its data. \(error.localizedDescription)"
+            alert.addButton(withTitle: "Quit")
+            alert.runModal()
+            NSApp.terminate(nil)
+        }
+    }
+
+    private static func otherRunningInstance() -> NSRunningApplication? {
+        guard let identifier = Bundle.main.bundleIdentifier else { return nil }
+        return NSRunningApplication.runningApplications(withBundleIdentifier: identifier).first {
+            $0.processIdentifier != ProcessInfo.processInfo.processIdentifier
+        }
+    }
+
+    func beginOwnedLaunch(at url: URL, anotherInstanceIsRunning: Bool = false, finish: () -> Void) throws -> Bool {
+        if anotherInstanceIsRunning { launchRefused = true; return false }
+        do {
+            guard let lease = try AppInstanceLease.acquire(at: url) else { launchRefused = true; return false }
+            instanceLease = lease
+            finish()
+            return true
+        } catch {
+            launchRefused = true
+            throw error
+        }
     }
 
     /// Creates the status item and starts font registration without touching anything font-dependent, then runs `finish`
@@ -567,6 +606,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        if launchRefused { return .terminateNow }
         if isTerminating { return .terminateLater }
         if deferQuitForQueuedURLs(sender: sender) { return .terminateLater }
         return beginTermination(sender: sender)
@@ -614,6 +654,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     public func applicationWillTerminate(_ notification: Notification) {
+        guard !launchRefused else { return }
         isTerminating = true
         audioQuiet.end()
         fileTranscriptionModel.cancel()
@@ -655,7 +696,11 @@ public final class AppDelegate: NSObject, NSApplicationDelegate {
                 showNotice(PillMessage("Nothing to paste yet"))
                 return
             }
-            if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") { cardPresenter.present(card) }
+            if let card = DeliveryCard.forDelivery(result, transcript: inserter.lastDelivered ?? "") {
+                cardPresenter.present(card)
+            } else if result.transcriptStaysOnClipboard {
+                showNotice(DictationController.clipboardKeptNotice)
+            }
         }
     }
 

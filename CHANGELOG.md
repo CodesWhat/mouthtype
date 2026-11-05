@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.12.1] - 2026-11-03
+## [0.12.1] - 2026-11-05
 
 ### Security
 
@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - History: if the history database can't be opened, the menu and Diagnostics say so instead of failing silently. A damaged database is set aside with its recordings, nothing is deleted, and a fresh one starts.
+- History search: a damaged search index is rebuilt from saved history before the database is set aside, including when the index's copied text is damaged.
+- A second Mouthtype instance defers to the running app before opening history or changing audio and Fn state. Startup ownership is released when the process exits.
+- Clipboard: slow destinations get time to read the transcript before restoration. Supported rich and multi-item clipboard data is restored; an un-restorable file-promise clipboard leaves the transcript on the clipboard with a warning.
+- Paste checks account for slow accessibility reads and missed deadlines. A change in an unreadable field needs a collapsed selection to confirm delivery; an expanded selection cannot arm Return.
 - Recordings: deleting a take removes its audio too. Failed and interrupted recordings age out with the retention setting after a 30-day grace, and saved recordings stay listed after an account rename.
 - Counted lists no longer leave a stray "and", "then" or similar joining word at the end of an item.
 

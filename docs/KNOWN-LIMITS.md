@@ -32,6 +32,10 @@
 | The Hi-Fi ears and 4 px gap were positioned by eye and haven't had a physical display check. | Use Classic if the spacing looks wrong on your display. |
 | The Hi-Fi card falls back to the Classic card for text its pixel font can't draw. Characters outside the font's range would turn into question marks. | Nothing to do. The card shows your text in the Classic style instead, and the text is unchanged. |
 
+## Secure Input
+
+- Secure Input safeguards depend on the destination's accessibility metadata. A missing subrole can still be accepted when the app reports an allowed text role without secure or protected markers and no lookup failed. Requiring a writable value or a caret range has not been validated as a stronger discriminator.
+
 ## Recognition and cleanup
 
 - Names and context-dependent words can be recognized wrongly. Check text before sending. Mouthtype doesn't read earlier chat messages to resolve them.
