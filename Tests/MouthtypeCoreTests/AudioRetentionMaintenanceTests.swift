@@ -221,7 +221,8 @@ import Testing
         #expect(try store.dictation(id: "x")?.audioPath != nil)
     }
 
-    @Test func pruneKeepsAnExistingRecordingOutsideTheCurrentArchive() throws {
+    @Test(arguments: [false, true])
+    func pruneKeepsAnExistingRecordingOutsideTheCurrentArchive(purgesDuplicate: Bool) throws {
         let dir = FileManager.default.temporaryDirectory.appendingPathComponent("mouthtype-retention-relocated-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: dir) }
         let store = try TranscriptStore(url: dir.appendingPathComponent("store.sqlite"))
@@ -234,8 +235,14 @@ import Testing
         try store.recordCapture("relocated", CaptureRecord(audioPath: audio.url.path, audioExpiresAt: expires))
         try store.recordInsertion("relocated", InsertionRecord(finalText: "Keep this recording."))
         _ = try archive.write(samples: [0.1, 0.2], id: "unrelated")
+        if purgesDuplicate {
+            let duplicate = try archive.write(samples: [0.1, 0.2], id: "relocated")
+            try FileManager.default.setAttributes([.modificationDate: now.addingTimeInterval(-30 * 86_400)], ofItemAtPath: duplicate.url.path)
+        }
 
-        #expect(try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now).isEmpty)
+        let removed = try AudioRetentionMaintenance.prune(archive: archive, store: store, policy: AudioRetentionPolicy(age: .days14), now: now)
+        #expect(removed == (purgesDuplicate ? ["relocated"] : []))
+        #expect(!FileManager.default.fileExists(atPath: archive.url(for: "relocated").path))
 
         let row = try #require(try store.dictation(id: "relocated"))
         #expect(row.audioPath == audio.url.path)
