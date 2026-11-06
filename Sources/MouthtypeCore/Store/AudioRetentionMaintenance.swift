@@ -16,11 +16,13 @@ public enum AudioRetentionMaintenance {
         // A missing, unreadable or empty directory (an unmounted or remounted-empty folder) says nothing about the files, so
         // only a non-empty listing can clear pointers. Paths are read first: a pointer is set only after its file exists,
         // so the later listing contains every file that was there. A row whose archive file or partial is listed keeps its
-        // pointer even when the stored absolute path went stale.
+        // pointer even when the stored absolute path went stale. An existing stored path also keeps its pointer when the
+        // recording lives outside the current archive.
         let paths = try store.audioPaths()
         if let listed = archive.listedFileNames(), !listed.isEmpty {
             let missing = paths.filter {
                 !listed.contains(archive.url(for: $0.id).lastPathComponent) && !listed.contains(archive.partialURL(for: $0.id).lastPathComponent)
+                    && !FileManager.default.fileExists(atPath: $0.path)
             }.map(\.id)
             if !missing.isEmpty { try store.clearAudio(ids: missing) }
         }
