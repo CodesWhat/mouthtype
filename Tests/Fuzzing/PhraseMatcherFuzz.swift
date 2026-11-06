@@ -17,9 +17,21 @@ public func fuzzPhraseMatcher(_ data: UnsafePointer<UInt8>?, _ count: Int) -> In
         precondition(patterns.indices.contains(match.pattern))
         precondition(match.range.lowerBound == 0 || !TextScan.isWordChar(chars[match.range.lowerBound - 1]))
         precondition(match.range.upperBound == chars.count || !TextScan.isWordChar(chars[match.range.upperBound]))
-        let actual = TextScan.lowered(Array(PhraseKey.collapsed(String(chars[match.range]))))
         let expected = TextScan.lowered(Array(PhraseKey.collapsed(patterns[match.pattern])))
-        precondition(actual == expected)
+        // Collapse the pattern only once, as the matcher does. Rebuilding and collapsing the matched substring can
+        // discard a combining mark that attached to a space when the pattern's whitespace was collapsed.
+        let literals = expected.split(separator: " ", omittingEmptySubsequences: false)
+        var remaining = lower[match.range]
+        for (index, literal) in literals.enumerated() {
+            if index > 0 {
+                let whitespace = remaining.prefix(while: \.isWhitespace)
+                precondition(!whitespace.isEmpty)
+                remaining = remaining.dropFirst(whitespace.count)
+            }
+            precondition(remaining.starts(with: literal))
+            remaining = remaining.dropFirst(literal.count)
+        }
+        precondition(remaining.isEmpty)
     }
 
     var end = 0

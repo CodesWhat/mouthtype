@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.12.1] - 2026-11-05
+
+### Security
+
+- Secure Input: Mouthtype could paste into a password field while Secure Input was on, in some apps (web and Electron apps, or a slow native password field). It now pastes only when it can confirm a normal text field, and otherwise keeps the text on the card with a note that Secure Input is on.
+
+### Fixed
+
+- History: if the history database can't be opened, the menu and Diagnostics say so instead of failing silently. A damaged database is set aside with its recordings, nothing is deleted, and a fresh one starts.
+- History search: a damaged search index is rebuilt from saved history before the database is set aside, including when the index's copied text is damaged.
+- A second Mouthtype instance defers to the running app before opening history or changing audio and Fn state. Startup ownership is released when the process exits.
+- Clipboard: slow destinations get time to read the transcript before restoration. Supported rich and multi-item clipboard data is restored; an un-restorable file-promise clipboard leaves the transcript on the clipboard with a warning.
+- Paste checks account for slow accessibility reads and missed deadlines. A change in an unreadable field needs a collapsed selection to confirm delivery; an expanded selection cannot arm Return.
+- Recordings: deleting a take removes its audio too. Failed and interrupted recordings age out with the retention setting after a 30-day grace, and saved recordings stay listed after an account rename.
+- Counted lists no longer leave a stray "and", "then" or similar joining word at the end of an item.
+
+### Changed
+
+- Bench: `ProcessMemory.vmInfo()` and `BenchDate.today()` are shared helpers, and cleanup shares one `shortSHA` helper.
+
+### Tests and CI
+
+- Store upgrade fixtures from the v0.1.0, v0.3.0 and v0.10.0 schemas, a frozen-migration test and a downgrade round trip.
+- Release tests cover `dmg_identity`, `notarize` and `verify_disk_image` with mocked tools.
+
 ## [0.12.0] - 2026-11-02
 
 ### Added
@@ -226,7 +251,8 @@ First stable release for Apple Silicon Macs on macOS 26 or later. Hold Fn, speak
 
 0.1.0 was preceded by `v0.1.0-alpha.1` through `v0.1.0-alpha.9`, `v0.1.0-beta.1` and `v0.1.0-rc.1` through `v0.1.0-rc.4`. Each has a tag on the [releases page](https://github.com/CodesWhat/mouthtype/tags). Their notes are folded into the 0.1.0 entry in [`packaging/ReleaseNotes.txt`](packaging/ReleaseNotes.txt).
 
-[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.12.0...HEAD
+[Unreleased]: https://github.com/CodesWhat/mouthtype/compare/v0.12.1...HEAD
+[0.12.1]: https://github.com/CodesWhat/mouthtype/compare/v0.12.0...v0.12.1
 [0.12.0]: https://github.com/CodesWhat/mouthtype/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/CodesWhat/mouthtype/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/CodesWhat/mouthtype/compare/v0.9.1...v0.10.0

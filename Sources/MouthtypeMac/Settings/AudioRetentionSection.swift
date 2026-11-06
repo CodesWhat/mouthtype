@@ -11,7 +11,7 @@ struct AudioRetentionSection: View {
             footer:
                 "The oldest completed recordings are removed when either limit is reached. Changes apply the next time Mouthtype launches."
         ) {
-            DesignRow(title: "Keep finished audio for", detail: "Unfinished and recovery audio is kept regardless.") {
+            DesignRow(title: "Keep finished audio for", detail: "Recovery audio is kept 30 days, then follows this limit.") {
                 DesignPopup(
                     title: "Keep completed recordings", selection: Binding(get: { model.audioRetention.age }, set: model.setAudioRetentionAge),
                     choices: [

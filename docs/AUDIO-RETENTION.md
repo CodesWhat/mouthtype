@@ -22,16 +22,13 @@ Changes apply to existing completed recordings the next time Mouthtype launches.
 
 New archive metadata records the selected expiration date, or no expiration date when there is no age limit. When startup maintenance removes a completed recording, its audio location and expiration are cleared from its database row; its text and statistics remain.
 
-## What is never pruned
+## Recovery audio and unmatched files
 
-These are exempt from the completed-audio limits and can use additional storage:
+Recovery audio is failed or interrupted takes and crash partials. It isn't pruned for the first 30 days. After that it follows your age and size limit like any other audio.
 
-- Unfinished recordings.
-- Crash-recovery partials.
-- Failed takes available for recovery.
-- Files without a matching completed database record. They aren't assumed completed just because the database doesn't list them as unfinished.
+Files without a matching database record are never pruned. They aren't assumed completed just because the database doesn't list them as unfinished.
 
-Recovery audio remains available through **Saved Recordings**; the existing Recover and Discard behavior is unchanged. Discard ends the recovery offer and doesn't promise to delete its audio immediately.
+Recovery audio remains available through **Saved Recordings** during the grace period; the existing Recover and Discard behavior is unchanged. Discard ends the recovery offer and doesn't promise to delete its audio immediately.
 
 ## What stays
 

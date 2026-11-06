@@ -322,7 +322,7 @@ public actor SmartCleanup {
             : CleanupPrompt.system(for: context) + CleanupPrompt.reference(context)
         if settleCorrections { description = CleanupPrompt.system(for: correctionContext) + "\n" + description }
         if !joining.isEmpty { description += "\njoined-spelling-software-context-v1" }
-        let sha = SHA256.hash(data: Data(description.utf8)).prefix(6).map { String(format: "%02x", $0) }.joined()
+        let sha = shortSHA(Data(description.utf8))
         guard await Self.finished(work, by: deadline, clock: clock) else {
             work.cancel()
             return finish(.timeout, sha: sha)
@@ -413,7 +413,11 @@ public actor SmartCleanup {
 extension S1MiniPrompt {
     /// A short hash of the system prompt and the control lines, for the store's `prompt_sha`.
     public static func promptSHA(_ controlLines: [String]) -> String {
-        let digest = SHA256.hash(data: Data(([system] + controlLines).joined(separator: "\n").utf8))
-        return digest.prefix(6).map { String(format: "%02x", $0) }.joined()
+        shortSHA(Data(([system] + controlLines).joined(separator: "\n").utf8))
     }
+}
+
+/// The first six bytes of the SHA-256 as hex, for the store's `prompt_sha`.
+private func shortSHA(_ data: Data) -> String {
+    SHA256.hash(data: data).prefix(6).map { String(format: "%02x", $0) }.joined()
 }

@@ -382,5 +382,13 @@ import Testing
         // The stamped expiry is stale once the policy changes; maintenance deletes expired files, so a file still
         // on disk is recoverable.
         #expect(Set(found.map(\.id)) == [kept, expired] && found.allSatisfy(\.isCompleted))
+
+        // A path that stopped existing (account rename, migration) falls back to the archive's own file for the take.
+        let moved = try dictate(store, minutes: 5, text: "moved")
+        _ = try archive.write(samples: tone, id: moved)
+        try store.recordCapture(moved, CaptureRecord(audioMs: 1000, audioPath: "/Users/old-name/audio/\(moved).wav"))
+        let relocated = DictationRecovery.completed(rows: try store.recentTakes(limit: 10), now: base, archive: archive)
+        #expect(Set(relocated.map(\.id)) == [kept, expired, moved])
+        #expect(relocated.first { $0.id == moved }?.audioURL == archive.url(for: moved))
     }
 }

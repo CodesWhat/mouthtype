@@ -96,12 +96,9 @@ struct Run: AsyncParsableCommand {
             reports.append(report)
         }
 
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
         let machine = Machine.collect()
         let report = BenchReport(
-            date: formatter.string(from: Date()),
+            date: BenchDate.today(),
             machine: machine,
             corpus: corpus,
             runsPerClip: runs,
