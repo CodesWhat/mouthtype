@@ -12,18 +12,28 @@ public enum AudioRetentionMaintenance {
             olderThan: policy.cutoff(at: now), maxTotalBytes: policy.maximumBytes, eligibleIDs: completed,
             recoveryIDs: try store.recoveryAudioIDs(), recoveryCutoff: now.addingTimeInterval(-AudioArchive.recoveryGrace),
             knownIDs: try store.dictationIDs())
-        if !removed.isEmpty { try store.clearAudio(ids: removed) }
         // A missing, unreadable or empty directory (an unmounted or remounted-empty folder) says nothing about the files, so
-        // only a non-empty listing can clear pointers. Paths are read first: a pointer is set only after its file exists,
+        // only a non-empty listing can identify missing files beyond those the policy just removed. Paths are read first:
+        // a pointer is set only after its file exists,
         // so the later listing contains every file that was there. A row whose archive file or partial is listed keeps its
-        // pointer even when the stored absolute path went stale.
+        // pointer even when the stored absolute path went stale. An existing stored path also keeps its pointer when the
+        // recording lives outside the current archive.
         let paths = try store.audioPaths()
-        if let listed = archive.listedFileNames(), !listed.isEmpty {
-            let missing = paths.filter {
-                !listed.contains(archive.url(for: $0.id).lastPathComponent) && !listed.contains(archive.partialURL(for: $0.id).lastPathComponent)
-            }.map(\.id)
-            if !missing.isEmpty { try store.clearAudio(ids: missing) }
+        let listed = archive.listedFileNames()
+        var missing = Set(removed)
+        for entry in paths {
+            let absent =
+                listed.map {
+                    !$0.isEmpty && !$0.contains(archive.url(for: entry.id).lastPathComponent) && !$0.contains(archive.partialURL(for: entry.id).lastPathComponent)
+                } ?? false
+            guard missing.contains(entry.id) || absent else { continue }
+            if FileManager.default.fileExists(atPath: entry.path) {
+                missing.remove(entry.id)
+            } else {
+                missing.insert(entry.id)
+            }
         }
+        if !missing.isEmpty { try store.clearAudio(ids: Array(missing)) }
         return removed
     }
 }
