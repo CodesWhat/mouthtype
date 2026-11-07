@@ -72,4 +72,4 @@ If Fn opens the emoji picker or nothing happens, see [Troubleshooting](../TROUBL
 
 - [Dictating](dictating.md) covers hands-free mode, shortcuts and recovery.
 - [Dictionary](dictionary.md) teaches Mouthtype the names it gets wrong.
-- The [install notes](../READ-ME.md) have the full release notes for 0.9.1 and earlier.
+- The [install notes](../READ-ME.md) cover installation and release notes.
